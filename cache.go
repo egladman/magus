@@ -160,7 +160,11 @@ func (m *Magus) spellCaches(ctx context.Context) ([]declaredCaches, error) {
 	for _, name := range slices.Sorted(maps.Keys(bySpell)) {
 		s, sb := bySpell[name], bySpell[name].Sandbox()
 		tools := []string{"platform:" + runtime.GOOS + "/" + runtime.GOARCH}
-		for _, lines := range m.toolVersionsByProject(ctx, projects[name]) {
+		byProject, err := m.toolVersionsByProject(ctx, projects[name])
+		if err != nil {
+			return nil, err
+		}
+		for _, lines := range byProject {
 			for _, l := range lines {
 				if strings.HasPrefix(l, name+":") {
 					tools = append(tools, l)

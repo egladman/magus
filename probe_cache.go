@@ -28,16 +28,49 @@ import (
 // against, so building a Step just to hold it would be a heavier write path for the
 // common case (a plain os.ReadFile) than the read it exists to save.
 
-// probeInputs are the files a probed tool reads to pick its version, searched in the
-// probe's directory and every ancestor. Only these tools are cached: go switches
-// toolchains through GOTOOLCHAIN and go.mod, rustup proxies through rust-toolchain
-// files and its own settings, and a script wrapper can read anything, so none of those
-// has an input list that could be trusted.
-var probeInputs = map[string][]string{
-	"node --version": nil,
+// probeInputs says, per probe argv, what decides its answer. Only these probes are
+// cached: go switches toolchains through GOTOOLCHAIN and go.mod, rustup proxies through
+// rust-toolchain files and its own settings, and a script wrapper can read anything, so
+// none of those has an input list that could be trusted.
+var probeInputs = map[string]probeSpec{
+	"node --version": {},
 	// pnpm switches to the version a manifest pins (manage-package-manager-versions),
 	// configured from any of these.
-	"pnpm --version": {"package.json", "pnpm-workspace.yaml", ".npmrc"},
+	"pnpm --version": {files: []string{"package.json", "pnpm-workspace.yaml", ".npmrc"}},
+	// The install decides this one: the stamps pnpm writes when an install finishes, the
+	// shim it writes into .bin, and the typescript link, whose target names the version.
+	// A tree with no node_modules records every one as absent, so installing misses.
+	"pnpm exec tsc --version": {
+		files: []string{
+			"package.json", "pnpm-workspace.yaml", ".npmrc", "pnpm-lock.yaml",
+			"node_modules/.modules.yaml", "node_modules/.pnpm/lock.yaml",
+			"node_modules/.bin/tsc", "node_modules/typescript",
+		},
+		execs: "tsc",
+	},
+}
+
+// probeSpec is what one probe's answer depends on beyond the binary and environment.
+type probeSpec struct {
+	// files are read in the probe's directory and every ancestor.
+	files []string
+	// execs is the binary the probe reaches through a package manager's exec: found in
+	// node_modules/.bin of the directory or an ancestor, then on PATH.
+	execs string
+}
+
+// execPresent reports whether a package manager's exec would find bin from dir.
+func execPresent(bin, dir string) bool {
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "node_modules", ".bin", bin)); err == nil {
+			return true
+		}
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	_, err := exec.LookPath(bin)
+	return err == nil
 }
 
 // miseDirInputs are the files a mise shim reads, in any ancestor of the working
@@ -50,16 +83,29 @@ var miseDirInputs = []string{
 	".tool-versions", ".nvmrc", ".node-version", "package.json",
 }
 
-// probeCacheFormat changes whenever the key's composition does, so an older entry is
-// never read under a new meaning.
-const probeCacheFormat = "probe-cache/1"
+// probeCacheFormat changes whenever the key's composition or the record's encoding
+// does, so an older entry is never read under a new meaning.
+const probeCacheFormat = "probe-cache/2"
+
+// probeSpecFor returns what decides probe's answer, and false for a probe never cached.
+func probeSpecFor(probe spells.Command) (probeSpec, bool) {
+	spec, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	return spec, ok
+}
 
 // probeCacheKey returns the key a probe of tool in dir caches under, or false when
 // that probe must fork.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
-	selectors, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	spec, ok := probeSpecFor(probe)
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
+	}
+	selectors := spec.files
+	// pnpm exec falls back to a tsc on PATH, whose own inputs nothing here lists.
+	if spec.execs != "" {
+		if _, err := exec.LookPath(spec.execs); err == nil {
+			return "", false
+		}
 	}
 	// A relative PATH entry resolves against the probe's directory, which the lookup
 	// below does not model.
@@ -241,19 +287,39 @@ func writeMiseGlobals(b *strings.Builder) {
 	writeDirEntries(b, filepath.Join(data, "installs"))
 }
 
-func (m *Magus) cachedProbe(key string) (string, bool) {
+// probeRecord is one cached probe answer: the tool's output, or why the tool is absent.
+// An absence is cached as surely as a version, since the same inputs give the same
+// answer, and re-forking a probe that cannot succeed was a spawn on every invocation.
+type probeRecord struct {
+	out    string
+	absent string
+}
+
+// The record's first line says which answer follows it.
+const (
+	probeRecordOK     = "ok\n"
+	probeRecordAbsent = "absent\n"
+)
+
+func (m *Magus) cachedProbe(key string) (probeRecord, bool) {
 	if m.cache == nil {
-		return "", false
+		return probeRecord{}, false
 	}
-	out, err := os.ReadFile(filepath.Join(m.CacheDir(), "probes", key))
+	raw, err := os.ReadFile(filepath.Join(m.CacheDir(), "probes", key))
 	if err != nil {
-		return "", false
+		return probeRecord{}, false
 	}
-	return string(out), true
+	if out, ok := strings.CutPrefix(string(raw), probeRecordOK); ok {
+		return probeRecord{out: out}, true
+	}
+	if cause, ok := strings.CutPrefix(string(raw), probeRecordAbsent); ok && cause != "" {
+		return probeRecord{absent: cause}, true
+	}
+	return probeRecord{}, false
 }
 
 // storeProbe caches a probe answer. Best-effort: a failed write costs the next run a fork.
-func (m *Magus) storeProbe(key, out string) {
+func (m *Magus) storeProbe(key string, r probeRecord) {
 	if m.cache == nil || !m.cfg.Cache.WriteEnabled() {
 		return
 	}
@@ -261,5 +327,9 @@ func (m *Magus) storeProbe(key, out string) {
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
-	_ = file.WriteFileAtomic(filepath.Join(dir, key), []byte(out), 0o644)
+	body := probeRecordOK + r.out
+	if r.absent != "" {
+		body = probeRecordAbsent + r.absent
+	}
+	_ = file.WriteFileAtomic(filepath.Join(dir, key), []byte(body), 0o644)
 }

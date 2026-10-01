@@ -821,6 +821,9 @@ func printSymbolIndexStatus(w io.Writer, indexes []types.SymbolIndexStatus) {
 		// Project.Display() shows the name, adding the path only when it differs (the
 		// workspace root: "magus (.)"), so the root never renders as a bare ".".
 		fmt.Fprintf(w, "  %-12s  %-30s  %s\n", s.Freshness, s.Project.Display(), lang)
+		if s.Detail != "" {
+			fmt.Fprintf(w, "    %s\n", s.Detail)
+		}
 	}
 }
 

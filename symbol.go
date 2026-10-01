@@ -449,12 +449,22 @@ func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolInde
 	cacheDir := resolveCacheDir(m.Root(), m.cfg)
 	// Probed once for the whole sweep, the way a run probes once per invocation: each
 	// tool version costs a subprocess spawn.
-	toolVersions := m.toolVersionsByProject(ctx, capable)
+	//
+	// A project with an unprobeable tool is reported unvouched rather than failing the
+	// read. A status read runs no tool and writes no entry, so it cannot mint the
+	// dishonest key MGS3035 exists to stop, and refusing every graph read in the
+	// workspace over one project's tool would hide every other project's answer too.
+	toolVersions, unprobeable := m.toolVersionsEach(ctx, capable)
 	observations := m.probeObservations(ctx, capable, nil)
 	c := m.freshnessCache(ctx)
 	out := make([]types.SymbolIndexStatus, 0, len(capable))
 	for _, p := range capable {
 		s := types.SymbolIndexStatus{Project: types.NewProjectRef(p.Path, p.Dir), Language: langs[p.Path], Freshness: types.SymbolIndexNotBuilt}
+		if err := unprobeable[p.Path]; err != nil {
+			s.Freshness, s.Detail = types.SymbolIndexUnvouched, err.Error()
+			out = append(out, s)
+			continue
+		}
 		if _, err := os.Stat(symbols.IndexPath(cacheDir, p.Dir)); err == nil {
 			// The index exists; it is fresh only if the scip step would replay for the
 			// current sources (a cache hit means the op would not re-run, so the index
@@ -583,10 +593,16 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			projectList(touched))
 	}
 	probe := func(ps []*types.Project) map[string]bool {
-		toolVersions := m.toolVersionsByProject(ctx, ps)
+		// An unprobeable project reads as not current; its rebuild runs through m.Run,
+		// which refuses it with the MGS3035 that names the tool.
+		toolVersions, unprobeable := m.toolVersionsEach(ctx, ps)
 		observations := m.probeObservations(ctx, ps, nil)
 		out := map[string]bool{}
 		for _, p := range ps {
+			if unprobeable[p.Path] != nil {
+				out[p.Path] = false
+				continue
+			}
 			ok, err := c.IsCached(ctx, m.symbolIndexStep(p, toolVersions[p.Path], observations[p.Path]))
 			out[p.Path] = err == nil && ok
 		}

@@ -653,7 +653,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 type composedRunner struct {
 	m            *Magus
 	runs         *cache.TargetRuns
-	newStep      func(*types.Project, string) cache.Step
+	newStep      func(*types.Project, string) (cache.Step, error)
 	skipReplay   bool
 	forceNoCache bool
 	cacheOpts    []cache.RunOption
@@ -686,7 +686,11 @@ func (r *composedRunner) runSkipCache(ctx context.Context, ref types.TargetRef) 
 		// No ExtraArgs and no Spell: `--` args and a spell::op filter belong to the target
 		// the user named, the same boundary runBuzzDependencies draws for a dependency.
 		handler := r.m.targetHandler(ref.Target)
-		_, err := r.m.cache.RunAside(ctx, r.newStep(owner, ref.Target), func(ctx context.Context) error {
+		step, err := r.newStep(owner, ref.Target)
+		if err != nil {
+			return err
+		}
+		_, err = r.m.cache.RunAside(ctx, step, func(ctx context.Context) error {
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(owner.Path)...))
 			return handler(buzz.WithTargetInterceptor(ctx, r.interceptor(owner)), owner)
 		}, r.cacheOpts...)
@@ -703,7 +707,10 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 		// runs under the scheduled unit rather than under whichever composer asked first; see
 		// cache.SharedStepContext for the ceiling this stops from leaking sideways.
 		memberCtx = cache.SharedStepContext(memberCtx)
-		member := r.newStep(p, name)
+		member, err := r.newStep(p, name)
+		if err != nil {
+			return err
+		}
 		member.SkipReplay = r.skipReplay
 		member.NoCache = member.NoCache || r.forceNoCache
 		return r.runs.Once(memberCtx, types.TargetRef{Project: p.Path, Target: name}, func() error {
@@ -777,7 +784,9 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 		toolVersions = reuse.toolVersions
 	}
 	if toolVersions == nil && keysTools(p, target) {
-		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
+		if toolVersions, err = m.toolVersionsByProject(ctx, []*types.Project{p}); err != nil {
+			return "", nil, err
+		}
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
 	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
@@ -1040,8 +1049,32 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 		strings.Join(violations, "\n  "))
 }
 
-func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
+// toolVersionsByProject is each project's tool key lines. The error is MGS3035 for a
+// tool that runs but cannot say which build it is; see probeOne.
+func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) (map[string][]string, error) {
 	return m.probeTools(ctx, projects, nil)
+}
+
+// toolVersionsEach is toolVersionsByProject for a reader that can do without some
+// projects: a project with an unprobeable tool is left out of the lines and named in
+// failed with its MGS3035, rather than failing every other project with it.
+func (m *Magus) toolVersionsEach(ctx context.Context, projects []*types.Project) (lines map[string][]string, failed map[string]error) {
+	prober := m.newToolProber()
+	lines, err := prober.probeVersions(ctx, projects, nil, nil)
+	if err == nil {
+		return lines, nil
+	}
+	// Every reading is memoized now, so asking per project spawns nothing more.
+	lines, failed = map[string][]string{}, map[string]error{}
+	for _, p := range projects {
+		one, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
+		if err != nil {
+			failed[p.Path] = err
+			continue
+		}
+		maps.Copy(lines, one)
+	}
+	return lines, failed
 }
 
 // probeTools is toolVersionsByProject with an optional second output: when extracted is
@@ -1057,7 +1090,7 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 // operation should hold its own long-lived prober instead (newToolProber, held across
 // calls the way the run path's `prober` variable is) so repeat asks replay rather than
 // re-spawning the probe.
-func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) map[string][]string {
+func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) (map[string][]string, error) {
 	return m.newToolProber().probeVersions(ctx, projects, nil, extracted)
 }
 
@@ -1073,6 +1106,7 @@ type toolProber struct {
 type toolProbe struct {
 	once sync.Once
 	r    toolReading
+	err  error
 }
 
 func (m *Magus) newToolProber() *toolProber {
@@ -1089,15 +1123,21 @@ func (tp *toolProber) dir(p *types.Project) string {
 // probeVersions returns each project's "spell:tool:token" key lines, probing what is not
 // yet memoized. only narrows the tools to probe and key on; nil means every declared
 // tool. It is safe for concurrent use; extracted is written only by the calling goroutine.
-func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) map[string][]string {
+//
+// A tool that runs but cannot be probed fails the whole call with MGS3035 and no lines:
+// any key minted from them would leave that tool out.
+func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) (map[string][]string, error) {
 	if tp.mode == "off" {
-		return nil
+		return nil, nil
 	}
 	wanted := func(s *spells.Spell, tool string) bool {
 		t, _ := s.Tool(tool)
 		return t.HasProbe() && (only == nil || only(s.Name(), tool))
 	}
-	memo := tp.m.probeReadings(ctx, tp, projects, wanted)
+	memo, err := tp.m.probeReadings(ctx, tp, projects, wanted)
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[string][]string, len(projects))
 	for _, p := range projects {
 		dir := tp.dir(p)
@@ -1123,7 +1163,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 			out[p.Path] = vers
 		}
 	}
-	return out
+	return out, nil
 }
 
 // toolReading is one probe's two consumers: the cache key wants a narrowed token, the
@@ -1144,8 +1184,9 @@ type toolReading struct{ token, full string }
 // decided every target was a cache hit. "A version probe is cheap" holds for one project
 // and stops holding at the workspace sizes magus is for.
 //
-// A key another caller is already probing is awaited rather than probed again.
-func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*types.Project, wanted func(*spells.Spell, string) bool) map[string]toolReading {
+// A key another caller is already probing is awaited rather than probed again. The
+// error joins every MGS3035 among the readings, in key order.
+func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*types.Project, wanted func(*spells.Spell, string) bool) (map[string]toolReading, error) {
 	type want struct {
 		spell *spells.Spell
 		dir   string
@@ -1173,25 +1214,30 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 	}
 	tp.mu.Unlock()
 	if len(wants) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(m.probeConcurrency())
 	for _, w := range wants {
 		g.Go(func() error {
-			w.probe.once.Do(func() { w.probe.r = m.probeOne(gctx, w.spell, w.tool, w.dir) })
+			w.probe.once.Do(func() { w.probe.r, w.probe.err = m.probeOne(gctx, w.spell, w.tool, w.dir) })
+			// Kept on the probe rather than returned, so one unprobeable tool does not
+			// cancel the probes beside it and every one of them is reported.
 			return nil
 		})
 	}
-	// Every probe records its own failure as UNPROBED, so nothing here returns an error
-	// and Wait is only a barrier.
 	_ = g.Wait()
 	readings := make(map[string]toolReading, len(wants))
-	for key, w := range wants {
+	var errs []error
+	for _, key := range slices.Sorted(maps.Keys(wants)) {
+		w := wants[key]
 		readings[key] = w.probe.r
+		if w.probe.err != nil {
+			errs = append(errs, w.probe.err)
+		}
 	}
-	return readings
+	return readings, errors.Join(errs...)
 }
 
 // probeConcurrency bounds the probe fan-out. It rides the run's own concurrency setting
@@ -1210,34 +1256,64 @@ func (m *Magus) probeConcurrency() int {
 	return runtime.NumCPU()
 }
 
-// probeOne reads one tool's version, recording a failure as UNPROBED rather than
-// returning an error: a tool that cannot say which build it is keeps the miss
-// deterministic, where keying on nothing would replay across an upgrade.
-func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string) toolReading {
+// absentMessage is the one line an absent tool is reported with.
+func absentMessage(tool, cause string) string {
+	return fmt.Sprintf("magus: %s is not installed, so its cache key records %s: %s", tool, unprobedToken, cause)
+}
+
+// unprobedToken keys a tool that is absent. Nothing that drives an absent tool can pass,
+// so no result is ever recorded under it that a later run could wrongly replay, and
+// installing the tool moves the key.
+const unprobedToken = "UNPROBED"
+
+// probeOne reads one tool's version.
+//
+// A failed probe means one of two things, and they get opposite answers. An absent tool
+// (see probeAbsence) keys as unprobedToken and is warned about once per change to the
+// probe's inputs, since the absence is cached like a version. A tool that is there and
+// still cannot say which build it is fails with MGS3035: its ops can pass, and a constant
+// in their key would replay those passes across an upgrade.
+func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string) (toolReading, error) {
 	t, _ := s.Tool(tool)
 	// A declared constant needs no process. It stays out of `full`: an author typed it,
 	// so there is nothing for the gate to compare.
 	if t.Probe.Bin == "" {
-		return toolReading{token: t.Key.Const}
+		return toolReading{token: t.Key.Const}, nil
 	}
 	key, cacheable := probeCacheKey(t.Probe, dir)
-	probed, hit := "", false
+	var rec probeRecord
+	hit := false
 	if cacheable {
-		probed, hit = m.cachedProbe(key)
+		rec, hit = m.cachedProbe(key)
 	}
-	var err error
 	if !hit {
-		probed, err = s.ProbeVersion(ctx, tool, dir)
-		if err == nil && cacheable {
-			m.storeProbe(key, probed)
+		probed, err := s.ProbeVersion(ctx, tool, dir)
+		switch {
+		case err == nil:
+			rec = probeRecord{out: probed}
+		case ctx.Err() != nil:
+			// A cancelled run keys nothing, and its failure says nothing about the tool.
+			return toolReading{token: unprobedToken}, nil
+		default:
+			cause, absent := m.probeAbsence(s, t.Probe, dir, err)
+			if !absent {
+				return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
+					"%s:%s runs in %s but cannot say which build it is, so no cache key could tell its upgrades apart: %v",
+					s.Name(), tool, dir, err)
+			}
+			slog.WarnContext(ctx, absentMessage(tool, cause), slog.String("spell", s.Name()))
+			rec = probeRecord{absent: cause}
 		}
+		if cacheable {
+			m.storeProbe(key, rec)
+		}
+	} else if rec.absent != "" {
+		slog.DebugContext(ctx, absentMessage(tool, rec.absent), slog.String("spell", s.Name()), slog.Bool("recorded", true))
 	}
-	if err != nil {
-		slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-			slog.String("spell", s.Name()), slog.String("tool", tool),
-			slog.String("dir", dir), slog.String("err", err.Error()))
-		return toolReading{token: "UNPROBED"}
+	if rec.absent != "" {
+		return toolReading{token: unprobedToken}, nil
 	}
+	probed := rec.out
 	token, note := spells.VersionToken(probed, t.Key)
 	if note != "" {
 		slog.WarnContext(ctx, "magus: tool-version key degraded; cache key is coarser than declared",
@@ -1251,7 +1327,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	if full, ok := spells.ExtractVersion(probed); ok {
 		r.full = full
 	}
-	return r
+	return r, nil
 }
 
 // probeObservations runs each resolved spell's declared observation probes and returns
@@ -1639,11 +1715,27 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	toolWindows := map[string]string{}
-	prober.probeVersions(ctx, keyed, nil, toolWindows)
+	if _, err := prober.probeVersions(ctx, keyed, nil, toolWindows); err != nil {
+		return err
+	}
 	for _, p := range unkeyed {
-		prober.probeVersions(ctx, []*types.Project{p}, func(spell, tool string) bool {
+		if _, err := prober.probeVersions(ctx, []*types.Project{p}, func(spell, tool string) bool {
 			return hasToolWindow(p, spell, tool)
-		}, toolWindows)
+		}, toolWindows); err != nil {
+			return err
+		}
+	}
+	// Preflight steps are minted through stepOrUncached below, which cannot return an
+	// MGS3035, so their projects are probed here where it can.
+	for _, st := range opts.preflight {
+		for _, p := range st.projects {
+			if !keysTools(p, st.target) {
+				continue
+			}
+			if _, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil); err != nil {
+				return err
+			}
+		}
 	}
 	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
 		return err
@@ -1676,7 +1768,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
-	keyedStep := func(p *types.Project, target string) cache.Step {
+	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
 		step := m.buildStep(p, target)
 		if sizeMemory != nil {
 			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
@@ -1688,14 +1780,31 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		var toolVersions []string
 		if keysTools(p, target) {
-			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
+			// A project the pass above probed replays its memo; one a composed target
+			// reaches only now is probed here, and refused the same way.
+			byProject, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
+			if err != nil {
+				return cache.Step{}, err
+			}
+			toolVersions = byProject[p.Path]
 		}
 		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
-		return step
+		return step, nil
 	}
-	newStep := func(p *types.Project, target string) cache.Step {
-		step := keyedStep(p, target)
+	newStep := func(p *types.Project, target string) (cache.Step, error) {
+		step, err := keyedStep(p, target)
 		stampRevision(&step)
+		return step, err
+	}
+	// stepOrUncached is newStep for the preflight and settle passes, which take no error.
+	// Every project they reach was probed above, so an error here is the memo of one
+	// already returned; should one slip past, the step runs uncached rather than keyed
+	// without the tool.
+	stepOrUncached := func(p *types.Project, target string) cache.Step {
+		step, err := newStep(p, target)
+		if err != nil {
+			step.NoCache = true
+		}
 		return step
 	}
 
@@ -1711,7 +1820,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			trackVolatile = true
 		}
 		for _, p := range st.projects {
-			step := keyedStep(p, st.target)
+			step, err := keyedStep(p, st.target)
+			if err != nil {
+				return err
+			}
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
@@ -1963,7 +2075,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	if len(opts.preflight) > 0 {
-		if err := m.runPreflight(ctx, opts.preflight, newStep, opts, runStep, cacheOpts); err != nil {
+		if err := m.runPreflight(ctx, opts.preflight, stepOrUncached, opts, runStep, cacheOpts); err != nil {
 			return err
 		}
 	}
@@ -1981,7 +2093,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if runErr == nil {
 		// After the batch so it holds every step's finished bytes, before the race
 		// replay so what that verifies is the settled tree.
-		runErr = m.settleDerivedOrder(ctx, settle, steps, results, newStep, cacheOpts)
+		runErr = m.settleDerivedOrder(ctx, settle, steps, results, stepOrUncached, cacheOpts)
 	}
 
 	if opts.RaceReplay && runErr == nil {

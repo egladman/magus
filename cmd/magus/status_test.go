@@ -1305,3 +1305,19 @@ func TestTruncateBoundsALabel(t *testing.T) {
 	assert.Equal(t, "abc", truncate("abc", 10))
 	assert.LessOrEqual(t, len(truncate(strings.Repeat("x", 100), 10)), 10)
 }
+
+// An unvouched index says why under its row, or the reader meets a verdict with no way to
+// clear it.
+func TestPrintSymbolIndexStatusPrintsTheDetailOfAnUnvouchedIndex(t *testing.T) {
+	var buf bytes.Buffer
+	printSymbolIndexStatus(&buf, []types.SymbolIndexStatus{
+		{Project: types.ProjectRef{Path: "web"}, Language: "typescript", Freshness: types.SymbolIndexUnvouched,
+			Detail: "[MGS3035] typescript:tsc runs in /repos/web but cannot say which build it is"},
+		{Project: types.ProjectRef{Path: "api"}, Language: "go", Freshness: types.SymbolIndexFresh},
+	})
+	out := buf.String()
+
+	assert.Contains(t, out, "unvouched")
+	assert.Contains(t, out, "    [MGS3035] typescript:tsc runs in /repos/web but cannot say which build it is\n")
+	assert.Equal(t, 1, strings.Count(out, "MGS3035"), "a fresh index prints no detail line")
+}
