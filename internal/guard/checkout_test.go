@@ -10,7 +10,7 @@ import (
 )
 
 func testSiblingCheckoutDeny(command string) string {
-	return denySiblingCheckout(command, DialectBash)
+	return denySiblingCheckout(".", command, DialectBash)
 }
 
 // twoCheckouts builds the layout this rule is about, without invoking git: one
@@ -65,6 +65,24 @@ func TestDenySiblingCheckoutIsDirectionAgnostic(t *testing.T) {
 	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run test ."))
 	// Another checkout is protected rather than routed, so a help request is refused too.
 	assert.NotEmpty(t, testSiblingCheckoutDeny("cd "+main+" && magus run --help"))
+}
+
+// The observed failure: the host started the hook in the main checkout while the
+// session worked in a linked worktree, and every `cd <that worktree> && ./magus` was
+// refused as a sibling. The session's checkout is where the command runs, so the
+// rule judges from callDir, and a relative cd resolves from there as the shell would.
+func TestDenySiblingCheckoutJudgesFromTheCallDirectory(t *testing.T) {
+	main, wt := twoCheckouts(t)
+	t.Chdir(main)
+
+	assert.Empty(t, denySiblingCheckout(wt, "cd "+wt+" && ./magus run lint .", DialectBash),
+		"a cd into the session's own worktree is not a relocation")
+	assert.Empty(t, denySiblingCheckout(wt, "cd internal && ./magus run lint .", DialectBash),
+		"a relative cd stays inside the session's checkout")
+	assert.NotEmpty(t, denySiblingCheckout(wt, "cd "+main+" && ./magus run lint .", DialectBash),
+		"the process's own checkout is a sibling of the session's")
+	assert.NotEmpty(t, denySiblingCheckout(main, "cd ../wt-feature && ./magus run lint .", DialectBash),
+		"a relative cd that leaves the session's checkout is still refused")
 }
 
 // The boundary that keeps this shippable. A cd into a DIFFERENT repository is

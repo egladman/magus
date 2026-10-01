@@ -35,6 +35,12 @@ func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
 // denySiblingCheckout returns the deny reason for a magus command relocated into
 // another checkout of this repository, or "" when there is nothing to say.
 //
+// callDir is where the command runs, the hook payload's cwd. It, not the guard
+// process's own working directory, is the session's checkout: a host may start its
+// hooks in the repository's main checkout while the session works in a linked
+// worktree, and judging from there refuses every cd into the session's own tree.
+// Relative cd targets resolve against it too.
+//
 // It fails OPEN on every unknown: a path that cannot be resolved, a session that
 // is not in a checkout at all. A guard that blocks because it could not read
 // something has its priorities backwards.
@@ -44,17 +50,17 @@ func rankSiblingCheckout(v ShellVerdict, reason string) ShellVerdict {
 // `--root`. Denying "other repository" here
 // would export a false positive about sibling checkouts to every consumer of
 // this guard to catch a mistake nobody makes.
-func denySiblingCheckout(command string, d Dialect) string {
+func denySiblingCheckout(callDir, command string, d Dialect) string {
 	targets := magusCdTargets(command, d)
 	if len(targets) == 0 {
 		return ""
 	}
-	hereRoot, hereCommon, ok := gitCheckout(".")
+	hereRoot, hereCommon, ok := gitCheckout(callDir)
 	if !ok {
 		return ""
 	}
 	for _, t := range targets {
-		root, common, ok := gitCheckout(t)
+		root, common, ok := gitCheckout(resolveFrom(callDir, t))
 		if !ok || common != hereCommon || root == hereRoot {
 			continue
 		}
@@ -68,7 +74,7 @@ func denySiblingCheckout(command string, d Dialect) string {
 //
 // Only a verb that selects no projects and names no relative path: both resolve against
 // the working directory, which the cd moved and the remedy does not.
-func siblingCheckoutRemedy(command string, d Dialect) (string, []hint.Next) {
+func siblingCheckoutRemedy(callDir, command string, d Dialect) (string, []hint.Next) {
 	cmds, ok := ParseCommandsDialect(command, d)
 	if !ok || len(cmds) != 2 || !isCdInvocation(cmds[0]) || len(cmds[0].Args) != 1 || !isMagusInvocation(cmds[1]) {
 		return "", nil
@@ -77,11 +83,11 @@ func siblingCheckoutRemedy(command string, d Dialect) (string, []hint.Next) {
 	if len(targets) != 1 {
 		return "", nil
 	}
-	_, hereCommon, ok := gitCheckout(".")
+	_, hereCommon, ok := gitCheckout(callDir)
 	if !ok {
 		return "", nil
 	}
-	abs, err := filepath.Abs(targets[0])
+	abs, err := filepath.Abs(resolveFrom(callDir, targets[0]))
 	if err != nil {
 		return "", nil
 	}
@@ -111,6 +117,14 @@ func siblingCheckoutRemedy(command string, d Dialect) (string, []hint.Next) {
 	return "`" + root + "` is another checkout of this repository, and only its own binary judges it.",
 		[]hint.Next{hint.NextForDenyRemedy(string(denyRuleSiblingCheckout), slices.Concat([]string{bin, "--root", root}, args),
 			"that tree's binary, rooted there, keeps its verdicts and its cache about that tree.")}
+}
+
+// resolveFrom reads p as the shell would after starting in dir.
+func resolveFrom(dir, p string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(dir, p)
 }
 
 // gitCheckout resolves dir to the checkout containing it: the working tree's root,

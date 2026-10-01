@@ -692,7 +692,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Reason = v.Deny
 			verdict.Rule = v.RuleName()
 			if v.Rule.Name == denyRuleSiblingCheckout {
-				lead, next := siblingCheckoutRemedy(input, shellD)
+				lead, next := siblingCheckoutRemedy(callDir, input, shellD)
 				v = v.withRemedy(lead, next...)
 			}
 			remedy = v
@@ -888,7 +888,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	script := denyScriptContent(deps, callDir, line, d)
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
-	v = rankSiblingCheckout(v, denySiblingCheckout(line, d))
+	v = rankSiblingCheckout(v, denySiblingCheckout(callDir, line, d))
 	v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, at, callDir, line, d))
 	v = rankInterpreterRewrite(v, denyInterpreterRewrite(at, line, d))
 	v = rankCacheDirWrite(v, denyCacheDirCommand(at, line, d))
