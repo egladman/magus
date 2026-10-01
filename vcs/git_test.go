@@ -3975,29 +3975,53 @@ func TestGitOperationInProgressNamesARevert(t *testing.T) {
 
 // The command read back is the one installed, from a linked worktree too, since that is
 // the checkout a not-indexed verdict asks about.
-func TestGitRefreshHookCommand(t *testing.T) {
+func TestReadGitRefreshHook(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
 	linked := filepath.Join(t.TempDir(), "linked")
 	gitRun(t, dir, "worktree", "add", "-q", linked)
 
-	_, installed, err := GitRefreshHookCommand(t.Context(), linked)
+	_, installed, err := ReadGitRefreshHook(t.Context(), linked)
 	require.NoError(t, err)
 	assert.False(t, installed, "no refresh section yet")
 
 	_, err = gitVCS{}.InstallRefreshHook(t.Context(), dir, "./magus job run sync-graph")
 	require.NoError(t, err)
-	command, installed, err := GitRefreshHookCommand(t.Context(), linked)
+	hook, installed, err := ReadGitRefreshHook(t.Context(), linked)
 	require.NoError(t, err)
 	assert.True(t, installed)
-	assert.Equal(t, "./magus job run sync-graph", command)
+	assert.Equal(t, "./magus job run sync-graph", hook.Command)
+	assert.Equal(t, evalSymlinks(t, linked), evalSymlinks(t, hook.Top), "the linked worktree's own top level, where its hooks run")
 }
 
-func TestGitRefreshHookCommandOutsideARepositoryIsUnsupported(t *testing.T) {
+// A magus workspace below the repository's top level: the hook runs at the top, so that
+// is where its ./magus resolves, not the workspace root the lookup was asked from.
+func TestReadGitRefreshHookNamesTheTopLevelAboveANestedWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"tools/ws/magusfile.buzz": "\n"})
+	workspace := filepath.Join(dir, "tools", "ws")
+	_, err := gitVCS{}.InstallRefreshHook(t.Context(), workspace, "./magus job run sync-graph")
+	require.NoError(t, err)
+
+	hook, installed, err := ReadGitRefreshHook(t.Context(), workspace)
+	require.NoError(t, err)
+	require.True(t, installed)
+	assert.Equal(t, evalSymlinks(t, dir), evalSymlinks(t, hook.Top))
+	assert.NotEqual(t, evalSymlinks(t, workspace), evalSymlinks(t, hook.Top))
+}
+
+func evalSymlinks(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	return resolved
+}
+
+func TestReadGitRefreshHookOutsideARepositoryIsUnsupported(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
-	_, installed, err := GitRefreshHookCommand(t.Context(), t.TempDir())
+	_, installed, err := ReadGitRefreshHook(t.Context(), t.TempDir())
 	require.ErrorIs(t, err, types.ErrVCSUnsupported)
 	assert.False(t, installed)
 }

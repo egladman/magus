@@ -211,11 +211,11 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 			}
 		}
 	}
-	command, installed, err := vcs.GitRefreshHookCommand(ctx, root)
+	hook, installed, err := vcs.ReadGitRefreshHook(ctx, root)
 	o.HookChecked = err == nil
 	if installed {
-		o.HookCommand = command
-		o.HookBinary, o.HookRunnable = maintenance.HookBinary(root, command)
+		o.HookCommand = hook.Command
+		o.HookBinary, o.HookRunnable = maintenance.HookBinary(hook.Top, hook.Command)
 	}
 	if dir, err := syncRequestDir(root); err == nil {
 		if r, ok, err := maintenance.ReadSyncRequest(dir); err == nil && ok {
