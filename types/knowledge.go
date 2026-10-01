@@ -652,6 +652,9 @@ const (
 	SymbolIndexFresh    SymbolIndexFreshness = "up-to-date"  // index reflects current sources
 	SymbolIndexStale    SymbolIndexFreshness = "out-of-date" // sources changed since the index was built
 	SymbolIndexNotBuilt SymbolIndexFreshness = "not-indexed" // no index has been produced yet
+	// SymbolIndexUnvouched is an index no cache key can vouch for: a tool the index step
+	// keys on runs but cannot be probed (MGS3035). Detail carries why.
+	SymbolIndexUnvouched SymbolIndexFreshness = "unvouched"
 )
 
 // SymbolIndexStatus is one symbol-capable project's index freshness, for status output.
@@ -661,6 +664,8 @@ type SymbolIndexStatus struct {
 	Project   ProjectRef           `json:"project"`
 	Language  string               `json:"language,omitempty"`
 	Freshness SymbolIndexFreshness `json:"freshness"`
+	// Detail says why, for a freshness that needs it; empty otherwise.
+	Detail string `json:"detail,omitempty"`
 }
 
 // KnowledgeSymbolRef is one referencing file: its path, how many times the symbol

@@ -131,6 +131,16 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 	}
 	res, err := run.Exec(ctx, probe.Bin, probe.Args, run.ExecOptions{Dir: dir, Capture: true, Quiet: true})
 	if err != nil {
+		// The exit status alone says nothing; the tool's own words usually name the cause
+		// (pnpm: `Command "tsc" not found`). pnpm reports on stdout, so stdout is the
+		// fallback.
+		tail := causeLine(res.Stderr)
+		if tail == "" {
+			tail = causeLine(res.Stdout)
+		}
+		if tail != "" {
+			return "", fmt.Errorf("version probe %s %v in %s: %w: %s", probe.Bin, probe.Args, dir, err, tail)
+		}
 		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
 	}
 	out := strings.TrimSpace(res.Stdout)
@@ -139,6 +149,28 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 		out = strings.ToValidUTF8(out[:maxProbeOutput], "")
 	}
 	return out, nil
+}
+
+// maxProbeTail bounds the line a failed probe quotes in its error.
+const maxProbeTail = 240
+
+// causeLine picks the line of a failed probe's output that names why: the first one
+// that mentions an error, else the last. mise ends on a "run with --verbose" footer and
+// pnpm opens with a stray "undefined", so neither end alone is the cause.
+func causeLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	line := lines[len(lines)-1]
+	for _, l := range lines {
+		if strings.Contains(strings.ToLower(l), "err") {
+			line = l
+			break
+		}
+	}
+	line = strings.Join(strings.Fields(line), " ")
+	if len(line) > maxProbeTail {
+		line = strings.ToValidUTF8(line[:maxProbeTail], "")
+	}
+	return line
 }
 
 // newCommandRenderer returns the command preview used by `magus describe`: it

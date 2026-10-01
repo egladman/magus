@@ -347,9 +347,9 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	p := m.Get(".")
 	require.NotNil(t, p)
 	ps := []*types.Project{p}
-	step := m.symbolIndexStep(p,
-		m.toolVersionsByProject(ctx, ps)[p.Path],
-		m.probeObservations(ctx, ps, symbolIndexDriven(ps))[p.Path])
+	toolVersions, err := m.toolVersionsByProject(ctx, ps)
+	require.NoError(t, err)
+	step := m.symbolIndexStep(p, toolVersions[p.Path], m.probeObservations(ctx, ps, symbolIndexDriven(ps))[p.Path])
 	probeKey, _, err := m.cache.StepKey(ctx, &step)
 	require.NoError(t, err)
 

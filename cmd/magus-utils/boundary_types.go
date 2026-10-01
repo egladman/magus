@@ -361,7 +361,7 @@ var boundaryEnums = []boundaryEnum{
 		Name: "SymbolIndexFreshness",
 		Type: reflect.TypeFor[types.SymbolIndexFreshness](),
 		Cases: []enumCase{{"none", ""}, {"upToDate", "up-to-date"}, {"outOfDate", "out-of-date"},
-			{"notIndexed", "not-indexed"}},
+			{"notIndexed", "not-indexed"}, {"unvouched", "unvouched"}},
 	},
 	{
 		Name:  "DiffUncoveredReason",

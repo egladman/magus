@@ -2,6 +2,9 @@ package magus
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -97,7 +100,11 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 			return spell == spellName && slices.Contains(choice.Install.Tools, tool)
 		}
 		windows := map[string]string{}
-		tv := k.prober.probeVersions(ctx, []*types.Project{p}, only, windows)[p.Path]
+		byProject, err := k.prober.probeVersions(ctx, []*types.Project{p}, only, windows)
+		if err != nil {
+			return err
+		}
+		tv := byProject[p.Path]
 		if err := checkToolWindows([]*types.Project{p}, windows); err != nil {
 			return err
 		}
@@ -130,9 +137,12 @@ func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, st
 					continue
 				}
 				name, tools := so.spell.Name(), choice.Install.Tools
-				go prober.probeVersions(ctx, []*types.Project{p}, func(sp, tool string) bool {
-					return sp == name && slices.Contains(tools, tool)
-				}, nil)
+				// The error is memoized with the reading; installRunner returns it.
+				go func() {
+					_, _ = prober.probeVersions(ctx, []*types.Project{p}, func(sp, tool string) bool {
+						return sp == name && slices.Contains(tools, tool)
+					}, nil)
+				}()
 			}
 		}
 	}
@@ -210,4 +220,84 @@ func (m *Magus) workspaceRel(abs string) string {
 		return filepath.ToSlash(abs)
 	}
 	return filepath.ToSlash(rel)
+}
+
+// probeAbsence reports whether err, from probing a tool in dir, says the tool is not
+// there, and if so the cause and its fix. Anything else is a tool that is present and
+// failed, which probeOne refuses to key.
+func (m *Magus) probeAbsence(s *spells.Spell, probe spells.Command, dir string, err error) (string, bool) {
+	if errors.Is(err, types.ToolNotOnPath) {
+		return probe.Bin + " is not on PATH", true
+	}
+	// mise's shim is on PATH whether or not this directory selects a version of the tool.
+	// The cause names no directory: directories that see the same mise config share one
+	// probe key, so one recorded cause answers for all of them.
+	if strings.Contains(err.Error(), "No version is set for shim") {
+		return fmt.Sprintf("mise selects no version of %s here: declare one in mise.toml", probe.Bin), true
+	}
+	spec, _ := probeSpecFor(probe)
+	if spec.execs == "" || execPresent(spec.execs, dir) {
+		return "", false
+	}
+	return m.missingInstall(s, spec.execs, dir), true
+}
+
+// missingInstall names why bin, which a spell's install provides, is missing from dir,
+// and the command that installs it.
+func (m *Magus) missingInstall(s *spells.Spell, bin, dir string) string {
+	shown := m.displayDir(dir)
+	stop := dir
+	if m.ws != nil {
+		stop = m.ws.Root
+	}
+	for _, name := range s.Targets() {
+		op, ok := s.Op(name)
+		if !ok || op.Kind != spells.OpKindInstall {
+			continue
+		}
+		choice, found, err := spell.ResolveInstall(op.Install, dir, stop)
+		if err != nil || !found {
+			continue
+		}
+		fix := m.installCommand(dir, name)
+		if _, err := os.Stat(filepath.Join(dir, choice.Install.Dir)); err != nil {
+			return fmt.Sprintf("no %s in %s: run `%s`", choice.Install.Dir, shown, fix)
+		}
+		for _, stamp := range choice.Install.Stamps {
+			if _, err := os.Stat(filepath.Join(dir, stamp)); err != nil {
+				return fmt.Sprintf("the install in %s never finished (%s is missing): run `%s`", shown, stamp, fix)
+			}
+		}
+		return fmt.Sprintf("the install in %s provides no %s: add the package that ships it to %s",
+			shown, bin, filepath.Base(choice.Manifest))
+	}
+	return fmt.Sprintf("nothing in %s installs %s", shown, bin)
+}
+
+// installCommand is how a person installs dir's dependencies: the project's own install
+// target when it has one, else the spell's install op, which runs bare.
+func (m *Magus) installCommand(dir, op string) string {
+	var p *types.Project
+	if m.ws != nil {
+		p = m.projectByDir(dir)
+	}
+	switch {
+	case p == nil:
+		return "magus run " + op
+	case slices.Contains(projectTargets(p), "install"):
+		return "magus run install " + p.Path
+	default:
+		return "magus run " + op + " " + p.Path
+	}
+}
+
+// displayDir is dir as a person reads it: workspace-relative when it is inside.
+func (m *Magus) displayDir(dir string) string {
+	if m.ws == nil {
+		return dir
+	}
+	if rel := m.workspaceRel(dir); !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return dir
 }

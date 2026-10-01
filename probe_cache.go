@@ -44,9 +44,14 @@ var probeInputs = map[string]probeRecipe{
 	// `pnpm exec` runs the nearest node_modules/.bin/tsc and falls back to PATH. pnpm
 	// links node_modules/typescript to a store path that names the version, so the link
 	// moves with an upgrade; package.json is read through it for an npm-style install.
+	// The lockfile and the stamps pnpm writes when an install finishes make installing
+	// into a tree with no node_modules a change of inputs.
 	"pnpm exec tsc --version": {
-		files:    append(slices.Clone(pnpmInputs), "node_modules/.bin/tsc", "node_modules/typescript", "node_modules/typescript/package.json"),
+		files: append(slices.Clone(pnpmInputs), "pnpm-lock.yaml",
+			"node_modules/.modules.yaml", "node_modules/.pnpm/lock.yaml",
+			"node_modules/.bin/tsc", "node_modules/typescript", "node_modules/typescript/package.json"),
 		pathBins: []string{"tsc"},
+		execs:    "tsc",
 	},
 	"go version":              {goToolchain: true},
 	"golangci-lint --version": {},
@@ -70,6 +75,24 @@ type probeRecipe struct {
 	// goToolchain marks go's toolchain switch: the go and toolchain lines of the go.work
 	// and go.mod it would read, the GOENV file, and the variables in goEnvInputs.
 	goToolchain bool
+	// execs is the binary the probe reaches through a package manager's exec: found in
+	// node_modules/.bin of the directory or an ancestor, then on PATH. Its absence is
+	// what makes a failed probe an absent tool rather than a broken one.
+	execs string
+}
+
+// execPresent reports whether a package manager's exec would find bin from dir.
+func execPresent(bin, dir string) bool {
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "node_modules", ".bin", bin)); err == nil {
+			return true
+		}
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	_, err := exec.LookPath(bin)
+	return err == nil
 }
 
 // goEnvInputs are the variables that move which toolchain `go version` reports. Reading
@@ -87,9 +110,15 @@ var miseDirInputs = []string{
 	".tool-versions", ".nvmrc", ".node-version", "package.json",
 }
 
-// probeCacheFormat changes whenever the key's composition does, so an older entry is
-// never read under a new meaning.
-const probeCacheFormat = "probe-cache/2"
+// probeCacheFormat changes whenever the key's composition or the records' encoding
+// does, so an older entry is never read under a new meaning.
+const probeCacheFormat = "probe-cache/3"
+
+// probeSpecFor returns what decides probe's answer, and false for a probe never cached.
+func probeSpecFor(probe spells.Command) (probeRecipe, bool) {
+	recipe, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	return recipe, ok
+}
 
 // probeCacheKey returns the key a probe of tool in dir caches under, or false when
 // that probe must fork.
@@ -99,7 +128,7 @@ const probeCacheFormat = "probe-cache/2"
 // the same version, so they share one answer; a file created in either adds a line and
 // moves its key, which is what an absent-file line used to catch.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
-	recipe, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
+	recipe, ok := probeSpecFor(probe)
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
 	}
@@ -381,6 +410,9 @@ const probeFailureTTL = 10 * time.Minute
 // success would use.
 const probeFailedSuffix = ".failed"
 
+// probeAbsentSuffix names the file an absent tool's cause is cached under.
+const probeAbsentSuffix = ".absent"
+
 // probeCached answers probe in dir from the probe cache when the probe's inputs can be
 // enumerated, and otherwise runs fork, which forks it. What it forks for is cached,
 // failure included.
@@ -455,8 +487,12 @@ func (g *flightGroup) do(key string, fn func() (string, error)) (string, error) 
 	return f.out, f.err
 }
 
-// cachedProbe returns a cached answer under key: the output of a probe that succeeded, or
-// the error of one that failed within probeFailureTTL.
+// cachedProbe returns a cached answer under key: the output of a probe that succeeded,
+// the cause of an absent tool, or the error of one that failed within probeFailureTTL.
+//
+// An absence takes no TTL. Its cause is a fact the key already sees (no node_modules, an
+// unfinished install), so it holds until one of the key's inputs moves, and a TTL would
+// only re-fork and re-warn on a clock.
 //
 // It reads the cache directory whether or not this workspace opened the cache: an
 // Inspect-built workspace probes for the symbol-index verdict too, and a read-only lookup
@@ -465,6 +501,9 @@ func (m *Magus) cachedProbe(key string) (probeAnswer, bool) {
 	dir := filepath.Join(m.CacheDir(), "probes")
 	if out, err := os.ReadFile(filepath.Join(dir, key)); err == nil {
 		return probeAnswer{out: string(out)}, true
+	}
+	if cause, err := os.ReadFile(filepath.Join(dir, key+probeAbsentSuffix)); err == nil && len(cause) > 0 {
+		return probeAnswer{err: &absentTool{cause: string(cause), recorded: true}}, true
 	}
 	failed := filepath.Join(dir, key+probeFailedSuffix)
 	fi, err := os.Stat(failed)
@@ -488,9 +527,25 @@ func (m *Magus) storeProbe(key, out string, err error) {
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
+	var absent *absentTool
+	if errors.As(err, &absent) {
+		_ = file.WriteFileAtomic(filepath.Join(dir, key+probeAbsentSuffix), []byte(absent.cause), 0o644)
+		return
+	}
 	if err != nil {
 		_ = file.ReplaceFile(filepath.Join(dir, key+probeFailedSuffix), []byte(err.Error()), 0o644)
 		return
 	}
 	_ = file.WriteFileAtomic(filepath.Join(dir, key), []byte(out), 0o644)
 }
+
+// absentTool is a probe failure that says the tool is not there (see probeAbsence),
+// carrying the cause and its fix.
+type absentTool struct {
+	cause string
+	// recorded is set on an answer read back from the cache rather than just forked,
+	// so the warning is printed once per change to the probe's inputs.
+	recorded bool
+}
+
+func (e *absentTool) Error() string { return e.cause }

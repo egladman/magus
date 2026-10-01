@@ -989,3 +989,25 @@ func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
 	readiness["faketool"] = spells.Tool{Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}}
 	assert.NoError(t, checkReady(context.Background(), readiness, op, dir))
 }
+
+// A failed probe quotes the tool's own reason. The exit status alone was the whole
+// message, so `pnpm exec tsc` in a tree with no node_modules read as "exit status 254".
+func TestVersionProberQuotesTheToolsReason(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "pnpm")
+	script := "#!/bin/sh\necho undefined\necho ' ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command \"tsc\" not found'\nexit 254\n"
+	require.NoError(t, os.WriteFile(bin, []byte(script), 0o755))
+
+	_, err := versionProber(t.Context(), spells.Command{Bin: bin, Args: []string{"exec", "tsc", "--version"}}, t.TempDir())
+
+	require.Error(t, err)
+	var exit *exec.ExitError
+	assert.ErrorAs(t, err, &exit, "the exit stays reachable, so a caller can tell a refusal from a failed start")
+	assert.Contains(t, err.Error(), `exit status 254: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "tsc" not found`)
+}
+
+func TestCauseLinePrefersTheErrorOverTheFooter(t *testing.T) {
+	mise := "mise ERROR No version is set for shim: tinygo\nSet a global default version with one of the following:\nmise use -g tinygo@0.41.1\nmise ERROR Run with --verbose or MISE_VERBOSE=1 for more information\n"
+	assert.Equal(t, "mise ERROR No version is set for shim: tinygo", causeLine(mise))
+	assert.Equal(t, "segfault", causeLine("starting\nsegfault\n"), "with no error line, the last line")
+	assert.Empty(t, causeLine(""))
+}

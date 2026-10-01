@@ -512,7 +512,12 @@ const (
 	// MCPClientFailed is a rejected or failed client tool program. The message
 	// names the import the tool refuses or the script failure. Workspace work
 	// goes through magus\; the CLI remains available for the full host surface.
-	MCPClientFailed           DiagnosticCode = "MGS3034"
+	MCPClientFailed DiagnosticCode = "MGS3034"
+	// ToolUnprobeable is a tool that is installed and runs but cannot say which build
+	// it is: its version probe fails. A key on a placeholder would replay a result
+	// across an upgrade of that tool, so the run stops instead. An ABSENT tool is not
+	// this: nothing that drives it can pass, so a placeholder there keys nothing false.
+	ToolUnprobeable           DiagnosticCode = "MGS3035"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -724,7 +729,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	WorkspaceLoadFailed, WorkspaceStillLoading, WritePathIsDirectory, QueueCredentialMismatch,
 	BrokerUnavailable, PipeCycle, HookHostUnnamed,
 	ServerProtocolOutdated, QueueHookNotACommand, QueueRunUntrusted, QueuePlanUnverified,
-	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed,
+	SavedPlanRefused, PipeUpstreamFailed, WritePathClaimUngradable, WritePathFileShared, MCPBuzzFailed, MCPClientFailed, ToolUnprobeable,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	UnformattedCommit, SelfInvalidatingKey,
