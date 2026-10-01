@@ -3,11 +3,14 @@
 // fragment and a fragment never reaches a server, so the link sends project names nowhere.
 //
 //	<consoleBase>graph/#figure=<base64url(utf-8 JSON)>
-//	{"v":1,"kind":"deps","title":"...","nodes":[{"id":"...","label":"...","seed":true}],
-//	 "edges":[["fromId","toId"]]}
+//	{"v":2,"kind":"deps","title":"...","nodes":[{"id":"...","label":"...","seed":true}],
+//	 "edges":[["fromId","toId"],["fromId","toId","optional","after"]]}
 //
-// An edge runs from a dependency to its dependent. A seed is a node the change edited.
-// The console reads this shape, so a change here is a change there.
+// An edge is [from, to, stroke?, label?]. stroke names a magus/figure Stroke case, so the
+// console draws the edge as figure\draw would: "optional" dashed, "plain" solid. A stroke
+// left out is "plain" and a label left out is "", which keeps the common edge short. A seed
+// is a node the change edited. The console reads this shape, so a change here is a change
+// there.
 //
 // Shared by the advisors here and by hack/ci/pull-requests.buzz, which imports it by path:
 // this directory ships with the action and is the one place both can reach.
@@ -25,21 +28,30 @@ final maxLinkLength = 16384;
 
 final marker = "#figure=";
 
+// magus/figure's Stroke cases, the treatments an edge may name.
+final strokes = ["plain", "focal", "external", "optional"];
+
 export object FigureNode {
     id: str,
     label: str,
     seed: bool = false,
 }
 
-// figureLink returns the console link for a dependency graph, or "" when the encoded link
-// would run past maxLinkLength. base may be empty for the default and need not end in a slash.
-// edges holds [fromId, toId] pairs, dependency first.
+// figureLink returns the console link for a graph, or "" when the encoded link would run past
+// maxLinkLength. base may be empty for the default and need not end in a slash. Each edge is
+// [fromId, toId], optionally followed by a figure\Stroke case's value and a label:
+// ["a", "b", "optional", "after"] draws dashed and labelled. Throws on an edge of another
+// length or a stroke figure does not declare.
 export fun figureLink(base: str, title: str, nodes: [FigureNode], edges: [[str]]) > str !> any {
     final drawn = mut [<any>];
     foreach (n in nodes) {
         drawn.append({"id": n.id, "label": n.label, "seed": n.seed});
     }
-    final json = serialize\jsonEncode({"v": 1, "kind": "deps", "title": title, "nodes": drawn, "edges": edges});
+    final wire = mut [<[str]>];
+    foreach (e in edges) {
+        wire.append(wireEdge(e, index: wire.len()));
+    }
+    final json = serialize\jsonEncode({"v": 2, "kind": "deps", "title": title, "nodes": drawn, "edges": wire});
     var payload = json.encodeBase64().replace("+", with: "-").replace("/", with: "_");
     while (payload.endsWith("=")) {
         payload = payload.sub(0, len: payload.len() - 1);
@@ -50,6 +62,21 @@ export fun figureLink(base: str, title: str, nodes: [FigureNode], edges: [[str]]
     final link = root + "graph/" + marker + payload;
     if (link.len() > maxLinkLength) { return ""; }
     return link;
+}
+
+// wireEdge checks e and drops its trailing defaults, a "plain" stroke and an empty label.
+fun wireEdge(e: [str], index: int) > [str] !> any {
+    if (e.len() < 2 or e.len() > 4) {
+        throw "figure-link: edge {index} is not [from, to, stroke?, label?]";
+    }
+    final stroke = if (e.len() > 2) e[2] else "plain";
+    if (strokes.indexOf(stroke) == null) {
+        throw "figure-link: edge {index} has stroke \"{stroke}\", not one of " + strokes.join(", ");
+    }
+    final label = if (e.len() > 3) e[3] else "";
+    if (label != "") { return [e[0], e[1], stroke, label]; }
+    if (stroke != "plain") { return [e[0], e[1], stroke]; }
+    return [e[0], e[1]];
 }
 
 // decodeFigureLink returns the JSON document a figureLink link carries. Throws on a link
@@ -75,7 +102,7 @@ test "a link decodes to the graph it was built from" {
         edges: [["libs/a", "cmd/b"]]);
     assert\equal(link.startsWith("https://example.test/console/graph/#figure="), want: true, message: link);
     final doc = decodeFigureLink(link);
-    assert\equal(doc.q("v").integerValue(), want: 1, message: "version");
+    assert\equal(doc.q("v").integerValue(), want: 2, message: "version");
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "How far this change reaches", message: "title");
     final nodes = doc.q("nodes").listValue();
@@ -86,6 +113,38 @@ test "a link decodes to the graph it was built from" {
     final edges = doc.q("edges").listValue();
     assert\equal([edges[0].listValue()[0].stringValue(), edges[0].listValue()[1].stringValue()],
         want: ["libs/a", "cmd/b"], message: "dependency first");
+}
+
+fun wireEdges(link: str) > [[str]] !> any {
+    final read = mut [<[str]>];
+    foreach (e in decodeFigureLink(link).q("edges").listValue()) {
+        final parts = mut [<str>];
+        foreach (part in e.listValue()) {
+            parts.append(part.stringValue());
+        }
+        read.append(parts);
+    }
+    return read;
+}
+
+test "each edge keeps its stroke and label, and drops the defaults" {
+    final link = figureLink("", title: "Session s-1: 3 jobs",
+        nodes: [FigureNode{ id = "session", label = "session", seed = true }, FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }],
+        edges: [["session", "a"], ["session", "b", "plain", ""], ["a", "b", "optional", "after"], ["b", "a", "focal"]]);
+    assert\equal(wireEdges(link), want: [["session", "a"], ["session", "b"], ["a", "b", "optional", "after"], ["b", "a", "focal"]], message: "edges");
+}
+
+test "an edge with an undeclared stroke or the wrong length is refused" {
+    final bad = [[["a"]], [["a", "b", "dotted"]], [["a", "b", "plain", "x", "y"]]];
+    foreach (edges in bad) {
+        var refused = false;
+        try {
+            figureLink("", title: "t", nodes: [FigureNode{ id = "a", label = "a" }, FigureNode{ id = "b", label = "b" }], edges: edges);
+        } catch (e) {
+            refused = true;
+        }
+        assert\equal(refused, want: true, message: "refused");
+    }
 }
 
 test "the payload is unpadded base64url" {

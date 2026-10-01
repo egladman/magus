@@ -2,7 +2,12 @@
 // .github/actions/advice/figure-link.buzz writes it, so a change to the shape is a change there.
 // A fragment never reaches a server, which is why the hosted console can draw it with no backend.
 
-export const FIGURE_LINK_VERSION = 1;
+import type { Stroke } from "./wasm";
+
+export const FIGURE_LINK_VERSION = 2;
+
+// magus/figure's Stroke cases: a link names each edge's treatment by one.
+const STROKES: readonly Stroke[] = ["plain", "focal", "external", "optional"];
 
 export interface LinkedNode {
   readonly id: string;
@@ -11,11 +16,19 @@ export interface LinkedNode {
   readonly seed: boolean;
 }
 
+// LinkedEdge runs between two nodes of its figure. On the wire it is [from, to, stroke?, label?];
+// an omitted stroke is "plain" and an omitted label "".
+export interface LinkedEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly stroke: Stroke;
+  readonly label: string;
+}
+
 export interface LinkedFigure {
   readonly title: string;
   readonly nodes: readonly LinkedNode[];
-  // [dependency id, dependent id], both ids of a node above.
-  readonly edges: readonly (readonly [string, string])[];
+  readonly edges: readonly LinkedEdge[];
 }
 
 export type FigureLinkRead =
@@ -23,6 +36,8 @@ export type FigureLinkRead =
   | { readonly ok: false; readonly error: string };
 
 const fail = (error: string): FigureLinkRead => ({ ok: false, error });
+
+const isStroke = (v: string): v is Stroke => STROKES.some((s) => s === v);
 
 function record(v: unknown): Record<string, unknown> | null {
   return typeof v === "object" && v !== null && !Array.isArray(v)
@@ -86,14 +101,23 @@ export function decodeFigureLink(payload: string): FigureLinkRead {
   }
 
   if (!Array.isArray(top.edges)) return fail("the link has no edges");
-  const edges: [string, string][] = [];
+  const edges: LinkedEdge[] = [];
   for (const [i, raw] of top.edges.entries()) {
-    if (!Array.isArray(raw) || raw.length !== 2 || raw.some((end) => typeof end !== "string"))
-      return fail("edge " + i + " is not a [from, to] pair of ids");
-    const [from, to] = raw as [string, string];
+    if (
+      !Array.isArray(raw) ||
+      raw.length < 2 ||
+      raw.length > 4 ||
+      raw.some((part) => typeof part !== "string")
+    )
+      return fail("edge " + i + " is not [from, to, stroke?, label?] strings");
+    const [from, to, stroke = "plain", label = ""] = raw as string[];
     for (const end of [from, to])
       if (!ids.has(end)) return fail("edge " + i + " names " + JSON.stringify(end) + ", no node");
-    edges.push([from, to]);
+    if (!isStroke(stroke))
+      return fail(
+        `edge ${i} has stroke ${JSON.stringify(stroke)}, not one of ${STROKES.join(", ")}`,
+      );
+    edges.push({ from, to, stroke, label });
   }
   return { ok: true, figure: { title: top.title, nodes, edges } };
 }
