@@ -86,7 +86,7 @@ test("runtime harness spells cover read observation and checkpoints", () => {
     // stands for, so the read rules reach the host's read tool as well as its shell.
     assert.match(
       spell,
-      /pretool_entry\("Read", (claude|codex)_guard_command\(\)/,
+      /pretool_entry\("Read", (argv: )?(claude|codex)_guard_command\(\)/,
       `${name} must judge reads with the command guard`,
     );
     assert.ok(spell.includes("magus-checkpoint.buzz"), `${name} must record stop checkpoints`);
