@@ -516,6 +516,27 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	m.MapSet("vcs", vcs)
 
+	// The real shape/shapes parse with internal/trail, which would pull vcs and os/user
+	// into the WASM playground, so they answer as a line the parser cannot read. read and
+	// marks find no trail; mark echoes a zero row for the reason job.put does.
+	trail := vm.NewMap()
+	trail.MapSet("read", fn("magus.trail.read", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectFeedbackTrail(types.FeedbackTrail{}), nil
+	}))
+	trail.MapSet("shape", fn("magus.trail.shape", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	trail.MapSet("shapes", fn("magus.trail.shapes", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	trail.MapSet("marks", fn("magus.trail.marks", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.ListValue(nil), nil
+	}))
+	trail.MapSet("mark", fn("magus.trail.mark", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return bindinggen.ObjectFeedbackMark(types.FeedbackMark{}), nil
+	}))
+	m.MapSet("trail", trail)
+
 	addPureMagus(m)
 
 	// The skill catalog is internal/agent's, which the sandbox does not link either.
