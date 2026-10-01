@@ -857,12 +857,21 @@ fun unitsOf(change: SymbolChange) > Units {
         }
     }
 
+    final newAt = mut {<str: [int]>};
+    foreach (n, r in change.regions) {
+        if (r.side != "new") { continue; }
+        final acc = mut [<int>];
+        foreach (x in newAt[r.path] ?? [<int>]) { acc.append(x); }
+        acc.append(n);
+        newAt[r.path] = acc;
+    }
     final deps = mut {<str: [str]>};
     foreach (s in change.symbols) {
         if (units[s.id] == null) { continue; }
         foreach (site in s.refs) {
-            foreach (n, r in change.regions) {
-                if (r.side != "new" or r.path != site.path or site.line < r.lo or site.line > r.hi) { continue; }
+            foreach (n in newAt[site.path] ?? [<int>]) {
+                final r = change.regions[n];
+                if (site.line < r.lo or site.line > r.hi) { continue; }
                 final user = regionKey[n];
                 if (user == s.id) { continue; }
                 final acc = mut [<str>];
@@ -1032,12 +1041,20 @@ fun groupUnits(u: Units, change: SymbolChange) > Groups {
         }
     }
 
+    final users = mut {<str: [str]>};
+    foreach (user in sort\strings(u.deps.keys())) {
+        foreach (d in u.deps[user]!) {
+            final acc = mut [<str>];
+            foreach (x in users[d] ?? [<str>]) { acc.append(x); }
+            acc.append(user);
+            users[d] = acc;
+        }
+    }
     foreach (k in sort\strings(units.keys())) {
         final un = units[k]!;
         final reshaped = un.change == "signature" or (un.kind == "type" and un.change == "body") or renamed.indexOf(k) != null;
         if (!reshaped) { continue; }
-        foreach (user in sort\strings(u.deps.keys())) {
-            if (u.deps[user]!.indexOf(k) == null) { continue; }
+        foreach (user in users[k] ?? [<str>]) {
             var what = "signature";
             if (un.kind == "type") { what = "type"; }
             if (renamed.indexOf(k) != null) { what = "name"; }
@@ -1154,7 +1171,7 @@ fun layerTitle(units: [Unit]) > str {
     }
     var top: Unit? = null;
     foreach (un in units) {
-        if (un.label == un.path or un.label == "(preamble)" or (tested and stemOf(un.path) != "")) { continue; }
+        if (un.label == un.path or un.label == "(preamble)" or un.label.len() < 3 or (tested and stemOf(un.path) != "")) { continue; }
         if (dirOf(un.path) != dir or (live and un.change == "removed")) { continue; }
         if (top == null or un.lines > top!.lines or (un.lines == top!.lines and un.id < top!.id)) { top = un; }
     }
@@ -1173,13 +1190,6 @@ fun groupLines(members: [str], units: {str: Unit}) > int {
     var n = 0;
     foreach (k in members) { n = n + units[k]!.lines; }
     return n;
-}
-
-fun isConfig(path: str, files: [Change]) > bool {
-    foreach (c in files) {
-        if (c.path == path) { return isWorkspaceConfig(c); }
-    }
-    return false;
 }
 
 // planSymbols cuts a change into stacked layers: units joined into atomic groups, the groups
@@ -1257,11 +1267,15 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         if (srcs.len() > 0) { sources[r] = srcs; }
     }
 
+    final configPaths = mut {<str: bool>};
+    foreach (c in change.files) {
+        if (isWorkspaceConfig(c)) { configPaths[c.path] = true; }
+    }
     fun klass(r: str) > int {
         var config = true;
         var removed = true;
         foreach (k in members[r]!) {
-            if (!isConfig(units[k]!.path, files: change.files)) { config = false; }
+            if (configPaths[units[k]!.path] == null) { config = false; }
             if (units[k]!.change != "removed") { removed = false; }
         }
         if (config) { return 0; }
@@ -1291,14 +1305,22 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         return least;
     }
     final todo = mut [<str>];
+    final first = mut {<str: str>};
+    final klassOf = mut {<str: int>};
+    final dirOfGroup = mut {<str: str>};
     foreach (r in members.keys()) {
-        if (sources[r] == null) { todo.append(r); }
+        if (sources[r] != null) { continue; }
+        todo.append(r);
+        first[r] = firstId(r);
+        klassOf[r] = klass(r);
+        dirOfGroup[r] = dominant(r);
     }
-    todo.sort(fun (a: str, b: str) > bool => firstId(a) < firstId(b));
+    todo.sort(fun (a: str, b: str) > bool => first[a]! < first[b]!);
     var lastDir = "";
     while (order.len() < todo.len()) {
         var pick = "";
-        var pickRank = mut [<int>];
+        var pickKlass = 0;
+        var pickAway = 0;
         foreach (r in todo) {
             if (placed[r] != null) { continue; }
             var ready = true;
@@ -1307,16 +1329,17 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
             }
             if (!ready) { continue; }
             var away = 1;
-            if (dominant(r) == lastDir) { away = 0; }
-            final rank = [klass(r), away];
-            if (pick == "" or rank[0] < pickRank[0] or (rank[0] == pickRank[0] and rank[1] < pickRank[1])) {
+            if (dirOfGroup[r]! == lastDir) { away = 0; }
+            final k = klassOf[r]!;
+            if (pick == "" or k < pickKlass or (k == pickKlass and away < pickAway)) {
                 pick = r;
-                pickRank = mut [rank[0], rank[1]];
+                pickKlass = k;
+                pickAway = away;
             }
         }
         placed[pick] = true;
         order.append(pick);
-        lastDir = dominant(pick);
+        lastDir = dirOfGroup[pick]!;
     }
 
     final layerOf = mut {<str: int>};
