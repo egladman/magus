@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -468,3 +469,46 @@ func TestFsExistsDistinguishesAbsenceFromDenial(t *testing.T) {
 // instead of being keyed on its NAME: a switch on the name silently gives any backend
 // outside it git's parsing. vcs.TestParityDirtyFilesReturnsPaths pins the rule against every
 // real binary; there is nothing for std to strip.
+
+// vcs.regions is the job footprint handed to scripts, so it must name the declaration a new
+// function adds as itself, which a hunk header gets wrong.
+func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	dir := t.TempDir()
+	for _, kv := range [][2]string{
+		{"GIT_AUTHOR_NAME", "t"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+		{"GIT_COMMITTER_NAME", "t"}, {"GIT_COMMITTER_EMAIL", "t@t"},
+		{"GIT_CONFIG_GLOBAL", os.DevNull}, {"GIT_CONFIG_SYSTEM", os.DevNull},
+	} {
+		t.Setenv(kv[0], kv[1])
+	}
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	write := func(name, body string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+	git("init", "-q", "-b", "main")
+	write(".gitattributes", "*.go diff=golang\n")
+	write("a.go", "package a\n\nfunc One() int {\n\treturn 1\n}\n")
+	git("add", ".")
+	git("commit", "-qm", "base")
+	write("a.go", "package a\n\nfunc One() int {\n\treturn 2\n}\n\nfunc Two() int {\n\treturn One()\n}\n")
+
+	got, err := VcsRegions(WithCwd(context.Background(), dir), "main")
+	require.NoError(t, err)
+	var placed []string
+	for _, r := range got {
+		placed = append(placed, fmt.Sprintf("%s %s %d-%d %s", r.File.Path, r.Side, r.Lines[0], r.Lines[1], r.Declaration))
+	}
+	assert.Equal(t, []string{
+		"a.go old 4-4 func One() int {",
+		"a.go new 4-6 func One() int {",
+		"a.go new 7-8 func Two() int {",
+	}, placed)
+}
