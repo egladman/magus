@@ -205,7 +205,11 @@ func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuil
 // the caller builds.
 func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildHolder) (bool, error) {
 	left := staleIndexProjects(ctx, root)
-	gaps, probed := symbolGaps(ctx, root)
+	var gaps []types.KnowledgeSymbolGap
+	probed := false
+	if ws, err := inspectWorkspace(ctx, root); err == nil {
+		gaps, probed = magus.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
+	}
 	if len(gaps) > 0 {
 		left = append(left, types.DescribeGaps(gaps))
 	}

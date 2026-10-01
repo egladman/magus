@@ -146,7 +146,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	out.Answer = withIndexCause(ctx, root, out.Answer)
 
 	if rf.Occurrences {
-		return emitOccurrences(opts, out, res.Occurrences)
+		return emitOccurrences(ctx, root, opts, out, res.Occurrences)
 	}
 	if rf.Definition || rf.Source {
 		defs, _ := g.Definitions(out.Symbol)
@@ -432,7 +432,7 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 // It reports; it does not edit. The output is what a caller needs to make the edit itself,
 // which is the same division every other magus verb keeps between naming what a change
 // touches and touching it.
-func emitOccurrences(opts OutputOptions, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead) error {
+func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs types.KnowledgeRefsOutput, occurrences *magus.SymbolOccurrenceRead) error {
 	if occurrences == nil {
 		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
 		// an empty list here would read as "nowhere", which is the one answer it has no

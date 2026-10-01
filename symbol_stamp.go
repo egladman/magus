@@ -144,9 +144,14 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		for i, w := range probe {
 			projects[i] = w.p
 		}
-		toolVersions := m.toolVersionsByProject(ctx, projects)
+		toolVersions, unprobeable := m.toolVersionsEach(ctx, projects)
 		observations := m.probeObservations(ctx, projects, nil)
 		for _, w := range probe {
+			if err := unprobeable[w.p.Path]; err != nil {
+				out[w.at].Freshness = types.SymbolIndexUnvouched
+				out[w.at].Detail = err.Error()
+				continue
+			}
 			// A cache hit means the scip op would not re-run, so the index is current.
 			fresh, err := c.IsCached(ctx, m.symbolIndexStep(w.p, toolVersions[w.p.Path], observations[w.p.Path]))
 			if err == nil && fresh {
