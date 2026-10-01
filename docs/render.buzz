@@ -392,9 +392,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     return site;
 }
 
-// site_publish is the cacheable publication unit used by docs:site-generate. Keep every
-// output that belongs to the completed site in this one phase: the page tree, pnpm-backed
-// vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
 // site_conventions re-exports the gates check for the magusfile. engine/gates is
 // flat-imported here, and a flat import does not RE-export, so the magusfile cannot
 // reach conventionsCheck through this module without a wrapper.
@@ -402,21 +399,15 @@ export fun site_conventions(root: str, docs: str) > void !> any {
     conventionsCheck(root, docs);
 }
 
+// site_publish is the cacheable publication unit used by docs:site-generate. Keep every
+// output that belongs to the completed site in this one phase: the page tree, the
+// integrity manifest, and (only for rw) the URL ledger. The npm-backed bundles are not
+// built here: site-generate needs build-hljs and build-playground-editor, so they are in
+// gen/ before the render starts.
 export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
-    generateJsBundles();
     writeSiteManifest(site);
     if (updateUrls) { updateUrlLock(site); }
-}
-
-// generateJsBundles builds the committed browser bundles that import npm packages. pnpm
-// is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time
-// rather than behind an isDir check: an interrupted install leaves a node_modules that
-// exists but is incomplete, and the guard read that as ready and fed esbuild a half
-// tree. See the install() note in magusfile.buzz.
-fun generateJsBundles() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    proc\exec("pnpm", ["run", "build"], ".", {});
 }
 
 // site_figures writes every figure's SVGs and receipt for the diagrams-generate target and
