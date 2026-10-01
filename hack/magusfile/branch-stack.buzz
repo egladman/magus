@@ -8,16 +8,18 @@ export final SCHEMA = "magus.branch-stack/v1";
 
 export final STATUSES = ["planned", "created", "merged", "needs-stub", "conflict"];
 
-// OwedCheck is a check a job's holder could not run and the root must: the same shape as a
-// job exit result's owed_checks entry.
-export object OwedCheck {
-    command: str,
-    why: str,
+// CheckGoal is a job row goal of kind check: `magus run <target> <project> -- <args>`.
+export object CheckGoal {
+    id: str,
+    target: str,
+    project: str,
+    args: [str] = [<str>],
 }
 
 // StackLayer is one branch of the stack. parent is the branch it goes on top of: for a
 // split, the branch it was cut on; for a merge, the layer merged before it. Either way it
-// is the stack's base or another layer's branch.
+// is the stack's base or another layer's branch. check is the job row's own check as a
+// command; goals are its check goals.
 export object StackLayer {
     branch: str,
     parent: str,
@@ -25,7 +27,7 @@ export object StackLayer {
     paths: [str],
     declarations: [str],
     check: str = "",
-    owed: [OwedCheck],
+    goals: [CheckGoal],
     status: str,
     reason: str = "",
 }
@@ -134,8 +136,9 @@ fun mapOf(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
 }
 
 // readStack decodes a stack and refuses what it cannot act on: another schema, an unknown
-// member, a status outside STATUSES, an owed check missing its command or why. Members left
-// out read as empty. It does not order the layers; orderLayers does.
+// member, a status outside STATUSES, a goal missing its id, target or project, a goal id
+// given twice in one layer. Members left out read as empty. It does not order the layers;
+// orderLayers does.
 export fun readStack(json: str) > BranchStack !> any {
     final doc = mapOf(serialize\jsonDecode(json), where: "the stack");
     keysOf(doc, allowed: ["schema", "base", "layers"], where: "the stack");
@@ -145,14 +148,18 @@ export fun readStack(json: str) > BranchStack !> any {
     foreach (i, lb in listField(doc, key: "layers", where: "the stack")) {
         final where = "layer {i}";
         final m = mapOf(lb, where: where);
-        keysOf(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "owed", "status", "reason"], where: where);
-        final owed = mut [<OwedCheck>];
-        foreach (j, ob in listField(m, key: "owed", where: where)) {
-            final ow = "{where}'s owed[{j}]";
-            final om = mapOf(ob, where: ow);
-            keysOf(om, allowed: ["command", "why"], where: ow);
-            owed.append(OwedCheck{ command = strField(om, key: "command", where: ow, required: true),
-                why = strField(om, key: "why", where: ow, required: true) });
+        keysOf(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "goals", "status", "reason"], where: where);
+        final goals = mut [<CheckGoal>];
+        final ids = mut [<str>];
+        foreach (j, gb in listField(m, key: "goals", where: where)) {
+            final gw = "{where}'s goals[{j}]";
+            final gm = mapOf(gb, where: gw);
+            keysOf(gm, allowed: ["id", "target", "project", "args"], where: gw);
+            final id = strField(gm, key: "id", where: gw, required: true);
+            if (ids.indexOf(id) != null) { throw "branch-stack: {where} names goal {id} twice"; }
+            ids.append(id);
+            goals.append(CheckGoal{ id = id, target = strField(gm, key: "target", where: gw, required: true),
+                project = strField(gm, key: "project", where: gw, required: true), args = strsField(gm, key: "args", where: gw) });
         }
         final status = strField(m, key: "status", where: where, required: true);
         if (STATUSES.indexOf(status) == null) {
@@ -165,7 +172,7 @@ export fun readStack(json: str) > BranchStack !> any {
             paths = strsField(m, key: "paths", where: where),
             declarations = strsField(m, key: "declarations", where: where),
             check = strField(m, key: "check", where: where, required: false),
-            owed = owed,
+            goals = goals,
             status = status,
             reason = strField(m, key: "reason", where: where, required: false),
         });
@@ -177,11 +184,11 @@ export fun readStack(json: str) > BranchStack !> any {
 export fun writeStack(stack: BranchStack) > str {
     final layers = mut [<any>];
     foreach (l in stack.layers) {
-        final owed = mut [<any>];
-        foreach (o in l.owed) { owed.append({"command": o.command, "why": o.why}); }
+        final goals = mut [<any>];
+        foreach (g in l.goals) { goals.append({"id": g.id, "target": g.target, "project": g.project, "args": g.args}); }
         layers.append({
             "branch": l.branch, "parent": l.parent, "job": l.job, "paths": l.paths,
-            "declarations": l.declarations, "check": l.check, "owed": owed,
+            "declarations": l.declarations, "check": l.check, "goals": goals,
             "status": l.status, "reason": l.reason,
         });
     }
@@ -189,7 +196,7 @@ export fun writeStack(stack: BranchStack) > str {
 }
 
 fun layer(branch: str, parent: str) > StackLayer {
-    return StackLayer{ branch = branch, parent = parent, paths = [<str>], declarations = [<str>], owed = [<OwedCheck>], status = "planned" };
+    return StackLayer{ branch = branch, parent = parent, paths = [<str>], declarations = [<str>], goals = [<CheckGoal>], status = "planned" };
 }
 
 fun branches(stack: BranchStack) > str {
@@ -226,13 +233,13 @@ test "orderLayers names a cycle, an unknown parent and a duplicate branch" {
 
 test "writeStack and readStack round-trip every member" {
     final l = StackLayer{ branch = "topic-1-root", parent = "main", job = "j", paths = ["a.go"], declarations = ["a.go#F"],
-        check = "magus run test .", owed = [OwedCheck{ command = "magus affected ci", why = "touches every project" }],
+        check = "magus run test .", goals = [CheckGoal{ id = "lint", target = "lint", project = "docs", args = ["--fix"] }],
         status = "conflict", reason = "a.go conflicts" };
     final stack = BranchStack{ base = "main", layers = [l] };
     final text = writeStack(stack);
     final back = readStack(text);
     assert\equal(writeStack(back), want: text, message: "round trip");
-    assert\equal(back.layers[0].owed[0].why, want: "touches every project", message: "owed");
+    assert\equal(back.layers[0].goals[0].args, want: ["--fix"], message: "goal args");
     final sparse = readStack(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned"}]}`);
     assert\equal(sparse.layers[0].paths.len(), want: 0, message: "a left-out list reads empty");
 }
@@ -246,13 +253,15 @@ fun refused(text: str) > str {
     return "";
 }
 
-test "readStack refuses another schema, an unknown member, a bad status and an empty owed check" {
+test "readStack refuses another schema, an unknown member, a bad status and an incomplete or repeated goal" {
     assert\equal(refused(`{"schema": "magus.branch-stack/v2", "base": "main", "layers": []}`),
         want: "branch-stack: the stack is magus.branch-stack/v2, and this reads magus.branch-stack/v1", message: "schema");
     assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [], "extra": 1}`),
         want: "branch-stack: the stack has unknown member extra; it takes schema, base, layers", message: "unknown member");
     assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "done"}]}`),
         want: "branch-stack: layer 0's status is done; it takes planned, created, merged, needs-stub, conflict", message: "status");
-    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "owed": [{"command": "", "why": "x"}]}]}`),
-        want: "branch-stack: layer 0's owed[0]'s command is empty", message: "owed");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "goals": [{"id": "g", "target": "", "project": "."}]}]}`),
+        want: "branch-stack: layer 0's goals[0]'s target is empty", message: "empty target");
+    assert\equal(refused(`{"schema": "magus.branch-stack/v1", "base": "main", "layers": [{"branch": "a", "parent": "main", "status": "planned", "goals": [{"id": "g", "target": "t", "project": "."}, {"id": "g", "target": "u", "project": "."}]}]}`),
+        want: "branch-stack: layer 0 names goal g twice", message: "repeated id");
 }
