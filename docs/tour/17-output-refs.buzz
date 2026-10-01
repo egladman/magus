@@ -45,7 +45,6 @@
 // hatch for invoking magus ITSELF - `magus\cmd("sh", ...)` would run `magus sh`.)
 
 import "magus";
-import "os";
 
 import "proc";
 magus\project({});
