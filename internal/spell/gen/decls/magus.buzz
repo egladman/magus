@@ -30,6 +30,7 @@ export enum<str> SymbolIndexFreshness {
     upToDate = "up-to-date",
     outOfDate = "out-of-date",
     notIndexed = "not-indexed",
+    unvouched = "unvouched",
 }
 
 export object Affected {
