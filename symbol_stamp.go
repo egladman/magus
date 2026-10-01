@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -75,22 +76,13 @@ func symbolStampMatches(indexPath, want string) bool {
 }
 
 // writeSymbolStamp records want once the probe has found the index fresh. Best-effort: a
-// sidecar that cannot be written costs the next read a probe and nothing else. The rename
-// keeps a concurrent reader from matching half a stamp.
+// sidecar that cannot be written costs the next read a probe and nothing else. Written
+// atomically, so a concurrent reader never matches half a stamp.
 func writeSymbolStamp(indexPath, want string) {
 	if want == "" {
 		return
 	}
-	path := symbolStampPath(indexPath)
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".fresh-*")
-	if err != nil {
-		return
-	}
-	_, werr := tmp.WriteString(want)
-	cerr := tmp.Close()
-	if werr != nil || cerr != nil || os.Rename(tmp.Name(), path) != nil {
-		_ = os.Remove(tmp.Name())
-	}
+	_ = file.WriteFileAtomic(symbolStampPath(indexPath), []byte(want), 0o644)
 }
 
 // SymbolFreshnessEnv names the environment variables an index freshness verdict depends
