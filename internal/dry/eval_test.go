@@ -462,7 +462,8 @@ func TestSpellExamplesParseAndRecord(t *testing.T) {
 }
 
 func TestEvalImportsFigureWithMagusRecords(t *testing.T) {
-	r := Eval(context.Background(), `import "magus/figure";
+	r := Eval(context.Background(), `import "magus";
+import "magus/figure";
 fun dir(path: str) > magus\Dir {
     final fields: {str: any} = { "path": path, "imports": [<str>], "importsIndexed": true, "calls": [<magus\DirCall>] };
     final record: any = fields;
