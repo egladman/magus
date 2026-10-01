@@ -2123,6 +2123,32 @@ func ObjectJobGateAttempt(v types.JobGateAttempt) vm.Value {
 	return out
 }
 
+func ObjectGateStatus(v types.GateStatus) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("verified", vm.BoolValue(v.Verified))
+	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
+	itemsViolations := make([]vm.Value, len(v.Violations))
+	for indexViolations := range v.Violations {
+		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
+	}
+	out.MapSet("violations", vm.ListValue(itemsViolations))
+	return out
+}
+
+func ObjectJobIntegration(v types.JobIntegration) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("checkout", vm.StrValue(v.Checkout))
+	out.MapSet("at", vm.IntValue(int64(v.At)))
+	out.MapSet("verified", vm.BoolValue(v.Verified))
+	itemsGates := make([]vm.Value, len(v.Gates))
+	for indexGates := range v.Gates {
+		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
+	}
+	out.MapSet("gates", vm.ListValue(itemsGates))
+	return out
+}
+
 func ObjectJobRun(v types.JobRun) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("invocation", vm.StrValue(v.Invocation))
@@ -2227,6 +2253,11 @@ func ObjectJob(v types.Job) vm.Value {
 		optLastRun = ObjectJobRun((*v.LastRun))
 	}
 	out.MapSet("lastRun", optLastRun)
+	optIntegration := vm.Null
+	if v.Integration != nil {
+		optIntegration = ObjectJobIntegration((*v.Integration))
+	}
+	out.MapSet("integration", optIntegration)
 	return out
 }
 
@@ -2424,19 +2455,6 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsUnproposed[indexUnproposed] = vm.StrValue(v.Unproposed[indexUnproposed])
 	}
 	out.MapSet("unproposed", vm.ListValue(itemsUnproposed))
-	return out
-}
-
-func ObjectGateStatus(v types.GateStatus) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StrValue(v.ID))
-	out.MapSet("verified", vm.BoolValue(v.Verified))
-	out.MapSet("outputRef", vm.StrValue(v.OutputRef))
-	itemsViolations := make([]vm.Value, len(v.Violations))
-	for indexViolations := range v.Violations {
-		itemsViolations[indexViolations] = vm.StrValue(v.Violations[indexViolations])
-	}
-	out.MapSet("violations", vm.ListValue(itemsViolations))
 	return out
 }
 

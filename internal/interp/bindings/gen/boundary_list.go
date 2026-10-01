@@ -84,6 +84,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "JobBlock", Zero: types.JobBlock{}, Encode: func(v any) vm.Value { return ObjectJobBlock(v.(types.JobBlock)) }},
 	{Name: "JobEntry", Zero: types.JobEntry{}, Encode: func(v any) vm.Value { return ObjectJobEntry(v.(types.JobEntry)) }},
 	{Name: "JobGateAttempt", Zero: types.JobGateAttempt{}, Encode: func(v any) vm.Value { return ObjectJobGateAttempt(v.(types.JobGateAttempt)) }},
+	{Name: "JobIntegration", Zero: types.JobIntegration{}, Encode: func(v any) vm.Value { return ObjectJobIntegration(v.(types.JobIntegration)) }},
 	{Name: "JobList", Zero: types.JobList{}, Encode: func(v any) vm.Value { return ObjectJobList(v.(types.JobList)) }},
 	{Name: "JobOverlap", Zero: types.JobOverlap{}, Encode: func(v any) vm.Value { return ObjectJobOverlap(v.(types.JobOverlap)) }},
 	{Name: "JobOverlapFootprint", Zero: types.JobOverlapFootprint{}, Encode: func(v any) vm.Value { return ObjectJobOverlapFootprint(v.(types.JobOverlapFootprint)) }},

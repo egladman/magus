@@ -762,6 +762,20 @@ type Job struct {
 	// run log and a cache all grow without the row being written, so a stored figure goes
 	// stale in silence. It is measured when the job is listed.
 	LastRun *JobRun `json:"last_run,omitempty" yaml:"last_run,omitempty"`
+	// Integration is the latest grade of this job's check goals in another tree, nil until
+	// `magus job wait --integration` records one. Store-computed like Result, and kept
+	// beside State rather than moving it: a job that passed where it was written and fails
+	// once merged is two facts, and one field could hold only the later.
+	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
+}
+
+// JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
+// an integration branch was merged into, at At (unix seconds).
+type JobIntegration struct {
+	Checkout string       `json:"checkout" yaml:"checkout"`
+	At       int64        `json:"at" yaml:"at"`
+	Verified bool         `json:"verified" yaml:"verified"`
+	Gates    []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 }
 
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
@@ -1719,6 +1733,14 @@ func (u Job) Clone() Job {
 	if u.LastRun != nil {
 		run := *u.LastRun
 		c.LastRun = &run
+	}
+	if u.Integration != nil {
+		integration := *u.Integration
+		integration.Gates = slices.Clone(u.Integration.Gates)
+		for i := range integration.Gates {
+			integration.Gates[i].Violations = slices.Clone(integration.Gates[i].Violations)
+		}
+		c.Integration = &integration
 	}
 	return c
 }

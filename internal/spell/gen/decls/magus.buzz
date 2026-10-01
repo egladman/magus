@@ -931,6 +931,20 @@ export object JobRun {
     bytesReclaimed: int = 0,
 }
 
+export object GateStatus {
+    id: str = "",
+    verified: bool = false,
+    outputRef: str = "",
+    violations: [str] = [],
+}
+
+export object JobIntegration {
+    checkout: str = "",
+    at: int = 0,
+    verified: bool = false,
+    gates: [GateStatus] = [],
+}
+
 export object Job {
     schemaVersion: int = 0,
     requires: [str] = [],
@@ -966,6 +980,7 @@ export object Job {
     attempt: JobAttempt? = null,
     gateAttempts: [JobGateAttempt] = [],
     lastRun: JobRun? = null,
+    integration: JobIntegration? = null,
 }
 
 export object SpawnTarget {
@@ -1118,13 +1133,6 @@ export object JobList {
     changes: [InflightChange] = [],
     fetched: InflightFetch? = null,
     unproposed: [str] = [],
-}
-
-export object GateStatus {
-    id: str = "",
-    verified: bool = false,
-    outputRef: str = "",
-    violations: [str] = [],
 }
 
 export object FileChange {

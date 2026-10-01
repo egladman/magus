@@ -212,6 +212,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},
 	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
 	{Name: "JobGateAttempt", Type: reflect.TypeFor[types.JobGateAttempt](), RuntimeObject: true},
+	{Name: "JobIntegration", Type: reflect.TypeFor[types.JobIntegration](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
