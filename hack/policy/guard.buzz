@@ -18,6 +18,10 @@
 //   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
+//   push-authority (deny): a push or `gh pr create` by any caller but the main session, and
+//     by one the host reported no session for.
+//   branch-name (deny, or advise on a topic miss alone): a pushed branch or bookmark, or a
+//     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
@@ -46,7 +50,8 @@
 //     session folder is not a run; magus status reads the lock.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
-// five), cadence.buzz (the gate and the push), binaries.buzz (foreign-binary and
+// five), cadence.buzz (the gate and the push), branches.buzz (push-authority and
+// branch-name), binaries.buzz (foreign-binary and
 // go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz,
 // comments.buzz and host.buzz (a run log, and a directory named terminals).
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
@@ -56,6 +61,7 @@ namespace agentpolicy;
 
 import "magus";
 import "fs";
+import "vcs";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/gh" as gh;
 import "./hack/policy/cadence" as cadence;
@@ -66,6 +72,7 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/pull_requests" as pullRequests;
 import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
+import "./hack/policy/branches" as branches;
 import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
@@ -100,14 +107,62 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final once = fun (key: str) > bool {
         return magus\guard.once(key);
     };
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    // TODO: pass the hook payload's subagent id as agent once CommandRequest carries it.
+    // Until then a subagent magus never saw spawned, under no lease, reads as the main session.
+    final pusher = branches\Pusher{ role = req.role, title = req.parent, session = req.session, lease = lease };
     final texts = withHeredocs(programs, line: req.command);
     final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
-        diff: pullRequests\branchDiff(req.workspace), once: once);
+        diff: pullRequests\branchDiff(req.workspace), once: once,
+        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = remoteOf(req), topic = branchTopic });
     if (verdict.decision != "allow" or stale\rebuilds(programs)) {
         return verdict;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
+}
+
+// Publishing is what the publishing rules read about a line: who runs it, the branch or
+// bookmark its checkout is on, what the checkout knows of the remote, and the topic of the
+// branch's diff, read only when a name is judged.
+export object Publishing {
+    pusher: branches\Pusher,
+    current: str,
+    remote: branches\Remote,
+    topic: fun () > branches\Topic,
+}
+
+// currentBranch is the branch or bookmark the guard read for a push, else the one vcs\ref
+// reads, "" when neither names one.
+fun currentBranch(req: CommandRequest) > str {
+    if (req.checkout != null) {
+        return req.checkout!.branch;
+    }
+    return (vcs\ref() catch null) ?? "";
+}
+
+fun remoteOf(req: CommandRequest) > branches\Remote {
+    if (req.checkout != null) {
+        return branches\Remote{ base = req.checkout!.base, branches = req.checkout!.remoteBranches };
+    }
+    return branches\Remote{ base = vcs\base(), branches = [<str>] };
+}
+
+// branchTopic is the topic of the branch's changes against the base, through vcs, which reads
+// the repository holding the rule's working directory. A diff it cannot read is no topic.
+fun branchTopic() > branches\Topic {
+    final paths = mut [<str>];
+    try {
+        foreach (p in vcs\changedFiles()) {
+            paths.append(p.value);
+        }
+    } catch (e) {
+        return branches\unknownTopic();
+    }
+    return branches\topicOf(paths);
 }
 
 // withHeredocs fills each commit message, title and description the parser rendered empty
@@ -210,20 +265,40 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
     return comments\decideComments(req.path, before: before, after: after, once: once);
 }
 
-// decide is judge over plain records. The order is the verdict: the gate and push denials
-// first, then the gh denials, then the commit and pull request text denials, then the gh
-// advisories, then the pull request text advisories. baseBranch is the checkout's branch
-// when it is the base branch, "" otherwise; line is the shell line as sent, files the
-// description files it names, and diff reads the branch's diff for a description's budget.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool) > GuardVerdict {
+// decide is judge over plain records. The order is the verdict: push authority first, then
+// the gate and push denials, then the branch name denials, then the gh denials, then the
+// commit and pull request text denials, then the gh advisories, then the pull request text
+// advisories, then the branch name advisories. baseBranch is the checkout's branch when it
+// is the base branch, "" otherwise; line is the shell line as sent, files the description
+// files it names, and diff reads the branch's diff for a description's budget.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
     final hostVerdict = host\decideHost(programs);
     if (hostVerdict.decision != "allow") {
         return hostVerdict;
+    }
+    final authority = branches\decideAuthority(programs, caller: publishing.pusher);
+    if (authority.decision != "allow") {
+        return authority;
     }
     final verdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
     if (verdict.decision != "allow") {
         return verdict;
     }
+    final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
+        topic: publishing.topic, once: once);
+    if (names.decision == "deny") {
+        return names;
+    }
+    final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, once: once);
+    if (rest.decision == "allow") {
+        return names;
+    }
+    return rest;
+}
+
+// decideText is decide's gh and text rules: the gh denials, the commit and pull request text
+// denials, the gh advisories, then the pull request text advisories.
+fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once);
     if (github.decision == "deny") {
         return github;
