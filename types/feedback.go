@@ -78,9 +78,9 @@ func joinFeedback[T ~string](values []T) string {
 	return strings.Join(parts, ", ")
 }
 
-// FeedbackTrail is what the guard recorded about one agent session inside a window, as
-// magus/feedback's trail call reads it: every call it judged and every subagent the
-// session started.
+// FeedbackTrail is what the guard recorded about one session inside a window, as
+// magus\trail.read returns it: every call it judged and every subagent the session
+// started.
 type FeedbackTrail struct {
 	// Session is the host's session id the observations belong to.
 	Session string

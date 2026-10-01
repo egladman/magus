@@ -59,9 +59,9 @@ func TestDecodeFeedbackMark(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestFeedbackNeedsAWorkspace(t *testing.T) {
-	_, err := FeedbackTrail(context.Background(), nil)
-	assert.ErrorContains(t, err, "feedback.trail")
-	_, err = FeedbackMarks(context.Background())
-	assert.ErrorContains(t, err, "feedback.marks")
+func TestMagusTrailNeedsAWorkspace(t *testing.T) {
+	_, err := MagusTrailRead(context.Background(), nil)
+	assert.ErrorContains(t, err, "trail.read")
+	_, err = MagusTrailMarks(context.Background())
+	assert.ErrorContains(t, err, "trail.marks")
 }

@@ -4,7 +4,6 @@ import "encoding/json";
 import "flags";
 import "fs";
 import "magus";
-import "magus/feedback";
 import "magus/figure";
 import "std";
 import "../../.github/actions/advice/figure-link" as figurelink;
@@ -240,7 +239,7 @@ export fun main(args: [str]) > void !> any {
     if (themeName != "light" and themeName != "dark") {
         throw "show-session-figure: --theme is light or dark, not {themeName}\n{USAGE}";
     }
-    final t = feedback\trail({"session": parsed.values["--session"] ?? "", "since": parsed.values["--since"] ?? "", "until": parsed.values["--until"] ?? ""});
+    final t = magus\trail.read({"session": parsed.values["--session"] ?? "", "since": parsed.values["--since"] ?? "", "until": parsed.values["--until"] ?? ""});
     if (t.session == "") {
         throw "show-session-figure: no agent session recorded anything in this repository's trails inside the window; widen it with --since";
     }
@@ -261,7 +260,7 @@ export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str)
 }
 
 // fixture builds the tree of hack/testdata/session-figure-jobs.json over the feedback trail
-// fixture, the shape magus\job.list() and feedback\trail() return.
+// fixture, the shape magus\job.list() and magus\trail.read() return.
 fun fixture() > JobTree !> any {
     final raw = json\parse(fs\readFile("hack/testdata/session-figure-jobs.json"));
     final jobs = mut [<magus\Job>];

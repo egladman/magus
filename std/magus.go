@@ -986,6 +986,56 @@ var Magus = Module{
 				Extern:  true,
 			}},
 		},
+		{
+			Name: "trail",
+			Doc: "A session's guard record, read from the activity trail, and the verdicts a person " +
+				"gives its rows. Bound by hand in internal/interp/bindings (buildTrail).",
+			Methods: []Method{
+				{
+					Name: "read",
+					Doc: "One session's guard record inside a window: {session, host, since, until, checkouts, observations, spawns}. " +
+						"opts.session picks the session; omitted, it is the session with the newest observation in the window. " +
+						"opts.since is a duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, default now. " +
+						"Reads the trail of every checkout of this repository that changed inside the window, because a session's hooks record into the checkout they ran from. " +
+						"An unknown option or an unreadable time raises, and MGS1022 outside a workspace.",
+					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "FeedbackTrail"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "shape",
+					Doc:     "A shell line with its paths, patterns and literals normalized away, so calls differing only in what they name read alike: `grep -rn foo src` and `grep -rn bar lib` are both `grep -rn <arg>`. Programs, flags, operators and redirections stay. \"\" for a line the shell parser cannot read.",
+					Args:    []Arg{{Name: "command", Type: TypeString}},
+					Returns: []Ret{{Type: TypeString}},
+					Extern:  true,
+				},
+				{
+					Name:    "shapes",
+					Doc:     "The shape of each program a shell line runs, in order, each with its own redirections: `cd x && grep -rn foo src | head -5` is [`cd <path>`, `grep -rn <arg>`, `head -<n>`]. Programs inside a loop or a command substitution count. Empty for a line the shell parser cannot read.",
+					Args:    []Arg{{Name: "command", Type: TypeString}},
+					Returns: []Ret{{Type: TypeStringSlice}},
+					Extern:  true,
+				},
+				{
+					Name:    "marks",
+					Doc:     "Every verdict a person recorded on a trail row in this repository, oldest first; a later mark on an id supersedes an earlier one. Kept per repository identity, so every checkout reads the same marks. Raises on a store line that does not decode, and MGS1022 outside a workspace.",
+					Returns: []Ret{{Type: TypeAny, Object: "[FeedbackMark]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "mark",
+					Doc: "Record a person's verdict on one trail row and return it as stored, its time stamped. " +
+						"id is the row's stable id (fb and 12 hex digits), section one of refused, advised, unguarded, next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule or shape the row groups by. " +
+						"Appends to the per-repository store and rewrites nothing. Raises on a malformed mark, an unwritable store, and MGS1022 outside a workspace.",
+					Args:    []Arg{{Name: "mark", Type: TypeAnyMap, Object: "FeedbackMark"}},
+					Returns: []Ret{{Type: TypeAny, Object: "FeedbackMark"}},
+					Raises:  true,
+					Extern:  true,
+				},
+			},
+		},
 	},
 	MCPTools: magusMCPTools,
 }

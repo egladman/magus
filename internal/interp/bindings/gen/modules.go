@@ -20,7 +20,6 @@ var Modules = ffi.Set{
 	"csv":      {Register: RegisterCsv, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/csv"},
 	"diff":     {Register: RegisterDiff, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"env":      {Register: RegisterEnv, Capabilities: ffi.Capabilities(ffi.WASM)},
-	"feedback": {Register: RegisterFeedback, Path: "magus/feedback"},
 	"flags":    {Register: RegisterFlags, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"fmt":      {Register: RegisterFmt, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"fs":       {Register: RegisterFs},

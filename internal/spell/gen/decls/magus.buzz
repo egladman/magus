@@ -1404,6 +1404,51 @@ export object ServiceLease {
     idle: str = "",
 }
 
+export object FeedbackMark {
+    id: str = "",
+    section: str = "",
+    key: str = "",
+    rule: str = "",
+    verdict: str = "",
+    note: str = "",
+    session: str = "",
+    at: int = 0,
+    examples: [str] = [],
+}
+
+export object FeedbackObservation {
+    at: int = 0,
+    agent: str = "",
+    lease: str = "",
+    tool: str = "",
+    command: str = "",
+    path: str = "",
+    decision: str = "",
+    rule: str = "",
+    nexts: [str] = [],
+    preauthorizedBy: str = "",
+    shape: str = "",
+    shapes: [str] = [],
+}
+
+export object FeedbackSpawn {
+    at: int = 0,
+    agent: str = "",
+    child: str = "",
+    lease: str = "",
+    model: str = "",
+}
+
+export object FeedbackTrail {
+    session: str = "",
+    host: str = "",
+    start: int = 0,
+    end: int = 0,
+    checkouts: [str] = [],
+    observations: [FeedbackObservation] = [],
+    spawns: [FeedbackSpawn] = [],
+}
+
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
@@ -1534,5 +1579,14 @@ export object service {
 // Facts about the workspace's version control that only magus computes. The `vcs` host module is the repository itself; this namespace is magus's reading of it. Bound by hand in internal/interp/bindings (buildVCS).
 export object vcs {
     static extern fun checkpoint() > VCSCheckpoint !> any;
+}
+
+// A session's guard record, read from the activity trail, and the verdicts a person gives its rows. Bound by hand in internal/interp/bindings (buildTrail).
+export object trail {
+    static extern fun mark(mark: FeedbackMark) > FeedbackMark !> any;
+    static extern fun marks() > [FeedbackMark] !> any;
+    static extern fun read(opts: {str: any} = {<str: any>}) > FeedbackTrail !> any;
+    static extern fun shape(command: str) > str;
+    static extern fun shapes(command: str) > [str];
 }
 

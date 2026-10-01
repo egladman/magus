@@ -86,6 +86,12 @@ service.release
 skills
 stats
 symbolIndexDigest
+trail
+trail.mark
+trail.marks
+trail.read
+trail.shape
+trail.shapes
 vcs
 vcs.checkpoint
 where

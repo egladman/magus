@@ -2,7 +2,7 @@ namespace markfeedback;
 
 import "flags";
 import "fs";
-import "magus/feedback";
+import "magus";
 import "std";
 import "strings";
 import "hack/dev/show-feedback" as show;
@@ -77,7 +77,7 @@ export fun main(args: [str]) > void !> any {
         std\print("dry run: would mark {marks.len()} row(s) {verdict} in this repository's feedback store; rerun with --apply to write");
     } else {
         foreach (m in marks) {
-            feedback\mark(m);
+            magus\trail.mark(m);
         }
         std\print("marked {marks.len()} row(s) {verdict} in this repository's feedback store");
     }

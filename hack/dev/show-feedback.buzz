@@ -4,7 +4,7 @@ import "crypto";
 import "encoding/json";
 import "flags";
 import "fs";
-import "magus/feedback";
+import "magus";
 import "std";
 import "strings";
 import "time";
@@ -179,7 +179,7 @@ export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
             }
         }
         if (o.nexts.len() > 0 and !nextRun(obs, i: i)) {
-            final shape = feedback\shape(o.nexts[0]);
+            final shape = magus\trail.shape(o.nexts[0]);
             bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: agentOf(o),
                 example: clip("served `{o.nexts[0]}` after `{what}`"));
         }
@@ -216,8 +216,8 @@ export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
 
 // report reads the session and folds it into rows.
 export fun report(session: str, since: str, through: str) > Report !> any {
-    final t = feedback\trail({"session": session, "since": since, "until": through});
-    return fold(t, marks: feedback\marks());
+    final t = magus\trail.read({"session": session, "since": since, "until": through});
+    return fold(t, marks: magus\trail.marks());
 }
 
 export fun fold(t: FeedbackTrail, marks: [FeedbackMark]) > Report {
@@ -371,7 +371,7 @@ export fun main(args: [str]) > void !> any {
 }
 
 // trailFromJSON reads a fixture: a FeedbackTrail spelled as JSON, the shape -o json of
-// feedback\trail would print.
+// magus\trail.read would print.
 export fun trailFromJSON(text: str) > FeedbackTrail !> any {
     final raw = json\parse(text);
     final obs = mut [<FeedbackObservation>];
@@ -385,7 +385,7 @@ export fun trailFromJSON(text: str) > FeedbackTrail !> any {
             at = std\toInt(o["at"] ?? 0), agent = o["agent"] ?? "", lease = o["lease"] ?? "", tool = o["tool"] ?? "shell.command",
             command = command, path = o["path"] ?? "", decision = o["decision"] ?? "", rule = o["rule"] ?? "",
             nexts = nexts, preauthorizedBy = o["preauthorizedBy"] ?? "",
-            shape = feedback\shape(command), shapes = feedback\shapes(command),
+            shape = magus\trail.shape(command), shapes = magus\trail.shapes(command),
         });
     }
     final spawns = mut [<FeedbackSpawn>];
@@ -414,8 +414,8 @@ fun fixtureReport() > Report !> any {
 }
 
 test "commands that differ only in what they name share a shape" {
-    assert\equal(feedback\shape("grep -rn foo src"), want: feedback\shape("grep -rn bar lib"), message: "grep");
-    assert\equal(feedback\shape("grep -rn foo src"), want: "grep -rn <arg>", message: "shape");
+    assert\equal(magus\trail.shape("grep -rn foo src"), want: magus\trail.shape("grep -rn bar lib"), message: "grep");
+    assert\equal(magus\trail.shape("grep -rn foo src"), want: "grep -rn <arg>", message: "shape");
 }
 
 test "a row id is a digest of section and key, not of its position" {

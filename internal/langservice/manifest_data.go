@@ -108,17 +108,6 @@ var modules = []Module{
 		},
 	},
 	{
-		Name: "feedback",
-		Doc:  "One agent session's guard record (every call the guard judged, with its verdict, served nexts and command shape, plus the subagents it started) and a person's verdicts on the report's rows, kept per repository.",
-		Methods: []Method{
-			{Name: "trail", Doc: "One session's guard record inside a window: {session, host, since, until, checkouts, observations, spawns}. opts.session picks the session; omitted, it is the session with the newest agent observation in the window. opts.since is a duration back from opts.until (`6h`) or an RFC3339 time, default 24h; opts.until is an RFC3339 time, default now. Reads the trail of every checkout of this repository that changed inside the window, because a session's hooks record into the checkout they ran from, which is rarely the worker's. An unknown option or an unreadable time raises. Reads the workspace on the context; raises MGS1022 outside one.", Sig: "feedback\\trail([opts]) -> FeedbackTrail"},
-			{Name: "shape", Doc: "A shell line with its paths, patterns and literals normalized away, so calls differing only in what they name read alike: `grep -rn foo src` and `grep -rn bar lib` are both `grep -rn <arg>`. Programs, flags, operators and redirections stay. \"\" for a line the shell parser cannot read.", Sig: "feedback\\shape(command) -> string"},
-			{Name: "shapes", Doc: "The shape of each program a shell line runs, in order, each with its own redirections: `cd x && grep -rn foo src | head -5` is [`cd <path>`, `grep -rn <arg>`, `head -<n>`]. Programs inside a loop or a command substitution count. Empty for a line the shell parser cannot read.", Sig: "feedback\\shapes(command) -> []string"},
-			{Name: "marks", Doc: "Every verdict a person recorded on a feedback row in this repository, oldest first; a later mark on an id supersedes an earlier one. Kept per repository identity, so every checkout reads the same marks. Raises on a store line that does not decode, and MGS1022 outside a workspace.", Sig: "feedback\\marks() -> [FeedbackMark]"},
-			{Name: "mark", Doc: "Record a person's verdict on one feedback row and return it as stored, its time stamped. id is the row's stable id (fb and 12 hex digits), section one of refused, advised, unguarded, next-not-taken, verdict one of should-deny, should-advise, wrong-deny, fine; key names the rule or shape the row groups by. Appends to the per-repository store and rewrites nothing. Raises on a malformed mark, an unwritable store, and MGS1022 outside a workspace.", Sig: "feedback\\mark(mark) -> FeedbackMark"},
-		},
-	},
-	{
 		Name: "figure",
 		Doc:  "Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls.",
 		Methods: []Method{
