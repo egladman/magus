@@ -306,6 +306,21 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	assert.Contains(t, reason, "workers do not publish")
 }
 
+// A root session holding a parentless row is the root under lease-vcs, so the push gate
+// asks it as it asks a person; only a worker is refused outright.
+func TestUngatedPushAsksARootSessionHoldingItsOwnLease(t *testing.T) {
+	lease := narrowLease()
+	lease.Parent = ""
+	ctx, _ := fleetFixture(t, lease)
+	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
+	assert.Equal(t, "ask", v.Decision)
+	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Contains(t, v.Reason, "Approving publishes")
+}
+
 // TestGatedPushIsNeverAsked pins that the prompt appears only when consent is needed.
 func TestGatedPushIsNeverAsked(t *testing.T) {
 	v := judgePush(t, "pass", "")

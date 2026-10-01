@@ -762,7 +762,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
 			cover, commit := pushCoverage(ctx, deps, location, input, shellD, callDir)
-			switch decision, reason := gradePushWithoutGate(cover, commit, actingLease); decision {
+			// The same worker test lease-vcs uses: a root session holding a parentless row
+			// publishes, so it is asked like a person rather than refused like a worker. A
+			// row that cannot be read stays a worker.
+			worker := actingLease
+			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
+				worker = ""
+			}
+			switch decision, reason := gradePushWithoutGate(cover, commit, worker); decision {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
 				if !req.RendersAsk {
