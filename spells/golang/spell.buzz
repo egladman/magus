@@ -76,6 +76,9 @@ export fun mgs_getTools() > {str: Tool} {
                    supported = VersionBounds{min = "1.21"}, lifecycle = "go"},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
         "govulncheck": Tool{observe = Command{bin = "govulncheck", args = ["-version"]}},
+        // Observed for the reason govulncheck is: only the scip op drives it, so its
+        // version keys the index and no build or test.
+        "scip-go": Tool{observe = Command{bin = "scip-go", args = ["--version"]}},
     };
 }
 

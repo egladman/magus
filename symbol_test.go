@@ -214,30 +214,63 @@ func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 // indexer would only make the fixture depend on an installed binary.
 func newIndexedWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
+	m, src, _ := newIndexedWorkspaceWith(t)
+	return m, src
+}
+
+// indexerBin is the fixture indexer's binary. It is on no PATH, so its observation is
+// never cached and every probe reads the version the test set.
+const indexerBin = "zzz-scip-freshness-indexer"
+
+// newIndexedWorkspaceWith is newIndexedWorkspace that also binds the root project to a
+// second spell claiming the installed skills under .claude/skills, the way the real root
+// project does, and hands back the indexer version its observe probe reports.
+func newIndexedWorkspaceWith(t *testing.T) (*Magus, string, *string) {
+	t.Helper()
 	const spellName = "zzz-scip-freshness-test-spell"
+	const skillsSpell = "zzz-scip-freshness-skills-spell"
+	version := "1.0.0"
 	spell := spells.NewSpell(spellName,
 		spells.WithTargets(spells.SymbolIndexOp),
-		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
+		spells.WithOps(map[string]spells.Op{
+			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: indexerBin}},
+		}),
 		spells.WithSources("**/*.go"),
-		// A probed tool is not decoration: its version is a key input the run scheduler
-		// stamps and buildStep does not, so without one every assertion here would hold
-		// just as well for the broken probe this fixture exists to catch. `go` is present
-		// wherever these tests run.
+		// The observed indexer is not decoration: its version is a key input the run
+		// scheduler stamps and buildStep does not, so without one every assertion here
+		// would hold just as well for the broken probe this fixture exists to catch. The
+		// probed toolchain is there to prove the scip step does NOT key on it.
 		spells.WithTools(map[string]spells.Tool{
-			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}},
+			indexerBin:      {Observe: spells.Command{Bin: indexerBin, Args: []string{"--version"}}},
+			"zzz-toolchain": {Probe: spells.Command{Bin: "zzz-toolchain", Args: []string{"--version"}}},
+		}),
+		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
+			if cmd.Bin == indexerBin {
+				return version, nil
+			}
+			return "toolchain " + version, nil
 		}),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
 	)
+	skills := spells.NewSpell(skillsSpell, spells.WithSources(".claude/skills/**/SKILL.md"))
 	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	project.DefaultSpellRegistry().RegisterSpell(skills)
+	t.Cleanup(func() {
+		project.DefaultSpellRegistry().UnregisterSpell(spellName)
+		project.DefaultSpellRegistry().UnregisterSpell(skillsSpell)
+	})
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
+	skill := filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	require.NoError(t, os.WriteFile(skill, []byte("# query\n"), 0o644))
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(spellName))
+	reg.RegisterProject(".", WithSpell(spellName), WithSpell(skillsSpell))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
@@ -248,7 +281,7 @@ func newIndexedWorkspace(t *testing.T) (*Magus, string) {
 	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root())
 	require.NoError(t, os.MkdirAll(filepath.Dir(index), 0o755))
 	require.NoError(t, os.WriteFile(index, []byte("scip"), 0o644))
-	return m, src
+	return m, src, &version
 }
 
 func freshness(t *testing.T, m *Magus) types.SymbolIndexFreshness {
@@ -313,9 +346,10 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 
 	p := m.Get(".")
 	require.NotNil(t, p)
+	ps := []*types.Project{p}
 	step := m.symbolIndexStep(p,
-		m.toolVersionsByProject(ctx, []*types.Project{p})[p.Path],
-		m.probeObservations(ctx, []*types.Project{p}, nil)[p.Path])
+		m.toolVersionsByProject(ctx, ps)[p.Path],
+		m.probeObservations(ctx, ps, symbolIndexDriven(ps))[p.Path])
 	probeKey, _, err := m.cache.StepKey(ctx, &step)
 	require.NoError(t, err)
 
@@ -331,6 +365,117 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	bareKey, _, err := m.cache.StepKey(ctx, &bare)
 	require.NoError(t, err)
 	assert.NotEqual(t, runKey, bareKey, "buildStep alone is not the key any run mints")
+}
+
+// The index reads the language's sources. Installed skills sit in the root project's
+// source set, and a skill install rewrites them; that marked a Go index out of date
+// when no symbol could have moved, and `magus explain` exited 1 over it.
+func TestSymbolIndexIgnoresAnInstalledSkillRewrite(t *testing.T) {
+	m, _ := newIndexedWorkspace(t)
+	ctx := context.Background()
+	scipKey := func() string {
+		key, _, err := m.ComputeTargetKey(ctx, ".", spells.SymbolIndexOp, nil)
+		require.NoError(t, err)
+		return key
+	}
+	projectKey := func() string {
+		step := m.buildStep(m.Get("."), "build")
+		key, _, err := m.cache.StepKey(ctx, &step)
+		require.NoError(t, err)
+		return key
+	}
+	scipBefore, projectBefore := scipKey(), projectKey()
+
+	skill := filepath.Join(m.Root(), ".claude", "skills", "magus-query", "SKILL.md")
+	require.NoError(t, os.WriteFile(skill, []byte("# query, reinstalled\n"), 0o644))
+
+	assert.NotEqual(t, projectBefore, projectKey(), "the skill is one of the project's sources")
+	assert.Equal(t, scipBefore, scipKey(), "but not one the indexer reads")
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m))
+}
+
+// The other half of keying the indexer on itself: an upgraded indexer writes a different
+// index, so the old one is out of date. The spell's toolchain is not what the op runs, so
+// its version does not key the index.
+func TestSymbolIndexKeysOnTheIndexerVersionNotTheToolchain(t *testing.T) {
+	m, _, version := newIndexedWorkspaceWith(t)
+	require.Equal(t, types.SymbolIndexFresh, freshness(t, m))
+
+	p := m.Get(".")
+	step := m.symbolIndexStep(p, []string{"zzz:zzz-toolchain:9.9.9"}, nil)
+	assert.Empty(t, step.ToolVersions, "the scip step drops the spell's tool versions")
+
+	*version = "2.0.0"
+	assert.Equal(t, types.SymbolIndexStale, freshness(t, m), "a new indexer version stales the index")
+}
+
+// The indexer's version reaches the scip key and no other target's: it is declared as an
+// observation, which keys only the targets whose ops drive the binary.
+func TestIndexerObservationKeysOnlyTheScipOp(t *testing.T) {
+	sp := spells.NewSpell("go",
+		spells.WithOps(map[string]spells.Op{
+			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			"go-build":           {Command: spells.Command{Bin: "go"}},
+		}),
+		spells.WithTools(map[string]spells.Tool{
+			"scip-go": {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+		}),
+	)
+	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+	probed := map[string]string{"go:scip-go": "0.2.7"}
+
+	assert.Equal(t, []string{"go:scip-go:0.2.7"}, observationsForTarget(p, spells.SymbolIndexOp, probed))
+	assert.Empty(t, observationsForTarget(p, "go-build", probed))
+	assert.Empty(t, observationsForTarget(p, "test", probed))
+}
+
+// A status check probes only what the scip op drives. It passed driven=nil (probe
+// everything) and then dropped every observation the op does not drive, so govulncheck's
+// database probe forked once per Go project on every graph read and fed nothing.
+func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
+	var mu sync.Mutex
+	forked := map[string]int{}
+	sp := spells.NewSpell("go",
+		spells.WithOps(map[string]spells.Op{
+			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			"govulncheck":        {Command: spells.Command{Bin: "govulncheck"}},
+		}),
+		spells.WithTools(map[string]spells.Tool{
+			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
+			"govulncheck": {Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+		}),
+		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			forked[cmd.Bin]++
+			return "v1", nil
+		}),
+	)
+	binDir := t.TempDir()
+	for _, bin := range []string{"scip-go", "govulncheck"} {
+		require.NoError(t, os.WriteFile(filepath.Join(binDir, bin), []byte("\x7fELF binary"), 0o755))
+	}
+	t.Setenv("PATH", binDir)
+
+	root := t.TempDir()
+	var ps []*types.Project
+	for i := range 7 {
+		dir := filepath.Join(root, fmt.Sprintf("p%d", i))
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		ps = append(ps, &types.Project{Path: fmt.Sprintf("p%d", i), Dir: dir, ResolvedSpells: []*spells.Spell{sp}})
+	}
+	m := &Magus{ws: &types.Workspace{Root: root}}
+
+	got := m.probeObservations(t.Context(), ps, symbolIndexDriven(ps))
+	assert.Equal(t, map[string]int{"scip-go": 1}, forked,
+		"one scip-go fork for seven projects that see the same inputs, and no govulncheck")
+	assert.Equal(t, "v1", got["p3"]["go:scip-go"])
+
+	m.probeObservations(t.Context(), ps, symbolIndexDriven(ps))
+	assert.Equal(t, map[string]int{"scip-go": 1}, forked, "the second status check is a cache hit")
+
+	m.probeObservations(t.Context(), ps, map[string]map[string]bool{"p0": {"go:govulncheck": true}, "p1": {"go:govulncheck": true}})
+	assert.Equal(t, 2, forked["govulncheck"], "the database observation is never cached: it moves on a clock")
 }
 
 // TestDispatchDueSkipsARunAlreadyInFlight is the one occupancy rule the scheduler still

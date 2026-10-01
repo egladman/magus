@@ -495,6 +495,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, magusfileGlobs(".")...)
 		}
 	}
+	// The symbol indexer reads its language's sources and nothing else the project
+	// declares. Keyed on the whole project, a rewrite of installed skills under the root
+	// project marked its Go index out of date when no symbol could have moved.
+	// An indexing spell that declares no sources keeps the whole project, which is the
+	// claim that can only over-invalidate.
+	if target == spells.SymbolIndexOp {
+		if indexed := symbolIndexSources(p); len(indexed) > 0 {
+			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
+			if p.Path != "." {
+				step.Sources = append(step.Sources, magusfileGlobs(".")...)
+			}
+		}
+	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
 	// already spans every target rather than the running one (a chained target's writes land
@@ -812,7 +825,14 @@ func alwaysRuns(p *types.Project, target string) bool {
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
+//
+// The scip step takes no tool versions: the indexer is its own binary, keyed through the
+// observation its spell declares for it, and the spell's toolchain (go, golangci-lint,
+// node, tsc) is not what it runs.
 func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
+	if step.Target == spells.SymbolIndexOp {
+		toolVersions = nil
+	}
 	step.ToolVersions = toolVersions
 	// Appended, not assigned: buildStep already put the target's ctx.observes lines
 	// here, and a probed observation is the same input class from the other source.
@@ -1300,8 +1320,9 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 	return out
 }
 
-// targetDrivenBins is the "spell:bin" set target's body statically reaches, the same
-// walk observationsForTarget narrows the key with. Returning it separately is what lets
+// targetDrivenBins is the "spell:bin" set target's body statically reaches, plus the bin
+// of a spell op named target itself, which runs with no body to walk (the scip op, `magus
+// run go-vet`): the same walk observationsForTarget narrows the key with. Returning it separately is what lets
 // the SPAWN be skipped rather than only the key line: a nil result means the target
 // drives nothing, and probeObservations reads nil as "probe everything" for callers that
 // have no target to scope by, so the two are not interchangeable.
@@ -1316,6 +1337,11 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
 				driven[use.Spell+":"+op.Bin] = true
 			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok && op.Bin != "" {
+			driven[s.Name()+":"+op.Bin] = true
 		}
 	}
 	return driven
@@ -1368,30 +1394,41 @@ func targetDrivenEnvKeys(p *types.Project, target string) []string {
 // through a helper the walk cannot follow is invisible, and TargetSpellUse.Spell is the
 // IMPORT HANDLE, which equals the spell name only for an unaliased import. Both leave a
 // target keyed as it was before, never keyed on the wrong thing.
+//
+// A spell op named target itself counts too, as in targetDrivenBins: a bare op has no
+// body for the walk to read, and the scip op keys on its indexer's version this way.
 func observationsForTarget(p *types.Project, target string, probed map[string]string) []string {
 	if len(probed) == 0 {
 		return nil
 	}
 	var out []string
+	add := func(spell string, op spells.Op) {
+		if op.Bin == "" {
+			return
+		}
+		key := spell + ":" + op.Bin
+		value, ok := probed[key]
+		if !ok {
+			return
+		}
+		if line := key + ":" + value; !slices.Contains(out, line) {
+			out = append(out, line)
+		}
+	}
 	for _, use := range p.TargetSpellOps[target] {
 		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
 		if i < 0 {
 			continue
 		}
-		sp := p.ResolvedSpells[i]
 		for _, opName := range use.Ops {
-			op, ok := sp.Op(opName)
-			if !ok || op.Bin == "" {
-				continue
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok {
+				add(use.Spell, op)
 			}
-			key := use.Spell + ":" + op.Bin
-			value, ok := probed[key]
-			if !ok {
-				continue
-			}
-			if line := key + ":" + value; !slices.Contains(out, line) {
-				out = append(out, line)
-			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok {
+			add(s.Name(), op)
 		}
 	}
 	return out
