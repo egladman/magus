@@ -283,7 +283,8 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 
 	if row.Check == nil && len(row.Goals) == 0 {
 		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no check and no goal, so nothing magus can grade says it is done."+
-			" Declare one in the job record's check or goals", row.ID))
+			" Declare one in the job record's check or goals; a fact no target checks can be shown by a script run with"+
+			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
 	}
 
 	declaredGates := make(map[string]types.CompletionGate, len(row.Goals))
