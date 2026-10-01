@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -33,9 +34,35 @@ func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one "+
 		"command at a time: `mv magus magus.old`, then `go build -o magus ./cmd/tool`, then rebuild it the "+
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
-		"checkout's committed generated files are behind its sources (a merge kept one side): restore "+
-		"them from the revision that generated them, then link again.",
+		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
+		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
+		"commands its generate targets run, then link again.",
 		ownBuildEscape(exe, builtFrom("example.com/tool", "cmd/tool"), root))
+}
+
+// A merged checkout of magus itself is told which generators to run, in the order the
+// *_generate targets need them, rather than to restore files from either side.
+func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
+	root, exe := sourceCheckout(t, ownModule)
+	escape := ownBuildEscape(exe, builtFrom(ownModule, "cmd/magus"), root)
+
+	assert.Contains(t, escape, "`mv magus magus.old`, then `go build -o magus ./cmd/magus`")
+	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
+		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
+		"`go run ./cmd/magus-utils jobschema -out internal/job/gen`, then `go generate ./internal/langservice`, then "+
+		"`go generate ./std/...`, then `go generate ./internal/handler/mcp`, then link again.")
+	assert.NotContains(t, escape, "restore them")
+}
+
+// ownGenerators restates what magusfile.buzz runs, so each must still be a proc\exec there.
+func TestOwnGeneratorsAreWhatTheMagusfileRuns(t *testing.T) {
+	data, err := os.ReadFile("magusfile.buzz")
+	require.NoError(t, err)
+	for _, command := range ownGenerators {
+		words := strings.Fields(command)
+		call := `proc\exec("` + words[0] + `", ["` + strings.Join(words[1:], `", "`) + `"]);`
+		assert.Contains(t, string(data), call, command)
+	}
 }
 
 // A release on PATH, a release vendored at the root of a workspace of another module, and a

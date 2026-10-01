@@ -900,7 +900,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
 // holds: Evaluate's, then the ones that read the filesystem.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
-	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(deps, callDir, line, d))
+	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
 	// lines around it that the script sets up.
 	script := denyScriptContent(deps, callDir, line, d)
