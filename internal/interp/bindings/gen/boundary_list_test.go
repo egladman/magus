@@ -87,6 +87,12 @@ func populate(v reflect.Value) {
 			if fv.Elem().Kind() == reflect.Struct {
 				populate(fv.Elem())
 			}
+		case reflect.Interface:
+			// Only `any` takes an arbitrary value; a typed interface (an error kept out of
+			// the boundary) stays nil.
+			if fv.Type().NumMethod() == 0 {
+				fv.Set(reflect.ValueOf("x"))
+			}
 		}
 	}
 }

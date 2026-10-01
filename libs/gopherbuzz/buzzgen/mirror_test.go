@@ -53,6 +53,10 @@ func TestFieldType_Kinds(t *testing.T) {
 		// A Duration is an Int64, so without its own case it would mirror as a bare
 		// int and hand Buzz an unlabelled nanosecond count.
 		{"duration", reflect.TypeOf(time.Duration(0)), "str", `""`},
+
+		// An interface holds any JSON-shaped value or nil, so it claims no type.
+		{"interface", reflect.TypeFor[any](), "any?", "null"},
+		{"map of interface", reflect.TypeOf(map[string]any{}), "{str: any?}", "{}"},
 	}
 
 	for _, tc := range cases {

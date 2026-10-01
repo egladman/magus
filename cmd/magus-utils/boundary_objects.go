@@ -54,7 +54,7 @@ func runBoundaryObjects(args []string) error {
 	}
 
 	// Every type the registry declares as crossing at run time. This is what covers a
-	// type no declared method returns: magus\job and magus\describeModule are bound by
+	// type no declared method returns: magus\job and magus\describe are bound by
 	// hand, so their returns are reachable from the registry and nowhere else.
 	for _, entry := range boundaryTypes {
 		if !entry.RuntimeObject {
@@ -80,6 +80,9 @@ func runBoundaryObjects(args []string) error {
 	}
 	if e.usesTime {
 		fmt.Fprintln(&b, `	"time"`)
+	}
+	if e.usesFFI {
+		fmt.Fprintln(&b, `	"github.com/egladman/magus/internal/interp/bindings/ffi"`)
 	}
 	fmt.Fprintln(&b, `)`)
 	fmt.Fprintln(&b)
