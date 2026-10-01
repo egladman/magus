@@ -123,6 +123,9 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 			}
 			return `undefined type "` + qual + `\` + name + `": ` + qual + " declares no type " + name
 		}
+		if c.unboundQualifier(qual) {
+			return `undefined type "` + qual + `\` + name + `": no import binds ` + qual + ` in this module`
+		}
 	}
 	if _, ok := c.namedType(name); ok {
 		return ""
@@ -142,6 +145,18 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 		name = qual + `\` + name
 	}
 	return `undefined type "` + name + `"`
+}
+
+// unboundQualifier reports whether qual is a single namespace segment this chunk
+// binds nowhere. Upstream resolves `ns\T` only through the importing script's own
+// globals, so a module that did not import ns cannot name its types, however the
+// session came to know them.
+func (c *checker) unboundQualifier(qual string) bool {
+	if strings.IndexByte(qual, '\\') >= 0 {
+		return false
+	}
+	_, ok := c.lookup(qual)
+	return !ok
 }
 
 // namespaceMemberType resolves `qual\name` through the namespace bound to qual.

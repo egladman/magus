@@ -700,6 +700,9 @@ func (c *checker) resolveTypeIn(t types.Type, quals map[string]string) types.Typ
 				}
 				return v
 			}
+			if c.unboundQualifier(qual) {
+				return v
+			}
 		}
 		if resolved, ok := c.namedType(v.Name); ok {
 			return resolved
