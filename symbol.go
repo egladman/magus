@@ -520,6 +520,22 @@ func symbolIndexSources(p *types.Project) []types.Glob {
 	return out
 }
 
+// indexerUses is the tools s's symbol indexer runs besides its own binary when target is
+// the scip op, and nil for any other target: their versions key the index and nothing else.
+func indexerUses(s *spells.Spell, target string) []string {
+	if target != spells.SymbolIndexOp || s.SymbolIndexer() == nil {
+		return nil
+	}
+	return s.SymbolIndexer().Uses
+}
+
+// indexerUseKey is how targetDrivenBins marks a tool the indexer uses: apart from the
+// "spell:bin" a build op that runs the same binary is driven under, so keying a build
+// never probes the indexer's view of it.
+func indexerUseKey(spell, tool string) string {
+	return spell + ":" + tool + "@" + spells.SymbolIndexOp
+}
+
 // symbolIndexDriven is, per project, the binaries the scip op drives: the set
 // ComputeTargetKey hands probeObservations for the same op. An observation outside it
 // never reaches the step's key, so probing it would fork for nothing; govulncheck's

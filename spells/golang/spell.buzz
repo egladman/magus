@@ -303,10 +303,12 @@ fun goVulncheck(target: Target) > Command {
 // magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands
 // in the tree; scip-go writes there via --output. The runner resolves the bare
 // $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
+// scip-go loads packages through `go`, so the toolchain's version keys the index too.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{
         format = SymbolFormat.scip,
         command = Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
+        uses = ["go"],
     };
 }
 

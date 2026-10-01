@@ -410,23 +410,108 @@ func TestSymbolIndexKeysOnTheIndexerVersionNotTheToolchain(t *testing.T) {
 }
 
 // The indexer's version reaches the scip key and no other target's: it is declared as an
-// observation, which keys only the targets whose ops drive the binary.
+// observation, which keys only the targets whose ops drive the binary. A tool the indexer
+// uses (go, for scip-go) keys the scip op the same way and still no build or test.
 func TestIndexerObservationKeysOnlyTheScipOp(t *testing.T) {
 	sp := spells.NewSpell("go",
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-go"}, Uses: []string{"go"}}),
 		spells.WithOps(map[string]spells.Op{
 			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
 			"go-build":           {Command: spells.Command{Bin: "go"}},
 		}),
 		spells.WithTools(map[string]spells.Tool{
+			"go":      {Probe: spells.Command{Bin: "go", Args: []string{"version"}}},
 			"scip-go": {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
 		}),
 	)
 	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
-	probed := map[string]string{"go:scip-go": "0.2.7"}
+	probed := map[string]string{"go:scip-go": "0.2.7", "go:go": "go version go1.26.6"}
 
-	assert.Equal(t, []string{"go:scip-go:0.2.7"}, observationsForTarget(p, spells.SymbolIndexOp, probed))
-	assert.Empty(t, observationsForTarget(p, "go-build", probed))
+	assert.Equal(t, []string{"go:scip-go:0.2.7", "go:go:go version go1.26.6"}, observationsForTarget(p, spells.SymbolIndexOp, probed))
+	assert.Empty(t, observationsForTarget(p, "go-build", probed), "build keys on go through its version probe, never this line")
 	assert.Empty(t, observationsForTarget(p, "test", probed))
+	assert.Equal(t, map[string]bool{"go:scip-go": true, "go:go@scip": true}, targetDrivenBins(p, spells.SymbolIndexOp))
+	assert.Equal(t, map[string]bool{"go:go": true}, targetDrivenBins(p, "go-build"))
+}
+
+// scip-go loads packages through go, so a toolchain upgrade stales a Go index. The
+// TypeScript index beside it declares no such use, so neither the go upgrade nor its own
+// toolchain moving touches it.
+func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
+	goVersion, tscVersion := "go1.26.0", "5.9.0"
+	prober := func(_ context.Context, cmd spells.Command, _ string) (string, error) {
+		switch cmd.Bin {
+		case "zzz-uses-go":
+			return "go version " + goVersion, nil
+		case "zzz-uses-tsc":
+			return tscVersion, nil
+		default:
+			return "indexer 1.0", nil
+		}
+	}
+	noop := spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil })
+	goSpell := spells.NewSpell("zzz-uses-go-spell",
+		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithSources("**/*.go"),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-go"}, Uses: []string{"zzz-uses-go"}}),
+		spells.WithOps(map[string]spells.Op{spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-go"}}}),
+		spells.WithTools(map[string]spells.Tool{
+			"zzz-uses-go":      {Probe: spells.Command{Bin: "zzz-uses-go", Args: []string{"version"}}},
+			"zzz-uses-scip-go": {Observe: spells.Command{Bin: "zzz-uses-scip-go", Args: []string{"--version"}}},
+		}),
+		spells.WithVersionProber(prober), noop,
+	)
+	tsSpell := spells.NewSpell("zzz-uses-ts-spell",
+		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithSources("**/*.ts"),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}),
+		spells.WithOps(map[string]spells.Op{spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}}),
+		spells.WithTools(map[string]spells.Tool{
+			"zzz-uses-tsc":     {Probe: spells.Command{Bin: "zzz-uses-tsc", Args: []string{"--version"}}},
+			"zzz-uses-scip-ts": {Observe: spells.Command{Bin: "zzz-uses-scip-ts", Args: []string{"--version"}}},
+		}),
+		spells.WithVersionProber(prober), noop,
+	)
+	for _, sp := range []*spells.Spell{goSpell, tsSpell} {
+		project.DefaultSpellRegistry().RegisterSpell(sp)
+		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
+	}
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"), []byte(""), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(root, dir, file), []byte("x\n"), 0o644))
+	}
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject("svc", WithSpell(goSpell.Name()))
+	reg.RegisterProject("web", WithSpell(tsSpell.Name()))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	ctx := context.Background()
+	for _, path := range []string{"svc", "web"} {
+		require.NoError(t, m.Run(ctx, []types.Target{{Path: path, Name: spells.SymbolIndexOp}}), "scip run in %s", path)
+		index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Get(path).Dir)
+		require.NoError(t, os.MkdirAll(filepath.Dir(index), 0o755))
+		require.NoError(t, os.WriteFile(index, []byte("scip"), 0o644))
+	}
+	status := func() map[string]types.SymbolIndexFreshness {
+		out := map[string]types.SymbolIndexFreshness{}
+		for _, s := range m.SymbolIndexStatus(ctx) {
+			out[s.Project.Path] = s.Freshness
+		}
+		return out
+	}
+	require.Equal(t, map[string]types.SymbolIndexFreshness{"svc": types.SymbolIndexFresh, "web": types.SymbolIndexFresh}, status())
+
+	tscVersion = "6.0.0"
+	assert.Equal(t, types.SymbolIndexFresh, status()["web"], "the project's own compiler is not what scip-typescript runs")
+
+	goVersion = "go1.27.0"
+	assert.Equal(t, map[string]types.SymbolIndexFreshness{"svc": types.SymbolIndexStale, "web": types.SymbolIndexFresh}, status())
 }
 
 // A status check probes only what the scip op drives. It passed driven=nil (probe

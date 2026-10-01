@@ -248,6 +248,35 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
 }
 
+// The tools an indexer runs besides its binary decode onto the indexer, and each must be a
+// tool the spell probes for a version: a used tool with no probe would key the index on
+// nothing, so the load fails naming the spell rather than leaving the index unstaleable.
+func TestDecode_SymbolIndexerUses(t *testing.T) {
+	src := func(uses []string, tools map[string]any) mapObj {
+		return mapObj{
+			"name":  "myspell",
+			"tools": tools,
+			"symbol_indexer": map[string]any{
+				"format":  "scip",
+				"command": map[string]any{"bin": "scip-go"},
+				"uses":    uses,
+			},
+		}
+	}
+	probed := map[string]any{"go": map[string]any{"probe": map[string]any{"bin": "go", "args": []string{"version"}}}}
+
+	m, err := Decode(src([]string{"go"}, probed))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"go"}, m.SymbolIndexer.Uses)
+
+	_, err = Decode(src([]string{"gopls"}, probed))
+	require.EqualError(t, err, `spell "myspell": symbol indexer uses "gopls", which mgs_getTools does not declare with a version probe`)
+
+	observed := map[string]any{"go": map[string]any{"observe": map[string]any{"bin": "go", "args": []string{"version"}}}}
+	_, err = Decode(src([]string{"go"}, observed))
+	require.Error(t, err, "an observe probe is not a version probe")
+}
+
 // TestDecode_SymbolIndexerRequiresAFormat proves the format is required rather than
 // defaulted to SCIP: the whole point of naming it is that ingestion no longer assumes.
 func TestDecode_SymbolIndexerRequiresAFormat(t *testing.T) {

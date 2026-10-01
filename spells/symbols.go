@@ -28,9 +28,15 @@ const (
 // (see internal/symbols), so the index lands in the cache and the working tree stays
 // clean. The command is straight-line data like any op command: it is charm-patched,
 // rendered by `magus describe`, and keyed into the cache without being executed.
+//
+// Uses names the spell's own tools the indexer runs besides its binary: scip-go loads
+// packages through `go`, so a Go index is out of date once the toolchain moves. Each entry
+// must be a tool mgs_getTools declares with a version probe; that version keys the scip op
+// and no other target.
 type SymbolIndexer struct {
 	Format  SymbolFormat `json:"format,omitempty"`
 	Command Command      `json:"command,omitempty"`
+	Uses    []string     `json:"uses,omitempty"`
 }
 
 // SymbolIndexOp is the op name magus registers a declared indexer under, so an index

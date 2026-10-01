@@ -1784,6 +1784,11 @@ func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("format", vm.StrValue(string(v.Format)))
 	out.MapSet("command", ObjectCommand(v.Command))
+	itemsUses := make([]vm.Value, len(v.Uses))
+	for indexUses := range v.Uses {
+		itemsUses[indexUses] = vm.StrValue(v.Uses[indexUses])
+	}
+	out.MapSet("uses", vm.ListValue(itemsUses))
 	return out
 }
 
