@@ -141,6 +141,29 @@ func TestSession_Diagnostics_ImportUsedInInterpolation(t *testing.T) {
 	}
 }
 
+// Upstream marks an import referenced when a type annotation names one of its types
+// (Parser.zig parseUserType), including the annotations this parser consumes as raw
+// tokens rather than through skipType.
+func TestSession_Diagnostics_ImportUsedOnlyInTypeArgument(t *testing.T) {
+	for _, tc := range []struct{ name, code string }{
+		{name: "parameter", code: `fun f(t: demo\Thing) > void {}`},
+		{name: "typed list literal", code: `fun f() > void { _ = [<demo\Thing>]; }`},
+		{name: "typed map literal", code: `fun f() > void { _ = {<str: demo\Thing>}; }`},
+		{name: "nested list literal", code: `fun f() > void { _ = [<[demo\Thing]>]; }`},
+		{name: "anonymous object type", code: `fun f(t: obj{ a: demo\Thing }) > void {}`},
+		{name: "generic call argument", code: "fun id::<T>(x: T) > T { return x; }\nfun f() > void { _ = id::<demo\\Thing?>(null); }"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSession(context.Background(), WithEmbedded())
+			s.SetNativeModule("example/demo", vm.NewMap())
+			s.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }")
+			for _, d := range s.Diagnostics("import \"example/demo\";\n" + tc.code) {
+				assert.NotEqual(t, UnusedImport, d.Code, "%s", d)
+			}
+		})
+	}
+}
+
 func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("example/demo", vm.NewMap())

@@ -100,6 +100,18 @@ func (p *parser) markImportUsed(name string) {
 	}
 }
 
+// markQualifiers marks the namespace of every `ns\T` among the tokens from from up
+// to the current position. A type the parser consumes as raw tokens (`[<T>]`,
+// `{<K: V>}`, `obj{...}`, `::<T>`) never reaches skipType's own mark, and upstream
+// counts a type annotation as a use of its import (Parser.zig parseUserType).
+func (p *parser) markQualifiers(from int) {
+	for i := from; i+1 < p.pos && i+1 < len(p.tokens); i++ {
+		if p.tokens[i].Kind == token.Ident && p.tokens[i+1].Kind == token.Backslash {
+			p.markImportUsed(p.tokens[i].Val)
+		}
+	}
+}
+
 // Parse tokenizes src and returns a Program using upstream Buzz's rules: the
 // program top level may contain only declarations, imports, and expression
 // statements (no control flow), and call arguments after the first must be
@@ -986,6 +998,7 @@ func (p *parser) skipBalancedBraces() error {
 	if _, err := p.eat(token.LBrace); err != nil {
 		return err
 	}
+	defer p.markQualifiers(p.pos)
 	for depth := 1; depth > 0; {
 		switch p.peek().Kind {
 		case token.LBrace:
@@ -1005,6 +1018,7 @@ func (p *parser) skipGenericArgs() error {
 	if _, err := p.eat(token.Lt); err != nil {
 		return err
 	}
+	defer p.markQualifiers(p.pos)
 	depth := 1
 	for depth > 0 {
 		switch p.peek().Kind {
@@ -1032,6 +1046,7 @@ func (p *parser) readGenericArg() (string, error) {
 		return "", err
 	}
 	before := p.pos
+	defer p.markQualifiers(before)
 	depth := 1
 	for depth > 0 {
 		switch p.peek().Kind {
