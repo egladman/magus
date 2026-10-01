@@ -2546,7 +2546,10 @@ object Sketch {
         return this;
     }
 
-    // rank puts its nodes in one rank; refused when a path between two of them orders them.
+    // rank puts its nodes in one rank. An edge between two of them lies flat, across the
+    // rank from source to target, side by side. Refused when a path through other nodes
+    // orders two of them, when flat edges loop, or when anything sits between a flat edge's
+    // ends.
     mut fun rank(ids: [str]) > mut Sketch {
         this.ranks.append(ids);
         return this;
@@ -2625,6 +2628,8 @@ object Plan {
     fromItem: mut [int],
     toItem: mut [int],
     reversed: mut [bool],
+    // Per declared edge: both ends share a rank() and the edge runs across it.
+    flat: mut [bool],
     // A back edge's chain is its two ends only: it takes no dummy and neighbours nothing.
     chains: mut [mut [int]],
     preds: mut [mut [int]],
@@ -3087,8 +3092,41 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
         return ranked.find(a) == ranked.find(b) or pl.rankOf[a] == pl.rankOf[b];
     };
 
+    // climbs[a][b]: a path from a to b, as laid out, climbs at least one rank. A flat edge
+    // adds none, so a path made of flat edges alone keeps both ends in one rank.
+    final ne = pl.fromItem.len();
+    final climbs: mut [mut {int: bool}] = mut [<mut {int: bool}>];
+    i = 0;
+    while (i < nn) {
+        final seen: mut {int: bool} = mut {<int: bool>};
+        final queue: mut [int] = mut [i * 2];
+        final queued: mut {int: bool} = mut {<int: bool>};
+        queued[i * 2] = true;
+        var head = 0;
+        while (head < queue.len()) {
+            final at = queue[head] / 2;
+            final climbed = queue[head] % 2;
+            var li = 0;
+            while (li < ne) {
+                if (pl.reversed[li] == false and pl.fromItem[li] == at) {
+                    var state = pl.toItem[li] * 2 + climbed;
+                    if (pl.flat[li] == false) { state = pl.toItem[li] * 2 + 1; }
+                    if (queued[state] == null) {
+                        queued[state] = true;
+                        queue.append(state);
+                        if (state % 2 == 1) { seen[state / 2] = true; }
+                    }
+                }
+                li = li + 1;
+            }
+            head = head + 1;
+        }
+        climbs.append(seen);
+        i = i + 1;
+    }
+
     // Each group of rank() calls, in declaration order, against every path between two of
-    // its members.
+    // its members that climbs a rank.
     final reported: mut {int: bool} = mut {<int: bool>};
     i = 0;
     while (i < nn) {
@@ -3106,7 +3144,7 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
                 foreach (at in members) { ids.append(f.nodes[at].id); }
                 foreach (a in members) {
                     foreach (b in members) {
-                        if (a != b and reach[a][b] != null) {
+                        if (a != b and climbs[a][b] != null) {
                             errs.append("{call("rank", ids: ids)} contradicts the path {quote(f.nodes[a].id)} -> {quote(f.nodes[b].id)}; drop one of them from rank([...])");
                         }
                     }
@@ -3114,6 +3152,91 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
             }
         }
         i = i + 1;
+    }
+
+    // A flat edge runs from its source to its target, side by side in the rank: flat edges
+    // that close a loop have no such order, nor does one with anything laid between its
+    // ends, nor flat edges that cross from one band into another and back.
+    final flatNext = lists(nn);
+    final flatIndeg = zeros(nn);
+    var fe = 0;
+    while (fe < ne) {
+        if (pl.flat[fe]) {
+            flatNext[pl.fromItem[fe]].append(pl.toItem[fe]);
+            flatIndeg[pl.toItem[fe]] = flatIndeg[pl.toItem[fe]] + 1;
+        }
+        fe = fe + 1;
+    }
+    final drained: mut [int] = mut [<int>];
+    i = 0;
+    while (i < nn) {
+        if (flatIndeg[i] == 0) { drained.append(i); }
+        i = i + 1;
+    }
+    var fh = 0;
+    while (fh < drained.len()) {
+        foreach (w in flatNext[drained[fh]]) {
+            flatIndeg[w] = flatIndeg[w] - 1;
+            if (flatIndeg[w] == 0) { drained.append(w); }
+        }
+        fh = fh + 1;
+    }
+    if (drained.len() < nn) {
+        final loop: mut [str] = mut [<str>];
+        i = 0;
+        while (i < nn) {
+            if (flatIndeg[i] > 0) { loop.append(f.nodes[i].id); }
+            i = i + 1;
+        }
+        errs.append("{call("rank", ids: loop)} lays its edges across one rank in a loop; drop one of them from rank([...])");
+    }
+    fe = 0;
+    while (fe < ne) {
+        final a = pl.fromItem[fe];
+        final b = pl.toItem[fe];
+        if (pl.flat[fe] and drained.len() == nn) {
+            final row = pl.orders[pl.rankOf[a]];
+            var at = 0;
+            while (row[at] != a) { at = at + 1; }
+            if (at + 1 >= row.len() or row[at + 1] != b) {
+                final pair = "{quote(f.nodes[a].id)} -> {quote(f.nodes[b].id)}";
+                if (at + 1 < row.len() and row[at + 1] < nn) {
+                    errs.append("rank([...]) lays {pair} across one rank, but {quote(f.nodes[row[at + 1]].id)} sits between them; drop it from that rank([...]) or split the edge out");
+                } else {
+                    errs.append("rank([...]) lays {pair} across one rank, but another connector's lane runs between them; drop one of them from rank([...])");
+                }
+            }
+        }
+        fe = fe + 1;
+    }
+    final bandNext = lists(pl.bandCount);
+    final bandIndeg = zeros(pl.bandCount);
+    fe = 0;
+    while (fe < ne) {
+        final ba = pl.bandOf[pl.fromItem[fe]];
+        final bb = pl.bandOf[pl.toItem[fe]];
+        if (pl.flat[fe] and ba != bb) {
+            bandNext[ba].append(bb);
+            bandIndeg[bb] = bandIndeg[bb] + 1;
+        }
+        fe = fe + 1;
+    }
+    final bandsDrained: mut [int] = mut [<int>];
+    var bi = 0;
+    while (bi < pl.bandCount) {
+        if (bandIndeg[bi] == 0) { bandsDrained.append(bi); }
+        bi = bi + 1;
+    }
+    fh = 0;
+    while (fh < bandsDrained.len()) {
+        foreach (w in bandNext[bandsDrained[fh]]) {
+            bandIndeg[w] = bandIndeg[w] - 1;
+            if (bandIndeg[w] == 0) { bandsDrained.append(w); }
+        }
+        fh = fh + 1;
+    }
+    if (bandsDrained.len() < pl.bandCount) {
+        errs.append("rank([...]) lays edges across from one zone into another and back; drop one of them from rank([...]) or put both ends in one zone");
     }
 
     foreach (ids in f.orders) {
@@ -3132,7 +3255,7 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
             }
             final za = zoneOf[ids[k - 1]];
             final zb = zoneOf[ids[k]];
-            if (za != null and zb != null and za! > zb!) {
+            if (za != null and zb != null and pl.stackOf[za!] > pl.stackOf[zb!]) {
                 errs.append("{named} puts {quote(ids[k - 1])} first, but zone {quote(f.zones[za!].label)} stacks after zone {quote(f.zones[zb!].label)}; reorder the zones or drop the order");
             }
             // An unzoned node stacks after every zone, save a band's sole parent and a node
@@ -3254,19 +3377,34 @@ fun plan(f: Sketch) > Plan {
     }
     final ne = fromItem.len();
 
-    // Cycle break: an edge into a node still on the DFS stack closes a cycle, and laying it
-    // out reversed leaves a DAG. Entry points and children in declaration order.
-    final outAdj = lists(nn);
+    // An edge between two members of one rank() lies flat: it runs across the rank from the
+    // earlier member to the later and adds no rank.
+    final ranked = groupsOf(nn, sets: f.ranks, idx: idx);
+    final flat: mut [bool] = mut [<bool>];
+    final flatJoined = groupsOf(nn, sets: [<[str]>], idx: idx);
     var li = 0;
     while (li < ne) {
-        outAdj[fromItem[li]].append(li);
+        flat.append(ranked.find(fromItem[li]) == ranked.find(toItem[li]));
+        if (flat[li]) { flatJoined.join(fromItem[li], b: toItem[li]); }
+        li = li + 1;
+    }
+
+    // Cycle break: an edge into a node still on the DFS stack closes a cycle, and laying it
+    // out reversed leaves a DAG. Entry points and children in declaration order. Members
+    // joined by flat edges walk as one, so a cycle through them reverses a ranked edge and
+    // never a flat one.
+    final outAdj = lists(nn);
+    li = 0;
+    while (li < ne) {
+        if (flat[li] == false) { outAdj[flatJoined.find(fromItem[li])].append(li); }
         li = li + 1;
     }
     final state = zeros(nn);
     final stackNode: mut [int] = mut [<int>];
     final stackNext: mut [int] = mut [<int>];
-    var start = 0;
-    while (start < nn) {
+    var entry = 0;
+    while (entry < nn) {
+        final start = flatJoined.find(entry);
         if (state[start] == 0) {
             state[start] = 1;
             stackNode.append(start);
@@ -3278,7 +3416,7 @@ fun plan(f: Sketch) > Plan {
                 if (k < outAdj[u].len()) {
                     stackNext[top] = k + 1;
                     final edgeAt = outAdj[u][k];
-                    final w = toItem[edgeAt];
+                    final w = flatJoined.find(toItem[edgeAt]);
                     if (state[w] == 1) {
                         reversed[edgeAt] = true;
                     } else {
@@ -3295,7 +3433,7 @@ fun plan(f: Sketch) > Plan {
                 }
             }
         }
-        start = start + 1;
+        entry = entry + 1;
     }
     li = 0;
     while (li < ne) {
@@ -3319,7 +3457,7 @@ fun plan(f: Sketch) > Plan {
     li = 0;
     while (li < ne) {
         final t = toItem[li];
-        if (reversed[li]) {
+        if (reversed[li] or flat[li]) {
             li = li + 1;
             continue;
         }
@@ -3385,14 +3523,62 @@ fun plan(f: Sketch) > Plan {
         if (bandOf[i] == nz and nearHi[i] == nearLo[i] + 1 and nearHi[i] < nz) { bandOf[i] = nz + 1 + nearLo[i]; }
         i = i + 1;
     }
+    // A flat edge runs forward across its rank, so the band it leaves stacks before the band
+    // it enters; otherwise the bands keep the order above. A cycle of such edges keeps that
+    // order too, and constraintFindings names it.
+    final bandCount = nz + 1 + gapCount;
+    final bandNext = lists(bandCount);
+    final bandIndeg = zeros(bandCount);
+    li = 0;
+    while (li < ne) {
+        final ba = bandOf[fromItem[li]];
+        final bb = bandOf[toItem[li]];
+        if (flat[li] and ba != bb) {
+            bandNext[ba].append(bb);
+            bandIndeg[bb] = bandIndeg[bb] + 1;
+        }
+        li = li + 1;
+    }
+    final restacked = zeros(bandCount);
+    final placed: mut [bool] = mut [<bool>];
+    sb = 0;
+    while (sb < bandCount) {
+        placed.append(false);
+        sb = sb + 1;
+    }
+    var next = 0;
+    var stuck = false;
+    while (next < bandCount and stuck == false) {
+        var pick = 0 - 1;
+        sb = 0;
+        while (sb < bandCount) {
+            if (placed[sb] == false and bandIndeg[sb] == 0 and (pick < 0 or stackOf[sb] < stackOf[pick])) { pick = sb; }
+            sb = sb + 1;
+        }
+        if (pick < 0) {
+            stuck = true;
+        } else {
+            placed[pick] = true;
+            restacked[pick] = next;
+            next = next + 1;
+            foreach (w in bandNext[pick]) { bandIndeg[w] = bandIndeg[w] - 1; }
+        }
+    }
+    if (stuck == false) {
+        sb = 0;
+        while (sb < bandCount) {
+            stackOf[sb] = restacked[sb];
+            sb = sb + 1;
+        }
+    }
 
     // Longest path from the roots, in topological order. A back edge closes a cycle over a
-    // forward path, so leaving it out orders nothing differently.
+    // forward path, so leaving it out orders nothing differently, and a flat edge adds no rank.
     final succAdj = lists(nn);
     final indeg = zeros(nn);
     li = 0;
     while (li < ne) {
-        if (reversed[li] == false) {
+        if (reversed[li] == false and flat[li] == false) {
             succAdj[fromItem[li]].append(li);
             indeg[toItem[li]] = indeg[toItem[li]] + 1;
         }
@@ -3416,7 +3602,6 @@ fun plan(f: Sketch) > Plan {
     // rank() pulls a group to its deepest member's rank as a floor, and the floors push
     // descendants on; a group that chases itself never settles, and constraintFindings
     // names the path that makes it.
-    final ranked = groupsOf(nn, sets: f.ranks, idx: idx);
     final floor = zeros(nn);
     final rankOf = zeros(nn);
     var pass = 0;
@@ -3484,7 +3669,7 @@ fun plan(f: Sketch) > Plan {
     while (li < ne) {
         final chain = chains[li];
         var s = 0;
-        while (s + 1 < chain.len() and reversed[li] == false) {
+        while (s + 1 < chain.len() and reversed[li] == false and flat[li] == false) {
             succs[chain[s]].append(chain[s + 1]);
             preds[chain[s + 1]].append(chain[s]);
             s = s + 1;
@@ -3533,6 +3718,15 @@ fun plan(f: Sketch) > Plan {
             ordered[b] = true;
             k = k + 1;
         }
+    }
+    li = 0;
+    while (li < ne) {
+        if (flat[li]) {
+            orderNext[fromItem[li]].append(toItem[li]);
+            ordered[fromItem[li]] = true;
+            ordered[toItem[li]] = true;
+        }
+        li = li + 1;
     }
     foreach (row in orders) {
         row.sort(before);
@@ -3584,6 +3778,7 @@ fun plan(f: Sketch) > Plan {
         fromItem = fromItem,
         toItem = toItem,
         reversed = reversed,
+        flat = flat,
         chains = chains,
         preds = preds,
         succs = succs,
@@ -3638,13 +3833,17 @@ fun honourOrder(row: mut [int], next: [[int]], ordered: [bool]) > void {
 }
 
 // Placer is what the coordinate sweeps read about each item: half its cross size (a dummy
-// is a line and has none), whether it is a diamond, and the row() leader it follows, -1
-// for none.
+// is a line and has none), whether it is a diamond, the row() leader it follows, -1 for
+// none, the item a flat edge leads it to, -1 for none, with the gap that edge needs, and
+// whether it is a box no connector touches.
 object Placer {
     half: [int],
     decision: [bool],
     leader: [int],
     member: [bool],
+    flatTo: [int],
+    flatGap: [int],
+    loose: [bool],
 }
 
 // floor4 rounds down onto the 4px grid, negative midlines included.
@@ -3684,8 +3883,10 @@ fun median(vals: mut [int], centre: bool) > int {
 // settle places one run of a rank, in cross order, by priority: each item takes the
 // midline it wants unless one placed before it blocks the way, and pushes the unplaced
 // ones aside. gaps[k] is the least distance between the midlines of seg[k] and seg[k + 1].
-// This is the priority method of Sugiyama, Tagawa and Toda (1981), one rank at a time.
-fun settle(seg: [int], pos: mut [int], want: [int], key: [int], gaps: [int]) > void {
+// A box marked in hug has nothing to line up with, so it closes up on the nearest box
+// already placed instead of keeping a stale midline. This is the priority method of
+// Sugiyama, Tagawa and Toda (1981), one rank at a time.
+fun settle(seg: [int], pos: mut [int], want: [int], key: [int], gaps: [int], hug: [bool]) > void {
     final n = seg.len();
     final byKey: mut [int] = mut [<int>];
     final fixed: mut [bool] = mut [<bool>];
@@ -3722,7 +3923,13 @@ fun settle(seg: [int], pos: mut [int], want: [int], key: [int], gaps: [int]) > v
             }
             j = j + 1;
         }
-        pos[seg[at]] = imin(imax(want[at], b: lo), b: hi);
+        var aim = want[at];
+        if (hug[at] and lo > 0 - Far) {
+            aim = lo;
+        } else {
+            if (hug[at] and hi < Far) { aim = hi; }
+        }
+        pos[seg[at]] = imin(imax(aim, b: lo), b: hi);
         j = at - 1;
         while (j >= 0) {
             pos[seg[j]] = imin(pos[seg[j]], b: pos[seg[j + 1]] - gaps[j]);
@@ -3755,7 +3962,7 @@ fun runsOf(row: [int], bandOf: [int], whole: bool) > [[int]] {
 
 // gapsOf is the least midline distance between neighbours in a run: two boxes keep a row
 // gap, and so does a diamond, whose side exits step into it; a lane beside anything keeps
-// a Pitch.
+// a Pitch; a flat edge keeps the gap its connector and label need.
 fun gapsOf(run: [int], pc: Placer, nodeCount: int) > [int] {
     final gaps: mut [int] = mut [<int>];
     var k = 0;
@@ -3764,6 +3971,7 @@ fun gapsOf(run: [int], pc: Placer, nodeCount: int) > [int] {
         final b = run[k + 1];
         var gap = Pitch;
         if ((a < nodeCount and b < nodeCount) or pc.decision[a] or pc.decision[b]) { gap = LayerRowGap; }
+        if (pc.flatTo[a] == b) { gap = pc.flatGap[a]; }
         gaps.append(pc.half[a] + pc.half[b] + gap);
         k = k + 1;
     }
@@ -3789,8 +3997,9 @@ fun pack(row: [int], pos: mut [int], pl: Plan, pc: Placer, whole: bool, start: i
 // side instead, so it sits in the middle of its wider fan. A row() member
 // goes first, then a box, then a long edge's lane, then what has no neighbour there; within
 // a class the better connected, then the one already nearest, then the earlier. The first
-// phase aligns each band on its own; the second places the free ranks against everything.
-fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: bool) > void {
+// phase aligns each track of bands on its own; the second places the free ranks against
+// everything.
+fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: bool, trackOf: [int]) > void {
     foreach (goingDown in [true, false, true]) {
         var step = 1;
         while (step <= pl.maxRank) {
@@ -3800,7 +4009,9 @@ fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: boo
                 foreach (run in runsOf(pl.orders[r], bandOf: pl.bandOf, whole: phaseTwo)) {
                     final want: mut [int] = mut [<int>];
                     final key: mut [int] = mut [<int>];
+                    final hug: mut [bool] = mut [<bool>];
                     foreach (item in run) {
+                        hug.append(pc.loose[item]);
                         var nbs = pl.preds[item];
                         var far = pl.succs[item];
                         if (goingDown == false) {
@@ -3810,13 +4021,13 @@ fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: boo
                         if (item < pl.nodeCount and pc.decision[item] == false and nbs.len() > 1 and far.len() > nbs.len()) { nbs = far; }
                         final vals: mut [int] = mut [<int>];
                         foreach (nb in nbs) {
-                            final sameBand = pl.bandOf[nb] == pl.bandOf[item] and free[pl.rankOf[nb]] == false;
-                            if (phaseTwo or sameBand) { vals.append(pos[nb]); }
+                            final sameTrack = trackOf[pl.bandOf[nb]] == trackOf[pl.bandOf[item]] and free[pl.rankOf[nb]] == false;
+                            if (phaseTwo or sameTrack) { vals.append(pos[nb]); }
                         }
                         final lead = pc.leader[item];
                         var follows = false;
                         if (lead >= 0) {
-                            follows = free[pl.rankOf[lead]] == phaseTwo and (phaseTwo or pl.bandOf[lead] == pl.bandOf[item]);
+                            follows = free[pl.rankOf[lead]] == phaseTwo and (phaseTwo or trackOf[pl.bandOf[lead]] == trackOf[pl.bandOf[item]]);
                         }
                         var w = pos[item];
                         var cls = 3;
@@ -3834,7 +4045,7 @@ fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: boo
                         want.append(w);
                         key.append(cls * 10000000 + (9 - imin(degree, b: 9)) * 1000000 + imin(iabs(w - pos[item]), b: 999999));
                     }
-                    settle(run, pos: pos, want: want, key: key, gaps: gapsOf(run, pc: pc, nodeCount: pl.nodeCount));
+                    settle(run, pos: pos, want: want, key: key, gaps: gapsOf(run, pc: pc, nodeCount: pl.nodeCount), hug: hug);
                 }
             }
             step = step + 1;
@@ -3961,6 +4172,59 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         zr = zr + 1;
     }
 
+    // Bands share the cross axis only where they share a rank. Each takes a track, in stack
+    // order: the first one past every earlier band whose ranks overlap its own. A zone the
+    // flow reaches only after another has ended continues in that zone's track, along the
+    // flow, instead of stepping off across it into a room of its own.
+    final spanLo = zeros(pl.bandCount);
+    final spanHi = zeros(pl.bandCount);
+    var sb = 0;
+    while (sb < pl.bandCount) {
+        spanLo[sb] = pl.maxRank + 1;
+        spanHi[sb] = 0 - 1;
+        sb = sb + 1;
+    }
+    item = 0;
+    while (item < items) {
+        if (free[pl.rankOf[item]] == false) {
+            final bb = pl.bandOf[item];
+            spanLo[bb] = imin(spanLo[bb], b: pl.rankOf[item]);
+            spanHi[bb] = imax(spanHi[bb], b: pl.rankOf[item]);
+        }
+        item = item + 1;
+    }
+    // A gap band holds what two neighbouring zones share, so it keeps a track between them.
+    sb = nz + 1;
+    while (sb < pl.bandCount) {
+        if (spanLo[sb] <= spanHi[sb]) {
+            final g = sb - nz - 1;
+            spanLo[sb] = imin(spanLo[sb], b: imin(spanLo[g], b: spanLo[g + 1]));
+            spanHi[sb] = imax(spanHi[sb], b: imax(spanHi[g], b: spanHi[g + 1]));
+        }
+        sb = sb + 1;
+    }
+    final byStack = zeros(pl.bandCount);
+    sb = 0;
+    while (sb < pl.bandCount) {
+        byStack[pl.stackOf[sb]] = sb;
+        sb = sb + 1;
+    }
+    final trackOf = zeros(pl.bandCount);
+    var trackCount = 0;
+    var si = 0;
+    while (si < pl.bandCount) {
+        final b = byStack[si];
+        var sj = 0;
+        while (sj < si) {
+            final a = byStack[sj];
+            final overlaps = spanLo[a] <= spanHi[b] and spanLo[b] <= spanHi[a];
+            if (overlaps and trackOf[a] + 1 > trackOf[b]) { trackOf[b] = trackOf[a] + 1; }
+            sj = sj + 1;
+        }
+        if (spanLo[b] <= spanHi[b] and trackOf[b] + 1 > trackCount) { trackCount = trackOf[b] + 1; }
+        si = si + 1;
+    }
+
     // Each connector's declared ends and the faces they attach to. A back edge takes the
     // side of the figure where more of its ends are outermost in their ranks; an end that
     // is outermost leaves across the flow, straight to the lane, and one that is not steps
@@ -3979,6 +4243,10 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         dstOf[li] = pl.toItem[li];
         srcFace[li] = FaceOut;
         dstFace[li] = FaceIn;
+        if (pl.flat[li]) {
+            srcFace[li] = FaceAfter;
+            dstFace[li] = FaceBefore;
+        }
         if (pl.reversed[li]) {
             final s = pl.toItem[li];
             final d = pl.fromItem[li];
@@ -4016,8 +4284,8 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             while (r <= pl.rankOf[s]) {
                 if (free[r]) { owned = false; }
                 foreach (x in pl.orders[r]) {
-                    if (side < 0 and pl.stackOf[pl.bandOf[x]] < pl.stackOf[band]) { owned = false; }
-                    if (side > 0 and pl.stackOf[pl.bandOf[x]] > pl.stackOf[band]) { owned = false; }
+                    if (side < 0 and trackOf[pl.bandOf[x]] < trackOf[band]) { owned = false; }
+                    if (side > 0 and trackOf[pl.bandOf[x]] > trackOf[band]) { owned = false; }
                 }
                 r = r + 1;
             }
@@ -4135,7 +4403,39 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         }
         ni = ni + 1;
     }
-    final pc = Placer{ half = half, decision = isDecision, leader = leader, member = member };
+    // A flat edge keeps a rank gap between its boxes. Across a down() figure it runs level,
+    // so its label sits above it and the gap also fits the label, LabelClear off each box.
+    final flatTo = zeros(items);
+    final flatGap = zeros(items);
+    item = 0;
+    while (item < items) {
+        flatTo[item] = 0 - 1;
+        item = item + 1;
+    }
+    li = 0;
+    while (li < ne) {
+        if (pl.flat[li]) {
+            var room = LayerColGap;
+            if (lr == false) { room = imax(room, b: roundUp8(snap(f.edges[li].label.len() * 5 + 12) + 2 * LabelClear + Pitch)); }
+            flatTo[pl.fromItem[li]] = pl.toItem[li];
+            flatGap[pl.fromItem[li]] = room;
+        }
+        li = li + 1;
+    }
+    final touched = zeros(items);
+    li = 0;
+    while (li < ne) {
+        touched[pl.fromItem[li]] = 1;
+        touched[pl.toItem[li]] = 1;
+        li = li + 1;
+    }
+    final loose: mut [bool] = mut [<bool>];
+    item = 0;
+    while (item < items) {
+        loose.append(item < nn and touched[item] == 0 and leader[item] < 0 and member[item] == false);
+        item = item + 1;
+    }
+    final pc = Placer{ half = half, decision = isDecision, leader = leader, member = member, flatTo = flatTo, flatGap = flatGap, loose = loose };
 
     final pos = zeros(items);
     var r = 0;
@@ -4143,10 +4443,11 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         if (free[r] == false) { pack(pl.orders[r], pos: pos, pl: pl, pc: pc, whole: false, start: 0); }
         r = r + 1;
     }
-    alignRanks(pl, pos: pos, pc: pc, free: free, phaseTwo: false);
+    alignRanks(pl, pos: pos, pc: pc, free: free, phaseTwo: false, trackOf: trackOf);
 
-    // Bands stack in stackOf order, each as tall as its aligned content: a zone's label
-    // pad, the lanes of the back edges it owns, its content, its bottom pad, a row gap.
+    // Tracks stack in order, each as tall as its aligned content: a zone's label pad, the
+    // lanes of the back edges its bands own, its content, its bottom pad, a row gap. Every
+    // band in a track takes the track's extent, so zones that share one line up.
     final bandLo = zeros(pl.bandCount);
     final bandHi = zeros(pl.bandCount);
     final hasBand: mut [bool] = mut [<bool>];
@@ -4167,28 +4468,77 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         }
         item = item + 1;
     }
+    final trackLo = zeros(trackCount);
+    final trackHi = zeros(trackCount);
+    final trackBefore = zeros(trackCount);
+    final trackAfter = zeros(trackCount);
+    final trackZoned: mut [bool] = mut [<bool>];
+    final trackUsed: mut [bool] = mut [<bool>];
+    var t = 0;
+    while (t < trackCount) {
+        trackLo[t] = Far;
+        trackHi[t] = 0 - Far;
+        trackZoned.append(false);
+        trackUsed.append(false);
+        t = t + 1;
+    }
+    b = 0;
+    while (b < pl.bandCount) {
+        if (hasBand[b]) {
+            t = trackOf[b];
+            trackUsed[t] = true;
+            if (b < nz) { trackZoned[t] = true; }
+            trackLo[t] = imin(trackLo[t], b: bandLo[b]);
+            trackHi[t] = imax(trackHi[t], b: bandHi[b]);
+            trackBefore[t] = imax(trackBefore[t], b: padBefore[b]);
+            trackAfter[t] = imax(trackAfter[t], b: padAfter[b]);
+        }
+        b = b + 1;
+    }
+    final trackOffset = zeros(trackCount);
+    final trackBoxLo = zeros(trackCount);
+    final trackBoxHi = zeros(trackCount);
+    var cursor = crossStart;
+    t = 0;
+    while (t < trackCount) {
+        if (trackUsed[t]) {
+            var lead = trackBefore[t] - trackLo[t];
+            if (trackZoned[t]) { lead = lead + crossLabelPad; }
+            li = 0;
+            while (li < ne) {
+                final a = pl.fromItem[li];
+                final bt = pl.toItem[li];
+                if (pl.flat[li] and free[pl.rankOf[a]] == false and trackOf[pl.bandOf[bt]] == t and trackOf[pl.bandOf[a]] < t) {
+                    final aFace = pos[a] + half[a] + trackOffset[trackOf[pl.bandOf[a]]];
+                    cursor = imax(cursor, b: aFace + flatGap[a] - (pos[bt] - half[bt] + lead));
+                }
+                li = li + 1;
+            }
+            trackBoxLo[t] = cursor;
+            if (trackZoned[t]) { cursor = cursor + crossLabelPad; }
+            cursor = cursor + trackBefore[t];
+            trackOffset[t] = cursor - trackLo[t];
+            cursor = cursor + trackHi[t] - trackLo[t] + trackAfter[t];
+            if (trackZoned[t]) { cursor = cursor + ZonePad; }
+            trackBoxHi[t] = cursor;
+            cursor = cursor + LayerRowGap;
+        }
+        t = t + 1;
+    }
     final bandOffset = zeros(pl.bandCount);
     final boxLo = zeros(pl.bandCount);
     final boxHi = zeros(pl.bandCount);
-    final stacked = zeros(pl.bandCount);
     b = 0;
     while (b < pl.bandCount) {
-        stacked[pl.stackOf[b]] = b;
-        b = b + 1;
-    }
-    var cursor = crossStart;
-    foreach (sk in stacked) {
-        if (hasBand[sk]) {
-            final zoned = sk < nz;
-            boxLo[sk] = cursor;
-            if (zoned) { cursor = cursor + crossLabelPad; }
-            cursor = cursor + padBefore[sk];
-            bandOffset[sk] = cursor - bandLo[sk];
-            cursor = cursor + bandHi[sk] - bandLo[sk] + padAfter[sk];
-            if (zoned) { cursor = cursor + ZonePad; }
-            boxHi[sk] = cursor;
-            cursor = cursor + LayerRowGap;
+        if (hasBand[b]) {
+            t = trackOf[b];
+            bandOffset[b] = trackOffset[t];
+            boxLo[b] = trackBoxLo[t];
+            boxHi[b] = trackBoxHi[t];
+            bandLo[b] = trackLo[t];
+            bandHi[b] = trackHi[t];
         }
+        b = b + 1;
     }
     item = 0;
     while (item < items) {
@@ -4200,7 +4550,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         if (free[r]) { pack(pl.orders[r], pos: pos, pl: pl, pc: pc, whole: true, start: crossStart); }
         r = r + 1;
     }
-    alignRanks(pl, pos: pos, pc: pc, free: free, phaseTwo: true);
+    alignRanks(pl, pos: pos, pc: pc, free: free, phaseTwo: true, trackOf: trackOf);
     straightenLanes(pl, pos: pos, pc: pc, free: free, bandLo: bandLo, bandHi: bandHi, bandOffset: bandOffset);
 
     ni = 0;
@@ -4272,7 +4622,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     final outsOf = lists(nn);
     li = 0;
     while (li < ne) {
-        if (pl.reversed[li] == false) { outsOf[pl.fromItem[li]].append(li); }
+        if (pl.reversed[li] == false and pl.flat[li] == false) { outsOf[pl.fromItem[li]].append(li); }
         li = li + 1;
     }
     final byNext = fun (x: int, y: int) > bool {
@@ -4371,7 +4721,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     li = 0;
     while (li < ne) {
         final s = pl.fromItem[li];
-        if (pl.reversed[li] == false) {
+        if (pl.reversed[li] == false and pl.flat[li] == false) {
             final face = portFace(li);
             if (isDecision[s] and face >= 0 and face == srcFace[li]) { port[li] = true; }
             if (isDecision[s] == false and face >= 0) { portsOf[s * 4 + face].append(li); }
@@ -4432,6 +4782,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
             }
             return laneSide[at] * Far;
         }
+        if (pl.flat[at]) { return Far / 2; }
         if (end % 2 == 1 and port[at]) { return Far - iabs(pos[farOf(end)] - pos[srcOf[at]]); }
         return pos[farOf(end)];
     };
@@ -4463,6 +4814,12 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
                 while (k >= 0) {
                     if (ends[k] % 2 == 1 and port[ends[k] / 2]) { anchor = k; }
                     k = k - 1;
+                }
+                // A flat edge's two ends both take the midline, so it runs level.
+                k = 0;
+                while (k < n) {
+                    if (pl.flat[ends[k] / 2]) { anchor = k; }
+                    k = k + 1;
                 }
             }
             // In Pitch steps from the midline, where the first end sits. A fan whose anchored
@@ -4538,7 +4895,8 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
                 hopBack.append(true);
             }
         } else {
-            final last = chain.len() - 1;
+            var last = chain.len() - 1;
+            if (pl.flat[li]) { last = 0; }
             var s = 0;
             while (s < last) {
                 var yIn = pos[chain[s]];
@@ -4712,7 +5070,8 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
                 pts.append(rankMain[pl.rankOf[d]] + mainSize / 2 + dstOff[li]);
                 pts.append(line);
             }
-        } else {
+        }
+        if (pl.reversed[li] == false and pl.flat[li] == false) {
             final hops = pl.chains[li].len() - 1;
             final exit = srcFace[li] != FaceOut;
             if (exit) {
@@ -5886,8 +6245,8 @@ test "constraints that hold lay out, and ones that contradict are refused" {
     std\assert(thrown(diamond().rank(["b", "c"]).order(["c", "b"]).row(["a", "d"])) == "", message: "a consistent set: {thrown(diamond().rank(["b", "c"]))}");
     final path = thrown(diamond().rank(["a", "d"]));
     std\assert(path == "flow \"t\": rank([\"a\", \"d\"]) contradicts the path \"a\" -> \"d\"; drop one of them from rank([...])", message: "path: {path}");
-    final chained = thrown(diamond().rank(["a", "x"]).rank(["x", "b"]).node("x"));
-    std\assert(chained.indexOf("rank([\"a\", \"b\", \"x\"]) contradicts the path \"a\" -> \"b\"") != null, message: "chained: {chained}");
+    final chained = thrown(diamond().rank(["a", "x"]).rank(["x", "d"]).node("x"));
+    std\assert(chained.indexOf("rank([\"a\", \"d\", \"x\"]) contradicts the path \"a\" -> \"d\"") != null, message: "chained: {chained}");
     final unknown = thrown(diamond().row(["a", "zz"]));
     std\assert(unknown == "flow \"t\": row([\"a\", \"zz\"]) names \"zz\", which no node declares; declare node(\"zz\") or drop it from row([...])", message: "unknown: {unknown}");
     final lone = thrown(diamond().order(["a"]));
@@ -6008,6 +6367,73 @@ test "rank puts its members in one column" {
     std\assert(validate(d).len() == 0, message: "sound");
     std\assert(nodeOf(d, id: "y").x == nodeOf(d, id: "c").x, message: "y joins c's column");
     std\assert(nodeOf(d, id: "x").x == nodeOf(d, id: "a").x, message: "x keeps its own");
+}
+
+test "a chain declared in one rank lies flat, each connector straight across it" {
+    final d = fig().node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b", label: "runs magus").edge("b", dst: "c").edge("c", dst: "d")
+        .rank(["a", "b", "c"]).down()
+        .diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
+    final a = nodeOf(d, id: "a");
+    final b = nodeOf(d, id: "b");
+    final c = nodeOf(d, id: "c");
+    std\assert(a.y == b.y and b.y == c.y, message: "one row");
+    std\assert(a.x < b.x and b.x < c.x, message: "in edge order");
+    final ab = edgeOf(d, src: "a", dst: "b")!;
+    std\assert(ab.srcSide == "right" and ab.dstSide == "left" and ab.via.len() == 0, message: "straight across: {ab.srcSide} {ab.dstSide} {ab.via}");
+    std\assert(edgePoints(edgeGeometry(d, e: ab), e: ab)[1] == a.y + a.h / 2, message: "on the midline");
+    std\assert(b.x - a.x - a.w >= snap("runs magus".len() * 5 + 12) + 2 * LabelClear, message: "the gap seats the label");
+    std\assert(nodeOf(d, id: "d").y > c.y, message: "the next rank still runs down");
+}
+
+test "a flat edge leaving the unzoned rest for a zone stacks the rest first" {
+    final d = fig().node("p").node("q").node("r").node("s")
+        .edge("p", dst: "q").edge("q", dst: "r").edge("r", dst: "s")
+        .zone("z", members: ["q"]).rank(["p", "q"]).down()
+        .diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
+    std\assert(nodeOf(d, id: "p").x + nodeOf(d, id: "p").w < d.zones[0].x, message: "p sits before the zone it feeds");
+}
+
+test "rank() refuses flat edges that loop, a box between a flat edge's ends, and a zone crossed both ways" {
+    final loop = thrown(fig().node("a").node("b").edge("a", dst: "b").edge("b", dst: "a").rank(["a", "b"]));
+    std\assert(loop.indexOf("lays its edges across one rank in a loop") != null, message: "loop: {loop}");
+    final between = thrown(fig().node("a").node("b").node("c").edge("a", dst: "c")
+        .rank(["a", "b", "c"]).order(["a", "b", "c"]));
+    std\assert(between.indexOf("rank([...]) lays \"a\" -> \"c\" across one rank, but \"b\" sits between them") != null, message: "between: {between}");
+    final crossed = thrown(fig().node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("c", dst: "d")
+        .zone("one", members: ["a", "d"]).zone("two", members: ["b", "c"])
+        .rank(["a", "b", "c", "d"]));
+    std\assert(crossed.indexOf("from one zone into another and back") != null, message: "crossed: {crossed}");
+}
+
+test "server-share's box with no connector closes up on its rank instead of keeping a stale row" {
+    final d = fig().node("console").node("share").node("lan").node("phone").node("viewer").node("status").node("never")
+        .edge("console", dst: "share").edge("share", dst: "lan").edge("share", dst: "viewer").edge("share", dst: "status")
+        .edge("phone", dst: "lan")
+        .diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
+    final phone = nodeOf(d, id: "phone");
+    std\assert(nodeOf(d, id: "never").y == phone.y + phone.h + LayerRowGap, message: "a row gap below phone, at {nodeOf(d, id: "never").y}");
+}
+
+test "zones whose ranks do not overlap share a track along the flow" {
+    final d = fig().node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("b", dst: "c").edge("c", dst: "d")
+        .zone("one", members: ["a", "b"]).zone("two", members: ["c", "d"])
+        .diagram() catch Diagram{};
+    std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
+    final one = d.zones[0];
+    final two = d.zones[1];
+    std\assert(one.y == two.y and one.h == two.h, message: "one track: {one.y}+{one.h} vs {two.y}+{two.h}");
+    std\assert(one.x + one.w < two.x, message: "two follows one along the flow");
+    final overlapping = fig().node("a").node("b").node("c").node("d")
+        .edge("a", dst: "b").edge("a", dst: "c").edge("c", dst: "d")
+        .zone("one", members: ["a", "b"]).zone("two", members: ["c", "d"])
+        .diagram() catch Diagram{};
+    std\assert(overlapping.zones[0].y + overlapping.zones[0].h < overlapping.zones[1].y, message: "zones sharing a rank still stack across it");
 }
 
 // Each shape below is a docs figure's, cut to the boxes and connectors whose placement the
@@ -6592,7 +7018,9 @@ export object Figure {
         return this;
     }
 
-    // rank puts the boxes drawing dirs, and the actors, in one rank.
+    // rank puts the boxes drawing dirs, and the actors, in one rank. A connector between two
+    // of them lies flat, across the rank, so a chain declared in one rank reads across a
+    // down() figure instead of down it.
     mut fun rank(dirs: DirSet? = null, actors: [Actor]? = null) > mut Figure {
         this.alignments = this.alignments + [Alignment{ axis = Axis.rank, dirs = dirs, actors = actors ?? [<Actor>] }];
         return this;

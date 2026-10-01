@@ -36,7 +36,7 @@ export fun serverHttp() > Figure !> any {
 | `.hideEdges(src, dst:, why:)`          | Hides graph edges from one set to another.                       |
 | `.markEdge(src, dst:, ...)`            | Labels or strokes one graph edge.                                |
 | `.flowIn`, `.flowOut`, `.flowAcross`   | Hand edges; each has an actor at one end.                        |
-| `.zone`, `.boundary`, `.rank`, `.row`  | Layout bands over sets and actors.                               |
+| `.zone`, `.boundary`, `.rank`, `.row`  | Bands over sets and actors; an edge inside a rank lies flat.     |
 | `.legend(look, label:)`                | One legend entry.                                                |
 | `draw(f, theme:, anchorHref:)`         | Lay out and paint with `Theme.page`, `.light` or `.dark`.        |
 | `.diagram()`                           | Lay out only, for a receipt of the placed boxes and edges.       |
