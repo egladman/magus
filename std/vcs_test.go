@@ -40,7 +40,7 @@ func TestVcsAccessorsRaiseWithNoVCS(t *testing.T) {
 
 	for name, call := range map[string]func() (string, error){
 		"ref": func() (string, error) {
-			ref, err := VcsRef(ctx)
+			ref, err := VcsRef(ctx, "")
 			assert.Nil(t, ref, "no VCS is an error, not a checkout that names no ref")
 			return "", err
 		},
@@ -146,15 +146,102 @@ func TestVcsRefIsNullOnADetachedCheckout(t *testing.T) {
 	git("commit", "-q", "--allow-empty", "-m", "init")
 	ctx := WithCwd(context.Background(), dir)
 
-	ref, err := VcsRef(ctx)
+	ref, err := VcsRef(ctx, "")
 	require.NoError(t, err)
 	require.NotNil(t, ref)
 	assert.Equal(t, "main", *ref)
 
 	git("switch", "-q", "--detach")
-	ref, err = VcsRef(ctx)
+	ref, err = VcsRef(ctx, "")
 	require.NoError(t, err)
 	assert.Nil(t, ref)
+}
+
+// gitTopicRepo makes dir a git repository whose branch topic adds file on top of main.
+func gitTopicRepo(t *testing.T, dir, topic, file string) string {
+	t.Helper()
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	git("init", "-q", "-b", "main")
+	git("commit", "-q", "--allow-empty", "-m", "init")
+	git("switch", "-q", "-c", topic)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(file), 0o644))
+	git("add", ".")
+	git("commit", "-qm", "add "+file)
+	return dir
+}
+
+// A dir argument reads the repository holding it, not the one holding the cwd: a guard
+// rule runs in the hook process's checkout while the caller pushes from its own.
+func TestVcsRefAndChangedFilesReadTheRepositoryHoldingDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	for _, kv := range [][2]string{
+		{"GIT_AUTHOR_NAME", "t"}, {"GIT_AUTHOR_EMAIL", "t@t"},
+		{"GIT_COMMITTER_NAME", "t"}, {"GIT_COMMITTER_EMAIL", "t@t"},
+		{"GIT_CONFIG_GLOBAL", os.DevNull}, {"GIT_CONFIG_SYSTEM", os.DevNull},
+	} {
+		t.Setenv(kv[0], kv[1])
+	}
+	parent := t.TempDir()
+	hook := gitTopicRepo(t, filepath.Join(parent, "hook"), "alpha", "a.txt")
+	caller := gitTopicRepo(t, filepath.Join(parent, "caller"), "beta", "b.txt")
+	ctx := WithCwd(context.Background(), hook)
+
+	for name, dir := range map[string]string{"absolute": caller, "relative to the cwd": filepath.Join("..", "caller")} {
+		t.Run(name, func(t *testing.T) {
+			ref, err := VcsRef(ctx, dir)
+			require.NoError(t, err)
+			require.NotNil(t, ref)
+			assert.Equal(t, "beta", *ref)
+
+			files, err := VcsChangedFiles(ctx, "main", dir)
+			require.NoError(t, err)
+			require.Len(t, files, 1)
+			assert.Equal(t, "b.txt", files[0].Value)
+			assert.Equal(t, canonical(t, caller), canonical(t, files[0].Base))
+		})
+	}
+
+	ref, err := VcsRef(ctx, "")
+	require.NoError(t, err)
+	require.NotNil(t, ref)
+	assert.Equal(t, "alpha", *ref, "no dir still reads the cwd's repository")
+	files, err := VcsChangedFiles(ctx, "main", "")
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	assert.Equal(t, "a.txt", files[0].Value)
+}
+
+// A dir that does not exist raises instead of falling back to the cwd's repository, which
+// would answer for a checkout the caller did not name.
+func TestVcsRefAndChangedFilesRaiseForAMissingDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	ctx := WithCwd(context.Background(), t.TempDir())
+	missing := filepath.Join(t.TempDir(), "gone")
+
+	ref, err := VcsRef(ctx, missing)
+	require.ErrorContains(t, err, "vcs.ref: dir")
+	assert.Nil(t, ref)
+	files, err := VcsChangedFiles(ctx, "", missing)
+	require.ErrorContains(t, err, "vcs.changedFiles: dir")
+	assert.Nil(t, files)
+}
+
+func canonical(t *testing.T, dir string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+	return resolved
 }
 
 // A repository's first commit is made on an unborn branch, and hack/git-hooks/commit-msg.buzz
@@ -169,7 +256,7 @@ func TestVcsRefRaisesOnAnUnbornBranch(t *testing.T) {
 	out, err := exec.Command("git", "-C", dir, "init", "-q", "-b", "main").CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	ref, err := VcsRef(WithCwd(context.Background(), dir))
+	ref, err := VcsRef(WithCwd(context.Background(), dir), "")
 	require.Error(t, err)
 	assert.Nil(t, ref)
 }

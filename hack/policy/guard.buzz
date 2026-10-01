@@ -102,11 +102,14 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return magus\guard.once(key);
     };
     final pusher = pusherOf(req);
+    final topic = fun () > branches\Topic {
+        return branchTopic(req.dir);
+    };
     final texts = withHeredocs(programs, line: req.command);
     final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\branchDiff(req.workspace), once: once,
-        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = remoteOf(req), topic = branchTopic });
+        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = remoteOf(req), topic = topic });
     if (verdict.decision != "allow" or stale\rebuilds(programs)) {
         return verdict;
     }
@@ -146,13 +149,13 @@ export object Publishing {
     topic: fun () > branches\Topic,
 }
 
-// currentBranch is the branch or bookmark the guard read for a push, else the one vcs\ref
-// reads, "" when neither names one.
+// currentBranch is the branch or bookmark the guard read for a push, else the one the
+// caller's checkout is on, "" when neither names one.
 fun currentBranch(req: CommandRequest) > str {
     if (req.checkout != null) {
         return req.checkout!.branch;
     }
-    return (vcs\ref() catch null) ?? "";
+    return (vcs\ref(dir: req.dir) catch null) ?? "";
 }
 
 fun remoteOf(req: CommandRequest) > branches\Remote {
@@ -162,12 +165,12 @@ fun remoteOf(req: CommandRequest) > branches\Remote {
     return branches\Remote{ base = vcs\base(), branches = [<str>] };
 }
 
-// branchTopic is the topic of the branch's changes against the base, through vcs, which reads
-// the repository holding the rule's working directory. A diff it cannot read is no topic.
-fun branchTopic() > branches\Topic {
+// branchTopic is the topic of the branch's changes against the base in the checkout holding
+// dir, the caller's rather than the hook process's. A diff it cannot read is no topic.
+fun branchTopic(dir: str) > branches\Topic {
     final paths = mut [<str>];
     try {
-        foreach (p in vcs\changedFiles()) {
+        foreach (p in vcs\changedFiles(dir: dir)) {
             paths.append(p.value);
         }
     } catch (e) {
