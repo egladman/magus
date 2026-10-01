@@ -89,8 +89,9 @@ magus agent harness verify --id claude-code
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
 (recorded and judged), and sub-agent spawns. Each runs a shipped script that talks to
-`magus shell`, through a short launcher that picks which magus runs it. The Bash
-entry, as `magus describe harness claude-code` prints it, in the place it lands in
+`magus shell`, through a short launcher that picks which magus runs it: file edits
+run `magus-path.buzz`, reads also run `magus-observe.buzz`, and every other entry
+runs `magus-command.buzz`. The Bash entry, as `magus describe harness claude-code` prints it, in the place it lands in
 `.claude/settings.json`:
 
 ```json
