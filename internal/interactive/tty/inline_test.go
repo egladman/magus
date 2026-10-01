@@ -216,3 +216,55 @@ func TestInlineViewSurvivesAHeightChangeThenDiffs(t *testing.T) {
 	assert.Equal(t, "", s.Row(4))
 	assert.Equal(t, 2, cursorRowOf(s))
 }
+
+// countingTTY records how many bytes reach the terminal. For an interactive
+// surface that is the number that matters: ns/op measures composition, but what
+// a reader actually waits on is the terminal parsing and rendering the bytes,
+// and, over ssh, the link carrying them.
+type countingTTY struct{ n int }
+
+func (c *countingTTY) Write(p []byte) (int, error) { c.n += len(p); return len(p), nil }
+func (*countingTTY) Fd() uintptr                   { return 2 }
+
+// statusFrame is a realistic `magus status --watch` grid: mostly static rows
+// with one animated cell, which is what the 150ms tick exists to advance.
+func statusFrame(spinner rune) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "server  %c  running   pid 4211   uptime 3h12m\n", spinner)
+	b.WriteString("telemetry\n  enabled\ttrue\n  endpoint\tlocalhost:4317\n  protocol\tgrpc\n")
+	for i := range 12 {
+		fmt.Fprintf(&b, "  project-%02d\tbuild\tcached\t0.0s\n", i)
+	}
+	return b.String()
+}
+
+// BenchmarkWatchFrame is one second of a watch view. Grid mode animates at
+// 150ms, so this cost repeats for as long as the view is open, and over ssh,
+// on the wire the whole time. The two variants are the block rewritten whole
+// and the block diffed.
+func BenchmarkWatchFrame(b *testing.B) {
+	spinners := []rune{'|', '/', '-', '\\'}
+	run := func(b *testing.B, whole bool) {
+		var total int
+		b.ReportAllocs()
+		b.ResetTimer()
+		for range b.N {
+			c := &countingTTY{}
+			v := NewInlineView(c, terminal(100, 40))
+			v.Paint(statusFrame(spinners[0]))
+			c.n = 0
+			for i := 1; i <= 7; i++ {
+				if whole {
+					// What it did before: forget the last frame, so every line
+					// counts as changed.
+					v.Reset()
+				}
+				v.Paint(statusFrame(spinners[i%len(spinners)]))
+			}
+			total = c.n
+		}
+		b.ReportMetric(float64(total), "B_written/sec")
+	}
+	b.Run("rewrite-whole-block", func(b *testing.B) { run(b, true) })
+	b.Run("diff-changed-lines", func(b *testing.B) { run(b, false) })
+}

@@ -38,7 +38,7 @@ const (
 // JIT-eligible.
 // flushICache is a no-op on x86: instruction fetch is coherent with data writes,
 // so freshly written bytes are fetched correctly once the page is executable. It
-// exists so jit_mem_unix.go can call it unconditionally rather than branching on
+// exists so jit_mem_other.go can call it unconditionally rather than branching on
 // the architecture; jit_arm64.go supplies the real sequence.
 func flushICache(*byte, int) {}
 

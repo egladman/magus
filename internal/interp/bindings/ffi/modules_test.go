@@ -3,8 +3,11 @@ package ffi
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestSetWithDoesNotMutateSource(t *testing.T) {
 	original := Set{"fs": {Capabilities: Capabilities(WASM)}}

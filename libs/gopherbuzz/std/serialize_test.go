@@ -2,9 +2,11 @@ package std
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -119,4 +121,24 @@ func TestJSONDecodeValueKeepsIntegralNumbersInts(t *testing.T) {
 	assert.True(t, f.IsFloat())
 	_, boxed := v.MapGet(boxedRawKey)
 	assert.False(t, boxed, "the value is plain, not Boxed")
+}
+
+func TestSession_SerializeBoxedIsDeclared(t *testing.T) {
+	ctx := context.Background()
+	exec := func(src string) (*buzz.Session, error) {
+		s := buzz.NewSession(ctx, buzz.WithEmbedded())
+		Register(s)
+		return s, s.Exec(ctx, src)
+	}
+	s, err := exec(`import "serialize";
+fun amount(b: serialize\Boxed) > int { return b.q(["a"]).integerValue() + b.q("a").integerValue(); }
+final n = amount(serialize\jsonDecode("\{\"a\": 3}"));
+final m = amount(serialize\Boxed.init({"a": 4}));`)
+	require.NoError(t, err)
+	assert.Equal(t, int64(6), s.Globals()["n"].AsInt())
+	assert.Equal(t, int64(8), s.Globals()["m"].AsInt())
+
+	_, err = exec(`import "serialize"; fun amount(b: serialize\Boxed) > int { return b.integerValue(); } final _n = amount(42);`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `cannot pass int as argument "b" of type Boxed`)
 }

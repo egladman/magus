@@ -1,5 +1,3 @@
-// cross-cutting: runs upstream Buzz's behavior suite against the whole engine
-
 package buzz_test //nolint:testlayout // in-package would close a cycle: gopherbuzz/std imports gopherbuzz
 
 // This file automates the "strict superset of upstream" claim in README.md and
@@ -15,13 +13,11 @@ package buzz_test //nolint:testlayout // in-package would close a cycle: gopherb
 // improvement cannot land without updating testdata/upstream-behavior-allowlist.txt.
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -32,22 +28,16 @@ import (
 
 const allowlistPath = "testdata/upstream-behavior-allowlist.txt"
 
-// upstreamCheckoutDir resolves the upstream buzz-language/buzz checkout: the
-// GOPHERBUZZ_UPSTREAM_DIR env var if set, else ~/Repos/buzz. It reports ok=false
-// (never an error) so the caller can t.Skip cleanly on a machine without the
-// checkout: this test must stay hermetic and green in that case.
-func upstreamCheckoutDir() (dir string, ok bool) {
-	if v := os.Getenv("GOPHERBUZZ_UPSTREAM_DIR"); v != "" {
-		dir = v
-	} else if home, err := os.UserHomeDir(); err == nil {
-		dir = filepath.Join(home, "Repos", "buzz")
-	} else {
-		return "", false
+// TestUpstreamCommitReadsThePin holds UpstreamCommit to UpstreamRef, the pin every
+// suite below verifies its checkout against. It needs no checkout of its own.
+func TestUpstreamCommitReadsThePin(t *testing.T) {
+	sha, ok := buzz.UpstreamCommit()
+	if !ok {
+		t.Fatalf("UpstreamRef %q has no -g<sha> suffix", buzz.UpstreamRef)
 	}
-	if info, err := os.Stat(filepath.Join(dir, "tests", "behavior")); err != nil || !info.IsDir() {
-		return "", false
+	if !strings.HasSuffix(buzz.UpstreamRef, "-g"+sha) {
+		t.Fatalf("UpstreamCommit() = %q, not the suffix of UpstreamRef %q", sha, buzz.UpstreamRef)
 	}
-	return dir, true
 }
 
 // TestUpstreamConformance runs every upstream tests/behavior/*.buzz file
@@ -55,7 +45,7 @@ func upstreamCheckoutDir() (dir string, ok bool) {
 // surface `magus buzz -t` installs) and checks the result against the checked-in
 // allowlist in both directions.
 func TestUpstreamConformance(t *testing.T) {
-	dir, ok := upstreamCheckoutDir()
+	dir, ok := buzz.UpstreamCheckout()
 	if !ok {
 		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")
 	}
@@ -72,7 +62,7 @@ func TestUpstreamConformance(t *testing.T) {
 	}
 	sort.Strings(files)
 
-	allowed, err := loadAllowlist(allowlistPath)
+	allowed, err := buzz.ReadConformanceAllowlist(allowlistPath)
 	if err != nil {
 		t.Fatalf("load allowlist: %v", err)
 	}
@@ -80,7 +70,7 @@ func TestUpstreamConformance(t *testing.T) {
 	// Upstream runs this suite from its own repo root, and several files depend on
 	// that: fs.buzz stats README.md, run-file.buzz runs tests/utils/testing.buzz.
 	// Reading them from elsewhere failed on the working directory rather than on
-	// anything about the language. Done after loadAllowlist, which resolves
+	// anything about the language. Done after ReadConformanceAllowlist, which resolves
 	// allowlistPath relative to THIS package's directory.
 	t.Chdir(stageRunDir(t, dir))
 
@@ -170,38 +160,6 @@ func runUpstreamBehaviorFile(t *testing.T, path string) (pass bool, detail strin
 	return true, ""
 }
 
-// loadAllowlist reads the newline-separated, #-comment-tolerant allowlist file
-// into a set of base filenames.
-func loadAllowlist(path string) (map[string]bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-
-	out := make(map[string]bool)
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		out[line] = true
-	}
-	return out, scanner.Err()
-}
-
-// upstreamRefSHA is the `-g<sha>` suffix of buzz.UpstreamRef (a `git describe`
-// string like "0.5.0-251-ged42f47"), the exact commit gopherbuzz was last
-// validated against.
-var upstreamRefSHA = regexp.MustCompile(`-g([0-9a-f]+)$`)
-
-// warnIfUpstreamRefMismatch compares the upstream checkout's actual HEAD commit
-// against the sha pinned in buzz.UpstreamRef, logging (never failing) a warning
-// on mismatch: the conformance numbers below are only meaningful measured
-// against that exact pinned commit, but a stale local checkout should not block
-// this test from running: it just means the result is against a different (and
-// possibly non-comparable) upstream state.
 // skipIfUpstreamRefMismatch skips when the checkout is not at the pinned commit.
 //
 // It SKIPS rather than warns-and-continues because the allowlist is a set of
@@ -215,12 +173,11 @@ var upstreamRefSHA = regexp.MustCompile(`-g([0-9a-f]+)$`)
 // work is worse than no measurement.
 func skipIfUpstreamRefMismatch(t *testing.T, dir string) {
 	t.Helper()
-	m := upstreamRefSHA.FindStringSubmatch(buzz.UpstreamRef)
-	if m == nil {
+	pinned, ok := buzz.UpstreamCommit()
+	if !ok {
 		t.Logf("warning: buzz.UpstreamRef %q has no parseable -g<sha> suffix; cannot verify checkout", buzz.UpstreamRef)
 		return
 	}
-	pinned := m[1]
 
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
@@ -261,7 +218,7 @@ const compileErrorsAllowlistPath = "testdata/upstream-compile-errors-allowlist.t
 // regression (gopherbuzz got laxer), and an unlisted file that starts failing is
 // progress that has to be recorded.
 func TestUpstreamCompileErrors(t *testing.T) {
-	dir, ok := upstreamCheckoutDir()
+	dir, ok := buzz.UpstreamCheckout()
 	if !ok {
 		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")
 	}
@@ -277,7 +234,7 @@ func TestUpstreamCompileErrors(t *testing.T) {
 	}
 	sort.Strings(files)
 
-	allowed, err := loadAllowlist(compileErrorsAllowlistPath)
+	allowed, err := buzz.ReadConformanceAllowlist(compileErrorsAllowlistPath)
 	if err != nil {
 		t.Fatalf("load allowlist: %v", err)
 	}
@@ -347,7 +304,7 @@ func upstreamRejects(t *testing.T, path, root string) (rejected bool) {
 // non-terminating loop, and the front end is where malformed input is supposed to be
 // caught. The README states the same limit rather than implying they are run.
 func TestUpstreamFuzzInputsDoNotPanic(t *testing.T) {
-	dir, ok := upstreamCheckoutDir()
+	dir, ok := buzz.UpstreamCheckout()
 	if !ok {
 		t.Skip("no upstream buzz checkout found: set GOPHERBUZZ_UPSTREAM_DIR or check one out to ~/Repos/buzz (github.com/buzz-language/buzz) to run this test")
 	}

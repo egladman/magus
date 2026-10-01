@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"fmt"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -406,4 +407,23 @@ func TestAssembleDocsDocumentsTheTargetsARunNames(t *testing.T) {
 	d, ok := nodeByID(out, "doc:docs/guide.md")
 	require.True(t, ok)
 	assert.Equal(t, "docs:nope@13", d.Attrs[attrUnknownTargets], "only a named project of this workspace missing the target is a claim, at its file line")
+}
+
+func benchSpells() []types.Spell {
+	out := make([]types.Spell, 20)
+	for i := range out {
+		out[i] = types.Spell{Name: fmt.Sprintf("spell%02d", i)}
+	}
+	out[0].Name = "go"
+	return out
+}
+
+func BenchmarkAssembleDocs(b *testing.B) {
+	root := writeBenchTree(b, 0, 100)
+	spells := benchSpells()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = assembleDocs(root, spells, nil, "")
+	}
 }

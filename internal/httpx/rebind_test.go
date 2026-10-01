@@ -87,3 +87,17 @@ func TestAllowedHosts(t *testing.T) {
 		assert.False(t, allowed("192.168.1.5:7391", "attacker.com"))
 	})
 }
+
+func TestRebindRefusalOmitsTheBearerChallenge(t *testing.T) {
+	t.Parallel()
+	req := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	req.Host = "evil.example"
+	rr := httptest.NewRecorder()
+	GuardRebind(rpcerr.FormatJSON, AllowedHosts(netip.MustParseAddrPort("127.0.0.1:7391")), okHandler).ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+	assert.Empty(t, rr.Header().Get("WWW-Authenticate"))
+	got := decodeStatus(t, rr.Body.Bytes())
+	assert.Equal(t, "PERMISSION_DENIED", got.Error.Status)
+	assert.Equal(t, "MGS9007", got.reason())
+}
