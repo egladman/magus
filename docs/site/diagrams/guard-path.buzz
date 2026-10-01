@@ -29,9 +29,9 @@ export fun guardPathFigure() > figure\Figure !> any {
         .actor(verdict)
         .box(hint, label: "next: breadcrumb", sub: "a command to run")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([shell]), dst: figure\setOf([jobs, hint]),
+        .hideEdges([shell], dst: [jobs, hint],
             why: "the shell's own job and hint uses are other verbs; a call reaches them through the guard")
-        .hideEdges(figure\setOf([jobs]), dst: figure\setOf([hint]),
+        .hideEdges([jobs], dst: [hint],
             why: "job results carry their own next: steps; the guard's comes from the verdict")
         .markEdge(shell, dst: guard, label: "judges")
         .markEdge(guard, dst: jobs, label: "lease")
@@ -49,7 +49,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .scope(goPackages("internal/guard/**"))
         .scope(goPackages("internal/job/**"))
         .scope(goPackages("internal/hint/**"))
-        .except(figure\setOf([magus\dir("cmd/magus/gen")]),
+        .except([magus\dir("cmd/magus/gen")],
             why: "the CLI's generated config flags; the hook event arrives on stdin")
         .except(cmdTools(), why: "docs generators, codegen and the browser playground; none reads a hook event");
 }

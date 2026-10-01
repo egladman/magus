@@ -47,7 +47,7 @@ export fun leaseLoopFigure() > figure\Figure !> any {
         .flowIn(work, dst: decl, label: "release", stroke: figure\Stroke.focal)
         .flowOut(decl, dst: plan, label: "job rows")
         .flowAcross(human, dst: plan, label: "watches")
-        .zone("the loop the orchestrator runs", dirs: figure\setOf([decl, verify]), actors: [cp, part, work, integrate])
+        .zone("the loop the orchestrator runs", dirs: [decl, verify], actors: [cp, part, work, integrate])
         .zone("what a person watches", actors: [plan, human])
         .legend(figure\Look.focal, label: "the whole guarantee")
         .legend(figure\Look.external, label: "agents and people")

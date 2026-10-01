@@ -9,7 +9,7 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
     final sdk = magus\dir(".");
     final risk = magus\dir("internal/risk");
     final nested: [magus\Dir] = magus\dirs("internal/queue/*");
-    final queue = figure\setOf(nested + [queueDir]).without([provider]);
+    final queue = figure\without(nested + [queueDir], drop: [provider]);
     final github = figure\external("GitHub", sub: "auto-merge or a label");
     final low = figure\external("low risk?", look: figure\Look.decision);
     final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
@@ -42,9 +42,9 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
         .flowAcross(low, dst: verdict, label: "no: kick back")
         .flowAcross(gate, dst: verdict, label: "exit status")
         .flowAcross(verdict, dst: github, label: "apply")
-        .zone("the workspace", dirs: figure\setOf([sdk, risk]))
+        .zone("the workspace", dirs: [sdk, risk])
         .legend(figure\Look.focal, label: "reads what an edit is")
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.decision, label: "the queue decides")
-        .scope(queue.plus([provider, risk]));
+        .scope(queue + [provider, risk]);
 }

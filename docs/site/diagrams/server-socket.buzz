@@ -34,12 +34,12 @@ export fun serverSocketFigure() > figure\Figure !> any {
         .legend(figure\Look.optional, label: "spawned on demand")
         .scope(goPackages("internal/proc/**"))
         .scope(goPackages("internal/share/**"))
-        .except(figure\setOf([magus\dir("internal/proc/endpoint")]),
+        .except([magus\dir("internal/proc/endpoint")],
             why: "parses the transport address a client dials, a value type the CLI and config share")
-        .except(figure\setOf([magus\dir("internal/proc/environ")]),
+        .except([magus\dir("internal/proc/environ")],
             why: "one run's environment for the env host module; nothing on the socket reads it")
-        .except(figure\setOf([magus\dir("internal/proc/run")]),
+        .except([magus\dir("internal/proc/run")],
             why: "the subprocess helper spells run tools through, under the pool rather than at the socket")
-        .except(figure\setOf([magus\dir("internal/proc/sockdir")]),
+        .except([magus\dir("internal/proc/sockdir")],
             why: "picks the 0700 directory the socket lives in, which the box's sub names");
 }

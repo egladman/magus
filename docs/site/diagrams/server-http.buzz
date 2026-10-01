@@ -7,8 +7,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
     final server = magus\dir("internal/server");
-    final handlers = figure\layerSet(magus\layer("handler"));
-    final routes = handlers.without([mcp]);
+    final handlers = magus\layer("handler").dirs;
+    final routes = figure\without(handlers, drop: [mcp]);
     final agent = figure\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: figure\Look.plain);
     final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);
     final probe = figure\external("kubelet", sub: "scripts, probes", tag: "client");
@@ -32,8 +32,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
         .flowIn(agent, dst: guard)
         .flowIn(console, dst: guard)
         .flowIn(probe, dst: server, label: "unguarded", stroke: figure\Stroke.focal)
-        .zone("through the guard", dirs: handlers.plus([guard]), actors: [agent, console])
+        .zone("through the guard", dirs: handlers + [guard], actors: [agent, console])
         .legend(figure\Look.focal, label: "authenticated")
         .legend(figure\Look.external, label: "open to any caller")
-        .scope(handlers.plus([guard, server]));
+        .scope(handlers + [guard, server]);
 }

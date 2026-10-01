@@ -109,10 +109,9 @@ var modules = []Module{
 	},
 	{
 		Name: "figure",
-		Doc:  "Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls.",
+		Doc:  "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.",
 		Methods: []Method{
-			{Name: "setOf", Doc: "setOf is the set of the given dirs; a dir named twice is held once. Raises when an item", Sig: "figure\\setOf(dirs, [named]) -> DirSet"},
-			{Name: "layerSet", Doc: "layerSet is every directory layer covers. Raises when layer is not a Layer record.", Sig: "figure\\layerSet(layer) -> DirSet"},
+			{Name: "without", Doc: "without is dirs less drop, in the order dirs holds them.", Sig: "figure\\without(dirs, drop) -> [magus\\Dir]"},
 			{Name: "external", Doc: "external is an actor the figure draws but no directory holds. look defaults to", Sig: "figure\\external(name, [sub], [tag], [link], [look]) -> Actor"},
 			{Name: "of", Doc: "of starts an empty figure. direction defaults to Direction.across; generated marks a", Sig: "figure\\of(id, [title], [eyebrow], [desc], [direction], [generated]) -> mut Figure"},
 			{Name: "draw", Doc: "draw lays f out and paints it with theme. anchorHref is a URL template: {path} takes a", Sig: "figure\\draw(f, theme, [anchorHref]) -> str"},

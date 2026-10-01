@@ -29,10 +29,10 @@ export fun ciProvidersFigure() > figure\Figure !> any {
         .flowAcross(ops, dst: vendor, label: "vendor syntax")
         .flowIn(prefixes, dst: quote, label: "read once", stroke: figure\Stroke.optional)
         .flowOut(quote, dst: vendor, label: "de-fanged")
-        .zone("magus binary, names no ci system", dirs: figure\setOf([contract, quote]), actors: [run])
+        .zone("magus binary, names no ci system", dirs: [contract, quote], actors: [run])
         .zone("provider spell, in buzz", actors: [ops, prefixes])
         .legend(figure\Look.external, label: "outside magus")
         .scope(goPackages("internal/ci/**"))
-        .except(figure\setOf([magus\dir("internal/ci/forecast"), magus\dir("internal/ci/volatility")]),
+        .except([magus\dir("internal/ci/forecast"), magus\dir("internal/ci/volatility")],
             why: "shard sizing and flaky-test retry: they read run history and speak to no CI system");
 }

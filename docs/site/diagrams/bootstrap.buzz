@@ -39,7 +39,7 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .actor(stale)
         .actor(escape)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([cli]), dst: figure\setOf([stamp]),
+        .hideEdges([cli], dst: [stamp],
             why: "the CLI imports the bindings to run any magusfile; the stamp reaches them by go-build's -X flag, drawn from go-build")
         .markEdge(cli, dst: rule, label: "judges")
         .flowIn(person, dst: cli, label: "runs magus")
@@ -51,10 +51,10 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .flowIn(stale, dst: stamp, label: "reads")
         .flowAcross(stale, dst: escape, label: "decls moved")
         .flowAcross(escape, dst: exempt, label: "mv magus.old", stroke: figure\Stroke.focal)
-        .zone("no ./magus yet", dirs: figure\setOf([rule]), actors: [exempt])
-        .zone("magus builds magus", dirs: figure\setOf([stamp]), actors: [target, spells])
+        .zone("no ./magus yet", dirs: [rule], actors: [exempt])
+        .zone("magus builds magus", dirs: [stamp], actors: [target, spells])
         .zone("kept fresh", actors: [stale, escape])
-        .rank(dirs: figure\setOf([cli, rule]), actors: [person, exempt])
+        .rank(dirs: [cli, rule], actors: [person, exempt])
         .legend(figure\Look.focal, label: "the one go run")
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.store, label: "embedded in the binary")
@@ -62,13 +62,13 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .scope(goPackages("cmd/**"))
         .scope(goPackages("internal/guard/**"))
         .scope(goPackages("internal/interp/**"))
-        .except(figure\setOf([magus\dir("cmd/magus/gen")]),
+        .except([magus\dir("cmd/magus/gen")],
             why: "the CLI's generated config flags, linked into the same binary")
-        .except(cmdTools().without([magus\dir("cmd/magus-utils")]),
+        .except(figure\without(cmdTools(), drop: [magus\dir("cmd/magus-utils")]),
             why: "docs generators and the browser playground, each built by its own target once ./magus exists; go-build links ./cmd/magus alone")
-        .except(figure\setOf([magus\dir("cmd/magus-utils")]),
+        .except([magus\dir("cmd/magus-utils")],
             why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
-        .except(figure\setOf([
+        .except([
             magus\dir("internal/interp"),
             magus\dir("internal/interp/bindings/ffi"),
             magus\dir("internal/interp/bindings/gen"),
@@ -77,6 +77,6 @@ export fun bootstrapFigure() > figure\Figure !> any {
             magus\dir("internal/interp/engine/buzz"),
             magus\dir("internal/interp/mcpclient"),
             magus\dir("internal/interp/transform"),
-        ]),
+        ],
             why: "the rest of the magusfile interpreter; go-build's -X flag names bindings.buildStamp alone");
 }

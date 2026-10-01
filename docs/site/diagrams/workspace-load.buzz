@@ -13,7 +13,7 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
     final root = magus\dir(".");
     final rootMf = figure\external("Root magusfile", sub: "declares project .", look: figure\Look.input);
     final nestedMf = figure\external("Nested magusfiles", sub: "docs/, proto/, libs/*", look: figure\Look.input);
-    final steps = figure\setOf([discover, interp, extract, cache]);
+    final steps = [discover, interp, extract, cache];
     return figure\of("workspace-load",
             title: "A target exists because a magusfile exported it",
             eyebrow: "workspace",
@@ -34,9 +34,9 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .box(cache, label: "Cache key", sub: "one step per target")
         .box(root, label: "magus describe", sub: "targets, claims, the graph")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([root]), dst: steps,
+        .hideEdges([root], dst: steps,
             why: "the root package runs the load; its calls into each step are the order, not the model")
-        .hideEdges(figure\setOf([interp, cache]), dst: figure\setOf([discover]),
+        .hideEdges([interp, cache], dst: [discover],
             why: "they read project options and project paths; the model they fill is types")
         .markEdge(interp, dst: model, label: "targets")
         .markEdge(extract, dst: model, label: "footprints")
@@ -50,9 +50,9 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
         .scope(goPackages("internal/describe/**"))
         .scope(goPackages("types/**"))
         .scope(goPackages("internal/cache/**"))
-        .except(figure\setOf([magus\dir("project/impact")]),
+        .except([magus\dir("project/impact")],
             why: "the blast radius of a changeset, which affected reads after the load")
-        .except(figure\setOf([
+        .except([
             magus\dir("internal/interp/bindings"),
             magus\dir("internal/interp/bindings/ffi"),
             magus\dir("internal/interp/bindings/gen"),
@@ -61,12 +61,12 @@ export fun workspaceLoadFigure() > figure\Figure !> any {
             magus\dir("internal/interp/engine/buzz"),
             magus\dir("internal/interp/mcpclient"),
             magus\dir("internal/interp/transform"),
-        ]),
+        ],
             why: "the engine seam, host bindings, MCP client and transforms an evaluation calls through; the Evaluate box is where an export becomes a target")
-        .except(figure\setOf([magus\dir("types/enum")]),
+        .except([magus\dir("types/enum")],
             why: "the closed string sets every package checks values against; no part of the project model")
-        .except(figure\setOf([magus\dir("internal/cache/reflink"), magus\dir("internal/cache/remotetest")]),
+        .except([magus\dir("internal/cache/reflink"), magus\dir("internal/cache/remotetest")],
             why: "copying files in and out of the store, and a fake remote cache for tests; the key is computed in internal/cache")
-        .except(figure\setOf([magus\dir("project/impact/gen/mocks"), magus\dir("types/gen/mocks")]),
+        .except([magus\dir("project/impact/gen/mocks"), magus\dir("types/gen/mocks")],
             why: "generated test mocks");
 }

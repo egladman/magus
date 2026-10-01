@@ -35,7 +35,7 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .box(cache, label: "Cache key", sub: "source walk, key, snapshot", focal: true)
         .box(claims, label: "Output claim", sub: "stops at a nested dir")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([audit]), dst: figure\setOf([claims]),
+        .hideEdges([audit], dst: [claims],
             why: "the audit reads the same claim rule; the figure draws it from the snapshot")
         .flowIn(reads, dst: cache, label: "src:")
         .flowIn(handle, dst: cache, label: "+ depends_on", stroke: figure\Stroke.focal)
@@ -43,16 +43,16 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .flowIn(writes, dst: cache, label: "snapshot")
         .flowIn(writes, dst: audit, label: "stray write", stroke: figure\Stroke.optional)
         .zone("root project .", actors: [reads, writes])
-        .zone("a nested project", dirs: figure\setOf([audit]), actors: [handle])
-        .zone("the cache", dirs: figure\setOf([cache, claims]), actors: [probe])
+        .zone("a nested project", dirs: [audit], actors: [handle])
+        .zone("the cache", dirs: [cache, claims], actors: [probe])
         .legend(figure\Look.focal, label: "what a hit is keyed on")
         .scope(goPackages("internal/cache/**"))
         .scope(goPackages("internal/audit/**"))
         .scope(goPackages("types/**"))
-        .except(figure\setOf([magus\dir("internal/cache/reflink")]),
+        .except([magus\dir("internal/cache/reflink")],
             why: "copies files in and out of the store; it reads no glob and keys nothing")
-        .except(figure\setOf([magus\dir("internal/cache/remotetest")]), why: "a fake remote cache for tests")
-        .except(figure\setOf([magus\dir("types/enum")]),
+        .except([magus\dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
+        .except([magus\dir("types/enum")],
             why: "the closed string sets every package checks values against; no claim rule")
-        .except(figure\setOf([magus\dir("types/gen/mocks")]), why: "generated test mocks");
+        .except([magus\dir("types/gen/mocks")], why: "generated test mocks");
 }

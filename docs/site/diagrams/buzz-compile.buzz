@@ -55,17 +55,17 @@ export fun buzzCompileFigure() > figure\Figure !> any {
         .flowAcross(checker, dst: compiler, label: "no errors")
         .flowIn(compiler, dst: vm, label: "emits")
         .flowIn(store, dst: vm, label: "fresh hit")
-        .rank(dirs: figure\setOf([lexer]), actors: [parseCache, parser, imports])
+        .rank(dirs: [lexer], actors: [parseCache, parser, imports])
         .rank(actors: [checker, compiler])
-        .rank(dirs: figure\setOf([vm]), actors: [store])
+        .rank(dirs: [vm], actors: [store])
         .legend(figure\Look.focal, label: "where an import runs")
         .legend(figure\Look.store, label: "optional, set by the host")
         .scope(gopherbuzzPackages())
-        .except(figure\setOf([session]),
+        .except([session],
             why: "its steps are drawn one by one, each checked against the symbol that implements it")
-        .except(figure\setOf([tree, typeSystem]),
+        .except([tree, typeSystem],
             why: "data packages: their types label the connectors")
-        .except(figure\setOf([magus\dir("libs/gopherbuzz/std"), magus\dir("libs/gopherbuzz/internal/codec")]),
+        .except([magus\dir("libs/gopherbuzz/std"), magus\dir("libs/gopherbuzz/internal/codec")],
             why: "the Buzz stdlib and its JSON codec: modules a program imports, compiled by these same steps")
         .except(gopherbuzzAround(), why: AROUND_WHY);
 }

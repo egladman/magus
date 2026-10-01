@@ -23,7 +23,7 @@ func init() {
 	RegisterSource(SourceModule{
 		Name:   "figure",
 		Path:   "magus/figure",
-		Doc:    "Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls.",
+		Doc:    "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.",
 		Source: figuresrc.Source,
 	})
 }

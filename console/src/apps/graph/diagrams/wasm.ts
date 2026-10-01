@@ -47,7 +47,7 @@ export interface Figure {
   readonly unscopedWhy: string;
   readonly graphEdges: boolean;
   readonly boxes: readonly Box[];
-  readonly scopes: readonly DirSet[];
+  readonly scopes: readonly (readonly Dir[])[];
   readonly exclusions: readonly Exclusion[];
   readonly hiddenEdges: readonly HiddenEdges[];
   readonly edgeMarks: readonly EdgeMark[];
@@ -60,18 +60,13 @@ export interface Figure {
 // Box is one drawn box: exactly one of dir, group and actor is set.
 export interface Box {
   readonly dir: Dir | null;
-  readonly group: DirSet | null;
+  readonly group: readonly Dir[] | null;
   readonly actor: Actor | null;
   readonly label: string;
   readonly sub: string;
   readonly tag: string;
   readonly focal: boolean;
   readonly look: Look | null;
-}
-
-export interface DirSet {
-  readonly dirs: readonly Dir[];
-  readonly named: string;
 }
 
 export interface Actor {
@@ -84,13 +79,13 @@ export interface Actor {
 }
 
 export interface Exclusion {
-  readonly set: DirSet;
+  readonly dirs: readonly Dir[];
   readonly why: string;
 }
 
 export interface HiddenEdges {
-  readonly src: DirSet;
-  readonly dst: DirSet;
+  readonly src: readonly Dir[];
+  readonly dst: readonly Dir[];
   readonly why: string;
 }
 
@@ -116,14 +111,14 @@ export interface Flow {
 
 export interface Zone {
   readonly label: string;
-  readonly dirs: DirSet | null;
+  readonly dirs: readonly Dir[];
   readonly actors: readonly Actor[];
   readonly boundary: boolean;
 }
 
 export interface Alignment {
   readonly axis: Axis;
-  readonly dirs: DirSet | null;
+  readonly dirs: readonly Dir[];
   readonly actors: readonly Actor[];
 }
 

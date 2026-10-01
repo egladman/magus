@@ -33,7 +33,7 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
         .box(mcp, label: "MCP client", sub: "magus\\query and kin", tag: "reader")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([cli]), dst: figure\setOf([graph, mcp]),
+        .hideEdges([cli], dst: [graph, mcp],
             why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
         .flowIn(core, dst: graph)
         .flowIn(files, dst: graph)
@@ -44,8 +44,8 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "what every reader asks")
         .legend(figure\Look.input, label: "built by a SCIP indexer")
         .scope(goPackages("internal/graph/**"))
-        .except(figure\setOf([magus\dir("internal/graph/dependency")]),
+        .except([magus\dir("internal/graph/dependency")],
             why: "the project dependency DAG targets run in, a different graph")
-        .except(figure\setOf([magus\dir("internal/graph/url")]),
+        .except([magus\dir("internal/graph/url")],
             why: "composes the console explorer's URL; it reads no shard and asks no verb");
 }

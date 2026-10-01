@@ -47,10 +47,10 @@ export fun volatilityFigure() > figure\Figure !> any {
         .flowAcross(retry, dst: regress, label: "fails again")
         .legend(figure\Look.focal, label: "wants a human")
         .scope(goPackages("internal/ci/**"))
-        .except(figure\setOf([magus\dir("internal/ci")]),
+        .except([magus\dir("internal/ci")],
             why: "plans the CI fan-out and the gate; a retry is decided per target, inside a run")
-        .except(figure\setOf([magus\dir("internal/ci/annotate")]),
+        .except([magus\dir("internal/ci/annotate")],
             why: "turns a retry already made into a CI notice; drawn in ci-providers")
-        .except(figure\setOf([magus\dir("internal/ci/forecast")]),
+        .except([magus\dir("internal/ci/forecast")],
             why: "the run history Decide reads and Record appends to; drawn, it breaks the nine-box budget");
 }

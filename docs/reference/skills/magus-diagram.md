@@ -3,8 +3,8 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 7983
-skill_short_bytes: 7190
+skill_full_bytes: 8034
+skill_short_bytes: 7241
 ---
 
 # magus-diagram
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `fcb1584e12f6` |
+| `skill-content` | `0c478b39a9d4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -91,15 +91,15 @@ import "magus/figure";
 export fun serverHttpFigure() > figure\Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
-    final handlers = figure\layerSet(magus\layer("handler"));
+    final handlers = magus\layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
     return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(handlers.without([mcp]), label: "Console routes")
+        .group(figure\without(handlers, drop: [mcp]), label: "Console routes")
         .edgesFromGraph()
         .flowIn(agent, dst: guard)
-        .scope(handlers.plus([guard]));
+        .scope(handlers + [guard]);
 }
 ```
 
@@ -115,18 +115,19 @@ it. Prove a figure draws before you register it: call it from a scratch `main()`
 | call | draws |
 | --- | --- |
 | `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\refs` result |
-| `.group(set, label:, ...)` | every directory in a `DirSet` as one box |
+| `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
 | `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |
 
-Build a set from records, never from a list of path strings: `figure\layerSet(magus\layer("handler"))`
-takes every directory a declared layer covers, `figure\setOf(magus\dirs("internal/queue/*"))`
-every directory a glob matches, and `.without([...])` and `.plus([...])` derive one.
+Take directories as records, never as path strings: `magus\layer("handler").dirs` is
+every directory a declared layer covers, `magus\dirs("internal/queue/*")` every directory
+a glob matches. `+` joins two lists, and `figure\without(dirs, drop: [...])` leaves some
+out, raising when one it drops is not there.
 A package that joins the layer joins the group, and nothing in the figure changes.
 Layers are declared under `"layers"` in `magus\project`, workspace-relative directory or
 glob to a lowercase name.
 
-A directory is drawn once: a box inside a group's set is refused, so drop it with
-`.without([...])`. Files of one package are one box, or actors when they are steps.
+A directory is drawn once: a box inside a group's dirs is refused, so drop it with
+`figure\without`. Files of one package are one box, or actors when they are steps.
 
 `look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or
 `decision` (actors only, at most three exits). Spend the two accents on the one point the
@@ -139,7 +140,7 @@ two drawn boxes; two or more code boxes require it. Arrows point importer to imp
 edge inside one group is not drawn. Every drawn directory needs a symbol index: an
 unindexed one is a finding, never an empty edge list, so run `magus graph build` first.
 
-- `.hideEdges(src, dst:, why:)` drops graph edges from one set to another, reason
+- `.hideEdges(src, dst:, why:)` drops graph edges from one list of dirs to another, reason
   required. A hide that matches nothing is a finding: the code changed, so look again.
 - `.markEdge(src, dst:, label:, stroke:)` labels or strokes one graph edge.
 - `.flowIn(actor, dst: dir)`, `.flowOut(dir, dst: actor)` and `.flowAcross(actor, dst:
@@ -148,8 +149,8 @@ unindexed one is a finding, never an empty edge list, so run `magus graph build`
 
 ## Scope
 
-`.scope(set)` names the directories the figure answers for. Every one must be drawn by a
-box or a group, or left out with `.except(set, why:)`, which is for a true exclusion, not a
+`.scope(dirs)` names the directories the figure answers for. Every one must be drawn by a
+box or a group, or left out with `.except(dirs, why:)`, which is for a true exclusion, not a
 list of packages the picture did not fit. Narrow the scope instead. A figure with no code
 behind it, a decision process or a CI arrangement, says so with `.unscoped(why:)`.
 
@@ -158,7 +159,7 @@ behind it, a decision process or a CI arrangement, says so with `.unscoped(why:)
 Nothing is drawn until the figure is clean. Real ones:
 
 ```text
-figure "server-http": "internal/server" is in scope(...) but nothing draws it; add it to a box or a group, or except(setOf([...]), why:)
+figure "server-http": "internal/server" is in scope("internal/**") but nothing draws it; add it to a box or a group, or except([...], why:)
 figure "t": draws 2 boxes of code and no edge between them; call edgesFromGraph()
 figure "t": "a" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`
 ```
@@ -248,15 +249,15 @@ import "magus/figure";
 export fun serverHttpFigure() > figure\Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
-    final handlers = figure\layerSet(magus\layer("handler"));
+    final handlers = magus\layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
     return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(handlers.without([mcp]), label: "Console routes")
+        .group(figure\without(handlers, drop: [mcp]), label: "Console routes")
         .edgesFromGraph()
         .flowIn(agent, dst: guard)
-        .scope(handlers.plus([guard]));
+        .scope(handlers + [guard]);
 }
 ```
 
@@ -276,18 +277,19 @@ bottom instead of left to right.
 | call | draws |
 | --- | --- |
 | `.box(dir, label:, sub:, tag:, focal:, look:, symbol:)` | one directory; `symbol:` anchors it at a `magus\refs` result |
-| `.group(set, label:, ...)` | every directory in a `DirSet` as one box |
+| `.group(dirs, label:, ...)` | every directory in a list of `magus\Dir` as one box |
 | `figure\external(name, sub:, tag:, link:, look:)` | an actor: a person, a vendor, a step, a Buzz file, a decision |
 
-Build a set from records, never from a list of path strings: `figure\layerSet(magus\layer("handler"))`
-takes every directory a declared layer covers, `figure\setOf(magus\dirs("internal/queue/*"))`
-every directory a glob matches, and `.without([...])` and `.plus([...])` derive one.
+Take directories as records, never as path strings: `magus\layer("handler").dirs` is
+every directory a declared layer covers, `magus\dirs("internal/queue/*")` every directory
+a glob matches. `+` joins two lists, and `figure\without(dirs, drop: [...])` leaves some
+out, raising when one it drops is not there.
 A package that joins the layer joins the group, and nothing in the figure changes.
 Layers are declared under `"layers"` in `magus\project`, workspace-relative directory or
 glob to a lowercase name.
 
-A directory is drawn once: a box inside a group's set is refused, so drop it with
-`.without([...])`. Files of one package are one box, or actors when they are steps.
+A directory is drawn once: a box inside a group's dirs is refused, so drop it with
+`figure\without`. Files of one package are one box, or actors when they are steps.
 
 `look:` takes `figure\Look.plain`, `focal`, `store`, `external`, `input`, `optional` or
 `decision` (actors only, at most three exits). Spend the two accents on the one point the
@@ -300,7 +302,7 @@ two drawn boxes; two or more code boxes require it. Arrows point importer to imp
 edge inside one group is not drawn. Every drawn directory needs a symbol index: an
 unindexed one is a finding, never an empty edge list, so run `magus graph build` first.
 
-- `.hideEdges(src, dst:, why:)` drops graph edges from one set to another, reason
+- `.hideEdges(src, dst:, why:)` drops graph edges from one list of dirs to another, reason
   required. A hide that matches nothing is a finding: the code changed, so look again.
 - `.markEdge(src, dst:, label:, stroke:)` labels or strokes one graph edge.
 - `.flowIn(actor, dst: dir)`, `.flowOut(dir, dst: actor)` and `.flowAcross(actor, dst:
@@ -313,8 +315,8 @@ by hand. The marker becomes a calls edge `edgesFromGraph()` draws.
 
 ## Scope
 
-`.scope(set)` names the directories the figure answers for. Every one must be drawn by a
-box or a group, or left out with `.except(set, why:)`, which is for a true exclusion, not a
+`.scope(dirs)` names the directories the figure answers for. Every one must be drawn by a
+box or a group, or left out with `.except(dirs, why:)`, which is for a true exclusion, not a
 list of packages the picture did not fit. Narrow the scope instead. A figure with no code
 behind it, a decision process or a CI arrangement, says so with `.unscoped(why:)`.
 
@@ -323,7 +325,7 @@ behind it, a decision process or a CI arrangement, says so with `.unscoped(why:)
 Nothing is drawn until the figure is clean. Real ones:
 
 ```text
-figure "server-http": "internal/server" is in scope(...) but nothing draws it; add it to a box or a group, or except(setOf([...]), why:)
+figure "server-http": "internal/server" is in scope("internal/**") but nothing draws it; add it to a box or a group, or except([...], why:)
 figure "t": draws 2 boxes of code and no edge between them; call edgesFromGraph()
 figure "t": "a" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`
 ```

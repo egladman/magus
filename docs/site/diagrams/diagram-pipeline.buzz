@@ -42,15 +42,15 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .scope(goPackages("libs/*"))
         .scope(goPackages("libs/figure/**"))
         .scope(goPackages("std/**"))
-        .scope(figure\layerSet(magus\layer("handler")))
-        .except(figure\setOf([magus\dir("libs/gopherbuzz")]),
+        .scope(magus\layer("handler").dirs)
+        .except([magus\dir("libs/gopherbuzz")],
             why: "the Buzz runtime every module runs on, figures included; drawn in buzz-engine")
-        .except(figure\setOf([magus\dir("libs/coldread"), magus\dir("libs/testlayout")]),
+        .except([magus\dir("libs/coldread"), magus\dir("libs/testlayout")],
             why: "Go analyzers for comments and test layout; no figure passes through them")
-        .except(figure\setOf([magus\dir("libs/diagnostics")]),
+        .except([magus\dir("libs/diagnostics")],
             why: "the diagnostic-code framework; a figure's findings are plain strings")
-        .except(figure\setOf([magus\dir("libs/testkit")]), why: "fixtures for magus's Go tests")
-        .except(figure\setOf([
+        .except([magus\dir("libs/testkit")], why: "fixtures for magus's Go tests")
+        .except([
             magus\dir("std/encoding"),
             magus\dir("std/encoding/base64"),
             magus\dir("std/encoding/csv"),
@@ -61,9 +61,9 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             magus\dir("std/encoding/url"),
             magus\dir("std/encoding/xml"),
             magus\dir("std/encoding/yaml"),
-        ]),
+        ],
             why: "the encoding host modules; a figure source reads the graph through the magus module alone")
-        .except(figure\setOf([
+        .except([
             magus\dir("internal/handler/activity"),
             magus\dir("internal/handler/attention"),
             magus\dir("internal/handler/diff"),
@@ -79,6 +79,6 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
             magus\dir("internal/handler/tool"),
             magus\dir("internal/handler/trailrpc"),
             magus\dir("internal/handler/viewer"),
-        ]),
+        ],
             why: "the console's other services; none embeds magus/figure");
 }

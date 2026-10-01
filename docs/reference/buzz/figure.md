@@ -2,39 +2,28 @@
 title: figure module
 generated_from: reference/buzz/
 aliases: [modules/figure]
-description: "Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls."
+description: "Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls."
 tags: [figure, module, stdlib, magusfile]
 ---
 
 # figure
 
-Architecture figures drawn from graph records: boxes and groups over Dir and Layer sets, coverage by set, edges derived from imports and declared calls.
+Architecture figures drawn from graph records: boxes and groups over Dir records, coverage by scope, edges derived from imports and declared calls.
 
 > **Naming convention:** import the module under its bare name (`import "figure"`), reach members with a backslash, and call methods in `camelCase`: `figure\someMethod`.
 
 ## Methods
 
-### setOf
+### without
 
-setOf is the set of the given dirs; a dir named twice is held once. Raises when an item
+without is dirs less drop, in the order dirs holds them.
 
-**Signature:** `figure\setOf(dirs) -> DirSet`
+**Signature:** `figure\without(dirs, drop) -> [magus\Dir]`
 
 | Parameter | Type  | Optional | Description |
 | --------- | ----- | -------- | ----------- |
 | `dirs`    | `any` |          |             |
-
-**Returns:** any
-
-### layerSet
-
-layerSet is every directory layer covers. Raises when layer is not a Layer record.
-
-**Signature:** `figure\layerSet(layer) -> DirSet`
-
-| Parameter | Type  | Optional | Description |
-| --------- | ----- | -------- | ----------- |
-| `layer`   | `any` |          |             |
+| `drop`    | `any` |          |             |
 
 **Returns:** any
 

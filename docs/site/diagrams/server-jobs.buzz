@@ -29,10 +29,10 @@ export fun serverJobsFigure() > figure\Figure !> any {
         .legend(figure\Look.external, label: "outside the server")
         .legend(figure\Look.focal, label: "the one warm copy")
         .scope(goPackages("internal/file/**"))
-        .except(figure\setOf([magus\dir("internal/file")]),
+        .except([magus\dir("internal/file")],
             why: "filesystem primitives every package shares; no background work of their own")
-        .except(figure\setOf([magus\dir("internal/file/diff")]),
+        .except([magus\dir("internal/file/diff")],
             why: "attributes one run's concurrent writes by mtime and size; inside a run, not between runs")
-        .except(figure\setOf([magus\dir("internal/file/record")]),
+        .except([magus\dir("internal/file/record")],
             why: "one-file records for lock owners; nothing here writes the registry through them");
 }

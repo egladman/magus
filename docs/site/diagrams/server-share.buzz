@@ -29,7 +29,7 @@ export fun serverShareFigure() > figure\Figure !> any {
         .box(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, insight", look: figure\Look.store)
         .box(withheld, label: "Never on a share", sub: "graph, diff, plan, job, /mcp", look: figure\Look.optional)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([server]), dst: figure\setOf([withheld]),
+        .hideEdges([server], dst: [withheld],
             why: "the server mounts it on loopback only; drawn, it would read as served on a share")
         .markEdge(server, dst: lan, label: "mints token")
         .markEdge(server, dst: served, label: "mounts")
@@ -39,14 +39,14 @@ export fun serverShareFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "reachable off-machine")
         .legend(figure\Look.store, label: "served on a share")
         .legend(figure\Look.optional, label: "loopback only")
-        .scope(figure\setOf([lan]))
-        .scope(figure\layerSet(magus\layer("handler")))
-        .except(figure\setOf([magus\dir("internal/handler/activity"), magus\dir("internal/handler/insight"), magus\dir("internal/handler/metrics")]),
+        .scope([lan])
+        .scope(magus\layer("handler").dirs)
+        .except([magus\dir("internal/handler/activity"), magus\dir("internal/handler/insight"), magus\dir("internal/handler/metrics")],
             why: "shared read services, folded into the two shared boxes")
-        .except(figure\setOf([magus\dir("internal/handler/diff"), magus\dir("internal/handler/job"), magus\dir("internal/handler/mcp"), magus\dir("internal/handler/plan")]),
+        .except([magus\dir("internal/handler/diff"), magus\dir("internal/handler/job"), magus\dir("internal/handler/mcp"), magus\dir("internal/handler/plan")],
             why: "loopback only, named in the never-on-a-share box")
-        .except(figure\setOf([magus\dir("internal/handler/attention"), magus\dir("internal/handler/diagram"), magus\dir("internal/handler/notes"), magus\dir("internal/handler/token"), magus\dir("internal/handler/tool")]),
+        .except([magus\dir("internal/handler/attention"), magus\dir("internal/handler/diagram"), magus\dir("internal/handler/notes"), magus\dir("internal/handler/token"), magus\dir("internal/handler/tool")],
             why: "loopback only: a person's blocks, the figures, private notes, token management and a service that execs tools")
-        .except(figure\setOf([magus\dir("internal/handler/trailrpc")]),
+        .except([magus\dir("internal/handler/trailrpc")],
             why: "the audit interceptor around Connect services, not a route");
 }
