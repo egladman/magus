@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -635,7 +636,7 @@ func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	_, err := OsRetry(context.Background(), 3, cb, covFastRetry)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the caller needs the reason, not just the count")
-	assert.Contains(t, err.Error(), "os.retry: 3 attempt(s)")
+	assert.Contains(t, err.Error(), `os\retry: 3 attempt(s)`)
 	assert.Equal(t, 3, cb.calls)
 }
 
@@ -785,4 +786,85 @@ func TestOsStdinIsTerminal(t *testing.T) {
 	got, err := OsStdinIsTerminal(context.Background())
 	require.NoError(t, err)
 	assert.False(t, got, "the test binary's stdin is never a terminal")
+}
+
+// The proc.exec warning is worth reading only where a typed member answers the invocation,
+// so each case pins whether one does and which.
+func TestTypedMagusMember(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"run", "go-build", "."}, "run"},
+		{[]string{"describe", "file", "go.mod"}, "describe.file"},
+		{[]string{"describe", "spells", "-o", "json"}, "describe.spell"},
+		{[]string{"describe", "targets"}, "describe.target"},
+		{[]string{"describe", "target", "go-build", "-o", "json"}, "describe.evaluatedTarget"},
+		{[]string{"query", "output", "ref1"}, "output"},
+		{[]string{"query", "kind=spell"}, "query"},
+		{[]string{"ls"}, "describe.project"},
+		{[]string{"ls", "-o", "json"}, "describe.project"},
+		{[]string{"ls", "targets"}, "describe.graph"},
+		{[]string{"ls", "jobs", "-o", "json"}, "job.list"},
+		{[]string{"affected", "--impact"}, "impact"},
+		{[]string{"affected", "--base", "main"}, "affected"},
+		{[]string{"vcs", "checkpoint", "-o", "name"}, "vcs.checkpoint"},
+		{[]string{"job", "fork", "--stdin"}, "job.put"},
+		// No member answers these, so proc.exec is the right call and a warning is noise.
+		{[]string{"job", "exec", "tooling-gaps"}, ""},
+		{[]string{"describe", "job", "x"}, ""},
+		{[]string{"describe"}, ""},
+		{[]string{"affected", "ci"}, ""},
+		{[]string{"ls", "deps"}, ""},
+		{[]string{"queue", "ls"}, ""},
+		{[]string{"server", "start"}, ""},
+		{[]string{"--root", "x", "run", "lint"}, ""},
+		{nil, ""},
+	} {
+		assert.Equal(t, tc.want, typedMagusMember(tc.args), "magus %s", strings.Join(tc.args, " "))
+	}
+}
+
+// Every member the warning names must be one the magus module declares, or the hint sends
+// the author to a call that does not exist.
+func TestTypedMagusMembersAreDeclared(t *testing.T) {
+	t.Parallel()
+	declared := map[string]bool{}
+	for _, m := range Magus.Methods {
+		declared[CamelCase(m.Name)] = true
+	}
+	for _, ns := range Magus.Namespaces {
+		for _, m := range ns.Methods {
+			declared[ns.Name+"."+CamelCase(m.Name)] = true
+		}
+	}
+	named := []string{"describe.project", "describe.target", "describe.evaluatedTarget", "affected", "impact"}
+	for _, member := range typedMagusMembers {
+		named = append(named, member)
+	}
+	for _, member := range named {
+		assert.True(t, declared[member], "magus\\%s is not a member of the magus module", member)
+	}
+}
+
+func TestWarnIfMagusBinaryNamesTheTypedMember(t *testing.T) {
+	// slog.SetDefault and magusWarned are process-global, so this test is not parallel.
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	magusWarned.Delete("run")
+
+	warnIfMagusBinary(t.Context(), "./magus", []string{"job", "exec", "x"})
+	warnIfMagusBinary(t.Context(), "go", []string{"run", "."})
+	assert.Empty(t, buf.String(), "job exec has no member, and go is not magus")
+
+	warnIfMagusBinary(t.Context(), "/usr/local/bin/magus", []string{"run", "go-build", "."})
+	assert.Contains(t, buf.String(), `call magus\\run instead`)
+	assert.Contains(t, buf.String(), "magus run go-build .")
+
+	buf.Reset()
+	warnIfMagusBinary(t.Context(), "magus", []string{"run", "lint", "."})
+	assert.Empty(t, buf.String(), "a member is named once per process")
 }

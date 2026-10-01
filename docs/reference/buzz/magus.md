@@ -12,7 +12,7 @@ Magus core primitives.
 
 Provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it, `magus\harness.provider(<spell>)` an agent-host harness (many hosts; like workspace.provider, unlike cache.remote's one), and `magus\guard.shell(<rule>)` an additive shell-guard rule (strengthen-only), and `magus\guard.spawn(<fun>)` the one function the agent guard calls on every spawn and continuation (see [magus\guard.spawn](../guard-spawn.md)), and `magus\guard.command(<fun>)` the one function it calls on every agent shell command (see [magus\guard.command](../guard-command.md)), and `magus\guard.write(<fun>)` the one function it calls on every agent file write. Each provider takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 
-`import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, `dir`, `dirs`, `layer`, `neighborhood`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
+`import "magus"` is how you reach any of this. The namespace is an ordinary host module, like `fs` or `vcs`: without the import line `magus` is undefined, and the import is what attaches these signatures to your call sites. It resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, `where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, `dir`, `dirs`, `layer`, `neighborhood`) and `output` all answer in-process, and so does `magus\job` (list, put, register, exit, wait, clear): the job store an orchestrating agent declares about work it handed out (see types.Job). The `magus job` CLI subcommand is a third write door onto the same rows: ls and describe read, fork declares a row, exec records a worker's landed base, and wait blocks on a dependency. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `doctor`, and the `magus\describe` methods that fork) work there either way and discover the workspace themselves.
 
 > **Naming convention:** import the module under its bare name (`import "magus"`), reach members with a backslash, and call methods in `camelCase`: `magus\someMethod`.
 
@@ -20,9 +20,9 @@ Provider namespaces are wired by the runtime rather than declared here, so they 
 
 ### cmd
 
-Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.
+Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus\cmd(sub, args, [opts]) beside magus\run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\describe methods) when one exists - magus\cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.
 
-**Signature:** `magus\cmd(sub, args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1246)
+**Signature:** `magus\cmd(sub, args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1465)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -32,39 +32,11 @@ Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method
 
 **Returns:** map[string]any
 
-### projects
-
-The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd("ls") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSON round-trip.
-
-**Signature:** `magus\projects() -> Projects` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1062)
-
-**Returns:** map[string]any
-
-### targets
-
-The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not - so the same call works from a magusfile and from a `magus buzz` script with no workspace.
-
-**Signature:** `magus\targets([opts]) -> TargetGraph` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1081)
-
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `opts`    | `map[string]any` | yes      |             |
-
-**Returns:** map[string]any
-
-### tools
-
-Every project's tools as `magus describe tools` reports them: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Annotate the result `> ToolReport` (magus's own type, no import needed) for compile-checked field access. Probes every tool's version, and asks the wired lifecycle provider (magus\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not, like magus.targets.
-
-**Signature:** `magus\tools() -> ToolReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1091)
-
-**Returns:** map[string]any
-
 ### affected
 
 Compute the VCS-affected project set against base (empty uses the configured base ref): {base, changed, seed, filesBySeed, affected}. Served in-process from the workspace on the context - no subprocess. Raises when the diff cannot be computed, rather than reporting an empty set, since an empty set and an uncomputable one mean opposite things to a caller deciding what to build.
 
-**Signature:** `magus\affected([base]) -> Affected` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1108)
+**Signature:** `magus\affected([base]) -> Affected` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1327)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -76,7 +48,7 @@ Compute the VCS-affected project set against base (empty uses the configured bas
 
 The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.
 
-**Signature:** `magus\projectGraph() -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1228)
+**Signature:** `magus\projectGraph() -> Graph` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1447)
 
 **Returns:** map[string]any
 
@@ -84,7 +56,7 @@ The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOL
 
 Return the project path containing dir, or null when dir is inside no project. Served in-process from the workspace on the context - no subprocess.
 
-**Signature:** `magus\where(dir) -> string` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1123)
+**Signature:** `magus\where(dir) -> string` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1342)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -96,7 +68,7 @@ Return the project path containing dir, or null when dir is inside no project. S
 
 Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == "ACME1001") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints under its own diagnostics.
 
-**Signature:** `magus\raise(code, message, [opts])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1167)
+**Signature:** `magus\raise(code, message, [opts])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1386)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -106,22 +78,9 @@ Fail with a CODED diagnostic instead of a bare string, so a caller can branch on
 
 ### run
 
-Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.
+Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.
 
-**Signature:** `magus\run(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1263)
-
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `args`    | `[]string`       |          |             |
-| `opts`    | `map[string]any` | yes      |             |
-
-**Returns:** map[string]any
-
-### describe
-
-Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.
-
-**Signature:** `magus\describe(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1268)
+**Signature:** `magus\run(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1499)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -134,7 +93,7 @@ Run `magus describe <args>` in the target's project directory and capture its ou
 
 Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.
 
-**Signature:** `magus\insight([opts]) -> InsightReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1312)
+**Signature:** `magus\insight([opts]) -> InsightReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1543)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -224,7 +183,7 @@ A digest of the symbol index the graph members load: {digest, indexed, projects,
 
 ### dir
 
-One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus.project's "layers" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.
+One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\project's "layers" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
 **Signature:** `magus\dir(path) -> Dir` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L272)
 
@@ -249,7 +208,7 @@ Every directory whose workspace path matches glob, as Dir records sorted by path
 
 ### layer
 
-One layer magus.project's "layers" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.
+One layer magus\project's "layers" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
 **Signature:** `magus\layer(name) -> Layer` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L330)
 
@@ -288,7 +247,7 @@ One target run's captured output by its ref: {ref, project, target, failed, dura
 
 The blast radius of a changeset: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}. Each affected project carries whether it was a seed and, for a seed, the changed files in it. Annotate the result `> Impact`. This is `magus affected --impact`: the report, with no target run. opts.commits caps the commits scanned; opts.since bounds the window (90d, 12w, 6mo, 1y).
 
-**Signature:** `magus\impact([base], [opts]) -> Impact` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1295)
+**Signature:** `magus\impact([base], [opts]) -> Impact` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1526)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -297,24 +256,11 @@ The blast radius of a changeset: {base, changedFileCount, changedFiles, seedProj
 
 **Returns:** map[string]any
 
-### describeFile
-
-Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question "can I disregard this changed file", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.
-
-**Signature:** `magus\describeFile(paths, [opts]) -> FileReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1643)
-
-| Parameter | Type             | Optional | Description |
-| --------- | ---------------- | -------- | ----------- |
-| `paths`   | `[]string`       |          |             |
-| `opts`    | `map[string]any` | yes      |             |
-
-**Returns:** map[string]any
-
 ### diff
 
 Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. opts.rev reviews a committed range written base...head instead of the working tree, which is what a caller running where the tree is clean (a CI checkout) has to pass to see anything at all. opts.patch reviews a unified diff given as text instead, the way `magus diff --patch -` reads one: a pull request's patch, for files that may not match the tree. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Each symbol the change adds, renames or re-signs carries `checks`: what the conformance checks found against how the rest of the workspace declares the same kind of thing, with opts.minCohort and opts.minShare as their silence gates (default 5 and 0.8). opts.from reads a review an earlier `magus diff -o json` saved instead of computing it again, so several readers of one change pay for one diff. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.
 
-**Signature:** `magus\diff([opts]) -> Diff` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1660)
+**Signature:** `magus\diff([opts]) -> Diff` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1904)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -324,9 +270,9 @@ Read the working tree's uncommitted changes, annotated and ordered by what they 
 
 ### doctor
 
-Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).
+Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc\exec).
 
-**Signature:** `magus\doctor(args, [opts]) -> DoctorReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1284)
+**Signature:** `magus\doctor(args, [opts]) -> DoctorReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1515)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -339,7 +285,7 @@ Validate the workspace and return what every check found: {workspace, checks, su
 
 Remove the declared outputs of the selected projects: {removed, tracked, dryRun}. Arguments are `magus clean`'s: project paths, `--cache`, `--dry-run`. With no projects, the cwd project is selected, or the whole workspace from the root. Tracked outputs stay, because they are committed. Annotate the result `> CleanReport`. opts.root and opts.dir as on doctor.
 
-**Signature:** `magus\clean(args, [opts]) -> CleanReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1290)
+**Signature:** `magus\clean(args, [opts]) -> CleanReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1521)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -352,7 +298,7 @@ Remove the declared outputs of the selected projects: {removed, tracked, dryRun}
 
 List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, lease, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.
 
-**Signature:** `magus\attention(args, [opts]) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1275)
+**Signature:** `magus\attention(args, [opts]) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1506)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -363,9 +309,9 @@ List the OPEN attention requests of this repository's session store: {requests, 
 
 ### diagnoseDrift
 
-Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.
+Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs\status; does not replace it.
 
-**Signature:** `magus\diagnoseDrift(outputs, [inputs]) -> DriftResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1891)
+**Signature:** `magus\diagnoseDrift(outputs, [inputs]) -> DriftResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L2145)
 
 | Parameter | Type       | Optional | Description |
 | --------- | ---------- | -------- | ----------- |
@@ -378,7 +324,7 @@ Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {
 
 Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sources. No arg clears all; a project path clears one project.
 
-**Signature:** `magus\bustCache([project_path])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1022)
+**Signature:** `magus\bustCache([project_path])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1138)
 
 | Parameter      | Type     | Optional | Description |
 | -------------- | -------- | -------- | ----------- |
@@ -388,7 +334,7 @@ Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sou
 
 True when execution charm `name` is active, letting a target body branch on a charm carried in context (e.g. has_charm("rw")).
 
-**Signature:** `magus\hasCharm(name) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1015)
+**Signature:** `magus\hasCharm(name) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1131)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -407,21 +353,9 @@ Declare this directory's project: its spell, sources, outputs, and options. A ma
 | `config`  | `any` |          |             |
 | `opts`    | `any` | yes      |             |
 
-### describeModule
-
-The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; pass one to detail it.
-
-**Signature:** `magus\describeModule([name]) -> [Module]`
-
-| Parameter | Type     | Optional | Description |
-| --------- | -------- | -------- | ----------- |
-| `name`    | `string` | yes      |             |
-
-**Returns:** any
-
 ### skills
 
-Every skill this workspace offers an agent, sorted by name then form: each {name, description, source, form, body, current}. source is `shipped` for magus's own catalog, which yields a `short` and a `full` entry per skill, or `local` for a hand-authored skill found in an installed skills directory (a wired harness's skill paths, where `magus agent install` writes), which yields one entry with form `full`. body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. An unknown option raises. Pair it with magus\job.put and magus\describe(["job", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. Read from the workspace on the context; raises MGS1022 in a script run outside one.
+Every skill this workspace offers an agent, sorted by name then form: each {name, description, source, form, body, current}. source is `shipped` for magus's own catalog, which yields a `short` and a `full` entry per skill, or `local` for a hand-authored skill found in an installed skills directory (a wired harness's skill paths, where `magus agent install` writes), which yields one entry with form `full`. body is exactly what an agent loads: the SKILL.md text with its frontmatter excluded, the generated footer kept. current is true when every installed copy of that entry is byte-equal to what this magus would install, false when one differs or none is installed, and always true for a local skill. opts.name selects one skill and raises on a name nothing offers, naming the near matches; opts.form (`short`, `full`, or `both`, the default) narrows the shipped entries and leaves local ones alone. An unknown option raises. Pair it with magus\job.put and magus\cmd("describe", ["job", id]) to hand a worker its brief and its skills from magus itself rather than from pasted files. Read from the workspace on the context; raises MGS1022 in a script run outside one.
 
 **Signature:** `magus\skills([opts]) -> [Skill]`
 

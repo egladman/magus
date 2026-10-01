@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -1372,7 +1373,8 @@ func TestProbeToolsLeavesAnObservationOnlyToolOutOfTheVersionKey(t *testing.T) {
 	p := &types.Project{Path: ".", Dir: "/tmp/root", ResolvedSpells: []*spells.Spell{sp}}
 
 	full := map[string]string{}
-	got := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 
 	assert.Empty(t, got, "no version line for a tool that declares no version probe")
 	assert.Empty(t, full, "and nothing for the window gate, which has no reading to compare")
@@ -1386,7 +1388,8 @@ func TestProbeToolsRecordsTheKeyTokenAndTheFullVersion(t *testing.T) {
 	p := &types.Project{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}
 
 	full := map[string]string{}
-	got := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, calls)
 	assert.Equal(t, map[string]string{key("console", "typescript", "node"): "v22.14.0"}, full)
@@ -1394,13 +1397,13 @@ func TestProbeToolsRecordsTheKeyTokenAndTheFullVersion(t *testing.T) {
 	assert.Equal(t, []string{"typescript:node:v22.14.0"}, got["console"], "the default key narrows nothing; the gate reads the same probe")
 }
 
-// A probe that fails records UNPROBED for the cache key and NOTHING for the gate. Those
+// An absent tool records UNPROBED for the cache key and NOTHING for the gate. Those
 // have to differ: a key must change so a later successful probe misses, while the gate
 // must not invent a version and fail a build over a comparison it could not make.
-func TestProbeToolsLeavesAFailedProbeOutOfTheGate(t *testing.T) {
+func TestProbeToolsLeavesAnAbsentToolOutOfTheGate(t *testing.T) {
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(string) (string, error) {
-		return "", errors.New("exec: node: not found")
+		return "", types.WrapDiagnostic(types.ToolNotOnPath, exec.ErrNotFound, "%q is not on PATH", "node")
 	}, &calls)
 	p := &types.Project{
 		Path: "console", Dir: "/tmp/console",
@@ -1409,11 +1412,38 @@ func TestProbeToolsLeavesAFailedProbeOutOfTheGate(t *testing.T) {
 	}
 
 	full := map[string]string{}
-	got := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 
 	assert.Equal(t, []string{"typescript:node:UNPROBED"}, got["console"])
 	assert.Empty(t, full)
 	assert.NoError(t, checkToolWindows([]*types.Project{p}, full), "an absent tool is not a version violation")
+}
+
+// A tool that is there and still cannot say which build it is gets no key at all. Its
+// ops can pass, and a constant in their key would replay those passes across an upgrade.
+func TestProbeToolsRefusesAPresentToolThatCannotBeProbed(t *testing.T) {
+	calls := 0
+	sp := probedSpell("go", "golangci-lint", spells.VersionKey{}, func(string) (string, error) {
+		return "", errors.New("version probe golangci-lint [--version] in /tmp/api: exit status 3: panic: runtime error")
+	}, &calls)
+	ok := probedSpell("typescript", "node", spells.VersionKey{}, func(string) (string, error) { return "v22.14.0", nil }, new(int))
+	bad := &types.Project{Path: "api", Dir: "/tmp/api", ResolvedSpells: []*spells.Spell{sp}}
+	good := &types.Project{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{ok}}
+
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{bad, good}, nil)
+
+	require.ErrorIs(t, err, types.ToolUnprobeable)
+	assert.Contains(t, err.Error(), "go:golangci-lint runs in /tmp/api")
+	assert.Contains(t, err.Error(), "panic: runtime error", "the tool's own words reach the person")
+	assert.Nil(t, got, "no key lines at all, so no caller can mint a key that leaves the tool out")
+
+	calls = 0
+	lines, failed := (&Magus{}).toolVersionsEach(t.Context(), []*types.Project{bad, good})
+	assert.Equal(t, map[string][]string{"console": {"typescript:node:v22.14.0"}}, lines, "a reader keeps every other project")
+	require.Contains(t, failed, "api")
+	assert.ErrorIs(t, failed["api"], types.ToolUnprobeable)
+	assert.Equal(t, 1, calls, "the per-project pass replays the memo instead of probing again")
 }
 
 // Output carrying no version is the same contract as a failed probe for the gate's
@@ -1425,7 +1455,8 @@ func TestProbeToolsLeavesUnparsableOutputOutOfTheGate(t *testing.T) {
 	p := &types.Project{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}
 
 	full := map[string]string{}
-	(&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	_, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 	assert.Empty(t, full)
 }
 
@@ -1438,7 +1469,8 @@ func TestProbeToolsMemoizesAcrossProjectsSharingADir(t *testing.T) {
 	b := &types.Project{Path: "b", Dir: "/tmp/same", ResolvedSpells: []*spells.Spell{sp}}
 
 	full := map[string]string{}
-	(&Magus{}).probeTools(t.Context(), []*types.Project{a, b}, full)
+	_, err := (&Magus{}).probeTools(t.Context(), []*types.Project{a, b}, full)
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, calls, "one spawn for the shared (spell, dir, tool)")
 	// Both projects still get their own gate entry, or the second would go unchecked.
@@ -1455,7 +1487,8 @@ func TestProbeToolsDoesNotGateOnADeclaredConstant(t *testing.T) {
 	}))
 	p := &types.Project{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}
 	full := map[string]string{}
-	got := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"typescript:node:pinned-1"}, got["console"], "the constant still keys the cache")
 	assert.Empty(t, full, "but it is not a reading of anything installed, so the gate never sees it")
 }
@@ -1475,7 +1508,9 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 	}
 
 	full := map[string]string{}
-	assert.Nil(t, (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full))
+	got, err := (&Magus{}).probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
+	assert.Nil(t, got)
 	assert.Equal(t, 0, calls)
 	assert.NoError(t, checkToolWindows([]*types.Project{p}, full))
 }
@@ -1498,7 +1533,8 @@ func TestProbeToolsWorkspaceModeProbesTheRootDir(t *testing.T) {
 
 	m := &Magus{ws: &types.Workspace{Root: "/tmp/root"}}
 	full := map[string]string{}
-	m.probeTools(t.Context(), []*types.Project{p}, full)
+	_, err := m.probeTools(t.Context(), []*types.Project{p}, full)
+	require.NoError(t, err)
 
 	assert.Equal(t, []string{"/tmp/root"}, seen)
 	assert.ErrorIs(t, checkToolWindows([]*types.Project{p}, full), types.ToolTooNew)
@@ -1510,7 +1546,9 @@ func TestToolVersionsByProjectTakesTheNilGateMap(t *testing.T) {
 	calls := 0
 	sp := probedSpell("typescript", "node", spells.VersionKey{}, func(string) (string, error) { return "v22.14.0", nil }, &calls)
 	p := &types.Project{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}
-	assert.Equal(t, []string{"typescript:node:v22.14.0"}, (&Magus{}).toolVersionsByProject(t.Context(), []*types.Project{p})["console"])
+	got, err := (&Magus{}).toolVersionsByProject(t.Context(), []*types.Project{p})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"typescript:node:v22.14.0"}, got["console"])
 }
 
 // A workspace target runs another project's generate, so that project's output is written inside

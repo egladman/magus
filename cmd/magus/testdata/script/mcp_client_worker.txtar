@@ -11,13 +11,13 @@ env MAGUS_MCP_CLIENT=1
 stdin ../describe.json
 exec magus
 stdout -count=1 '\n'
-stdout '^\{"stdout":"","json":\{"ok":true,"listed":true\}\}$'
+stdout '^\{"stdout":"","json":\{"listed":true\}\}$'
 
 env MAGUS_SANDBOX=best-effort
 stdin ../describe.json
 exec magus
 stdout -count=1 '\n'
-stdout '^\{"stdout":"","json":\{"ok":true,"listed":true\}\}$'
+stdout '^\{"stdout":"","json":\{"listed":true\}\}$'
 
 # a failure reports the diagnostic once, on stderr, and exits nonzero
 stdin ../denied.json
@@ -26,9 +26,9 @@ stdin ../denied.json
 stderr -count=1 '\[MGS3034\]'
 
 -- describe.json --
-{"script": "import \"magus\"; fun main(args: [str]) > any !> any { final r = magus\\describe([\"projects\", \"-o\", \"name\"]); return {\"ok\": r.ok, \"listed\": r.stdout.len() > 0}; }"}
+{"script": "import \"magus\"; fun main(args: [str]) > any !> any { final r = magus\\describe.workspace(); return {\"listed\": r.len() > 0}; }"}
 -- denied.json --
 {"script": "import \"fs\"; fun main(args: [str]) > int { return 0; }"}
 -- ws/magusfile.buzz --
 import "magus";
-magus.project({});
+magus\project({});

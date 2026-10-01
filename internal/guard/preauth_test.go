@@ -298,6 +298,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	}
 	ctx, root := fleetFixture(t, worker, reviewer)
 	templates := servedNextTemplates(t)
+	readScript, writeScript := scriptNexts(t, root)
 
 	grade := func(t *testing.T, id, run, role, lease string) {
 		t.Helper()
@@ -335,6 +336,17 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		for id, run := range templates {
 			t.Run(role.name+"/"+id, func(t *testing.T) { grade(t, id, run, role.name, role.lease) })
 		}
+		t.Run(role.name+"/scripts", func(t *testing.T) {
+			kind, writePaths := hint.LeaseRole([]types.Job{worker, reviewer}, role.lease)
+			served := hint.ServableTo(kind, writePaths, []hint.Next{readScript, writeScript})
+			require.Contains(t, served, readScript, "a read script is served to every role")
+			if kind == hint.RoleReviewer {
+				assert.NotContains(t, served, writeScript, "a write script is never served to a reviewer")
+			}
+			for _, n := range served {
+				grade(t, n.ID, n.Run, role.name, role.lease)
+			}
+		})
 		// A deny's remedy is graded as Judge serves it to this role: whatever it drops
 		// was never served, and whatever it keeps must pass.
 		for _, f := range denyRemedyFixtures() {
@@ -356,6 +368,33 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 			})
 		}
 	}
+}
+
+// scriptNexts serves one read and one write script out of an index written under root,
+// through the same lookup the serving sites use.
+func scriptNexts(t *testing.T, root string) (read, write hint.Next) {
+	t.Helper()
+	entry := func(rel, effect string, args ...string) hint.ScriptServe {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte("export fun main() > void {}\n"), 0o644))
+		info, err := os.Stat(abs)
+		require.NoError(t, err)
+		return hint.ScriptServe{Path: rel, Args: args, Effect: effect, MtimeNs: info.ModTime().UnixNano(), Size: info.Size()}
+	}
+	cacheDir := t.TempDir()
+	require.NoError(t, hint.WriteScriptsIndex(cacheDir, hint.ScriptsIndex{Root: root, Serves: map[string][]hint.ScriptServe{
+		"next:run-output": {
+			entry("hack/dev/ls-test-failures.buzz", hint.ScriptEffectRead, "--ref", "{ref}"),
+			entry("hack/dev/merge-job-branches.buzz", hint.ScriptEffectWrite),
+		},
+	}}))
+	next, err := hint.ScriptsFor(cacheDir, "next:run-output", map[string]string{"ref": "out84fea3b6ae30"})
+	require.NoError(t, err)
+	require.Len(t, next, 2)
+	require.True(t, next[0].Reads)
+	require.False(t, next[1].Reads)
+	return next[0], next[1]
 }
 
 // TestServedNextTemplatesAreRunnable pins the property the pre-authorization reader

@@ -4,7 +4,7 @@
 // upstream-shaped defaulting is the contract under test here.
 // @expect: [0, 0, ]
 import "serialize";
-final boxed = serialize.jsonDecode(`{"a": [1]}`);
+final boxed = serialize\jsonDecode(`{"a": [1]}`);
 final __r = [
     boxed.q(["missing"]).integerValue(),
     boxed.q(["a", 9]).integerValue(),

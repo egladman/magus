@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/types"
 )
 
 // The rule catalog: what this workspace enforces, as data a reader can list.
@@ -25,32 +26,9 @@ import (
 // one caller what to run instead; this tells a reader what the rule is FOR, so a list of
 // thirty-eight reads as a set of conventions rather than a wall of remediation.
 
-// RuleDoc is one catalogued rule: its stable name, which tier it lands on, and what it
-// fires on.
-// The json tags are the -o json and -o template field names, so they follow the
-// lowercase convention every other magus output uses rather than the Go spelling.
-type RuleDoc struct {
-	// Name is the slug a verdict reports and a reader looks up.
-	Name string `json:"name"`
-	// Decision is the tier: "deny" or "advise". A rule never moves between them without
-	// the move being the point of the change, so it is recorded rather than derived.
-	Decision string `json:"decision"`
-	// Catches says what the rule fires on, in one line, in the reader's terms.
-	Catches string `json:"catches"`
-	// Why is the reasoning behind the rule, for a reader who wants to disagree with it
-	// or to understand why the replacement is better rather than merely different.
-	//
-	// It is where the rationale the three-line verdict budget displaced lives. Those
-	// paragraphs were true and load-bearing and cost more than they returned at the
-	// moment of refusal, when the reader is interrupted and wants the command; here they
-	// are read by someone who came looking. Empty for a rule whose one line says all of
-	// it, which is most of them: a Why that restates Catches is worse than none.
-	Why string `json:"why,omitempty"`
-}
-
 // denyRuleDocs documents every rule that REFUSES. Ordered by name here only for review;
 // Rules sorts what it returns.
-var denyRuleDocs = []RuleDoc{
+var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleBacktickSubstitution), Decision: "deny",
 		Catches: "a backtick command substitution, which inside double quotes runs a command",
 		Why: "Inside double quotes a backtick starts a command substitution, so a pattern or a message carrying a literal backtick runs code: the backtick pairs with the next one anywhere on the line, and everything between them becomes one command. " +
@@ -119,7 +97,7 @@ var denyRuleDocs = []RuleDoc{
 		Catches: "the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill",
 		Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
 			"Six errors in one session, by an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
-			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
+			"It grades the session, not the file: one Skill(magus-buzz-lang) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
 	{Name: string(denyRulePushUngated), Decision: "deny",
 		Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
 		Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +
@@ -188,6 +166,9 @@ var denyRuleDocs = []RuleDoc{
 			"One command is exempt, in a checkout of magus itself: `go run -trimpath ./cmd/magus run go-build --no-cache .`, alone on its line, in a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 			"It runs the real go-build target (its generate steps and stamped link) instead of a bare link, so the first binary is the one every later build would make. `--no-cache` because that target's key cannot express the embedded-spell ordering and once replayed a binary missing tools; Go's content-addressed build cache stays on, and `-trimpath` matches the target's own build so packages compile once. " +
 			"Every other raw go command in that root, a bare `go build -o magus ./cmd/magus` included, is refused and served the bootstrap. Once the binary exists the deny applies again and names `./magus run go-build .`. " +
+			"A checkout that cannot load its own sources (MGS1021) has a second exemption, because no target can run there and the bootstrap fails to compile against generated files that lag their sources: " +
+			"alone on its line, with no environment prefix but `GOEXPERIMENT`, the relink MGS1021 prints (`go build [-trimpath] -o magus ./cmd/magus`) and the generators the `*_generate` targets run (`go generate <package>` inside the checkout, `go run [-trimpath] ./cmd/magus-utils <generator>`, never its release subcommands) are advised rather than refused, with a binary or without. " +
+			"The guard learns this by loading the workspace, and only for one of those lines; the binary judging is the checkout's own `./magus` when there is one. Once the workspace loads, they are refused again. " +
 			"It was an advisory first, and changed behavior zero times over a long session while leaving the Go build cache poisoned by uninstrumented runs, which is why it denies."},
 	{Name: string(denyRuleAgentSignOff), Decision: "deny",
 		Catches: "an agent stamping a read receipt or closing an attention request, which only a person may do",
@@ -225,28 +206,31 @@ var denyRuleDocs = []RuleDoc{
 			"Measured: one such call put 69 files, a whole regenerated docs site plus five untouched source files, into a commit about four collection methods. " +
 			"`magus vcs add` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and reports anything undeclared instead of staging it."},
 	{Name: string(denyRuleSymbolSearch), Decision: "deny",
-		Catches: "a text search for symbols or diagnostic codes the graph answers exactly",
-		Why: "It fires only when the graph can VOUCH for every name the pattern looks for: each symbol is defined here and no project's index is older than its sources, and each diagnostic code is one the graph carries a node for. " +
-			"On those terms `magus refs <symbol> --occurrences` knows every definition and reference, including the generated and cross-language ones a pattern misses, and `magus explain diagnostic:<code>` knows the code's page and what documents and emits it. " +
-			"An alternation (`A\\|B`, `-e A -e B`, `A|B` under -E) is answered with one command per name, and a definition lookup (`func X`, `func (r *T) X`, `type X`) with `magus refs X --definition --source`, which prints the body in place of the grep-then-sed pair. " +
-			"A search naming Go files (`grep -n Foo file.go`, measured 2026-09-26 as the commonest symbol lookup) runs, with refs advised: a deny could only hand back the lines grep prints, so it would cost a turn and save nothing. A definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
-			"A search of the tree carries the index's own answer when it can give one within the hook's budget: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. It is refs' answer, not grep's: comments, strings and prose are not in it. " +
-			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it, and the deny would then state the wrong output as fact. " +
-			"A stale index or a diagnostic code keeps the routing deny without the answer. " +
-			"A graph describing another tree (a rebase underway, an index built at another revision) turns the deny into graph-stale's advice. " +
-			"A single name the index cannot vouch for, a BZZ code, a case-insensitive search, a Markdown or log operand, or a search of a tree outside the workspace stays advice or nothing. " +
-			"Searching raw TEXT is untouched and has its own answer: `magus refs --text <pattern> [<path>...]` is a literal substring search with grep's exit codes, scoped by the same trailing paths. " +
-			"Measured 2026-09-24 over 14,773 search patterns: 45% were alternations and 13% definition lookups, and the single-identifier form this rule started with fired 0 times."},
+		Catches: "a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers",
+		Why: "Each alternative of the pattern is classified by what it looks for, and the deny names every classification and why, so a false positive is disputable from the message alone. " +
+			"A name is a declaration lookup (`func X`, `type X`, `class X`, `function X`, `const X`), a CamelCase identifier, or a short name the syntax marks as one: a word search (`\\bX\\b`, -w), a qualified member (`pkg.X`, `\\.X`) or an assignment, when it is capitalized. " +
+			"Text is everything else: a plain word, which is as likely prose; snake_case, which in this tree is a config key, a JSON tag or a Buzz function; a lowercase call or member (`Mkdir(` is os.Mkdir as often as a local function); a standard-library member (`os.Rename`); a declaration of a lowercase word many share (`func main`); a string literal, a path, a hyphenated word or a regular expression. With -i a plain or marked short name widens to text, and a CamelCase one stays a name. " +
+			"The deny fires when ANY alternative is a name the index defines, serving `magus refs X --occurrences` per name (`--definition --source` for a declaration lookup, which prints the body in place of the grep-then-sed pair) and `magus refs --text <literal> <paths>` for each literal text alternative, and `magus explain diagnostic:<code>` for a code the graph holds a node for. " +
+			"A stale index still refuses, serving `magus graph build --silent` first: it still knows the names it held, and it vouches for a declaration lookup or a CamelCase call it has not indexed yet, since that is the name a branch is adding; a bare word it does not hold stays text. Measured 2026-09-30: the fail-open advice a stale index used to give let every symbol search through, since an index goes stale on the first edit. Only a workspace with no symbol index at all is advised instead, since a deny there routes nowhere. " +
+			"An index built at another revision is stale on the same terms; a rebase still underway turns the deny into graph-stale's advice, since a rebuild then would describe a tree about to move. " +
+			"The search must reach the tree: a directory, a glob, or several files. One named file is a read and runs, with refs advised when the index vouches for the name; a definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
+			"The files refs answers for are the languages a spell declares a symbol indexer for (here Go and TypeScript), read from the spell catalog. A search of stdin, Markdown, a log, Buzz (source no indexer reads, so a Buzz `fun` or `object` lookup is text too), a directory holding none of those languages (a skills tree, fixtures), a dot-directory (.github, .git), node_modules, a revision, or a tree outside the workspace runs. " +
+			"A search of the tree carries the index's own answer when the index is current: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. It is refs' answer, not grep's: comments, strings and prose are not in it. " +
+			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it. " +
+			"Measured 2026-09-24 over 14,773 search patterns: 45% were alternations and 13% definition lookups. Measured 2026-09-30: of the 1,211 distinct search lines the guard recorded that week, the old rule refused one."},
 	{Name: string(denyRuleSearchTranslation), Decision: "deny",
 		Catches: "a text search whose pattern a graph query provably answers with the same entities",
 		Why: "The pattern is compiled in the tool's own dialect (BRE, ERE or fixed) and run against the graph's ids when the command is judged, so the deny names a query that was checked rather than one that looks equivalent, and carries that query's answer, bounded to twenty results and a count, so the refused search costs nothing. " +
-			"Five shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
+			"These shapes qualify. A pattern that can only match MGS codes (`MGS30[23]`, `MGS30..`, `MGS302[0-9]\\|MGS303[0-9]`), over any path in the workspace, becomes `magus query kind=diagnostic 'id=~^diagnostic:...$'`, and a single literal code keeps symbol-search's `magus explain diagnostic:<code>`. " +
 			"A pattern selecting every Markdown heading of the files searched (`^#`, `^#\\+`), when those lines match the section nodes the graph holds file for file and none sits in a code fence, becomes `magus query kind=docsection 'id=~^docsection:<file>#'`. " +
 			"A search of a magusfile whose every hit declares a target the graph holds becomes `magus explain target:<project>:<name>`. " +
 			"A search of one Go file whose every hit declares a symbol the index holds (`^func`, `^func Test`, `func (s \\*Store)`) becomes `magus explain file:<path>`, with the names and their lines inline. " +
-			"A `find -name` under the workspace whose files are, name for name, the file nodes the graph holds under the searched paths becomes `magus query kind=file 'id=~^file:...'`; -type f and -maxdepth are honored; a `[!x]` class, any other predicate, or a walk past the hook's budget is silent. " +
-			"A pipe after the search is not reproduced: the deny carries the query's unfiltered answer and says so, rather than a model of the filter that could diverge from the real tool. " +
-			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. A graph describing another tree advises, as graph-stale. " +
+			"A file-finding call whose every file is a node the graph holds becomes `magus query kind=file 'id=~^file:...'`: a pattern when one selects exactly those files, else the files enumerated when there are twenty or fewer. The proof walks what the call walks, so it holds whatever revision the index was built at. It covers `find` (-name, -path, their negations, -type f, -maxdepth), `fd` (a name pattern or glob, -e, -t f, -d, smart case), `rg --files` (-g and -t), `ls -R <dir>`, and an `ls <dir>` whose every visible entry is a file node or a directory holding one, which becomes `magus query 'id=~^(?:file|dir):<dir>/[^/]+$'`. " +
+			"`git ls-files [<dir|glob>]`, alone or piped into a search of its paths, is proved against what version control tracks: the graph indexes only some tracked files and never an untracked one (measured 2026-09-30: 2,689 of 4,940, the rest mostly Markdown under changes/ and docs/), so the deny answers for the indexed ones and names every other match; past twenty such files it is silent. " +
+			"A metadata flag (-l, -a, -t, -S), hidden or ignored files (fd -H, rg -uu), an untracked-files question (`--others`), one named file (a tracked check), an inverted or counted filter, a file the graph does not index, or a walk past the budget is silent. " +
+			"A host's own content and file search tools are judged as the rg and find lines they stand for, read by the shape of their input. " +
+			"A pipe after the search is not reproduced, except the search a tracked listing is piped into: the deny carries the query's unfiltered answer and says so, rather than a model of the filter that could diverge from the real tool. " +
+			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. A graph describing another tree advises, as graph-stale, except for a listing, which the walk proves. " +
 			"Measured 2026-09-26 over 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389 listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target declarations, 1,366 were a `find -name`."},
 	{Name: string(denyRuleThrowawayCopy), Decision: "deny",
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
@@ -272,7 +256,13 @@ var denyRuleDocs = []RuleDoc{
 	{Name: string(denyRuleLeaseHarness), Decision: "deny", Catches: "a leased worker rewriting the harness skill trees that steer it"},
 	{Name: string(denyRuleLeaseRebind), Decision: "deny", Catches: "a leased worker rewriting who it is or what its own job row says"},
 	{Name: string(denyRuleLeaseUndeclared), Decision: "deny", Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned"},
-	{Name: string(denyRuleLeaseVCS), Decision: "deny", Catches: "a worker lease committing, pushing, stashing or reverting the tree it is landed from"},
+	{Name: string(denyRuleLeaseVCS), Decision: "deny",
+		Catches: "a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout",
+		Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
+			"A commit is the one exception: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
+			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
+			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite), Decision: "deny",
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
 		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back on both surfaces, a file write and a shell line, in the same words. " +
@@ -307,7 +297,7 @@ var denyRuleDocs = []RuleDoc{
 // agent-shaped by construction (a lease, a focus boundary, host wiring): they are
 // catalogued anyway, because a reader asking what this workspace enforces is owed the
 // whole set rather than the half that happens to apply to them today.
-var advisoryDocs = []RuleDoc{
+var advisoryDocs = []types.RuleDoc{
 	{Name: string(advisoryCaptureFilter), Decision: "advise",
 		Catches: "a filter over a run capture or log, which cuts the failure block apart",
 		Why: "A failure prints five lines together: the target, the cause, an output ref, the command that reads that ref, and the command to reproduce it. " +
@@ -359,7 +349,7 @@ var advisoryDocs = []RuleDoc{
 	{Name: string(advisoryLeaseTerminal), Decision: "advise", Catches: "a call naming a lease whose row has already finished"},
 	{Name: string(advisoryLeasedPath), Decision: "advise",
 		Catches: "a write into paths a running lease owns, by a caller that names no lease",
-		Why: "The writer is either that lease, not saying so, or a second agent about to collide with it; magus cannot tell which, so it advises rather than refuses. " +
+		Why: "The writer is either that lease, not saying so, or someone about to collide with whoever took it, a person or not; magus cannot tell which, so it advises rather than refuses, and says where the job was taken. " +
 			"It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first."},
 	{Name: string(advisoryInstruction), Decision: "advise", Catches: "a write to a cross-host instruction file, which every session loads whole",
 		Why: "A cross-host instruction file is read in full at the start of every session on every host, so a sentence there costs context forever. " +
@@ -390,11 +380,11 @@ var advisoryDocs = []RuleDoc{
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
 // reader scans, with the tier that blocks them at the top.
-func Rules() []RuleDoc {
-	out := make([]RuleDoc, 0, len(denyRuleDocs)+len(advisoryDocs))
+func Rules() []types.RuleDoc {
+	out := make([]types.RuleDoc, 0, len(denyRuleDocs)+len(advisoryDocs))
 	out = append(out, denyRuleDocs...)
 	out = append(out, advisoryDocs...)
-	slices.SortFunc(out, func(a, b RuleDoc) int {
+	slices.SortFunc(out, func(a, b types.RuleDoc) int {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
@@ -411,14 +401,14 @@ func Rules() []RuleDoc {
 // Rule looks one rule up by name, reporting false for a name nobody declares. The
 // comparison is exact: a near-miss that resolved would report a different rule's terms
 // as this one's.
-func Rule(name string) (RuleDoc, bool) {
+func Rule(name string) (types.RuleDoc, bool) {
 	name = strings.TrimSpace(name)
 	for _, r := range Rules() {
 		if r.Name == name {
 			return r, true
 		}
 	}
-	return RuleDoc{}, false
+	return types.RuleDoc{}, false
 }
 
 // advisoryKinds is every enrolled kind, for the test that pairs the catalog against the

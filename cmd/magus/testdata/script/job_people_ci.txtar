@@ -1,0 +1,94 @@
+# A CI job on a merged branch declares the plan from a committed file, runs the check
+# once, and records whether each job's check still passes in the merged tree with
+# `job wait --integration`. The exit status is the build's verdict: 0 passes, 1 fails.
+# docs/guides/jobs.md shows these commands and every golden below verbatim
+# (TestJobGuideMatchesItsScripts holds it to that).
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+env GIT_AUTHOR_DATE=2026-10-01T09:00:00Z
+env GIT_COMMITTER_DATE=2026-10-01T09:00:00Z
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'merge the pricing and tax branches'
+
+exec magus job apply -f ci/jobs.jsonl
+cmp stdout $WORK/apply.out
+
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p") && sed "s/out<hex>/$ref/" ci/evidence.tmpl.json > "$WORK/evidence.json"'
+stdin $WORK/evidence.json
+exec magus job wait release/pricing --integration --stdin
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
+cmp stdout $WORK/pass.out
+stdin $WORK/evidence.json
+exec magus job wait release/tax --integration --stdin
+
+# The job's state does not move: the grade is recorded beside it.
+exec magus ls jobs
+cmp stdout $WORK/ls.out
+
+cp $WORK/broken.sh pricing/total.sh
+exec sh -c 'ref=$(magus run test . -o jsonl | sed -n "s/.*\"ref\":\"\(out[0-9a-f]*\)\".*/\1/p"); sed "s/out<hex>/$ref/" ci/evidence.tmpl.json > "$WORK/evidence.json"'
+stdin $WORK/evidence.json
+! exec magus job wait release/pricing --integration --stdin
+cp stdout $WORK/raw
+exec sh -c 'sed -e "s|$WORK|~/src|g" -e "s/out[0-9a-f]\{12\}/out<hex>/g" "$WORK/raw"'
+cmp stdout $WORK/fail.out
+exec magus ls jobs -o json
+stdout '"integration": \{\n\s+"checkout": ".*shop",\n\s+"at": [1-9][0-9]+,\n\s+"verified": false'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the shell checks in test/run.sh.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh", "checkout/*.sh", "test/*.sh");
+    proc\exec("sh", ["test/run.sh"]);
+}
+-- shop/ci/jobs.jsonl --
+{"schema_version": 11, "id": "release/pricing", "criteria": "totals are computed in cents", "write_paths": ["pricing/total.sh"], "check": {"target": "test", "project": "."}}
+{"schema_version": 11, "id": "release/tax", "criteria": "tax rounds half up", "write_paths": ["checkout/tax.sh"], "check": {"target": "test", "project": "."}}
+-- shop/ci/evidence.tmpl.json --
+{"schema_version": 2,
+ "changed_paths": [],
+ "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
+-- shop/pricing/total.sh --
+total() { echo $(( $1 + $2 )); }
+-- shop/checkout/tax.sh --
+tax() { echo $(( $1 / 10 )); }
+-- shop/test/run.sh --
+. pricing/total.sh
+. checkout/tax.sh
+[ "$(total 2 3)" = 5 ] && [ "$(tax 50)" = 5 ]
+-- broken.sh --
+total() { echo $(( $1 - $2 )); }
+-- apply.out --
+created release/pricing, declared, with 1 write path(s)
+created release/tax, declared, with 1 write path(s)
+-- pass.out --
+integration: release/pricing passes in ~/src/shop; its state is unchanged
+release/pricing: 1 of 1 goal(s) met
+  [met] check
+-- ls.out --
+JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
+release/pricing  -       declared  -      1      alone  magus run test .
+release/tax      -       declared  -      1      alone  magus run test .
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- fail.out --
+integration: release/pricing fails in ~/src/shop; its state is unchanged
+release/pricing: 0 of 1 goal(s) met
+  [unmet] check
+      the run behind output ref "out<hex>" failed, so its check did not pass

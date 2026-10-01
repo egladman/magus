@@ -35,9 +35,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The whole history, without blobs until a comparison reads one: `magus queue
+      # reviews` walks from each approved commit and the head back to where they left main.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       # No restore either: this job holds pull-requests: write, and a pull request run

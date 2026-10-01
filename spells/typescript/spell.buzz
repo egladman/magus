@@ -69,6 +69,9 @@ export fun mgs_getTools() > {str: Tool} {
                      key = VersionKey{upTo = VersionComponent.patch}},
         "tsc": Tool{probe = Command{bin = "pnpm", args = ["exec", "tsc", "--version"]},
                     key = VersionKey{upTo = VersionComponent.patch}},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "scip-typescript": Tool{observe = Command{bin = "scip-typescript", args = ["--version"]}},
     };
 }
 
@@ -95,15 +98,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "typescript",
         extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            quotes = [
-                Quote{open = "`", close = "`"},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["@ts-", "eslint-", "<reference"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                quotes = [
+                    Quote{open = "`", close = "`"},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["@ts-", "eslint-", "<reference"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n\tthrow new Error(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\");\n\}",
+            },
         },
     };
 }

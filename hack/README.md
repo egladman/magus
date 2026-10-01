@@ -21,13 +21,17 @@ magus buzz hack/dev/<script>.buzz -- --help
 | `testdata/`, `testdata-upstream/` | the fixtures the scripts' tests read | the tests |
 
 A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
-`summarize` and `example` only read. `time` runs what it names and reports how long,
-writing nothing in the tree. `rename` and `split` print a plan and write only with
-`--apply`. `on-<where>` runs the command after it somewhere else. The first line a
+`summarize` and `example` only read. `render` only prints. `time` runs what it names and
+reports how long, writing nothing in the tree. `check` replays calls through what the
+workspace wires and reports what was not refused, writing nothing in the tree. `rename`, `split`, `mark`, `prune` and
+`merge` print a plan and write only with `--apply`. `bootstrap` prepares the checkout it
+runs in, writing there and to its job's row only. `on-<where>` runs the command after it
+somewhere else. The first line a
 script prints says what it did, and the first line of `--help` says what it costs.
 `hack/lint/hack-scripts-start-with-a-verb.buzz` holds every script to that and this file
 to listing each one; `hack/lint/magusfile-modules-have-no-main.buzz` keeps modules and
-scripts in their directories.
+scripts in their directories; `hack/lint/hack-scripts-parse-argv-with-flags.buzz` has every
+script read its argv with `flags\parse`.
 
 Each script's work is an exported, typed function that `main` only calls, so the
 scripts are also reference to copy: read one before reaching for python, sed or jq.
@@ -37,7 +41,10 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | script | effect | cost |
 | --- | --- | --- |
 | `magus buzz hack/dev/rename-symbol.buzz -- --symbol <name> --to <new> [--apply]` | renames a code symbol at every occurrence the index verifies; dry run by default | needs the code index |
-| `magus buzz hack/dev/split-into-branches.buzz -- [--base <rev>] [--prefix <branch>] [--apply]` | splits the working change into stacked branches, one per owning project; dry run by default, never pushes | grows with tree size |
+| `magus buzz hack/dev/split-into-branches.buzz -- [--by project\|symbols] [--base <rev>] [--prefix <branch>] [--budget <lines>] [-o json] [--apply]` | splits the working change into stacked branches, one per owning project or packed by changed declaration; dry run by default, never pushes | grows with tree size; `--by symbols` also reads the symbol index once per changed symbol |
+| `magus buzz hack/dev/merge-job-branches.buzz -- (--jobs <id,...> \| --branches <name,...> \| --stack <file\|->) [--base <rev>] [--into <branch>] [-o json] [--apply] [--verify]` | merges job branches, named branches or a split-into-branches stack in a temporary worktree, settling generated files by regenerating; dry run by default, never pushes | a temporary worktree and one merge per branch; `--apply` also regenerates once, `--verify` runs every merged job's checks |
+| `magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]` | plans which git worktrees and agent branches can go, largest first, with every reason a kept one stays; dry run by default | a git status and rev-list per worktree, one lsof, and a du per removable worktree |
+| `magus buzz hack/dev/prune-changelog-fragments.buzz -- [-o json] [--apply]` | plans which unreleased changelog fragments are superseded, obsolete or duplicate from the history of the lines their commits wrote; dry run by default | a git blame per changed path, then a nested magus diff of about 13s per duplicate candidate |
 | `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: magus's results as typed Buzz values, where a shell pipes `-o json` into jq | needs the code index |
 | `magus buzz hack/dev/ls-uncommitted.buzz` | read-only: uncommitted files by owning project and declared role | grows with tree size |
 | `magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]` | read-only: every worktree with its uncommitted files, unpushed commits and job | grows with the number of worktrees |
@@ -46,6 +53,13 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/show-memory-kills.buzz -- [--since <duration\|timestamp>] [--until <timestamp>] [--name <substring>] [--all]` | read-only: the processes the OS killed or suspended under memory pressure in a window, and the swap state around them | none; reads the OS log |
 | `magus buzz hack/dev/count-symbols.buzz -- [--project <path>] [--kind <kind>]` | read-only: a project's code symbols by kind and by the first word of their names | needs the code index |
 | `magus buzz hack/dev/count-refusals.buzz` | read-only: this checkout's recurring guard refusals by rule | none |
+| `magus buzz hack/dev/check-guard-blocks.buzz` | writes nothing in the tree: replays a canonical set of tool calls through the hooks each host `magus describe harness` names (claude-code, codex, cursor) wires here, in that host's own event and reply format, and reports per host every call the guard answered weaker than expected; every case runs, a host with nothing wired is a row, and it exits non-zero at the end on any weak row | one hook process per call per host, about a second each |
+| `magus buzz hack/dev/show-feedback.buzz -- [--session <id>] [--since <duration\|RFC3339>] [--until <RFC3339>] [--page <n>] [-o json]` | read-only: one session's guard feedback, ten labelled rows a page: refused, advised, unguarded command shapes, served nexts not taken; each page ends with the command for the next | every checkout's trail that changed in the window |
+| `magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny\|should-advise\|wrong-deny\|fine [--note <text>] [--session <id>] [--since ...] [--until ...] [--apply] -- <label\|id>...` | records a verdict on feedback rows under their stable ids in the per-repository store; dry run by default | as show-feedback |
+| `magus buzz hack/dev/count-feedback.buzz -- [--since <duration>] [-o json]` | read-only: every mark across sessions folded into a ranked guard backlog | none |
+| `magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since ...] [--all] [-o svg] [--theme light\|dark] [--console <base>]` | read-only: a session's job hierarchy as a summary and the console link that explores it; `-o svg` prints the figure for you to redirect | every checkout's trail that changed in the window, and the job store |
+| `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] \| --check --from <checkout>)` | builds ./magus, builds the graph and takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` copies another checkout's ./magus instead, only when it was built at this HEAD with no declared build input changed on either side; `--check` prints that verdict and writes nothing | a Go build and a graph build, about two minutes cold; seconds when `--from` reuses |
+| `magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]` | read-only: a worker's complete brief from its job row | two job-store reads |
 | `magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
 | `magus buzz hack/dev/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
 | `magus buzz hack/dev/show-review-context.buzz -- [--rev <base>...<head> \| --patch <file\|-> \| --from <diff.json\|->] [--baseline <graph.json>] [--budget <n>] [--lens architecture\|code\|all] [-o json]` | read-only: a change's per-symbol review context (callers, callees, tests, the path to the API, cited diagnostics) and what it does to projects, dependencies and vocabulary | needs the code index; about six graph reads per carded symbol |
@@ -89,10 +103,16 @@ Targets import these; each runs through its target rather than by hand.
 | module | holds |
 | --- | --- |
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
+| `hack/magusfile/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
+| `hack/magusfile/branch-stack.buzz` | the typed BranchStack record split-into-branches emits and merge-job-branches reads, with its strict reader, writer and layer ordering |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
+| `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
+| `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
+| `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |
+| `hack/magusfile/ruledocs.buzz` | the guard-rule reference: one page per rule the running binary enforces, plus the index |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 

@@ -71,6 +71,33 @@ func TestKnowledgeAnswerJSONKeys(t *testing.T) {
 	}`, string(b))
 }
 
+// The cause rides refs' structured outputs (-o json, --occurrences, --definition) under
+// the answer, so a script reads the same why and fix the text output prints.
+func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
+	ans := ClassifyAnswer(true, "", []KnowledgeSymbolGap{{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt}})
+	require.True(t, ans.IndexBehind())
+	ans.IndexCause = &KnowledgeIndexCause{
+		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
+		Fix: "`magus server start` keeps it current from now on",
+	}
+	out := KnowledgeOccurrencesOutput{Symbol: "symbol:x", Answer: ans}
+	b, err := json.Marshal(out)
+	require.NoError(t, err)
+	var got struct {
+		Answer struct {
+			IndexCause map[string]string `json:"index_cause"`
+		} `json:"answer"`
+	}
+	require.NoError(t, json.Unmarshal(b, &got))
+	assert.Equal(t, map[string]string{"why": ans.IndexCause.Why, "fix": ans.IndexCause.Fix}, got.Answer.IndexCause)
+
+	b, err = json.Marshal(KnowledgeAnswer{Verdict: VerdictFound})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"verdict":"found"}`, string(b), "no cause, no key")
+	assert.False(t, KnowledgeAnswer{Verdict: VerdictFound}.IndexBehind())
+	assert.True(t, KnowledgeAnswer{StaleIndexes: []string{"libs/api"}}.IndexBehind())
+}
+
 // TestNodeKindPaletteDrift locks the browser's node-kind palette to the kinds declared here.
 //
 // The Graph Explorer colors every node by kind, and a kind with no entry falls through to a flat

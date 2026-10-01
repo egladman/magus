@@ -1,0 +1,235 @@
+namespace ruledocs;
+
+import "magus";
+import "fs";
+import "std";
+
+// quote is Go's %q for the frontmatter's double-quoted scalars: a description carrying
+// a colon is a YAML mapping unless quoted, and every one of these does.
+fun quote(s: str) > str {
+    final escaped = s.replace("\\", with: "\\\\").replace("\"", with: "\\\"");
+    return "\"" + escaped.replace("\n", with: "\\n").replace("\t", with: "\\t") + "\"";
+}
+
+// describe is the one sentence a page and its frontmatter share, so they cannot disagree.
+fun describe(r: magus\Rule) > str {
+    if (r.decision == "deny") {
+        return "A deny rule: it refuses " + r.catches + ", and names what to run instead.";
+    }
+    return "An advisory: it explains, and blocks nothing, on " + r.catches + ".";
+}
+
+// upperFirst capitalizes only a leading ASCII letter: several rules open with a
+// backtick-quoted command, and capitalizing inside it would misquote the command.
+fun upperFirst(s: str) > str {
+    if (s == "" or s.byte(0) < 97 or s.byte(0) > 122) {
+        return s;
+    }
+    return s.sub(0, len: 1).upper() + s.sub(1);
+}
+
+// renderRule is one rule's page.
+export fun renderRule(r: magus\Rule) > str {
+    var page = "---\ntitle: " + quote(r.name + ": " + r.catches) + "\n"
+        + "description: " + quote(describe(r)) + "\n"
+        + "tags: [guard, rules, " + r.name + ", " + r.decision + "]\n---\n\n"
+        + "# " + r.name + "\n\n"
+        + describe(r) + "\n\n"
+        + "## What it catches\n\n"
+        + upperFirst(r.catches) + ".\n\n";
+    if (r.why != "") {
+        page = page + "## Why\n\n" + r.why + "\n\n";
+    }
+    return page + "## Seeing it\n\n"
+        + "A verdict names its rule in brackets, which is how you got here:\n\n"
+        + "```text\n"
+        + r.decision + " [" + r.name + "]: ...\n"
+        + "```\n\n"
+        + "`magus describe rule " + r.name + "` prints the same entry at a terminal, and\n"
+        + "`magus describe rules` lists every rule this workspace enforces.\n\n"
+        + "## See also\n\n"
+        + "- [All rules](index.md) - what this workspace enforces, deny first\n"
+        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n";
+}
+
+// pad right-pads a cell to width. Every cell is ASCII, so a byte count is its width.
+fun pad(s: str, width: int) > str {
+    return s + " ".repeat(width - s.len());
+}
+
+// table is one heading and its table, columns padded to their widest cell the way the
+// docs formatter aligns them: ragged pipes would be rewritten by every format, and
+// generate and format would disagree forever.
+fun table(heading: str, rules: [magus\Rule]) > str {
+    final names = mut [<str>];
+    final catches = mut [<str>];
+    var nameWidth = "Rule".len();
+    var catchWidth = "Catches".len();
+    foreach (r in rules) {
+        final name = "[" + r.name + "](" + r.name + ".md)";
+        // A shell pipe in a catches would split its cell.
+        final cell = r.catches.replace("|", with: "\\|");
+        names.append(name);
+        catches.append(cell);
+        if (name.len() > nameWidth) { nameWidth = name.len(); }
+        if (cell.len() > catchWidth) { catchWidth = cell.len(); }
+    }
+    final rows = mut [<str>];
+    foreach (i, name in names) {
+        rows.append("| " + pad(name, width: nameWidth) + " | " + pad(catches[i], width: catchWidth) + " |\n");
+    }
+    return "## " + heading + "\n\n"
+        + "| " + pad("Rule", width: nameWidth) + " | " + pad("Catches", width: catchWidth) + " |\n"
+        + "| " + "-".repeat(nameWidth) + " | " + "-".repeat(catchWidth) + " |\n"
+        + rows.join("")
+        + "\n";
+}
+
+// renderIndex is the whole catalog as two tables, denies first, in catalog order, the
+// list `magus describe rules` prints.
+export fun renderIndex(rules: [magus\Rule]) > str {
+    final denies = mut [<magus\Rule>];
+    final advisories = mut [<magus\Rule>];
+    foreach (r in rules) {
+        if (r.decision == "deny") { denies.append(r); } else { advisories.append(r); }
+    }
+    var page = "---\ntitle: \"Guard rules\"\n"
+        + "description: \"Every rule the guard enforces: what each one catches, whether it refuses or explains, and where the reasoning lives.\"\n"
+        + "tags: [guard, rules, reference]\n---\n\n"
+        + "# Guard rules\n\n"
+        + "What this workspace enforces. A **deny** refuses the call and names the\n"
+        + "replacement; an **advise** attaches context and blocks nothing.\n\n"
+        + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
+        + "name is the entry below. `magus describe rules` prints the same list.\n\n"
+        + table("Refuses", rules: denies)
+        + table("Explains", rules: advisories);
+    // One final newline, not the last table's two, which the formatter would trim.
+    while (page.endsWith("\n")) {
+        page = page.sub(0, len: page.len() - 1);
+    }
+    return page + "\n";
+}
+
+fun writeIfChanged(path: str, body: str) > void !> any {
+    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    fs\writeFile(path, content: body);
+}
+
+// write renders one page per rule plus index.md into dir, rewriting only pages whose
+// bytes changed, and deletes any other .md there: a renamed rule would otherwise leave
+// its old page published, describing a rule that can never fire. rules is the catalog
+// `magus\describe.rule()` returns, so a page cannot exist under a name no verdict reports.
+// Raises on an empty catalog, which means the rules moved, not that none exist.
+export fun write(dir: str, rules: [magus\Rule]) > void !> any {
+    if (rules.len() == 0) {
+        throw "the guard rule catalog is empty; the rules moved and this generator stopped seeing them";
+    }
+    fs\mkdirAll(dir);
+    final keep = mut {"index.md": true};
+    foreach (r in rules) {
+        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderRule(r));
+        keep[r.name + ".md"] = true;
+    }
+    writeIfChanged(fs\join(dir, "index.md"), body: renderIndex(rules));
+    foreach (name in fs\listDir(dir)) {
+        final path = fs\join(dir, name);
+        if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
+        fs\remove(path);
+    }
+}
+
+fun sleepRule() > magus\Rule {
+    return magus\Rule{ name = "sleep-loop", decision = "deny", catches = "a loop that only sleeps", why = "It holds a tool slot." };
+}
+
+fun pipeRule() > magus\Rule {
+    return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "" };
+}
+
+test "a deny rule with a why renders its page" {
+    final want = "---\n"
+        + "title: \"sleep-loop: a loop that only sleeps\"\n"
+        + "description: \"A deny rule: it refuses a loop that only sleeps, and names what to run instead.\"\n"
+        + "tags: [guard, rules, sleep-loop, deny]\n"
+        + "---\n"
+        + "\n"
+        + "# sleep-loop\n"
+        + "\n"
+        + "A deny rule: it refuses a loop that only sleeps, and names what to run instead.\n"
+        + "\n"
+        + "## What it catches\n"
+        + "\n"
+        + "A loop that only sleeps.\n"
+        + "\n"
+        + "## Why\n"
+        + "\n"
+        + "It holds a tool slot.\n"
+        + "\n"
+        + "## Seeing it\n"
+        + "\n"
+        + "A verdict names its rule in brackets, which is how you got here:\n"
+        + "\n"
+        + "```text\n"
+        + "deny [sleep-loop]: ...\n"
+        + "```\n"
+        + "\n"
+        + "`magus describe rule sleep-loop` prints the same entry at a terminal, and\n"
+        + "`magus describe rules` lists every rule this workspace enforces.\n"
+        + "\n"
+        + "## See also\n"
+        + "\n"
+        + "- [All rules](index.md) - what this workspace enforces, deny first\n"
+        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n";
+    final got = renderRule(sleepRule());
+    std\assert(got == want, message: got);
+}
+
+test "an advisory quotes its frontmatter and keeps a leading backtick" {
+    final page = renderRule(pipeRule());
+    final head = "---\n"
+        + "title: \"raw-pipe: `a | b` piped \\\"raw\\\"\"\n"
+        + "description: \"An advisory: it explains, and blocks nothing, on `a | b` piped \\\"raw\\\".\"\n"
+        + "tags: [guard, rules, raw-pipe, advise]\n"
+        + "---\n"
+        + "\n"
+        + "# raw-pipe\n"
+        + "\n"
+        + "An advisory: it explains, and blocks nothing, on `a | b` piped \"raw\".\n"
+        + "\n"
+        + "## What it catches\n"
+        + "\n"
+        + "`a | b` piped \"raw\".\n"
+        + "\n"
+        + "## Seeing it\n";
+    std\assert(page.startsWith(head), message: page);
+}
+
+test "the index pads both tables and ends in one newline" {
+    final want = "---\n"
+        + "title: \"Guard rules\"\n"
+        + "description: \"Every rule the guard enforces: what each one catches, whether it refuses or explains, and where the reasoning lives.\"\n"
+        + "tags: [guard, rules, reference]\n"
+        + "---\n"
+        + "\n"
+        + "# Guard rules\n"
+        + "\n"
+        + "What this workspace enforces. A **deny** refuses the call and names the\n"
+        + "replacement; an **advise** attaches context and blocks nothing.\n"
+        + "\n"
+        + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
+        + "name is the entry below. `magus describe rules` prints the same list.\n"
+        + "\n"
+        + "## Refuses\n"
+        + "\n"
+        + "| Rule                        | Catches                 |\n"
+        + "| --------------------------- | ----------------------- |\n"
+        + "| [sleep-loop](sleep-loop.md) | a loop that only sleeps |\n"
+        + "\n"
+        + "## Explains\n"
+        + "\n"
+        + "| Rule                    | Catches              |\n"
+        + "| ----------------------- | -------------------- |\n"
+        + "| [raw-pipe](raw-pipe.md) | `a \\| b` piped \"raw\" |\n";
+    final got = renderIndex([pipeRule(), sleepRule()]);
+    std\assert(got == want, message: got);
+}

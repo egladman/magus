@@ -1,0 +1,16 @@
+import "std";
+
+fun main(args: [str]) > void {
+    final rows = "ada,36\ngrace,85\nlinus,54";
+    var oldestName = "";
+    var oldestAge = -1;
+    foreach (row in rows.split("\n")) {
+        final fields = row.split(",");
+        final age = std\parseInt(fields[1]) ?? 0;
+        if (age > oldestAge) {
+            oldestAge = age;
+            oldestName = fields[0];
+        }
+    }
+    std\print("oldest={oldestName} age={oldestAge}");
+}

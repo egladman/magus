@@ -416,6 +416,52 @@ func replaceIn(t *testing.T, dir, name, from, to string) {
 	writeRepoFile(t, dir, name, strings.Replace(string(body), from, to, 1))
 }
 
+// git's funcname matching sees `var i = 0;` at column 0 inside a raw string and names it a
+// declaration; placement treats Go strings and comments as text, as the pure placement does.
+func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
+	isolateGitConfig(t)
+	body := "package a\n\nfunc A() {\n\trun(`\nvar i = 0;\nfunc fake() {\n`)\n\tx()\n}\n\n/*\ntype T struct {\n*/\n\nvar after = 1\n"
+	var funcnames []string
+	for _, f := range gitFuncnames {
+		funcnames = append(funcnames, "-c", f.key()+"="+f.pattern)
+	}
+	got, err := gitPlaceLines(t.Context(), t.TempDir(), "golang", funcnames, []byte(body))
+	require.NoError(t, err)
+	const a, after = "func A() {", "var after = 1"
+	assert.Equal(t, []string{"", "", a, a, a, a, a, a, a, a, a, a, a, a, after}, got)
+	golang, _ := types.DiffDriverFor("a.go")
+	assert.Equal(t, got, golang.Declarations(types.SplitLines([]byte(body))))
+}
+
+// Regions name declarations in a test file, in a file under a build tag in a nested
+// module, and in a Go file whose raw string holds Buzz, by the Go declaration around it.
+func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{
+		".gitattributes":         "*.go diff=golang\n",
+		"go.mod":                 "module example.com/m\n",
+		"a_test.go":              "package a\n\nfunc TestA(t *testing.T) {\n\tcheck(1)\n}\n",
+		"libs/x/go.mod":          "module example.com/m/libs/x\n",
+		"libs/x/vm/jit_amd64.go": "//go:build amd64\n\npackage vm\n\nfunc compile() int {\n\treturn 1\n}\n",
+		"embed.go":               "package a\n\nfunc Script() string {\n\treturn `\nvar i = 0;\nfun main() > void {}\n`\n}\n",
+	})
+	replaceIn(t, dir, "a_test.go", "check(1)", "check(2)")
+	replaceIn(t, dir, "libs/x/vm/jit_amd64.go", "return 1", "return 2")
+	replaceIn(t, dir, "embed.go", "fun main() > void {}", "fun main() > void { i = 1; }")
+
+	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", changedFileChanges(t, dir, "HEAD"))
+	require.NoError(t, err)
+	assert.Equal(t, []types.RegionChange{
+		region("a_test.go", types.RegionOld, 4, 4, "func TestA(t *testing.T) {", "golang"),
+		region("a_test.go", types.RegionNew, 4, 4, "func TestA(t *testing.T) {", "golang"),
+		region("embed.go", types.RegionOld, 6, 6, "func Script() string {", "golang"),
+		region("embed.go", types.RegionNew, 6, 6, "func Script() string {", "golang"),
+		region("libs/x/vm/jit_amd64.go", types.RegionOld, 6, 6, "func compile() int {", "golang"),
+		region("libs/x/vm/jit_amd64.go", types.RegionNew, 6, 6, "func compile() int {", "golang"),
+	}, got)
+}
+
 // The pure placement (types.DiffDriver.Declarations) names every line as git's funcname
 // matching does, for every driver magus routes files to, so a region a merge reports is
 // the region git's hunk headers, a footprint and a job claim name.

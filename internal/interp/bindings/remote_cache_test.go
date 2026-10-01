@@ -101,13 +101,13 @@ export fun get_artifact(target: any, cb: fun(any)) > bool !> any {
     final io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];
-    return xhttp.download(url, "" + io["dest"], {}) == 200;
+    return xhttp\download(url, "" + io["dest"], {}) == 200;
 }
 export fun put_artifact(target: any, cb: fun(any)) > bool !> any {
     final io = {};
     cb(io);
     final url = BASE + "/blob/" + io["hash"];
-    final res = xhttp.upload_chunked("PUT", url, "" + io["src"], 0, {});
+    final res = xhttp\upload_chunked("PUT", url, "" + io["src"], 0, {});
     return res[0] == 200;
 }
 `, name, srvURL)

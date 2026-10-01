@@ -187,7 +187,7 @@ func TestNativeCanSuspendTheFiberItRunsInside(t *testing.T) {
 import "host";
 var reached = "no";
 fun body() > void *> str !> any {
-    final answer = host.wait();
+    final answer = host\wait();
     reached = answer;
 }
 `))
@@ -234,7 +234,7 @@ func TestNativeSuspendSurvivesNestedFrames(t *testing.T) {
 	require.NoError(t, s.Exec(t.Context(), `
 import "host";
 var landed = "none";
-fun inner() > str !> any { return host.wait(); }
+fun inner() > str !> any { return host\wait(); }
 fun middle() > str !> any { return inner(); }
 fun body() > void *> str !> any { landed = middle(); }
 `))
@@ -273,7 +273,7 @@ func TestNativeSuspendUnderResolve(t *testing.T) {
 	require.NoError(t, s.Exec(t.Context(), `
 import "host";
 var landed = "none";
-fun body() > void *> str !> any { landed = host.wait(); }
+fun body() > void *> str !> any { landed = host\wait(); }
 `))
 	fiber, err := s.Eval(t.Context(), `return &body()`)
 	require.NoError(t, err)

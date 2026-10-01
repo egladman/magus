@@ -239,7 +239,7 @@ func TestEvalInContext_compileError(t *testing.T) {
 // hint.Nearest: a near-miss project option key yields a "did you mean" hint
 // naming the intended key.
 func TestTraceProject_unknownKeyHint(t *testing.T) {
-	const src = `import "magus"; magus.project({"outputz": ["bin/**"]});`
+	const src = `import "magus"; magus\project({"outputz": ["bin/**"]});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK, "an unknown project option must fail the load")
 	require.NotNil(t, g.Diag)
@@ -253,7 +253,7 @@ func TestTraceProject_unknownKeyHint(t *testing.T) {
 // This asserted the opposite until the rejection deadlocked a workspace: the load abort
 // took out every magus command, the one that builds a newer binary included.
 func TestTraceProject_unknownKeyNoHintLoads(t *testing.T) {
-	const src = `import "magus"; magus.project({"zzzzzzzz": true});`
+	const src = `import "magus"; magus\project({"zzzzzzzz": true});`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a key this magus cannot recognize must not fail the load")
 	assert.Nil(t, g.Diag)
@@ -262,7 +262,7 @@ func TestTraceProject_unknownKeyNoHintLoads(t *testing.T) {
 // TestTraceProject_unknownTargetPolicyKey exercises the per-target policy
 // checkUnknownKeys path (a distinct call site from the top-level options).
 func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
-	const src = `import "magus"; magus.project({"targets": {"lint": {"skipcache": true}}});`
+	const src = `import "magus"; magus\project({"targets": {"lint": {"skipcache": true}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -277,7 +277,7 @@ func TestTraceProject_unknownTargetPolicyKey(t *testing.T) {
 // twice in three merges, and `timeout` then made every command fail at workspace load
 // against a binary that predated it.
 func TestTraceProject_futureTargetPolicyKeyLoads(t *testing.T) {
-	const src = `import "magus"; magus.project({"targets": {"lint": {"quantum_flux": "9m"}}});`
+	const src = `import "magus"; magus\project({"targets": {"lint": {"quantum_flux": "9m"}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "an unrecognized per-target policy key must not fail the load")
 	assert.Nil(t, g.Diag)
@@ -286,7 +286,7 @@ func TestTraceProject_futureTargetPolicyKeyLoads(t *testing.T) {
 // TestTraceProject_slotsNotInt: a non-integer slots value is rejected with a
 // type-shaped message.
 func TestTraceProject_slotsNotInt(t *testing.T) {
-	const src = `import "magus"; magus.project({"targets": {"lint": {"slots": "four"}}});`
+	const src = `import "magus"; magus\project({"targets": {"lint": {"slots": "four"}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -295,7 +295,7 @@ func TestTraceProject_slotsNotInt(t *testing.T) {
 
 // TestTraceProject_slotsBelowOne: slots must be >= 1.
 func TestTraceProject_slotsBelowOne(t *testing.T) {
-	const src = `import "magus"; magus.project({"targets": {"lint": {"slots": 0}}});`
+	const src = `import "magus"; magus\project({"targets": {"lint": {"slots": 0}}});`
 	g := LoadMagusfile(context.Background(), src)
 	require.False(t, g.OK)
 	require.NotNil(t, g.Diag)
@@ -306,7 +306,7 @@ func TestTraceProject_slotsBelowOne(t *testing.T) {
 // depends_on/sources/outputs fields into the project.
 func TestTraceProject_targetPolicyAndLists(t *testing.T) {
 	const src = `import "magus";
-magus.project({
+magus\project({
     "depends_on": ["../lib"],
     "sources": ["src/**"],
     "outputs": "bin/app",
@@ -326,7 +326,7 @@ export fun deploy(ctx: magus\Context, args: [str]) > void {}`
 // TestTraceProject_malformedCall: a non-map, non-str argument is a no-op config
 // (captureConfigure returns a null opts), so the project registers with defaults.
 func TestTraceProject_malformedCall(t *testing.T) {
-	const src = `import "magus"; magus.project(5);`
+	const src = `import "magus"; magus\project(5);`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a malformed magus.project should be a lenient no-op: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
@@ -336,13 +336,13 @@ func TestTraceProject_malformedCall(t *testing.T) {
 // TestTraceProject_explicitPath: the two-argument form sets an explicit project
 // path; a non-map second argument degrades to no options.
 func TestTraceProject_explicitPath(t *testing.T) {
-	g := LoadMagusfile(context.Background(), `import "magus"; magus.project("./sub", {"outputs": ["out/**"]});`)
+	g := LoadMagusfile(context.Background(), `import "magus"; magus\project("./sub", {"outputs": ["out/**"]});`)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
 	assert.Equal(t, "./sub", g.Projects[0].Path)
 	assert.Equal(t, []string{"out/**"}, g.Projects[0].Outputs)
 
-	g2 := LoadMagusfile(context.Background(), `import "magus"; magus.project("./sub", 5);`)
+	g2 := LoadMagusfile(context.Background(), `import "magus"; magus\project("./sub", 5);`)
 	require.True(t, g2.OK, "load failed: %+v", g2.Diag)
 	require.Len(t, g2.Projects, 1)
 	assert.Equal(t, "./sub", g2.Projects[0].Path)
@@ -353,7 +353,7 @@ func TestTraceProject_explicitPath(t *testing.T) {
 // branch (a scalar depends_on is dropped) and its list branch skipping non-str
 // items.
 func TestTraceProject_valToStringsShapes(t *testing.T) {
-	const src = `import "magus"; magus.project({"depends_on": 5, "outputs": [1, "keep", true]});`
+	const src = `import "magus"; magus\project({"depends_on": 5, "outputs": [1, "keep", true]});`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
@@ -390,23 +390,26 @@ func TestRun_stubbedHostMembers(t *testing.T) {
 	const src = `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.log.info("i");
-    magus.log.warn("w");
-    magus.log.error("e");
-    magus.log.debug("d");
-    magus.cmd("ls", []);
-    magus.describe(["x"]);
-    magus.doctor(["z"]);
-    magus.clean([]);
-    magus.describeModule();
-    magus.describeModule("go");
-    magus.log.hint("h");
-    magus.pry();
-    magus.bustCache();
-    magus.impact("main");
-    magus.describeFile(["magusfile.buzz"]);
-    magus.insight({});
-    final _state = magus.tools().lifecycle.state;
+    magus\log.info("i");
+    magus\log.warn("w");
+    magus\log.error("e");
+    magus\log.debug("d");
+    magus\cmd("ls", []);
+    magus\doctor(["z"]);
+    magus\clean([]);
+    magus\describe.module();
+    magus\describe.module("go");
+    magus\log.hint("h");
+    magus\pry();
+    magus\bustCache();
+    magus\impact("main");
+    magus\describe.file(["magusfile.buzz"]);
+    final _spells = magus\describe.spell("go");
+    final _projects = magus\describe.project().projects;
+    final _graph = magus\describe.graph().projects;
+    final _index = magus\describe.graphMarkdown();
+    magus\insight({});
+    final _state = magus\describe.tool().lifecycle.state;
 }
 `
 	r := Run(context.Background(), src, "work", nil)
@@ -427,7 +430,7 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
 func TestRun_logMissingArg(t *testing.T) {
 	const src = `
 import "magus";
-export fun work(ctx: magus\Context, args: [str]) > void { magus.log.info(); }
+export fun work(ctx: magus\Context, args: [str]) > void { magus\log.info(); }
 `
 	r := Run(context.Background(), src, "work", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -439,7 +442,7 @@ export fun work(ctx: magus\Context, args: [str]) > void { magus.log.info(); }
 // TestLoadMagusfile_topLevelLogNoAttribution: a log call at the top level (no
 // current target) has nowhere to attribute, so addOp drops it without erroring.
 func TestLoadMagusfile_topLevelLog(t *testing.T) {
-	const src = `import "magus"; magus.log.info("top-level");`
+	const src = `import "magus"; magus\log.info("top-level");`
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "a top-level log must not fail the load: %+v", g.Diag)
 }
@@ -449,7 +452,7 @@ func TestLoadMagusfile_topLevelLog(t *testing.T) {
 func TestRun_magusRunEmptyArgv(t *testing.T) {
 	const src = `
 import "magus";
-export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run([]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run([]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -462,7 +465,7 @@ func TestRun_magusRunWithCharmSuffix(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd,fast"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["image-build:cd,fast"]); }
 `
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
@@ -477,7 +480,7 @@ func TestRun_spellListTargets(t *testing.T) {
 	const src = `
 import "magus";
 import "magus/spell/go";
-magus.project({"spells": [go]});
+magus\project({"spells": [go]});
 export fun show(ctx: magus\Context, args: [str]) > void { go.listTargets(); }
 `
 	r := Run(context.Background(), src, "show", nil)
@@ -491,7 +494,7 @@ func TestRun_spellArgsDetailNoArgsKey(t *testing.T) {
 	const src = `
 import "magus";
 import "magus/spell/go";
-magus.project({"spells": [go]});
+magus\project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"]({"env": {"CGO_ENABLED": "0"}}); }
 `
 	r := Run(context.Background(), src, "build", nil)
@@ -608,7 +611,7 @@ func TestRun_charmBranchViaCtx(t *testing.T) {
 	const src = `
 import "magus";
 import "magus/spell/docker";
-magus.project({"spells": [docker]});
+magus\project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
@@ -635,8 +638,8 @@ func TestRun_insightLensesAreShaped(t *testing.T) {
 			src := `
 import "magus";
 export fun work(ctx: magus\Context, args: [str]) > void !> any {
-    magus.log.info("{magus.insight({}).` + lens + `.len()}");
-    magus.log.info("reached-the-end");
+    magus\log.info("{magus\insight({}).` + lens + `.len()}");
+    magus\log.info("reached-the-end");
 }
 `
 			r := Run(context.Background(), src, "work", nil)

@@ -2,6 +2,7 @@ package spells
 
 import (
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain drops the variables that point git at another repository, so the tracked-file
+// listing below reads this checkout even when a hook or a parent git exported them. Not
+// testkit.Main: testkit imports types, which imports this package.
+func TestMain(m *testing.M) {
+	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"} {
+		_ = os.Unsetenv(name)
+	}
+	os.Exit(m.Run())
+}
 
 // The embed takes the files on disk, less any whose name starts with . or _, while a
 // release packs the files git tracks. The two must be one set, or the digest a binary

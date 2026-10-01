@@ -301,6 +301,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_MCP_ADDRESS",
 	},
 	{
+		GoPath:   "MCP.HTTP",
+		YamlPath: "mcp.http",
+		EnvVar:   "MAGUS_MCP_HTTP",
+		Flag:     fieldtype.FlagNames{Long: ""},
+		Kind:     fieldtype.KindBoolPtr,
+		Usage:    "MAGUS_MCP_HTTP: HTTP serves /mcp on the server's HTTP listener.",
+	},
+	{
 		GoPath:   "MCP.InsecureBind",
 		YamlPath: "mcp.insecure_bind",
 		EnvVar:   "MAGUS_MCP_INSECURE_BIND",

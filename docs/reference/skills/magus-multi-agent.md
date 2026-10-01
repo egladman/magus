@@ -1,15 +1,15 @@
 ---
 title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
-description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs."
+description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 41004
-skill_short_bytes: 31209
+skill_full_bytes: 40941
+skill_short_bytes: 31664
 ---
 
 # magus-multi-agent
 
-Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, narrow the scope at every level, and match each lease's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says "fan this out" or "spin up an agent per package" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.
+Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task. Covers forking the job row each worker is bound to (magus job fork with FILE or glob write paths, a check, criteria and a model), the spawn description <parent>/<role> <job>, partitioning by WRITE SET from graph evidence (magus refs --occurrences, explain, affected --plan --stdin), proving the jobs cannot collide, and matching each job's model to its work. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `cd084f71a455` |
+| `skill-content` | `ab67378e858b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,6 +80,10 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 
 You do not need to be asked.
 
+Hand every spawn, read-only scouts included, a job row forked first: a child bound
+to no row is graded as you are, which no lease bounds. "Fork the job, then spawn the
+worker" below has the commands to copy.
+
 Fan-out is not inherently expensive. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
@@ -108,6 +112,9 @@ Four rules, in the order they bite:
   a gate is a reason to start the next merged unit.
 
 ## Run the graph-engineering loop
+
+Prove it before you plan it: a claim a plan or brief rests on cites the output ref
+of a run that settled it, not a sentence, and a guess nobody ran stays out of the plan.
 
 Treat graph engineering as
 an acceptance-criteria loop with graph-derived jobs: define, partition,
@@ -158,8 +165,7 @@ so a job gets the narrowest target from that decomposition and the integrator
 re-runs the described order, with `magus affected ci` re-proving the whole
 composition.
 
-A job's check is that narrow target and never the gate; the guard reads
-the row and denies `ci` to any worker whose check names something else. The
+A job's check is that narrow target and never the gate. The
 root gates ONCE, in its own tree, after every unit lands.
 
 Decide each job's validation PLANE with its target. A worker environment that
@@ -285,61 +291,118 @@ Those are the files magus READS to load the workspace, so a half-saved one is
 not a conflict between two workers: it stops the workspace loading for everybody
 in that checkout at once, and the rest lose `magus run`, `magus ls` and their own
 tests over an edit they cannot see.
-`magus job fork` refuses such a job outright while another live job with
-write paths is bound to the same checkout, naming the file and the holder. A
-separate worktree is the answer, not a narrower boundary: the file has one owner, so
-the only way both jobs can be right is for one of them to be somewhere else.
+When `magus job fork` refuses one, the answer is a separate worktree, not a
+narrower boundary.
 
 Fork records what it could prove in `write_proof` - `alone`, `disjoint` or
 `overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
 refused, because sequencing two jobs onto one path is a call only you can make;
-what the row settles is whether anybody checked.
-
-Spawning into a checkout that already holds a live job carries the same
-reminder from the guard, once per session, with the union of the write paths to
-classify. Answer it by running the call above or by handing the new worker its
-own worktree - a proof or a worktree, not a judgment that it looks fine.
+what the row settles is whether anybody checked. Answer the guard's shared-checkout
+reminder the same way: a proof or a worktree, not a judgment that it looks fine.
 
 Project boundaries alone are insufficient. A declared dependency means group the
 work or serialize producer before consumer. Treat strong hidden affinity as a
 warning. When evidence is incomplete, reduce parallelism.
 
-## Fork one job per unit of work
+## Fork the job, then spawn the worker
 
-Before spawning, fork one job per unit - including the checkpoint it was handed
-(`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
-tree is not clean) - and keep descendants in the same store. Fork each one with
-`client` (`magus\job.put`) from the orchestrating agent, or `magus job fork` from a
-person at a terminal.
-A worker holding a lease forks its own units the same way, naming its job with
-`--parent`, and the job store refuses a child that claims more than its parent:
+The order is fixed: fork the row, spawn the worker with a description naming it,
+and only then does the worker take the lease. A spawn whose description names no
+live row binds its child to nothing.
 
-| Job | Parent | Checkpoint | Criteria | Goals | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
-|---|---|---|---|---|---|---|---|---|---|---|
+1. Record the checkpoint you are handing out: `magus vcs checkpoint -o name`
+   prints the revision, plus a dirty-patch digest when the tree is not clean.
+2. Fork one job per unit, from flags:
+
+   ```sh
+   magus job fork api-store --model <model> \
+     --criteria "accounts move to the new store; nothing names the old one" \
+     --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
+     --check "go-test api -- -run TestStore" \
+     --checkpoint <checkpoint>
+   ```
+
+   or from a record on stdin, the form that carries goals (see the next section):
+
+   ```sh
+   magus job fork --stdin <<'EOF'
+   {"schema_version": 11, "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
+    "criteria": "accounts move to the new store; nothing names the old one",
+    "write_paths": ["db/migrations/*.sql", "api/migrate.go"],
+    "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},
+    "goals": [
+      {"id": "migration", "kind": "paths", "expect": "changed", "paths": ["db/migrations/*.sql"]},
+      {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
+      {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
+    ]}
+   EOF
+   ```
+
+   `magus job fork --schema` prints every field and the newest `schema_version`.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
+   first a parent id and a role joined by `/`, the second the job id. A root job
+   has no parent row, so its first word takes any label (`orchestrator/feat
+   api-store`); a child reads `api-store/fix migrate`, and the guard resolves the
+   job as `migrate`, else `api-store/migrate`. The role is a word for the work
+   (`feat`, `fix`, `review`); a workspace spawn rule may restrict it, and its
+   refusal names the list.
+
+Write paths name FILES: a file, a file the job will create, or a file glob
+(`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob
+that matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/).
+
+Two jobs share one file by claiming declarations in it: `<file>#<declaration>`,
+such as `internal/agent/catalog.go#SkillVersion`. A claim names one file, never a
+glob, and the file needs a diff driver (`magus doctor` lists the managed ones);
+otherwise fork refuses with [MGS3031](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3031/). Two jobs that must edit the SAME
+declaration still have one owner: give it to one job, or order them with
+`--depends-on`.
+
+The check is `<target> <project> [-- args]` with the `magus run` implied
+(`"test ."`, `"go-test api -- -run TestStore"`), and never the gate or a target
+that chains to it.
+
+Fork with `client` (`magus\job.put`) from an agent, or `magus job fork` from
+a terminal. A worker holding a lease forks its own units the same way, naming
+its job with `--parent` and paths inside its own.
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
 prints the job's own criteria, boundary and check, plus what the workspace knows
 and nobody wrote down. Two renders
-of one row are byte-identical, which hand-typed prompts are not. It
-REFUSES a job whose check is the gate, or a target that chains to one.
+of one row are byte-identical, which hand-typed prompts are not.
+
+The guard grades every command a brief presents in a shell fence or a code span,
+and one it would deny refuses the spawn. A line that names a command to forbid it ("never ...")
+is not graded.
 
 Every worker prompt must include its row, its JOB ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
 `BAGGAGE=magus.lease=<its id>` before it works - the guard grades its writes only when that is
 set. Require it to preserve
-unrelated changes, stay inside write paths, avoid generated outputs, run only its
-assigned Magus target, and return its result with `magus job exit --stdin` in the
-schema `magus job exit --schema` prints: changed paths, the validation it ran with
-the output ref that proves it, descendants it forked, and unresolved risks. A typed
-result is what makes verification mechanical. Keep unresolved risks mandatory, so a
+unrelated changes, stay inside write paths, avoid generated outputs, and run only its
+assigned Magus target.
+
+End every brief with the step that files the result, as the worker's LAST act
+before it reports back. A brief that leaves it out gets a prose report and a row
+that never moves. The step, with the shape `magus job exit
+--schema` prints:
+
+```sh
+magus job exit <job> --stdin <<'EOF'
+{"schema_version": 2, "job": "<job>",
+ "changed_paths": ["api/store.go", "api/store_test.go"],
+ "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "descendants": [],
+ "unresolved_risks": ["what is left, or what the worker could not verify"]}
+EOF
+```
+
+A typed result is what makes verification mechanical. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
 
-Taking a lease narrows what a worker may write in the store, never what it may see. Its
-own row accepts four writes: recording the base it landed on, shrinking its own
-write_paths (how it releases a path), ending itself in fail or no_return, and
-forking a child inside its own write paths. Everything else, including any other field
-on its own row and any write to a row that is not its own or its child, is the
-orchestrator's alone.
+A worker writes only its own row and the children it forks; every other store
+write is the orchestrator's, and a refused worker reports it as an unresolved risk
+and stops.
 
 The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
@@ -361,13 +424,9 @@ Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line.
 
-Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
-worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once it holds its lease. When a worker must READ something it
-must not WRITE, put that path in the row's `read_paths` instead of widening
-`write_paths`: one list cannot say both, and widening the write paths to open a
-read is how two workers end up owning one file. `read_paths` is the only widening
-there is; nothing in the environment turns the rule off.
+Write paths bound READS too: a worker may read its projects and what they declare
+`depends_on`. When a worker must READ something it must not WRITE, put that path in
+the row's `read_paths` instead of widening `write_paths`, or two workers end up owning one file.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
@@ -379,13 +438,15 @@ Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
 
-Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
-widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
-the row and keep its state, where a re-fork hands a taken job out again as declared,
-and both preview until `--apply`. A revoked path is recorded as a release with its
-digest, and the worker's next write there is refused, naming the revocation. Ending
-a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
-`magus describe job` and tells it to ask you.
+Moving a live job's boundary is yours. Change its record and run `magus job apply -f
+<file>` (`-f -` reads stdin): the record is the whole spec, so it widens or revokes
+write paths and adds goals in one write, and the job keeps its state, where a re-fork
+hands a taken job out again as declared. `--dry-run` prints the spec diff and writes
+nothing. A check you find the job owes mid-flight is a goal you add this way, so
+`magus job wait` grades it from a recorded run. A revoked path is recorded as a release
+with its digest, and the worker's next write there is refused, naming the revocation.
+Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
+names `magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
@@ -413,36 +474,13 @@ inside the write paths, and a diff it cannot read FAILS. So fork writing jobs wi
 a checkpoint. It also refuses pass while any descendant is still live, and grades
 a child against its ancestors' symbol goals as well as its own.
 
-The store RECORDS and the agent guard GRADES. A worker that exported
-`magus.lease` has each file write judged against these declarations as it
-happens: inside its own write paths passes; inside its deny paths, or inside
-another live job's write paths, is DENIED, and the denial names the owning
-job, how long ago it was last updated, and the exit command that releases it. A writer magus cannot attribute - a person in their own checkout, or a
-worker that never enrolled - is ADVISED and never blocked, and every uncertainty
-fails open the same way. It is a seatbelt for harnesses that opt in, not a
-sandbox. So a denied worker
-COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning job release the path with the `write_paths` write above once it has
-finished editing, then retry. Step 1 of Integrate
-and verify checks the same boundary against the checkpoint, and that is the half
-that does not depend on a worker cooperating.
-
-A bound lease is denied one class of write regardless of its write paths: the host's own
-guard wiring - `.claude/settings.json` and its hooks, `.cursor/hooks.json`,
-`.codex/hooks.json`, `.opencode/plugins/`, and each host's equivalent.
-
-Every guard verdict carries `lease`: the job it graded the write under, read from
-`--lease` or the `magus.lease` baggage member. An id the store does not carry
-is a DENY, not a silent pass-through. An id naming a row already in `pass`, `fail`, or
-`no_return` prints one notice per session that its rules are inert.
-
-A `next` breadcrumb magus itself served is PRE-AUTHORIZED for the call it names:
-no advisory fires and the role-scoped rules stand down for that exact
-command. The workspace-wide denies never yield to it - a raw language
-tool, a pipe or redirect of magus's own output, a whole-tree VCS op, a relocated
-checkout.
-`magus session hints` reports how often a served breadcrumb was actually taken
-up, per id, over the sessions this repository has loaded.
+The guard grades each write of a worker that exported `magus.lease` against these
+rows and denies one outside them, naming the owner. A writer magus cannot attribute
+is only ADVISED, and every uncertainty fails open: it is a seatbelt, not a sandbox.
+So a denied worker COORDINATES and never works around: ask the orchestrator to
+re-partition, or have the owning job release the path, then retry. Step 1 of Integrate and verify checks the same boundary
+against the checkpoint, and that is the half that does not depend on a worker
+cooperating.
 
 A read-only job carries an abbreviated row: no write paths, no deny paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which: silence is not a pass.
@@ -457,23 +495,9 @@ A job's acceptance criteria are prose a reader grades. A GOAL is the part magus
 grades itself, from evidence the worker cannot author, and `magus job wait`
 refuses to record pass until every one verifies. Goals are data: write them in
 the job record's `goals`, never as flags. `magus job fork` refuses a job that
-writes and declares neither a check nor a goal.
-
-```sh
-magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "api/migrate", "parent": "api",
- "criteria": "accounts move to the new store; nothing names the old one",
- "write_paths": ["api", "db/migrations"], "check": {"target": "go-test", "project": "api"},
- "goals": [
-   {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
-   {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
-   {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
- ]}
-EOF
-```
-
-`client` (`magus\job.put`) and `magus job fork` take the same `goals` array.
-`magus job fork --schema` prints every field.
+writes and declares neither a check nor a goal. The `--stdin` record above declares
+a `paths` goal and two `symbol` goals, and `client` (`magus\job.put`) takes the same
+`goals` array.
 
 A goal names WHAT it examines and what must be true of it:
 
@@ -520,9 +544,6 @@ before another is approached; a failed prerequisite propagates. Do NOT nest
 them: a goal that wants children is a JOB that wants splitting, and the rule
 above already covers it. Goals stay flat so the job tree stays the only
 hierarchy with an owner.
-
-A `check` goal still may not name `ci` or anything that chains to it, for the
-reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the
@@ -662,6 +683,10 @@ magus affected ci --plan --stdin            # plan PROPOSED paths, before editin
 You do not need to be asked. "Split this across agents" is one way in;
 several disjoint write sets you can name is another.
 
+Hand every spawn, read-only scouts included, a job row forked first: a child bound
+to no row is graded as you are, which no lease bounds. "Fork the job, then spawn the
+worker" below has the commands to copy.
+
 Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
 so nobody can say when to stop, and a principal model assigned to mechanical edits.
@@ -701,6 +726,9 @@ Four rules, in the order they bite:
   in half to have something to spawn buys wall clock with two fixed loads.
 
 ## Run the graph-engineering loop
+
+Prove it before you plan it: a claim a plan or brief rests on cites the output ref
+of a run that settled it, not a sentence, and a guess nobody ran stays out of the plan.
 
 Graph engineering is a natural evolution of loop engineering. The
 human supplies a goal and constraints; the root agent turns them into explicit
@@ -779,8 +807,7 @@ composition. A worker hand-sequencing lint, format, and test is re-deriving an
 order the magusfile already owns, and the step it forgets fails silently by
 omission.
 
-A job's check is that narrow target and never the gate; the guard reads
-the row and denies `ci` to any worker whose check names something else. The
+A job's check is that narrow target and never the gate. The
 root gates ONCE, in its own tree, after every unit lands, which is
 what stops seven fanned-out workers from each running the whole pipeline
 concurrently on one machine.
@@ -925,42 +952,88 @@ in that checkout at once, and the rest lose `magus run`, `magus ls` and their ow
 tests over an edit they cannot see. Measured 2026-09-17: three workers
 shared a checkout, one saved the root magusfile mid-edit, and all three were
 stopped for the duration by a file only one of them had ever opened.
-`magus job fork` refuses such a job outright while another live job with
-write paths is bound to the same checkout, naming the file and the holder. A
-separate worktree is the answer, not a narrower boundary: the file has one owner, so
-the only way both jobs can be right is for one of them to be somewhere else.
+When `magus job fork` refuses one, the answer is a separate worktree, not a
+narrower boundary.
 
 Fork records what it could prove in `write_proof` - `alone`, `disjoint` or
 `overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
 refused, because sequencing two jobs onto one path is a call only you can make;
-what the row settles is whether anybody checked.
-
-Spawning into a checkout that already holds a live job carries the same
-reminder from the guard, once per session, with the union of the write paths to
-classify. Answer it by running the call above or by handing the new worker its
-own worktree - a proof or a worktree, not a judgment that it looks fine.
+what the row settles is whether anybody checked. Answer the guard's shared-checkout
+reminder the same way: a proof or a worktree, not a judgment that it looks fine.
 
 Project boundaries alone are insufficient. A declared dependency means group the
 work or serialize producer before consumer. Treat strong hidden affinity as a
 warning. When evidence is incomplete, reduce parallelism.
 
-## Fork one job per unit of work
+## Fork the job, then spawn the worker
 
-Before spawning, fork one job per unit - including the checkpoint it was handed
-(`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
-tree is not clean) - and keep descendants in the same store. Fork each one with
-`client` (`magus\job.put`) from the orchestrating agent, or `magus job fork` from a
-person at a terminal - the same store and the same
-authorization rule either way, so a job forked by hand and one an agent forked are
-indistinguishable to everything that reads them.
-A worker holding a lease forks its own units the same way, naming its job with
-`--parent`, and the job store refuses a child that claims more than its parent:
+The order is fixed: fork the row, spawn the worker with a description naming it,
+and only then does the worker take the lease. A spawn whose description names no
+live row binds its child to nothing, so every write it makes is graded as
+an editor magus cannot attribute.
+
+1. Record the checkpoint you are handing out: `magus vcs checkpoint -o name`
+   prints the revision, plus a dirty-patch digest when the tree is not clean.
+2. Fork one job per unit, from flags:
+
+   ```sh
+   magus job fork api-store --model <model> \
+     --criteria "accounts move to the new store; nothing names the old one" \
+     --write-paths 'api/store.go,api/store_test.go,db/migrations/*.sql' \
+     --check "go-test api -- -run TestStore" \
+     --checkpoint <checkpoint>
+   ```
+
+   or from a record on stdin, the form that carries goals (see the next section):
+
+   ```sh
+   magus job fork --stdin <<'EOF'
+   {"schema_version": 11, "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
+    "criteria": "accounts move to the new store; nothing names the old one",
+    "write_paths": ["db/migrations/*.sql", "api/migrate.go"],
+    "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},
+    "goals": [
+      {"id": "migration", "kind": "paths", "expect": "changed", "paths": ["db/migrations/*.sql"]},
+      {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
+      {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
+    ]}
+   EOF
+   ```
+
+   `magus job fork --schema` prints every field and the newest `schema_version`.
+3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
+   first a parent id and a role joined by `/`, the second the job id. A root job
+   has no parent row, so its first word takes any label (`orchestrator/feat
+   api-store`); a child reads `api-store/fix migrate`, and the guard resolves the
+   job as `migrate`, else `api-store/migrate`. The role is a word for the work
+   (`feat`, `fix`, `review`); a workspace spawn rule may restrict it, and its
+   refusal names the list.
+
+Write paths name FILES: a file, a file the job will create, or a file glob
+(`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob
+that matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/), because it
+claims every file under it and so overlaps every job editing anything there.
+
+Two jobs share one file by claiming declarations in it: `<file>#<declaration>`,
+such as `internal/agent/catalog.go#SkillVersion`. A claim names one file, never a
+glob, and the file needs a diff driver (`magus doctor` lists the managed ones);
+otherwise fork refuses with [MGS3031](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3031/). Two jobs that must edit the SAME
+declaration still have one owner: give it to one job, or order them with
+`--depends-on`. Claiming the whole file, or a glob over its directory, is
+what serializes every other job that needed one function in it.
+
+The check is `<target> <project> [-- args]` with the `magus run` implied
+(`"test ."`, `"go-test api -- -run TestStore"`), and never the gate or a target
+that chains to it.
+
+Fork with `client` (`magus\job.put`) from an agent, or `magus job fork` from
+a terminal - the same store and the same authorization rule either way, so a
+job forked by hand and one an agent forked are indistinguishable to everything that
+reads them. A worker holding a lease forks its own units the same way, naming
+its job with `--parent` and paths inside its own.
 
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
-
-| Job | Parent | Checkpoint | Criteria | Goals | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
-|---|---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
 prints the job's own criteria, boundary and check, plus what the workspace knows
@@ -969,8 +1042,12 @@ output globs that land inside them, the paths a sibling job is holding, the buil
 inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency. Two renders
 of one row are byte-identical, which hand-typed prompts are not: seven of
-them disagreed about a dedup key and every one ended with the gate. It
-REFUSES a job whose check is the gate, or a target that chains to one.
+them disagreed about a dedup key and every one ended with the gate.
+
+The guard grades every command a brief presents in a shell fence or a code span,
+and one it would deny refuses the spawn, since the worker runs a brief's
+commands as written. A line that names a command to forbid it ("never ...")
+is not graded.
 
 Every worker prompt must include its row, its JOB ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
@@ -981,24 +1058,34 @@ magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
 `magus.spawner=<your label>` to the baggage: magus records the trace, the parent span
 and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
 verdict is ever keyed on them. Require it to preserve
-unrelated changes, stay inside write paths, avoid generated outputs, run only its
-assigned Magus target, and return its result with `magus job exit --stdin` in the
-schema `magus job exit --schema` prints: changed paths, the validation it ran with
-the output ref that proves it, descendants it forked, and unresolved risks. A typed
-result is what makes verification mechanical; the same four facts in prose can only be
+unrelated changes, stay inside write paths, avoid generated outputs, and run only its
+assigned Magus target.
+
+End every brief with the step that files the result, as the worker's LAST act
+before it reports back. A brief that leaves it out gets a prose report and a row
+that never moves: the store keeps the write paths held, `magus job wait`
+has nothing to verify, and nobody notices until a sibling is refused over a path
+the finished worker no longer needs. The step, with the shape `magus job exit
+--schema` prints:
+
+```sh
+magus job exit <job> --stdin <<'EOF'
+{"schema_version": 2, "job": "<job>",
+ "changed_paths": ["api/store.go", "api/store_test.go"],
+ "validation": {"command": "magus run go-test api -- -run TestStore", "output_ref": "<ref>"},
+ "descendants": [],
+ "unresolved_risks": ["what is left, or what the worker could not verify"]}
+EOF
+```
+
+A typed result is what makes verification mechanical; the same four facts in prose can only be
 graded by reading, and a worker that ran a filtered subset writes the same
 paragraph as one that did not. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
 
-Taking a lease narrows what a worker may write in the store, never what it may see. Its
-own row accepts four writes: recording the base it landed on, shrinking its own
-write_paths (how it releases a path), ending itself in fail or no_return, and
-forking a child inside its own write paths. Everything else, including any other field
-on its own row and any write to a row that is not its own or its child, is the
-orchestrator's alone, and the store refuses the rest before a worker
-gets far enough to try it a second way: the refusal names the actor directly -
-your orchestrator writes what a worker may not; report it as an unresolved risk
-and stop.
+A worker writes only its own row and the children it forks; every other store
+write is the orchestrator's, and a refused worker reports it as an unresolved risk
+and stops.
 
 The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
@@ -1030,15 +1117,11 @@ generic "expect drift" line, which only primes the worker to dismiss real
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct.
 
-Write paths are the WRITE boundary. The guard reads them as a READ boundary too, so a
-worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once it holds its lease. The
-read boundary is its projects plus what they declare `depends_on`, so a shared library
-it legitimately builds on stays open. When a worker must READ something it
-must not WRITE, put that path in the row's `read_paths` instead of widening
-`write_paths`: one list cannot say both, and widening the write paths to open a
-read is how two workers end up owning one file. `read_paths` is the only widening
-there is; nothing in the environment turns the rule off.
+Write paths bound READS too: a worker may read its projects and what they declare
+`depends_on`. When a worker must READ something it must not WRITE, put that path in
+the row's `read_paths` instead of widening `write_paths`: one list cannot say
+both, and widening the write paths to open a read is how two workers end up owning
+one file.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
@@ -1053,13 +1136,15 @@ Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
 
-Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
-widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
-the row and keep its state, where a re-fork hands a taken job out again as declared,
-and both preview until `--apply`. A revoked path is recorded as a release with its
-digest, and the worker's next write there is refused, naming the revocation. Ending
-a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
-`magus describe job` and tells it to ask you.
+Moving a live job's boundary is yours. Change its record and run `magus job apply -f
+<file>` (`-f -` reads stdin): the record is the whole spec, so it widens or revokes
+write paths and adds goals in one write, and the job keeps its state, where a re-fork
+hands a taken job out again as declared. `--dry-run` prints the spec diff and writes
+nothing. A check you find the job owes mid-flight is a goal you add this way, so
+`magus job wait` grades it from a recorded run. A revoked path is recorded as a release
+with its digest, and the worker's next write there is refused, naming the revocation.
+Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
+names `magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
@@ -1090,49 +1175,16 @@ inside the write paths, and a diff it cannot read FAILS. So fork writing jobs wi
 a checkpoint. It also refuses pass while any descendant is still live, and grades
 a child against its ancestors' symbol goals as well as its own.
 
-The store RECORDS and the agent guard GRADES. A worker that exported
-`magus.lease` has each file write judged against these declarations as it
-happens: inside its own write paths passes; inside its deny paths, or inside
-another live job's write paths, is DENIED, and the denial names the owning
-job, how long ago it was last updated, and the exit command that releases it. A writer magus cannot attribute - a person in their own checkout, or a
-worker that never enrolled - is ADVISED and never blocked, and every uncertainty
-fails open the same way: no jobs declared, none live, a store
-that will not parse. It is a seatbelt for harnesses that opt in, not a
-sandbox. So a denied worker
-COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning job release the path with the `write_paths` write above once it has
-finished editing, then retry. Editing anyway from an un-enrolled shell, or
-dropping the lease id to buy advisory treatment, turns a denial you could have
-acted on into a collision nobody sees until integration. Step 1 of Integrate
-and verify checks the same boundary against the checkpoint, and that is the half
-that does not depend on a worker cooperating.
-
-A bound lease is denied one class of write regardless of its write paths: the host's own
-guard wiring - `.claude/settings.json` and its hooks, `.cursor/hooks.json`,
-`.codex/hooks.json`, `.opencode/plugins/`, and each host's equivalent.
-Those files switch the guard on for the host's next session start, so an edit
-inside them is never a write-path question. An unbound session gets a once-per-session
-advisory instead, because rewiring the host is ordinarily the orchestrator's or a
-person's job.
-
-Every guard verdict carries `lease`: the job it graded the write under, read from
-`--lease` or the `magus.lease` baggage member. An id the store does not carry
-is a DENY, not a silent pass-through - every lease-scoped rule reads
-that row, so a typo'd id would otherwise be graded by nothing while the worker
-believed itself bounded. An id naming a row already in `pass`, `fail`, or
-`no_return` prints one notice per session that its rules are inert,
-because those rules only ever read live rows.
-
-A `next` breadcrumb magus itself served is PRE-AUTHORIZED for the call it names:
-no advisory fires and the role-scoped rules stand down for that exact
-command, matched argv for argv with only the binary's own spelling
-normalized. The workspace-wide denies never yield to it - a raw language
-tool, a pipe or redirect of magus's own output, a whole-tree VCS op, a relocated
-checkout, because those protect everyone rather than one role.
-`magus session hints` reports how often a served breadcrumb was actually taken
-up, per id, over the sessions this repository has loaded: served,
-followed, rejected and reflex-repeated counts, and the rate below which a hint is
-spending context on advice nobody takes.
+The guard grades each write of a worker that exported `magus.lease` against these
+rows and denies one outside them, naming the owner. A writer magus cannot attribute
+is only ADVISED, and every uncertainty fails open: it is a seatbelt, not a sandbox.
+So a denied worker COORDINATES and never works around: ask the orchestrator to
+re-partition, or have the owning job release the path, then retry. Editing
+anyway from an un-enrolled shell, or dropping the lease id to buy advisory
+treatment, turns a denial you could have acted on into a collision nobody sees
+until integration. Step 1 of Integrate and verify checks the same boundary
+against the checkpoint, and that is the half that does not depend on a worker
+cooperating.
 
 A read-only job carries an abbreviated row: no write paths, no deny paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which: silence
@@ -1151,23 +1203,9 @@ A job's acceptance criteria are prose a reader grades. A GOAL is the part magus
 grades itself, from evidence the worker cannot author, and `magus job wait`
 refuses to record pass until every one verifies. Goals are data: write them in
 the job record's `goals`, never as flags. `magus job fork` refuses a job that
-writes and declares neither a check nor a goal.
-
-```sh
-magus job fork --stdin <<'EOF'
-{"schema_version": 11, "id": "api/migrate", "parent": "api",
- "criteria": "accounts move to the new store; nothing names the old one",
- "write_paths": ["api", "db/migrations"], "check": {"target": "go-test", "project": "api"},
- "goals": [
-   {"id": "migration", "kind": "paths", "paths": ["db/migrations/**"]},
-   {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
-   {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
- ]}
-EOF
-```
-
-`client` (`magus\job.put`) and `magus job fork` take the same `goals` array.
-`magus job fork --schema` prints every field.
+writes and declares neither a check nor a goal. The `--stdin` record above declares
+a `paths` goal and two `symbol` goals, and `client` (`magus\job.put`) takes the same
+`goals` array.
 
 A goal names WHAT it examines and what must be true of it:
 
@@ -1214,9 +1252,6 @@ before another is approached; a failed prerequisite propagates. Do NOT nest
 them: a goal that wants children is a JOB that wants splitting, and the rule
 above already covers it. Goals stay flat so the job tree stays the only
 hierarchy with an owner.
-
-A `check` goal still may not name `ci` or anything that chains to it, for the
-reason the check rule gives above.
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the

@@ -539,8 +539,11 @@ func TestStoreSymbolIndexDigest(t *testing.T) {
 		in.Symbols = map[string][]types.KnowledgeSymbol{"pkg/b": symbol("Bar"), "pkg/a": symbol("Foo")}
 		build(t, cacheDir, BuildOptions{}, in)
 		man := readManifest(t, cacheDir)
+		// pkg/b's index defines its symbol under pkg/a, outside pkg/b's own directory, so
+		// that symbol has a directory shard of its own and pkg/b contributes two lines.
 		h := sha256.New()
-		fmt.Fprintf(h, "pkg/a\x00%s\npkg/b\x00%s\n", man.Shards["pkg/a@symbols"].Fingerprint, man.Shards["pkg/b@symbols"].Fingerprint)
+		fmt.Fprintf(h, "pkg/a\x00%s\npkg/b\x00%s\npkg/b:pkg/a\x00%s\n", man.Shards["pkg/a@symbols"].Fingerprint,
+			man.Shards["pkg/b@symbols"].Fingerprint, man.Shards["pkg/b@symbols:pkg/a"].Fingerprint)
 		assert.Equal(t, types.SymbolIndexDigest{
 			Digest:   hex.EncodeToString(h.Sum(nil)),
 			Indexed:  true,

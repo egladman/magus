@@ -5,6 +5,7 @@ package std
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/egladman/magus/internal/proc/run"
@@ -28,9 +29,13 @@ var Vcs = Module{
 			Impl:    VcsName,
 		},
 		{
-			Name:    "base",
-			Doc:     "Resolved base ref for diffs.",
+			Name: "base",
+			Doc:  "Resolved base ref for diffs. dir resolves it for the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd, so it names that repository's VCS default. Raises only when dir does not exist.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeString}},
+			Raises:  true,
 			Impl:    VcsBase,
 		},
 		{
@@ -42,24 +47,38 @@ var Vcs = Module{
 		},
 		{
 			Name: "changed_files",
-			Doc:  "The files changed against the given base (defaults to vcs.base), each a Path carrying the repository root as its base. Empty when no VCS is resolved. Named for what it returns: it answers WHICH files a branch touched, where vcs.dirtyDiff answers WHAT changed inside the working tree.",
+			Doc:  "The files changed against the given base (defaults to the base vcs\\base resolves for dir), each a Path carrying the repository root as its base. dir reads the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd; a dir that does not exist raises. Empty when no VCS is resolved. Named for what it returns: it answers WHICH files a branch touched, where vcs\\dirtyDiff answers WHAT changed inside the working tree.",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "dir", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[Path]"}},
 			Raises:  true,
 			Impl:    VcsChangedFiles,
 		},
 		{
-			Name:    "ref",
-			Doc:     "The movable name pointing at the current revision, or null when none names it: a detached git HEAD, or jj's working copy, which is usually an anonymous change, so null is an ordinary answer there, not a failure. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. Raises when no VCS is resolved or its metadata cannot be read - use vcs.name() to test for a VCS first.",
+			Name: "regions",
+			Doc:  "The declarations the change against base (defaults to vcs\\base) lands in: one {file, side, lines, declaration, driver} per declaration each hunk touches, ordered by path, then side, then line, for the same files vcs\\changedFiles lists. side is `old` for lines only the merge base's version has (a deletion) and `new` for the working tree's; lines is the first and last line on that side, 1-based and inclusive; declaration is the enclosing declaration's line as the file's diff driver matched it (`func (m *Magus) run(ctx context.Context) error {`), empty above a file's first declaration; driver is that diff driver (`golang`, `markdown`, `buzz`), empty for a file with none, whose regions then say only which lines changed. It is the footprint `magus job wait` prints. Empty when no VCS is resolved; raises when the backend cannot place regions (only git can) or the diff cannot be computed, since an empty footprint reads as a change that touched nothing.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "[RegionChange]"}},
+			Raises:  true,
+			Impl:    VcsRegions,
+		},
+		{
+			Name: "ref",
+			Doc:  "The movable name pointing at the current revision, or null when none names it: a detached git HEAD, or jj's working copy, which is usually an anonymous change, so null is an ordinary answer there, not a failure. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. dir reads the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd. Raises when no VCS is resolved, its metadata cannot be read, or dir does not exist - use vcs\\name() to test for a VCS first.",
+			Args: []Arg{
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
 			Returns: []Ret{{Type: TypeString, Nullable: true}},
 			Raises:  true,
 			Impl:    VcsRef,
 		},
 		{
 			Name: "status",
-			Doc:  "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs.cmd() when the codes matter.",
+			Doc:  "The working tree's uncommitted state as {clean, files}: clean is true when nothing changed, files are the changed paths (empty when clean). Pass paths to scope it. Each file is a Path carrying the repository root as its base, because a VCS reports paths from the root while a target runs in its project directory. Paths only - a per-entry status code is not portable (jj reports none), so reach for vcs\\cmd() when the codes matter.",
 			Args: []Arg{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
@@ -79,7 +98,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "dirty_diff",
-			Doc:  "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs.name() to print a diff; the bytes are the backend's native format, not a normalized one.",
+			Doc:  "The uncommitted changes to paths, as the active VCS's own unified diff; \"\" when nothing changed or no VCS is resolved. is_dirty answers whether an output moved, this answers how - which is what a drift gate needs when it fires in CI and nobody can look at the tree. Every backend implements it, so a magusfile no longer branches on vcs\\name() to print a diff; the bytes are the backend's native format, not a normalized one.",
 			Args: []Arg{
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
 			},
@@ -88,7 +107,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "commit",
-			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents, files}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339 in the committer's own offset, when the revision was recorded. files stays empty here, meaning not asked; vcs.history fills it. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs.name() to test for a VCS, and try/catch for a revision that may not exist.",
+			Doc:  "Resolve a revision (a VCS-native rev expression; omit for the current revision) to its commit object: {id, short, author {name, email}, date, subject, body, parents, files}. id is the content/revision id (git SHA, hg node, jj commit_id); date is RFC3339 in the committer's own offset, when the revision was recorded. files stays empty here, meaning not asked; vcs\\history fills it. Every field is meaningful for every VCS. Raises when no VCS is resolved or the revision cannot be looked up, so a caller never has to sniff a field to find out - use vcs\\name() to test for a VCS, and try/catch for a revision that may not exist.",
 			Args: []Arg{
 				{Name: "rev", Type: TypeString, Optional: true},
 			},
@@ -98,7 +117,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "history",
-			Doc:  "Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs.commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. first_parent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.",
+			Doc:  "Up to limit commits reachable from the current revision, newest first, in one VCS call however many there are; each is the object vcs\\commit returns, with files set to the repository-relative paths it changed against its first parent (a rename is both paths). limit defaults to 10; 0 means every commit. paths keeps only the commits that changed one of those literal repository-relative paths (a directory keeps what is under it) and narrows each commit's files to them. first_parent follows only the first parent of a merge, the line a branch landed on. An empty list when no VCS is resolved.",
 			Args: []Arg{
 				{Name: "limit", Type: TypeInt, Optional: true, Default: 10},
 				{Name: "paths", Type: TypeStringSlice, Optional: true},
@@ -110,7 +129,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus\\cmd and proc\\exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc\\exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs\\name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -131,7 +150,7 @@ var Vcs = Module{
 		},
 		{
 			Name:    "describe",
-			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs.commit().short as a fallback.",
+			Doc:     "Human-readable version string from the nearest tag (git's `describe --tags --always --dirty`: tag, else short hash, with a -dirty suffix for a modified tree). \"\" when no VCS is resolved, or for a backend without a tag-describe concept (jj) - so a magusfile stamps a version without shelling out to git. Pair with vcs\\commit().short as a fallback.",
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
 			Impl:    VcsDescribe,
@@ -155,26 +174,60 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 	if err != nil {
 		wd = "."
 	}
+	v, base, _ := resolveVCSAt(ctx, wd)
+	return v, base
+}
+
+// resolveVCSAt resolves the driver and base ref for the repository holding wd, sharing
+// resolveVCS's one-entry cache.
+func resolveVCSAt(ctx context.Context, wd string) (types.VCSDriver, string, error) {
 	vcsMu.Lock()
 	defer vcsMu.Unlock()
 	if wd == vcsCwdKey {
-		return vcsCached, vcsBase
+		return vcsCached, vcsBase, nil
 	}
 	res, err := vcs.Resolve(ctx, wd, "", types.VCSOptions{})
 	if err != nil {
 		// A resolve failure (transient error, ctx cancellation) is not "no VCS": do
 		// not poison the cache for this cwd with it, or every later call in the
 		// process would replay this one failure forever.
-		return nil, ""
+		return nil, "", err
 	}
 	vcsCwdKey = wd
 	if res.VCS == nil {
 		vcsCached, vcsBase = nil, ""
-		return nil, ""
+		return nil, "", nil
 	}
 	vcsCached = res.VCS
 	vcsBase = res.Base
-	return vcsCached, vcsBase
+	return vcsCached, vcsBase, nil
+}
+
+// vcsAt is the driver, base ref and directory a vcs call taking a dir argument reads: the
+// repository holding dir, or for "" the one holding the target's cwd. A dir that does not
+// exist is an error rather than a fall back to the cwd, which would answer for a different
+// checkout than the caller named.
+func vcsAt(ctx context.Context, method, dir string) (types.VCSDriver, string, string, error) {
+	if dir == "" {
+		v, base := resolveVCS(ctx)
+		return v, base, vcsDir(ctx), nil
+	}
+	wd := resolveDir(ctx, dir)
+	if err := checkRead(ctx, wd); err != nil {
+		return nil, "", "", err
+	}
+	info, err := os.Stat(wd)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("vcs.%s: dir %q: %w", method, dir, err)
+	}
+	if !info.IsDir() {
+		return nil, "", "", fmt.Errorf("vcs.%s: dir %q is not a directory", method, dir)
+	}
+	v, base, err := resolveVCSAt(ctx, wd)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("vcs.%s: resolve the VCS holding %s: %w", method, wd, err)
+	}
+	return v, base, wd, nil
 }
 
 // VcsName returns the active VCS short name (e.g. "git"), or "" if unresolved.
@@ -188,10 +241,11 @@ func VcsName(ctx context.Context) (string, error) {
 	return v.Name(), nil
 }
 
-// VcsBase returns the resolved base ref used for diffs (see VcsName).
-func VcsBase(ctx context.Context) (string, error) {
-	_, base := resolveVCS(ctx)
-	return base, nil
+// VcsBase returns the base ref resolved for the repository holding dir, "" meaning the
+// target's cwd; it raises only for a dir that does not exist.
+func VcsBase(ctx context.Context, dir string) (string, error) {
+	_, base, _, err := vcsAt(ctx, "base", dir)
+	return base, err
 }
 
 // VcsRoot returns the absolute path of the repository root, or "" if unresolved.
@@ -202,30 +256,30 @@ func VcsRoot(ctx context.Context) (string, error) {
 	}
 	root, err := v.Root(ctx, vcsDir(ctx))
 	if err != nil {
-		return "", fmt.Errorf("vcs.root: %w", err)
+		return "", fmt.Errorf(`vcs\root: %w`, err)
 	}
 	return root, nil
 }
 
-// VcsChangedFiles lists files changed against base, defaulting to the resolved base ref.
+// VcsChangedFiles lists files changed against base, defaulting to the base ref resolved
+// for the repository holding dir; dir "" is the target's cwd.
 //
 // Paths carry the repository root as their base: a VCS reports diff paths from the root
 // while a target runs in its project directory.
 //
-// The probe runs at EffectiveCwd, matching resolveVCS and vcs.status. An empty dir means
-// the PROCESS cwd, which would resolve the driver from the target's directory and then
-// run it somewhere else, identical only while both sit in the same repository.
-func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
-	v, defaultBase := resolveVCS(ctx)
+// The probe runs where the driver was resolved (vcsAt). Running it at the PROCESS cwd
+// instead would resolve the driver from one directory and run it in another, identical
+// only while both sit in the same repository.
+func VcsChangedFiles(ctx context.Context, base, dir string) ([]types.Path, error) {
+	v, defaultBase, dir, err := vcsAt(ctx, "changedFiles", dir)
+	if err != nil {
+		return nil, err
+	}
 	if v == nil {
 		return nil, nil
 	}
 	if base == "" {
 		base = defaultBase
-	}
-	dir, err := EffectiveCwd(ctx)
-	if err != nil {
-		dir = ""
 	}
 	files, err := v.ChangedFiles(ctx, dir, base)
 	if err != nil {
@@ -240,6 +294,37 @@ func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 		out = append(out, types.Path{Value: f, Base: root})
 	}
 	return out, nil
+}
+
+// VcsRegions refines the files VcsChangedFiles lists into the declarations their changed
+// lines land in, through the driver's Regions: the one implementation the job store's
+// footprint reads, so a script and `magus job wait` never disagree about a declaration.
+func VcsRegions(ctx context.Context, base string) ([]types.RegionChange, error) {
+	v, defaultBase := resolveVCS(ctx)
+	if v == nil {
+		return nil, nil
+	}
+	if base == "" {
+		base = defaultBase
+	}
+	dir := vcsDir(ctx)
+	root, err := v.Root(ctx, dir)
+	if err != nil {
+		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "find the %s repository root", v.Name())
+	}
+	paths, err := v.ChangedFiles(ctx, dir, base)
+	if err != nil {
+		return nil, fmt.Errorf("vcs.regions: %w", err)
+	}
+	files := make([]types.FileChange, 0, len(paths))
+	for _, p := range paths {
+		files = append(files, types.FileChange{Path: p})
+	}
+	regions, err := v.Regions(ctx, root, base, files)
+	if err != nil {
+		return nil, fmt.Errorf("vcs.regions: %w", err)
+	}
+	return regions, nil
 }
 
 // vcsDir is the directory every vcs probe runs in: the target's, not the process's.
@@ -260,14 +345,18 @@ func vcsDir(ctx context.Context) string {
 }
 
 // VcsRef returns the movable name at the current revision (a git branch, an hg named
-// branch, a jj bookmark), or nil when none names it; raises when no VCS or metadata is
-// available.
-func VcsRef(ctx context.Context) (*string, error) {
-	v, _ := resolveVCS(ctx)
-	if v == nil {
-		return nil, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before asking for commit metadata")
+// branch, a jj bookmark) of the repository holding dir, "" meaning the target's cwd, or
+// nil when none names it; raises when no VCS or metadata is available, or dir does not
+// exist.
+func VcsRef(ctx context.Context, dir string) (*string, error) {
+	v, _, dir, err := vcsAt(ctx, "ref", dir)
+	if err != nil {
+		return nil, err
 	}
-	ref, err := v.Ref(ctx, vcsDir(ctx))
+	if v == nil {
+		return nil, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs\\name() to test before asking for commit metadata")
+	}
+	ref, err := v.Ref(ctx, dir)
 	if err != nil {
 		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
 	}
@@ -362,12 +451,12 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 
 // VcsCommit resolves rev (empty = current revision) to its commit object. It
 // RAISES when no VCS is resolved and RAISES when the revision can't be looked
-// up: a caller uses vcs.name() to test for a VCS first, and try/catch for a
+// up: a caller uses vcs\name() to test for a VCS first, and try/catch for a
 // revision that may not exist.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
 	if v == nil {
-		return types.Commit{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs.name() to test before looking up a commit")
+		return types.Commit{}, types.DiagnosticErrorf(types.VCSUnavailable, "no VCS resolved for this workspace; use vcs\\name() to test before looking up a commit")
 	}
 	c, err := v.FindCommit(ctx, vcsDir(ctx), rev)
 	if err != nil {
@@ -459,7 +548,12 @@ func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.Exec
 	}
 	if bin == "" {
 		return types.ExecResult{}, types.DiagnosticErrorf(types.VCSUnavailable,
-			"vcs.cmd: no VCS is resolved for this directory, so there is no binary to run")
+			`vcs\cmd: no VCS is resolved for this directory, so there is no binary to run`)
 	}
-	return runResult(ctx, bin, args, resolveDir(ctx, optStringDefault(opts, "dir", "")), "vcs.cmd", bin, opts)
+	dir := resolveDir(ctx, optStringDefault(opts, "dir", ""))
+	v, _ := resolveVCS(ctx)
+	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir); err != nil {
+		return types.ExecResult{}, err
+	}
+	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, opts)
 }

@@ -13,8 +13,13 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // `rustc --version` carries the commit hash and its date (`1.94.1 (e408947bf
 // 2026-03-25)`), neither of which distinguishes two installs of the same release.
 export fun mgs_getTools() > {str: Tool} {
-    return {"rustc": Tool{probe = Command{bin = "rustc", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch},
-                          lifecycle = "rust"}};
+    return {
+        "rustc": Tool{probe = Command{bin = "rustc", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch},
+                      lifecycle = "rust"},
+        // Observed, not probed: only the scip op drives it, so its version keys the index
+        // and no other target.
+        "rust-analyzer": Tool{observe = Command{bin = "rust-analyzer", args = ["--version"]}},
+    };
 }
 
 // cargo gets its registry and git checkouts and its installed binaries, never its home:
@@ -39,15 +44,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "rust",
         extensions = [".rs"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            nested = true,
-            quotes = [
-                Quote{open = "r#\"", close = "\"#", ignoreEscape = true},
-                Quote{open = "r\"", close = "\"", ignoreEscape = true},
-                Quote{open = "\"", close = "\""},
-            ],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                nested = true,
+                quotes = [
+                    Quote{open = "r#\"", close = "\"#", ignoreEscape = true},
+                    Quote{open = "r\"", close = "\"", ignoreEscape = true},
+                    Quote{open = "\"", close = "\""},
+                ],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n    todo!(\"\{\{&Name}} lands in \{\{&Branch}}\")\n\}",
+            },
         },
     };
 }

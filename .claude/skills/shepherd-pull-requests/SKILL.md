@@ -15,7 +15,8 @@ wrong, fix the pure function that produced it and its test, then run it again.
 
 1. Read the pinned "Merge queue" issue first: every open pull request's place in
    the queue, with its reason and a person's command (`./magus buzz
-   hack/ci/pull-requests.buzz -- dashboard --all` renders it locally). Then read
+   hack/ci/pull-requests.buzz -- dashboard --all --preview --out dashboard.md`
+   renders it locally). Then read
    the board:
 
    ```sh

@@ -224,7 +224,11 @@ type FlagParse struct {
 	// flag records its value. A flag given twice records the LAST one, because an argv
 	// assembled by concatenation reads left to right and the nearer word is the override.
 	Values map[string]string
-	// Positionals are the words after the `--` separator, verbatim and in order.
+	// Lists holds every value of each repeated flag that appeared, in the order given:
+	// `--env A --env B` is {"--env": ["A", "B"]}. A repeated flag never appears in Values.
+	Lists map[string][]string
+	// Positionals are the words after the `--` separator, verbatim and in order, or in
+	// command mode the first bare word and everything after it.
 	Positionals []string
 	// Unknown holds every argument that was not declared, in order, whatever it looks
 	// like. A leading dash does not make a word a flag here: only declaring it does.

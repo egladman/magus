@@ -1,0 +1,7 @@
+// @error: Out of bound list access
+// Upstream buzz at 294d8f9 rejects `l[5] = 2` on a one-item mut list with "Out of
+// bound list access." (OP_SET_LIST_SUBSCRIPT in src/vm.zig); assignment never grows
+// a list.
+final l = mut [1];
+l[5] = 2;
+final __r = l;

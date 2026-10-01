@@ -2,15 +2,12 @@ package knowledge
 
 import (
 	"cmp"
-	"io/fs"
 	"maps"
 	"path"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -99,33 +96,14 @@ func packageLanguage(p string) string {
 
 // findPackageSources skips what findBuzzFiles skips except gen: a generated package is
 // still one the hand-written ones import.
-func findPackageSources(root string) []string {
-	var out []string
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if p != root && name != "gen" && (project.IsIgnoreDir(name) || name == "testdata") {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if packageLanguage(d.Name()) == "" {
-			return nil
-		}
-		if rel, err := filepath.Rel(root, p); err == nil {
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return nil
-	})
-	slices.Sort(out)
-	return dropVCSIgnored(root, out)
+func findPackageSources(root string) []string { return WalkTree(root).packageSources() }
+
+func (w *TreeWalk) packageSources() []string {
+	return w.scan(walkPackages, func(f treeFile) bool { return packageLanguage(path.Base(f.rel)) != "" })
 }
 
-func assemblePackageDirs(root string, projects []types.TargetGraphProject, layers map[string]string) Shard {
-	return packageDirs(findPackageSources(root), projects, layers)
+func assemblePackageDirs(w *TreeWalk, projects []types.TargetGraphProject, layers map[string]string) Shard {
+	return packageDirs(w.packageSources(), projects, layers)
 }
 
 // packageDirs mints a dir node for every directory holding a source file and every

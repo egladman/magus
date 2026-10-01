@@ -3,7 +3,6 @@ package knowledge
 import (
 	"bytes"
 	"fmt"
-	"io/fs"
 	"maps"
 	"os"
 	"path"
@@ -16,7 +15,6 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/types"
-	"github.com/egladman/magus/vcs"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
 )
@@ -236,7 +234,8 @@ func unknownMarkerFamilyError(unknown []unknownMarker) error {
 // workspace. docPages are the doc shard's page paths, which reach dot-directories the
 // source walk skips. An unknown family sets Err and nothing else, because a declaration
 // nothing honors must stop the build rather than vanish from it.
-func assembleMarkers(root string, projects []types.TargetGraphProject, docPages []string, idx docIndex) Shard {
+func assembleMarkers(w *TreeWalk, projects []types.TargetGraphProject, docPages []string, idx docIndex) Shard {
+	root := w.root
 	s := Shard{Name: markersShardName}
 	type fileHits struct {
 		rel  string
@@ -244,7 +243,7 @@ func assembleMarkers(root string, projects []types.TargetGraphProject, docPages 
 	}
 	var found []fileHits
 	var unknown []unknownMarker
-	for _, rel := range findMarkerSources(root, docPages) {
+	for _, rel := range w.markerSources(docPages) {
 		src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 		if err != nil || !bytes.Contains(src, []byte("magus:")) || bytes.IndexByte(src, 0) >= 0 {
 			continue
@@ -453,40 +452,22 @@ func figureEmbeds(root string, docPages []string, idx docIndex) map[string][]str
 	return out
 }
 
-// findMarkerSources returns every workspace file the marker scan reads, sorted: the
-// source walk plus docPages, less whatever the VCS ignores. Unlike the discovery walk it
-// descends into gen/, where generated blocks carry their stamps. Go test files and
-// testdata are skipped, because a fixture quoting a marker declares nothing.
-func findMarkerSources(root string, docPages []string) []string {
+// markerSources returns every workspace file the marker scan reads, sorted: the source
+// walk plus docPages, less whatever the VCS ignores. Unlike the discovery walk it descends
+// into gen/, where generated blocks carry their stamps (see dirScans for the directories
+// it skips). Go test files are skipped, because a fixture quoting a marker declares
+// nothing, and so is anything over maxMarkerFileBytes.
+func (w *TreeWalk) markerSources(docPages []string) []string {
 	out := slices.Clone(docPages)
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
+	for _, f := range w.files {
+		if f.scans&walkMarkers == 0 || !f.info.Mode().IsRegular() || strings.HasSuffix(f.rel, "_test.go") {
+			continue
 		}
-		name := d.Name()
-		if d.IsDir() {
-			if p == root {
-				return nil
-			}
-			switch {
-			case strings.HasPrefix(name, "."), name == "testdata", name == "vendor", name == "node_modules", name == "target":
-				return fs.SkipDir
-			case vcs.IsSecondaryCheckout(p):
-				return fs.SkipDir
-			}
-			return nil
+		if f.info.Size() > maxMarkerFileBytes {
+			continue
 		}
-		if !d.Type().IsRegular() || strings.HasSuffix(name, "_test.go") {
-			return nil
-		}
-		if info, err := d.Info(); err != nil || info.Size() > maxMarkerFileBytes {
-			return nil //nolint:nilerr // an unreadable or oversized file holds no marker we index
-		}
-		if rel, err := filepath.Rel(root, p); err == nil {
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return nil
-	})
+		out = append(out, f.rel)
+	}
 	slices.Sort(out)
-	return dropVCSIgnored(root, slices.Compact(out))
+	return w.dropIgnored(slices.Compact(out))
 }

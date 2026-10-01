@@ -57,7 +57,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 -- libs/foo/magusfile.buzz --
 import "magus";
-magus.project({ "depends_on": ["../..", "../../other"] });
+magus\project({ "depends_on": ["../..", "../../other"] });
 // Builds foo.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("MAGUS.md");

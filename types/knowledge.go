@@ -652,6 +652,9 @@ const (
 	SymbolIndexFresh    SymbolIndexFreshness = "up-to-date"  // index reflects current sources
 	SymbolIndexStale    SymbolIndexFreshness = "out-of-date" // sources changed since the index was built
 	SymbolIndexNotBuilt SymbolIndexFreshness = "not-indexed" // no index has been produced yet
+	// SymbolIndexUnvouched is an index no cache key can vouch for: a tool the index step
+	// keys on runs but cannot be probed (MGS3035). Detail carries why.
+	SymbolIndexUnvouched SymbolIndexFreshness = "unvouched"
 )
 
 // SymbolIndexStatus is one symbol-capable project's index freshness, for status output.
@@ -661,6 +664,8 @@ type SymbolIndexStatus struct {
 	Project   ProjectRef           `json:"project"`
 	Language  string               `json:"language,omitempty"`
 	Freshness SymbolIndexFreshness `json:"freshness"`
+	// Detail says why, for a freshness that needs it; empty otherwise.
+	Detail string `json:"detail,omitempty"`
 }
 
 // KnowledgeSymbolRef is one referencing file: its path, how many times the symbol
@@ -785,6 +790,24 @@ type KnowledgeAnswer struct {
 	Gaps         []KnowledgeSymbolGap   `json:"gaps,omitempty"          yaml:"gaps,omitempty"`
 	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	Text         *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
+	// IndexCause is why Gaps or StaleIndexes exist, as far as magus can observe, and what
+	// clears it. Nil when the answer has neither, or when the lookup did not diagnose them.
+	IndexCause *KnowledgeIndexCause `json:"index_cause,omitempty" yaml:"index_cause,omitempty"`
+}
+
+// IndexBehind reports whether the answer was drawn from a symbol index that is missing or
+// older than its sources, the condition IndexCause explains.
+func (a KnowledgeAnswer) IndexBehind() bool {
+	return len(a.Gaps) > 0 || len(a.StaleIndexes) > 0
+}
+
+// KnowledgeIndexCause is the observed reason a checkout's symbol index is missing or
+// behind (no server running, a refresh hook that cannot start its binary, a build running
+// now) and the command that clears it. Both are sentences; commands in them are
+// backquoted.
+type KnowledgeIndexCause struct {
+	Why string `json:"why" yaml:"why"`
+	Fix string `json:"fix" yaml:"fix"`
 }
 
 // KnowledgeTextPresence is what a raw-text search found for a name no symbol index

@@ -44,6 +44,41 @@ func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T)
 	assert.Contains(t, got.Message, "no ./magus built")
 }
 
+// The interpreter, not the verdict binary: an installed v0.4.3 ahead of the checkout's
+// build ran every hook in a session and rendered no verdict, while this check said
+// "hook would run" it and stopped there.
+func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "magus")
+	require.NoError(t, os.WriteFile(stale, []byte("#!/bin/sh\necho 'magus v0.4.3 (abc1234) built 2026-01-01'\n"), 0o755))
+	t.Setenv("PATH", dir)
+	r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+
+	got := r.checkGuardBinary()
+
+	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Contains(t, got.Message, stale+" (v0.4.3)", "names the binary a hook runs, and its build")
+	assert.Contains(t, got.Message, "this magus is v0.5.0", "and the build it should have been")
+
+	r.opts.serverInfo.ClientVersion = "v0.4.3"
+	assert.Equal(t, types.CheckOK, r.checkGuardBinary().Status, "the same build passes")
+}
+
+// A binary that cannot say which build it is cannot run the glue either.
+func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "magus")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\nexit 3\n"), 0o755))
+	withoutPathMagus(t)
+	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+
+	got := r.checkGuardBinary()
+
+	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Contains(t, got.Message, "did not answer `version`")
+	assert.Contains(t, got.Message, bin)
+}
+
 // onPath puts an executable magus on PATH and nothing else, so a case can state which
 // binary the check is allowed to find.
 func onPath(t *testing.T) {

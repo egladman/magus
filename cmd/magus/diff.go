@@ -2615,7 +2615,7 @@ func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string, rev type
 	}
 	defer restore()
 
-	// The advisors ask magus about the workspace (magus\describeFile, magus\diff,
+	// The advisors ask magus about the workspace (magus\describe.file, magus\diff,
 	// magus\impact), which reads it off the context the way `magus buzz` does.
 	// The caller's already-loaded workspace is attached rather than loaded again:
 	// loadMagus is once-per-process and panics on a second call with a different root.

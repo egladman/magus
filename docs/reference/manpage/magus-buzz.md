@@ -73,6 +73,9 @@ nothing loads.
 **--profile**
 : Print where compile and import time went, after the script runs
 
+**--record** *magus query output \<ref\>*
+: Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (\`magus query output \<ref\>\` reopens it)
+
 **-t**
 : Run the file's test "..." {} blocks and report pass/fail
 
@@ -132,6 +135,12 @@ magus buzz -t --coverprofile=out.lcov scripts/report.buzz
 
 ```sh
 magus buzz --profile scripts/report.buzz
+```
+
+*Run a probe and keep its output to cite*
+
+```sh
+magus buzz --record probes/does-the-key-move.buzz
 ```
 
 ## See Also

@@ -69,6 +69,33 @@ func TestRefuseUngradableClaims(t *testing.T) {
 		})
 	}
 
+	// The guard grades a deny path's declaration by the same placement, so a row may not
+	// deny a declaration the guard would have to read as the whole file.
+	for _, tc := range []struct {
+		name string
+		deny string
+		want string
+	}{
+		{"a deny path on a driven file", "run.go#executeStages", ""},
+		{"a deny path on a file with no driver", "notes.txt#Intro", "deny path \"notes.txt\" has no diff driver"},
+		{"a deny path on a pattern", "*.go#executeStages", `deny path "*.go#executeStages" claims a declaration of a pattern`},
+		{"a deny path with no declaration", "run.go#", `deny path "run.go#" names no declaration after its #`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := NewStore(tmpLoc(t, root))
+			_, err := ForkMerge(context.Background(), s, "wave/job", func(u *types.Job) {
+				u.Check, u.State, u.WritePaths, u.DenyPaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}, []string{tc.deny}
+			}, config.Jobs{}, nil)
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, types.WritePathClaimUngradable)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+
 	t.Run("a checkout with no version control", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tmpLoc(t, t.TempDir()))

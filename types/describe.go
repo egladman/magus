@@ -11,13 +11,13 @@ import (
 
 // Describe-output types and the concept definitions printed by "magus describe".
 //
-// Naming rule for this file: a type carries the `Entry` suffix (CharmEntry -> now
-// Charm is the exception that PROVES it; see below) only when a bare name of that
-// type already exists and would collide: ProjectEntry (types.Project),
-// TargetEntry (types.Target), WorkspaceEntry (types.Workspace), and FileEntry
-// (types.File is reserved for a future promoted path type). Where no such collision
-// exists, the bare name wins: Spell, Charm,
-// EvaluatedProject, EvaluatedTarget, EvaluatedSpell.
+// Naming rule for this file: a type carries the `Entry` suffix only when a bare name
+// of that type already exists and would collide: ProjectEntry (types.Project),
+// TargetEntry (types.Target), WorkspaceEntry (types.Workspace), CharmEntry
+// (spells.Charm, which shares the Buzz boundary and its encoder namespace), and
+// FileEntry (types.File is reserved for a future promoted path type). Where no such
+// collision exists, the bare name wins: Spell, EvaluatedProject, EvaluatedTarget,
+// EvaluatedSpell.
 
 // SpellDefinition is the human-readable description of a spell shown by "magus describe spells".
 const SpellDefinition = "A spell is a language/runtime adapter that " +
@@ -78,6 +78,13 @@ type Spell struct {
 	// node so `magus query language:go` reaches the adapter alongside that language's
 	// files and symbols.
 	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	// Extensions and Syntax are the rest of the spell's mgs_getLanguage record
+	// (spells.Language), carried so a script can read the language facts a spell
+	// declares without loading the spell: the branch splitter reads syntax.stubs to
+	// write placeholder bodies, and syntax.comments to find a body's closing brace.
+	// Each is empty or nil when the spell declares none.
+	Extensions []string       `json:"extensions,omitempty" yaml:"extensions,omitempty"`
+	Syntax     *spells.Syntax `json:"syntax,omitempty"     yaml:"syntax,omitempty"`
 	// VersionProbe reports whether the spell declares a toolchain-version command
 	// (mgs_getVersionProbe). Its OUTPUT is mixed into every cache key for the
 	// project (run.go's toolVersionsByProject), making it one of the few cache
@@ -126,10 +133,10 @@ const CharmDefinition = "A charm is a named, shared execution modifier applied a
 	"RFC 6902 JSON Patch over a target's argv: it changes how a target runs (rw, gha), " +
 	"never which project runs; a target may read one to need more (extended). See docs/charms.md."
 
-// Charm is one charm in the inverse index: its name, whether it is a reserved
+// CharmEntry is one charm in the inverse index: its name, whether it is a reserved
 // built-in or a workspace default, its built-in doc (empty for a spell-defined
 // charm), and every target that declares a patch for it.
-type Charm struct {
+type CharmEntry struct {
 	Name         string             `json:"name"                   yaml:"name"`
 	Builtin      bool               `json:"builtin,omitempty"      yaml:"builtin,omitempty"`
 	Default      bool               `json:"default,omitempty"      yaml:"default,omitempty"`
@@ -637,7 +644,7 @@ type ProjectsOutput struct {
 // ModuleDefinition is the human-readable description shown by "magus describe modules".
 const ModuleDefinition = "A module is a magus standard-library namespace a magusfile imports for " +
 	"host capabilities - filesystem, exec, vcs, crypto, http, and more. Import " +
-	"each under its bare name (import \"fs\", then fs.glob(...)); magus layers these " +
+	"each under its bare name (import \"fs\", then fs\\glob(...)); magus layers these " +
 	"methods onto Buzz's own stdlib. The magus forms are sandbox-aware; some methods " +
 	"also exist in Buzz's own stdlib."
 
@@ -1098,9 +1105,9 @@ func fileOverlaps(files []FileEntry) []FileClaim {
 
 // CharmReport is the "describe charm[s]" envelope.
 type CharmReport struct {
-	Definition string  `json:"definition" yaml:"definition"`
-	Count      int     `json:"count"      yaml:"count"`
-	Charms     []Charm `json:"charms"     yaml:"charms"`
+	Definition string       `json:"definition" yaml:"definition"`
+	Count      int          `json:"count"      yaml:"count"`
+	Charms     []CharmEntry `json:"charms"     yaml:"charms"`
 }
 
 // EvaluatedTargetReport is the "describe target <path:target>" envelope.

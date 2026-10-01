@@ -1,0 +1,12 @@
+import "std";
+
+fun main(args: [str]) > void {
+    final files = ["main.buzz", "README.md", "spell.buzz", "x.buzz"];
+    foreach (file in files) {
+        if (file.endsWith(".buzz")) {
+            final stem = file.sub(0, len: file.len() - 5);
+            final size = if (stem.len() > 3) "long" else "short";
+            std\print("{stem.upper()} {size}");
+        }
+    }
+}

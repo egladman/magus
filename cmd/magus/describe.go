@@ -193,7 +193,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	case outputDot:
 		return render.WriteTargetGraphDOT(os.Stdout, out)
 	case outputMarkdown:
-		// `magus.cmd(["describe","graph","-o","markdown"])` captures this to generate
+		// magus\describe.graphMarkdown() captures this to generate
 		// MAGUS.md, a routing index. It deliberately omits each target's evaluated
 		// dispatch plan (that is `magus describe target <name>` away), so the static
 		// graph is all the renderer needs: no per-target evaluation here.
@@ -370,6 +370,9 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		if t.Language != "" {
 			fmt.Printf("    adapts:  %s\n", t.Language)
 		}
+		if s := spellSyntaxSummary(t); s != "" {
+			fmt.Printf("    syntax:  %s\n", s)
+		}
 		// Rendered as the whole statement rather than the bare path, so it is
 		// copy-pasteable into a magusfile. It is the ONLY way to reach the spell's
 		// ops: written literally, so the target graph can see the edge.
@@ -399,6 +402,30 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		printSpellVersions(t.Versions)
 	}
 	return nil
+}
+
+// spellSyntaxSummary folds the spell's declared language record into one line:
+// which extensions, which comment openers, and what a stub may replace. The
+// full record is in -o json; this line says only whether each part exists.
+func spellSyntaxSummary(t types.Spell) string {
+	var parts []string
+	if len(t.Extensions) > 0 {
+		parts = append(parts, strings.Join(t.Extensions, " "))
+	}
+	if t.Syntax == nil {
+		return strings.Join(parts, "; ")
+	}
+	if c := t.Syntax.Comments; c != nil {
+		openers := slices.Clone(c.LineComments)
+		for _, b := range c.BlockComments {
+			openers = append(openers, b.Open+" "+b.Close)
+		}
+		parts = append(parts, "comments "+strings.Join(openers, ", "))
+	}
+	if st := t.Syntax.Stubs; st != nil {
+		parts = append(parts, fmt.Sprintf("stubs %s (%s)", strings.Join(st.Kinds, ", "), st.BodyStyle))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // printSpellVersions EXECUTES a spell's version probes and reports what they return
@@ -509,8 +536,8 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	detail := len(pos) > 0
 	if detail {
 		name := types.Normalize(pos[0])
-		names := namesOf(charms, func(c types.Charm) string { return c.Name })
-		charms = filterByName(charms, name, func(c types.Charm) string { return c.Name })
+		names := namesOf(charms, func(c types.CharmEntry) string { return c.Name })
+		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
 		if len(charms) == 0 {
 			return unknownEntity("charm", pos[0], names)
 		}
@@ -1475,7 +1502,7 @@ func describeMCPTools(args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe mcp-tool[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, mcp.MCPToolDefinition)
+			fmt.Fprintln(os.Stderr, types.MCPToolDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -1492,8 +1519,8 @@ func describeMCPTools(args []string) error {
 
 	out := mcp.DescribeTools()
 	if len(pos) > 0 {
-		names := namesOf(out.MCPTools, func(t mcp.MCPToolEntry) string { return t.Name })
-		out.MCPTools = filterByName(out.MCPTools, pos[0], func(t mcp.MCPToolEntry) string { return t.Name })
+		names := namesOf(out.MCPTools, func(t types.MCPTool) string { return t.Name })
+		out.MCPTools = filterByName(out.MCPTools, pos[0], func(t types.MCPTool) string { return t.Name })
 		out.Count = len(out.MCPTools)
 		if out.Count == 0 {
 			return unknownEntity("mcp-tool", pos[0], names)

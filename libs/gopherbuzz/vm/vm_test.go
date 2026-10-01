@@ -113,3 +113,43 @@ func TestCaughtValueRendersStructuredErrors(t *testing.T) {
 		}
 	})
 }
+
+// invokeChunk builds `recv.name(1)` with the call on line 3 of probe.buzz.
+func invokeChunk(recv Value, name string, lines bool) *Chunk {
+	c := &Chunk{SourceFile: "probe.buzz"}
+	if lines {
+		c.Lines = []int32{}
+	}
+	c.CurLine = 1
+	c.Emit(OpLoadConst, c.AddConst(recv), 0)
+	c.CurLine = 3
+	c.Emit(OpLoadConst, c.AddConst(IntValue(1)), 0)
+	c.Emit(OpInvoke, c.AddConst(StrValue(name)), 1)
+	c.Emit(OpReturn, 0, 0)
+	return c
+}
+
+// TestUnknownMethodCarriesItsLine covers the call the checker cannot see: an
+// untyped receiver whose member does not exist reached the caller as a bare
+// "null is not callable".
+func TestUnknownMethodCarriesItsLine(t *testing.T) {
+	run := func(c *Chunk) error {
+		_, err := NewVM(context.Background()).Run(c, NewEnv())
+		return err
+	}
+	list := ListValue([]Value{IntValue(1)})
+
+	assert.EqualError(t, run(invokeChunk(list, "push", true)), "buzz: probe.buzz:3: unknown method push on list")
+	assert.EqualError(t, run(invokeChunk(StrValue("abc"), "toUpperCase", true)), "buzz: probe.buzz:3: unknown method toUpperCase on str")
+
+	noFile := invokeChunk(list, "push", true)
+	noFile.SourceFile = ""
+	assert.EqualError(t, run(noFile), "buzz: line 3: unknown method push on list")
+	assert.EqualError(t, run(invokeChunk(list, "push", false)), "buzz: unknown method push on list")
+
+	// A map that STORES the name holds a value, so calling it is not a missing method.
+	m := NewMap()
+	m.MapSet("cb", Null)
+	assert.EqualError(t, run(invokeChunk(m, "cb", true)), "buzz: null is not callable")
+	assert.EqualError(t, run(invokeChunk(NewMap(), "cb", true)), "buzz: probe.buzz:3: unknown method cb on map")
+}

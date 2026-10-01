@@ -1,0 +1,13 @@
+import "std";
+
+fun main(args: [str]) > void {
+    final counts: mut {str: int} = mut {};
+    foreach (word in "the cat and the hat and the bat".split(" ")) {
+        counts[word] = (counts[word] ?? 0) + 1;
+    }
+    final words = counts.keys().cloneMutable();
+    words.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (word in words) {
+        std\print("{word}={counts[word]}");
+    }
+}

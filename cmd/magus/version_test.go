@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +22,15 @@ import (
 // ward.DevVersion, rather than comparing the two directly.
 func TestUnknownVersionMatchesWardDevVersion(t *testing.T) {
 	assert.Equal(t, ward.DevVersion, unknownVersion)
+}
+
+// The digest is what diagrams-generate keys on, so it must name the figure.buzz this
+// binary was built from.
+func TestVersionOutputDigestsTheEmbeddedFigureSource(t *testing.T) {
+	disk, err := os.ReadFile(filepath.Join("..", "..", "libs", "figure", "figure.buzz"))
+	require.NoError(t, err)
+	sum := sha256.Sum256(disk)
+	assert.Equal(t, hex.EncodeToString(sum[:]), newVersionOutput().Embedded.FigureSHA256)
 }
 
 func TestServerLine(t *testing.T) {

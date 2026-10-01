@@ -1,0 +1,769 @@
+// Cost: grows with the number of worktrees: a git status and rev-list per worktree, one
+// lsof, and a du per removable worktree.
+//
+// Plans what this repository's git worktrees can give back, largest first, and removes it
+// only with --apply.
+//
+//	magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]
+//
+// A worktree is removable when it is clean, every commit on it is on a remote-tracking ref
+// or --base (the workspace's base ref by default), no live job was taken in it, no process
+// has its working directory inside it, it is not locked, it is neither the main worktree
+// nor the caller's checkout, and nothing in it changed within --keep-recent (2h). Any other
+// worktree is kept, with every reason that holds. Recency is the newest mtime of the
+// worktree directory and of its index, HEAD and HEAD reflog, so a commit or a checkout
+// counts; an edit deep in the tree does not, but an edit leaves the worktree dirty.
+// Processes come from `lsof -d cwd`, which macOS and most Linux distributions ship; the
+// script refuses to plan without it rather than guess that nothing runs.
+//
+// The size is du of a removable worktree, with its ignored build state (.magus,
+// node_modules, the magus binary) listed beneath it; kept worktrees are not measured. The
+// Go build cache, shared by every worktree, is never measured: du of it does not finish.
+//
+// --apply runs `git worktree remove`, never with --force, on each removable worktree after
+// the guard (`magus shell`) passes that exact line, and skips any line it refuses; then
+// deletes each agent branch (worktree-agent-*, agent-*) no remaining worktree holds whose
+// every commit is on a remote or the base, compare-and-delete on the tip it planned with;
+// and, with --go-cache, empties the Go build cache through `magus run go::go-clean`.
+namespace pruneworktrees;
+
+import "flags";
+import "fs";
+import "magus";
+import "os";
+import "proc";
+import "serialize";
+import "std";
+import "time";
+import "vcs";
+
+import "assert";
+
+import "hack/dev/ls-worktrees" as lsworktrees;
+
+final USAGE = "usage: magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]";
+final HELP = "cost: a git status and rev-list per worktree, one lsof and a du per removable worktree; --apply removes worktrees and merged agent branches, --go-cache also empties the shared Go build cache\n{USAGE}";
+
+final GO_CLEAN = ["go::go-clean", "--no-cache", ".", "--", "-cache"];
+final AGENT_BRANCHES = ["refs/heads/worktree-agent-*", "refs/heads/agent-*"];
+
+// Observed is what git and the filesystem say about one worktree.
+export object Observed {
+    path: str,
+    branch: str = "",
+    // dirty is the count of uncommitted files, -1 for a worktree whose directory is gone.
+    dirty: int = 0,
+    // unique counts the commits on no remote-tracking ref and not in the base.
+    unique: int = 0,
+    // locked is the lock's reason, "" for a lock that gives none, null when unlocked.
+    locked: str? = null,
+    // touched is Unix millis.
+    touched: double = 0.0,
+}
+
+// Cwd is one process's working directory.
+export object Cwd {
+    pid: str,
+    dir: str,
+}
+
+export object Lease {
+    id: str,
+    state: str,
+    checkoutRoot: str,
+}
+
+export object Cache {
+    path: str,
+    kind: str,
+    kib: int,
+}
+
+// Item is one row of the plan: a worktree, an agent branch, or the Go build cache.
+export object Item {
+    kind: str,
+    name: str,
+    // class is removable, keep, or report: a report row names what --apply leaves alone
+    // unless asked.
+    class: str,
+    reasons: [str],
+    // keys name each reason for the totals, one per entry of reasons on a kept row.
+    keys: [str] = [<str>],
+    // kib is -1 when not measured.
+    kib: int = -1,
+    caches: [Cache] = [<Cache>],
+    path: str = "",
+    branch: str = "",
+    tip: str = "",
+    result: str = "",
+}
+
+fun plural(n: int, word: str) > str {
+    if (n == 1) { return "1 {word}"; }
+    if (word.endsWith("ch")) { return "{n} {word}es"; }
+    return "{n} {word}s";
+}
+
+export fun age(ms: double) > str {
+    final minutes = std\toInt(ms / 60000.0);
+    if (minutes < 120) { return "{minutes}m"; }
+    if (minutes < 2880) { return "{minutes / 60}h"; }
+    return "{minutes / 1440}d";
+}
+
+export fun size(kib: int) > str {
+    if (kib < 0) { return "-"; }
+    if (kib < 1024) { return "{kib} KiB"; }
+    if (kib < 1048576) { return "{kib / 1024} MiB"; }
+    final tenths = kib * 10 / 1048576;
+    return "{tenths / 10}.{tenths % 10} GiB";
+}
+
+export fun parseCwds(lsof: str) > [Cwd] {
+    final found = mut [<Cwd>];
+    var pid = "";
+    foreach (line in lsof.split("\n")) {
+        if (line.startsWith("p")) {
+            pid = line.sub(1);
+        } else if (line.startsWith("n") and pid != "") {
+            found.append(Cwd{ pid = pid, dir = line.sub(1) });
+        }
+    }
+    return found;
+}
+
+// pidsByWorktree gives each process to the deepest worktree holding its working directory:
+// linked worktrees nest inside the main one, and a process in a linked worktree is not
+// working in the main one.
+export fun pidsByWorktree(cwds: [Cwd], paths: [str]) > {str: [str]} {
+    final byPath = mut {<str: [str]>};
+    foreach (c in cwds) {
+        var best = "";
+        foreach (p in paths) {
+            if ((c.dir == p or c.dir.startsWith(p + "/")) and p.len() > best.len()) { best = p; }
+        }
+        if (best == "") { continue; }
+        final acc = mut [<str>];
+        foreach (pid in byPath[best] ?? [<str>]) { acc.append(pid); }
+        if (acc.indexOf(c.pid) == null) { acc.append(c.pid); }
+        byPath[best] = acc;
+    }
+    return byPath;
+}
+
+// liveLeases is each checkout's live jobs as "<id> (<state>)". Exited counts as live: the
+// holder still owns the checkout until its result is graded (types.JobState.Live).
+export fun liveLeases(leases: [Lease]) > {str: [str]} {
+    final byRoot = mut {<str: [str]>};
+    foreach (l in leases) {
+        if (l.checkoutRoot == "" or ["declared", "running", "exited"].indexOf(l.state) == null) { continue; }
+        final acc = mut [<str>];
+        foreach (s in byRoot[l.checkoutRoot] ?? [<str>]) { acc.append(s); }
+        acc.append("{l.id} ({l.state})");
+        byRoot[l.checkoutRoot] = acc;
+    }
+    return byRoot;
+}
+
+// classify decides one worktree, listing every reason to keep it rather than the first.
+export fun classify(o: Observed, main: str, own: str, leases: {str: [str]}, pids: {str: [str]}, now: double, keepRecent: double, shown: str) > Item {
+    final reasons = mut [<str>];
+    final keys = mut [<str>];
+    fun keep(key: str, why: str) > void {
+        keys.append(key);
+        reasons.append(why);
+    }
+    if (o.path == main) { keep("main", why: "the main worktree, which holds the repository"); }
+    if (o.path == own) { keep("own", why: "the caller's own checkout"); }
+    if (o.dirty < 0) {
+        keep("gone", why: "its directory is gone, so nothing to reclaim; `git worktree prune` clears the record");
+    }
+    if (o.locked != null) {
+        if (o.locked! == "") { keep("locked", why: "locked"); } else { keep("locked", why: "locked: {o.locked!}"); }
+    }
+    if (o.dirty > 0) { keep("dirty", why: plural(o.dirty, word: "uncommitted file")); }
+    if (o.unique > 0) { keep("unique", why: "{plural(o.unique, word: "commit")} on no remote and not in the base"); }
+    foreach (l in leases[o.path] ?? [<str>]) { keep("lease", why: "live job {l}"); }
+    final working = pids[o.path] ?? [<str>];
+    if (working.len() > 0) { keep("process", why: "working directory of pid {working.join(", ")}"); }
+    final idle = now - o.touched;
+    if (o.dirty >= 0 and idle < keepRecent) { keep("recent", why: "touched {age(idle)} ago, within --keep-recent"); }
+    if (reasons.len() > 0) {
+        return Item{ kind = "worktree", name = shown, class = "keep", reasons = reasons, keys = keys, path = o.path, branch = o.branch };
+    }
+    return Item{ kind = "worktree", name = shown, class = "removable", path = o.path, branch = o.branch,
+        reasons = ["clean, every commit on a remote or the base, no live job, process or lock, untouched for {age(idle)}"] };
+}
+
+// branchItems lists the agent branches whose loss loses nothing: no kept worktree holds
+// them and no commit on them is missing from every remote and the base. A branch held by
+// a removable worktree is listed too, since removing the worktree orphans it.
+export fun branchItems(tips: {str: str}, held: {str: str}, removable: [str], unique: [str]) > [Item] {
+    final found = mut [<Item>];
+    final names = mut [<str>];
+    foreach (name, tip in tips) { names.append(name); }
+    names.sort(fun (a: str, b: str) > bool => a < b);
+    foreach (name in names) {
+        if (unique.indexOf(name) != null) { continue; }
+        final holder = held[name];
+        var why = "no worktree holds it";
+        if (holder != null) {
+            if (removable.indexOf(holder!) == null) { continue; }
+            why = "its worktree is removed by this plan";
+        }
+        found.append(Item{ kind = "branch", name = name, class = "removable", kib = 0, branch = name, tip = tips[name]!,
+            reasons = ["{why}; every commit is on a remote or the base"] });
+    }
+    return found;
+}
+
+// parseUniqueBranches reads `git log --format=%D --decorate-refs=refs/heads/`: the names
+// decorating a commit no remote and no base reaches. A branch is unique exactly when its
+// tip is, because whatever reaches the tip reaches every commit under it.
+export fun parseUniqueBranches(log: str) > [str] {
+    final found = mut [<str>];
+    foreach (line in log.split("\n")) {
+        foreach (word in line.split(",")) {
+            var name = word.trim();
+            if (name.startsWith("HEAD -> ")) { name = name.sub(8); }
+            if (name != "" and name != "HEAD" and found.indexOf(name) == null) { found.append(name); }
+        }
+    }
+    return found;
+}
+
+fun classRank(c: str) > int {
+    if (c == "removable") { return 0; }
+    if (c == "report") { return 1; }
+    return 2;
+}
+
+// rank orders the plan largest reclaim first; unmeasured rows follow, removable before kept.
+export fun rank(items: [Item]) > [Item] {
+    final ranked = mut [<Item>];
+    foreach (it in items) { ranked.append(it); }
+    ranked.sort(fun (a: Item, b: Item) > bool {
+        if (a.kib != b.kib) { return a.kib > b.kib; }
+        if (a.class != b.class) { return classRank(a.class) < classRank(b.class); }
+        return a.name < b.name;
+    });
+    return ranked;
+}
+
+export object Totals {
+    worktrees: int,
+    removableWorktrees: int,
+    removableKiB: int,
+    branches: int,
+    kept: int,
+    keptBy: {str: int},
+}
+
+export fun totals(items: [Item]) > Totals {
+    var worktrees = 0;
+    var removable = 0;
+    var kib = 0;
+    var branches = 0;
+    var kept = 0;
+    final by = mut {<str: int>};
+    foreach (it in items) {
+        if (it.kind == "worktree") { worktrees = worktrees + 1; }
+        if (it.kind == "worktree" and it.class == "removable") {
+            removable = removable + 1;
+            kib = kib + it.kib;
+        }
+        if (it.kind == "branch") { branches = branches + 1; }
+        if (it.kind == "worktree" and it.class == "keep") {
+            kept = kept + 1;
+            foreach (k in it.keys) { by[k] = (by[k] ?? 0) + 1; }
+        }
+    }
+    return Totals{ worktrees = worktrees, removableWorktrees = removable, removableKiB = kib, branches = branches, kept = kept, keptBy = by };
+}
+
+fun pad(s: str, width: int) > str {
+    final spaces = mut [<str>];
+    for (var i = s.len(); i < width; i = i + 1) { spaces.append(" "); }
+    return s + spaces.join("");
+}
+
+final KEY_ORDER = ["dirty", "unique", "lease", "process", "locked", "recent", "own", "main", "gone"];
+
+export fun render(items: [Item]) > [str] {
+    // A worktree outside the repository shows its absolute path; past this width it
+    // overflows its own row rather than widening every other one.
+    var width = 4;
+    foreach (it in items) {
+        if (it.name.len() > width and it.name.len() <= 60) { width = it.name.len(); }
+    }
+    final lines = mut ["{pad("CLASS", width: 9)}  {pad("SIZE", width: 9)}  {pad("ITEM", width: width)}  REASON"];
+    foreach (it in items) {
+        final result = if (it.result == "") "" else "  [{it.result}]";
+        lines.append("{pad(it.class, width: 9)}  {pad(size(it.kib), width: 9)}  {pad(it.name, width: width)}  {it.reasons.join("; ")}{result}");
+        foreach (c in it.caches) {
+            lines.append("{pad("", width: 9)}  {pad(size(c.kib), width: 9)}    {c.path} ({c.kind})");
+        }
+    }
+    final t = totals(items);
+    final by = mut [<str>];
+    foreach (k in KEY_ORDER) {
+        if (t.keptBy[k] != null) { by.append("{k} {t.keptBy[k]!}"); }
+    }
+    lines.append("");
+    lines.append("removable: {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}), {plural(t.branches, word: "agent branch")}");
+    lines.append("kept: {t.kept} of {t.worktrees} worktrees, by reason (one worktree can have several): {by.join(", ")}");
+    return lines;
+}
+
+fun git(dir: str, args: [str]) > str !> any {
+    return vcs\cmd(args, opts: {"dir": dir, "quiet": true}).stdout;
+}
+
+fun gitOk(dir: str, args: [str]) > bool !> any {
+    return vcs\cmd(args, opts: {"dir": dir, "quiet": true, "allow_failure": true}).code == 0;
+}
+
+// gitDirOf is a linked worktree's administrative directory, from the gitdir line of its
+// .git file.
+fun gitDirOf(path: str) > str !> any {
+    final dotgit = path + "/.git";
+    if (!fs\isFile(dotgit)) { return dotgit; }
+    final line = fs\readFile(dotgit).trim();
+    if (!line.startsWith("gitdir: ")) { return ""; }
+    final dir = line.sub(8);
+    if (dir.startsWith("/")) { return dir; }
+    return path + "/" + dir;
+}
+
+fun touchedAt(path: str, gitdir: str) > double !> any {
+    var newest = 0.0;
+    foreach (p in [path, gitdir + "/index", gitdir + "/HEAD", gitdir + "/logs/HEAD"]) {
+        if (fs\exists(p)) {
+            final m = fs\stat(p).mtime;
+            if (m > newest) { newest = m; }
+        }
+    }
+    return newest;
+}
+
+fun lockOf(gitdir: str) > str? !> any {
+    final f = gitdir + "/locked";
+    if (gitdir == "" or !fs\isFile(f)) { return null; }
+    return fs\readFile(f).trim();
+}
+
+fun duKiB(path: str) > int !> any {
+    // du exits 1 when one entry is unreadable and still prints the total of the rest.
+    final res = proc\exec("du", args: ["-sk", path], opts: {"quiet": true, "allow_failure": true});
+    return std\parseInt(res.stdout.trim().split("\t")[0]) ?? -1;
+}
+
+// caches lists the ignored build state git status reports at the top of a worktree's
+// ignored directories: the per-checkout magus cache, node_modules, and the magus binary.
+fun caches(path: str) > [Cache] !> any {
+    final found = mut [<Cache>];
+    foreach (line in git(path, args: ["--no-optional-locks", "status", "--porcelain", "--ignored"]).split("\n")) {
+        if (!line.startsWith("!! ")) { continue; }
+        final entry = line.sub(3);
+        var kind = "";
+        if (entry == ".magus/") {
+            kind = "magus cache";
+        } else if (entry == "node_modules/" or entry.endsWith("/node_modules/")) {
+            kind = "node_modules";
+        } else if (entry == "magus") {
+            kind = "magus binary";
+        }
+        if (kind != "") {
+            found.append(Cache{ path = entry, kind = kind, kib = duKiB(path + "/" + entry) });
+        }
+    }
+    found.sort(fun (a: Cache, b: Cache) > bool => a.kib > b.kib);
+    return found;
+}
+
+fun processCwds() > [Cwd] !> any {
+    try {
+        proc\which("lsof");
+    } catch (e) {
+        throw "prune-worktrees: lsof is not on PATH, so which processes work inside a worktree cannot be read; install it rather than plan blind";
+    }
+    // lsof exits 1 when it cannot read some process, and still lists every one it can.
+    return parseCwds(proc\exec("lsof", args: ["-d", "cwd", "-Fpn", "-w"], opts: {"quiet": true, "allow_failure": true}).stdout);
+}
+
+fun jobLeases() > [Lease] !> any {
+    final list: magus\JobList = magus\job.list();
+    final found = mut [<Lease>];
+    foreach (j in list.jobs) {
+        found.append(Lease{ id = j.id, state = j.state, checkoutRoot = j.checkoutRoot });
+    }
+    return found;
+}
+
+export object Survey {
+    root: str,
+    base: str,
+    items: [Item],
+    goCache: str,
+}
+
+fun agentBranches(root: str, base: str, baseOk: bool) > {str: {str: str}} !> any {
+    final tips = mut {<str: str>};
+    final refsArgs = mut ["for-each-ref", "--format=%(refname:short) %(objectname)"];
+    foreach (p in AGENT_BRANCHES) { refsArgs.append(p); }
+    foreach (line in git(root, args: refsArgs).split("\n")) {
+        final parts = line.trim().split(" ");
+        if (parts.len() == 2) { tips[parts[0]] = parts[1]; }
+    }
+    final logArgs = mut ["log", "--format=%D", "--decorate-refs=refs/heads/"];
+    foreach (p in AGENT_BRANCHES) { logArgs.append("--branches={p.sub(11)}"); }
+    logArgs.append("--not");
+    logArgs.append("--remotes");
+    if (baseOk) { logArgs.append(base); }
+    final unique = mut {<str: str>};
+    foreach (name in parseUniqueBranches(git(root, args: logArgs))) { unique[name] = name; }
+    return {"tips": tips, "unique": unique};
+}
+
+fun goCacheDir() > str !> any {
+    final res = proc\exec("go", args: ["env", "GOCACHE"], opts: {"quiet": true, "allow_failure": true});
+    if (res.code != 0) { return "the Go build cache"; }
+    return res.stdout.trim();
+}
+
+// survey reads every worktree and agent branch and returns the plan, unranked.
+export fun survey(base: str, now: double, keepRecent: double, goCache: bool) > Survey !> any {
+    final root = vcs\root();
+    final trees = lsworktrees\parseWorktrees(git(root, args: ["worktree", "list", "--porcelain"]));
+    final main = if (trees.len() > 0) trees[0].path else "";
+    final rows = mut {<str: lsworktrees\Row>};
+    foreach (r in lsworktrees\worktrees(false)) { rows[r.path] = r; }
+    final baseOk = gitOk(root, args: ["rev-parse", "--verify", "--quiet", base + "^0"]);
+    final leases = liveLeases(jobLeases());
+    final paths = mut [<str>];
+    foreach (t in trees) { paths.append(t.path); }
+    final pids = pidsByWorktree(processCwds(), paths: paths);
+
+    final items = mut [<Item>];
+    final held = mut {<str: str>};
+    final removable = mut [<str>];
+    foreach (t in trees) {
+        final shown = lsworktrees\displayPath(t.path, main: main);
+        final row = rows[shown];
+        final dirty = row?.dirty ?? -1;
+        var unique = 0;
+        if (dirty >= 0 and (row?.unpushed ?? 0) > 0) {
+            unique = row!.unpushed;
+            if (baseOk) {
+                unique = std\parseInt(git(t.path, args: ["rev-list", "--count", "HEAD", "--not", "--remotes", base]).trim()) ?? unique;
+            }
+        }
+        var gitdir = "";
+        var touched = 0.0;
+        var locked: str? = null;
+        if (t.path != main) {
+            gitdir = gitDirOf(t.path);
+            locked = lockOf(gitdir);
+        }
+        if (dirty >= 0) { touched = touchedAt(t.path, gitdir: if (gitdir == "") t.path + "/.git" else gitdir); }
+        final o = Observed{ path = t.path, branch = t.branch, dirty = dirty, unique = unique, locked = locked, touched = touched };
+        final it = classify(o, main: main, own: root, leases: leases, pids: pids, now: now, keepRecent: keepRecent, shown: shown);
+        if (t.branch != "" and t.branch != "(detached)") { held[t.branch] = t.path; }
+        if (it.class == "removable") {
+            removable.append(t.path);
+            items.append(copyItem(it, kib: duKiB(t.path), caches: caches(t.path), result: ""));
+        } else {
+            items.append(it);
+        }
+    }
+
+    final branches = agentBranches(root, base: base, baseOk: baseOk);
+    final unique = mut [<str>];
+    foreach (name, n in branches["unique"]!) { unique.append(name); }
+    foreach (b in branchItems(branches["tips"]!, held: held, removable: removable, unique: unique)) { items.append(b); }
+
+    final dir = goCacheDir();
+    var goClass = "report";
+    var goWhy = "shared by every worktree, never measured; --apply --go-cache empties it with `magus run {GO_CLEAN.join(" ")}`, and every worktree's next build recompiles";
+    if (goCache) {
+        goClass = "removable";
+        goWhy = "shared by every worktree, never measured; --apply empties it with `magus run {GO_CLEAN.join(" ")}`, and every worktree's next build recompiles";
+    }
+    items.append(Item{ kind = "go-cache", name = dir, class = goClass, reasons = [goWhy], path = dir });
+    return Survey{ root = root, base = base, items = items, goCache = dir };
+}
+
+// guardLine is the shell line the guard judges for one removal: the same argv vcs\cmd runs,
+// from the same directory. A path needing quotes gets no line: the guard check would judge
+// different words than git receives.
+export fun guardLine(root: str, path: str) > str? {
+    for (i: int = 0; i < path.len(); i = i + 1) {
+        final b = path.sub(i, len: 1);
+        if (!((b >= "a" and b <= "z") or (b >= "A" and b <= "Z") or (b >= "0" and b <= "9") or b == "/" or b == "." or b == "_" or b == "-")) {
+            return null;
+        }
+    }
+    return "git -C {root} worktree remove {path}";
+}
+
+fun copyItem(it: Item, kib: int, caches: [Cache], result: str) > Item {
+    return Item{ kind = it.kind, name = it.name, class = it.class, reasons = it.reasons, keys = it.keys, kib = kib,
+        caches = caches, path = it.path, branch = it.branch, tip = it.tip, result = result };
+}
+
+fun removeWorktree(it: Item, root: str) > str {
+    final line = guardLine(root, path: it.path);
+    if (line == null) { return "skipped: its path needs shell quoting, which the guard check does not cover"; }
+    try {
+        magus\cmd("shell", args: [line!], opts: {"quiet": true, "dir": root});
+    } catch (e) {
+        return "refused by the guard: {e}";
+    }
+    try {
+        vcs\cmd(["worktree", "remove", it.path], opts: {"dir": root, "quiet": true});
+    } catch (e) {
+        return "failed: {e}";
+    }
+    return "removed";
+}
+
+// apply removes the removable rows and returns the plan with each row's result. A worktree
+// the guard refuses or git fails on stays, and so does its branch.
+fun apply(items: [Item], root: str, goCache: bool) > [Item] {
+    final done = mut [<Item>];
+    final kept = mut [<str>];
+    foreach (it in items) {
+        if (it.kind == "worktree" and it.class == "removable") {
+            final result = removeWorktree(it, root: root);
+            if (result != "removed") { kept.append(it.branch); }
+            done.append(copyItem(it, kib: it.kib, caches: it.caches, result: result));
+        } else {
+            done.append(it);
+        }
+    }
+    foreach (i, it in done) {
+        if (it.kind == "branch") {
+            var result = "deleted";
+            if (kept.indexOf(it.branch) != null) {
+                result = "skipped: its worktree was not removed";
+            } else {
+                try {
+                    vcs\cmd(["update-ref", "-d", "refs/heads/{it.branch}", it.tip], opts: {"dir": root, "quiet": true});
+                } catch (e) {
+                    result = "failed: {e}";
+                }
+            }
+            done[i] = copyItem(it, kib: it.kib, caches: it.caches, result: result);
+        } else if (it.kind == "go-cache" and goCache) {
+            var result = "emptied";
+            try {
+                magus\run(GO_CLEAN, opts: {"quiet": true, "dir": root});
+            } catch (e) {
+                result = "failed: {e}";
+            }
+            done[i] = copyItem(it, kib: it.kib, caches: it.caches, result: result);
+        }
+    }
+    return done;
+}
+
+fun count(items: [Item], kind: str, result: str) > int {
+    var n = 0;
+    foreach (it in items) {
+        if (it.kind == kind and it.result == result) { n = n + 1; }
+    }
+    return n;
+}
+
+export fun headline(items: [Item], applied: bool, goCache: bool) > str {
+    final t = totals(items);
+    if (!applied) {
+        var go = "";
+        if (goCache) { go = " and empties the Go build cache"; }
+        return "dry run: nothing removed; --apply removes {plural(t.removableWorktrees, word: "worktree")} ({size(t.removableKiB)}) and {plural(t.branches, word: "agent branch")}{go}";
+    }
+    var kib = 0;
+    foreach (it in items) {
+        if (it.kind == "worktree" and it.result == "removed") { kib = kib + it.kib; }
+    }
+    var go = "";
+    if (goCache) {
+        if (count(items, kind: "go-cache", result: "emptied") == 1) { go = "; emptied the Go build cache"; } else { go = "; the Go build cache was NOT emptied"; }
+    }
+    return "removed {count(items, kind: "worktree", result: "removed")} of {plural(t.removableWorktrees, word: "removable worktree")} ({size(kib)}) and deleted {count(items, kind: "branch", result: "deleted")} of {plural(t.branches, word: "agent branch")}{go}";
+}
+
+fun encode(s: Survey, items: [Item], applied: bool, keepRecent: str) > str {
+    final rows = mut [<{str: any}>];
+    foreach (it in items) {
+        final cs = mut [<{str: any}>];
+        foreach (c in it.caches) { cs.append({"path": c.path, "kind": c.kind, "kib": c.kib}); }
+        rows.append({"kind": it.kind, "name": it.name, "class": it.class, "reasons": it.reasons, "keys": it.keys,
+            "kib": it.kib, "caches": cs, "path": it.path, "branch": it.branch, "tip": it.tip, "result": it.result});
+    }
+    final t = totals(items);
+    final by = mut {<str: any>};
+    foreach (k, v in t.keptBy) { by[k] = v; }
+    return serialize\jsonEncode(serialize\Boxed.init({"root": s.root, "base": s.base, "keep_recent": keepRecent, "applied": applied,
+        "items": rows, "totals": {"worktrees": t.worktrees, "removable_worktrees": t.removableWorktrees, "removable_kib": t.removableKiB,
+            "branches": t.branches, "kept": t.kept, "kept_by": by}}));
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--go-cache", "--help"], valued: ["--keep-recent", "--base", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "prune-worktrees: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "prune-worktrees: reads git worktrees, and this checkout is {vcs\name()}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "prune-worktrees: -o takes text or json\n{USAGE}";
+    }
+    final keepRecent = parsed.values["--keep-recent"] ?? "2h";
+    final keepMs = time\parseDuration(keepRecent) catch -1.0;
+    if (keepMs < 0.0) {
+        throw "prune-worktrees: --keep-recent takes a duration such as 2h or 30m\n{USAGE}";
+    }
+    final applied = parsed.values["--apply"] != null;
+    final goCache = parsed.values["--go-cache"] != null;
+
+    final s = survey(parsed.values["--base"] ?? vcs\base(), now: os\time(), keepRecent: keepMs, goCache: goCache);
+    final planned = rank(s.items);
+    final items = if (applied) apply(planned, root: s.root, goCache: goCache) else planned;
+    // -o json prints the plan document alone, so a reader can parse the whole of stdout.
+    if (format == "json") {
+        std\print(encode(s, items: items, applied: applied, keepRecent: keepRecent));
+        return;
+    }
+    std\print(headline(items, applied: applied, goCache: goCache));
+    foreach (line in render(items)) { std\print(line); }
+}
+
+export object Fixture {
+    main: str,
+    own: str,
+    now: double,
+    keepRecent: double,
+    observed: [Observed],
+    want: {str: str},
+    leases: [Lease],
+    cwds: [Cwd],
+}
+
+fun fixture() > Fixture !> any {
+    final doc = serialize\jsonDecode(fs\readFile("hack/testdata/prune-worktrees.json"));
+    final observed = mut [<Observed>];
+    final want = mut {<str: str>};
+    foreach (w in doc.q("worktrees").listValue()) {
+        var locked: str? = null;
+        if (w.q("locked").stringValue() != "" or w.q("locked_without_reason").booleanValue()) { locked = w.q("locked").stringValue(); }
+        final path = w.q("path").stringValue();
+        observed.append(Observed{ path = path, branch = w.q("branch").stringValue(), dirty = w.q("dirty").integerValue(),
+            unique = w.q("unique").integerValue(), locked = locked,
+            touched = std\toDouble(doc.q("now").integerValue() - w.q("idle_minutes").integerValue() * 60000) });
+        want[path] = w.q("want").stringValue();
+    }
+    final leases = mut [<Lease>];
+    foreach (j in doc.q("jobs").listValue()) {
+        leases.append(Lease{ id = j.q("id").stringValue(), state = j.q("state").stringValue(), checkoutRoot = j.q("checkout_root").stringValue() });
+    }
+    final lsof = mut [<str>];
+    foreach (l in doc.q("lsof").listValue()) { lsof.append(l.stringValue()); }
+    return Fixture{ main = doc.q("main").stringValue(), own = doc.q("own").stringValue(), now = std\toDouble(doc.q("now").integerValue()),
+        keepRecent = time\parseDuration(doc.q("keep_recent").stringValue()), observed = observed, want = want, leases = leases,
+        cwds = parseCwds(lsof.join("\n")) };
+}
+
+fun classified() > {str: Item} !> any {
+    final f = fixture();
+    final leases = liveLeases(f.leases);
+    final paths = mut [<str>];
+    foreach (o in f.observed) { paths.append(o.path); }
+    final pids = pidsByWorktree(f.cwds, paths: paths);
+    final byPath = mut {<str: Item>};
+    foreach (o in f.observed) {
+        byPath[o.path] = classify(o, main: f.main, own: f.own, leases: leases, pids: pids, now: f.now, keepRecent: f.keepRecent, shown: o.path);
+    }
+    return byPath;
+}
+
+test "each fixture worktree gets the class its row expects" {
+    final f = fixture();
+    final got = classified();
+    foreach (path, want in f.want) {
+        assert\equal(got[path]!.class, want: want, message: "{path}: {got[path]!.reasons.join("; ")}");
+    }
+}
+
+test "a kept worktree names every reason that holds, not just the first" {
+    final got = classified();
+    assert\equal(got["/work/repo/.claude/worktrees/dirty"]!.reasons, want: ["3 uncommitted files"], message: "dirty");
+    assert\equal(got["/work/repo/.claude/worktrees/unique"]!.reasons, want: ["2 commits on no remote and not in the base"], message: "unique");
+    assert\equal(got["/work/repo/.claude/worktrees/leased"]!.reasons, want: ["live job prune-worktrees (running)"], message: "lease");
+    assert\equal(got["/work/repo/.claude/worktrees/own"]!.reasons, want: ["the caller's own checkout", "touched 5m ago, within --keep-recent"], message: "own");
+    assert\equal(got["/work/repo/.claude/worktrees/busy"]!.reasons, want: ["working directory of pid 4242"], message: "a process below the root");
+    assert\equal(got["/work/repo/.claude/worktrees/many"]!.keys, want: ["locked", "dirty", "unique", "lease", "recent"], message: "several");
+    assert\equal(got["/work/repo/.claude/worktrees/gone"]!.keys, want: ["gone"], message: "gone is not also recent");
+    assert\equal(got["/work/repo"]!.keys, want: ["main"], message: "main");
+}
+
+test "a finished job does not hold its checkout, and a path that merely shares a prefix is not inside" {
+    final got = classified();
+    assert\equal(got["/work/repo/.claude/worktrees/merged"]!.class, want: "removable", message: "merged");
+    assert\equal(got["/work/repo/.claude/worktrees/finished-job"]!.class, want: "removable", message: "a pass job releases its checkout");
+    assert\equal(got["/work/repo/.claude/worktrees/bus"]!.class, want: "removable", message: "pid 4242 works in busy, not bus");
+}
+
+test "the plan ranks the largest reclaim first, unmeasured rows last, removable before kept" {
+    final ranked = rank([
+        Item{ kind = "worktree", name = "small", class = "removable", reasons = [<str>], kib = 10 },
+        Item{ kind = "worktree", name = "kept", class = "keep", reasons = [<str>] },
+        Item{ kind = "go-cache", name = "go", class = "report", reasons = [<str>] },
+        Item{ kind = "branch", name = "b", class = "removable", reasons = [<str>], kib = 0 },
+        Item{ kind = "worktree", name = "big", class = "removable", reasons = [<str>], kib = 900000 },
+    ]);
+    final names = mut [<str>];
+    foreach (it in ranked) { names.append(it.name); }
+    assert\equal(names, want: ["big", "small", "b", "go", "kept"], message: "order");
+    assert\equal(size(900000), want: "878 MiB", message: "MiB");
+    assert\equal(size(5452596), want: "5.2 GiB", message: "GiB");
+    assert\equal(age(3.0 * 86400000.0), want: "3d", message: "days");
+}
+
+test "an agent branch is listed only when nothing on it would be lost" {
+    final items = branchItems({"worktree-agent-a": "aaa", "worktree-agent-b": "bbb", "worktree-agent-c": "ccc", "worktree-agent-d": "ddd", "agent-e": "eee"},
+        held: {"worktree-agent-b": "/w/kept", "worktree-agent-c": "/w/removable"}, removable: ["/w/removable"], unique: ["worktree-agent-d"]);
+    final got = mut [<str>];
+    foreach (it in items) { got.append("{it.name} {it.tip}: {it.reasons[0]}"); }
+    assert\equal(got, want: [
+        "agent-e eee: no worktree holds it; every commit is on a remote or the base",
+        "worktree-agent-a aaa: no worktree holds it; every commit is on a remote or the base",
+        "worktree-agent-c ccc: its worktree is removed by this plan; every commit is on a remote or the base",
+    ], message: "branches");
+    assert\equal(parseUniqueBranches("worktree-agent-d\n\nHEAD -> worktree-agent-x, agent-y\n"), want: ["worktree-agent-d", "worktree-agent-x", "agent-y"], message: "decorations");
+}
+
+test "the guard judges the same words git receives, or nothing" {
+    assert\equal(guardLine("/work/repo", path: "/work/repo/.claude/worktrees/agent-a1"), want: "git -C /work/repo worktree remove /work/repo/.claude/worktrees/agent-a1", message: "plain");
+    assert\equal(guardLine("/work/repo", path: "/work/my repo/wt"), want: null, message: "a space");
+    assert\equal(guardLine("/work/repo", path: "/work/$(x)"), want: null, message: "a substitution");
+}
+
+test "the headline says what ran" {
+    final items = [
+        Item{ kind = "worktree", name = "a", class = "removable", reasons = [<str>], kib = 2048, result = "removed" },
+        Item{ kind = "worktree", name = "b", class = "removable", reasons = [<str>], kib = 1024, result = "refused by the guard: dirty" },
+        Item{ kind = "branch", name = "c", class = "removable", reasons = [<str>], kib = 0, result = "deleted" },
+        Item{ kind = "worktree", name = "d", class = "keep", reasons = ["dirty"], keys = ["dirty"] },
+    ];
+    assert\equal(headline(items, applied: false, goCache: false), want: "dry run: nothing removed; --apply removes 2 worktrees (3 MiB) and 1 agent branch", message: "dry");
+    assert\equal(headline(items, applied: true, goCache: true),
+        want: "removed 1 of 2 removable worktrees (2 MiB) and deleted 1 of 1 agent branch; the Go build cache was NOT emptied", message: "applied");
+    assert\equal(plural(2, word: "agent branch"), want: "2 agent branches", message: "plural");
+}

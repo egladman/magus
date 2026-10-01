@@ -115,7 +115,9 @@ func gateVerdictAt(workspace, commit string) gateCoverage {
 	if err != nil {
 		return gateUnknown
 	}
-	fold, err := sessions.ReadAll(dir)
+	// Gate verdicts only, through the store's per-kind fold cache: a push used to decode
+	// every invocation in the store to find one record.
+	fold, err := sessions.ReadGateResults(dir)
 	if err != nil {
 		return gateUnknown
 	}

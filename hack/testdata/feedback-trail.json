@@ -1,0 +1,28 @@
+{
+  "session": "s-fixture",
+  "host": "claude-code",
+  "start": 1790800000000,
+  "end": 1790821600000,
+  "checkouts": ["/work/repo", "/work/repo/.claude/worktrees/w1"],
+  "observations": [
+    {"at": 1790800001000, "agent": "a1", "lease": "job-a", "command": "grep -A5 'func X' a.go", "decision": "deny", "rule": "grep-reader", "nexts": ["sed -n 1,9p a.go"]},
+    {"at": 1790800002000, "agent": "a1", "lease": "job-a", "command": "sed -n 1,9p a.go", "decision": "pass", "preauthorizedBy": "deny-grep-reader"},
+    {"at": 1790800003000, "agent": "a2", "lease": "job-b", "command": "grep -A3 'func Y' b.go", "decision": "deny", "rule": "grep-reader", "nexts": ["sed -n 4,8p b.go"]},
+    {"at": 1790800004000, "agent": "a2", "lease": "job-b", "command": "grep -rn Y internal", "decision": "pass"},
+    {"at": 1790800005000, "command": "grep -rn foo src", "decision": "pass"},
+    {"at": 1790800006000, "command": "grep -rn bar lib", "decision": "pass"},
+    {"at": 1790800007000, "command": "git status --short", "decision": "pass"},
+    {"at": 1790800008000, "agent": "a1", "lease": "job-a", "tool": "file.write", "path": "/work/repo/a.go", "decision": "advise", "rule": "lease-state"},
+    {"at": 1790800009000, "agent": "a1", "lease": "job-a", "tool": "file.write", "path": "/work/repo/b.go", "decision": "advise", "rule": "lease-state"},
+    {"at": 1790800010000, "agent": "a2", "lease": "job-b", "tool": "file.write", "path": "/work/repo/c.go", "decision": "advise", "rule": "lease-state"},
+    {"at": 1790800011000, "command": "./magus describe file x | grep role", "decision": "deny", "rule": "output-pipe"},
+    {"at": 1790800012000, "tool": "file.read", "path": "/work/repo/README.md"},
+    {"at": 1790800013000, "command": "echo 'oops", "decision": "pass"},
+    {"at": 1790800014000, "agent": "a2", "lease": "job-b", "command": "git status --short", "decision": "pass"},
+    {"at": 1790800015000, "agent": "a2", "lease": "job-b", "command": "make build", "decision": "pass"}
+  ],
+  "spawns": [
+    {"at": 1790800000500, "child": "worker", "lease": "job-a", "model": "opus"},
+    {"at": 1790800000600, "child": "worker", "lease": "job-b", "model": "sonnet"}
+  ]
+}

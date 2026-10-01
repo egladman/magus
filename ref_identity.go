@@ -101,10 +101,15 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 	// a subprocess, and computeTargetKey's own memo lives only as long as one call.
 	// Probing per target dominated the sweep; see computeTargetKey's doc.
 	projects := m.All()
-	reuse := &sweepReuse{memo: memo, toolVersions: m.toolVersionsByProject(ctx, projects)}
+	toolVersions, unprobeable := m.toolVersionsEach(ctx, projects)
+	reuse := &sweepReuse{memo: memo, toolVersions: toolVersions}
 
 	var matches []types.RefMatch
 	for _, p := range projects {
+		// No honest key exists for its tool-keyed targets, so nothing there can match.
+		if unprobeable[p.Path] != nil {
+			continue
+		}
 		for _, target := range projectTargets(p) {
 			for _, charms := range variants {
 				key, _, err := m.computeTargetKey(ctx, p.Path, target, charms, reuse)

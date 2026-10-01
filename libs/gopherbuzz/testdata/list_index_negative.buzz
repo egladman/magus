@@ -1,0 +1,6 @@
+// @error: Out of bound list access
+// Upstream buzz at 294d8f9 rejects [1][-1] with "Out of bound list access.", the same
+// message as past the end; there is no negative-from-the-end indexing.
+final l = [1];
+final i = 0 - 1;
+final __r = l[i];

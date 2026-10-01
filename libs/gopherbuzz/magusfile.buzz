@@ -62,6 +62,18 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
 }
 
+// Runs the benchmarks/comparison module's tests, which test's ./... skips because that
+// directory has its own go.mod. Without the cgo_engines tag only the pure-Go engines
+// compile, and without -bench no benchmark runs.
+export fun buzzbench_test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    // The module replaces gopherbuzz and diagnostics with their checkouts, so both feed the key.
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum",
+        "benchmarks/comparison/go.mod", "benchmarks/comparison/go.sum",
+        "../diagnostics/**/*.go", "../diagnostics/go.mod");
+    go["go-test"](ctx.withCwd("benchmarks/comparison"));
+}
+
 // Fuzzes the lexer for 30s; `magus run fuzz libs/gopherbuzz -- --fuzztime 2m` overrides it.
 // go refuses -fuzz across packages, so go-test's ./... cannot run this.
 export fun fuzz(ctx: magus\Context, args: [str]) > void !> any {
@@ -106,7 +118,7 @@ export fun buzz_build(ctx: magus\Context, args: [str]) > void !> any {
 
 // The anchor `magus affected ci` keys off.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test);
+    ctx.needs(lint, build, test, buzzbench_test);
 }
 
 // "0.5.0-251-ged42f47" -> "ed42f47"

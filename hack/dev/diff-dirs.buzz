@@ -131,7 +131,7 @@ export fun diffDirs(a: str, b: str) > Report !> any {
     var outputs = 0;
     final all = union(files(a), b: files(b));
     if (all.len() > 0) {
-        foreach (f in magus\describeFile(all).files) {
+        foreach (f in magus\describe.file(all).files) {
             if (f.role == "output") {
                 outputs = outputs + 1;
             } else {

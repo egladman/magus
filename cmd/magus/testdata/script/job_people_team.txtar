@@ -1,0 +1,137 @@
+# Two people in two worktrees of one repository claim the same file. The store records
+# the overlap, the guard advises the one who asks before writing and blocks nobody, and
+# `job apply -f -` hands the file over by narrowing the first job's record.
+# docs/guides/jobs.md shows these commands and every golden below verbatim
+# (TestJobGuideMatchesItsScripts holds it to that).
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+env GIT_AUTHOR_DATE=2026-10-01T09:00:00Z
+env GIT_COMMITTER_DATE=2026-10-01T09:00:00Z
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop before the currency work'
+exec git worktree add -q ../ana
+exec git worktree add -q ../ben
+
+cd ../ana
+exec magus job fork cents --criteria 'prices are integers of cents' --write-paths pricing/total.sh,pricing/format.sh --check 'test .'
+exec magus job exec cents
+
+cd ../ben
+exec magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
+cmp stdout $WORK/fork.out
+
+# An advisory exits 0: a person who names no job is told, never stopped.
+exec magus shell --path pricing/format.sh -o name
+cmp stdout $WORK/shell.out
+exec magus job exec currency
+
+# Ana's job stays hers: taking it from Ben's worktree is refused, naming where it is held.
+! exec magus job exec cents
+stderr 'job: cents is held in .*/ana \(running, updated [0-9]+s ago\)'
+stderr '`magus job exit cents`'
+exec magus ls jobs
+cmp stdout $WORK/ls-overlap.out
+
+cd ../ana
+stdin $WORK/release.json
+exec magus job apply -f -
+cmp stdout $WORK/apply.out
+exec magus ls jobs
+cmp stdout $WORK/ls-handed.out
+exec magus describe job currency
+cmp stdout $WORK/describe.out
+
+# The release is recorded with the digest the file carried, and the question Ben asked
+# before writing is recorded on the job that owned the file then.
+exec magus ls jobs -o json
+stdout '"path": "pricing/format.sh",\n\s+"digest": "sha256:[0-9a-f]{64}"'
+stdout '"revoked": true'
+stdout '"unattributed"'
+
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+import "proc";
+
+// test runs the shell checks in test/run.sh.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("pricing/*.sh", "checkout/*.sh", "test/*.sh");
+    proc\exec("sh", ["test/run.sh"]);
+}
+-- shop/pricing/total.sh --
+total() { echo $(( $1 + $2 )); }
+-- shop/pricing/format.sh --
+format() { echo "$1.00"; }
+-- shop/checkout/tax.sh --
+tax() { echo $(( $1 / 10 )); }
+-- shop/test/run.sh --
+. pricing/total.sh
+. pricing/format.sh
+. checkout/tax.sh
+[ "$(total 2 3)" = 5 ] && [ "$(format 5)" = 5.00 ] && [ "$(tax 50)" = 5 ]
+-- release.json --
+{"schema_version": 11, "id": "cents",
+ "criteria": "prices are integers of cents",
+ "write_paths": ["pricing/total.sh"],
+ "check": {"target": "test", "project": "."}}
+-- fork.out --
+forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- shell.out --
+advise
+-- ls-overlap.out --
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      2      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
+
+overlaps
+  cents and currency claim common ground
+    cents: pricing/format.sh
+    currency: pricing/format.sh
+    footprints: disjoint
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- apply.out --
+updated cents, still running:
+  write_paths -pricing/format.sh
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- ls-handed.out --
+JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
+cents     ana     running  -      1      alone  magus run test .
+currency  ben     running  -      2      alone  magus run test .
+
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
+-- describe.out --
+job: currency
+
+criteria
+prices carry a currency code
+
+write paths
+  pricing/format.sh
+  checkout/tax.sh
+
+projects
+  .
+
+deny paths the workspace declares
+  pricing/total.sh: owned by live lease cents: coordinate, never work around
+  magus.yaml: workspace configuration: changing it changes the plan every lease is running
+
+the only check you run
+magus run test .
+currency: 0 of 1 goal(s) met
+  [unmet] check
+      carries no output_ref, so there is no run to reopen
+console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

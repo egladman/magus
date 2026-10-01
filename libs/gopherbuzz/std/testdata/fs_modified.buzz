@@ -5,7 +5,7 @@ import "io";
 import "os";
 
 final path = os\tmpDir() + "/buzz-fs-modified-test";
-final f = io.File.open(path, io.FileMode.write);
+final f = io\File.open(path, io\FileMode.write);
 f.write("stamp me");
 f.close();
 

@@ -35,7 +35,7 @@ concurrency: 2
 -- magusfile.buzz --
 import "magus";
 import "spells/acme";
-magus.project({ "spells": [acme] });
+magus\project({ "spells": [acme] });
 export fun check(ctx: magus\Context, args: [str]) > void {
     acme.test(ctx, {"args": ["forwarded: {args.len()}"]});
     acme.test(ctx, {"args": ["-race", "./..."] + args});

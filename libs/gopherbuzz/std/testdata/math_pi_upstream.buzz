@@ -11,6 +11,6 @@
 // swaps buzzPi back to Go's math.Pi, which would give 114.59155902616465 and
 // 3.141592653589793. See the note on buzzPi in std/math.go before changing either.
 import "math";
-final __r = math.deg(2.0) == 114.59155902616439
-    and math.pi == 3.1415926535898
-    and math.rad(math.deg(2.0)) == 2;
+final __r = math\deg(2.0) == 114.59155902616439
+    and math\pi == 3.1415926535898
+    and math\rad(math\deg(2.0)) == 2;

@@ -4,12 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // The staleness line refs, query and explain print under an answer drawn from a symbol
@@ -97,21 +104,26 @@ func plural(n int, one, many string) string {
 // gap probe's answer, printVerdict already renders it as "outside coverage", and one fact
 // stated twice in two vocabularies teaches a reader to skip both.
 //
-// The verdict comes from SymbolIndexStatus, the same probe `magus status` prints, so the
-// banner and the status table cannot disagree about one index. The concrete type is what
-// carries it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
+// The verdict comes from the stamp-checked probe behind `magus status`, so the banner and
+// the status table cannot disagree about one index, and it is checked at the moment of the
+// read rather than taken from a server's watcher memo. The concrete type is what carries
+// it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
 // question needs the cache, which no domain interface exposes.
 func staleIndexProjects(ctx context.Context, root string) []string {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil || ws == nil {
 		return nil
 	}
+	return staleIndexProjectsOf(ctx, ws)
+}
+
+func staleIndexProjectsOf(ctx context.Context, ws types.WorkspaceRepository) []string {
 	m, ok := ws.(*magus.Magus)
 	if !ok {
 		return nil
 	}
 	var stale []string
-	for _, s := range m.SymbolIndexStatus(ctx) {
+	for _, s := range m.SymbolIndexStatusByStamp(ctx) {
 		if s.Freshness != types.SymbolIndexStale {
 			continue
 		}
@@ -134,7 +146,14 @@ func staleGraphAdvice(ctx context.Context) string {
 		}
 		return ""
 	})
-	return staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+	advice := staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+	if advice == "" {
+		return ""
+	}
+	if cause := indexCauseForGuard(); cause != "" {
+		advice += "\n" + cause
+	}
+	return advice
 }
 
 // staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
@@ -171,4 +190,89 @@ func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
 	return fmt.Sprintf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
 		out.OccurrenceCount-out.VerifiedCount, out.StaleFiles) +
 		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)
+}
+
+// knowledgeStoreDir is the checkout at root's knowledge store: where graph builds take
+// their lock and `job run sync-graph` records its last request, beside the guard index.
+func knowledgeStoreDir(root string) (string, error) {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return "", err
+	}
+	return knowledge.StoreDir(cacheDir), nil
+}
+
+// observeSync gathers what this process can see of why the checkout at root's index is
+// current or not. Every probe is local: a socket dial, one status round trip when a server
+// answers, two git rev-parses for the hook, and three file reads.
+func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
+	o := maintenance.SyncObservation{Version: version}
+	if addr := resolveServerAddr(""); proc.SocketLive(ctx, addr) {
+		if st, err := proc.QueryStatus(ctx, addr); err == nil {
+			o.ServerLive, o.ServerVersion, o.ServerPID = true, st.Version, st.ParentPID
+		}
+	}
+	hook, installed, err := vcs.ReadGitRefreshHook(ctx, root)
+	o.HookChecked = err == nil
+	if installed {
+		o.HookCommand = hook.Command
+		o.HookBinary, o.HookRunnable = maintenance.HookBinary(hook.Top, hook.Command)
+	}
+	if dir, err := knowledgeStoreDir(root); err == nil {
+		if h, ok := maintenance.RunningGraphBuild(dir); ok {
+			o.Building = &h
+		}
+		if r, ok, err := maintenance.ReadSyncRequest(dir); err == nil && ok {
+			o.LastRequest = &r
+		}
+		if info, err := os.Stat(knowledge.GuardIndexPath(filepath.Dir(dir))); err == nil {
+			o.IndexBuilt = info.ModTime()
+		}
+	}
+	return o
+}
+
+// withIndexCause returns ans carrying indexCause when it was drawn from an index that is
+// missing or behind, and unchanged otherwise.
+func withIndexCause(ctx context.Context, root string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
+	if ans.IndexBehind() {
+		c := indexCause(ctx, root)
+		ans.IndexCause = &c
+	}
+	return ans
+}
+
+// indexCause is the observed reason the checkout at root has an index missing or behind,
+// with its remedy.
+func indexCause(ctx context.Context, root string) types.KnowledgeIndexCause {
+	return maintenance.DiagnoseSync(observeSync(ctx, resolveRootOrEmpty(root)), maintenance.Commands{
+		GraphBuild:  hint.GraphBuild.String(),
+		ServerStart: hint.ServerStart.String(),
+		ServerStop:  hint.ServerStop.String(),
+		JobRunSync:  hint.JobRun.With(job.NameSyncGraph),
+	})
+}
+
+// printIndexCause writes the answer's index cause under its verdict block, in its
+// indentation, and nothing when it carries none.
+func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
+	if c := ans.IndexCause; c != nil {
+		fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+	}
+}
+
+// indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
+// within the guard's lookup budget.
+func indexCauseForGuard() string {
+	root, err := guardRoot()
+	if err != nil {
+		return ""
+	}
+	c, ok := withinBudget(guardLookupBudget, func() types.KnowledgeIndexCause {
+		return indexCause(context.Background(), root)
+	})
+	if !ok {
+		return ""
+	}
+	return "Why: " + c.Why + ". Fix: " + c.Fix + "."
 }

@@ -13,8 +13,10 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -86,7 +88,7 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
 		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
 
@@ -143,6 +145,25 @@ func TestBuzzScriptContextRefusesAFailedLoadUnderTheSandbox(t *testing.T) {
 	assert.Equal(t, 2, *opens)
 }
 
+// A script run carries one evaluation memo, which std's graph members read through, so two
+// magus\refs calls in one script build the symbol graph once rather than once each.
+func TestBuzzRunContextCarriesOneEvalMemo(t *testing.T) {
+	ctx, err := buzzRunContext(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	memo := types.EvalMemoFromContext(ctx)
+	require.NotNil(t, memo, "graph reads in a script would each rebuild the graph")
+
+	builds := 0
+	for range 2 {
+		_, err := memo.Do("graph+symbols", func() (any, error) {
+			builds++
+			return nil, nil
+		})
+		require.NoError(t, err)
+	}
+	assert.Equal(t, 1, builds)
+}
+
 // TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted holds the other half: the
 // sandbox is off by default, and a script in a workspace that never asked for one keeps
 // writing wherever it could before.
@@ -158,7 +179,7 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 
 const (
 	buzzVanillaScript = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
-	buzzMemberScript  = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\projects();\n    std\\print(\"{p.projects.len()}\");\n}\n"
+	buzzMemberScript  = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\describe.project();\n    std\\print(\"{p.projects.len()}\");\n}\n"
 )
 
 // countWorkspaceOpens swaps buzzLoadWorkspace for open, counting its calls.
@@ -180,7 +201,7 @@ func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
 	path := filepath.Join(root, "script.buzz")
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))
@@ -962,4 +983,22 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, bytes.HasPrefix(data, []byte{0x1f, 0x8b}), "%s is a gzipped profile", name)
 	}
+}
+
+func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
+	root := t.TempDir()
+	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, []byte("hello\n"), time.Now(), nil)
+
+	dir, err := magus.ResolveCacheDir(root)
+	require.NoError(t, err)
+	store := cache.NewOutputStore(dir)
+	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", []string{"--x"}))
+	out, d, err := store.ByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, "hello\n", string(out))
+	assert.Equal(t, "buzz probe.buzz", d.Target)
+	assert.False(t, d.Failed)
+
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", nil), buzzRunKey("probe.buzz", "code", []string{"--x"}),
+		"different arguments are a different probe")
 }

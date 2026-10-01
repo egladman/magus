@@ -166,7 +166,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 // Ship a release: a needs() edge onto image-build, so it shows up in `graph`/`ls`
 // as part of the DAG. Charms ride down needs() edges from the run, so `magus run
 // release:cd` flows the cd charm into image-build and it switches to a multi-arch
-// push. (magus.run(["image-build:cd"]) would instead invoke it imperatively with
+// push. (magus\run(["image-build:cd"]) would instead invoke it imperatively with
 // the charm pinned in the call, but an imperative call is not a static edge, so it
 // would not appear in the graph. Both are valid; needs keeps the DAG complete.)
 export fun release(ctx: magus\Context, args: [str]) > void {

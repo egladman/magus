@@ -79,7 +79,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    rerunning one failing target is cheaper than the pipeline while you fix it,
    and `ci` afterwards proves the change. `magus describe targets` lists every
    target (`-o name` for bare names){{if .Full}} and classifies each as canonical, spell,
-   or custom; `{{tool "client"}}` (`{{buzz "describe"}}`, the same arguments as `magus describe targets`) is the MCP equivalent{{end}}. Ask the
+   or custom; `{{tool "client"}}` (`{{buzz "describe.target"}}`) is the MCP equivalent{{end}}. Ask the
    workspace rather than reading `MAGUS.md`{{if .Full}}: that file is a generated index
    for humans, true only as of its last regeneration{{end}}.
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)

@@ -1,7 +1,6 @@
 ### Added
 
-- **`magus job edit` widens or revokes a live job's write paths.** `--add-write-path`
-  and `--remove-write-path` merge into the row in one write that keeps its state; it
-  previews until `--apply`. A revoked path is recorded as a release with its digest,
-  and the holder's next write there is refused naming the revocation. A refusal no
-  longer serves a widening command.
+- **`magus job apply -f <file|->` upserts jobs' specs, the way `kubectl apply` does.** The
+  record is the whole spec; the job keeps its state, holder and registration. `-f -` reads
+  stdin: one record, an array, or one per line, all checked before any is written. A new
+  id creates the job. `--dry-run` prints the spec diff.

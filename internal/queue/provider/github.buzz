@@ -1,6 +1,7 @@
 // GitHub provider for the merge queue: `mergequeue --provider github`. It carries the
 // provider contract (see the provider package): describe, list_changes, approval_at,
-// list_green, post_status, retarget, merge_change, kick_back, mark and list_artifacts.
+// list_green, post_status, retarget, merge_change, kick_back, mark, list_artifacts,
+// required_checks, reviews and dismiss_review.
 // The queue decides what to validate and merge; this file only speaks GitHub's REST and
 // GraphQL APIs.
 //
@@ -27,7 +28,7 @@
 // # Credentials
 //
 // Two environment variables. The reads (describe, list_changes, approval_at,
-// list_artifacts) use MERGEQUEUE_TOKEN when the environment carries it, else
+// list_artifacts, reviews) use MERGEQUEUE_TOKEN when the environment carries it, else
 // GITHUB_TOKEN: the validation side runs pull-request code and holds only a read-only
 // Actions token. The writes use MERGEQUEUE_TOKEN and nothing else, so a job that does
 // not hold the write credential cannot write by accident. That credential is the queue's
@@ -1183,13 +1184,31 @@ fun mergedUnder(repo: str, base: str, queued: [any], hdrs: {str: str}) > [any] !
     return found;
 }
 
+// onlyIn is the record mergedUnder reads for pull request number in listing pages, so
+// a listing scoped to it reads what it carries alone; none when it is not open.
+fun onlyIn(pages: [str], number: str, repo: str) > [any] !> any {
+    final found = mut [<any>];
+    foreach (page in pages) {
+        foreach (pr in serialize\jsonDecode(page).listValue()) {
+            if ("{pr.q("number").integerValue()}" == number) {
+                found.append({"id": number, "fork": pr.q("head").q("repo").q("full_name").stringValue() != repo});
+            }
+        }
+    }
+    return found;
+}
+
 // list_changes returns the queued pull requests against the base branch, oldest first,
 // the merged ones a queued one carries the head of, every other open pull request, and
-// the closed ones still showing a queue label.
+// the closed ones still showing a queue label. With only, a pull request number, it
+// reads the merged ones that one carries instead, and no closed ones: what classifying
+// its approvals takes, at one GraphQL query per 100 of its commits rather than per
+// queued pull request.
 export fun list_changes(io: {str: any}) > any !> any {
     final hdrs = reading("list_changes");
     final repo = repoOf(io);
     final base = "{io["base"] ?? ""}";
+    final only = "{io["only"] ?? ""}";
     final pulls = openPulls(repo, hdrs: hdrs);
     final stacks = mut {<str: str>};
     foreach (top in stackTops(pulls, base: base)) {
@@ -1204,6 +1223,10 @@ export fun list_changes(io: {str: any}) > any !> any {
         }
     }
     final changes = changesFrom(pulls, repo: repo, base: base, stacks: stacks, labeled: labeled);
+    if (only != "") {
+        return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: onlyIn(pulls, number: only, repo: repo), hdrs: hdrs),
+            "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes)};
+    }
     return {"changes": changes, "merged": mergedUnder(repo, base: base, queued: changes, hdrs: hdrs), "unqueued": unqueuedFrom(pulls, repo: repo, queued: changes),
         "closed": closedFrom(closedPulls(repo, hdrs: hdrs), repo: repo)};
 }
@@ -1222,29 +1245,20 @@ fun requiredFrom(body: str) > int !> any {
     return need;
 }
 
-// approvalFrom decides approval AT commit from a GraphQL pull-request answer.
-//
-// Each reviewer's latest decisive review counts, as on GitHub, but only a reviewer who can
-// push to the repository counts at all, as GitHub counts toward a required review: anyone
-// can leave an approving review on a public repository. An approval counts only when it
-// was given on commit itself: approving an older commit does not approve what the queue
-// tested. When commit lacks them, approved_commit names an older commit that holds enough
-// approvals, the one approved most recently (by commit id when two tie), and the queue
-// decides whether commit is that one rebased with its diff unchanged. reviewDecision
-// covers what rulesets do not show (classic protection, code owners), so any requirement
-// it signals needs at least one approval; its APPROVED alone approves nothing, since it
-// can stand on a review of an older commit.
-fun approvalFrom(body: str, commit: str, required: int) > {str: any} !> any {
-    final pr = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest");
-    final head = pr.q("headRefOid").stringValue();
-    if (head == "") {
-        throw "github: approval_at: the pull request was not found";
+// standingFrom reads each reviewer's latest decisive review from every page of a GraphQL
+// pull request's reviews, oldest first, keyed by login, as {state, commit, at, id}: what
+// counts, as on GitHub. Only a reviewer who can push to the repository counts at all, as
+// GitHub counts toward a required review: anyone can leave an approving review on a
+// public repository.
+fun standingFrom(pages: [str]) > {str: {str: str}} !> any {
+    final latest = mut {<str: {str: str}>};
+    final nodes = mut [<serialize\Boxed>];
+    foreach (page in pages) {
+        foreach (r in serialize\jsonDecode(page).q("data").q("repository").q("pullRequest").q("reviews").q("nodes").listValue()) {
+            nodes.append(r);
+        }
     }
-    final decision = pr.q("reviewDecision").stringValue();
-    final latest = mut {<str: str>};
-    final commits = mut {<str: str>};
-    final times = mut {<str: str>};
-    foreach (r in pr.q("reviews").q("nodes").listValue()) {
+    foreach (r in nodes) {
         final state = r.q("state").stringValue();
         if (state != "APPROVED" and state != "CHANGES_REQUESTED" and state != "DISMISSED") {
             continue;
@@ -1254,21 +1268,40 @@ fun approvalFrom(body: str, commit: str, required: int) > {str: any} !> any {
         if (who == "" or !r.q("authorCanPushToRepository").booleanValue()) {
             continue;
         }
-        latest[who] = state;
-        commits[who] = r.q("commit").q("oid").stringValue();
-        times[who] = r.q("submittedAt").stringValue();
+        latest[who] = {"state": state, "commit": r.q("commit").q("oid").stringValue(), "at": r.q("submittedAt").stringValue(), "id": id(r.q("databaseId"))};
     }
+    return latest;
+}
+
+// approvalFrom decides approval AT commit from the pages of a GraphQL pull-request answer.
+//
+// Each reviewer's latest decisive review counts, as standingFrom reads it. An approval counts only when it
+// was given on commit itself: approving an older commit does not approve what the queue
+// tested. When commit lacks them, approved_commit names an older commit that holds enough
+// approvals, the one approved most recently (by commit id when two tie), and the queue
+// decides whether commit is that one rebased with its diff unchanged. reviewDecision
+// covers what rulesets do not show (classic protection, code owners), so any requirement
+// it signals needs at least one approval; its APPROVED alone approves nothing, since it
+// can stand on a review of an older commit.
+fun approvalFrom(pages: [str], commit: str, required: int) > {str: any} !> any {
+    final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
+    final head = pr.q("headRefOid").stringValue();
+    if (head == "") {
+        throw "github: approval_at: the pull request was not found";
+    }
+    final decision = pr.q("reviewDecision").stringValue();
     var changes = decision == "CHANGES_REQUESTED";
     final at = mut {<str: int>};
     final newestAt = mut {<str: str>};
-    foreach (who, state in latest) {
+    foreach (_, review in standingFrom(pages)) {
+        final state = review["state"] ?? "";
         if (state == "CHANGES_REQUESTED") {
             changes = true;
         }
         if (state == "APPROVED") {
-            final oid = commits[who] ?? "";
+            final oid = review["commit"] ?? "";
             at[oid] = (at[oid] ?? 0) + 1;
-            final when = times[who] ?? "";
+            final when = review["at"] ?? "";
             if (when > (newestAt[oid] ?? "")) {
                 newestAt[oid] = when;
             }
@@ -1357,21 +1390,67 @@ fun sharedFrom(pages: [str], number: str) > [str] !> any {
 }
 
 // Backquoted: GraphQL's braces would read as interpolation in a double-quoted string.
-final APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid reviewDecision reviews(last: 100) { nodes { state submittedAt authorCanPushToRepository author { login } commit { oid } } } } } }`;
+final APPROVAL_QUERY = `query($owner: String!, $name: String!, $number: Int!, $after: String) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { headRefOid reviewDecision reviews(first: 100, after: $after) { pageInfo { hasNextPage endCursor } nodes { databaseId state submittedAt authorCanPushToRepository author { login } commit { oid } } } } } }`;
+
+// reviewsNext is the cursor of the reviews page after the one in body, "" at the end.
+fun reviewsNext(body: str) > str !> any {
+    final info = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest").q("reviews").q("pageInfo");
+    if (info.q("hasNextPage").booleanValue()) {
+        return info.q("endCursor").stringValue();
+    }
+    return "";
+}
+
+// reviewPages reads every page of a pull request's reviews, oldest first, so no review is
+// dropped however many there are. A page whose head differs from the first is an error:
+// the reviews would then belong to two heads.
+fun reviewPages(parts: [str], number: str, hdrs: {str: str}) > [str] !> any {
+    final bodies = mut [<str>];
+    var after = "";
+    var head = "";
+    while (true) {
+        final vars = mut {<str: any>};
+        vars["owner"] = parts[0];
+        vars["name"] = parts[1];
+        vars["number"] = std\parseInt(number) ?? 0;
+        if (after != "") {
+            vars["after"] = after;
+        }
+        final body = graphql(APPROVAL_QUERY, variables: vars, hdrs: hdrs);
+        final at = serialize\jsonDecode(body).q("data").q("repository").q("pullRequest").q("headRefOid").stringValue();
+        if (bodies.len() == 0) {
+            head = at;
+        } else if (at != head) {
+            throw "github: #{number} moved from {head} to {at} while its reviews were read";
+        }
+        bodies.append(body);
+        after = reviewsNext(body);
+        if (after == "") {
+            break;
+        }
+    }
+    return bodies;
+}
+
+// ownerName splits a change record's owner/name repo for GraphQL.
+fun ownerName(io: {str: any}, op: str) > [str] !> any {
+    final repo = "{io["repo"] ?? ""}";
+    final parts = repo.split("/");
+    if (parts.len() != 2) {
+        throw "github: {op} needs an owner/name repo, got '{repo}'";
+    }
+    return parts;
+}
 
 export fun approval_at(io: {str: any}) > any !> any {
     final hdrs = reading("approval_at");
     final repo = "{io["repo"] ?? ""}";
-    final parts = repo.split("/");
-    if (parts.len() != 2) {
-        throw "github: approval_at needs an owner/name repo, got '{repo}'";
-    }
+    final parts = ownerName(io, op: "approval_at");
     final number = "{io["id"] ?? ""}";
     final prBody = expect(get(apiBase() + "/repos/" + repo + "/pulls/" + number, hdrs: hdrs), status: 200, what: "read #{number}");
     final target = targetFrom(prBody, method: "{io["method"] ?? ""}");
     final rules = expect(get(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(target["base"] ?? ""), hdrs: hdrs), status: 200, what: "read the rules on {target["base"] ?? ""}");
-    final answer = graphql(APPROVAL_QUERY, variables: {"owner": parts[0], "name": parts[1], "number": std\parseInt(number) ?? 0}, hdrs: hdrs);
-    final a = approvalFrom(answer, commit: "{io["commit"] ?? ""}", required: requiredFrom(rules));
+    final a = approvalFrom(reviewPages(parts, number: number, hdrs: hdrs), commit: "{io["commit"] ?? ""}", required: requiredFrom(rules));
     final pr = serialize\jsonDecode(prBody);
     var shared = [<str>];
     final branch = pr.q("head").q("ref").stringValue();
@@ -1383,6 +1462,65 @@ export fun approval_at(io: {str: any}) > any !> any {
         "approved": a["approved"], "head": a["head"], "reason": a["reason"], "approved_commit": a["approved_commit"],
         "base": target["base"], "method": target["method"], "queued": intent(prBody, repo: repo, hdrs: hdrs), "shared_with": shared,
     };
+}
+
+// reviewsFrom reads the head and the approvals standing on a pull request from the same
+// GraphQL pages approval_at reads, so both count the same reviews: each push-capable
+// reviewer's latest decisive review, kept when it approves.
+fun reviewsFrom(pages: [str]) > {str: any} !> any {
+    final pr = serialize\jsonDecode(pages[0]).q("data").q("repository").q("pullRequest");
+    final head = pr.q("headRefOid").stringValue();
+    if (head == "") {
+        throw "github: reviews: the pull request was not found";
+    }
+    final approving = mut [<{str: str}>];
+    foreach (who, review in standingFrom(pages)) {
+        if ((review["state"] ?? "") == "APPROVED") {
+            approving.append({"id": review["id"] ?? "", "reviewer": who, "commit": review["commit"] ?? ""});
+        }
+    }
+    return {"head": head, "reviews": approving};
+}
+
+export fun reviews(io: {str: any}) > any !> any {
+    final hdrs = reading("reviews");
+    final parts = ownerName(io, op: "reviews");
+    return reviewsFrom(reviewPages(parts, number: "{io["id"] ?? ""}", hdrs: hdrs));
+}
+
+// dismissal reads GitHub's answer to a dismissal: "done" on 200, "reread" on 422, which
+// GitHub sends for a review that is no longer approving, so the caller reads its state.
+// Anything else is an error naming GitHub's reason.
+fun dismissal(res: {str: any}, review: str) > str !> any {
+    if (res["status"] == 200) {
+        return "done";
+    }
+    if (res["status"] == 422) {
+        return "reread";
+    }
+    throw "github: dismiss review {review}: HTTP {res["status"]}: {res["body"]}";
+}
+
+// dismissedFrom reads a review's state after a refused dismissal: one already dismissed,
+// by this queue or by hand, is what the dismissal wanted.
+fun dismissedFrom(body: str, review: str) > bool !> any {
+    final state = serialize\jsonDecode(body).q("state").stringValue();
+    if (state != "DISMISSED") {
+        throw "github: dismiss review {review}: GitHub refused it, and it is {state}, not dismissed";
+    }
+    return true;
+}
+
+export fun dismiss_review(io: {str: any}) > bool !> any {
+    final hdrs = writing("dismiss_review");
+    final review = "{io["review"] ?? ""}";
+    final url = apiBase() + "/repos/{io["repo"] ?? ""}/pulls/{io["id"] ?? ""}/reviews/{escape(review)}";
+    final payload = serialize\jsonEncode({"message": "{io["message"] ?? ""}", "event": "DISMISS"});
+    final res = mergequeue\request("PUT", url: url + "/dismissals", body: payload, headers: hdrs);
+    if (dismissal(res, review: review) == "done") {
+        return true;
+    }
+    return dismissedFrom(expect(get(url, hdrs: hdrs), status: 200, what: "read review {review}"), review: review);
 }
 
 // latestRuns lists the ids of the newest workflow run of each workflow in an
@@ -2370,8 +2508,8 @@ test "merged changes are the ones merged into the base at a head the change carr
 test "an approval counts only at the commit asked about" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "new", "reviewDecision": "APPROVED",
         "reviews": {"nodes": [{"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "old"}}]}}}}}`;
-    assert\equal(approvalFrom(body, commit: "old", required: 1)["approved"], want: true, message: "approved at old");
-    final atNew = approvalFrom(body, commit: "new", required: 1);
+    assert\equal(approvalFrom([body],commit: "old", required: 1)["approved"], want: true, message: "approved at old");
+    final atNew = approvalFrom([body],commit: "new", required: 1);
     assert\equal(atNew["approved"], want: false, message: "not approved at a commit nobody reviewed");
     assert\equal(atNew["head"], want: "new", message: "the current head rides along");
     assert\equal(atNew["reason"], want: "0 of 1 approvals at this commit", message: "says why");
@@ -2385,8 +2523,8 @@ test "the commit approvals carry over from is the one approved most recently" {
             {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "first"}},
             {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "c"}, "commit": {"oid": "first"}}
         ]}}}}}`;
-    assert\equal(approvalFrom(body, commit: "new", required: 1)["approved_commit"], want: "second", message: "whatever order the reviewers come in");
-    assert\equal(approvalFrom(body, commit: "new", required: 2)["approved_commit"], want: "first", message: "among the commits holding enough");
+    assert\equal(approvalFrom([body],commit: "new", required: 1)["approved_commit"], want: "second", message: "whatever order the reviewers come in");
+    assert\equal(approvalFrom([body],commit: "new", required: 2)["approved_commit"], want: "first", message: "among the commits holding enough");
 }
 
 test "a reviewer's latest decisive review wins, and changes requested blocks" {
@@ -2396,7 +2534,7 @@ test "a reviewer's latest decisive review wins, and changes requested blocks" {
             {"state": "COMMENTED", "authorCanPushToRepository": true, "author": {"login": "a"}, "commit": {"oid": "abc"}},
             {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": true, "author": {"login": "b"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    final got = approvalFrom(body, commit: "abc", required: 1);
+    final got = approvalFrom([body],commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "changes requested blocks");
     assert\equal(got["reason"], want: "changes requested", message: "a comment does not undo an approval, and says why not");
     assert\equal(got["approved_commit"], want: "", message: "nothing carries over past a change request");
@@ -2410,10 +2548,84 @@ test "only a reviewer who can push counts, whatever reviewDecision says" {
             {"state": "APPROVED", "submittedAt": "2026-01-02T00:00:00Z", "authorCanPushToRepository": true, "author": null, "commit": {"oid": "abc"}},
             {"state": "APPROVED", "submittedAt": "2026-01-01T00:00:00Z", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "old"}}
         ]}}}}}`;
-    final got = approvalFrom(body, commit: "abc", required: 1);
+    final got = approvalFrom([body],commit: "abc", required: 1);
     assert\equal(got["approved"], want: false, message: "a stale APPROVED decision and approvals from accounts that cannot push approve nothing");
     assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "counts the writer's review only, at the commit it covers");
     assert\equal(got["approved_commit"], want: "old", message: "the writer's approval still stands where it was given");
+}
+
+test "reviews lists the approvals approval_at counts, with the id a dismissal takes" {
+    final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "APPROVED",
+        "reviews": {"nodes": [
+            {"databaseId": 11, "state": "APPROVED", "authorCanPushToRepository": false, "author": {"login": "drive-by"}, "commit": {"oid": "old"}},
+            {"databaseId": 12, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "old"}},
+            {"databaseId": 13, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "owner"}, "commit": {"oid": "older"}},
+            {"databaseId": 14, "state": "COMMENTED", "authorCanPushToRepository": true, "author": {"login": "owner"}, "commit": {"oid": "abc"}},
+            {"databaseId": 15, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "gone"}, "commit": {"oid": "old"}},
+            {"databaseId": 16, "state": "DISMISSED", "authorCanPushToRepository": true, "author": {"login": "gone"}, "commit": {"oid": "old"}},
+            {"databaseId": 17, "state": "CHANGES_REQUESTED", "authorCanPushToRepository": true, "author": {"login": "critic"}, "commit": {"oid": "abc"}}
+        ]}}}}}`;
+    final got = serialize\Boxed.init(reviewsFrom([body]));
+    assert\equal(got.q("head").stringValue(), want: "abc", message: "the head, read with the reviews");
+    final seen = mut [<str>];
+    foreach (r in got.q("reviews").listValue()) {
+        seen.append("{r.q("reviewer").stringValue()}:{r.q("id").stringValue()}@{r.q("commit").stringValue()}");
+    }
+    final listed = seen.join(" ");
+    assert\equal(seen.len(), want: 2, message: "a reviewer who cannot push, a dismissed approval and a change request are no approvals: " + listed);
+    assert\equal(seen.indexOf("writer:12@old") != null and seen.indexOf("owner:13@older") != null, want: true, message: "a comment leaves an approval standing: " + listed);
+}
+
+test "reviews read every page, a later page's review replacing an earlier one" {
+    final first = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "APPROVED",
+        "reviews": {"pageInfo": {"hasNextPage": true, "endCursor": "c1"}, "nodes": [
+            {"databaseId": 1, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "ann"}, "commit": {"oid": "old"}},
+            {"databaseId": 2, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "bob"}, "commit": {"oid": "old"}}
+        ]}}}}}`;
+    final second = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "APPROVED",
+        "reviews": {"pageInfo": {"hasNextPage": false, "endCursor": "c2"}, "nodes": [
+            {"databaseId": 3, "state": "DISMISSED", "authorCanPushToRepository": true, "author": {"login": "ann"}, "commit": {"oid": "old"}},
+            {"databaseId": 4, "state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "cy"}, "commit": {"oid": "abc"}}
+        ]}}}}}`;
+    assert\equal(reviewsNext(first), want: "c1", message: "the first page names where the second starts");
+    assert\equal(reviewsNext(second), want: "", message: "the last page names none");
+    final seen = mut [<str>];
+    foreach (r in serialize\Boxed.init(reviewsFrom([first, second])).q("reviews").listValue()) {
+        seen.append(r.q("reviewer").stringValue());
+    }
+    assert\equal(seen.len(), want: 2, message: "ann's approval was dismissed on the second page: " + seen.join(" "));
+    assert\equal(seen.indexOf("bob") != null and seen.indexOf("cy") != null, want: true, message: "bob from the first page, cy from the second: " + seen.join(" "));
+    assert\equal(approvalFrom([first, second], commit: "abc", required: 1)["approved"], want: true, message: "approval_at counts the second page too");
+}
+
+test "reviews of a pull request that does not exist is an error" {
+    var failed = false;
+    try {
+        reviewsFrom([`{"data": {"repository": {"pullRequest": null}}}`]);
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "no head");
+}
+
+test "a dismissal is done on 200, re-read on 422, and an error otherwise" {
+    assert\equal(dismissal({"status": 200, "body": ""}, review: "12"), want: "done", message: "dismissed");
+    assert\equal(dismissal({"status": 422, "body": ""}, review: "12"), want: "reread", message: "no longer approving");
+    var failed = false;
+    try {
+        dismissal({"status": 403, "body": "Resource not accessible by integration"}, review: "12");
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "a token without pull-requests write");
+    assert\equal(dismissedFrom(`{"id": 12, "state": "DISMISSED"}`, review: "12"), want: true, message: "already dismissed is done");
+    failed = false;
+    try {
+        dismissedFrom(`{"id": 12, "state": "COMMENTED"}`, review: "12");
+    } catch (e) {
+        failed = true;
+    }
+    assert\equal(failed, want: true, message: "a refusal that left the review standing");
 }
 
 test "a change request from an account that cannot push blocks nothing" {
@@ -2422,19 +2634,19 @@ test "a change request from an account that cannot push blocks nothing" {
             {"state": "APPROVED", "authorCanPushToRepository": true, "author": {"login": "writer"}, "commit": {"oid": "abc"}},
             {"state": "CHANGES_REQUESTED", "authorCanPushToRepository": false, "author": {"login": "drive-by"}, "commit": {"oid": "abc"}}
         ]}}}}}`;
-    assert\equal(approvalFrom(body, commit: "abc", required: 1)["approved"], want: true, message: "as on GitHub, where it does not count either");
+    assert\equal(approvalFrom([body],commit: "abc", required: 1)["approved"], want: true, message: "as on GitHub, where it does not count either");
 }
 
 test "no review requirement approves with no reviews" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": null,
         "reviews": {"nodes": []}}}}}`;
-    assert\equal(approvalFrom(body, commit: "abc", required: 0)["approved"], want: true, message: "nothing is required");
+    assert\equal(approvalFrom([body],commit: "abc", required: 0)["approved"], want: true, message: "nothing is required");
 }
 
 test "a requirement the rulesets do not show still needs one approval at the commit" {
     final body = `{"data": {"repository": {"pullRequest": {"headRefOid": "abc", "reviewDecision": "REVIEW_REQUIRED",
         "reviews": {"nodes": []}}}}}`;
-    final got = approvalFrom(body, commit: "abc", required: 0);
+    final got = approvalFrom([body],commit: "abc", required: 0);
     assert\equal(got["approved"], want: false, message: "classic protection or code owners");
     assert\equal(got["reason"], want: "0 of 1 approvals at this commit", message: "at least one");
 }

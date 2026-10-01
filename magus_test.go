@@ -1670,10 +1670,24 @@ func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
 	)
 	got := touchedSymbols(head, patch, map[string]*types.DiffFile{"api.go": {Path: "api.go"}})
 	require.Equal(t, map[string]touchedSymbol{
-		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()"},
-		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()"},
-		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()"},
+		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()", kind: "Function"},
+		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()", kind: "Function"},
+		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()", kind: "Function"},
 	}, got)
+}
+
+// A changed test function has no referents and leaves no module, and is still the
+// declaration a reviewer and a split plan need named. An object-literal property SCIP
+// indexes as a symbol is not.
+func TestListedDiffSymbolsKeepTouchedDeclarations(t *testing.T) {
+	unreferenced := types.DiffSymbol{ID: goSymbol("api", "TestOpen()."), Label: "TestOpen"}
+	assert.True(t, listedDiffSymbol(unreferenced, "Function"), "a touched test function")
+	assert.True(t, listedDiffSymbol(unreferenced, "Method"), "a touched method")
+	assert.False(t, listedDiffSymbol(unreferenced, ""), "untouched and unreferenced")
+	assert.False(t, listedDiffSymbol(unreferenced, "UnspecifiedKind"), "a TypeScript property")
+	assert.False(t, listedDiffSymbol(unreferenced, "Parameter"))
+	assert.True(t, listedDiffSymbol(types.DiffSymbol{RefCount: 2, FileCount: 1}, ""), "referenced")
+	assert.True(t, listedDiffSymbol(types.DiffSymbol{PublicBeyondWorkspace: true}, ""), "exported")
 }
 
 func TestTouchedSymbolsNeverIncludeANamespace(t *testing.T) {

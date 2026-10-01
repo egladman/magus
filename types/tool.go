@@ -1,7 +1,7 @@
 package types
 
 // ToolReport is every project's tools, their probed versions, their windows, and where each
-// probed version's release cycle stands: `magus describe tools` and magus\tools() return it.
+// probed version's release cycle stands: `magus describe tools` and magus\describe.tool() return it.
 // Annotate a Buzz result `> ToolReport` for compile-checked field access.
 //
 // Field names and values track magus.tool.v1alpha1 (proto/magus/tool/v1alpha1/tool.proto),

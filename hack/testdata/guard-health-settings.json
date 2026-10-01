@@ -1,0 +1,57 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-path.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|NotebookEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "^mcp__magus__"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

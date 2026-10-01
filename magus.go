@@ -931,6 +931,13 @@ func (m *Magus) AutoResolvable(ctx context.Context, path string, base, merged []
 	return v.Line(), ok
 }
 
+// ClassifyEdit is ChangeClassifier's class of one path's edit from old to cur, and why. A
+// nil side is the path absent there, so adding or deleting a file is never comment-only.
+// The merge queue carries an approval over an edit by this class.
+func (m *Magus) ClassifyEdit(ctx context.Context, path string, old, cur []byte) risk.Classified {
+	return m.ChangeClassifier(nil, nil).Edit(ctx, path, old, cur)
+}
+
 // AutoResolve settles a conflicted path the way the merge queue does: MergeThreeWay settles
 // every region both sides changed, by the same rule, and AutoResolvable allows the result. It
 // returns the merge when it settles; report names the path's class and why, and each
@@ -1416,17 +1423,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		if graph != nil {
 			sym.PublicTo, sym.PublicFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
-		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
-		// parameters and temporaries (`signal0`, `headers1`, `body0`), and on a real file they
-		// were roughly two thirds of the payload this surface serves to every MCP client. A
-		// symbol that nothing references and that leaves neither the project nor the module
-		// cannot change how anyone reads the diff, so carrying it costs an agent's context and
-		// buys nothing.
-		//
-		// The exports are kept even at zero references, and that is the whole reason this is a
-		// conjunction rather than `RefCount == 0`: a NEWLY ADDED public function has no
-		// referents yet and is precisely the thing a reviewer must see.
-		if sym.RefCount > 0 || sym.FileCount > 0 || sym.PublicBeyondWorkspace || len(sym.PublicTo) > 0 {
+		if listedDiffSymbol(sym, t.kind) {
 			f.Symbols = append(f.Symbols, sym)
 		}
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
@@ -1441,6 +1438,22 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// that because its neighbors are internal is how the signal gets missed.
 		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
 			f.Surface = types.DiffSurfacePublic
+		}
+	}
+	// scip-go indexes only the files that build for the host's GOOS, GOARCH and default
+	// tags, in the projects it reaches, so a file under another build tag defines nothing in
+	// the graph; its declarations come from its own syntax instead.
+	if patchErr == nil {
+		defined := map[string]bool{}
+		for _, s := range res.ChangedSymbols {
+			defined[s.File] = true
+		}
+		lines, pf := impact.ChangedLines(patch), readPatchFacts(patch)
+		for i := range out.Files {
+			f := &out.Files[i]
+			if !defined[f.Path] && strings.HasSuffix(f.Path, ".go") {
+				f.Symbols = append(f.Symbols, parsedGoSymbols(m.ws.Root, f.Path, lines[f.Path], pf)...)
+			}
 		}
 	}
 	for _, c := range res.ChangedFileCoverage {
@@ -1477,10 +1490,34 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	return out, nil
 }
 
-// touchedSymbol is what a patch says about one symbol whose lines it changed.
+// touchedSymbol is what a patch says about one symbol whose lines it changed. kind is the
+// symbol's SCIP kind.
 type touchedSymbol struct {
 	change    string
 	signature string
+	kind      string
+}
+
+// listedDiffSymbol reports whether a changed file lists sym. touchedKind is the SCIP kind of
+// a symbol the patch touched, "" for one it did not.
+//
+// SCIP indexes every binding, so a changed function brings its parameters and temporaries
+// (`signal0`, `headers1`, `body0`), roughly two thirds of the payload on a real file. A
+// symbol nothing references that leaves neither the project nor the module cannot change
+// how anyone reads the diff, unless the patch touched it and it is a declaration: a changed
+// test function has no referents and is still the declaration a reviewer and a split plan
+// need named. A newly added export has no referents yet and is kept by its exposure.
+func listedDiffSymbol(sym types.DiffSymbol, touchedKind string) bool {
+	return sym.RefCount > 0 || sym.FileCount > 0 || sym.PublicBeyondWorkspace || len(sym.PublicTo) > 0 ||
+		declarationKinds[touchedKind]
+}
+
+// declarationKinds are the SCIP kinds of what a reader edits as a declaration. Fields,
+// parameters and the UnspecifiedKind an object-literal property gets are left out.
+var declarationKinds = map[string]bool{
+	"Class": true, "Constant": true, "Constructor": true, "Enum": true, "Function": true,
+	"Interface": true, "Macro": true, "Method": true, "Struct": true, "Trait": true,
+	"Type": true, "TypeAlias": true, "Variable": true,
 }
 
 // touchedSymbols reads which symbols the reviewed files define on lines the patch changed, and
@@ -1511,7 +1548,7 @@ func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*type
 					change = types.DiffChangeSignature
 				}
 			}
-			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature]}
+			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature], kind: def.node.Attrs[attrSymbolKind]}
 		}
 	}
 	return out

@@ -3972,3 +3972,92 @@ func TestGitOperationInProgressNamesARevert(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.OperationRevert, op)
 }
+
+// The command read back is the one installed, from a linked worktree too, since that is
+// the checkout a not-indexed verdict asks about.
+func TestReadGitRefreshHook(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, dir, "worktree", "add", "-q", linked)
+
+	_, installed, err := ReadGitRefreshHook(t.Context(), linked)
+	require.NoError(t, err)
+	assert.False(t, installed, "no refresh section yet")
+
+	_, err = gitVCS{}.InstallRefreshHook(t.Context(), dir, "./magus job run sync-graph")
+	require.NoError(t, err)
+	hook, installed, err := ReadGitRefreshHook(t.Context(), linked)
+	require.NoError(t, err)
+	assert.True(t, installed)
+	assert.Equal(t, "./magus job run sync-graph", hook.Command)
+	assert.Equal(t, evalSymlinks(t, linked), evalSymlinks(t, hook.Top), "the linked worktree's own top level, where its hooks run")
+}
+
+// A magus workspace below the repository's top level: the hook runs at the top, so that
+// is where its ./magus resolves, not the workspace root the lookup was asked from.
+func TestReadGitRefreshHookNamesTheTopLevelAboveANestedWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"tools/ws/magusfile.buzz": "\n"})
+	workspace := filepath.Join(dir, "tools", "ws")
+	_, err := gitVCS{}.InstallRefreshHook(t.Context(), workspace, "./magus job run sync-graph")
+	require.NoError(t, err)
+
+	hook, installed, err := ReadGitRefreshHook(t.Context(), workspace)
+	require.NoError(t, err)
+	require.True(t, installed)
+	assert.Equal(t, evalSymlinks(t, dir), evalSymlinks(t, hook.Top))
+	assert.NotEqual(t, evalSymlinks(t, workspace), evalSymlinks(t, hook.Top))
+}
+
+func evalSymlinks(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	require.NoError(t, err)
+	return resolved
+}
+
+func TestReadGitRefreshHookOutsideARepositoryIsUnsupported(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	_, installed, err := ReadGitRefreshHook(t.Context(), t.TempDir())
+	require.ErrorIs(t, err, types.ErrVCSUnsupported)
+	assert.False(t, installed)
+}
+
+// IgnoreSources names the out-of-tree rule files: info/exclude from the common gitdir, so
+// a linked worktree reports its main checkout's, and core.excludesFile or git's XDG default.
+func TestGitIgnoreSources(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "a\n"})
+	realRepo, err := filepath.EvalSymlinks(repo)
+	require.NoError(t, err)
+	ctx := t.Context()
+
+	got, err := gitVCS{}.IgnoreSources(ctx, repo)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	exclude, err := filepath.EvalSymlinks(filepath.Dir(got[0]))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude)
+	assert.Equal(t, "exclude", filepath.Base(got[0]))
+	assert.Equal(t, filepath.Join(home, "xdg", "git", "ignore"), got[1], "unset, git falls back to its XDG location")
+
+	global := filepath.Join(home, "global-ignore")
+	gitRun(t, repo, "config", "core.excludesFile", global)
+	got, err = gitVCS{}.IgnoreSources(ctx, repo)
+	require.NoError(t, err)
+	assert.Equal(t, global, got[1])
+
+	linked := filepath.Join(t.TempDir(), "linked")
+	gitRun(t, repo, "worktree", "add", "-q", linked)
+	fromLinked, err := gitVCS{}.IgnoreSources(ctx, linked)
+	require.NoError(t, err)
+	exclude, err = filepath.EvalSymlinks(filepath.Dir(fromLinked[0]))
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(realRepo, ".git", "info"), exclude, "a linked worktree shares its main checkout's exclude file")
+}

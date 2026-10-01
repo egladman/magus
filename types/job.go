@@ -81,11 +81,20 @@ func (h JobHolder) OrSession() JobHolder {
 // `magus run -o json test .` to a target named json.
 type LeaseCheck struct {
 	// Target is the magus target the check runs, without the `magus run` in front of it.
+	// Empty when Script names the check instead.
 	Target string `json:"target"             yaml:"target"`
+	// Script is a Buzz script the check runs with `magus buzz --record` in place of a
+	// target, for a fact no target checks: a passing recorded run of it is the evidence. A
+	// check names a target or a script, never both.
+	Script string `json:"script,omitempty"   yaml:"script,omitempty"`
 	// Project is the project the target runs in, "." when the row names none.
 	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
 	// Args are forwarded to the tool after `--`, never to magus.
 	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
+	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
+	// the workspace's default_charms satisfies it: the charmless `generate` that compares
+	// against HEAD, in a workspace whose default is rw.
+	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
 }
 
 // PrimaryCompletionGateID names the existing singular check when it is projected
@@ -107,11 +116,13 @@ type CompletionGate struct {
 	// multiplication and reads inconsistently the moment it has four members.
 	//
 	// Both are RESOLVED before a row is stored: Resolve fills a gate that named neither,
-	// so a reader never applies a default and the published enums carry no empty member.
-	// A default applied on read is a default every reader has to know about, and the
-	// readers here are the verifier, the guard, the observer and two schemas.
-	Kind   GateKind   `json:"kind"   yaml:"kind"`
-	Expect GateExpect `json:"expect" yaml:"expect"`
+	// so a reader of a stored row never applies a default. A default applied on read is a
+	// default every reader has to know about, and the readers here are the verifier, the
+	// guard, the observer and two schemas.
+	Kind GateKind `json:"kind" yaml:"kind"`
+	// Expect is optional and defaults to the kind's own: passed for check, changed for
+	// paths and symbol. The common goal names only its kind and its subject.
+	Expect GateExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
 	// Check is the run a GateKindCheck gate examines. Zero on every other kind.
 	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Paths are the globs a GateKindPaths gate examines. Zero on every other kind.
@@ -215,7 +226,7 @@ func (k GateKind) DefaultExpect() GateExpect {
 func (g CompletionGate) Subject() []string {
 	switch g.Kind {
 	case GateKindCheck:
-		if g.Check.Target == "" {
+		if g.Check.Target == "" && g.Check.Script == "" {
 			return nil
 		}
 		return []string{g.Check.String()}
@@ -248,33 +259,29 @@ func (u Job) EffectiveGoals() []CompletionGate {
 	return gates
 }
 
-// String renders the check as a DECLARATION, the shape a person types and a row stores.
-// It is not the command to run: a check naming no charm means the charmless run, and
-// spelling that needs the --no-default-charms flag, which this package cannot render
-// because types imports no CLI surface. internal/job renders the runnable form through
-// the hint command builder; see gateCommand.
+// String renders the check as the command a person types and a row stores. Running it
+// satisfies the check: the charms it executes under, default_charms included, are the
+// charms the check is resolved to (internal/job.bindsTo).
 func (c LeaseCheck) String() string {
+	if c.Script != "" {
+		line := "magus buzz --record " + c.Script
+		if len(c.Args) > 0 {
+			line += " -- " + strings.Join(c.Args, " ")
+		}
+		return line
+	}
 	project := c.Project
 	if project == "" {
 		project = "."
 	}
 	line := "magus run " + c.Target + " " + project
+	if c.NoDefaultCharms {
+		line += " --no-default-charms"
+	}
 	if len(c.Args) > 0 {
 		line += " -- " + strings.Join(c.Args, " ")
 	}
 	return line
-}
-
-// NamesCharm reports whether the check pins a charm on its target, which is what decides
-// whether the runnable form needs --no-default-charms. Asked here rather than re-parsed
-// at each renderer: the charm is part of the target's identity (see internal/job.bindsTo)
-// and only this type knows how a target is spelled.
-func (c LeaseCheck) NamesCharm() bool {
-	_, target, _ := strings.Cut(c.Target, "::")
-	if target == "" {
-		target = c.Target
-	}
-	return strings.Contains(target, ":")
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
@@ -290,6 +297,10 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 		words, args = words[:i], words[i+1:]
 	}
 	for _, w := range words {
+		if w == "--no-default-charms" {
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s;"+
+				" declare the check as a record with `no_default_charms: true` instead", s, w)
+		}
 		if strings.HasPrefix(w, "-") {
 			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
@@ -317,8 +328,18 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 // no `check`): the line is what rows declared before the check record existed.
 func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 	words := strings.Fields(s)
-	if len(words) > 0 && words[0] != "run" {
+	if len(words) > 0 && words[0] != "run" && words[0] != "buzz" {
 		words = words[1:]
+	}
+	if len(words) >= 3 && words[0] == "buzz" && words[1] == "--record" {
+		c := LeaseCheck{Script: words[2]}
+		if rest := words[3:]; len(rest) > 0 {
+			if rest[0] != "--" {
+				return LeaseCheck{}, fmt.Errorf("a script check line is `magus buzz --record <script> [-- args]` and %q is not one", s)
+			}
+			c.Args = rest[1:]
+		}
+		return c, nil
 	}
 	if len(words) == 0 || words[0] != "run" {
 		return LeaseCheck{}, fmt.Errorf("a check line is `magus run <target> <project> [-- args]` and %q is not one", s)
@@ -762,6 +783,20 @@ type Job struct {
 	// run log and a cache all grow without the row being written, so a stored figure goes
 	// stale in silence. It is measured when the job is listed.
 	LastRun *JobRun `json:"last_run,omitempty" yaml:"last_run,omitempty"`
+	// Integration is the latest grade of this job's check goals in another tree, nil until
+	// `magus job wait --integration` records one. Store-computed like Result, and kept
+	// beside State rather than moving it: a job that passed where it was written and fails
+	// once merged is two facts, and one field could hold only the later.
+	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
+}
+
+// JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
+// an integration branch was merged into, at At (unix seconds).
+type JobIntegration struct {
+	Checkout string       `json:"checkout" yaml:"checkout"`
+	At       int64        `json:"at" yaml:"at"`
+	Verified bool         `json:"verified" yaml:"verified"`
+	Gates    []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 }
 
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
@@ -770,7 +805,7 @@ type Job struct {
 // the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. magus\job\put deliberately does the opposite,
+// is cleared rather than kept. magus\job.put deliberately does the opposite,
 // since an agent advancing one field of a live row must not erase the rest (see
 // job.ParseMerge).
 //
@@ -988,7 +1023,7 @@ func (g CompletionGate) Validate() error {
 	// Exactly one subject, named by the kind. A gate carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
-	if g.Kind != GateKindCheck && g.Check.Target != "" {
+	if g.Kind != GateKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
 		return fmt.Errorf("gate %q is a %s gate and also carries a check; a gate examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GateKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
@@ -1001,11 +1036,31 @@ func (g CompletionGate) Validate() error {
 		return fmt.Errorf("gate %q is a %s gate and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
 	}
 	if g.Kind == GateKindCheck {
+		if err := g.Check.validScript(); err != nil || g.Check.Script != "" {
+			return err
+		}
 		if _, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// validScript refuses a check naming both a script and a target, or a script with a
+// project: a recorded script run belongs to the workspace, not to one project.
+func (c LeaseCheck) validScript() error {
+	switch {
+	case c.Script == "":
+		return nil
+	case c.Target != "":
+		return fmt.Errorf("check names target %q and script %q; a check names one", c.Target, c.Script)
+	case c.Project != "" && c.Project != ".":
+		return fmt.Errorf("check script %q names project %q; a recorded script run belongs to the workspace", c.Script, c.Project)
+	case c.NoDefaultCharms:
+		return fmt.Errorf("check script %q sets no_default_charms; a script runs under no charms", c.Script)
+	default:
+		return nil
+	}
 }
 
 // ParseJobTimeout reads a declared timeout: empty is no bound and parses to zero, anything
@@ -1081,12 +1136,18 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 	switch {
 	case r.Check != nil && line != "":
 		return LeaseCheck{}, false, errors.New("job: a row carries `check` or a rendered `validation` line, not both")
+	case r.Check != nil && r.Check.Script != "":
+		if err := r.Check.validScript(); err != nil {
+			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+		}
+		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
 	case r.Check != nil:
 		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
 			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
 		}
 		parsed.Args = r.Check.Args
+		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
 		return parsed, true, nil
 	case line != "":
 		parsed, err := ParseLeaseRunLine(line)
@@ -1131,6 +1192,18 @@ func (r Declaration) Apply(u *Job) {
 	u.Goals = cloneGoals(r.Goals)
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
+}
+
+// ApplySpec writes this declaration's spec onto a row, for `magus job apply`: as Apply, but
+// the row's state is kept, since apply never moves a job, and so is its checkpoint when the
+// declaration names none, since the checkpoint records where the work started.
+func (r Declaration) ApplySpec(u *Job) {
+	state, checkpoint := u.State, u.Checkpoint
+	r.Apply(u)
+	u.State = state
+	if u.Checkpoint == "" {
+		u.Checkpoint = checkpoint
+	}
 }
 
 func cloneGoals(in []CompletionGate) []CompletionGate {
@@ -1527,7 +1600,7 @@ func JobDescendants(rows []Job, id string) []Job {
 // The registration facts take the opposite route and are NOT derived here. ReportedBase,
 // BaseVerdict and Registered describe one row against the checkpoint that row was handed,
 // so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus\job\list, JobService's ListJobs) by riding
+// reader of this list (magus\job.list, JobService's ListJobs) by riding
 // the leases. Deriving a second copy at read time would be a duplicate to keep true, which
 // is exactly what the overlap rule above avoids in the other direction.
 //
@@ -1719,6 +1792,14 @@ func (u Job) Clone() Job {
 	if u.LastRun != nil {
 		run := *u.LastRun
 		c.LastRun = &run
+	}
+	if u.Integration != nil {
+		integration := *u.Integration
+		integration.Gates = slices.Clone(u.Integration.Gates)
+		for i := range integration.Gates {
+			integration.Gates[i].Violations = slices.Clone(integration.Gates[i].Violations)
+		}
+		c.Integration = &integration
 	}
 	return c
 }

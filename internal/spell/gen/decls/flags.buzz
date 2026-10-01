@@ -8,8 +8,9 @@
 
 export object FlagParse {
     values: {str: str} = {},
+    lists: {str: [str]} = {},
     positionals: [str] = [],
     unknown: [str] = [],
 }
 
-export extern fun parse(argv: [str], switches: [str], valued: [str]) > FlagParse !> any;
+export extern fun parse(argv: [str], switches: [str], valued: [str], required: [str] = [<str>], repeated: [str] = [<str>], command: bool = false) > FlagParse !> any;

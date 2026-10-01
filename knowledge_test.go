@@ -20,7 +20,9 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
@@ -781,4 +783,249 @@ func TestLoadKnowledgePackagesReadsEveryEcosystem(t *testing.T) {
 	assert.Contains(t, logged, "project=bun")
 	assert.Contains(t, logged, "package.json read, no lockfile it understands (pnpm-lock.yaml, package-lock.json, npm-shrinkwrap.json, yarn.lock); no npm nodes for bun")
 	assert.Contains(t, logged, "pyproject.toml read, no lockfile it understands (uv.lock, poetry.lock, pdm.lock, Pipfile.lock); no python nodes for bun")
+}
+
+// TestKnowledgeStampsInvalidateExactlyTheirClasses pins the contract the stored-graph read
+// rests on: each kind of input change moves the stamp of every class that reads it, and
+// of no other. A class that missed a move would be served stale from the store.
+func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := filepath.Join(t.TempDir(), "cache")
+	gitRun(t, root, "init", "-q")
+	// Every write is backdated past the racy window, so a stamp computed a moment later
+	// does not change merely because a file aged out of it between two computations.
+	settled := time.Now().Add(-time.Hour)
+	write := func(path, body string) {
+		t.Helper()
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		settled = settled.Add(time.Second)
+		require.NoError(t, os.Chtimes(path, settled, settled))
+	}
+	write(filepath.Join(root, "pkg", "a", "a.go"), "package a\n")
+	gitRun(t, root, "add", "-A")
+	gitRun(t, root, "commit", "-q", "-m", "c")
+
+	projects, spells := goWorkspace("pkg/a")
+	cfg := config.Config{
+		HistoryPath: filepath.Join(t.TempDir(), "history.json"),
+		Knowledge:   config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}},
+	}
+	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
+	stamps := func() knowledge.Stamps {
+		src := knowledgeSources{
+			cfg: cfg, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
+			tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler),
+		}
+		return knowledgeStamps(ctx, src, store, knowledge.AllClasses)
+	}
+	first := stamps()
+	for _, c := range knowledge.AllClasses {
+		require.NotEmptyf(t, first[c], "class %s has a stamp", c)
+	}
+	require.Equal(t, first, stamps(), "unchanged inputs stamp alike")
+
+	tree := []knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSymbols, knowledge.ClassSession}
+	for _, step := range []struct {
+		name   string
+		change func()
+		moved  []knowledge.ShardClass
+	}{
+		{"a source edit", func() { write(filepath.Join(root, "pkg", "a", "a.go"), "package a // edited\n") }, tree},
+		{"a new file", func() { write(filepath.Join(root, "pkg", "a", "b.go"), "package a\n") }, tree},
+		{"a HEAD move", func() {
+			gitRun(t, root, "add", "-A")
+			gitRun(t, root, "commit", "-q", "-m", "c2")
+		}, tree},
+		{"a new SCIP index", func() {
+			path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg", "a"))
+			writeSCIP(t, path)
+			settled = settled.Add(time.Second)
+			require.NoError(t, os.Chtimes(path, settled, settled))
+		}, []knowledge.ShardClass{knowledge.ClassSymbols, knowledge.ClassCoverage, knowledge.ClassSession}},
+		{"a run record", func() { write(knowledge.RuntimeRecordsPath(cacheDir), "[]") },
+			[]knowledge.ShardClass{knowledge.ClassRuntime}},
+		{"a timing sample", func() { write(cfg.HistoryPath, "{}") },
+			[]knowledge.ShardClass{knowledge.ClassRuntime}},
+		{"a coverage profile", func() { write(filepath.Join(root, ".magus", "coverage.out"), "mode: set\n") },
+			[]knowledge.ShardClass{knowledge.ClassCoverage, knowledge.ClassSession}},
+		// No walk sees .git, but the tree scans drop what its rules ignore.
+		{"an ignore rule outside the tree", func() { write(filepath.Join(root, ".git", "info", "exclude"), "docs/\n") },
+			[]knowledge.ShardClass{knowledge.ClassDomain, knowledge.ClassSession}},
+	} {
+		before := stamps()
+		step.change()
+		after := stamps()
+		var moved []knowledge.ShardClass
+		for _, c := range knowledge.AllClasses {
+			if before[c] != after[c] {
+				moved = append(moved, c)
+			}
+		}
+		assert.ElementsMatchf(t, step.moved, moved, "%s moved the wrong classes", step.name)
+	}
+}
+
+// A domain rebuild reads no SCIP index, however many are declared; only a symbol class
+// rebuild does.
+func TestGatherKnowledgeInputsReadsSymbolsOnlyForTheirClasses(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	projects, spells := goWorkspace("pkg/a")
+	src := knowledgeSources{cfg: config.Config{}, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
+		tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler)}
+
+	domain := gatherKnowledgeInputs(ctx, src, false, knowledge.DefaultClasses)
+	assert.Nil(t, domain.Symbols)
+	assert.NoDirExists(t, filepath.Join(knowledge.StoreDir(cacheDir), "inputs", "scip"), "nothing parsed, so nothing cached")
+
+	lazy := gatherKnowledgeInputs(ctx, src, false, []knowledge.ShardClass{knowledge.ClassSymbols})
+	assert.Contains(t, lazy.Symbols, "pkg/a")
+}
+
+// TestParseSymbolIndexCachedReparsesOnlyAMovedIndex: the parse is reused while the index
+// file's identity holds, and redone the moment it moves.
+func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	index := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	writeSCIP(t, index)
+	settled := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(index, settled, settled))
+	projects, spells := goWorkspace("pkg/a")
+	in := ingest(config.Config{}, root, cacheDir, projects, spells)
+	decl := symbolIndexDeclarations(ctx, in)[0]
+
+	first, err := parseSymbolIndexCached(ctx, in, decl)
+	require.NoError(t, err)
+	require.NotEmpty(t, first)
+
+	// Same size and mtime, different bytes: only a reparse could notice, so a match proves
+	// the parse came from the cache.
+	good, err := os.ReadFile(index)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(index, bytes.Repeat([]byte{0xff}, len(good)), 0o644))
+	require.NoError(t, os.Chtimes(index, settled, settled))
+	cached, err := parseSymbolIndexCached(ctx, in, decl)
+	require.NoError(t, err)
+	assert.Equal(t, first, cached)
+
+	moved := settled.Add(time.Minute)
+	require.NoError(t, os.Chtimes(index, moved, moved))
+	_, err = parseSymbolIndexCached(ctx, in, decl)
+	var decodeErr symbolDecodeError
+	assert.ErrorAs(t, err, &decodeErr, "a moved index is parsed again, and this one no longer decodes")
+}
+
+// indexedWorkspace is a one-project workspace whose SCIP index is declared in config, so
+// its symbols are ingested without a symbol-capable spell bound.
+func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
+	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
+	ws, err := Inspect(context.Background(), root)
+	require.NoError(t, err)
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "idx/index.scip"}}}}
+	return root, ws, cfg
+}
+
+// The session store grows with every agent event while anyone works. A symbol read does
+// not rebuild @session, so an append costs it nothing: the store is not re-stamped, and
+// nothing is reassembled or rewritten.
+func TestSymbolReadIgnoresSessionStoreAppends(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ctx := context.Background()
+	root, ws, cfg := indexedWorkspace(t)
+	log := slog.New(slog.DiscardHandler)
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	events := filepath.Join(dir, "s1.jsonl")
+	require.NoError(t, os.WriteFile(events, []byte("{}\n"), 0o644))
+	read := func() {
+		t.Helper()
+		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		require.NoError(t, err)
+		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+	}
+	manifest := filepath.Join(root, ".magus", "knowledge", "manifest.json")
+	read()
+	before, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+
+	f, err := os.OpenFile(events, os.O_APPEND|os.O_WRONLY, 0)
+	require.NoError(t, err)
+	_, err = f.WriteString("{}\n")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	read()
+
+	after, err := os.ReadFile(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "an append to the session store reassembled nothing")
+}
+
+// QueryKnowledgeGraph is a faster route to the answer the CLI's symbol query used to give,
+// and nothing else: it must equal building the graph, merging every symbol shard and
+// querying, byte for byte.
+func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
+	ctx := context.Background()
+	root, ws, cfg := indexedWorkspace(t)
+	log := slog.New(slog.DiscardHandler)
+
+	for _, input := range []string{"Foo", "Foo kind=symbol", "kind=symbol", "kind=file", "absentname kind=symbol"} {
+		g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+		require.NoError(t, err)
+		require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+		require.True(t, g.HasSymbols(), "the fixture's index is ingested")
+		want, err := json.Marshal(g.Query(input, 0))
+		require.NoError(t, err)
+
+		out, ranked, err := QueryKnowledgeGraph(ctx, ws, root, cfg, false, input, 0, log)
+		require.NoError(t, err)
+		got, err := json.Marshal(out)
+		require.NoError(t, err)
+		assert.Equalf(t, string(want), string(got), "query %q", input)
+		assert.Equal(t, g.NearestNode(input), ranked.NearestNode(input), "a near miss is found among the same nodes")
+	}
+}
+
+// TestBuildKnowledgeGraphAnswersFromTheStore drives the read path end to end: a second
+// build with nothing changed reads the store and agrees with the first, and an edit is
+// seen by the next build rather than served stale.
+func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
+	ctx := context.Background()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
+	ws, err := Inspect(ctx, root)
+	require.NoError(t, err)
+	build := func() string {
+		t.Helper()
+		g, err := BuildKnowledgeGraph(ctx, ws, root, config.Config{}, false, slog.New(slog.DiscardHandler))
+		require.NoError(t, err)
+		b, err := json.Marshal(g.Output())
+		require.NoError(t, err)
+		return string(b)
+	}
+	manifest := filepath.Join(root, ".magus", "knowledge", "manifest.json")
+
+	first := build()
+	stat, err := os.Stat(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, first, build(), "the stored graph is the built one")
+	again, err := os.Stat(manifest)
+	require.NoError(t, err)
+	assert.Equal(t, stat.ModTime(), again.ModTime(), "a matching stamp writes nothing")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "setup.md"), []byte("# Setup\n"), 0o644))
+	assert.Contains(t, build(), "doc:docs/setup.md", "a new doc reaches the next read")
 }

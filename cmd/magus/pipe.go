@@ -25,14 +25,15 @@ type (
 // fails fast is gone from the kernel before the run reaches its locks.
 //
 // The verbs that run targets prove every stage upstream, for their locks and for the
-// pipeline's exit status. A stage that trades records (see pipeRecordStage) proves the
-// stage it writes to and the one writing to it.
+// pipeline's exit status, and so does a stage that prints or reads a shard plan (see
+// awaitPipeline). A stage that trades records (see pipeRecordStage) proves the stage it
+// writes to and the one writing to it.
 func proveStdio(ctx context.Context, args []string) context.Context {
 	ctx = context.WithValue(ctx, pipeStageKey{}, startPipeStage(ctx, args))
 	argv := append([]string{os.Args[0]}, args...)
-	sub, _ := peekSub(args)
+	sub, subArgs := peekSub(args)
 	locks := (sub == "run" || sub == "affected") && takesProjectLocks(argv)
-	if !locks && !tradesRecords(args) {
+	if !locks && !tradesRecords(args) && !handlesPlan(sub, subArgs) {
 		return ctx
 	}
 	s := &magus.ProcessStdio{Stdin: os.Stdin, Stdout: os.Stdout, TakesLocks: takesProjectLocks}
@@ -285,6 +286,38 @@ func settlePipeline(ctx context.Context, args []string) error {
 	return s.SettlePipeline(ctx, root, globalCfg)
 }
 
+// handlesPlan reports whether a magus invoked with sub and subArgs prints a shard plan
+// (affected --plan) or reads one (run --stdin).
+func handlesPlan(sub string, subArgs []string) bool {
+	switch sub {
+	case "affected":
+		return hasModeFlag(subArgs, "plan")
+	case "run":
+		return runReadsPlan(subArgs)
+	}
+	return false
+}
+
+// awaitPipeline holds a stage that prints or reads a shard plan until every magus stage
+// proven upstream of it has ended, and refuses with MGS3030 when one failed. A plan
+// stage takes no project lock, so nothing else would hold it back, and a plan printed
+// behind a red stage fans shards out from a tree that stage rejected. Call it once stdin
+// holds nothing more the stage reads.
+func awaitPipeline(ctx context.Context, root string) error {
+	s, ok := ctx.Value(processStdioKey{}).(*magus.ProcessStdio)
+	if !ok {
+		return nil
+	}
+	if _, adopted := magusFromContext(ctx); adopted {
+		return nil
+	}
+	ws, err := magus.FindRoot(root)
+	if err != nil {
+		return nil //nolint:nilerr // no workspace, so no stage left a record to read
+	}
+	return s.AwaitUpstream(ctx, ws, globalCfg)
+}
+
 // recordPipeExit leaves code for the magus stage reading this process's stdout. See
 // magus.RecordPipeExit.
 func recordPipeExit(args []string, code int, interrupted func() (syscall.Signal, bool)) {
@@ -310,14 +343,7 @@ func takesProjectLocks(argv []string) bool {
 	}
 	sub, subArgs := peekSub(argv[1:])
 	switch sub {
-	case "affected":
-		// --plan runs nothing, except the --preflight pass it gates the plan on: the
-		// shape `affected ci --plan --preflight generate | magus run --stdin` exists for.
-		if hasModeFlag(subArgs, "preflight") {
-			return true
-		}
-		return resolveProfile(sub, subArgs).spawnsWork
-	case "run":
+	case "affected", "run":
 		return resolveProfile(sub, subArgs).spawnsWork
 	case "clean", "x", "graph", "refs":
 		return true

@@ -1,0 +1,22 @@
+// @expect: 7|97,195,169,226,128,148,98|1111111|97,195,169,226,128,148,98|é|—b|null
+// s[i], len(), sub() and foreach all count BYTES, as upstream does. Upstream buzz at
+// 294d8f9 over "aé—b" prints len=7; s[0]..s[6] each a one-byte str with bytes
+// 97,195,169,226,128,148,98; sub(1, len: 2)="é"; sub(3)="—b"; foreach the same seven
+// one-byte strs keyed 0..6; s[7] fails "Out of bound str access."
+final s = "aé—b";
+
+var indexed = "";
+var widths = "";
+foreach (i in 0..s.len()) {
+    final sep = if (i == 0) "" else ",";
+    indexed = indexed + "{sep}{s[i].byte(0)}";
+    widths = widths + "{s[i].len()}";
+}
+
+var iterated = "";
+foreach (i, c in s) {
+    final sep = if (i == 0) "" else ",";
+    iterated = iterated + "{sep}{c.byte(0)}";
+}
+
+final __r = "{s.len()}|{indexed}|{widths}|{iterated}|{s.sub(1, len: 2)}|{s.sub(3)}|{s[?7]}";

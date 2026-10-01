@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
@@ -53,6 +54,10 @@ var serverTrailBase string
 
 // serverStarted is when this process became the server.
 var serverStarted time.Time
+
+// serverReadCacheBytes caps the knowledge read cache the server keeps, measured as the
+// on-disk size of the shards behind it. This repository's whole store is about 250 MiB.
+const serverReadCacheBytes = 512 << 20
 
 // serverHTTPAddr is the HTTP listener the server serves MCP and the console on, empty while
 // it serves none. The proc Status RPC reads it on every request.
@@ -102,6 +107,7 @@ func serverInfo(sock string) *types.StatusServer {
 // a claim, so an idle server never keeps the broker awake.
 func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	serverStarted = time.Now()
+	knowledge.SetReadCacheLimit(serverReadCacheBytes)
 	n := cfg.Concurrency
 	if n <= 0 {
 		n = cache.ProfileConcurrency(cfg.ConcurrencyProfile)
@@ -161,6 +167,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 			hctx = console.WithRunSink(hctx, serverRuns)
 			return reg.dispatch(hctx, root, rc, args)
 		},
+		Read:            graphReads(reg),
 		OnJobDone:       recordJobActivity,
 		WorkspaceLister: reg.status,
 		ConfigReloader:  reg.evictAll,
@@ -208,6 +215,28 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		}
 		stopServer()
 	}()
+}
+
+// graphReads answers the CLI's graph reads (see askServer) from the workspaces reg holds,
+// opening one on its first read like any other request.
+func graphReads(reg *wsRegistry) func(ctx context.Context, root, verb string, request []byte) ([]byte, error) {
+	return func(ctx context.Context, root, verb string, request []byte) ([]byte, error) {
+		if root == "" {
+			return nil, fmt.Errorf("%w: a read names no workspace", proc.ErrNotAdoptable)
+		}
+		// Resolved per read rather than kept from the open, so the read honors magus.yaml
+		// as it is now, as the client's own read would.
+		cfg, err := loadWorkspaceCfg(root)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
+		}
+		e, err := reg.acquire(root)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", proc.ErrNotAdoptable, err)
+		}
+		defer reg.release(e)
+		return serveGraphRead(ctx, e.m, cfg, verb, request)
+	}
 }
 
 // stopServer tears the server down: its socket, the runs it adopted, its workspaces. It

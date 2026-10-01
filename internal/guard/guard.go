@@ -104,6 +104,11 @@ type Dependencies struct {
 	// which is not proof of anything: the guard may only deny a search when it can
 	// show the replacement returns the same sites.
 	SymbolDefined func(ident string) (defined, definitive bool)
+	// IndexCause names the observed reason the symbol index is missing or behind (no
+	// server, so the VCS refresh hook's sync did nothing; a hook whose binary is absent; a
+	// sync running now) and the command that clears it, as advisory sentences. "" when it
+	// could not tell within the guard's budget.
+	IndexCause func() string
 	// SymbolSites lists each file defining or referencing ident, with its count and first
 	// lines, from SymbolDefined's index and definitive on the same terms.
 	SymbolSites func(ident string) (sites []types.KnowledgeRefSite, definitive bool)
@@ -118,6 +123,15 @@ type Dependencies struct {
 	// loaded, which proves nothing. It can build the graph, so a rule calls it only for a
 	// command it has already found a translation candidate.
 	GraphIDs func(ctx context.Context, kind string) (ids []string, definitive bool)
+	// IndexedIDs lists the ids of kind the last `magus graph build` recorded, current or
+	// not, and reports false when no index exists. It is for a rule that proves its answer
+	// against the disk itself, such as a listing walked entry for entry, where GraphIDs'
+	// freshness check would only silence it on the first edit.
+	IndexedIDs func(ctx context.Context, kind string) (ids []string, ok bool)
+	// TrackedFiles lists every file version control tracks in the checkout at root,
+	// relative to root, and reports false when it cannot say before ctx ends. A listing of
+	// tracked files is proved against it.
+	TrackedFiles func(ctx context.Context, root string) (files []string, ok bool)
 	// CheckoutBase is the checkout at root as `magus vcs checkpoint -o name` prints it:
 	// `<rev>`, or `<rev>+<digest>` when dirty. "" when there is no VCS to ask. It is the
 	// base an attributed spawn records for its job, the value `magus job exec` records.
@@ -132,6 +146,9 @@ type Dependencies struct {
 	// callDir is the directory the judged call runs in, where its relative paths resolve.
 	// Judge fills it from the envelope's cwd; empty means the hook process's own.
 	callDir string
+	// caller is who makes the judged call, which decides whether a lease acts as a worker.
+	// Judge fills it; zero is an identity-less caller.
+	caller job.Caller
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -431,6 +448,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	location := hookLocation(ctx, deps)
 	deps.scope = scopeAt(location)
+	deps.caller = who.caller()
 	policyDigest := ""
 	if !req.DryRun {
 		policyDigest = recordPolicy(ctx, deps, location, false)
@@ -692,7 +710,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Reason = v.Deny
 			verdict.Rule = v.RuleName()
 			if v.Rule.Name == denyRuleSiblingCheckout {
-				lead, next := siblingCheckoutRemedy(input, shellD)
+				lead, next := siblingCheckoutRemedy(callDir, input, shellD)
 				v = v.withRemedy(lead, next...)
 			}
 			remedy = v
@@ -744,7 +762,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// with a location decides what the workspace knows about it.
 		if verdict.Rule == string(advisoryPushGate) && preauth == "" {
 			cover, commit := pushCoverage(ctx, deps, location, input, shellD, callDir)
-			switch decision, reason := gradePushWithoutGate(cover, commit, actingLease); decision {
+			// The same worker test lease-vcs uses: a root session holding a parentless row
+			// publishes, so it is asked like a person rather than refused like a worker. A
+			// row that cannot be read stays a worker.
+			worker := actingLease
+			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
+				worker = ""
+			}
+			switch decision, reason := gradePushWithoutGate(cover, commit, worker); decision {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
 				if !req.RendersAsk {
@@ -882,13 +907,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
 // holds: Evaluate's, then the ones that read the filesystem.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
-	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(deps, callDir, line, d))
+	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
 	// lines around it that the script sets up.
 	script := denyScriptContent(deps, callDir, line, d)
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
-	v = rankSiblingCheckout(v, denySiblingCheckout(line, d))
+	v = rankSiblingCheckout(v, denySiblingCheckout(callDir, line, d))
 	v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, at, callDir, line, d))
 	v = rankInterpreterRewrite(v, denyInterpreterRewrite(at, line, d))
 	v = rankCacheDirWrite(v, denyCacheDirCommand(at, line, d))
@@ -1106,6 +1131,10 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Description = envelopeString(env.ToolInput, "description")
 	case env.Command != "":
 		req.Value = env.Command
+	case nativeSearchLine(env.ToolInput) != "" && envelopeWritePath(env.ToolInput) == "":
+		// A host's own content or file search, judged as the shell line it stands for so
+		// the search rules hold on that channel too.
+		req.Value = nativeSearchLine(env.ToolInput)
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
 		// Read by shape, like the path: a whole-file write carries its content, an edit the
@@ -1664,8 +1693,8 @@ func hookLocationAt(deps Dependencies, dir string) location {
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host
 // reported its tool call runs in. A host runs its hooks from wherever it likes, and the
-// process cwd is then the orchestrator's tree rather than the worker's: the marker bound
-// with `magus session lease` lives in the worker's checkout, so the envelope's cwd is the
+// process cwd is then the orchestrator's tree rather than the worker's: the binding
+// `magus job exec` records lives in the worker's checkout, so the envelope's cwd is the
 // only thing that finds it. A location already pinned (a test's) wins, and a cwd magus
 // cannot resolve to a workspace changes nothing. A relative cwd is ignored rather than
 // resolved against the hook process, whose directory is the thing it must not stand for.

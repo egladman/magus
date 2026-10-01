@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -506,4 +507,68 @@ func TestJobsStaleAfterRefusesANegativeWindow(t *testing.T) {
 	cfg := Defaults()
 	cfg.Jobs.StaleAfter = -1
 	assert.ErrorContains(t, Validate(cfg), "stale_after")
+}
+
+// queue.carry_approvals defaults to every tier but code when unset, an empty list is the
+// strictest policy, and a name that is no tier, or is code, stops the load with MGS1050
+// naming each entry's line.
+func TestQueueCarryApprovals(t *testing.T) {
+	for name, tc := range map[string]struct {
+		yaml    string
+		want    queuetypes.CarryPolicy
+		wantErr string
+	}{
+		"unset":  {yaml: "queue: {}\n", want: queuetypes.DefaultCarryPolicy()},
+		"empty":  {yaml: "queue:\n  carry_approvals: []\n", want: queuetypes.CarryPolicy{}},
+		"listed": {yaml: "queue:\n  carry_approvals: [rebase, prose]\n", want: queuetypes.CarryPolicy{queuetypes.CarryRebase, queuetypes.CarryProse}},
+		"unknown and code": {yaml: "queue:\n  carry_approvals:\n    - prose\n    - docs\n    - code\n",
+			wantErr: "line 4: queue.carry_approvals: \"docs\" is not an approval carry tier (want some of rebase, generated, prose, comment-only)\n" +
+				"line 5: queue.carry_approvals: \"code\" never carries an approval: a reviewer has to see a code change (want some of rebase, generated, prose, comment-only)"},
+		"not a list": {yaml: "queue:\n  carry_approvals: prose\n", wantErr: "line 2: queue.carry_approvals must be a list of tiers"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			cfg, err := LoadWorkspaceOnly(root)
+			if tc.wantErr != "" {
+				require.ErrorIs(t, err, types.CarryApprovalsInvalid)
+				assert.Equal(t, "config: "+filepath.Join(root, Filename)+": "+types.DiagnosticErrorf(types.CarryApprovalsInvalid, "%s", tc.wantErr).Error(), err.Error())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.Queue.CarryApprovals.Policy())
+		})
+	}
+}
+
+// FuzzLoadFile feeds arbitrary bytes through the YAML loader. The
+// invariant is "no panic": malformed YAML and unknown-key strict
+// failures must return errors, not crash. Strict mode also enforces
+// schema validation, exercising the validate package via Validate().
+func FuzzLoadFile(f *testing.F) {
+	for _, seed := range [][]byte{
+		[]byte(""),
+		[]byte("cache:\n  mode: auto\n"),
+		[]byte("cache:\n  mode: bogus\n"),
+		[]byte("vcs:\n  enabled: true\n  command_name: git\n"),
+		[]byte("concurrency: -1\n"),
+		[]byte("log:\n  format: pretty\n"),
+		[]byte("\xff\xfe\x00\x00binary garbage"),
+		[]byte("a: !!binary unparsable"),
+		[]byte("---\n---\nmultiple-docs"),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		// LoadFile is path-based; persist the fuzz input and let the
+		// loader read it. t.TempDir handles cleanup.
+		path := filepath.Join(t.TempDir(), "magus.yaml")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		// Both modes; strict adds KnownFields + Validate. Either path
+		// must terminate in (Config, error) and never panic.
+		_, _ = LoadFile(path, false)
+		_, _ = LoadFile(path, true)
+	})
 }

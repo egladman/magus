@@ -1,27 +1,26 @@
-// Package testlayout defines an analyzer that reports a Go test file whose name
-// narrows the name of a source file in the same directory.
+// Package testlayout defines two analyzers over the layout of Go test files.
 //
-// It catches test sprawl: rather than adding cases to resolver_test.go, someone
-// writes resolver_edge_cases_test.go, and the package fills with test files no
-// source file accounts for. The Go toolchain does not object, so only a reviewer
-// catches it.
+// [Pairing] reports every X_test.go with no X.go beside it. It has no options and
+// no exemptions: a test file pairs with a source file of the same stem, with that
+// stem less its build suffixes, or with a platform family, and with nothing else.
+// It reports under its own name, testpair, so a //nolint:testlayout written for
+// one of the rules below cannot silence it.
 //
-// Narrowing is the reported case, not a missing sibling. 34% of the standard
-// library's test files are named after a cross-cutting concern no source file
-// owns, which makes reporting those a house rule. See [Options.ReportUnpaired],
-// and [CrossCuttingMarker] for the comment that can excuse one file from it.
+// [Analyzer] and [New] carry the rest: a test file in an external test package,
+// and, as options, a file named with a _unix segment and a test in package main.
 //
-// The analyzer depends on no linter runner. The golangci-lint plugin lives in
-// the plugin subpackage.
+// Neither depends on a linter runner. The golangci-lint plugin lives in the plugin
+// subpackage.
 //
-// It is not hermetic: sourceNames reads the directory, so a driver caching
-// results against declared package inputs (go vet's unitchecker) can replay a
-// stale verdict after you add or remove a sibling file.
+// Both read beyond the pass. A test file a build constraint excludes is still
+// checked, from the pass's ignored files, and source names come off disk, so a
+// driver caching results against declared package inputs (go vet's unitchecker)
+// can replay a stale verdict after you add or remove a sibling file.
 package testlayout
 
 import (
-	"fmt"
 	"go/ast"
+	"go/parser"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,51 +52,22 @@ func isMainTestPackage(name string) bool {
 // than what is wrong with leaving it in main.
 const mainTestMessage = "move the logic this test drives into the package that owns it, then test it there"
 
-const doc = `check that a test file's name does not narrow a source file's name
+const doc = `check where a test file lives and how it is named
 
-X_test.go accompanies X.go. When there is no X.go but some prefix of X names a
-source file - resolver_edge_cases_test.go against resolver.go - the test file
-has narrowed an existing name, and its cases belong in that file's test file.
-
-It also reports a test file in an external test package (package foo_test). A test
+It reports a test file in an external test package (package foo_test). A test
 belongs in the package it tests; the external package is reserved for the case where
 an in-package test would close an import cycle, and that case is worth a //nolint
 naming the cycle rather than a silent convention.
 
-With report-unpaired it reports every X_test.go with no X.go, unless a source
-family (X_linux.go) stands in. honor-marker adds a second exit, a file opening with
-"// cross-cutting: <why>". pair-benchmarks holds X_bench_test.go to the same rule
-instead of exempting it, and report-unix-suffix reports any Go file named with a
-_unix segment.
+With report-unix-suffix it reports any Go file named with a _unix segment. With
+report-main-tests it reports any _test.go declaring package main or main_test: that
+test can only run inside the binary it drives, which usually means the code it
+drives never left main either.
 
-With report-main-tests it also reports any _test.go declaring package main or
-main_test, regardless of the other options: that test can only run inside the
-binary it drives, which usually means the code it drives never left main either.
-
-Every option is off by default.`
-
-// conventional lists test filenames that have no source counterpart by design,
-// with the number of uses each has in the Go standard library. Every entry is
-// measured rather than assumed, because an exemption is a hole punched in the
-// rule and a hole nobody can point at a sample for is a guess.
-var conventional = []string{
-	"export_test.go", "*_export_test.go", // 43 + 9: the hatch to an external test package
-	"example_test.go", "*_example_test.go", // 105: godoc renders examples from it
-	"main_test.go",                           // 6: the TestMain entry point
-	"internal_test.go", "*_internal_test.go", // 3: white-box companion to an external test package
-	"all_test.go",                    // 5: package-wide suite
-	"fuzz_test.go", "*_fuzz_test.go", // 15
-}
-
-// benchmarkNames are the conventional names for a file of benchmarks kept apart from
-// the unit tests, exempt like the rest unless [Options.PairBenchmarks] is set.
-var benchmarkNames = []string{
-	"bench_test.go", "*_bench_test.go", // 9
-	"benchmark_test.go", "*_benchmark_test.go", // 6
-}
+Pairing a test file with its source file is testpair's job, not this one's.`
 
 // buildSuffixes are trailing segments the Go build system reads as a constraint
-// rather than part of the name, so rawconn_unix_test.go still pairs with
+// rather than part of the name, so rawconn_linux_test.go still pairs with
 // rawconn.go.
 //
 // Every entry is a GOOS or GOARCH from `go tool dist list` on Go 1.26, plus
@@ -120,30 +90,9 @@ var buildSuffixes = []string{
 // parallel copy, so adding an option here cannot be silently dropped on the way in.
 //
 // Every option is off in the zero value, and setting a flag true turns on what its
-// name says, so a settings block lists only what it enables.
+// name says, so a settings block lists only what it enables. Nothing here touches
+// pairing, which [Pairing] does with no options at all.
 type Options struct {
-	// Allow lists globs in [path/filepath.Match] syntax, matched against the base
-	// name of a test file, that are exempt from the rule.
-	Allow []string `json:"allow"`
-
-	// ReportUnpaired extends the rule to every test file with no source file of
-	// the same name, not only one that narrows an existing name. See the package
-	// comment for what that costs.
-	//
-	// A test file still pairs when its name matches a platform-split family:
-	// tree_test.go covers tree_linux.go and tree_darwin.go when no tree.go exists.
-	ReportUnpaired bool `json:"report-unpaired"`
-
-	// HonorMarker lets [CrossCuttingMarker] exempt a file from ReportUnpaired.
-	// Without it an unpaired test file goes in Allow, where every exception is
-	// visible in one place instead of in each file's header.
-	HonorMarker bool `json:"honor-marker"`
-
-	// PairBenchmarks drops the benchmark file names (bench_test.go,
-	// X_bench_test.go and the benchmark_ forms) from the conventional exemptions,
-	// so benchmarks live in the _test.go of the file they measure.
-	PairBenchmarks bool `json:"pair-benchmarks"`
-
 	// ReportUnixSuffix reports every Go file, test or source, whose name ends in
 	// a _unix segment. The toolchain reads no constraint from that segment, so
 	// the file's //go:build line decides what it serves and the name only
@@ -158,80 +107,24 @@ type Options struct {
 	ReportMainTests bool `json:"report-main-tests"`
 }
 
-// CrossCuttingMarker opens a line comment above the package clause of a test file
-// that has no single source file to pair with, followed by the reason:
-//
-//	// cross-cutting: every backend runs the same cases, so no one backend owns them
-//
-// Under [Options.HonorMarker] it exempts the file from [Options.ReportUnpaired]
-// only. A marked file that narrows a source name is still reported, because that
-// file has a home. An empty reason does not count: the marker exists to make the
-// exception readable.
-const CrossCuttingMarker = "cross-cutting:"
-
-// New returns an analyzer configured by opts, erroring on a malformed Allow glob.
-//
-// Checked here rather than at the point of use, which runs once per test file per
-// package: a config typo would lint clean until it reached a package holding a
-// non-exempt test file, then fail from somewhere unrelated to the mistake.
-func New(opts Options) (*analysis.Analyzer, error) {
-	for _, pattern := range opts.Allow {
-		if _, err := filepath.Match(pattern, "probe"); err != nil {
-			return nil, fmt.Errorf("testlayout: allow pattern %q: %w", pattern, err)
-		}
-	}
-
-	return newAnalyzer(opts), nil
-}
-
-// Analyzer is the analyzer with no exemptions beyond the conventional names and
-// narrowing-only reporting. It takes its configuration at construction, so this
-// one runs with the defaults; use [New] to change them.
-var Analyzer = newAnalyzer(Options{})
-
-func newAnalyzer(opts Options) *analysis.Analyzer {
-	l := linter{
-		unpaired:       opts.ReportUnpaired,
-		honorMarker:    opts.HonorMarker,
-		pairBenchmarks: opts.PairBenchmarks,
-		unixSuffix:     opts.ReportUnixSuffix,
-		mainTests:      opts.ReportMainTests,
-		// Combined once. Per test file, this list is walked but never rebuilt.
-		exempt: slices.Concat(conventional, opts.Allow),
-	}
-	if !opts.PairBenchmarks {
-		l.exempt = append(l.exempt, benchmarkNames...)
-	}
+// New returns the testlayout analyzer configured by opts.
+func New(opts Options) *analysis.Analyzer {
+	l := linter{unixSuffix: opts.ReportUnixSuffix, mainTests: opts.ReportMainTests}
 
 	return &analysis.Analyzer{Name: "testlayout", Doc: doc, Run: l.run}
 }
 
+// Analyzer is the testlayout analyzer with every option off: it reports external
+// test packages only. Use [New] to turn the options on.
+var Analyzer = New(Options{})
+
 type linter struct {
-	exempt         []string
-	unpaired       bool
-	honorMarker    bool
-	pairBenchmarks bool
-	unixSuffix     bool
-	mainTests      bool
+	unixSuffix bool
+	mainTests  bool
 }
 
 func (l linter) run(pass *analysis.Pass) (any, error) {
-	// A Go package is one directory, so in practice this holds a single entry.
-	// Keying by directory rather than reading once per pass avoids assuming that
-	// of a driver that positions a file elsewhere.
-	listings := map[string]map[string]bool{}
-
-	for _, f := range pass.Files {
-		// A file with no position (a synthesized or overlay-sourced AST) has no
-		// name to reason about and no directory to look beside it. Skipping beats
-		// dereferencing nil and panicking the driver.
-		tf := pass.Fset.File(f.Pos())
-		if tf == nil {
-			continue
-		}
-
-		path := tf.Name()
-
+	for path, f := range goFiles(pass) {
 		name := filepath.Base(path)
 		if l.unixSuffix && unixSuffixed(name) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: unixSuffixMessage(name)})
@@ -241,10 +134,6 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 			continue
 		}
 
-		// The package rule runs before the exemption list, which is about FILE NAMES
-		// that have no source counterpart by design. Where a test file lives in the
-		// package tree is a different question from what it is called, and an
-		// export_test.go is not license to sit outside the package.
 		if strings.HasSuffix(f.Name.Name, "_test") {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
 		}
@@ -252,76 +141,57 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		if l.mainTests && isMainTestPackage(f.Name.Name) {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: mainTestMessage})
 		}
-
-		if l.exempted(name) {
-			continue
-		}
-
-		dir := filepath.Dir(path)
-
-		sources, ok := listings[dir]
-		if !ok {
-			// An unlistable directory is one this analyzer has nothing to say about:
-			// a cgo or overlay path outside the module, or a directory removed
-			// between package load and analysis. Returning the error would fail the
-			// whole lint run over a filename heuristic.
-			sources = sourceNames(dir)
-			listings[dir] = sources
-		}
-
-		marked := l.honorMarker && crossCutting(f)
-		if message := l.check(name, sources, marked); message != "" {
-			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: message})
-		}
 	}
 
 	return nil, nil
 }
 
-// check returns the diagnostic for the test file name, or "" when it is fine.
-// marked reports whether the file carries [CrossCuttingMarker].
-func (l linter) check(name string, sources map[string]bool, marked bool) string {
-	base := strings.TrimSuffix(name, "_test.go")
+// goFiles yields every Go file of the pass by path: the files it loaded, then the
+// ones a build constraint kept out, parsed through the package clause so a
+// diagnostic still lands on a real position. Without the second half a test file
+// tagged for another platform, or for an opt-in tag, is never seen at all.
+//
+// A file with no position (a synthesized or overlay-sourced AST), or an ignored
+// file that cannot be read or parsed, has nothing to reason about and is skipped
+// rather than failing the run.
+func goFiles(pass *analysis.Pass) func(yield func(string, *ast.File) bool) {
+	return func(yield func(string, *ast.File) bool) {
+		for _, f := range pass.Files {
+			tf := pass.Fset.File(f.Pos())
+			if tf == nil {
+				continue
+			}
 
-	// Exact pair first. Trimming ahead of this lookup hides a source file carrying
-	// the same suffix (cipher_gcm_arm64_test.go beside cipher_gcm_arm64.go), and
-	// the trimmed name then reaches the narrowing search and matches some shorter
-	// name. The crypto packages are full of that shape.
-	if sources[base] {
-		return ""
+			if !yield(tf.Name(), f) {
+				return
+			}
+		}
+
+		read := pass.ReadFile
+		if read == nil {
+			read = os.ReadFile
+		}
+
+		for _, path := range pass.IgnoredFiles {
+			if !strings.HasSuffix(path, ".go") {
+				continue
+			}
+
+			content, err := read(path)
+			if err != nil {
+				continue
+			}
+
+			f, err := parser.ParseFile(pass.Fset, path, content, parser.PackageClauseOnly)
+			if err != nil {
+				continue
+			}
+
+			if !yield(path, f) {
+				return
+			}
+		}
 	}
-
-	// Then the pair a build suffix hides: rawconn_unix_test.go covers the unix
-	// build of rawconn.go. That is a constraint, not a narrowing.
-	trimmed := trimBuildSuffixes(base)
-	if sources[trimmed] {
-		return ""
-	}
-
-	if owner := nearestSource(trimmed, sources); owner != "" {
-		return fmt.Sprintf("%s narrows %s.go; these tests belong in %s_test.go", name, owner, owner)
-	}
-
-	// Reached only under PairBenchmarks, since otherwise the name was exempted. It is
-	// reported with or without ReportUnpaired: a benchmark file always has a file it
-	// measures.
-	if matchesAny(benchmarkNames, name) {
-		return fmt.Sprintf("%s keeps benchmarks apart from the tests of the file they measure; "+
-			"move them into that file's _test.go", name)
-	}
-
-	if !l.unpaired || marked || pairsWithFamily(trimmed, sources) {
-		return ""
-	}
-
-	if !l.honorMarker {
-		return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
-			"of the file they exercise, or, when no single file owns them, add it to the allow list", name)
-	}
-
-	return fmt.Sprintf("%s has no source file of the same name; move its tests into the _test.go "+
-		"of the file they exercise, or, when no single file owns them, open the file with "+
-		"`// %s <why>` above the package clause", name, CrossCuttingMarker)
 }
 
 // unixSuffixed reports whether name, less .go and _test, ends in build suffixes of
@@ -349,63 +219,9 @@ func unixSuffixMessage(name string) string {
 	stem := strings.TrimSuffix(strings.TrimSuffix(name, ".go"), "_test")
 	stem = stem[:strings.LastIndex(stem, "_unix")]
 
-	return fmt.Sprintf("%s is named for unix, which a file name does not constrain; name the platforms "+
-		"it serves, %s_linux.go and %s_darwin.go, with %s_other.go for the rest and %s.go for what they share",
-		name, stem, stem, stem, stem)
-}
-
-// pairsWithFamily reports whether some source file is base plus build suffixes only,
-// so tree_test.go pairs with tree_linux.go. Checked after the narrowing search because
-// a family is not a file the tests could have been added to.
-func pairsWithFamily(base string, sources map[string]bool) bool {
-	for source := range sources {
-		if source != base && trimBuildSuffixes(source) == base {
-			return true
-		}
-	}
-
-	return false
-}
-
-// crossCutting reports whether a line comment above f's package clause opens with
-// [CrossCuttingMarker] and gives a reason.
-func crossCutting(f *ast.File) bool {
-	for _, group := range f.Comments {
-		if group.Pos() >= f.Package {
-			return false
-		}
-
-		for _, c := range group.List {
-			text, ok := strings.CutPrefix(c.Text, "//")
-			if !ok {
-				continue
-			}
-
-			reason, ok := strings.CutPrefix(strings.TrimSpace(text), CrossCuttingMarker)
-			if ok && strings.TrimSpace(reason) != "" {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// exempted reports whether the test file name matches a conventional name or a
-// configured glob. The patterns were validated by [New], so a match error here
-// would mean a pattern that changed after construction, and there is none.
-func (l linter) exempted(name string) bool {
-	return matchesAny(l.exempt, name)
-}
-
-func matchesAny(patterns []string, name string) bool {
-	for _, pattern := range patterns {
-		if ok, _ := filepath.Match(pattern, name); ok {
-			return true
-		}
-	}
-
-	return false
+	return name + " is named for unix, which a file name does not constrain; name the platforms " +
+		"it serves, " + stem + "_linux.go and " + stem + "_darwin.go, with " + stem +
+		"_other.go for the rest and " + stem + ".go for what they share"
 }
 
 // trimBuildSuffixes removes every trailing segment the Go build system reads as a
@@ -419,49 +235,5 @@ func trimBuildSuffixes(base string) string {
 		}
 
 		base = base[:i]
-	}
-}
-
-// sourceNames returns the base names of dir's non-test Go files with the .go
-// suffix trimmed, so resolver.go yields "resolver". An unreadable directory
-// yields no names, which reports nothing rather than failing the run.
-//
-// The listing comes off disk rather than out of the pass because the pass does
-// not always hold the answer: an external test package (the _test suffixed one
-// a file declares as package foo_test) is loaded on its own, with none of the
-// package's source files in it.
-func sourceNames(dir string) map[string]bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-
-	names := make(map[string]bool, len(entries))
-
-	for _, e := range entries {
-		name := e.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-
-		names[strings.TrimSuffix(name, ".go")] = true
-	}
-
-	return names
-}
-
-// nearestSource trims trailing underscore-separated segments off base and returns
-// the longest remaining prefix that names a source file, or "" when none does.
-func nearestSource(base string, sources map[string]bool) string {
-	for {
-		i := strings.LastIndex(base, "_")
-		if i < 0 {
-			return ""
-		}
-
-		base = base[:i]
-		if sources[base] {
-			return base
-		}
 	}
 }

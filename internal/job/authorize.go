@@ -165,7 +165,7 @@ func refuse(actor Actor, id, rule string) error {
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on, SHRINK its write paths (which is how the skill has it release one), and
+// it landed on (which starts a declared row running), SHRINK its write paths (which is how the skill has it release one), and
 // end itself in fail, no_return, or exited; on any other row it may only CREATE a child of itself
 // inside its own boundary, or, as an [asVerdict] write, pass a row below it. Widening a
 // boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
@@ -194,6 +194,10 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 				return refuse(actor, id, "a worker may only SHRINK write_paths, which is how it releases a path, and this write widens them")
 			}
 		case "state":
+			// Taking a declared job is what starts it, so the exec carries that move.
+			if kind == asExec && prev.State == types.StateDeclared && next.State == types.StateRunning {
+				continue
+			}
 			// StatePass stays refused here on purpose: pass is the claim that the work
 			// met its criteria, and that judgment belongs to whoever is waiting on the
 			// row, never to the holder announcing it is done.
@@ -275,20 +279,17 @@ func runsTheGate(row types.Job) bool {
 	})
 }
 
-// gateCommand renders the command whose output will SATISFY a check, which is not
-// types.LeaseCheck.String(): that renders the DECLARATION. A check naming no charm means
-// the charmless run, so in a workspace setting default_charms the declaration's bare
-// `magus run generate .` produces a `generate:rw` descriptor that the same check then
-// refuses (see bindsTo). Quoting a command guaranteed to fail its own gate is the failure
-// this avoids. Built through hint.Run so a subcommand rename is one edit; types renders
-// its own form because it imports no CLI surface.
+// gateCommand renders the command whose output will SATISFY a check. A check is resolved
+// against default_charms the way `magus run` resolves it (see bindsTo), so the command
+// is the declaration itself. Built through hint.Run so a subcommand rename is one edit;
+// types renders its own form because it imports no CLI surface.
 func gateCommand(c types.LeaseCheck) string {
 	project := c.Project
 	if project == "" {
 		project = "."
 	}
 	args := []string{c.Target, project}
-	if !c.NamesCharm() {
+	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}
 	if len(c.Args) > 0 {
@@ -368,7 +369,7 @@ func goalsEqual(a, b []types.CompletionGate) bool {
 		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
 			a[i].Kind != b[i].Kind || a[i].Expect != b[i].Expect ||
 			!slices.Equal(a[i].Paths, b[i].Paths) || !slices.Equal(a[i].Symbols, b[i].Symbols) ||
-			a[i].Check.Target != b[i].Check.Target || a[i].Check.Project != b[i].Check.Project ||
+			a[i].Check.Target != b[i].Check.Target || a[i].Check.Script != b[i].Check.Script || a[i].Check.Project != b[i].Check.Project ||
 			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
 			return false
 		}

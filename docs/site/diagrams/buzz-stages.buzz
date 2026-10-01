@@ -1,0 +1,18 @@
+namespace buzzStages;
+
+import "magus";
+import "magus/figure";
+
+// codeStage is an actor for a step that lives inside one package, so a box (one per
+// directory) cannot draw it. The symbol must be defined directly in dir, or the figure
+// raises: the actor is checked against the index the way a box's symbol: anchor is.
+export fun codeStage(dir: magus\Dir, symbol: str, name: str, sub: str = "", look: figure\Look? = null) > figure\Actor !> any {
+    final found: magus\RefsResult = magus\refs(symbol);
+    final prefix = dir.path + "/";
+    foreach (site in found.defs) {
+        if (site.file.startsWith(prefix) and site.file.sub(prefix.len()).indexOf("/") == null) {
+            return figure\external(name, sub: sub, look: look ?? figure\Look.plain);
+        }
+    }
+    throw "codeStage(\"{name}\"): {symbol} has no definition directly in {dir.path}";
+}

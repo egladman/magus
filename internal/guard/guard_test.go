@@ -294,6 +294,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "worker-runs-gate", name: "an integrate worker runs the gate", input: bash("./magus affected ci --no-default-charms"), worker: "root/integrate footprint", decision: "pass"},
 		{rule: "detached-push-unqualified", name: "a detached push to a new branch", input: bash("git push origin HEAD:guard-pr-polling"),
 			checkout: &types.CheckoutState{RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "HEAD:refs/heads/guard-pr-polling"},
+		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
+			worker: "root/feat footprint", decision: "deny", reason: "only the main session pushes or opens a pull request"},
+		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
+			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "branch-name: `Pin_Key` is not a name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
 			"description": "audit the store", "prompt": "Audit it.", "model": "sonnet",
 		}), decision: "deny", reason: "magus job fork <job> --model sonnet"},
@@ -573,6 +577,26 @@ func (driftWorkspace) ClassifyFiles(context.Context, []string) ([]types.FileEntr
 	return nil, nil
 }
 
+// verdictRefLine opens the line a stored deny cites its grd ref on.
+const verdictRefLine = "\nfull verdict: "
+
+// verdictRef matches the grd ref a deny cites.
+var verdictRef = regexp.MustCompile(verdictRefPrefix + `[0-9a-f]+`)
+
+// withoutVerdictRef is v as a dry run renders it: the call stores its verdict and cites
+// the ref, and a dry run stores nothing, so it has no ref to cite.
+func withoutVerdictRef(v Verdict) Verdict {
+	head, rest, ok := strings.Cut(v.Reason, verdictRefLine)
+	if !ok {
+		return v
+	}
+	if _, tail, more := strings.Cut(rest, "\n"); more {
+		head += "\n" + tail
+	}
+	v.Reason = head
+	return v
+}
+
 // treeState is every path under dirs with its bytes and modification time.
 func treeState(t *testing.T, dirs ...string) map[string]string {
 	t.Helper()
@@ -670,7 +694,8 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 
 				real := Judge(ctx, deps, req)
 				if round == 0 {
-					assert.Equal(t, real, preview)
+					assert.NotContains(t, preview.Reason, verdictRefLine, "a dry run stores no verdict, so it cites none")
+					assert.Equal(t, withoutVerdictRef(real), preview)
 					assert.NotEqual(t, before, treeState(t, dirs...), "the call itself records something")
 					got := Verdict{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
 					if tc.want.Rule == "" {
@@ -717,9 +742,12 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 		Why:  "--tee writes the structured record to the file and still prints it.",
 	}
 	assert.Equal(t, []hint.Next{want}, v.Next)
+	ref := verdictRef.FindString(v.Reason)
+	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
 	assert.Equal(t, "`ls jobs >f`: console text is not a format anything should parse."+
 		"\nnext:\n  magus ls jobs -o json --tee f\n      "+want.Why+
-		"\nsee: "+ruleDocsBase+"output-redirect/", v.Reason, "one line plus the next")
+		verdictRefLine+"magus query output "+ref+
+		"\nsee: "+ruleDocsBase+"output-redirect/", v.Reason, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
 	assert.NotEqual(t, "deny", Judge(ctx, deps, Request{Input: want.Run}).Decision, "the served line passes")

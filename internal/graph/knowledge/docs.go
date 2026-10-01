@@ -2,7 +2,6 @@ package knowledge
 
 import (
 	"context"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -49,9 +48,15 @@ var (
 // generated page declares in its `generated_from` frontmatter. Both point outside the doc
 // tree, so both are classified in @links, which owns that question for prose and code alike.
 func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) (Shard, docCitations) {
+	return assembleDocsIn(WalkTree(root), spells, projects, notesPath)
+}
+
+// assembleDocsIn is assembleDocs over a walk already taken.
+func assembleDocsIn(w *TreeWalk, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) (Shard, docCitations) {
+	root := w.root
 	s := Shard{Name: docsShardName}
 	var cites docCitations
-	files := findDocFiles(root, notesPath)
+	files := w.docFiles(notesPath)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
 		scanned[f] = true
@@ -625,44 +630,32 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 // changes the body, which changes the edge count, which changes the counts: no
 // single-pass fixpoint. Everything in MAGUS.md is already a first-class node, so
 // excluding it loses nothing.
-func findDocFiles(root, notesPath string) []string {
+func findDocFiles(root, notesPath string) []string { return WalkTree(root).docFiles(notesPath) }
+
+// docFiles is findDocFiles over the walk. The walk never skips its root, which matters
+// because the workspace being indexed is often a secondary checkout (a git worktree, hg
+// share, or jj workspace) that skipDocWalkDir's guard would otherwise skip whole; the guard
+// applies only to checkouts found BELOW the root.
+func (w *TreeWalk) docFiles(notesPath string) []string {
 	// The workspace's declared notes store is markdown, but it is NOT documentation: a
 	// note is human-authored knowledge anchored to graph entities, and indexing it here
 	// would give it a kind:doc node and collapse the distinction the store exists to
 	// draw. Excluded by DECLARED path rather than by name, so a workspace that declares
 	// nothing keeps indexing a directory that merely happens to be called notes.
-	var notesDir string
+	var notesPrefix string
 	if p := strings.TrimSpace(notesPath); p != "" && !filepath.IsAbs(p) {
-		notesDir = filepath.Join(root, filepath.Clean(p))
+		rel := filepath.ToSlash(filepath.Clean(p))
+		if rel == "." {
+			return nil // the notes store is the whole workspace, so nothing in it is a doc
+		}
+		notesPrefix = rel + "/"
 	}
-	var out []string
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
+	return w.scan(walkDocs, func(f treeFile) bool {
+		if notesPrefix != "" && strings.HasPrefix(f.rel, notesPrefix) {
+			return false
 		}
-		if d.IsDir() {
-			// Never skip the walk root itself: the workspace we are indexing is often a
-			// secondary checkout (a git worktree, hg share, or jj workspace), and
-			// skipDocWalkDir's secondary-checkout guard would otherwise skip everything.
-			// The guard applies only to checkouts found BELOW the root.
-			if p != root && skipDocWalkDir(p, d.Name()) {
-				return fs.SkipDir
-			}
-			if notesDir != "" && p == notesDir {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(p, ".md") || filepath.Base(p) == "MAGUS.md" {
-			return nil
-		}
-		if rel, err := filepath.Rel(root, p); err == nil {
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return nil
+		return strings.HasSuffix(f.rel, ".md") && path.Base(f.rel) != "MAGUS.md"
 	})
-	slices.Sort(out)
-	return dropVCSIgnored(root, out)
 }
 
 // dropVCSIgnored removes the paths the workspace's VCS ignores. One batched query
@@ -706,11 +699,16 @@ func dropVCSIgnored(root string, files []string) []string {
 // dependency trees, and any secondary checkout of the same repo (a git worktree, hg
 // share, or jj workspace) whose files would otherwise be indexed twice.
 func skipDocWalkDir(path, name string) bool {
+	return skipDocWalkName(name) || vcs.IsSecondaryCheckout(path)
+}
+
+// skipDocWalkName is the half of skipDocWalkDir a directory's name decides.
+func skipDocWalkName(name string) bool {
 	switch name {
 	case ".git", ".magus", "node_modules", "vendor", "gen", "target", "dist":
 		return true
 	}
-	return vcs.IsSecondaryCheckout(path)
+	return false
 }
 
 // roleFromRel classifies a markdown file by what it IS, from cross-ecosystem filename

@@ -72,7 +72,7 @@ the line runs: a word holding a variable or substitution, a relative path after 
 on the same line, a program reparsed out of a `sh -c` payload, or no `dir` to resolve it
 against. Symlinks are left as spelled.
 
-`magus\guard.once(key)`, `magus\guard.count(key)` and `magus\job\list()` work here as
+`magus\guard.once(key)`, `magus\guard.count(key)` and `magus\job.list()` work here as
 they do in a [spawn rule](guard-spawn.md), and share its store: a key means one thing to
 the whole policy.
 

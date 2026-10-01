@@ -261,7 +261,9 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 		"MISE_CONFIG_DIR":           "/runner/mise-config",
 		"MISE_TRUSTED_CONFIG_PATHS": "/work:/tmp",
 	}, box)
-	assert.Equal(t, os.Getenv("PATH"), seen["PATH"])
+	require.NotEmpty(t, seen["MAGUS"])
+	assert.Equal(t, filepath.Dir(seen["MAGUS"])+string(os.PathListSeparator)+os.Getenv("PATH"), seen["PATH"],
+		"the inherited PATH, behind the running magus's own directory, so a bare magus in a hook is this build")
 	assert.Equal(t, string(magustypes.SandboxModeBestEffort), seen[procrun.SandboxEnvVar])
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
@@ -808,6 +810,32 @@ func TestCommandFactsAnswerAutoResolve(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 	assert.Equal(t, "x.go: the facts command answered no auto_resolve (auto_resolve hook: exited 9)", verdict)
+}
+
+// The classify_edit fact is asked with both sides of one path, null where it is absent;
+// a command that cannot answer it, or answers a tier no path has, classifies the path as
+// code.
+func TestCommandFactsAnswerClassifyEdit(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	facts := script(`case "$1" in
+	classify_edit) cat > asked; echo '{"tier": "prose", "why": "a glob"}';;
+	*) exit 9;;
+	esac`)
+	got, err := CommandFacts(facts, dir, HookEnv{}, nil).ClassifyEdit(ctx, "CHANGELOG.md", nil, []byte("a\n"))
+	require.NoError(t, err)
+	assert.Equal(t, types.ClassifiedPath{Path: "CHANGELOG.md", Tier: types.CarryProse, Why: "a glob"}, got)
+	asked, err := os.ReadFile(filepath.Join(dir, "asked"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"path": "CHANGELOG.md", "old": null, "cur": "a\n"}`, string(asked))
+
+	got, err = CommandFacts(script(`echo '{"tier": "rebase", "why": "a guess"}'`), dir, HookEnv{}, nil).ClassifyEdit(ctx, "x.go", nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.ClassifiedPath{Path: "x.go", Tier: types.CarryCode, Why: `the classify_edit hook answered tier "rebase"`}, got)
+
+	got, err = CommandFacts(script(`exit 9`), dir, HookEnv{}, nil).ClassifyEdit(ctx, "x.go", nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, types.ClassifiedPath{Path: "x.go", Tier: types.CarryCode, Why: "the facts command answered no classify_edit (classify_edit hook: exited 9)"}, got)
 }
 
 func TestCommandFactsAnswerWritesGenerationAndEveryUnit(t *testing.T) {

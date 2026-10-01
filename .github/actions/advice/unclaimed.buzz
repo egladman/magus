@@ -74,7 +74,7 @@ fun main() > void !> any {
         return;
     }
     var found = mut [];
-    foreach (f in magus\describeFile(paths).files) {
+    foreach (f in magus\describe.file(paths).files) {
         if (f.role == "unclaimed") { found.append(f.path); }
     }
     if (found.len() == 0) {

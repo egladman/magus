@@ -25,7 +25,7 @@ func TestEval_value(t *testing.T) {
 }
 
 func TestEval_capturesPrint(t *testing.T) {
-	r := Eval(context.Background(), `import "std"; std.print("hello"); std.print("world");`)
+	r := Eval(context.Background(), `import "std"; std\print("hello"); std\print("world");`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	assert.Equal(t, "hello\nworld\n", r.Output)
 }
@@ -41,7 +41,7 @@ const sampleMagusfile = `
 import "magus";
 import "magus/spell/go";
 
-magus.project({
+magus\project({
     "spells": [go],
     "outputs": ["bin/**"],
     "targets": {"regen-pgo": {"skip_cache": "test policy"}, "lint": {"slots": 4}},
@@ -190,7 +190,7 @@ func TestRun_charmBranch(t *testing.T) {
 	const src = `
 import "magus";
 import "magus/spell/docker";
-magus.project({"spells": [docker]});
+magus\project({"spells": [docker]});
 export fun image_build(ctx: magus\Context, args: [str]) > void {
     if (ctx.hasCharm("cd")) { docker["docker-build"]({"args": ["--push"]}); }
     else { docker["docker-build"]({"args": ["--load"]}); }
@@ -244,7 +244,7 @@ func TestRun_magusRunInvocation(t *testing.T) {
 	const src = `
 import "magus";
 export fun image_build(ctx: magus\Context, args: [str]) > void {}
-export fun release(ctx: magus\Context, args: [str]) > void !> any { magus.run(["image-build:cd"]); }
+export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["image-build:cd"]); }
 `
 	g := LoadMagusfile(context.Background(), src)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
@@ -288,8 +288,8 @@ func hasEdge(edges []Edge, from, to string) bool {
 
 func TestEval_HostModules(t *testing.T) {
 	cases := map[string]string{
-		`import "strings"; return strings.camelCase("hello world");`: "helloWorld",
-		`import "encoding/base64"; return base64.encode("hi");`:      "aGk=",
+		`import "strings"; return strings\camelCase("hello world");`: "helloWorld",
+		`import "encoding/base64"; return base64\encode("hi");`:      "aGk=",
 	}
 	for src, want := range cases {
 		r := Eval(context.Background(), src)
@@ -317,7 +317,7 @@ func TestEval_tracerSpellOp(t *testing.T) {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 `
@@ -336,7 +336,7 @@ func TestEval_tracerMultiTarget(t *testing.T) {
 import "magus";
 import "magus/spell/go";
 
-magus.project({ "spells": [go] });
+magus\project({ "spells": [go] });
 
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 export fun test(ctx: magus\Context, args: [str]) > void { go["go-test"](); }
@@ -358,7 +358,7 @@ func TestEval_withCatalog(t *testing.T) {
 import "magus";
 import "magus/spell/acme";
 
-magus.project({ "spells": [acme] });
+magus\project({ "spells": [acme] });
 
 export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"](); }
 `
@@ -471,6 +471,22 @@ fun dir(path: str) > magus\Dir {
 return figure\draw(figure\of("t").box(dir("a")).unscoped(why: "x"), theme: figure\Theme.light) catch "refused";`)
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	assert.Equal(t, "refused", r.Result, "figure type-checks against magus\\Dir and raises its finding")
+}
+
+// TestEvalFigureKeepsItsPrivateNode draws from a script that declares its own
+// Node. figure's private Node must stay figure's: resolved to the script's, every
+// box carries both anchor and link and the figure refuses to draw.
+func TestEvalFigureKeepsItsPrivateNode(t *testing.T) {
+	r := Eval(context.Background(), `import "magus/figure";
+object Node {
+    anchor: str = "a",
+    link: str = "b",
+}
+final a = figure\external("a", link: "https://a.example");
+final b = figure\external("b");
+return figure\draw(figure\of("t").actor(a).actor(b).flowAcross(a, dst: b).unscoped(why: "a process"), theme: figure\Theme.light) catch "refused";`)
+	require.True(t, r.OK, "eval failed: %+v", r.Diag)
+	assert.True(t, strings.HasPrefix(r.Result, "<svg"), r.Result)
 }
 
 func TestPlaygroundSourceModules(t *testing.T) {

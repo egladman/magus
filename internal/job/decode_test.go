@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -165,6 +166,35 @@ func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	assert.Equal(t, types.StateDeclared, row.State)
 }
 
+// `magus job apply -f` reads a manifest the three ways one arrives: one record, an array,
+// or one per line. Each record is decoded strictly, and a bad one is named by position.
+func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
+	t.Parallel()
+
+	a := declaration(`"id":"a"`)
+	one, err := io.ReadAll(a)
+	require.NoError(t, err)
+	two := fmt.Sprintf(`{"schema_version":%d,"id":"b"}`, types.JobSchemaVersion)
+	for name, raw := range map[string]string{
+		"an array":     "[" + string(one) + "," + two + "]",
+		"one per line": string(one) + "\n\n" + two + "\n",
+	} {
+		rows, err := DecodeDeclarations(strings.NewReader(raw))
+		require.NoError(t, err, name)
+		assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, name)
+	}
+	rows, err := DecodeDeclarations(strings.NewReader(string(one)))
+	require.NoError(t, err)
+	assert.Len(t, rows, 1)
+
+	bad := fmt.Sprintf(`{"schema_version":%d,"id":"c","confidence":"high"}`, types.JobSchemaVersion)
+	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + two + "\n" + bad))
+	require.ErrorContains(t, err, "record 3:")
+	assert.Contains(t, err.Error(), "confidence")
+	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + string(one)))
+	require.ErrorContains(t, err, "a is record 1 too")
+}
+
 // An empty stdin is the shape of a pipeline that produced nothing, and reading it as an
 // empty record would record a row that erases the one it names.
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
@@ -207,6 +237,42 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	assert.ElementsMatch(t, jsonFields(types.Declaration{}), keys(schema.Properties))
 }
 
+// A goal naming only its kind and subject is the common one, so the schema must not
+// require the expect the decoder fills in, and it states the default a reader would get.
+func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
+	t.Parallel()
+
+	var schema struct {
+		Properties struct {
+			Goals struct {
+				Items struct {
+					Required   []string `json:"required"`
+					Properties struct {
+						Expect struct {
+							Description string `json:"description"`
+						} `json:"expect"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"goals"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
+	goal := schema.Properties.Goals.Items
+	assert.NotContains(t, goal.Required, "expect")
+	assert.Contains(t, goal.Properties.Expect.Description, "passed for check")
+	assert.Contains(t, goal.Properties.Expect.Description, "changed for paths and symbol")
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/store"`, `"goals":[`+
+		`{"id":"unit","kind":"check","check":{"target":"test"}},`+
+		`{"id":"done","kind":"paths","paths":["internal/job"]}]`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	require.Len(t, row.Goals, 2)
+	assert.Equal(t, types.ExpectPassed, row.Goals[0].Expect)
+	assert.Equal(t, types.ExpectChanged, row.Goals[1].Expect)
+}
+
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
 // row the other would have recorded. ParseMerge is the MCP tool's decoder and
 // types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
@@ -245,7 +311,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			}}
 		}
 		_, err := ParseMerge(map[string]any{field: value})
-		assert.NoError(t, err, "magus\\job\\put rejects %q, which `magus job fork` accepts", field)
+		assert.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
 	for _, field := range jsonFields(types.Declaration{}) {

@@ -13,11 +13,14 @@ import (
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 // mergeDriverWorkspace builds a workspace whose generate target declares gen/** as its own
 // output via ctx.writesFiles (the shape rebuildTarget requires), and which would leave
@@ -28,7 +31,7 @@ func mergeDriverWorkspace(t *testing.T) (*magus.Magus, string) {
 	magusfile := `import "magus";
 import "fs";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
@@ -140,7 +143,7 @@ func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
 	root := t.TempDir()
 	magusfile := `import "magus";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**", "!gen/hand.txt");
@@ -168,7 +171,7 @@ func TestMergeDriverRefusesUnrebuildableOutput(t *testing.T) {
 	// gen/** is declared project-wide, and no target claims it via ctx.writesFiles.
 	magusfile := `import "magus";
 
-magus.project({
+magus\project({
     "outputs": ["gen/**"],
 })
 
@@ -192,7 +195,7 @@ func autoResolveWorkspace(t *testing.T) *magus.Magus {
 	root := t.TempDir()
 	magusfile := `import "magus";
 
-magus.project({"merge_low_risk": ["fixtures/**"]})
+magus\project({"merge_low_risk": ["fixtures/**"]})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");

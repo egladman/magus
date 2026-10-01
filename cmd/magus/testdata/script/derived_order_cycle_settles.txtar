@@ -29,7 +29,7 @@ cmp runs.log want-runs-twice
 concurrency: 2
 -- magusfile.buzz --
 import "magus";
-magus.project({"sources": ["*.md"]});
+magus\project({"sources": ["*.md"]});
 -- want-b-index --
 two
 -- want-a-index --
@@ -48,7 +48,7 @@ a: one
 -- a/magusfile.buzz --
 import "magus";
 import "proc";
-magus.project({
+magus\project({
     "sources": ["*.md"],
     "targets": {
         "index-generate": {"skip_cache": "derives from every index in the tree; no input glob can key it"},
@@ -70,7 +70,7 @@ one
 -- b/magusfile.buzz --
 import "magus";
 import "proc";
-magus.project({
+magus\project({
     "sources": ["*.md", "seed.txt"],
     "targets": {
         "index-generate": {"skip_cache": "derives from every index in the tree; no input glob can key it"},

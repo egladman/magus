@@ -1,0 +1,22 @@
+import "std";
+
+fun findIndex(names: [str], target: str) > int? {
+    foreach (index, name in names) {
+        if (name == target) {
+            return index;
+        }
+    }
+    return null;
+}
+
+fun main(args: [str]) > void {
+    final names = ["ada", "grace", "linus"];
+    foreach (target in ["linus", "ken"]) {
+        final index = findIndex(names, target: target);
+        if (index -> found) {
+            std\print("{target}: found at {found}");
+        } else {
+            std\print("{target}: missing");
+        }
+    }
+}

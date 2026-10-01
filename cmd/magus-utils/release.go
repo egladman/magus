@@ -274,7 +274,7 @@ func loadManifests(dir string) ([]ReleaseManifest, error) {
 // Usage: magus-utils cut -version v0.2.0 -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
 //
 // The MAGUS_SIGNING_KEY env var is NOT required here; signing SHA256SUMS is a
-// separate step (magus-utils sign). The manifest itself is not signed; only
+// separate step (the release-sign target). The manifest itself is not signed; only
 // index.json is signed (by runReleaseIndex).
 func runCut(args []string) error {
 	// Simple flag parsing without flag package to avoid import bloat.
@@ -506,6 +506,26 @@ func runReleaseIndex(args []string) error {
 	}
 	fmt.Printf("signed %s -> %s\n", idxPath, sigPath)
 	return nil
+}
+
+// overrideVerifyPubKey lets tests substitute a known keypair for the embedded
+// release key, which has no corresponding private key in this repo.
+var overrideVerifyPubKey ed25519.PublicKey
+
+// releaseVerifyKey is the key a release self-check verifies against: the ring's
+// ACTIVE key, not the whole ring. The ring exists so a client can accept a signature
+// from a key that is not the current signer; a release that just signed something has
+// no such latitude, and accepting a standby key here would let a mis-set
+// MAGUS_SIGNING_KEY publish quietly.
+func releaseVerifyKey() (ed25519.PublicKey, error) {
+	if overrideVerifyPubKey != nil {
+		return overrideVerifyPubKey, nil
+	}
+	active, err := selfupdate.ReleaseKeys.Active()
+	if err != nil {
+		return nil, err
+	}
+	return active.Pub, nil
 }
 
 // notesFromBodyString parses a trimmed body into structured notes sections.

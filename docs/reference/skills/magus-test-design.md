@@ -3,8 +3,8 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10496
-skill_short_bytes: 6638
+skill_full_bytes: 10512
+skill_short_bytes: 6654
 ---
 
 # magus-test-design
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `c5be10930e7d` |
+| `skill-content` | `3be496d3f995` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -93,7 +93,7 @@ runs locally, on a commit, or in CI.
    change what a lower boundary can prove: process/runtime execution,
    filesystem, network, time, scheduling, persistence, or a language boundary.
 
-Prefer `client` (`magus\describe`, `magus\explain`, `magus\refs`,
+Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`,
 `magus\path`); use the CLI commands above as fallback. Do not start a server
 solely to review test design.
 
@@ -243,7 +243,7 @@ runs locally, on a commit, or in CI.
    change what a lower boundary can prove: process/runtime execution,
    filesystem, network, time, scheduling, persistence, or a language boundary.
 
-Prefer `client` (`magus\describe`, `magus\explain`, `magus\refs`,
+Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`,
 `magus\path`); use the CLI commands above as fallback. Do not start a server
 solely to review test design.
 

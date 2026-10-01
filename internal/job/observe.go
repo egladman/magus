@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -44,6 +45,12 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		seen := changedSince(ctx, driver, unresolved, tree, row.Checkpoint)
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
 		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
+		// Workspace only, as for every rule that acts: a default in one person's global
+		// config must not loosen what a check accepts. An unreadable magus.yaml leaves no
+		// defaults, so a check binds only to the charms it names.
+		if cfg, err := config.LoadWorkspaceOnly(tree); err == nil {
+			seen.DefaultCharms = cfg.DefaultCharms
+		}
 		return seen, nil
 	}
 }
@@ -75,15 +82,11 @@ func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) {
 	return res.VCS, ""
 }
 
-// checkpointRevision is the revision half of a checkpoint token.
-//
-// The token is `<revision>` or `<revision>+<patch digest>`; only the revision half is
-// something a VCS can diff against, so the digest is cut. That digest still matters to a
-// reader deciding whether the worker saw the same tree, and it is on the row for exactly
-// that; it is not a revision, and asking a backend to resolve one would fail.
+// checkpointRevision is the revision half of a checkpoint token, the only half a VCS can
+// resolve; see [types.ParseCheckpointToken].
 func checkpointRevision(checkpoint string) string {
-	revision, _, _ := strings.Cut(checkpoint, "+")
-	return strings.TrimSpace(revision)
+	revision, _ := types.ParseCheckpointToken(checkpoint)
+	return revision
 }
 
 // changedSince asks driver what differs from the checkpoint's revision, and which
@@ -133,6 +136,22 @@ func regionsSince(ctx context.Context, driver types.VCSDriver, root, revision st
 		return nil, false, fmt.Sprintf("the regions changed since %s could not be read: %v", revision, err)
 	}
 	return regions, true, ""
+}
+
+// MeasureOverlaps is [OverlapFootprints] with the version control resolved at root, the one
+// measurement every read door that reports overlaps calls, so `magus ls jobs` and
+// magus\job.list cannot disagree about a footprint. Only the overlaps pay for it: a list
+// with none reads no VCS at all. Version control that is disabled or does not resolve
+// leaves each footprint unknown, naming why.
+func MeasureOverlaps(ctx context.Context, root string, rows []types.Job, overlaps []types.JobOverlap) []types.JobOverlap {
+	if len(overlaps) == 0 {
+		return overlaps
+	}
+	var driver types.VCSDriver
+	if res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{}); err == nil && res.Source != types.VCSSourceDisabled {
+		driver = res.VCS
+	}
+	return OverlapFootprints(ctx, driver, rows, overlaps)
 }
 
 // OverlapFootprints fills each overlap's Footprint: whether the two jobs' diffs, each

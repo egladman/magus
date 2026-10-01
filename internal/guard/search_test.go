@@ -12,19 +12,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
 // TestSymbolSearchDeniesEveryProvableShape widens the deny past one bare identifier: an
-// alternation, a definition lookup, and a diagnostic code, each only when the graph can
-// answer EVERY name the pattern looks for. The 2026-09-24 audit measured 45% of search
-// patterns as alternations and 13% as definition lookups, and the single-name deny fired
-// 0 times.
+// alternation, a definition lookup, and a diagnostic code, whenever ANY name the pattern
+// looks for is one the graph answers. The 2026-09-24 audit measured 45% of search patterns
+// as alternations and 13% as definition lookups, and the single-name deny fired 0 times.
 func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true, "Judge": true, "Verdict": true}
-	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph}
-	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph, Spells: spellCatalog}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph, Spells: spellCatalog}
 
 	for _, tt := range []struct {
 		command string
@@ -48,17 +49,18 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		{`grep -rnE 'func\s+Judge|type Verdict' .`, "Judge,Verdict"},
 		{`rg 'HandleRequest|MGS3010'`, "HandleRequest,diagnostic:MGS3010"},
 
-		// One alternative the index does not hold is text grep may be right about.
-		{`grep -rn 'HandleRequest\|someText' .`, ""},
-		{`grep -rn 'HandleRequest\|NotIndexedHere' .`, ""},
+		// One name is enough: the text alternative is served on its own.
+		{`grep -rn 'HandleRequest\|someText' .`, "HandleRequest"},
+		{`grep -rn 'HandleRequest\|NotIndexedHere' .`, "HandleRequest"},
 		// Under BRE a bare `|` is a literal, so this looks for one string, not two names.
 		{`grep -rn 'HandleRequest|ParseConfig' .`, ""},
 		// Fixed strings have no alternation at all.
 		{`grep -rnF 'HandleRequest\|ParseConfig' .`, ""},
-		// A case-insensitive search asks a wider question than refs answers.
-		{`grep -rni 'HandleRequest\|ParseConfig' .`, ""},
+		// -i widens a plain word into text, but a CamelCase name is still that name.
+		{`grep -rni 'HandleRequest\|ParseConfig' .`, "HandleRequest,ParseConfig"},
+		{`grep -rni '\bJudge\b' .`, ""},
 		{`grep -rn 'func Unknown' .`, ""},
-		// A lookup the index cannot vouch for stays advice.
+		// A stale index still knows the name, and the deny serves the rebuild first.
 		{`grep -rn 'func Judge' internal/`, "stale"},
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'func Judge' /tmp/other-repo`, ""},
@@ -68,7 +70,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		d := deps
 		want := tt.arg
 		if tt.arg == "stale" {
-			d, want = stale, ""
+			d, want = stale, "Judge"
 		}
 		v := Evaluate(d, tt.command)
 		if want == "" {
@@ -76,15 +78,17 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: want}, v.Rule, tt.command)
+		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "graph build --silent"), "%q: only a stale index serves the rebuild", tt.command)
 		for _, name := range strings.Split(want, ",") {
 			assert.Contains(t, v.Deny, name, "%q: one command per name", tt.command)
 		}
 	}
 }
 
-// TestSymbolSearchOnNamedFiles pins the file half: a search of named Go files for an
-// indexed name runs with refs advised, and anything the index does not cover, or a flag
-// that changes the question, gets no such advice.
+// TestSymbolSearchOnNamedFiles pins the file half: a search of ONE named Go file for an
+// indexed name is a read, and runs with refs advised; anything the index does not cover, or
+// a flag that changes the question, gets no such advice. Two files or a glob is a search,
+// pinned in TestSymbolSearchAnswersTreeSearches.
 func TestSymbolSearchOnNamedFiles(t *testing.T) {
 	root := writeTree(t, map[string]string{
 		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
@@ -101,8 +105,6 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		advice  string // the refs command advised, "" for none
 	}{
 		{`grep -n HandleRequest internal/api/handler.go`, deps, "refs HandleRequest --occurrences` answers this for every file."},
-		{`grep -n 'HandleRequest\|ParseConfig' internal/api/handler.go internal/api/config.go`, deps,
-			"refs HandleRequest --occurrences`, `magus refs ParseConfig --occurrences` answer this for every file."},
 		{`rg -n 'HandleRequest\(' internal/api/handler.go`, deps, "refs HandleRequest --occurrences`"},
 		{`grep -n 'func HandleRequest' internal/api/handler.go`, deps, "refs HandleRequest --definition --source`"},
 		{`grep -n ParseConfig internal/api/handler.go`, deps, "refs ParseConfig --occurrences`"},
@@ -124,8 +126,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		{`grep -l HandleRequest internal/api/handler.go`, deps, ""},
 		{`grep -v HandleRequest internal/api/handler.go`, deps, ""},
 		{`grep -in handlerequest internal/api/handler.go`, deps, ""},
-		// A glob or a missing file cannot be read.
-		{`grep -n HandleRequest internal/api/*.go`, deps, ""},
+		// A missing file cannot be read.
 		{`grep -n HandleRequest internal/api/missing.go`, deps, ""},
 		// A pipe is not a file.
 		{`cat internal/api/handler.go | grep -n HandleRequest`, deps, ""},
@@ -245,8 +246,8 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 		"ParseConfig":   {{File: "internal/api/config.go", Count: 1, Lines: []int{3}}},
 	}
 	indexed := func(name string) (bool, bool) { return sites[name] != nil, true }
-	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, scope: workspaceScope{root: root}}
-	blind := Dependencies{SymbolDefined: indexed, scope: workspaceScope{root: root}}
+	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}
+	blind := Dependencies{SymbolDefined: indexed, Spells: spellCatalog, scope: workspaceScope{root: root}}
 	const handler = "Its answer (2 results):\n  internal/api/handler.go  (2)  lines 4,6\n  internal/api/handler_test.go  (1)  lines 3"
 	const notReproduced = "\nThe pipe after the search is not reproduced: run it over the command's output."
 
@@ -266,8 +267,12 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 			"Its answer (1 result):\n  internal/api/handler_test.go  (1)  lines 3", false},
 		{`rg 'HandleRequest|ParseConfig' internal/api`, deps, "refs ParseConfig --occurrences",
 			"Its answer (3 results):\n  internal/api/config.go  (1)  lines 3\n  internal/api/handler.go  (2)  lines 4,6", false},
-		// A search no parser models, or an index with no sites, keeps the routing deny alone.
+		// Two named files are a search, not a read.
+		{`grep -n 'HandleRequest\|ParseConfig' internal/api/handler.go internal/api/config.go`, deps, "refs ParseConfig --occurrences",
+			"Its answer (2 results):\n  internal/api/config.go  (1)  lines 3\n  internal/api/handler.go  (2)  lines 4,6", false},
+		// A search no parser models, a glob, or an index with no sites keeps the routing deny alone.
 		{`grep -rl HandleRequest internal`, deps, "refs HandleRequest --occurrences", "", false},
+		{`grep -n HandleRequest internal/api/*.go`, deps, "refs HandleRequest --occurrences", "", false},
 		{`grep -rn HandleRequest internal | wc -l`, blind, "refs HandleRequest --occurrences", "", true},
 	} {
 		v, ok := searchVerdictAt(tt.deps, root, parseForTest(t, tt.command))
@@ -315,10 +320,14 @@ func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
 			types.KindDiagnostic: {"diagnostic:MGS2011"},
 		}),
+		Spells:  spellCatalog,
 		scope:   workspaceScope{root: root},
 		callDir: root,
 	}
 }
+
+// spellCatalog is the built-in spells, whose symbol indexers say which files refs answers for.
+var spellCatalog = project.DefaultSpellRegistry().All
 
 var staleGraphCommands = []struct {
 	command string
@@ -369,8 +378,9 @@ func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
 	}
 }
 
-// An index built at another revision than HEAD advises in place of every graph-backed
-// deny; one built at HEAD, named by its full id or an abbreviation, still denies.
+// An index built at another revision than HEAD advises in place of the translation and
+// reader denies, and turns symbol-search's deny into one that serves the rebuild first;
+// one built at HEAD, named by its full id or an abbreviation, denies as usual.
 func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 	root, deps := staleGraphTree(t)
 	cacheDir := t.TempDir()
@@ -388,6 +398,12 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
 	for _, tt := range staleGraphCommands {
 		v := Evaluate(deps, tt.command)
+		if tt.rule == denyRuleSymbolSearch {
+			assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
+			assert.Contains(t, v.Deny, "graph build --silent`, then ", tt.command)
+			assert.Contains(t, v.Deny, "The symbol index describes another tree (the index was built at 0123456789ab and the checkout is at fedcba9)", tt.command)
+			continue
+		}
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
 		assert.Contains(t, v.Brief, "the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9.", tt.command)
@@ -412,4 +428,249 @@ func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
 	for name, deps := range map[string]Dependencies{"no graph": {}, "a graph it doubts": {GraphIDs: doubted}, "another tree's": {GraphIDs: without}} {
 		assert.Empty(t, Evaluate(deps, registered).Deny, name)
 	}
+}
+
+// recordedSearchTree is a workspace laid out like this one, for the recorded commands: Go
+// packages, a Markdown-only skills directory, CI config under a dot-directory.
+func recordedSearchTree(t *testing.T) string {
+	t.Helper()
+	return writeTree(t, map[string]string{
+		"internal/api/handler.go":                    "package api\n",
+		"internal/cache/lock.go":                     "package cache\n",
+		"internal/cache/eviction.go":                 "package cache\n",
+		"internal/job/store.go":                      "package job\n",
+		"internal/agent/skills/magus-query/SKILL.md": "# query\n",
+		"cmd/magus/main.go":                          "package main\n",
+		"types/job.go":                               "package types\n",
+		"types/describe.go":                          "package types\n",
+		"vcs/git.go":                                 "package vcs\n",
+		"vcs/hg.go":                                  "package vcs\n",
+		"std/http.go":                                "package std\n",
+		"console/src/plan.ts":                        "export {}\n",
+		"tools/pull-requests.buzz":                   "fun main() > void {}\n",
+		"hack/split.buzz":                            "fun main() > void {}\n",
+		"docs/conventions.md":                        "# conventions\n",
+		".github/workflows/ci.yaml":                  "on: push\n",
+		"node_modules/x/index.js":                    "module.exports = {}\n",
+		"magusfile.buzz":                             "export fun spell_publish() > void {}\n",
+	})
+}
+
+// TestSearchIntentOnRecordedCommands is the classification table, built from search calls
+// recorded by the guard over the week before 2026-09-30 and classified by hand. Each row
+// names what the call was reaching for and what the guard must do: refuse with the graph
+// command for a symbol or a declaration, and let text, prose, a single-file read, stdin,
+// another tree and a revision through. Precision first: every "text" row is a call the old
+// rule passed and a careless one would refuse.
+func TestSearchIntentOnRecordedCommands(t *testing.T) {
+	root := recordedSearchTree(t)
+	indexed := map[string]bool{}
+	for _, name := range []string{
+		"WithPreflight", "trivialRebase", "ChainStep", "UpdateRef", "CheckStatus", "newPendingSet", "canonicalPath",
+		"covers", "Provider", "WriteFileAtomic", "CreateTemp", "Rename", "Mkdir", "worker", "read", "glob", "command",
+		"NewGate", "OutputRecord", "CleanReport", "Member", "globalCfg", "Magus", "Append", "Tool",
+		"KnowledgeRefsOutput", "Origin", "file_count", "field", "main", "WritePaths", "UnresolvedRisks",
+		"Unattributed", "InstallRefreshHook", "DeclareMagusTypes", "AutoResolve", "RawMessage", "Marshal", "UnixMilli",
+		"Inspect", "Walk",
+	} {
+		indexed[name] = true
+	}
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
+		GraphIDs:      graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS3010"}}),
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+
+	for _, tt := range []struct {
+		command string
+		class   string // what the call reaches for
+		arg     string // the names the deny routes to; "" lets it through
+	}{
+		// The evidence the job opened with.
+		{`rg -n WithPreflight`, "symbol", "WithPreflight"},
+		{`grep -rn "func trivialRebase" internal/queue`, "declaration", "trivialRebase"},
+		{`grep -rli "rebind\|Origin\b\|CORS" --include=*.go internal/api | grep -v _test | head`, "text: -i widens a plain word", ""},
+		{`grep -n -i "rebind\|origin\|cors" internal/api/handler.go internal/job/store.go | head -20`, "text: -i over plain words", ""},
+		{`git grep -n 'coverage\.buzz' | head -30`, "text: a file name", ""},
+		{`grep -rn "sibling-checkout" --include=*.go --include=*.buzz . | grep -v _test | head -8`, "text: hyphenated", ""},
+
+		// Names and declarations the graph answers.
+		{`grep -rn "type ChainStep\|type UpdateRef" internal/`, "declaration", "ChainStep,UpdateRef"},
+		{`grep -rln "CheckStatus\b" internal/ std/ --include=*.buzz --include=*.go`, "symbol: word search", "CheckStatus"},
+		{`grep -rn "newPendingSet\|\.covers(\|canonicalPath(" --include=*.go .`, "symbol; a lowercase call is text", "newPendingSet,canonicalPath"},
+		{`grep -rn "Provider\b\|provider" cmd/magus/*.go`, "symbol beside a plain word", "Provider"},
+		{`grep -rln 'WriteFileAtomic\|os.Rename\|CreateTemp\|flock' internal/cache internal/job/*.go`, "symbol; a stdlib member is text", "WriteFileAtomic,CreateTemp"},
+		{`grep -rn 'hint.NewGate(' --include=*.go internal cmd`, "symbol: qualified call", "NewGate"},
+		{`grep -rn "types.OutputRecord\|types\.CleanReport" --include=*.go .`, "symbol: qualified", "OutputRecord,CleanReport"},
+		{`grep -rn "\.Member\b" --include=*.go internal/api cmd/magus`, "symbol: member", "Member"},
+		{`grep -n "globalCfg = \|globalCfg, " cmd/magus/*.go`, "symbol: assignment", "globalCfg"},
+		{`grep -n '^var Magus\b\|^var Magus =' std/*.go`, "declaration", "Magus"},
+		{`grep -n "func Append\b\|func Append(" internal/job/*.go`, "declaration", "Append"},
+		{`grep -rln 'type Tool struct' --include=*.go .`, "declaration", "Tool"},
+		{`grep -n "Defs \|type KnowledgeRefsOutput" -A3 types/*.go`, "declaration beside text", "KnowledgeRefsOutput"},
+		{`grep -rn 'unresolved_risks\|UnresolvedRisks\|forked_by\|Unattributed\b' --include=*.go types internal/job`, "symbols; snake_case is a JSON tag", "UnresolvedRisks,Unattributed"},
+		{`grep -rn "WritePaths\|Heartbeat" --include=*.go internal/job/ types/`, "symbol beside a plain word", "WritePaths"},
+		{`grep -rn 'InstallRefreshHook' types/*.go`, "symbol over a glob", "InstallRefreshHook"},
+		{`grep -rln "func DeclareMagusTypes" internal/`, "declaration, files only", "DeclareMagusTypes"},
+		{`grep -n 'MergeDriver\|AutoResolve' vcs/git.go vcs/hg.go`, "symbol over two files", "AutoResolve"},
+		{`grep -n "RawMessage\|^func Marshal\|^import\|\"encoding/json\"" types/*.go`, "symbol and declaration beside text", "RawMessage,Marshal"},
+		{`grep -rni 'WithPreflight' internal`, "symbol: CamelCase survives -i", "WithPreflight"},
+		{`rg -n 'CheckStatus' -g '*.go'`, "symbol under a source filter", "CheckStatus"},
+		{`grep -rn 'MGS3010' internal`, "diagnostic", "diagnostic:MGS3010"},
+
+		// Text: no symbol index holds it.
+		{`grep -rln "clientbuzz" --include=*.go .`, "text: a plain word", ""},
+		{`grep -rn "package worker\|/worker\"" --include=*.go .`, "text", ""},
+		{`grep -rn "\"origin\"\|Origin()" --include=*.go internal/api cmd/magus`, "text: a string literal and a full call", ""},
+		{`grep -rln --include=*.go -E 'shell\.command|"thinking"|Transcript ' internal types std cmd`, "text: an event name and a string", ""},
+		{`grep -rlw "worker" --include=*.go internal cmd`, "text: a lowercase word, even with -w", ""},
+		{`grep -n '^func\|flock\|Flock\|O_EXCL\|Mkdir(' internal/cache/lock.go internal/cache/eviction.go`, "text: Mkdir( is os.Mkdir as often", ""},
+		{`grep -rn "secret.read\|\"read\"" internal/api/*.go`, "text: a lowercase member", ""},
+		{`grep -rn "ctx.glob(" --include=*.buzz .`, "text: a host method", ""},
+		{`rg -n 'time.UnixMilli'`, "text: a standard-library member", ""},
+		{`grep -rln 'SubagentStop\|SessionEnd' --include=*.go --include=*.buzz --include=*.md .`, "text: hook event names the index does not hold", ""},
+		{`grep -n "Origin" types/*.go`, "text: a plain word over a glob", ""},
+		{`grep -rn 'func main' cmd`, "text: a lowercase declaration many share", ""},
+		{`grep -rn "object ChainStep" internal/`, "text: a Buzz declaration, which no index reads", ""},
+		{`grep -rn 'CheckStatus' hack`, "text: a directory of Buzz", ""},
+		{`grep -rn 'ast.Inspect\|ast.Walk' --include=*.go .`, "text: go/ast, not the workspace's Inspect", ""},
+		{`grep -rni 'origin' internal`, "text", ""},
+
+		// Not code: the graph has no answer there.
+		{`grep -rn -E "match_count|file_count|duration_ms|blast_radius" internal/agent/skills`, "prose: a directory of Markdown", ""},
+		{`grep -n "queue\|provider github\|--provider" .github/workflows/*.y*ml`, "config under a dot-directory", ""},
+		{`git grep -n 'spell-publish\|spell_publish' -- .github/`, "config under a dot-directory", ""},
+		{`git grep -n 'spell_publish\|publish_spells' -- '.github/workflows/*.yaml' magusfile.buzz`, "text: Buzz function names", ""},
+		{`grep -rn "summary" docs --include=*.md`, "prose", ""},
+		{`grep -n -A8 "missing-path" docs/conventions.md`, "prose", ""},
+		{`rg -l 'Origin' -t md`, "prose filter", ""},
+		{`grep -rn 'CheckStatus' node_modules`, "dependencies", ""},
+		{`grep -rn 'CheckStatus' /tmp/other-repo`, "another tree", ""},
+		{`git grep -l 'CheckStatus' HEAD -- internal/job`, "a revision", ""},
+		{`echo CheckStatus | grep CheckStatus`, "stdin", ""},
+
+		// One named file is a read.
+		{`grep -n "type TargetGraphProject struct" types/describe.go`, "read", ""},
+		{`grep -c 'CheckStatus' internal/job/store.go`, "read", ""},
+		{`grep -n "^function field\|^function pathField" console/src/plan.ts`, "read", ""},
+		{`grep -rn "fun main\|\"status\"" tools/pull-requests.buzz`, "read", ""},
+	} {
+		v := Evaluate(deps, tt.command)
+		if tt.arg == "" {
+			assert.NotEqual(t, denyRuleSymbolSearch, v.Rule.Name, "%q (%s) must run: %s", tt.command, tt.class, v.Deny)
+			continue
+		}
+		require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, "%q (%s): %s", tt.command, tt.class, v.Deny+v.Context)
+		assert.Equal(t, tt.arg, v.Rule.Arg, "%q (%s)", tt.command, tt.class)
+		assert.Contains(t, v.Deny, "Classified: ", "%q: the deny names what it classified", tt.command)
+	}
+}
+
+// TestSymbolSearchOnAStaleIndex pins the rows the index state decides: a name the stale
+// index holds and a declaration it has not reached yet are refused with the rebuild served
+// first; a bare CamelCase word it does not hold is as often a string, and runs; with no
+// index at all the search runs, advised.
+func TestSymbolSearchOnAStaleIndex(t *testing.T) {
+	root := recordedSearchTree(t)
+	cacheDir := t.TempDir()
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, root, knowledge.NewGraph(), true, knowledge.GuardCheckout{}))
+	held := map[string]bool{"CheckStatus": true}
+	stale := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return held[name], false },
+		CacheDir:      func(string) (string, error) { return cacheDir, nil },
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	cold := stale
+	cold.CacheDir = func(string) (string, error) { return t.TempDir(), nil }
+
+	for _, tt := range []struct {
+		command string
+		deps    Dependencies
+		arg     string // "" lets it through
+		advised bool
+	}{
+		{`grep -rn CheckStatus internal`, stale, "CheckStatus", false},
+		{`grep -rn 'func settleTarget' cmd/magus`, stale, "settleTarget", false},
+		{`grep -rn 'workspaceOutputGlobs(' cmd/magus`, stale, "workspaceOutputGlobs", false},
+		{`grep -rn 'SubagentStop' internal`, stale, "", false},
+		{`grep -rn 'func settleTarget' cmd/magus`, cold, "", true},
+	} {
+		v := Evaluate(tt.deps, tt.command)
+		if tt.arg == "" {
+			assert.Empty(t, v.Deny, tt.command)
+			assert.Equal(t, tt.advised, v.Kind == advisoryPrecedent, tt.command)
+			continue
+		}
+		require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, "%q: %s", tt.command, v.Context)
+		assert.Equal(t, tt.arg, v.Rule.Arg, tt.command)
+		require.NotEmpty(t, v.Next, tt.command)
+		assert.Equal(t, hint.GraphBuild.With("--silent"), v.Next[0].Run, "%q: the rebuild comes first", tt.command)
+	}
+}
+
+// The files refs answers for are the languages a spell declares a symbol indexer for, read
+// from the catalog rather than a list in the guard: Go and TypeScript here, Buzz not.
+func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
+	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
+	assert.True(t, exts[".go"], "%v", exts)
+	assert.True(t, exts[".ts"], "%v", exts)
+	assert.False(t, exts[".buzz"], "no spell indexes Buzz")
+	assert.False(t, exts[".md"])
+	assert.Empty(t, indexedExtensions(Dependencies{}))
+
+	root := recordedSearchTree(t)
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return name == "CheckStatus", true },
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(deps, `grep -rn CheckStatus internal`).Rule.Name)
+	deps.Spells = nil
+	assert.Empty(t, Evaluate(deps, `grep -rn CheckStatus internal`).Deny, "with no indexer declared, nothing there is a symbol refs answers")
+}
+
+// TestMixedSearchServesTheTextOnItsOwn pins the half of a mixed alternation that is not a
+// symbol: a literal is served as magus's own literal search over the same paths.
+func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
+	root := recordedSearchTree(t)
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return name == "WritePaths", true },
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	v := Evaluate(deps, `grep -rn 'WritePaths\|Heartbeat' --include=*.go internal/job`)
+	require.Equal(t, denyRuleSymbolSearch, v.Rule.Name)
+	assert.Contains(t, v.Deny, "The text alternatives (`Heartbeat`) are not symbols: search them on their own.")
+	runs := make([]string, len(v.Next))
+	for i, n := range v.Next {
+		runs[i] = n.Run
+	}
+	assert.Contains(t, runs, hint.Refs.With("WritePaths", "--occurrences"))
+	assert.Contains(t, runs, hint.BinaryName()+" refs --text Heartbeat internal/job")
+}
+
+// A stale-index deny carries what was observed about why the index fell behind, so the
+// person learns what keeps it current rather than only that it is old; a cause the
+// lookup could not name in budget leaves the deny as it was.
+func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
+	stale := func(cause string) ShellVerdict {
+		return Evaluate(Dependencies{
+			SymbolDefined: func(string) (bool, bool) { return true, false },
+			IndexCause:    func() string { return cause },
+		}, "grep -r HandleRequest internal/")
+	}
+	const cause = "Why: no server is running, so the refresh hook synced nothing. Fix: `magus server start`."
+	named := stale(cause)
+	require.Equal(t, denyRuleSymbolSearch, named.Rule.Name)
+	assert.Contains(t, named.Deny, "pattern misses included.\n"+cause)
+
+	unnamed := stale("")
+	assert.NotContains(t, unnamed.Deny, "Why:")
+	assert.Contains(t, unnamed.Deny, "The symbol index is older than the sources it covers")
 }

@@ -144,8 +144,6 @@ Two layers run together:
 - [MGS3017](MGS3017.md): a server call against a workspace still loading.
 - [MGS3018](MGS3018.md): a job forked with a directory as a write path.
 - [MGS3019](MGS3019.md): the merge queue's status is required from another integration than its credential's.
-- [MGS3020](MGS3020.md): a --preflight target failed, so the invoked target never started.
-- [MGS3021](MGS3021.md): a --preflight target outside the invoked target's closure.
 - [MGS3023](MGS3023.md): a pipe whose writers loop back into the run reading it.
 - [MGS3024](MGS3024.md): a hook glue call that names no agent host.
 - [MGS3026](MGS3026.md): a merge queue hook flag holding shell syntax rather than a command and its arguments.
@@ -157,9 +155,16 @@ Two layers run together:
 - [MGS3032](MGS3032.md): a job forked into an unordered share of one claimable file another live job already holds.
 - [MGS3033](MGS3033.md): a buzz tool transform request was invalid or its script failed.
 - [MGS3034](MGS3034.md): a client MCP script was invalid, timed out, or failed.
+- [MGS3035](MGS3035.md): a tool runs but its version probe fails, so no cache key could tell its builds apart.
 
 MGS3015 was retired in 2026-09. It refused a run when every holder of the
 isolation gate looked stalled, and it read that from a record the gate did not
 own, so it could not fire for a simple step and did fire for healthy composite
 ones. The shape it was built for is prevented rather than detected; a hang that
 escapes that prevention is caught by MGS3012. The number is not reused.
+
+MGS3020 and MGS3021 were retired in 2026-09, with `--preflight`. MGS3020 reported
+a failed preflight pass and MGS3021 a preflight target outside the invoked
+target's closure. A pipe gates what runs after a check instead: a stage
+downstream of a failed magus stage starts nothing and prints no plan (MGS3030).
+The numbers are not reused.

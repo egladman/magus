@@ -295,7 +295,7 @@ fun main() > void !> any {
     final minShare = parseGate("conformance-min-share", fallback: 0.8);
 
     var members = mut [];
-    foreach (p in magus\targets().projects) {
+    foreach (p in magus\describe.graph().projects) {
         foreach (n in p.nodes) {
             var ops = mut [];
             foreach (use in n.spells) {

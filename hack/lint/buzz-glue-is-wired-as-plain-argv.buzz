@@ -1,10 +1,11 @@
-// buzz-glue-is-wired-as-plain-argv refuses a `NAME=value` prefix on any hook command that
-// runs the Buzz glue.
+// buzz-glue-is-wired-as-plain-argv refuses a `NAME=value` prefix on the command segment
+// that runs the Buzz glue.
 //
-// A leading assignment is shell syntax, and a hook command is not a shell line: the host
-// splits it into argv itself, so the prefix only works where something later re-joins and
-// re-parses it. The Buzz glue takes its per-entry knobs from the event it already reads
-// and from its own argv, which `magus buzz` forwards after `--`.
+// The Buzz glue takes its per-entry knobs from the event it already reads and from its own
+// argv, which `magus buzz` forwards after `--`, so an environment knob in front of it says
+// nothing the glue reads. Only that segment is judged: the launcher a hook may run first
+// (`m=...; [ -x "$m" ] || ...; exec "$m" buzz -s ...`) picks which magus runs the glue, and
+// its assignment is not a knob on the glue.
 namespace buzzglue;
 
 import "assert";
@@ -31,6 +32,17 @@ export fun envName(s: str) > bool {
     return s != "" and std\pattern("^[A-Za-z_][A-Za-z0-9_]*$").match(s) != null;
 }
 
+// glueSegment is the words of the shell segment that invokes `buzz -s`: what follows the
+// last `;` before it, up to `buzz`. Empty when the command runs no `buzz -s`.
+export fun glueSegment(command: str) > [str] {
+    final at = command.indexOf("buzz -s ");
+    if (at == null) {
+        return [<str>];
+    }
+    final segments = command.sub(0, len: at!).split(";");
+    return strings\fields(segments[segments.len() - 1]);
+}
+
 export fun check(files: [Path]) > [Finding] !> any {
     final found = mut [<Finding>];
     foreach (host in support\sorted(HOSTS.keys())) {
@@ -51,7 +63,7 @@ export fun check(files: [Path]) > [Finding] !> any {
                     if (command.indexOf(".buzz") == null) {
                         continue;
                     }
-                    final words = strings\fields(command);
+                    final words = glueSegment(command);
                     if (words.len() == 0) {
                         continue;
                     }
@@ -87,6 +99,13 @@ test "plain argv and a prefix on a command that runs no Buzz glue pass" {
     ]) {
         assert\equal(check(configs(command)).len(), want: 0, message: command);
     }
+}
+
+test "the launcher that picks which magus runs the glue is not a knob on it" {
+    final launched = "m=\\\"$CLAUDE_PROJECT_DIR/magus\\\"; [ -x \\\"$m\\\" ] || m=$(command -v magus); exec \\\"$m\\\" buzz -s docs/guides/integrations/agents/magus-command.buzz";
+    assert\equal(check(configs(launched)).len(), want: 0, message: "launcher");
+    final knobbed = "m=x; MAGUS_GUARD_ADVISE=1 exec \\\"$m\\\" buzz -s docs/guides/integrations/agents/magus-command.buzz";
+    assert\equal(check(configs(knobbed)).len(), want: 1, message: "a knob on the glue segment is still reported");
 }
 
 test "a prefix on the Buzz glue is reported at its line" {

@@ -89,7 +89,9 @@ magus agent harness verify --id claude-code
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
 (recorded and judged), and sub-agent spawns. Each runs a shipped script that talks to
-`magus shell`:
+`magus shell`, through a short launcher that picks which magus runs it. The Bash
+entry, as `magus describe harness claude-code` prints it, in the place it lands in
+`.claude/settings.json`:
 
 ```json
 {
@@ -97,38 +99,52 @@ The spell installs entries for commands, file edits, Magus MCP tool calls, reads
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz", "timeout": 10 }]
-      },
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-path.buzz", "timeout": 10 }]
+        "hooks": [{
+          "type": "command",
+          "timeout": 10,
+          "command": "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); if [ -z \"$m\" ]; then grep -Fq '\"command\":\"go run -trimpath ./cmd/magus run go-build --no-cache .\"' && exit 0; echo 'magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: go run -trimpath ./cmd/magus run go-build --no-cache .' >&2; exit 2; fi; exec \"$m\" buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+        }]
       }
     ]
   }
 }
 ```
 
-This repository's own `.claude/settings.json` invokes those same files. The
-scripts are the glue; the harness only prints the fragments that name them.
-See [guard templates](guard-templates.md) for the files and the variables that
-adapt them.
+This repository's own `.claude/settings.json` holds exactly what the spell prints,
+merged with the command `magus describe harness` prints beside it. The scripts are
+the glue; the harness only prints the fragments that name them. See
+[guard templates](guard-templates.md) for the files and the variables that adapt
+them.
 
-The glue is Buzz, which needs neither a POSIX shell nor `jq`. It does pin the
-guard to a `magus buzz`; see below for what that pin costs.
+Claude Code runs a hook command through `sh -c` and exports `CLAUDE_PROJECT_DIR`,
+the root the session started in ([hooks reference](https://code.claude.com/docs/en/hooks)).
+So the string is the same on every machine, never an absolute path, and finds the
+checkout's own build from any session directory. The glue itself is Buzz and needs
+no `jq`; the launcher is the one piece of shell, and it is there so a missing magus
+fails closed.
 
-`./magus` when the workspace carries its own binary, `magus` otherwise. Apply
-decides, because a hook command is one string with no shell in it to test a file
-with; re-run apply after your first build to move a checkout from one to the
-other. It is never an absolute path: this config is committed, and an absolute
-path would ship one machine's layout to every clone.
+Flags an entry declares ride after `--`, which `magus buzz` forwards to the script,
+never in a leading `VAR=value`: the glue reads whether to forward the whole event
+off the event itself.
 
-Every entry is a plain argv: `<interpreter> buzz -s <file>`, with at most a
-`-- <flags>` tail and never a `VAR=value` prefix. Claude Code splits a hook command
-itself rather than handing it to a shell, so a leading assignment is a word it would
-look for a program named after. So nothing per entry rides in the environment: the
-glue reads whether to forward the whole event off the event itself, and takes the
-`magus shell` flags an entry declares from the argv after `--`, which `magus buzz`
-forwards to the script.
+### Which magus runs
+
+Three things in a session resolve the word `magus`, and each has its own owner:
+
+| Who runs `magus` | Resolved by | Owner |
+| --- | --- | --- |
+| Hook commands (the guard's interpreter) | `$CLAUDE_PROJECT_DIR/magus` when executable, else the first `magus` on PATH | the launcher in every hook entry |
+| The agent's own Bash tool commands | PATH, with the session root put first | the `SessionStart` entry (matcher `startup\|resume\|clear`), which appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
+| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first | magus, on every child it spawns |
+
+The `SessionStart` entry cannot serve hooks: the hooks reference says
+`CLAUDE_ENV_FILE` persists variables "for subsequent Bash commands", and names no
+other consumer. It is the one entry that runs no magus, since it fixes the PATH a
+magus would be found on.
+
+`magus doctor`'s `guard-binary` check runs the interpreter a hook would run and
+fails when it is a different build from the doctor's own, or cannot print its
+version, naming both binaries.
 
 ### When the hook itself cannot run
 
@@ -137,20 +153,27 @@ copy's interpreter was `/bin/sh`: always present, and with no version to be wron
 So a magus that is missing, too old to run the script, or unable to load this
 workspace does not merely answer badly; it never runs the script at all.
 
-That failure is loud rather than silent, which is the trade this wiring makes.
 Claude Code treats a hook that exits non-zero with any code other than 2 as a
 [non-blocking error](https://code.claude.com/docs/en/hooks): the first line of its
-stderr appears in the transcript as a `<hook name> hook error` notice, and the
-tool call goes ahead. So you see something like
-`magus: magus.yaml:99: unknown key "sessions"` in the transcript, the command you
-asked for runs, and it runs UNJUDGED: no deny rule fires and no advisory reaches
-the model for as long as the interpreter stays broken. `magus agent harness verify
---id claude-code` reports the same thing before a session ever starts, by running
-each wired command against a synthetic event and checking the verdict comes back.
+stderr appears in the transcript as a `<hook name> hook error` notice, and the tool
+call goes ahead UNJUDGED. A bare `magus` with none on PATH exits 127 that way, and
+a whole session once ran with every guard rule open.
 
-The guard never blocks on its own failure. Exit 2 is the only code that blocks,
-and the glue reaches it on no path: a verdict it cannot obtain is reported and the
-call proceeds.
+So when no magus resolves, every `PreToolUse` entry exits 2: the call is refused,
+and the reason names the command that builds one. The one call let through is that
+command, `go run -trimpath ./cmd/magus run go-build --no-cache .`, exactly and alone,
+because a fresh checkout has no other way to get its first binary; the guard exempts
+the same line once a binary exists to run it. Entries after the call (`PostToolUse`,
+`Stop`, `SubagentStop`, `SessionStart`) exit 1 and only report: exit 2 on `Stop`
+would keep the agent from ever stopping. The `SessionStart` entry says the same at
+the start of a session, before the first refusal.
+
+A magus that resolves but is broken (too old, or unable to load the workspace)
+still fails open, with its own error as the notice. `magus doctor` and `magus agent
+harness verify --id claude-code` report that before a session starts; verify runs
+each wired command against a synthetic event and checks the verdict comes back. The
+glue never blocks on its own failure either: a verdict it cannot obtain is reported
+and the call proceeds.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and the command
 template renders it as `permissionDecision: "ask"`: Claude Code shows you the

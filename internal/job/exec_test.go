@@ -1,10 +1,13 @@
 package job
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +83,7 @@ func TestStoreExec(t *testing.T) {
 			assert.Equal(t, tt.reported, got.ReportedBase)
 			assert.NotZero(t, got.Registered, "the store stamps Registered")
 			assert.Equal(t, tt.checkpoint, got.Checkpoint, "registering does not overwrite the checkpoint it compares against")
-			assert.Equal(t, types.StateDeclared, got.State, "registering advances no state; that is the caller's put")
+			assert.Equal(t, types.StateRunning, got.State, "taking a declared job is what starts it")
 
 			advice := BaseAdvice(got)
 			assert.Contains(t, advice, "u1")
@@ -207,6 +210,144 @@ func TestStoreExecRefusesAnEndedJob(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, got[0].ReportedBase, state)
 	}
+}
+
+// Untracked files on a clean checkpoint's revision are work the job's diff later counts (the
+// footprint job wait grades lists them), so the tree is not the one handed out: the verdict
+// is revision-match, and the digest it reports is the untracked files', never the digest of
+// the empty tracked patch.
+func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
+	t.Parallel()
+
+	const emptyPatch = "e3b0c44298fc1c149afbf4c8996fb924"
+	for _, tt := range []struct {
+		name  string
+		edits map[string]string
+	}{
+		{name: "untracked only", edits: map[string]string{"new.txt": "fresh\n"}},
+		{name: "tracked edits plus untracked", edits: map[string]string{"a.txt": "a changed\n", "new.txt": "fresh\n"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			root := gitRepo(t, map[string]string{"a.txt": "a\n"})
+			rev := commitRepo(t, root)
+			for name, body := range tt.edits {
+				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+			}
+			res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+			require.NoError(t, err)
+			cp, err := vcs.Checkpoint(ctx, root, res, false)
+			require.NoError(t, err)
+
+			s := tmpStore(t, root)
+			seed(t, s, types.Job{ID: "u1", Checkpoint: rev, State: types.StateDeclared})
+			got, err := s.Exec(ctx, "u1", cp.Token())
+			require.NoError(t, err)
+
+			assert.Equal(t, types.BaseRevisionMatch, got.BaseVerdict)
+			assert.NotContains(t, got.ReportedBase, emptyPatch)
+			assert.NotContains(t, BaseAdvice(got), emptyPatch)
+			seen := changedSince(ctx, res.VCS, "", root, rev)
+			assert.Contains(t, seen.Changed, "new.txt", "the footprint counts the untracked file as the job's work")
+		})
+	}
+}
+
+// A job one checkout took is not taken again from another: wait grades the checkout the
+// row names, so a second exec would silently point that grade at the wrong tree.
+func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	loc, other := twoCheckouts(t)
+	ana := NewStore(loc)
+	seed(t, ana, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
+	taken, err := ana.Exec(ctx, "u1", baseA)
+	require.NoError(t, err)
+
+	_, err = NewStore(other).Exec(ctx, "u1", baseB)
+	require.Error(t, err)
+	for _, want := range []string{"u1", taken.CheckoutRoot, "running", "ago", hint.JobExit.With("u1"), hint.JobApply.String()} {
+		assert.Contains(t, err.Error(), want)
+	}
+
+	got, err := ana.List()
+	require.NoError(t, err)
+	assert.Equal(t, taken.CheckoutRoot, got[0].CheckoutRoot, "the refusal leaves the holder's checkout in place")
+	assert.Equal(t, baseA, got[0].ReportedBase)
+
+	again, err := ana.Exec(ctx, "u1", baseA)
+	require.NoError(t, err, "the holder's own checkout takes it again")
+	assert.Equal(t, taken.CheckoutRoot, again.CheckoutRoot)
+}
+
+// The way a job moves to another checkout: its holder ends it, and whoever forked it
+// declares it again, which hands it out with no checkout attached.
+func TestStoreExecTakesAJobDeclaredAgainAfterItEnded(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	loc, other := twoCheckouts(t)
+	ana := NewStore(loc)
+	seed(t, ana, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
+	_, err := ana.Exec(ctx, "u1", baseA)
+	require.NoError(t, err)
+	_, err = Exit(ctx, ana, "u1", nil, nil)
+	require.NoError(t, err)
+
+	revived, err := ana.Update(ctx, "u1", func(row *types.Job) { row.State = types.StateDeclared })
+	require.NoError(t, err)
+	assert.Empty(t, revived.CheckoutRoot, "a job declared again names no holder")
+	assert.Zero(t, revived.Registered)
+	assert.Empty(t, revived.ReportedBase)
+	assert.Empty(t, revived.BaseVerdict)
+
+	ben, err := NewStore(other).Exec(ctx, "u1", baseA)
+	require.NoError(t, err)
+	assert.Equal(t, other.Root, ben.CheckoutRoot)
+	assert.Equal(t, types.StateRunning, ben.State)
+}
+
+// twoCheckouts places two worktrees of one repository, which share its job store.
+// A fork records the forking checkout, but nobody has taken the job yet, so a worker in
+// another checkout takes it: the refusal is for a job an exec already holds.
+func TestStoreExecTakesAJobForkedInAnotherCheckout(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	loc, other := twoCheckouts(t)
+	forker := NewStore(loc)
+	// A hook may also record a base before anyone takes the job; it is still declared.
+	seed(t, forker, types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared, CheckoutRoot: loc.Root, ReportedBase: baseA})
+
+	got, err := NewStore(other).Exec(ctx, "u1", baseB)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateRunning, got.State)
+	assert.NotEqual(t, loc.Root, got.CheckoutRoot, "the worker's checkout takes it")
+}
+
+func twoCheckouts(t *testing.T) (main, worktree Location) {
+	t.Helper()
+	main = tmpLoc(t, t.TempDir())
+	worktree = main
+	worktree.Root = t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(worktree.Root, ".git"),
+		[]byte("gitdir: "+filepath.Join(main.Root, ".git", "worktrees", "w")+"\n"), 0o644))
+	return main, worktree
+}
+
+// A holder bound to its job takes it like anyone else: the move to running is the exec,
+// not a state the holder chose for itself.
+func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
+	t.Parallel()
+
+	loc := tmpLoc(t, t.TempDir())
+	seed(t, NewStore(loc), types.Job{ID: "u1", Checkpoint: baseA, State: types.StateDeclared})
+
+	got, err := boundStore(loc, "u1").Exec(t.Context(), "u1", baseA)
+	require.NoError(t, err)
+	assert.Equal(t, types.StateRunning, got.State)
 }
 
 func TestCompareBase(t *testing.T) {

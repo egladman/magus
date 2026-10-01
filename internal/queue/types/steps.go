@@ -92,6 +92,11 @@ type BuildFacts interface {
 	// settled content. verdict is the build tool's one line on the path, its class and
 	// why (magus: `<path>: <class> (<why>)`), either way.
 	AutoResolvable(ctx context.Context, path string, base, merged []byte) (verdict string, ok bool, err error)
+	// ClassifyEdit reports the tier of one path's edit from old to cur, and why:
+	// generated, prose, comment-only or code, never rebase. A nil side is the path absent
+	// there, which no comment-only edit is. Whatever the build tool cannot classify is
+	// code.
+	ClassifyEdit(ctx context.Context, path string, old, cur []byte) (ClassifiedPath, error)
 }
 
 // Writes is what the build tool knows about how it writes one path.

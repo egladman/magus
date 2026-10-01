@@ -22,7 +22,11 @@ type Planner struct {
 	// Parallel is how many changes are admitted (fetched, checked, and put to the build
 	// tool) at once. Zero means runtime.NumCPU().
 	Parallel int
-	Events   *Events
+	// CarryPolicy is the tiers of change since an approval that leave it standing (see
+	// [CarryApproval]). The zero policy carries a rebase alone. Read it from the base's
+	// declarations, never a change's, which could widen its own.
+	CarryPolicy types.CarryPolicy
+	Events      *Events
 
 	vcs      types.ReadVCS
 	clone    Clone
@@ -315,12 +319,12 @@ func (r *planning) admit(ctx context.Context, c *types.Change) (*types.Verdict, 
 	if c.Below == "" {
 		stackBase = c.StackBase
 	}
-	a, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, r.tip, *c, stackBase, planRefs(r.in))
+	a, err := approval(ctx, r.provider, r.vcs, r.facts, r.clone, r.tip, *c, stackBase, planRefs(r.in), r.CarryPolicy)
 	if err != nil {
 		return nil, err
 	}
-	if a.carried != "" {
-		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: carriedNotice(a)})
+	if notice := carriedNotice(a); notice != "" {
+		r.Events.Emit(Event{Kind: EventNotice, Change: c.ID, Reason: notice})
 	}
 	if v := admission(c, a, r.caps); v != nil {
 		return v, nil

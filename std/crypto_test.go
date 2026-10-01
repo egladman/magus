@@ -78,16 +78,14 @@ func TestCryptoSignFileHonorsSandbox(t *testing.T) {
 	path := filepath.Join(dir, "artifact.bin")
 	require.NoError(t, os.WriteFile(path, []byte("payload"), 0o644))
 
-	keyEnv := "MAGUS_TEST_SIGN_KEY"
 	_, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	t.Setenv(keyEnv, hex.EncodeToString(priv))
 
 	// A policy with no matching rule denies both read and write.
 	p := &sandbox.Policy{}
 	ctx := sandbox.WithPolicy(context.Background(), p)
 
-	_, err = CryptoSignFile(ctx, SignEd25519, path, keyEnv)
+	_, err = CryptoSignFile(ctx, SignEd25519, path, hex.EncodeToString(priv))
 	assert.Error(t, err, "expected sandbox read denial")
 	_, statErr := os.Stat(path + ".sig")
 	assert.True(t, os.IsNotExist(statErr), "a sandbox-denied sign_file must not write a .sig")
@@ -98,13 +96,11 @@ func TestCryptoSignFileTracingNoop(t *testing.T) {
 	path := filepath.Join(dir, "artifact.bin")
 	require.NoError(t, os.WriteFile(path, []byte("payload"), 0o644))
 
-	keyEnv := "MAGUS_TEST_SIGN_KEY_TRACE"
 	_, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
-	t.Setenv(keyEnv, hex.EncodeToString(priv))
 
 	ctx := types.WithTrace(context.Background())
-	got, err := CryptoSignFile(ctx, SignEd25519, path, keyEnv)
+	got, err := CryptoSignFile(ctx, SignEd25519, path, hex.EncodeToString(priv))
 	require.NoError(t, err)
 	assert.Equal(t, "", got, "a dry run must not produce a real signature")
 	_, statErr := os.Stat(path + ".sig")
@@ -174,23 +170,19 @@ func TestCryptoBase64BytesRoundTripsBinary(t *testing.T) {
 	require.Error(t, err)
 }
 
-// covSigningKey generates an ed25519 pair, puts the private half in a uniquely
-// named environment variable, and returns (keyEnv, pubHex). The key is NAMED and
-// never returned as a value, which is the shape crypto.sign is built around.
-func covSigningKey(t *testing.T) (keyEnv, pubHex string) {
+// covSigningKey generates an ed25519 pair and returns both halves as hex.
+func covSigningKey(t *testing.T) (keyHex, pubHex string) {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	keyEnv = "MAGUS_COV_SIGNING_KEY"
-	t.Setenv(keyEnv, hex.EncodeToString(priv))
-	return keyEnv, hex.EncodeToString(pub)
+	return hex.EncodeToString(priv), hex.EncodeToString(pub)
 }
 
 func TestCryptoSignVerifyRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	keyEnv, pubHex := covSigningKey(t)
+	keyHex, pubHex := covSigningKey(t)
 
-	sig, err := CryptoSign(ctx, SignEd25519, "payload", keyEnv)
+	sig, err := CryptoSign(ctx, SignEd25519, "payload", keyHex)
 	require.NoError(t, err)
 	assert.Len(t, sig, ed25519.SignatureSize*2, "the signature is returned as hex")
 
@@ -210,9 +202,9 @@ func TestCryptoSignVerifyRoundTrip(t *testing.T) {
 }
 
 func TestCryptoPublicKey(t *testing.T) {
-	keyEnv, pubHex := covSigningKey(t)
+	keyHex, pubHex := covSigningKey(t)
 
-	got, err := CryptoPublicKey(context.Background(), SignEd25519, keyEnv)
+	got, err := CryptoPublicKey(context.Background(), SignEd25519, keyHex)
 	require.NoError(t, err)
 	assert.Equal(t, pubHex, got, "the publisher prints exactly what its readers must pin")
 }
@@ -221,46 +213,43 @@ func TestCryptoPublicKey(t *testing.T) {
 // so the refusal has to carry what an enum would have offered as completion.
 func TestCryptoRejectsAnUnknownAlgorithm(t *testing.T) {
 	ctx := context.Background()
-	keyEnv, pubHex := covSigningKey(t)
+	keyHex, pubHex := covSigningKey(t)
 
-	_, err := CryptoSign(ctx, "rsa", "payload", keyEnv)
+	_, err := CryptoSign(ctx, "rsa", "payload", keyHex)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `unknown signing algorithm "rsa" (want "ed25519")`)
 
-	_, err = CryptoPublicKey(ctx, "rsa", keyEnv)
+	_, err = CryptoPublicKey(ctx, "rsa", keyHex)
 	assert.Error(t, err)
 
 	_, err = CryptoVerify(ctx, "rsa", "payload", "00", pubHex)
 	assert.Error(t, err)
 
-	_, err = CryptoSignFile(ctx, "rsa", filepath.Join(t.TempDir(), "f"), keyEnv)
+	_, err = CryptoSignFile(ctx, "rsa", filepath.Join(t.TempDir(), "f"), keyHex)
 	assert.Error(t, err)
 }
 
-// TestSigningKeyRejectsABadKey covers every way the named variable can fail to
-// hold a usable key. The invalid-hex message must not echo the value: a decode
-// error on a secret that printed the secret back would defeat the whole design.
+// TestSigningKeyRejectsABadKey covers every way a key can be unusable. No message may
+// echo the key: a decode error on a secret that printed the secret back would hand it to
+// the run log.
 func TestSigningKeyRejectsABadKey(t *testing.T) {
 	ctx := context.Background()
 
-	_, err := CryptoSign(ctx, SignEd25519, "payload", "")
+	_, err := CryptoSign(ctx, SignEd25519, "payload", "  ")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "key_env is required")
+	assert.Contains(t, err.Error(), "key is empty; read it with magus\\secret.read")
 
-	_, err = CryptoSign(ctx, SignEd25519, "payload", "MAGUS_COV_KEY_NEVER_SET")
+	const notHex = "zzzz-not-hex-zzzz"
+	_, err = CryptoSign(ctx, SignEd25519, "payload", notHex)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MAGUS_COV_KEY_NEVER_SET is not set")
+	assert.Contains(t, err.Error(), "key is not valid hex")
+	assert.NotContains(t, err.Error(), notHex, "a decode error must not print the secret back")
 
-	t.Setenv("MAGUS_COV_KEY_NOT_HEX", "zzzz-not-hex-zzzz")
-	_, err = CryptoSign(ctx, SignEd25519, "payload", "MAGUS_COV_KEY_NOT_HEX")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "MAGUS_COV_KEY_NOT_HEX is not valid hex")
-	assert.NotContains(t, err.Error(), "zzzz-not-hex-zzzz", "a decode error must not print the secret back")
-
-	t.Setenv("MAGUS_COV_KEY_SHORT", hex.EncodeToString([]byte("too short")))
-	_, err = CryptoSign(ctx, SignEd25519, "payload", "MAGUS_COV_KEY_SHORT")
+	short := hex.EncodeToString([]byte("too short"))
+	_, err = CryptoSign(ctx, SignEd25519, "payload", short)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be 64 bytes (128 hex chars), got 9 bytes")
+	assert.NotContains(t, err.Error(), short, "a length error must not print the secret back")
 }
 
 // TestCryptoVerifyRejectsMalformedInputs: ed25519.Verify panics on a wrong-length

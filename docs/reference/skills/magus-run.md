@@ -3,7 +3,7 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13696
+skill_full_bytes: 13655
 skill_short_bytes: 9350
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `aa654710e40a` |
+| `skill-content` | `a78a9ab3a943` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -326,7 +326,7 @@ VCS.
    rerunning one failing target is cheaper than the pipeline while you fix it,
    and `ci` afterwards proves the change. `magus describe targets` lists every
    target (`-o name` for bare names) and classifies each as canonical, spell,
-   or custom; `client` (`magus\describe`, the same arguments as `magus describe targets`) is the MCP equivalent. Ask the
+   or custom; `client` (`magus\describe.target`) is the MCP equivalent. Ask the
    workspace rather than reading `MAGUS.md`: that file is a generated index
    for humans, true only as of its last regeneration.
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)

@@ -2,6 +2,7 @@ package buzz
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -44,6 +45,27 @@ type CompileOptions struct {
 	// defaults, so this is a parity fix, not an extension.
 	ImportedTypes []ast.Node
 
+	// ImportedNames are the names flat imports bound bare in the shared Env:
+	// their exports, of every kind. A namespace-less program's own non-exported
+	// top-level declaration of one of them takes a per-module key instead of
+	// replacing the export the exporting module's code reaches by that name.
+	ImportedNames map[string]bool
+
+	// EntryQualified are the names earlier namespace-less chunks of the session
+	// gave per-module keys, so a later chunk reaches the same binding they did.
+	EntryQualified map[string]bool
+
+	// EntryTypes are object types earlier namespace-less chunks declared under a
+	// per-module key, by name. A literal resolves to one after its own
+	// compile's declarations and before ImportedTypes; a qualified one never does.
+	EntryTypes map[string]*ast.ObjectDecl
+
+	// TypeBound reports whether the shared Env binds an object definition under
+	// key. A literal of an imported type nothing defines (a host declared it for
+	// the checker only) is then a compile error naming the type, not a run-time
+	// one. Nil skips the check.
+	TypeBound func(key string) bool
+
 	// SourceFile stamps Chunk.SourceFile on every chunk this compile emits
 	// (top-level and nested). Empty leaves SourceFile unset. Session.Compile
 	// passes the entry file under test so line coverage and DebugFrame.Source
@@ -66,7 +88,7 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	// here. topLevelKeepEnv IS this scan; it is reused rather than duplicated.
 	c.capturedLocals = topLevelKeepEnv(prog)
 	if opts.SharedGlobals {
-		c.initModuleScope(prog) // per-module Env keys for private globals
+		c.initModuleScope(prog, opts) // per-module Env keys for private globals
 	}
 	if opts.SharedGlobals && opts.PromoteTopLevel {
 		c.promoteTopLevel = true
@@ -79,6 +101,8 @@ func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, erro
 	// how a `ns\Name{...}` literal resolves -- see the parser). Local declarations
 	// below overwrite on a name clash, so a local type always shadows an import.
 	c.importedTypes = opts.ImportedTypes
+	c.typeBound = opts.TypeBound
+	c.entryTypes = opts.EntryTypes
 	for _, s := range prog.Stmts {
 		if od, ok := s.(*ast.ObjectDecl); ok {
 			c.declareType(od)
@@ -470,7 +494,11 @@ type compiler struct {
 	// importedTypes is CompileOptions.ImportedTypes, set on the top-level compiler
 	// only. A later entry shadows an earlier one, and any declaration shadows both.
 	importedTypes []ast.Node
-	loops         []loopInfo
+	// typeBound and entryTypes are CompileOptions.TypeBound and EntryTypes,
+	// likewise top-level only.
+	typeBound  func(key string) bool
+	entryTypes map[string]*ast.ObjectDecl
+	loops      []loopInfo
 	// blockExprs is a stack, one entry per `from { ... }` currently being
 	// compiled, holding the jump indexes each `out` inside it emitted. They are
 	// patched to the block's end once its body is done.
@@ -519,11 +547,12 @@ type compiler struct {
 	// control. Upstream's ffi.buzz assigns `data.id = 42` on a plain literal.
 	foreignStructs map[string]bool
 	// nsPrefix and privTop give a namespaced module its own Env keys for PRIVATE
-	// top-level vars and funcs. In SharedGlobals mode every module's top-level
-	// declarations land in one shared Env keyed by bare name, so two modules that
-	// each declare a private `var panel` would collide on the same slot. When a
-	// module has a `namespace X;`, privTop holds its private top-level names and
-	// nsPrefix ("\0X\0") qualifies them at every def/load/store (see globalName).
+	// top-level vars, funcs, objects and enums. In SharedGlobals mode every
+	// module's top-level declarations land in one shared Env keyed by bare name,
+	// so two modules that each declare a private `var panel` would collide on the
+	// same slot. When a module has a `namespace X;`, privTop holds its private top-level names and
+	// nsPrefix ("\0X\0") qualifies them at every def/load/store (see globalName);
+	// the entry's few qualified names take "\0\0" (see initModuleScope).
 	// Exports stay bare — they're unique across modules and reached via the
 	// namespace object. Inherited by nested function compilers so a reference to a
 	// private global inside a function mangles to the same key as its definition.
@@ -562,6 +591,48 @@ func (c *compiler) typeDecl(name string) (*ast.ObjectDecl, bool) {
 			return d, true
 		}
 		root = cc
+	}
+	if d, ok := root.entryTypes[name]; ok {
+		return d, true
+	}
+	return root.importedType(name)
+}
+
+// localType reports whether this compile declares an object type called name.
+func (c *compiler) localType(name string) bool {
+	for cc := c; cc != nil; cc = cc.parent {
+		if _, ok := cc.typeDecls[name]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// checkConstructible refuses a literal of an imported type the shared Env holds
+// no definition for under key. A host can declare a type for the checker alone
+// (Session.DeclareModuleTypes); building one could only fail at run time, and in
+// a branch that rarely runs, so it fails here, naming the type.
+func (c *compiler) checkConstructible(v *ast.ObjectLit, key string) error {
+	root := c
+	for root.parent != nil {
+		root = root.parent
+	}
+	if root.typeBound == nil || root.typeBound(key) {
+		return nil
+	}
+	name := v.TypeName
+	if v.Namespace != "" {
+		name = v.Namespace + `\` + name
+	}
+	return fmt.Errorf("buzz: line %d:%d: %s is declared for type checking only and has no definition to construct", v.Line, v.Col, name)
+}
+
+// importedType finds the object type an import exports as name, skipping any
+// declaration of this module's own: what a qualified `ns\name` names.
+func (c *compiler) importedType(name string) (*ast.ObjectDecl, bool) {
+	root := c
+	for root.parent != nil {
+		root = root.parent
 	}
 	for i := len(root.importedTypes) - 1; i >= 0; i-- {
 		if od, ok := root.importedTypes[i].(*ast.ObjectDecl); ok && od.Name == name {
@@ -689,11 +760,12 @@ func (c *compiler) nameConst(s string) int32 {
 	return c.chunk.AddConst(vmpackage.StrValue(s))
 }
 
-// globalName maps a top-level identifier to its shared-Env key. A private var or
-// func of a namespaced module is qualified with nsPrefix so it can't collide with
-// a same-named private in another module; exports, imports, builtins, and any name
-// not declared private here keep their bare spelling. Called at every OpDefName /
-// OpLoadName / OpStoreName site that touches a user-level top-level name.
+// globalName maps a top-level identifier to its shared-Env key. A private var,
+// func, object or enum of a namespaced module is qualified with nsPrefix so it
+// can't collide with a same-named declaration in another module or the importer;
+// exports, imports, builtins, and any name not declared private here keep their
+// bare spelling. Called at every OpDefName / OpLoadName / OpStoreName /
+// OpNewObject site that touches a user-level top-level name.
 func (c *compiler) globalName(name string) string {
 	if c.privTop != nil && c.privTop[name] {
 		return c.nsPrefix + name
@@ -701,12 +773,40 @@ func (c *compiler) globalName(name string) string {
 	return name
 }
 
+// typeIdentity is the C operand of an OpIs or OpAs testing annot, whose runtime
+// shape is base: one past the const holding the Env key of the object or enum
+// annot names, so the VM can tell a module's private Node from the importer's.
+// A qualified name is an export, whose key is bare. Zero, for the builtin and
+// structural shapes, leaves the VM comparing names alone.
+func (c *compiler) typeIdentity(annot, base string) int32 {
+	if builtinTypeShapes[base] || strings.HasPrefix(base, "obj{") {
+		return 0
+	}
+	key := base
+	if !strings.Contains(annot, `\`) {
+		key = c.globalName(base)
+	}
+	return c.nameConst(key) + 1
+}
+
+// builtinTypeShapes are the bases vm.TypeShape reduces an annotation to that name
+// no declared type.
+var builtinTypeShapes = map[string]bool{
+	"any": true, "null": true, "bool": true, "int": true, "double": true, "str": true,
+	"list": true, "map": true, "fun": true, "rng": true, "pat": true, "ud": true,
+}
+
 // initModuleScope records the module's namespace and the set of its private
-// top-level vars/funcs, so globalName can give them per-module Env keys. Only
-// meaningful in SharedGlobals mode (where modules share one Env); a module with no
-// `namespace` — the entry program — keeps bare keys, which is unambiguous because
-// it is the only namespace-less module in a program.
-func (c *compiler) initModuleScope(prog *ast.Program) {
+// top-level vars, funcs, objects and enums, so globalName can give them
+// per-module Env keys. Only meaningful in SharedGlobals mode (where modules share
+// one Env). A protocol is left out: it binds nothing at run time.
+//
+// A module with no `namespace` (the entry program) keeps bare keys, which host
+// lookups and later REPL chunks resolve by name. The exception is a declaration
+// named like something an import exports: exports bind bare too, so the entry's
+// would replace the one the exporting module's own code reaches by that name.
+// Names an earlier entry chunk qualified stay qualified (opts.EntryQualified).
+func (c *compiler) initModuleScope(prog *ast.Program, opts CompileOptions) {
 	var ns string
 	for _, s := range prog.Stmts {
 		if n, ok := s.(*ast.NamespaceStmt); ok {
@@ -714,19 +814,29 @@ func (c *compiler) initModuleScope(prog *ast.Program) {
 			break
 		}
 	}
-	if ns == "" {
-		return
-	}
 	priv := map[string]bool{}
-	for _, s := range prog.Stmts {
-		switch d := s.(type) {
-		case *ast.DeclStmt:
-			if !d.IsExported {
-				priv[d.Name] = true
+	if ns == "" {
+		for name := range opts.EntryQualified {
+			priv[name] = true
+		}
+		importedTypes := map[string]bool{}
+		for _, n := range opts.ImportedTypes {
+			switch d := n.(type) {
+			case *ast.ObjectDecl:
+				importedTypes[d.Name] = true
+			case *ast.EnumDecl:
+				importedTypes[d.Name] = true
 			}
-		case *ast.FunDecl:
-			if !d.IsExported {
-				priv[d.Name] = true
+		}
+		for _, s := range prog.Stmts {
+			if name, private := topLevelPrivate(s); private && (opts.ImportedNames[name] || importedTypes[name]) {
+				priv[name] = true
+			}
+		}
+	} else {
+		for _, s := range prog.Stmts {
+			if name, private := topLevelPrivate(s); private {
+				priv[name] = true
 			}
 		}
 	}
@@ -735,6 +845,26 @@ func (c *compiler) initModuleScope(prog *ast.Program) {
 	}
 	c.nsPrefix = "\x00" + ns + "\x00"
 	c.privTop = priv
+}
+
+// entryKeyPrefix is the nsPrefix of a namespace-less program, whose qualified
+// names a session tracks (see Session.noteEntryQualified).
+const entryKeyPrefix = "\x00\x00"
+
+// topLevelPrivate names the non-exported top-level binding s declares, if any.
+// An extern is left out: the host binds it under its bare name.
+func topLevelPrivate(s ast.Node) (string, bool) {
+	switch d := s.(type) {
+	case *ast.DeclStmt:
+		return d.Name, !d.IsExported
+	case *ast.FunDecl:
+		return d.Name, !d.IsExported && !d.IsExtern
+	case *ast.ObjectDecl:
+		return d.Name, !d.IsExported && !d.IsProtocol
+	case *ast.EnumDecl:
+		return d.Name, !d.IsExported
+	}
+	return "", false
 }
 
 // compileZdefDecl lowers a top-level `zdef("lib", "<decls>")` statement into
@@ -1315,7 +1445,11 @@ func (c *compiler) compileMatchExpr(v *ast.MatchExpr) error {
 			if err := c.compileExpr(cond); err != nil {
 				return err
 			}
-			c.chunk.Emit(vmpackage.OpMatchTest, 0, 0)
+			test := c.chunk.Emit(vmpackage.OpMatchTest, 0, 0)
+			if te, isType := cond.(*ast.TypeExpr); isType {
+				base, _ := vmpackage.TypeShape(te.Annot)
+				c.chunk.Code[test].C = c.typeIdentity(te.Annot, base)
+			}
 			hit = append(hit, c.chunk.EmitJump(vmpackage.OpJumpTrue))
 		}
 		skip := c.chunk.EmitJump(vmpackage.OpJump)
@@ -1393,7 +1527,8 @@ func (c *compiler) compileTryCatch(v *ast.TryStmt) error {
 				nul = 1
 			}
 			c.emitGetLocal(errSlot, 0)
-			c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			is := c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+			c.chunk.Code[is].C = c.typeIdentity(cl.TypeName, base)
 			nextClause = c.chunk.EmitJump(vmpackage.OpJumpFalse)
 		}
 		c.enterBlock()
@@ -1670,8 +1805,25 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
+	// A default that names something (`Shade.light`) must resolve where the type
+	// is declared, so it also rides on the def as a hidden static thunk compiled
+	// here; a qualified literal in an importing module calls it (compileObjectLit).
+	// A thunk, not a value, so a type declared above the enum it names still loads.
+	scoped := 0
+	for _, f := range v.Fields {
+		if !namesSomething(f.Default) {
+			continue
+		}
+		idx, err := c.compileFunChunk(v.Name+"."+f.Name, "", nil, []ast.Node{&ast.ReturnStmt{Pos: ast.NodePos(f.Default), Value: f.Default}})
+		if err != nil {
+			return err
+		}
+		c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(defaultMember(f.Name))), 0)
+		c.chunk.Emit(vmpackage.OpNewClosure, idx, 0)
+		scoped++
+	}
 	c.declareType(v)
-	nameIdx := c.nameConst(v.Name)
+	nameIdx := c.nameConst(c.globalName(v.Name))
 	// Store the ObjectDecl as a const so the VM can access field info.
 	declIdx := c.chunk.AddConst(vmpackage.ObjDeclValue(v))
 	newObj := c.chunk.Emit(vmpackage.OpNewObject, declIdx, int32(len(v.Methods)))
@@ -1679,7 +1831,7 @@ func (c *compiler) compileObjectDecl(v *ast.ObjectDecl) error {
 	// count rides in C rather than sharing B with the method count: B's high bits
 	// already carry InstrMutBit on this opcode's literal path, and a second packed
 	// count there would add a masking rule for every reader of that operand.
-	c.chunk.Code[newObj].C = int32(len(v.StaticFields))
+	c.chunk.Code[newObj].C = int32(len(v.StaticFields) + scoped)
 	c.chunk.Emit(vmpackage.OpDefName, nameIdx, 0)
 	if c.depth == 0 {
 		if v.IsExported {
@@ -1732,7 +1884,7 @@ func (c *compiler) compileEnumDecl(v *ast.EnumDecl) error {
 	}
 	idx := c.chunk.AddConst(vmpackage.EnumDefValue(v.Name, v.Cases, values))
 	c.chunk.Emit(vmpackage.OpLoadConst, idx, 0)
-	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(v.Name), 0)
+	c.chunk.Emit(vmpackage.OpDefName, c.nameConst(c.globalName(v.Name)), 0)
 	if c.depth == 0 {
 		if v.IsExported {
 			c.chunk.Exports = append(c.chunk.Exports, v.Name)
@@ -1957,7 +2109,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		if nullable {
 			nul = 1
 		}
-		c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+		is := c.chunk.Emit(vmpackage.OpIs, c.nameConst(base), nul)
+		c.chunk.Code[is].C = c.typeIdentity(v.TypeName, base)
 	case *ast.AsExpr:
 		if err := c.compileExpr(v.Expr); err != nil {
 			return err
@@ -1972,7 +2125,8 @@ func (c *compiler) compileExpr(n ast.Node) error {
 		// bare-`as` path is unaffected, since every name it does not recognise as a
 		// primitive returns the value untouched either way.
 		base, _ := vmpackage.TypeShape(v.TypeName)
-		c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
+		as := c.chunk.Emit(vmpackage.OpAs, c.nameConst(base), opt)
+		c.chunk.Code[as].C = c.typeIdentity(v.TypeName, base)
 	case *ast.MatchExpr:
 		return c.compileMatchExpr(v)
 	case *ast.CatchExpr:
@@ -2192,6 +2346,17 @@ func (c *compiler) compileCall(v *ast.CallExpr) error {
 
 func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 	decl, ok := c.typeDecl(v.TypeName)
+	typeKey := c.globalName(v.TypeName)
+	if v.Namespace != "" {
+		// A qualified name is an import's export, which binds under its bare name.
+		decl, ok = c.importedType(v.TypeName)
+		typeKey = v.TypeName
+	}
+	if ok && (v.Namespace != "" || !c.localType(v.TypeName)) {
+		if err := c.checkConstructible(v, typeKey); err != nil {
+			return err
+		}
+	}
 	if !ok {
 		for i, key := range v.Keys {
 			c.chunk.Emit(vmpackage.OpLoadConst, c.chunk.AddConst(vmpackage.StrValue(key)), 0)
@@ -2199,7 +2364,7 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 				return err
 			}
 		}
-		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(v.Keys))|mutFlag(v.Mut))
+		c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(typeKey), int32(len(v.Keys))|mutFlag(v.Mut))
 		return nil
 	}
 
@@ -2213,6 +2378,12 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			if err := c.compileExpr(expr); err != nil {
 				return err
 			}
+		} else if v.Namespace != "" && namesSomething(f.Default) {
+			// The name means what it means in the exporting module, which only that
+			// module's thunk on the def can resolve.
+			c.chunk.Emit(vmpackage.OpLoadName, c.nameConst(typeKey), 0)
+			c.chunk.Emit(vmpackage.OpGetMember, c.nameConst(defaultMember(f.Name)), 0)
+			c.chunk.Emit(vmpackage.OpCall, 0, 0)
 		} else if f.Default != nil {
 			if err := c.compileExpr(f.Default); err != nil {
 				return err
@@ -2221,8 +2392,26 @@ func (c *compiler) compileObjectLit(v *ast.ObjectLit) error {
 			c.chunk.Emit(vmpackage.OpLoadNull, 0, 0)
 		}
 	}
-	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(v.TypeName), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
+	c.chunk.Emit(vmpackage.OpNewObject, c.nameConst(typeKey), int32(len(decl.Fields))|mutFlag(v.Mut || c.foreignStructs[v.TypeName]))
 	return nil
+}
+
+// defaultMember is the hidden static an object def carries for field's default
+// thunk. The NUL keeps source from ever naming it.
+func defaultMember(field string) string { return "\x00default\x00" + field }
+
+// namesSomething reports whether a field default refers to a declaration by name
+// (`Shade.light`, `.light`, `limit`) and so depends on the scope it compiles in.
+// Upstream only allows constant defaults, so these are the scope-bound ones; a
+// literal compiles the same anywhere.
+func namesSomething(n ast.Node) bool {
+	switch v := n.(type) {
+	case *ast.IdentExpr, *ast.EnumCaseExpr:
+		return true
+	case *ast.MemberExpr:
+		return namesSomething(v.Object)
+	}
+	return false
 }
 
 // mutFlag returns InstrMutBit when mut is set, for packing into a constructor's

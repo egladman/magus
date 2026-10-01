@@ -3,7 +3,6 @@ package knowledge
 import (
 	"go/scanner"
 	gotoken "go/token"
-	"io/fs"
 	"net"
 	"net/url"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/gopherbuzz/token"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -279,6 +277,12 @@ type sourceCite struct {
 // The shard mints its own file and dir nodes for both ends of a citation, the way a symbol
 // shard does, so an edge and its endpoints appear together or not at all.
 func assembleLinks(root string, projects []types.TargetGraphProject, idx docIndex, cites docCitations) Shard {
+	return assembleLinksIn(WalkTree(root), projects, idx, cites)
+}
+
+// assembleLinksIn is assembleLinks over a walk already taken.
+func assembleLinksIn(w *TreeWalk, projects []types.TargetGraphProject, idx docIndex, cites docCitations) Shard {
+	root := w.root
 	s := Shard{Name: linksShardName}
 	seen := map[string]bool{}
 	// noteFile mints a path-bearing node and its containment chain once per path. Only the
@@ -337,7 +341,7 @@ func assembleLinks(root string, projects []types.TargetGraphProject, idx docInde
 		found []sourceCite
 	}
 	var comments []sourceCites
-	for _, rel := range findCommentSources(root) {
+	for _, rel := range w.commentSources() {
 		src, err := os.ReadFile(filepath.Join(root, rel))
 		if err != nil {
 			continue
@@ -363,7 +367,7 @@ func assembleLinks(root string, projects []types.TargetGraphProject, idx docInde
 	}
 	slices.Sort(candidates)
 	held := map[string]bool{}
-	for _, rel := range dropVCSIgnored(root, slices.Compact(candidates)) {
+	for _, rel := range w.dropIgnored(slices.Compact(candidates)) {
 		held[rel] = true
 	}
 
@@ -544,27 +548,10 @@ func buzzCommentCitations(content string) []sourceCite {
 // one has to get template literals, regex literals and division apart to tell a comment
 // from a string; measured, console/src holds two comment URLs and both are loopback
 // placeholders this parser rejects anyway, so the unsafe parse would buy nothing.
-func findCommentSources(root string) []string {
-	var out []string
-	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
-		}
-		if d.IsDir() {
-			if p != root && (project.IsIgnoreDir(d.Name()) || d.Name() == "testdata") {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasSuffix(name, ".buzz") && (!strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go")) {
-			return nil
-		}
-		if rel, err := filepath.Rel(root, p); err == nil {
-			out = append(out, filepath.ToSlash(rel))
-		}
-		return nil
+func findCommentSources(root string) []string { return WalkTree(root).commentSources() }
+
+func (w *TreeWalk) commentSources() []string {
+	return w.scan(walkBuzz, func(f treeFile) bool {
+		return strings.HasSuffix(f.rel, ".buzz") || (strings.HasSuffix(f.rel, ".go") && !strings.HasSuffix(f.rel, "_test.go"))
 	})
-	slices.Sort(out)
-	return dropVCSIgnored(root, out)
 }

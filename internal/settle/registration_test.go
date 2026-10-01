@@ -22,7 +22,7 @@ func TestWorkspaceLoadWritesNoHook(t *testing.T) {
 	magusfile := `import "magus";
 import "fs";
 
-magus.project({})
+magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");

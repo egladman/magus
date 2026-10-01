@@ -3,6 +3,7 @@ import "../hack/magusfile/toolchain-policy" as policy;
 import "../hack/magusfile/advisories" as advisories;
 import "../hack/magusfile/drift" as drift;
 import "../hack/magusfile/index" as index;
+import "../hack/magusfile/ruledocs" as ruledocs;
 import "../hack/magusfile/changelog" as changelog;
 import "fs";
 import "os";
@@ -48,7 +49,8 @@ magus\project({
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
-                "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go"],
+                "../hack/magusfile/ruledocs.buzz", "../internal/guard/**/*.go",
+                "../cmd/magus-utils/**/*.go"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
@@ -58,6 +60,7 @@ magus\project({
         "generate": {"skip_cache": "is the drift gate itself; a replay would skip the check it exists to make"},
         "render": {"skip_cache": "the dev-loop fast path; every invocation must actually re-render gen/"},
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
+        "figure-engine-digest-generate": {"skip_cache": "reads the figure engine the running magus binary embeds, which no input glob can key; it runs before any replay of diagrams-generate, so that stays cacheable"},
         // The build-* targets stay cached: esbuild and the npm deps are pinned.
     },
 });
@@ -89,12 +92,14 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
         workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
-        workspace\file("cmd/magus-ruledocs/**/*.go"), workspace\file("internal/guard/**/*.go"),
+        // ruledocs renders the running binary's guard catalog, which internal/guard compiles in.
+        workspace\file("hack/magusfile/ruledocs.buzz"), workspace\file("internal/guard/**/*.go"),
+        workspace\file("cmd/magus-utils/**/*.go"),
         // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
         workspace\file("proto/gen/descriptor.binpb"),
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
     // Hand-written pages with a generated region between markers; as outputs, clean would delete them.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
         "concepts/review.md",
@@ -102,11 +107,13 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         "reference/config *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-utils", "contract", "-src", "../internal/spell/contract.go",
+        "-docs", "./reference/spell-contract.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
-    go["go-run"](ctx, {"args": ["../cmd/magus-ruledocs", "-out", "./reference/rules"]});
+    ruledocs\write("reference/rules", rules: magus\describe.rule());
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     fs\mkdirAll("benchmarks");
@@ -207,7 +214,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("assets/**"), workspace\file("releases/*.yaml"));
     ctx.writesFiles("gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\projectGraph(),
+        magus\describe.graph(), magus\projectGraph(),
         ctx.hasCharm("rw"));
 }
 
@@ -335,8 +342,8 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         throw "diagrams-generate: unexpected arguments {args.join(" ")}; it takes none";
     }
     // The index lives outside file hashing; the root's digest of it keys this target.
-    ctx.needs(workspace\symbol_digest_generate);
-    ctx.readsFiles("site/diagrams/*.buzz", workspace\file("libs/figure/figure.buzz"),
+    ctx.needs(workspace\symbol_digest_generate, figure_engine_digest_generate);
+    ctx.readsFiles("site/diagrams/*.buzz", "gen/figure-engine.sha256",
         workspace\file("gen/symbol-index.json"), workspace\file("magusfile.buzz"));
     ctx.writesFiles("assets/gen/diagram-*.svg", "assets/gen/diagram-*.json");
     final GENERATED = ["assets/gen"];
@@ -352,6 +359,21 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
         throw "diagrams-generate: the figures changed " + moved.join(", ")
             + "; re-run `magus run diagrams-generate:rw docs` and commit" + drift\secondCause;
     }
+}
+
+// figure-engine-digest-generate writes the SHA-256 of the magus/figure source the running
+// binary embeds to gen/figure-engine.sha256. The figures render from that copy, not from
+// libs/figure/figure.buzz, so diagrams-generate keys on this file: an edit to figure.buzz
+// reaches the SVGs only once a rebuilt binary carries it.
+export fun figure_engine_digest_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen/figure-engine.sha256");
+    final body = magus\cmd("version",
+        args: ["--client", "-o", "template=\{\{.embedded.figure_sha256}}"],
+        opts: {"quiet": true}).stdout.trim() + "\n";
+    final path = fs\join("gen", "figure-engine.sha256");
+    if (fs\exists(path) and fs\readFile(path) == body) { return; }
+    fs\mkdirAll("gen");
+    fs\writeFile(path, body);
 }
 
 // build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.
@@ -378,5 +400,5 @@ export fun render(ctx: magus\Context, args: [str]) > void !> any {
     // Uncommitted, so a fresh checkout lacks it.
     ctx.needs(changelog_page);
     renderer\site_render(ROOT, DOCS, BLOG, OUT,
-        magus\targets(), magus\projectGraph());
+        magus\describe.graph(), magus\projectGraph());
 }

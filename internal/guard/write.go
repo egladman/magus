@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 	"gopkg.in/yaml.v3"
 )
 
@@ -250,8 +251,9 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 }
 
 // gradeLeasedEdit is gradeLeasedWrite for a write whose payload says what it changes. A
-// write inside the acting lease's own paths is graded once more, by declaration, when
-// another live lease claims a declaration of that file; see gradeClaimedDeclarations.
+// write is graded once more, by declaration, when the acting lease's deny paths name a
+// declaration of that file (see gradeDeniedDeclarations), and a write inside its own paths
+// when another live lease claims one (see gradeClaimedDeclarations).
 func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writePath string, fields writeFields) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
@@ -304,6 +306,9 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		if g.Decision == "deny" {
 			return g
 		}
+		if denied := gradeDeniedDeclarations(ctx, checkout, me, rel, fields); denied.Decision != "" {
+			return denied
+		}
 		if claimed := gradeClaimedDeclarations(ctx, checkout, me, owners, rel, fields); claimed.Decision != "" {
 			return claimed
 		}
@@ -333,12 +338,24 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 		// Held once per session per lease: the second write into the same lease's paths
 		// repeats a fact the writer already has, while a different lease is a new one.
 		return writeGrade{Decision: "advise", Kind: advisoryLeasedPath, Key: leasedPathKey(owner.ID), Context: fmt.Sprintf(
-			"magus workspace: if you are lease %s, take it with `%s` so the guard grades your writes (a process no hook sees sets %s=%s instead); if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
+			"magus workspace: if you are lease %s, take it with `%s` so the guard grades your writes (a process no hook sees sets %s=%s instead); if you are not, %s\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.\n"+
 				"For one small change once its holder is done, record it on the job first with the client tool script `%s`.",
-			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, rel, owner.ID, criteriaLine(owner), owner.State, enterCall(owner.ID, rel))}
+			owner.ID, hint.JobExec.With(owner.ID), envHookLease, owner.ID, holderNotice(owner), rel, owner.ID, criteriaLine(owner), owner.State, enterCall(owner.ID, rel))}
 	}
 	return writeGrade{}
+}
+
+// holderNotice tells a writer outside lease owner who to talk to before saving into its
+// paths. The holder may be a person or an agent, and magus knows only where it took the job.
+func holderNotice(owner types.Job) string {
+	switch {
+	case owner.CheckoutRoot != "":
+		return fmt.Sprintf("whoever took it in %s may be editing this file now, so check with them before you save.", owner.CheckoutRoot)
+	case owner.Registered != 0:
+		return "whoever took it may be editing this file now, so check with them before you save."
+	}
+	return "nobody has taken it yet, so ask whoever forked it before you save."
 }
 
 // adviseUnleasedWorker teaches a spawned worker how to enroll, and says nothing to
@@ -364,7 +381,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the client tool (magus\\job\\put) and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+		"magus workspace: declare the plan with the client tool (magus\\job.put) and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
 			"This process reports a spawner but names no lease, and this workspace's job store holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
@@ -405,7 +422,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 				"Lease %s (%s) has not reported the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			hint.JobExec.With(me.ID), me.ID, criteriaLine(me))}
 	}
-	decl, denied, err := declarationCovering(me.DenyPaths, rel)
+	// A deny naming one declaration of rel is gradeDeniedDeclarations' to judge: at this,
+	// the path, level it would deny every edit to the file.
+	decl, denied, err := declarationCovering(job.WholeFileDenies(me.DenyPaths, rel), rel)
 	if err != nil {
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
@@ -485,6 +504,80 @@ func revokedCovering(me types.Job, rel string) (types.JobRelease, bool) {
 	return found, found.Path != ""
 }
 
+// gradeDeniedDeclarations denies a write that changes a declaration me's deny paths name in
+// rel (`run.go#A`), and passes one that changes only other parts of the file.
+//
+// The write is placed the way gradeClaimedDeclarations places one, so the declaration named
+// here is the one the footprint reports. Where the claim rule stands down to the path-level
+// verdict, this one does too, and for a deny that verdict is the whole file: a write magus
+// cannot place may change the declaration, so it is denied.
+func gradeDeniedDeclarations(ctx context.Context, checkout string, me types.Job, rel string, fields writeFields) writeGrade {
+	denied := job.DeniedDeclarations(me.DenyPaths, rel)
+	if len(denied) == 0 {
+		return writeGrade{}
+	}
+	changed, placed := changedDeclarations(ctx, checkout, rel, fields)
+	if !placed {
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+			"magus workspace: make this change as an edit whose old text appears once in %s, so magus can see which declaration it lands in, or leave the file alone.\n"+
+				"Your lease %s (%s) declared %s DENIED, and this write could not be placed in a declaration: no edit to apply, an edit that does not apply to the file on disk, or a file no diff driver reads. Nothing shows it leaves the denied declaration untouched, so it is denied whole. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
+			rel, me.ID, criteriaLine(me), quotedClaims(rel, denied))}
+	}
+	for _, decl := range changed {
+		if claim, ok := namingClaim(denied, decl); ok {
+			return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
+				"magus workspace: edit other declarations of %s, or report a checkpoint to the orchestrator and ask for the deny to be lifted before you touch this one.\n"+
+					"This edit changes %s in %s, which your lease %s (%s) declared DENIED as %q. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
+				rel, decl, rel, me.ID, criteriaLine(me), rel+"#"+claim)}
+		}
+	}
+	return writeGrade{}
+}
+
+// changedDeclarations are the declarations of rel a write changes, on either side of it,
+// reporting false when the write cannot be placed: no content to compare, a file no diff
+// driver reads, a VCS that places nothing.
+func changedDeclarations(ctx context.Context, checkout, rel string, fields writeFields) ([]string, bool) {
+	abs := filepath.Join(checkout, filepath.FromSlash(rel))
+	before, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, false
+	}
+	after, ok := resolvedWriteContent(abs, fields)
+	if !ok {
+		return nil, false
+	}
+	if after == string(before) {
+		return nil, true
+	}
+	res, err := vcs.Resolve(ctx, checkout, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return nil, false
+	}
+	regions, err := res.VCS.RegionsBetween(ctx, checkout, rel, before, []byte(after))
+	if err != nil || len(regions) == 0 {
+		return nil, false
+	}
+	decls := make([]string, 0, len(regions))
+	for _, r := range regions {
+		decl := r.Location().Declaration
+		if decl == "" {
+			return nil, false
+		}
+		decls = append(decls, decl)
+	}
+	return decls, true
+}
+
+// quotedClaims renders claims on rel as the deny entries that spelled them.
+func quotedClaims(rel string, claims []string) string {
+	quoted := make([]string, len(claims))
+	for i, c := range claims {
+		quoted[i] = strconv.Quote(rel + "#" + c)
+	}
+	return strings.Join(quoted, ", ")
+}
+
 // enterCall renders the job-store call that enters rel on lease id. The CLI has no
 // entry, so it is a client script.
 func enterCall(id, rel string) string {
@@ -493,7 +586,7 @@ func enterCall(id, rel string) string {
 
 // clientJobPut is a client tool script putting one key on row id.
 func clientJobPut(id, key, value string) string {
-	return fmt.Sprintf(`import "magus"; magus\job\put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
+	return fmt.Sprintf(`import "magus"; magus\job.put(%s, opts: {%q: %s});`, strconv.Quote(id), key, value)
 }
 
 // entryIdle is how long a holder must go without a tool call before an entry into its
@@ -649,7 +742,8 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 	var firstErr error
 	for _, raw := range decls {
 		// A claim on one declaration (`run.go#executeStages`) covers its file at this, the
-		// path, level; gradeClaimedDeclarations is where the declaration is read.
+		// path, level; gradeClaimedDeclarations and gradeDeniedDeclarations are where the
+		// declaration is read.
 		file, _ := types.SplitClaim(raw)
 		decl := path.Clean(file)
 		if decl == "." || decl == "/" {
@@ -687,7 +781,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-		"magus workspace: fix the path pattern with the client tool (magus\\job\\put), then retry this write.\n"+
+		"magus workspace: fix the path pattern with the client tool (magus\\job.put), then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
 }
 

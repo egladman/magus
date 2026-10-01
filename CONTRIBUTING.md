@@ -478,8 +478,8 @@ behind `//go:build` constraints, so macOS and Linux read 67.6% and 66.9% for the
 commit. The published figure is therefore split in two.
 
 The **denominator** is static. Which statements exist does not depend on where you
-stand, so `coverage.buzz` enumerates every statement block of every Go file in every
-module by running `go tool cover -mode=set` over one file at a time. That instruments
+stand, so `hack/magusfile/coverage.buzz` enumerates every statement block of every Go
+file in every module by running `go tool cover -mode=set` over one file at a time. That instruments
 syntactically, resolving no import and consulting no build context, so a Windows-only
 file yields its block table on a Mac and lands in the denominator at zero. Verified
 against a real profile: over the 418 files both a `go test -coverprofile` run and this

@@ -63,6 +63,9 @@ Start the REPL without executing the magusfile
 \fB\-\-profile\fR
 Print where compile and import time went, after the script runs
 .TP
+\fB\-\-record\fR \fImagus query output <ref>\fR
+Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)
+.TP
 \fB\-t\fR
 Run the file's test "..." {} blocks and report pass/fail
 .TP
@@ -122,6 +125,12 @@ magus buzz -t --coverprofile=out.lcov scripts/report.buzz
 .PP
 .EX
 magus buzz --profile scripts/report.buzz
+.EE
+.PP
+\fIRun a probe and keep its output to cite\fR
+.PP
+.EX
+magus buzz --record probes/does-the-key-move.buzz
 .EE
 .PP
 .SH SEE ALSO

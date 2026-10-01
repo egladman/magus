@@ -39,7 +39,7 @@ concurrency: 1
 import "magus";
 import "spells/acme";
 import "project/api";
-magus.project({ "spells": [acme] });
+magus\project({ "spells": [acme] });
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void {}
@@ -53,7 +53,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 }
 -- api/magusfile.buzz --
 import "magus";
-magus.project({});
+magus\project({});
 export fun lint(ctx: magus\Context, args: [str]) > void {}
 -- spells/acme/spell.buzz --
 import "magus/spell";

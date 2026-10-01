@@ -182,6 +182,10 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 			return "", "", fmt.Errorf("map value: %w", verr)
 		}
 		return "{" + keyT + ": " + valT + "}", "{}", nil
+	case reflect.Interface:
+		// An interface field holds whatever JSON-shaped value the Go side put there,
+		// nil included, so it mirrors as a nullable `any` rather than claiming a type.
+		return "any?", "null", nil
 	default:
 		return "", "", fmt.Errorf("unsupported Go type %s", t)
 	}

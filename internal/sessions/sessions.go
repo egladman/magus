@@ -34,7 +34,7 @@
 // reader can decode and lands in [Fold.Skipped], never as a record that lies.
 //
 // A file, however, is not grow-only: [Prune] deletes whole invocation files whose
-// newest fact has aged out, and [Open] runs it opportunistically so the store bounds
+// newest fact has aged out or that fall past a count cap, and [Open] runs it opportunistically so the store bounds
 // itself without a server. Two rules keep that from destroying history a reader is
 // still using (a still-open attention request pins every file naming it, and a
 // request's records are deleted as a unit), and [Prune] documents why each is
@@ -354,7 +354,8 @@ type Fold struct {
 
 	// Legacy counts schema-1 lines written before a per-process id was called an
 	// invocation, keyed `session`. This build does not read them; they are counted apart
-	// from Skipped so they are not reported as damage, and [Prune] keeps their files.
+	// from Skipped so they are not reported as damage, and [Prune] ages their files by the
+	// timestamps those lines still carry.
 	Legacy int
 }
 

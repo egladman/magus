@@ -179,7 +179,7 @@ func (s *lspServer) capabilities() any {
 		"capabilities": map[string]any{
 			"textDocumentSync": 1, // Full: didChange sends the whole document
 			"completionProvider": map[string]any{
-				"triggerCharacters": []string{".", "/"},
+				"triggerCharacters": []string{"\\", "/"},
 			},
 			"hoverProvider": true,
 			"signatureHelpProvider": map[string]any{

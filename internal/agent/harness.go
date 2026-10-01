@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 const harnessSchemaVersion = 2
@@ -36,9 +38,10 @@ const (
 	// HarnessUnprobed means presence matched (the config carries the declared
 	// fragments) but VerifyHarness could not confirm the wired command actually
 	// answers: the interpreter, jq, or the magus binary the guard script would
-	// resolve is missing from this environment. Distinct from HarnessVerified,
-	// because presence was never proof the guard runs, and distinct from
-	// HarnessUncovered, because the gap is this machine's tooling, not the config.
+	// resolve is missing from this environment, or the probe could not start or
+	// finish within its deadline. Distinct from HarnessVerified, because presence
+	// was never proof the guard runs, and distinct from HarnessUncovered, because
+	// the gap is this machine's tooling or load, not the config.
 	HarnessUnprobed HarnessStatus = "unprobed"
 )
 
@@ -98,58 +101,6 @@ type HarnessEntries struct {
 	Path    []string         `json:"path"`
 	Entries []map[string]any `json:"entries"`
 }
-
-// HarnessPlan is what a host needs merged for one descriptor, computed against the files on
-// disk. Magus prints it and never writes it: the person runs Merge.
-type HarnessPlan struct {
-	ID string `json:"id"`
-	// Files is keyed by workspace-relative path and holds only the files missing something.
-	Files map[string]HarnessFile `json:"files,omitempty"`
-	// Merge is one POSIX shell command that brings every file in Files current, empty when
-	// none is missing anything. It reads this plan back through `magus describe harness
-	// <id> -o json` and pipes it into `magus buzz`, which merges each file with merge\json.
-	Merge   string `json:"merge,omitempty"`
-	MCPHint string `json:"mcp_hint,omitempty"`
-}
-
-// Current reports whether every host file already carries what the descriptor declares.
-func (p HarnessPlan) Current() bool { return len(p.Files) == 0 }
-
-// HarnessFile is what one host file needs: Fragment merged into the JSON document the way
-// merge\deep does (objects merge key by key, any other value replaces the one on disk), or
-// Content as the whole file. A managed array appears in Fragment whole, with the entries a
-// person added kept in place, so replacing the array on disk is exactly the merge.
-type HarnessFile struct {
-	Exists   bool            `json:"exists"`
-	Fragment map[string]any  `json:"fragment,omitempty"`
-	Content  string          `json:"content,omitempty"`
-	Changes  []HarnessChange `json:"changes"`
-}
-
-// HarnessChange is one thing merging a HarnessFile changes.
-type HarnessChange struct {
-	Op    HarnessChangeOp `json:"op"`
-	Key   string          `json:"key,omitempty"`
-	Value any             `json:"value,omitempty"`
-}
-
-// HarnessChangeOp names what a HarnessChange does to its key.
-type HarnessChangeOp string
-
-const (
-	// HarnessAdd appends an entry the managed array lacks.
-	HarnessAdd HarnessChangeOp = "add"
-	// HarnessReplace swaps an entry with the same matcher and commands for the declared one,
-	// so an edited timeout does not leave a second copy of the hook.
-	HarnessReplace HarnessChangeOp = "replace"
-	// HarnessRetire drops an entry that runs a shipped template the descriptor no longer
-	// declares, so an upgraded hook is not judged twice.
-	HarnessRetire HarnessChangeOp = "retire"
-	// HarnessSet sets a key the file does not hold yet.
-	HarnessSet HarnessChangeOp = "set"
-	// HarnessWrite writes the whole file.
-	HarnessWrite HarnessChangeOp = "write"
-)
 
 // HarnessVerification makes coverage gaps explicit. A missing or invalid
 // descriptor is not coverage; neither is a configuration that merely contains
@@ -316,10 +267,11 @@ func validateHarnessEntries(group HarnessEntries) error {
 	if len(commands) == 0 {
 		return fmt.Errorf("entries must include at least one command that invokes magus")
 	}
-	for _, command := range commands {
-		if !invokesMagus(command) {
-			return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", command)
-		}
+	// One invoking command per group, not every command: an entry may prepare the
+	// environment a magus is found in, like a host's session-start entry that puts the
+	// session root on PATH, and it can only do that without running one.
+	if !slices.ContainsFunc(commands, invokesMagus) {
+		return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", commands[0])
 	}
 	return nil
 }
@@ -335,24 +287,27 @@ func isSafeRelativePath(path string) bool {
 // another value, and a config that names no magus command are errors. MCP setup guidance is
 // carried as a hint only: magus never plans host MCP client config and never resolves its
 // secret ref.
-func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
+func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error) {
 	if err := ctx.Err(); err != nil {
-		return HarnessPlan{}, err
+		return types.HarnessPlan{}, err
 	}
 	if root == "" {
-		return HarnessPlan{}, fmt.Errorf("workspace root is required")
+		return types.HarnessPlan{}, fmt.Errorf("workspace root is required")
 	}
 	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
-		return HarnessPlan{}, err
+		return types.HarnessPlan{}, err
 	}
-	plan := HarnessPlan{ID: d.ID}
+	plan := types.HarnessPlan{ID: d.ID, Wired: []types.HarnessWired{}}
 	if d.Config.Path != "" {
+		for _, group := range d.ManagedEntries {
+			plan.Wired = append(plan.Wired, types.HarnessWired{File: d.Config.Path, Key: strings.Join(group.Path, "."), Entries: group.Entries})
+		}
 		file, err := planHarnessConfig(root, d)
 		if err != nil {
 			return plan, err
 		}
-		if err := plan.addFile(d.Config.Path, file); err != nil {
+		if err := addPlanFile(&plan, d.Config.Path, file); err != nil {
 			return plan, err
 		}
 	}
@@ -361,7 +316,7 @@ func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
 		if err != nil {
 			return plan, err
 		}
-		if err := plan.addFile(p.Path, file); err != nil {
+		if err := addPlanFile(&plan, p.Path, file); err != nil {
 			return plan, err
 		}
 	}
@@ -374,12 +329,12 @@ func PlanHarness(ctx context.Context, root, id string) (HarnessPlan, error) {
 	return plan, nil
 }
 
-func planHarnessConfig(root string, d HarnessDescriptor) (HarnessFile, error) {
+func planHarnessConfig(root string, d HarnessDescriptor) (types.HarnessFile, error) {
 	path, err := harnessConfigPath(root, d.Config.Path)
 	if err != nil {
-		return HarnessFile{}, err
+		return types.HarnessFile{}, err
 	}
-	var file HarnessFile
+	var file types.HarnessFile
 	config := map[string]any{}
 	if body, err := os.ReadFile(path); err == nil {
 		file.Exists = true
@@ -395,7 +350,7 @@ func planHarnessConfig(root string, d HarnessDescriptor) (HarnessFile, error) {
 			continue
 		}
 		fragment[key] = d.ConfigDefaults[key]
-		file.Changes = append(file.Changes, HarnessChange{Op: HarnessSet, Key: key, Value: d.ConfigDefaults[key]})
+		file.Changes = append(file.Changes, types.HarnessChange{Op: types.HarnessSet, Key: key, Value: d.ConfigDefaults[key]})
 	}
 	for _, group := range d.ManagedEntries {
 		entries, changes, err := mergeManagedGroup(config, group)
@@ -421,14 +376,14 @@ func planHarnessConfig(root string, d HarnessDescriptor) (HarnessFile, error) {
 	return file, nil
 }
 
-// addFile records what path needs, folding it into what another source of the same
-// descriptor already asked of that file. A file needing nothing is left out.
-func (p *HarnessPlan) addFile(path string, file HarnessFile) error {
+// addPlanFile records in p what path needs, folding it into what another source of the
+// same descriptor already asked of that file. A file needing nothing is left out.
+func addPlanFile(p *types.HarnessPlan, path string, file types.HarnessFile) error {
 	if len(file.Changes) == 0 {
 		return nil
 	}
 	if p.Files == nil {
-		p.Files = map[string]HarnessFile{}
+		p.Files = map[string]types.HarnessFile{}
 	}
 	have, ok := p.Files[path]
 	if !ok {
@@ -466,7 +421,7 @@ const harnessMergeScript = `import "encoding/json"; import "fs"; import "io"; im
 // harnessMergeCommand renders the one command a person runs to bring files current.
 // It reads the plan back from `magus describe harness`, so re-running it after a
 // partial failure redoes only what is still missing.
-func harnessMergeCommand(id string, files map[string]HarnessFile) string {
+func harnessMergeCommand(id string, files map[string]types.HarnessFile) string {
 	if len(files) == 0 {
 		return ""
 	}
@@ -608,14 +563,14 @@ func pathEntries(config map[string]any, path []string) ([]any, error) {
 
 // mergeManagedGroup returns group's array in config as it reads once the declared entries
 // are in place, and what that changes. config is not modified.
-func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []HarnessChange, error) {
+func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []types.HarnessChange, error) {
 	existing, err := pathEntries(config, group.Path)
 	if err != nil {
 		return nil, nil, err
 	}
 	entries := slices.Clone(existing)
 	key := strings.Join(group.Path, ".")
-	var changes []HarnessChange
+	var changes []types.HarnessChange
 	for _, wanted := range group.Entries {
 		exact, err := containsExactEntry(entries, wanted)
 		if err != nil {
@@ -636,16 +591,16 @@ func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []Ha
 				break
 			}
 		}
-		op := HarnessReplace
+		op := types.HarnessReplace
 		if !replaced {
 			entries = append(entries, wanted)
-			op = HarnessAdd
+			op = types.HarnessAdd
 		}
-		changes = append(changes, HarnessChange{Op: op, Key: key, Value: wanted})
+		changes = append(changes, types.HarnessChange{Op: op, Key: key, Value: wanted})
 	}
 	entries, retired := dropSupersededEntries(entries, group.Entries)
 	for _, entry := range retired {
-		changes = append(changes, HarnessChange{Op: HarnessRetire, Key: key, Value: entry})
+		changes = append(changes, types.HarnessChange{Op: types.HarnessRetire, Key: key, Value: entry})
 	}
 	return entries, changes, nil
 }
@@ -767,14 +722,23 @@ func stringField(entry map[string]any, key string) string {
 	return v
 }
 
+// EntryCommands is the matcher a managed entry fires on (empty when it names none) and every
+// command it runs, in a stable order, for a reader who wants the wiring without the host
+// JSON around it.
+func EntryCommands(entry map[string]any) (matcher string, commands []string) {
+	collectCommands(entry, &commands)
+	return cmp.Or(stringField(entry, "matcher"), stringField(entry, "match")), commands
+}
+
 func collectCommands(v any, out *[]string) {
 	switch t := v.(type) {
 	case map[string]any:
 		if command, ok := t["command"].(string); ok && command != "" {
 			*out = append(*out, command)
 		}
-		for _, child := range t {
-			collectCommands(child, out)
+		// Sorted keys, so a rendering of the commands reads the same on every run.
+		for _, key := range slices.Sorted(maps.Keys(t)) {
+			collectCommands(t[key], out)
 		}
 	case []any:
 		for _, child := range t {

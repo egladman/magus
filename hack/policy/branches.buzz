@@ -1,0 +1,935 @@
+// The rules for publishing a branch: push-authority and branch-name.
+//
+// push-authority: only the main session publishes. A caller a lease binds, or one magus saw
+// spawned, is refused every push and every `gh pr create`, whatever the name. A caller magus
+// cannot attribute at all (the host reported no session) is refused too. Every other rule
+// fails open on a missing fact; this one fails closed, because a push is the one act that
+// leaves the machine and that no later hook can take back.
+//
+// branch-name: the name a push publishes, in every tool magus drives (git push, hg push -B,
+// sl push --to, jj git push -b), and the head `gh pr create` opens from. A name is a short
+// topic in lowercase words joined by `-`, so it is refused for:
+//   type-prefix: a `<type>/` from the conventional commit types. The subjects carry the type.
+//   namespace: any other `<word>/`, which this repository's flat branch list never used.
+//   generated-id: a word that is a hash or a random id, which names no part of the code.
+//   date: a year, a month or a day, which names when, never what.
+//   case, underscore, character: anything but lowercase letters, digits, `-` and `.`.
+//   length: more than maxWords words or maxChars characters.
+//   topic: no word naming what the branch touches.
+// The bounds come from the 372 merged pull requests whose head carried no `/` (as of
+// 2026-09-30): characters p50 17, p90 24, p95 26, p99 29, max 34; 98.7% are at most 28
+// characters and 98.1% at most 4 words.
+//
+// The topic is read from the branch's own diff against the base (vcs\changedFiles): the
+// directories and file names it touches, split into words. A name word relates to them when
+// it is one of them, shares a stem with one, or is a synonym declared below. Over the 428
+// merged pull requests' own diffs, 86 of the 344 names the mechanical rules pass (25%) miss
+// their topic, most of them good names (startup-latency, generate-race, sandbox-composed-
+// grants), so a topic miss alone advises, once per session, and the mechanical rules deny.
+//
+// Each refusal names every failed rule with its evidence and serves a name built from the
+// one pushed, or, when nothing of it survives, from the diff's words. A branch the remote
+// already has is an update: it is judged once per session, so the rename is served and the
+// update then goes through.
+namespace agentpolicy\branches;
+
+import "std";
+import "magus";
+import "./hack/policy/helpers" as helpers;
+
+final maxWords = 4;
+final maxChars = 28;
+
+final commitTypes = ["feat", "fix", "chore", "refactor", "docs", "perf", "test", "build", "ci",
+    "style", "revert"];
+// The types that never name a topic, so a leading `fix-` is the prefix with a hyphen, where a
+// leading `docs-` or `test-` may name the docs or the tests.
+final leadTypes = ["feat", "fix", "chore", "refactor", "revert"];
+
+// Name words that carry no topic, so they never count for or against it.
+final stopWords = ["a", "an", "the", "and", "or", "of", "to", "on", "in", "for", "per", "vs",
+    "at", "by", "no", "not", "with", "from", "is", "are", "be", "it", "its"];
+
+// Path words too common here to say what a change is about.
+final genericWords = ["internal", "cmd", "libs", "lib", "std", "types", "src", "pkg", "hack",
+    "testdata", "gen", "go", "mod", "sum", "md", "json", "yaml", "txt", "test", "tests",
+    "magus", "unreleased", "changes", "yml", "png", "svg", "txtar"];
+
+// synonyms are the name words that stand for path words they do not share a stem with.
+final synonyms = {
+    "ci": ["github", "workflows", "ci", "queue"],
+    "deps": ["lock", "package", "pnpm"],
+    "docs": ["docs", "readme", "guides", "reference"],
+    "buzz": ["gopherbuzz", "buzz", "spells"],
+    "release": ["releases", "releaser", "goreleaser"],
+    "lint": ["lint", "golangci", "rules"],
+    "mcp": ["mcp", "server", "tools"],
+    "pwa": ["console"],
+    "ui": ["console", "site", "css"],
+    "jit": ["jit", "vm", "compiler"],
+    "vcs": ["git", "hg", "jj", "sl", "vcs"],
+};
+
+// Pusher is who runs a push: role is root or worker (a lease binds it), title the
+// description magus saw it spawned with, session the host's session id, and agent the
+// host's subagent id. Each is a fact the guard recorded, never one the caller declares.
+export object Pusher {
+    role: str,
+    title: str,
+    session: str,
+    agent: str = "",
+    lease: str = "",
+}
+
+// authorityDenial is why caller may not publish, "" when it may.
+export fun authorityDenial(caller: Pusher) > str {
+    final why = mut [<str>];
+    if (caller.role == "worker") {
+        var bound = "a lease";
+        if (caller.lease != "") {
+            bound = "lease {caller.lease}";
+        }
+        why.append("{bound} binds this session, so it is a worker");
+    }
+    if (caller.title != "") {
+        why.append("magus saw this caller spawned as `{caller.title}`");
+    }
+    if (caller.agent != "") {
+        why.append("the host names this caller subagent `{caller.agent}`");
+    }
+    if (why.len() == 0 and caller.session == "") {
+        why.append("the host reported no session, so magus cannot tell the main session from a "
+            + "subagent; this rule fails closed where the others fail open, since a push cannot be "
+            + "taken back");
+    }
+    if (why.len() == 0) {
+        return "";
+    }
+    return "push-authority: only the main session pushes or opens a pull request: "
+        + why.join("; ") + ". Commit in your checkout and report its branch and commits; "
+        + "the main session publishes them.";
+}
+
+// Push is one branch a line publishes. name is the branch as the remote receives it, ""
+// when it is the checkout's own and the checkout reported none. generated is true for
+// `jj git push --change`, where jj makes the name up.
+export object Push {
+    tool: str,
+    remote: str,
+    name: str,
+    generated: bool = false,
+}
+
+final gitValueFlags = ["-o", "--push-option", "--repo", "--receive-pack", "--exec"];
+final gitSkipFlags = ["--delete", "-d", "--tags", "--all", "--mirror", "--help", "-h", "--dry-run", "-n"];
+
+// pushesOf are the branches the line's programs publish. current is the checkout's branch
+// or bookmark, "" when it is on none.
+export fun pushesOf(programs: [helpers\Program], current: str) > [Push] {
+    final pushes = mut [<Push>];
+    foreach (p in programs) {
+        if (p.name == "gh") {
+            final head = prHead(p.args, current: current);
+            if (head != null) {
+                pushes.append(Push{ tool = "gh", remote = "origin", name = head! });
+            }
+            continue;
+        }
+        if (p.vcs == null) {
+            continue;
+        }
+        final call = p.vcs!;
+        if (call.tool == "git" and call.subcommand == "push") {
+            foreach (push in gitPushes(call.args, current: current)) { pushes.append(push); }
+        } else if ((call.tool == "hg" or call.tool == "sl") and call.subcommand == "push") {
+            foreach (name in valuesOf(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
+                pushes.append(Push{ tool = call.tool, remote = "default", name = name });
+            }
+        } else if (call.tool == "jj" and call.subcommand == "git") {
+            final ops = helpers\operandsOf(call.args, valueFlags: [<str>]);
+            if (ops.len() > 0 and ops[0] == "push") {
+                foreach (push in jjPushes(call.args, current: current)) { pushes.append(push); }
+            }
+        }
+    }
+    return pushes;
+}
+
+fun gitPushes(args: [str], current: str) > [Push] {
+    final pushes = mut [<Push>];
+    foreach (flag in gitSkipFlags) {
+        if (args.indexOf(flag) != null) {
+            return pushes;
+        }
+    }
+    final ops = helpers\operandsOf(args, valueFlags: gitValueFlags);
+    var remote = "origin";
+    if (ops.len() > 0) {
+        remote = ops[0];
+    }
+    if (ops.len() < 2) {
+        pushes.append(Push{ tool = "git", remote = remote, name = current });
+        return pushes;
+    }
+    foreach (spec in ops.sub(1)) {
+        var ref = spec;
+        if (ref.startsWith("+")) { ref = ref.sub(1); }
+        if (ref.startsWith(":")) {
+            continue;
+        }
+        final colon = ref.indexOf(":");
+        if (colon != null) {
+            ref = ref.sub(colon! + 1);
+        }
+        if (ref == "HEAD" or ref == "@") {
+            ref = current;
+        }
+        if (ref.startsWith("refs/heads/")) {
+            ref = ref.sub(11);
+        } else if (ref.startsWith("refs/")) {
+            continue;
+        }
+        if (ref == "") {
+            continue;
+        }
+        pushes.append(Push{ tool = "git", remote = remote, name = ref });
+    }
+    return pushes;
+}
+
+fun jjPushes(args: [str], current: str) > [Push] {
+    final pushes = mut [<Push>];
+    foreach (flag in ["--all", "--tracked", "--deleted", "--help", "-h", "--dry-run"]) {
+        if (args.indexOf(flag) != null) {
+            return pushes;
+        }
+    }
+    var remote = "origin";
+    final remotes = valuesOf(args, longs: ["--remote"], shorts: [<str>]);
+    if (remotes.len() > 0) {
+        remote = remotes[0];
+    }
+    foreach (name in valuesOf(args, longs: ["--bookmark"], shorts: ["-b"])) {
+        if (name.indexOf(":") == null) {
+            pushes.append(Push{ tool = "jj", remote = remote, name = name });
+        }
+    }
+    foreach (named in valuesOf(args, longs: ["--named"], shorts: [<str>])) {
+        pushes.append(Push{ tool = "jj", remote = remote, name = named.split("=")[0] });
+    }
+    if (valuesOf(args, longs: ["--change"], shorts: ["-c"]).len() > 0) {
+        pushes.append(Push{ tool = "jj", remote = remote, name = "push-<change id>", generated = true });
+    }
+    if (pushes.len() == 0) {
+        pushes.append(Push{ tool = "jj", remote = remote, name = current });
+    }
+    return pushes;
+}
+
+// prHead is the branch `gh pr create` opens from: its --head without an `owner:` part, else
+// current. null for any other gh call.
+fun prHead(args: [str], current: str) > str? {
+    final ops = helpers\operandsOf(args, valueFlags: ["-R", "--repo", "-H", "--head", "-B", "--base",
+        "-t", "--title", "-b", "--body", "-F", "--body-file"]);
+    if (ops.len() < 2 or ops[0] != "pr" or ops[1] != "create" or args.indexOf("--help") != null) {
+        return null;
+    }
+    final head = helpers\flagValue(args, long: "--head", short: "-H");
+    if (head == null) {
+        return current;
+    }
+    final parts = head!.split(":");
+    return parts[parts.len() - 1];
+}
+
+// valuesOf are every value given to a repeatable flag, attached (`--to=x`, `-Bx`) or next.
+fun valuesOf(args: [str], longs: [str], shorts: [str]) > [str] {
+    final found = mut [<str>];
+    foreach (i, arg in args) {
+        var matched = false;
+        foreach (flag in longs + shorts) {
+            if (arg == flag and i + 1 < args.len()) {
+                found.append(args[i + 1]);
+                matched = true;
+            } else if (arg.startsWith(flag + "=")) {
+                found.append(arg.sub(flag.len() + 1));
+                matched = true;
+            }
+        }
+        if (!matched) {
+            foreach (flag in shorts) {
+                if (arg.startsWith(flag) and arg.len() > flag.len() and !arg.startsWith(flag + "=")) {
+                    found.append(arg.sub(flag.len()));
+                }
+            }
+        }
+    }
+    return found;
+}
+
+// Topic is what a branch touches, as words: each directory and file name of its diff split
+// at `/`, `-`, `_`, `.` and case changes, with how many paths name it and how deep in a path
+// it sits at most, so a tie goes to the more specific word. known is false when the diff
+// could not be read.
+export object Topic {
+    known: bool,
+    words: [str],
+    counts: {str: int},
+    depths: {str: int},
+}
+
+export fun unknownTopic() > Topic {
+    return Topic{ known = false, words = [<str>], counts = {<str: int>}, depths = {<str: int>} };
+}
+
+// topicOf reads the words of paths, extensions, numbers and stop words left out. A changelog
+// fragment is left out too: it is named after the branch, so it would vouch for any name.
+export fun topicOf(paths: [str]) > Topic {
+    final words = mut [<str>];
+    final counts = mut {<str: int>};
+    final depths = mut {<str: int>};
+    foreach (path in paths) {
+        if (path.startsWith("changes/") or path.startsWith("gen/") or path.indexOf("/gen/") != null) {
+            continue;
+        }
+        final seen = mut {<str: bool>};
+        foreach (depth, w in splitWords(withoutExtension(path))) {
+            if (w.len() < 3 or isDigits(w) or genericWords.indexOf(w) != null or stopWords.indexOf(w) != null or seen[w] ?? false) {
+                continue;
+            }
+            seen[w] = true;
+            if (counts[w] == null) {
+                words.append(w);
+                counts[w] = 0;
+            }
+            counts[w] = counts[w]! + 1;
+            if (depth > (depths[w] ?? 0)) {
+                depths[w] = depth;
+            }
+        }
+    }
+    return Topic{ known = words.len() > 0, words = words, counts = counts, depths = depths };
+}
+
+// withoutExtension is path with its file name's extension cut, which says what kind of file
+// it is rather than what it is about. A name that starts with its only dot keeps it.
+fun withoutExtension(path: str) > str {
+    var slash = -1;
+    var dot = -1;
+    foreach (i in 0..path.len()) {
+        final b = path.byte(i);
+        if (b == 47) {
+            slash = i;
+        } else if (b == 46) {
+            dot = i;
+        }
+    }
+    if (dot <= slash + 1) {
+        return path;
+    }
+    return path.sub(0, len: dot);
+}
+
+// splitWords is text cut at every byte that is not a letter or digit and before each
+// uppercase letter that follows a lowercase one, lowercased.
+fun splitWords(text: str) > [str] {
+    final words = mut [<str>];
+    var start = 0;
+    var prevLower = false;
+    foreach (i in 0..text.len()) {
+        final b = text.byte(i);
+        final upper = b >= 65 and b <= 90;
+        final lower = b >= 97 and b <= 122;
+        final digit = b >= 48 and b <= 57;
+        if (!upper and !lower and !digit) {
+            if (i > start) { words.append(text.sub(start, len: i - start).lower()); }
+            start = i + 1;
+            prevLower = false;
+            continue;
+        }
+        if (upper and prevLower and i > start) {
+            words.append(text.sub(start, len: i - start).lower());
+            start = i;
+        }
+        prevLower = lower or digit;
+    }
+    if (text.len() > start) { words.append(text.sub(start).lower()); }
+    return words;
+}
+
+// related: equal, or sharing a prefix of at least four letters that leaves at most two
+// letters of the shorter word over (guard and guards, cache and caching).
+fun related(a: str, b: str) > bool {
+    if (a == b) {
+        return true;
+    }
+    var shorter = a.len();
+    if (b.len() < shorter) { shorter = b.len(); }
+    var common = 0;
+    while (common < shorter and a.byte(common) == b.byte(common)) {
+        common = common + 1;
+    }
+    return common >= 4 and common >= shorter - 2;
+}
+
+// topicalWord is the first word of words that relates to topic, null when none does.
+fun topicalWord(words: [str], topic: Topic) > str? {
+    foreach (w in words) {
+        foreach (t in topic.words) {
+            if (related(w, b: t)) {
+                return w;
+            }
+        }
+        foreach (t in synonyms[w] ?? [<str>]) {
+            if (topic.counts[t] != null) {
+                return w;
+            }
+        }
+    }
+    return null;
+}
+
+// Failure is one rule a name breaks, and the evidence for it.
+export object Failure {
+    rule: str,
+    why: str,
+}
+
+// Verdict is a judged name: what it breaks, and the name served in its place, "" when it
+// breaks nothing.
+export object Verdict {
+    failures: [Failure],
+    served: str,
+}
+
+fun isDigits(w: str) > bool {
+    if (w == "") { return false; }
+    foreach (i in 0..w.len()) {
+        final b = w.byte(i);
+        if (b < 48 or b > 57) { return false; }
+    }
+    return true;
+}
+
+// idLike: a word of five or more letters and digits that reads as made by a machine:
+// digits only; letters and digits alternating more than once (e9x4tl, f0887d, a534fcfe);
+// seven or more hex digits leading with a digit (67221bd); or letters with no vowel.
+// A word that ends in digits (base64, ed25519, mgs1040) is a name.
+fun idLike(w: str) > bool {
+    if (w.len() < 5) {
+        return false;
+    }
+    var letters = 0;
+    var digits = 0;
+    var vowels = 0;
+    var changes = 0;
+    var hex = true;
+    var prev = 0;
+    foreach (i in 0..w.len()) {
+        final b = w.byte(i);
+        var kind = 0;
+        if (b >= 48 and b <= 57) {
+            kind = 2;
+            digits = digits + 1;
+        } else if (b >= 97 and b <= 122) {
+            kind = 1;
+            letters = letters + 1;
+            if ("aeiouy".indexOf(w.sub(i, len: 1)) != null) { vowels = vowels + 1; }
+            if (b > 102) { hex = false; }
+        } else {
+            return false;
+        }
+        if (prev != 0 and kind != prev) { changes = changes + 1; }
+        prev = kind;
+    }
+    if (letters == 0) {
+        return true;
+    }
+    if (digits == 0) {
+        return vowels == 0;
+    }
+    if (changes >= 2) {
+        return true;
+    }
+    final b0 = w.byte(0);
+    return hex and w.len() >= 7 and b0 >= 48 and b0 <= 57;
+}
+
+fun isYear(w: str) > bool {
+    return w.len() == 4 and isDigits(w) and (w.startsWith("19") or w.startsWith("20"));
+}
+
+// judgeName judges name against topic. A topic that is not known is not judged.
+export fun judgeName(name: str, topic: Topic) > Verdict {
+    final failures = mut [<Failure>];
+    var rest = name;
+    final slash = name.indexOf("/");
+    if (slash != null) {
+        final head = name.sub(0, len: slash!);
+        rest = name.sub(slash! + 1);
+        if (commitTypes.indexOf(head.lower()) != null) {
+            failures.append(Failure{ rule = "type-prefix", why = "`{head}/` is a commit type; the commit subjects carry the type and the branch names the topic" });
+        } else {
+            failures.append(Failure{ rule = "namespace", why = "`{head}/` puts the branch in a namespace; branches here are one flat list of topics" });
+        }
+        final segments = rest.split("/");
+        rest = segments[segments.len() - 1];
+    }
+    if (rest != rest.lower()) {
+        failures.append(Failure{ rule = "case", why = "uppercase letters; git and every filesystem that folds case can disagree about the name" });
+    }
+    if (rest.indexOf("_") != null) {
+        failures.append(Failure{ rule = "underscore", why = "`_` joins words where `-` does in every other branch here" });
+    }
+    final low = rest.lower().replace("_", with: "-");
+    final odd = $"[^a-z0-9.-]";
+    final bad = odd.match(low);
+    if (bad != null) {
+        failures.append(Failure{ rule = "character", why = "`{bad![0]}` is outside lowercase letters, digits, `-` and `.`" });
+    }
+    final kept = mut [<str>];
+    final ids = mut [<str>];
+    final dates = mut [<str>];
+    var inDate = false;
+    foreach (w in low.split("-")) {
+        if (w == "") {
+            continue;
+        }
+        if (isYear(w) or (w.len() == 8 and isDigits(w) and isYear(w.sub(0, len: 4)))) {
+            dates.append(w);
+            inDate = true;
+            continue;
+        }
+        if (inDate and w.len() <= 2 and isDigits(w)) {
+            dates.append(w);
+            continue;
+        }
+        inDate = false;
+        if (idLike(w)) {
+            ids.append(w);
+            continue;
+        }
+        kept.append(w);
+    }
+    if (slash == null and kept.len() > 1 and leadTypes.indexOf(kept[0]) != null) {
+        failures.append(Failure{ rule = "type-prefix", why = "`{kept[0]}-` is a commit type spelled with a hyphen; the commit subjects carry the type and the branch names the topic" });
+    }
+    if (kept.len() > 0 and leadTypes.indexOf(kept[0]) != null) {
+        kept.remove(0);
+    }
+    foreach (w in ids) {
+        failures.append(Failure{ rule = "generated-id", why = "`{w}` reads as a hash or a random id (digits only, letters and digits interleaved, or no vowel); it names no part of the code" });
+    }
+    if (dates.len() > 0) {
+        failures.append(Failure{ rule = "date", why = "`{dates.join("-")}` is a date; a name says what the branch changes, never when" });
+    }
+    final words = low.split("-");
+    if (words.len() > maxWords or rest.len() > maxChars) {
+        failures.append(Failure{ rule = "length", why = "{words.len()} words and {rest.len()} characters; at most {maxWords} and {maxChars}, which 98% of this repository's merged branches keep" });
+    }
+    if (topic.known) {
+        final content = mut [<str>];
+        foreach (w in kept) {
+            if (stopWords.indexOf(w) == null) { content.append(w); }
+        }
+        if (topicalWord(content, topic: topic) == null) {
+            failures.append(Failure{ rule = "topic", why = "no word of it names what the branch touches, whose paths say {leading(topic, n: 6).join(", ")}" });
+        }
+    }
+    if (failures.len() == 0) {
+        return Verdict{ failures = failures, served = "" };
+    }
+    return Verdict{ failures = failures, served = serve(kept, topic: topic) };
+}
+
+// leading are the n words most of topic's paths name, the deepest first on a tie.
+fun leading(topic: Topic, n: int) > [str] {
+    final ranked = mut [<str>];
+    foreach (w in topic.words) {
+        ranked.append(w);
+    }
+    ranked.sort(fun (a: str, b: str) > bool {
+        final ca = topic.counts[a]!;
+        final cb = topic.counts[b]!;
+        return ca > cb or (ca == cb and (topic.depths[a] ?? 0) > (topic.depths[b] ?? 0));
+    });
+    if (ranked.len() > n) {
+        return ranked.sub(0, len: n);
+    }
+    return ranked;
+}
+
+// serve builds the name to push instead: the kept words while they fit the bounds, led by
+// the topic's leading word when none of them names the topic, or the topic's two leading
+// words when nothing was kept.
+fun serve(kept: [str], topic: Topic) > str {
+    var words = kept;
+    if (kept.len() == 0) {
+        words = leading(topic, n: 2);
+    } else if (topic.known and topicalWord(kept, topic: topic) == null) {
+        words = leading(topic, n: 1) + kept;
+    }
+    final fitted = mut [<str>];
+    var chars = 0;
+    foreach (w in words) {
+        var next = chars + w.len();
+        if (fitted.len() > 0) { next = next + 1; }
+        if (fitted.len() == maxWords or next > maxChars) {
+            break;
+        }
+        fitted.append(w);
+        chars = next;
+    }
+    while (fitted.len() > 1 and stopWords.indexOf(fitted[fitted.len() - 1]) != null) {
+        fitted.remove(fitted.len() - 1);
+    }
+    return fitted.join("-");
+}
+
+// rename is how to publish p under name instead, in p's own tool.
+fun rename(p: Push, name: str, current: str) > str {
+    var local = "";
+    if (p.tool == "git" or p.tool == "gh") {
+        if (current != "" and current != name) {
+            local = "\n  git branch -m {current} {name}";
+        }
+        var then = "";
+        if (p.tool == "gh") {
+            then = "\n  then open the pull request with --head {name}";
+        }
+        return "  git push -u {p.remote} HEAD:{name}{local}{then}";
+    }
+    if (p.tool == "jj") {
+        if (p.generated) {
+            return "  jj bookmark create {name} -r @-\n  jj git push --remote {p.remote} -b {name}";
+        }
+        return "  jj bookmark rename {p.name} {name}\n  jj git push --remote {p.remote} -b {name}";
+    }
+    if (p.tool == "sl") {
+        return "  sl bookmark -m {p.name} {name}\n  sl push --to {name}";
+    }
+    return "  hg bookmark -m {p.name} {name}\n  hg push -B {name}";
+}
+
+// Remote is what the checkout knows of where a push lands: its base (`origin/main`) and the
+// remotes' branches, each `<remote>/<branch>`. unreadable says why the base could not be
+// resolved, which leaves the base branch indistinguishable from a topic.
+export object Remote {
+    base: str,
+    branches: [str],
+    unreadable: str = "",
+}
+
+// A version (`v0.5.0`), which names a release branch or a tag, not a topic.
+final release = $"^v[0-9]";
+
+// decideNames judges every branch the line publishes but the base branch and a version. A
+// mechanical failure denies; a topic miss alone advises. A name the remote already has, and
+// every `gh pr create` (which opens from a pushed branch), is judged once per session.
+export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun () > Topic, once: fun (key: str) > bool) > GuardVerdict {
+    final pushes = pushesOf(programs, current: current);
+    if (pushes.len() == 0) {
+        return magus\guard.allow();
+    }
+    if (remote.unreadable != "") {
+        return magus\guard.deny("branch-name: {remote.unreadable}, so a push to the base branch cannot be told "
+            + "from a topic branch. Fix the checkout's version control, then push again.");
+    }
+    final baseParts = remote.base.split("/");
+    final baseName = baseParts[baseParts.len() - 1];
+    final denials = mut [<str>];
+    final advice = mut [<str>];
+    var read: Topic? = null;
+    foreach (p in pushes) {
+        if (p.name == "" or p.name == baseName or release.match(p.name) != null) {
+            continue;
+        }
+        if (read == null) {
+            read = topic();
+        }
+        var verdict = judgeName(p.name, topic: read!);
+        if (p.generated) {
+            verdict = Verdict{
+                failures = [Failure{ rule = "generated-id", why = "`jj git push --change` names the bookmark after the change id" }],
+                served = serve([<str>], topic: read!),
+            };
+        }
+        if (verdict.failures.len() == 0) {
+            continue;
+        }
+        var mechanical = false;
+        final lines = mut ["branch-name: `{p.name}` is not a name to publish."];
+        foreach (f in verdict.failures) {
+            lines.append("- {f.rule}: {f.why}");
+            if (f.rule != "topic") { mechanical = true; }
+        }
+        final update = p.tool == "gh" or remote.branches.indexOf("{p.remote}/{p.name}") != null;
+        if ((update or !mechanical) and !once("branch-name:{p.name}")) {
+            continue;
+        }
+        if (verdict.served != "") {
+            lines.append("Publish it as `{verdict.served}`:\n" + rename(p, name: verdict.served, current: current));
+        }
+        if (update) {
+            lines.append("The remote already has `{p.name}`; this is said once per session, so the push goes through if you keep it.");
+        }
+        if (mechanical) {
+            denials.append(lines.join("\n"));
+        } else {
+            advice.append(lines.join("\n"));
+        }
+    }
+    if (denials.len() > 0) {
+        return magus\guard.deny((denials + advice).join("\n\n"));
+    }
+    if (advice.len() > 0) {
+        return magus\guard.advise(advice.join("\n\n"));
+    }
+    return magus\guard.allow();
+}
+
+// decideAuthority denies a line that publishes anything to a caller that may not.
+export fun decideAuthority(programs: [helpers\Program], caller: Pusher) > GuardVerdict {
+    if (!publishes(programs)) {
+        return magus\guard.allow();
+    }
+    final denial = authorityDenial(caller);
+    if (denial != "") {
+        return magus\guard.deny(denial);
+    }
+    return magus\guard.allow();
+}
+
+// publishes: the line pushes in any tool magus drives, or opens a pull request.
+fun publishes(programs: [helpers\Program]) > bool {
+    foreach (p in programs) {
+        if (p.name == "gh" and prHead(p.args, current: "") != null) {
+            return true;
+        }
+        if (p.vcs == null or p.vcs!.args.indexOf("--help") != null) {
+            continue;
+        }
+        final call = p.vcs!;
+        if (call.subcommand == "push" and call.tool != "jj") {
+            return true;
+        }
+        if (call.tool == "jj" and call.subcommand == "git") {
+            final ops = helpers\operandsOf(call.args, valueFlags: [<str>]);
+            if (ops.len() > 0 and ops[0] == "push") {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Case is one row of the name table: a branch name, the paths its diff touched ([] for a
+// topic not known), the rules it breaks and the name served for it.
+object Case {
+    name: str,
+    paths: [str],
+    rules: [str],
+    served: str,
+}
+
+fun rulesOf(v: Verdict) > [str] {
+    final rules = mut [<str>];
+    foreach (f in v.failures) {
+        rules.append(f.rule);
+    }
+    return rules;
+}
+
+final practicalPaths = ["libs/gopherbuzz/benchmarks/comparison/README.md",
+    "libs/gopherbuzz/benchmarks/comparison/comparison_test.go"];
+
+test "real branch names get the verdicts and served names in the table" {
+    // Names from origin's merged history and today's pushes; the paths are each one's own diff,
+    // cut to a few files.
+    final cases = [
+        Case{ name = "feat/practical-gates-e9x4tl", paths = practicalPaths,
+            rules = ["type-prefix", "generated-id", "topic"], served = "comparison-practical-gates" },
+        Case{ name = "approval-carry-over-2026-f0887d", paths = [<str>],
+            rules = ["generated-id", "date", "length"], served = "approval-carry-over" },
+        Case{ name = "feat/notes-memory-scope-003e7d", paths = ["internal/notes/notes.go", "cmd/magus/memory_cmd.go"],
+            rules = ["type-prefix", "generated-id"], served = "notes-memory-scope" },
+        Case{ name = "release-index/67221bd", paths = ["CHANGELOG.md", "docs/changelog.md", "releases/v0.4.3.yaml"],
+            rules = ["namespace", "generated-id", "topic"], served = "changelog-docs" },
+        Case{ name = "feat/node-version-tracking-ci-309371", paths = [".github/workflows/cd.yaml", "spells/node/node.buzz"],
+            rules = ["type-prefix", "generated-id", "length"], served = "node-version-tracking-ci" },
+        Case{ name = "fix-main-drift", paths = ["MAGUS.md", "docs/reference/rules/index.md"],
+            rules = ["type-prefix", "topic"], served = "index-main-drift" },
+        Case{ name = "worktree-agent-a534fcfe0afb1d232", paths = [<str>],
+            rules = ["generated-id", "length"], served = "worktree-agent" },
+        Case{ name = "merge-driver-resolves-per-worktree", paths = ["vcs/mergedriver/driver.go"],
+            rules = ["length"], served = "merge-driver-resolves" },
+        Case{ name = "Guard_Search", paths = ["internal/guard/search.go"],
+            rules = ["case", "underscore"], served = "guard-search" },
+        Case{ name = "cache-20260930", paths = ["internal/cache/cache.go"],
+            rules = ["date"], served = "cache" },
+        Case{ name = "buzz-heap-ownership", paths = ["libs/gopherbuzz/vm/heap.go"], rules = [<str>], served = "" },
+        Case{ name = "diagram-drift", paths = ["libs/figure/diagram.buzz", "hack/ci/drift.buzz"], rules = [<str>], served = "" },
+        Case{ name = "guard-floors", paths = ["internal/guard/floor.go"], rules = [<str>], served = "" },
+        Case{ name = "mgs1040-readable", paths = ["internal/diag/mgs1040.go"], rules = [<str>], served = "" },
+        Case{ name = "ed25519-signing", paths = [<str>], rules = [<str>], served = "" },
+        Case{ name = "startup-latency", paths = ["internal/interp/session.go", "libs/gopherbuzz/checker/checker.go"],
+            rules = ["topic"], served = "session-startup-latency" },
+    ];
+    foreach (c in cases) {
+        var topic = unknownTopic();
+        if (c.paths.len() > 0) {
+            topic = topicOf(c.paths);
+        }
+        final v = judgeName(c.name, topic: topic);
+        std\assert(rulesOf(v).join(",") == c.rules.join(","), message: "{c.name}: rules {rulesOf(v)}");
+        std\assert(v.served == c.served, message: "{c.name}: served {v.served}");
+    }
+}
+
+test "every push spelling names the branch it publishes" {
+    final cases = {
+        "git push -u origin HEAD:feat/x": "feat/x",
+        "git push --set-upstream origin feat/x": "feat/x",
+        "git push origin +HEAD:refs/heads/feat/x": "feat/x",
+        "git push origin topic:feat/x": "feat/x",
+        "git push": "feat/current",
+        "git push -u origin": "feat/current",
+        "git push origin HEAD": "feat/current",
+        "hg push -B feat/x": "feat/x",
+        "sl push --to feat/x": "feat/x",
+        "sl push --to=feat/x": "feat/x",
+        "jj git push -b feat/x": "feat/x",
+        "jj git push --bookmark=feat/x": "feat/x",
+        "jj git push --named feat/x=@-": "feat/x",
+        "jj git push": "feat/current",
+        "jj git push -c @-": "push-<change id>",
+        "gh pr create --head feat/x --title t": "feat/x",
+        "gh pr create -H owner:feat/x": "feat/x",
+        "gh pr create --fill": "feat/current",
+    };
+    foreach (line, want in cases) {
+        final words = line.split(" ");
+        var programs = helpers\vcsRequest([words]);
+        if (words[0] == "gh") {
+            programs = helpers\request([words]);
+        } else if (words[0] == "jj") {
+            programs = helpers\vcsRequest([["jj", "git"] + words.sub(2)]);
+        }
+        final pushes = pushesOf(programs, current: "feat/current");
+        std\assert(pushes.len() == 1, message: "{line}: {pushes.len()} pushes");
+        std\assert(pushes[0].name == want, message: "{line}: {pushes[0].name}");
+    }
+}
+
+test "a push that publishes no branch name is not judged" {
+    foreach (argv in [
+        ["git", "push", "origin", "--delete", "feat/x"],
+        ["git", "push", "origin", ":feat/x"],
+        ["git", "push", "--tags"],
+        ["git", "push", "origin", "refs/tags/v1"],
+        ["hg", "push"],
+        ["git", "stash", "push"],
+    ]) {
+        std\assert(pushesOf(helpers\vcsRequest([argv]), current: "feat/current").len() == 0, message: argv.join(" "));
+    }
+    std\assert(pushesOf(helpers\request([["gh", "pr", "view", "12"]]), current: "x").len() == 0, message: "gh pr view");
+}
+
+fun remote(branches: [str]) > Remote {
+    return Remote{ base = "origin/main", branches = branches };
+}
+
+fun practical() > Topic {
+    return topicOf(practicalPaths);
+}
+
+test "a bad name is denied with every rule, the served name and the commands to use it" {
+    final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:feat/practical-gates-e9x4tl"]]);
+    final v = decideNames(push, current: "feat/practical-gates-e9x4tl", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(v.decision == "deny", message: "denied");
+    foreach (want in ["type-prefix: `feat/`", "generated-id: `e9x4tl`", "topic:", "gopherbuzz",
+        "git push -u origin HEAD:comparison-practical-gates",
+        "git branch -m feat/practical-gates-e9x4tl comparison-practical-gates"]) {
+        std\assert(v.reason.indexOf(want) != null, message: "names {want}: {v.reason}");
+    }
+    final jj = decideNames(helpers\vcsRequest([["jj", "git", "push", "-b", "fix/thing"]]), current: "", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(jj.reason.indexOf("jj bookmark rename fix/thing comparison-thing") != null, message: "in jj's own words: {jj.reason}");
+    final sl = decideNames(helpers\vcsRequest([["sl", "push", "--to", "fix/thing"]]), current: "", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(sl.reason.indexOf("sl push --to comparison-thing") != null, message: "in sl's own words: {sl.reason}");
+}
+
+test "a good name, the base branch and a version pass" {
+    foreach (argv in [
+        ["git", "push", "-u", "origin", "HEAD:comparison-gates"],
+        ["git", "push", "origin", "main"],
+        ["git", "push", "origin", "v0.5.0"],
+    ]) {
+        final v = decideNames(helpers\vcsRequest([argv]), current: "x", remote: remote([<str>]), topic: practical, once: helpers\counter());
+        std\assert(v.decision == "allow", message: "{argv.join(" ")}: {v.reason}");
+    }
+}
+
+test "a push whose base cannot be resolved is denied, naming why" {
+    final broken = Remote{ base = "", branches = [<str>], unreadable = "the base ref of the checkout at `/gone` cannot be resolved" };
+    final push = helpers\vcsRequest([["git", "push", "origin", "main"]]);
+    final v = decideNames(push, current: "main", remote: broken, topic: practical, once: helpers\counter());
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.reason.indexOf("`/gone`") != null, message: v.reason);
+    final commit = helpers\vcsRequest([["git", "commit", "-m", "x"]]);
+    std\assert(decideNames(commit, current: "main", remote: broken, topic: practical, once: helpers\counter()).decision == "allow",
+        message: "a line that pushes nothing is not judged");
+}
+
+test "a topic miss alone advises once" {
+    final once = helpers\counter();
+    final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:practical-gates"]]);
+    final first = decideNames(push, current: "practical-gates", remote: remote([<str>]), topic: practical, once: once);
+    std\assert(first.decision == "advise", message: "advised: {first.reason}");
+    std\assert(first.reason.indexOf("comparison-practical-gates") != null, message: "serves a topical name");
+    std\assert(decideNames(push, current: "practical-gates", remote: remote([<str>]), topic: practical, once: once).decision == "allow", message: "once");
+}
+
+test "an update to a branch the remote has, and a pull request, are judged once per session" {
+    final once = helpers\counter();
+    final push = helpers\vcsRequest([["git", "push"]]);
+    final known = remote(["origin/feat/practical-gates-e9x4tl"]);
+    final first = decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once);
+    std\assert(first.decision == "deny", message: "first");
+    std\assert(first.reason.indexOf("already has") != null, message: "says why it lets the next one through");
+    std\assert(decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once).decision == "allow", message: "then the update goes through");
+    final fresh = helpers\vcsRequest([["git", "push", "origin", "HEAD:feat/other-a1b2c3"]]);
+    final counter = helpers\counter();
+    std\assert(decideNames(fresh, current: "", remote: known, topic: practical, once: counter).decision == "deny", message: "a new branch");
+    std\assert(decideNames(fresh, current: "", remote: known, topic: practical, once: counter).decision == "deny", message: "is denied every time");
+    final pr = helpers\request([["gh", "pr", "create", "--head", "fix/thing", "--fill"]]);
+    final prOnce = helpers\counter();
+    std\assert(decideNames(pr, current: "", remote: remote([<str>]), topic: practical, once: prOnce).decision == "deny", message: "a pull request");
+    std\assert(decideNames(pr, current: "", remote: remote([<str>]), topic: practical, once: prOnce).decision == "allow", message: "once");
+}
+
+test "only the main session may publish" {
+    final lines = [
+        helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:guard-search"]]),
+        helpers\vcsRequest([["hg", "push", "-B", "guard-search"]]),
+        helpers\vcsRequest([["jj", "git", "push", "-b", "guard-search"]]),
+        helpers\request([["gh", "pr", "create", "--fill"]]),
+    ];
+    final root = Pusher{ role = "root", title = "", session = "s1" };
+    final denied = [
+        Pusher{ role = "worker", title = "", session = "s1", lease = "branch-names" },
+        Pusher{ role = "root", title = "main/feat branch-names", session = "s1" },
+        Pusher{ role = "root", title = "", session = "s1", agent = "a534fcfe" },
+        Pusher{ role = "root", title = "", session = "" },
+    ];
+    final why = ["lease branch-names", "spawned as", "subagent `a534fcfe`", "no session"];
+    foreach (line in lines) {
+        std\assert(decideAuthority(line, caller: root).decision == "allow", message: "the main session");
+        foreach (i, caller in denied) {
+            final v = decideAuthority(line, caller: caller);
+            std\assert(v.decision == "deny", message: why[i]);
+            std\assert(v.reason.indexOf(why[i]) != null, message: v.reason);
+        }
+    }
+    final commit = helpers\vcsRequest([["git", "commit", "-m", "add the rule"]]);
+    std\assert(decideAuthority(commit, caller: denied[0]).decision == "allow", message: "a worker still commits");
+}

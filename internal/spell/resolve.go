@@ -61,22 +61,31 @@ const NameFunc = "mgs_getName"
 // helpers in the buzz engine wrap it for the bare-session case. Each function-valued
 // op in mgs_listTargets is reduced to its declared command (see resolveOps); a spell
 // that does in-VM work (a cache backend) exports plain functions and declares no ops.
-func Resolve(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error) {
+func Resolve(ctx context.Context, sess *buzz.Session, opts ...ResolveOption) (spells.Descriptor, error) {
+	var o resolveOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	if p := providerFrom(ctx); p != nil {
 		start := time.Now()
-		d, err := resolveSpell(ctx, sess)
+		d, err := resolveSpell(ctx, sess, o)
 		p.RecordBuzzSpellResolve(ctx, time.Since(start).Seconds(), d.Name, builtinLabel(ctx))
 		return d, err
 	}
-	return resolveSpell(ctx, sess)
+	return resolveSpell(ctx, sess, o)
 }
 
-func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, error) {
+func resolveSpell(ctx context.Context, sess *buzz.Session, o resolveOptions) (spells.Descriptor, error) {
 	ex := sess.Exports()
 
 	nameFn, ok := ex[NameFunc]
 	if !ok {
 		return spells.Descriptor{}, ErrNotASpell
+	}
+	if o.checked {
+		if err := checkContract(o.contractSrc); err != nil {
+			return spells.Descriptor{}, err
+		}
 	}
 	def := vm.NewMap()
 	nv, err := sess.CallValue(ctx, nameFn, nil)

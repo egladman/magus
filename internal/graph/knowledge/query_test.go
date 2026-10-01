@@ -804,3 +804,84 @@ func TestDirsGlobBaseAndSegments(t *testing.T) {
 	assert.Equal(t, 0, segmentsBelow("internal", "internal"))
 	assert.Equal(t, 1, segmentsBelow("", "a"))
 }
+
+func BenchmarkResolve(b *testing.B) {
+	g := mergeAll(AssembleShards(syntheticInputs(benchProjects, benchTargets)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = g.Resolve("kind:target t003", 50)
+	}
+}
+
+func BenchmarkQueryNeighborhood(b *testing.B) {
+	g := mergeAll(AssembleShards(syntheticInputs(benchProjects, benchTargets)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = g.Query("t003", 50)
+	}
+}
+
+// The scale tenet ("a match on a high-degree node cannot pull in the whole
+// graph"; steady state is a fingerprint check, not a rebuild) is guarded here by
+// invariants that hold regardless of machine speed. Wall-clock and allocation
+// budgets live in the benchmarks (BenchmarkQueryNeighborhood and its siblings) with benchstat evidence, per the
+// repo's go-ultra-optimize discipline: a timing assertion in a unit test only
+// buys CI flakes.
+
+// largeGraph builds the 16k-target synthetic fixture once per test. It is the
+// same fixture the benchmarks use, so a scale regression trips here too.
+func largeGraph(tb testing.TB) *Graph {
+	tb.Helper()
+	if testing.Short() {
+		tb.Skip("skipping large-graph scale test under -short")
+	}
+	return mergeAll(AssembleShards(syntheticInputs(benchProjects, benchTargets)))
+}
+
+func TestLargeGraphQueryRespectsBudget(t *testing.T) {
+	g := largeGraph(t)
+	// Sanity: the fixture really is large (>16k targets alone), so the budget
+	// bound below is meaningful rather than trivially satisfied.
+	require.Greater(t, len(g.Nodes()), benchProjects*benchTargets)
+
+	// A query seeded on a common term must never exceed its node budget, even
+	// though "t003" matches thousands of nodes across the graph.
+	for _, budget := range []int{10, 50, 200} {
+		out := g.Query("t003", budget)
+		assert.LessOrEqualf(t, len(out.Nodes), budget,
+			"query budget %d exceeded: got %d nodes", budget, len(out.Nodes))
+		assert.Positive(t, out.MatchCount)
+	}
+}
+
+func TestLargeGraphBlastRadiusTerminates(t *testing.T) {
+	g := largeGraph(t)
+	// blastRadius walks the whole reachable component; on the dependency chain the
+	// deepest project reaches many others. The invariant is that it terminates and
+	// stays within the graph, not a specific count.
+	id, ok := g.resolveOne("project:pkg/p00000")
+	require.True(t, ok)
+	br := g.blastRadius(id)
+	assert.GreaterOrEqual(t, br, 0)
+	assert.Less(t, br, len(g.Nodes()))
+}
+
+// SymbolsNamed is how `refs` tells a bare name that picks one symbol from one several
+// definitions share: only exact labels, and only symbols a workspace file defines.
+func TestSymbolsNamedListsEveryWorkspaceDefinition(t *testing.T) {
+	const hintID, queueID, lowerID, depID = "symbol:x hint/Classify().", "symbol:x queue/Workspace#Classify().", "symbol:x rpc/classify().", "symbol:dep/Classify()."
+	g := NewGraph()
+	for _, n := range []struct{ id, label string }{{hintID, "Classify"}, {queueID, "Classify"}, {lowerID, "classify"}, {depID, "Classify"}} {
+		g.AddNode(types.KnowledgeNode{ID: n.id, Kind: types.KindSymbol, Label: n.label})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "function:a.buzz:Classify", Kind: types.KindFunction, Label: "Classify"})
+	for _, d := range [][2]string{{"hint/a.go", hintID}, {"queue/b.go", queueID}, {"rpc/c.go", lowerID}} {
+		g.AddEdge(extractedEdge(fileID(d[0]), d[1], types.RelationDefines, d[0]))
+	}
+
+	assert.Equal(t, []string{hintID, queueID}, g.SymbolsNamed("Classify"))
+	assert.Equal(t, []string{lowerID}, g.SymbolsNamed("classify"))
+	assert.Empty(t, g.SymbolsNamed("Missing"))
+}

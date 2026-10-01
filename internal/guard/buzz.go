@@ -23,7 +23,7 @@ import (
 //   - strings are BYTE-indexed, so .sub produced a digest that matched nothing
 //
 // Six, all of them facts that reading first would have supplied. None was a typo.
-var buzzWriteSkill = agent.MustSkill("magus-buzz-write")
+var buzzWriteSkill = agent.MustSkill("magus-buzz-lang")
 
 // denyBuzzWriteWithoutSkill is the verdict for the first write to a .buzz file in a session
 // that has not read the Buzz skill, or "" otherwise.

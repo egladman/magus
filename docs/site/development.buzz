@@ -137,7 +137,7 @@ final UP = "../";
 // pages answer "what can I run here"; this answers "what does changing it reach", which
 // no page showed before.
 //
-// It reads magus.projectGraph()'s typed view: nodes already in topological order (so the table
+// It reads magus\projectGraph()'s typed view: nodes already in topological order (so the table
 // IS a valid build order, sorted by nobody here), each node's direct dependencies, and
 // its blast radius - the count of projects a change can transitively affect, which is
 // the number that tells a contributor whether an edit is contained or workspace-wide.
@@ -258,8 +258,9 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 // the README's "Building from source" is the one copy, and a second set of instructions
 // here could only drift from it.
 //
-// The project set comes from magus itself (magus.ls, annotated `> Projects` for
-// compile-checked field access), NOT from scanning the filesystem for MAGUS.md files.
+// The project set comes from magus itself (magus\describe.project(), annotated
+// `> Projects` for compile-checked field access), NOT from scanning the filesystem for
+// MAGUS.md files.
 // The scan it replaced looked only at site.root and its immediate subdirectories, so it
 // found 2 of this workspace's 9 projects: the three under libs/ sit one level too deep,
 // and console, proto, cmd/magus/starter and the agent-hook templates have no committed

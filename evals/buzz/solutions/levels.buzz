@@ -1,0 +1,33 @@
+import "std";
+
+enum Level {
+    low,
+    mid,
+    high,
+}
+
+fun levelOf(score: int) > Level {
+    if (score >= 80) {
+        return Level.high;
+    }
+    if (score >= 50) {
+        return Level.mid;
+    }
+    return Level.low;
+}
+
+fun describe(level: Level) > str {
+    if (level == Level.high) {
+        return "HIGH";
+    }
+    if (level == Level.mid) {
+        return "MID";
+    }
+    return "LOW";
+}
+
+fun main(args: [str]) > void {
+    foreach (score in [95, 60, 10]) {
+        std\print("{score} {describe(levelOf(score))}");
+    }
+}

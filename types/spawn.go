@@ -80,6 +80,9 @@ type SpawnRequest struct {
 	// Isolated is true when the caller asked for the agent to run outside this checkout,
 	// such as in its own worktree.
 	Isolated bool
+	// Agent is the subagent id the host reported for the CALLER, empty for the session's
+	// main agent, as on CommandRequest.
+	Agent string
 	// Parent is the description the CALLING agent was itself spawned with, empty when the
 	// caller is a root session or its spawn was never recorded.
 	Parent string

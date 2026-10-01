@@ -110,6 +110,10 @@ export object HookBinary {
     stamped: bool,
     moved: [str],
     commit: str = "",
+    // path is the binary judged, and workspace the checkout whose sources it was judged
+    // against: the hook's own, which need not be the checkout a command runs in.
+    path: str = "",
+    workspace: str = "",
 }
 
 // isStale is the stale-binary rule's verdict on bin: this workspace's ./magus, and either
@@ -129,12 +133,13 @@ export fun hookBinary(workspace: str) > HookBinary {
     final sameFile = binaries\onDisk().sameFile;
     if (bin.path == "" or (bin.path != own and !sameFile(own, bin.path))) { return none; }
     if (bin.stamp == "") {
-        return HookBinary{ ours = true, stamped = false, moved = [<str>] };
+        return HookBinary{ ours = true, stamped = false, moved = [<str>], path = bin.path, workspace = workspace };
     }
     final built = fs\stat(bin.path) catch null;
     if (built == null) { return none; }
     final moved = movedSince(workspace, stamp: bin.stamp, builtAt: built!.mtime) catch [<str>];
-    return HookBinary{ ours = true, stamped = true, moved = moved, commit = stampedCommit(bin.stamp) };
+    return HookBinary{ ours = true, stamped = true, moved = moved, commit = stampedCommit(bin.stamp),
+        path = bin.path, workspace = workspace };
 }
 
 final unstampedAdvice = "./magus carries no go-build stamp: it was linked by a bare `go build` "
@@ -221,18 +226,25 @@ export fun stateWrite(programs: [helpers\Program]) > StateWrite? {
 }
 
 // BaseCheck is whether a commit is on the base branch: known is false when the repository
-// could not say (no such ref, or a commit it lacks).
+// could not say (no such ref, or a commit it lacks). unreadable says why the base ref itself
+// could not be resolved, which is a broken setup rather than an unknown answer.
 export object BaseCheck {
     base: str,
     known: bool,
     contained: bool,
+    unreadable: str = "",
 }
 
 // onBase asks the workspace's repository whether commit is an ancestor of, or equal to,
 // the base ref. Offline: it reads the local ref and never fetches.
 export fun onBase(workspace: str) > fun (commit: str) > BaseCheck {
     return fun (commit: str) > BaseCheck {
-        final base = vcs\base();
+        final resolved = vcs\base(dir: workspace) catch null;
+        if (resolved == null) {
+            return BaseCheck{ base = "", known = false, contained = false,
+                unreadable = "the base ref of the workspace at `{workspace}` cannot be resolved" };
+        }
+        final base = resolved!;
         final res = vcs\cmd(["merge-base", "--is-ancestor", commit, base],
             opts: {"quiet": true, "allow_failure": true, "dir": workspace}) catch null;
         if (res == null or (res!.code != 0 and res!.code != 1)) {
@@ -263,9 +275,11 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
             why = "it was built before {movedList(hook)}";
         }
         return magus\guard.deny("`magus {verb}` writes state other checkouts and other magus versions read, "
-            + "and the ./magus that would run it is stale: {why}. It would stamp that state with a build "
-            + "its own checkout has moved past, and can undo what a newer magus wrote. "
-            + "Rebuild first with `./magus run go-build .`, then rerun.");
+            + "and the magus answering this hook ({hook.path}) is stale against {hook.workspace}: {why}. "
+            + "That is the hook's binary, judged against its own checkout, not the one this command names. "
+            + "It would stamp that state with a build its checkout has moved past, and can undo what a "
+            + "newer magus wrote. Rebuild it from its own sources with `{hook.path} --root {hook.workspace} "
+            + "run go-build .`, then rerun.");
     }
     if (!w!.shared or !hook.ours) {
         return magus\guard.allow();
@@ -276,6 +290,11 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
             + "stamped one. Rebuild it with `./magus run go-build .`, then rerun.");
     }
     final check = onBase(hook.commit);
+    if (check.unreadable != "") {
+        return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and "
+            + "{check.unreadable}, so nothing can say whether ./magus was built from the base branch. "
+            + "Fix the workspace's version control, then rerun.");
+    }
     if (!check.known or check.contained) {
         return magus\guard.allow();
     }
@@ -419,7 +438,10 @@ final stateWriters = [
 ];
 
 test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
-    final staleBin = fun () > HookBinary { return stale(["internal/guard/shell.go"]); };
+    final staleBin = fun () > HookBinary {
+        return HookBinary{ ours = true, stamped = true, moved = ["internal/guard/shell.go"],
+            path = "/repo/magus", workspace = "/repo" };
+    };
     foreach (argv in stateWriters + [
         ["./magus", "agent", "install", ".claude/skills", "--force"],
         ["./magus", "config", "set", "key=cache.dir,value=/tmp/c"],
@@ -428,7 +450,8 @@ test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
         final v = writeVerdict(argv, bin: staleBin, onBase: mainHolds(["c1"]));
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names what moved");
-        std\assert(v.reason.indexOf("./magus run go-build .") != null, message: "names the rebuild");
+        std\assert(v.reason.indexOf("(/repo/magus) is stale against /repo") != null, message: "names the hook's binary and its checkout");
+        std\assert(v.reason.indexOf("`/repo/magus --root /repo run go-build .`") != null, message: "names the rebuild of that binary");
     }
     final unstamped = fun () > HookBinary { return HookBinary{ ours = true, stamped = false, moved = [<str>] }; };
     final v = writeVerdict(["./magus", "init"], bin: unstamped, onBase: mainHolds([<str>]));
@@ -453,6 +476,22 @@ test "a build off the base branch is denied shared writes and allowed its own ch
     std\assert(writeVerdict(["./magus", "init"], bin: built("f00d"), onBase: unknownBase).decision == "allow", message: "a base the repository cannot answer for");
     final noCommit = writeVerdict(["./magus", "init"], bin: built(""), onBase: mainHolds([<str>]));
     std\assert(noCommit.decision == "deny" and noCommit.reason.indexOf("names no commit") != null, message: "a stamp with no commit");
+}
+
+test "a base ref that cannot be resolved denies shared writes, naming why" {
+    final missing = (fs\tempDir("unresolvable") catch "") + "/gone";
+    final check = onBase(missing)("c1");
+    std\assert(check.unreadable.indexOf(missing) != null, message: "onBase names the workspace: {check.unreadable}");
+    std\assert(!check.known, message: "no answer is claimed");
+
+    final broken = fun (commit: str) > BaseCheck { return check; };
+    foreach (argv in stateWriters) {
+        final v = writeVerdict(argv, bin: built("c1"), onBase: broken);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf(check.unreadable) != null, message: v.reason);
+    }
+    std\assert(writeVerdict(["./magus", "config", "set", "key=cache.dir,value=/tmp/c"], bin: built("c1"), onBase: broken).decision == "allow",
+        message: "a checkout's own state is not judged against the base");
 }
 
 test "read-only verbs, dry runs and another binary stay with the advisory" {

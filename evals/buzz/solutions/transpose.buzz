@@ -1,0 +1,19 @@
+import "std";
+
+fun transpose(grid: [[int]]) > [[int]] {
+    final result = mut [<[int]>];
+    for (var col = 0; col < grid[0].len(); col = col + 1) {
+        final row = mut [<int>];
+        foreach (line in grid) {
+            row.append(line[col]);
+        }
+        result.append(row);
+    }
+    return result;
+}
+
+fun main(args: [str]) > void {
+    foreach (row in transpose([[1, 2, 3], [4, 5, 6]])) {
+        std\print(row.join(" "));
+    }
+}

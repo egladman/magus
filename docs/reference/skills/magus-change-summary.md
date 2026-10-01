@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7318
-skill_short_bytes: 5658
+skill_full_bytes: 7319
+skill_short_bytes: 5659
 ---
 
 # magus-change-summary
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2bbf694a7a43` |
+| `skill-content` | `6058979e8d15` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,7 +80,7 @@ brief.
 
    Ignore generated outputs when identifying the change.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `client` (`magus\query`, `magus\explain`, `magus\describeFile`); otherwise use:
+   `client` (`magus\query`, `magus\explain`, `magus\describe.file`); otherwise use:
 
    ```sh
    magus query "<project or feature terms>"
@@ -240,7 +240,7 @@ brief. The output is a decision aid, not a chronological commit dump.
    Ignore generated outputs when identifying the change; trace them to their
    declared source and generator instead.
 4. Map the source files to projects and graph entities. Prefer MCP
-   `client` (`magus\query`, `magus\explain`, `magus\describeFile`); otherwise use:
+   `client` (`magus\query`, `magus\explain`, `magus\describe.file`); otherwise use:
 
    ```sh
    magus query "<project or feature terms>"

@@ -2162,7 +2162,62 @@ func gitHookBody(name, command string) string {
 	if name == "post-checkout" {
 		guard = "[ \"$3\" = \"1\" ] || exit 0\n"
 	}
-	return guard + command + " >/dev/null 2>&1 || true\n"
+	return guard + command + gitHookSuffix + "\n"
+}
+
+// gitHookSuffix is what gitHookBody appends to the command, so a reader can take it off.
+const gitHookSuffix = " >/dev/null 2>&1 || true"
+
+// GitRefreshHook is the refresh hook installed in a git repository, as one of its
+// checkouts sees it.
+type GitRefreshHook struct {
+	// Command is as written in the hook. A relative binary such as ./magus resolves
+	// against Top, not against the magus workspace root, which may sit below it.
+	Command string
+	// Top is the checkout's top level, the directory git runs hooks in.
+	Top string
+}
+
+// ReadGitRefreshHook returns the refresh hook installed for root's git repository, read
+// from post-checkout, the hook a new worktree fires. ok is false when no refresh section
+// is installed. A root outside any git repository is [types.ErrVCSUnsupported]: another
+// VCS keeps its hooks elsewhere, so "none installed" would be a guess.
+func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, ok bool, err error) {
+	paths, inRepo, err := gitRepoPathsOf(ctx, root)
+	if err != nil {
+		return GitRefreshHook{}, false, err
+	}
+	if !inRepo {
+		return GitRefreshHook{}, false, types.ErrVCSUnsupported
+	}
+	path := filepath.Join(paths.hooksDir, "post-checkout")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return GitRefreshHook{}, false, nil
+	}
+	if err != nil {
+		return GitRefreshHook{}, false, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	text := string(data)
+	spans, err := managedSpans(text, refreshMarkers)
+	if err != nil {
+		return GitRefreshHook{}, false, fmt.Errorf("vcs: %s: %w", path, err)
+	}
+	for _, s := range spans {
+		for line := range strings.Lines(text[s.start:s.end]) {
+			line = strings.TrimSpace(line)
+			cmd, found := strings.CutSuffix(line, gitHookSuffix)
+			if !found {
+				continue
+			}
+			top, err := gitVCS{}.Root(ctx, root)
+			if err != nil {
+				return GitRefreshHook{}, false, fmt.Errorf("vcs: top level of %s: %w", root, err)
+			}
+			return GitRefreshHook{Command: cmd, Top: top}, true, nil
+		}
+	}
+	return GitRefreshHook{}, false, nil
 }
 
 // InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
@@ -2490,6 +2545,47 @@ func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (
 		}
 	}
 	return ignored, nil
+}
+
+// IgnoreSources lists the files outside the working tree that git reads ignore rules
+// from: the repository's info/exclude, which a linked worktree shares with its main
+// checkout, and core.excludesFile, or git's XDG default when that is unset. A listed file
+// need not exist. The .gitignore files inside the tree are not listed, since anything
+// that reads the tree already sees them.
+func (v gitVCS) IgnoreSources(ctx context.Context, root string) ([]string, error) {
+	exclude, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
+	if err != nil {
+		return nil, fmt.Errorf("git rev-parse --git-path info/exclude: %w", err)
+	}
+	global, err := gitOutput(ctx, root, gitOpts{}, "config", "--path", "--get", "core.excludesFile")
+	switch {
+	case err == nil:
+	case exitCode(err) == 1: // unset: git falls back to its XDG location
+		global, err = gitDefaultExcludesFile()
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("git config core.excludesFile: %w", err)
+	}
+	out := []string{strings.TrimSpace(exclude)}
+	if g := strings.TrimSpace(global); g != "" {
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+// gitDefaultExcludesFile is where git looks for global ignore rules when core.excludesFile
+// is unset: $XDG_CONFIG_HOME/git/ignore, or ~/.config/git/ignore.
+func gitDefaultExcludesFile() (string, error) {
+	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
+		return filepath.Join(x, "git", "ignore"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "git", "ignore"), nil
 }
 
 // gitRedirectVars are the environment variables that move git off the repository the

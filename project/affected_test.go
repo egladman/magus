@@ -822,3 +822,26 @@ func TestUnregisteredDepErrorMessage(t *testing.T) {
 		assert.Contains(t, msg, want, "Error() missing %q", want)
 	}
 }
+
+// BenchmarkAffectedFromPaths measures how quickly AffectedFromPaths resolves
+// the closure for a set of changed files in a medium-sized workspace.
+func BenchmarkAffectedFromPaths(b *testing.B) {
+	const n = 50
+	root := b.TempDir()
+	buildSyntheticWorkspace(b, root, n)
+
+	ws, err := Discover(context.Background(), root)
+	if err != nil {
+		b.Fatal(err)
+	}
+	// Point to a real file under svc00 as the changed path.
+	changed := []string{filepath.Join(root, "svc00", "magusfile.tl")}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := AffectedFromPaths(context.Background(), ws, changed)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}

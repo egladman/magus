@@ -1,5 +1,5 @@
 // title: Charm axes: one question each, and a charm that checks itself
-// desc: The shape a real publish target reaches: two charms on separate axes, a guard for the pair that answers one question twice, and magus.raise so a refusal carries a code instead of a sentence.
+// desc: The shape a real publish target reaches: two charms on separate axes, a guard for the pair that answers one question twice, and magus\raise so a refusal carries a code instead of a sentence.
 // doc: recommendations|Recommendations
 //
 // Charms that answer one question each, and fail when they cannot. Step 8 showed a charm

@@ -24,7 +24,7 @@ import (
 func Describe(name string) []types.ModuleEntry {
 	// Go modules and Buzz modules are ONE surface here, deliberately. This
 	// function is what `magus describe modules`, the knowledge graph, the docs
-	// site, REPL completion, MCP describe_kind and magus\describeModules all read,
+	// site, REPL completion, MCP describe_kind and magus\describe.module all read,
 	// so folding both kinds in at this one point is what makes a Buzz-implemented
 	// module indistinguishable from a Go-implemented one everywhere it is seen.
 	// Which language implements a stdlib module is an implementation detail, and

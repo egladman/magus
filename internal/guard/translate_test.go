@@ -34,7 +34,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		{`grep -o 'MGS[0-9]' docs/reference/codes/README.md`, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=diagnostic 'id=~^diagnostic:MGS[0-9]\d{3}$' -o name`}},
 		// A literal code keeps symbol-search's per-code answer, on one file too.
 		{`grep -n MGS1046 types/diagnostic.go`, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS1046"}},
-		{`grep -n 'MGS1046\|MGS3020' docs/reference/codes/README.md`, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS1046,diagnostic:MGS3020"}},
+		{`grep -n 'MGS1046\|MGS3022' docs/reference/codes/README.md`, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS1046,diagnostic:MGS3022"}},
 
 		// Case-insensitive, inverted, counted, listed or with context: a different question.
 		{`grep -in 'MGS30[23]' docs/reference/codes/sandbox/README.md`, denyRule{}},
@@ -42,7 +42,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		{`grep -c 'MGS30[23]' docs/reference/codes/sandbox/README.md`, denyRule{}},
 		{`grep -rl 'MGS30[23]' docs/`, denyRule{}},
 		{`grep -n -A3 'MGS30[23]' docs/reference/codes/sandbox/README.md`, denyRule{}},
-		{`grep -x 'MGS3020' docs/reference/codes/sandbox/README.md`, denyRule{}},
+		{`grep -x 'MGS3022' docs/reference/codes/sandbox/README.md`, denyRule{}},
 		// A line anchor asks about layout, not about codes.
 		{`grep -n '^MGS30[23]' docs/reference/codes/sandbox/README.md`, denyRule{}},
 		// BZZ codes have no graph node.
@@ -57,7 +57,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		// Anything past the digits is text.
 		{`grep -rn 'MGS30[23].*sandbox' .`, denyRule{}},
 		// In BRE a bare `|` is a literal.
-		{`grep -rn 'MGS3020|MGS3021' .`, denyRule{}},
+		{`grep -rn 'MGS3022|MGS3023' .`, denyRule{}},
 		// grep reads `\d` as a literal d outside -P.
 		{`grep -rn 'MGS30\d\d' .`, denyRule{}},
 		// A log holds what one run emitted, which no node answers.
@@ -88,9 +88,9 @@ func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
-	assert.Contains(t, v.Deny, "MGS3020, MGS3021")
+	assert.Contains(t, v.Deny, "MGS3022, MGS3023")
 	assert.Contains(t, v.Deny, "Its answer (")
-	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3020\n")
+	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3022\n")
 }
 
 // writeTree lays files out under a fresh root and returns it with symlinks resolved.
@@ -390,6 +390,9 @@ func TestFindTranslation(t *testing.T) {
 			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
 		{`find internal -name '*.go' | xargs grep -l package`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`, "not reproduced"},
 		{`find internal -name 'deep.go' -print`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?deep\.go$' -o name`, "file:internal/store/sub/deep.go"},
+		// A negation no one pattern over ids says: the files are enumerated.
+		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, `query kind=file 'id=~^file:(?:internal/store/store\.go|internal/store/store_test\.go)$' -o name`,
+			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
 
 		// Markdown has no file node, so the sets differ.
 		{`find docs -name '*.md'`, deps, "", ""},
@@ -397,7 +400,6 @@ func TestFindTranslation(t *testing.T) {
 		// A predicate the file nodes do not answer.
 		{`find internal -iname '*.go'`, deps, "", ""},
 		{`find internal -name '*.go' -newer go.mod`, deps, "", ""},
-		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, "", ""},
 		{`find internal -name '*.go' -exec cat {} \;`, deps, "", ""},
 		{`find internal -type f`, deps, "", ""},
 		// find negates a class with `[!x]`, which the proof would read as a literal.

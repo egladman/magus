@@ -140,26 +140,26 @@ export object Site {
     blog: str = "",
     outDir: str = "",
 
-    // Every project's TARGET graph, injected once by site_render() from magus.targets()
-    // in the magusfile. The SSG cannot call magus.targets() itself: a site module may
+    // Every project's TARGET graph, injected once by site_render() from magus\describe.graph()
+    // in the magusfile. The SSG cannot call magus\describe.graph() itself: a site module may
     // read magus's own declared types (TargetGraph, Projects, ...) but not call the host
     // `magus` module itself, which is deliberate - the generator takes data in and stays
     // config-agnostic. This is the authoritative project inventory (magus's own, not a
     // filesystem scan) and it carries each project's targets, so /development/ renders
     // from typed data with no subprocess and no markdown to re-parse.
-    // TargetGraph is the generated return type of magus.targets(). Keeping it here makes
+    // TargetGraph is the generated return type of magus\describe.graph(). Keeping it here makes
     // the renderer and every consumer compile-check their graph access at the boundary.
     // Host-owned mirror types are available to the checker, but their values arrive
-    // from magus.targets() at the render boundary; they are not constructors in a
+    // from magus\describe.graph() at the render boundary; they are not constructors in a
     // file-imported renderer module. null is only this pre-injection placeholder.
     targets: TargetGraph = null,
 
-    // The PROJECT dependency DAG, injected the same way from magus.projectGraph(). targets
+    // The PROJECT dependency DAG, injected the same way from magus\projectGraph(). targets
     // above carries the targets inside each project; this carries how the projects
     // themselves relate - nodes in topological order, each node's direct dependencies,
     // and its blast radius. /development/ needs both: one answers "what can I run in
     // this project", the other "what does changing it reach".
-    // Graph is the generated Buzz return type of magus.projectGraph().
+    // Graph is the generated Buzz return type of magus\projectGraph().
     graph: Graph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.

@@ -24,15 +24,16 @@ type AllowedSet struct {
 }
 
 // GuardRebind rejects requests that a browser could forge via DNS rebinding.
-// It validates two headers on every request to /mcp:
+// It validates two headers on every request it wraps:
 //
 //   - Host (always present): the parsed hostname must be in allowed.
 //   - Origin (browser-only): if present, the parsed hostname must be in allowed.
-//     Absent Origin is allowed — non-browser MCP clients (a CLI, a desktop app,
+//     Absent Origin is allowed — non-browser clients (a CLI, a desktop app,
 //     curl) do not send it.
 //
-// Health routes (/livez, /readyz, /healthz) are mounted outside this middleware
-// and are deliberately left unguarded.
+// The server wraps its console routes in it. /mcp and the health routes
+// (/livez, /readyz, /healthz) are mounted outside it: /mcp trusts its bearer
+// token alone, and the health routes are deliberately unguarded.
 func GuardRebind(format rpcerr.Format, allowed AllowedSet, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !isAllowedHost(r.Host, allowed) {
@@ -59,7 +60,7 @@ var hostNotAllowed = rpcerr.Error{
 // Allow returns a copy of a that additionally accepts the given hostname, for a
 // deliberately trusted cross-origin caller such as the hosted site the dashboard is served
 // from. The receiver is not mutated (its names map is copied), so widening one route's
-// accept-list never leaks into the shared set used by /mcp or the /api bridge. An empty or
+// accept-list never leaks into the shared set the other loopback routes use. An empty or
 // port-only host is ignored.
 func (a AllowedSet) Allow(host string) AllowedSet {
 	host = strings.ToLower(strings.TrimSpace(host))
@@ -80,7 +81,7 @@ func (a AllowedSet) Allow(host string) AllowedSet {
 // already-parsed bind address. Loopback addresses are handled dynamically by
 // isAllowedHost via IsLoopback(), so they need no explicit entry. When addr
 // contains a concrete non-loopback, non-unspecified host it is stored in extra
-// so operators who deliberately bind to a LAN IP can still reach /mcp.
+// so operators who deliberately bind to a LAN IP can still reach the console routes.
 func AllowedHosts(addr netip.AddrPort) AllowedSet {
 	set := AllowedSet{
 		names: map[string]struct{}{"localhost": {}},

@@ -62,8 +62,6 @@ type run struct {
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
-	Preflight         []string // targets run first as a separate pass; see WithPreflight
-	preflight         []stage  // Preflight resolved against the selection by runResolved
 	narrowing         *project.OpNarrowing
 	stdio             *ProcessStdio
 }
@@ -211,12 +209,6 @@ func (e redactedError) Unwrap() error { return e.err }
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
-	// Before anything runs or locks: a preflight outside the closure is a refusal.
-	pre, err := m.planPreflight(targets, o.Preflight)
-	if err != nil {
-		return err
-	}
-	o.preflight = pre
 	ctx = attributeRun(ctx)
 	if scope, ok := undeclaredScopeEvent(targets); ok {
 		journal.Emit(ctx, scope)
@@ -495,6 +487,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, magusfileGlobs(".")...)
 		}
 	}
+	// The symbol indexer reads its language's sources and nothing else the project
+	// declares. Keyed on the whole project, a rewrite of installed skills under the root
+	// project marked its Go index out of date when no symbol could have moved.
+	// An indexing spell that declares no sources keeps the whole project, which is the
+	// claim that can only over-invalidate.
+	if target == spells.SymbolIndexOp {
+		if indexed := symbolIndexSources(p); len(indexed) > 0 {
+			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
+			if p.Path != "." {
+				step.Sources = append(step.Sources, magusfileGlobs(".")...)
+			}
+		}
+	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
 	// already spans every target rather than the running one (a chained target's writes land
@@ -653,7 +658,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 type composedRunner struct {
 	m            *Magus
 	runs         *cache.TargetRuns
-	newStep      func(*types.Project, string) cache.Step
+	newStep      func(*types.Project, string) (cache.Step, error)
 	skipReplay   bool
 	forceNoCache bool
 	cacheOpts    []cache.RunOption
@@ -686,7 +691,11 @@ func (r *composedRunner) runSkipCache(ctx context.Context, ref types.TargetRef) 
 		// No ExtraArgs and no Spell: `--` args and a spell::op filter belong to the target
 		// the user named, the same boundary runBuzzDependencies draws for a dependency.
 		handler := r.m.targetHandler(ref.Target)
-		_, err := r.m.cache.RunAside(ctx, r.newStep(owner, ref.Target), func(ctx context.Context) error {
+		step, err := r.newStep(owner, ref.Target)
+		if err != nil {
+			return err
+		}
+		_, err = r.m.cache.RunAside(ctx, step, func(ctx context.Context) error {
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(owner.Path)...))
 			return handler(buzz.WithTargetInterceptor(ctx, r.interceptor(owner)), owner)
 		}, r.cacheOpts...)
@@ -703,7 +712,10 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 		// runs under the scheduled unit rather than under whichever composer asked first; see
 		// cache.SharedStepContext for the ceiling this stops from leaking sideways.
 		memberCtx = cache.SharedStepContext(memberCtx)
-		member := r.newStep(p, name)
+		member, err := r.newStep(p, name)
+		if err != nil {
+			return err
+		}
 		member.SkipReplay = r.skipReplay
 		member.NoCache = member.NoCache || r.forceNoCache
 		return r.runs.Once(memberCtx, types.TargetRef{Project: p.Path, Target: name}, func() error {
@@ -777,7 +789,9 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 		toolVersions = reuse.toolVersions
 	}
 	if toolVersions == nil && keysTools(p, target) {
-		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
+		if toolVersions, err = m.toolVersionsByProject(ctx, []*types.Project{p}); err != nil {
+			return "", nil, err
+		}
 	}
 	// Not part of sweepReuse: an observation probe runs only for a project whose
 	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
@@ -812,7 +826,15 @@ func alwaysRuns(p *types.Project, target string) bool {
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
+//
+// The scip step takes no tool versions: the indexer is its own binary, keyed through the
+// observation its spell declares for it, and of the spell's other tools only those the
+// indexer declares it uses (go for scip-go, never golangci-lint or tsc) key it, through
+// observationsForTarget.
 func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
+	if step.Target == spells.SymbolIndexOp {
+		toolVersions = nil
+	}
 	step.ToolVersions = toolVersions
 	// Appended, not assigned: buildStep already put the target's ctx.observes lines
 	// here, and a probed observation is the same input class from the other source.
@@ -1040,8 +1062,32 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 		strings.Join(violations, "\n  "))
 }
 
-func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) map[string][]string {
+// toolVersionsByProject is each project's tool key lines. The error is MGS3035 for a
+// tool that runs but cannot say which build it is; see probeOne.
+func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Project) (map[string][]string, error) {
 	return m.probeTools(ctx, projects, nil)
+}
+
+// toolVersionsEach is toolVersionsByProject for a reader that can do without some
+// projects: a project with an unprobeable tool is left out of the lines and named in
+// failed with its MGS3035, rather than failing every other project with it.
+func (m *Magus) toolVersionsEach(ctx context.Context, projects []*types.Project) (lines map[string][]string, failed map[string]error) {
+	prober := m.newToolProber()
+	lines, err := prober.probeVersions(ctx, projects, nil, nil)
+	if err == nil {
+		return lines, nil
+	}
+	// Every reading is memoized now, so asking per project spawns nothing more.
+	lines, failed = map[string][]string{}, map[string]error{}
+	for _, p := range projects {
+		one, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
+		if err != nil {
+			failed[p.Path] = err
+			continue
+		}
+		maps.Copy(lines, one)
+	}
+	return lines, failed
 }
 
 // probeTools is toolVersionsByProject with an optional second output: when extracted is
@@ -1057,7 +1103,7 @@ func (m *Magus) toolVersionsByProject(ctx context.Context, projects []*types.Pro
 // operation should hold its own long-lived prober instead (newToolProber, held across
 // calls the way the run path's `prober` variable is) so repeat asks replay rather than
 // re-spawning the probe.
-func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) map[string][]string {
+func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extracted map[string]string) (map[string][]string, error) {
 	return m.newToolProber().probeVersions(ctx, projects, nil, extracted)
 }
 
@@ -1073,6 +1119,7 @@ type toolProber struct {
 type toolProbe struct {
 	once sync.Once
 	r    toolReading
+	err  error
 }
 
 func (m *Magus) newToolProber() *toolProber {
@@ -1089,15 +1136,21 @@ func (tp *toolProber) dir(p *types.Project) string {
 // probeVersions returns each project's "spell:tool:token" key lines, probing what is not
 // yet memoized. only narrows the tools to probe and key on; nil means every declared
 // tool. It is safe for concurrent use; extracted is written only by the calling goroutine.
-func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) map[string][]string {
+//
+// A tool that runs but cannot be probed fails the whole call with MGS3035 and no lines:
+// any key minted from them would leave that tool out.
+func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Project, only func(spell, tool string) bool, extracted map[string]string) (map[string][]string, error) {
 	if tp.mode == "off" {
-		return nil
+		return nil, nil //nolint:nilnil // probing off keys no tool lines; a nil map is that value
 	}
 	wanted := func(s *spells.Spell, tool string) bool {
 		t, _ := s.Tool(tool)
 		return t.HasProbe() && (only == nil || only(s.Name(), tool))
 	}
-	memo := tp.m.probeReadings(ctx, tp, projects, wanted)
+	memo, err := tp.m.probeReadings(ctx, tp, projects, wanted)
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[string][]string, len(projects))
 	for _, p := range projects {
 		dir := tp.dir(p)
@@ -1123,7 +1176,7 @@ func (tp *toolProber) probeVersions(ctx context.Context, projects []*types.Proje
 			out[p.Path] = vers
 		}
 	}
-	return out
+	return out, nil
 }
 
 // toolReading is one probe's two consumers: the cache key wants a narrowed token, the
@@ -1144,8 +1197,9 @@ type toolReading struct{ token, full string }
 // decided every target was a cache hit. "A version probe is cheap" holds for one project
 // and stops holding at the workspace sizes magus is for.
 //
-// A key another caller is already probing is awaited rather than probed again.
-func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*types.Project, wanted func(*spells.Spell, string) bool) map[string]toolReading {
+// A key another caller is already probing is awaited rather than probed again. The
+// error joins every MGS3035 among the readings, in key order.
+func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*types.Project, wanted func(*spells.Spell, string) bool) (map[string]toolReading, error) {
 	type want struct {
 		spell *spells.Spell
 		dir   string
@@ -1173,25 +1227,30 @@ func (m *Magus) probeReadings(ctx context.Context, tp *toolProber, projects []*t
 	}
 	tp.mu.Unlock()
 	if len(wants) == 0 {
-		return nil
+		return nil, nil //nolint:nilnil // nothing wanted reads as no readings; a nil map is that value
 	}
 
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(m.probeConcurrency())
 	for _, w := range wants {
 		g.Go(func() error {
-			w.probe.once.Do(func() { w.probe.r = m.probeOne(gctx, w.spell, w.tool, w.dir) })
+			w.probe.once.Do(func() { w.probe.r, w.probe.err = m.probeOne(gctx, w.spell, w.tool, w.dir) })
+			// Kept on the probe rather than returned, so one unprobeable tool does not
+			// cancel the probes beside it and every one of them is reported.
 			return nil
 		})
 	}
-	// Every probe records its own failure as UNPROBED, so nothing here returns an error
-	// and Wait is only a barrier.
 	_ = g.Wait()
 	readings := make(map[string]toolReading, len(wants))
-	for key, w := range wants {
+	var errs []error
+	for _, key := range slices.Sorted(maps.Keys(wants)) {
+		w := wants[key]
 		readings[key] = w.probe.r
+		if w.probe.err != nil {
+			errs = append(errs, w.probe.err)
+		}
 	}
-	return readings
+	return readings, errors.Join(errs...)
 }
 
 // probeConcurrency bounds the probe fan-out. It rides the run's own concurrency setting
@@ -1210,33 +1269,59 @@ func (m *Magus) probeConcurrency() int {
 	return runtime.NumCPU()
 }
 
-// probeOne reads one tool's version, recording a failure as UNPROBED rather than
-// returning an error: a tool that cannot say which build it is keeps the miss
-// deterministic, where keying on nothing would replay across an upgrade.
-func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string) toolReading {
+// absentMessage is the one line an absent tool is reported with.
+func absentMessage(tool, cause string) string {
+	return fmt.Sprintf("magus: %s is not installed, so its cache key records %s: %s", tool, unprobedToken, cause)
+}
+
+// unprobedToken keys a tool that is absent. Nothing that drives an absent tool can pass,
+// so no result is ever recorded under it that a later run could wrongly replay, and
+// installing the tool moves the key.
+const unprobedToken = "UNPROBED"
+
+// probeOne reads one tool's version.
+//
+// A failed probe means one of two things, and they get opposite answers. An absent tool
+// (see probeAbsence) keys as unprobedToken and is warned about once per change to the
+// probe's inputs, since the absence is cached like a version. A tool that is there and
+// still cannot say which build it is fails with MGS3035: its ops can pass, and a constant
+// in their key would replay those passes across an upgrade.
+func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string) (toolReading, error) {
 	t, _ := s.Tool(tool)
 	// A declared constant needs no process. It stays out of `full`: an author typed it,
 	// so there is nothing for the gate to compare.
 	if t.Probe.Bin == "" {
-		return toolReading{token: t.Key.Const}
+		return toolReading{token: t.Key.Const}, nil
 	}
-	key, cacheable := probeCacheKey(t.Probe, dir)
-	probed, hit := "", false
-	if cacheable {
-		probed, hit = m.cachedProbe(key)
-	}
-	var err error
-	if !hit {
-		probed, err = s.ProbeVersion(ctx, tool, dir)
-		if err == nil && cacheable {
-			m.storeProbe(key, probed)
+	// The absence is decided inside the fork, so probeCached records it as an absence
+	// (no TTL) rather than as a failure.
+	probed, err := m.probeCached(ctx, t.Probe, dir, func() (string, error) {
+		out, err := s.ProbeVersion(ctx, tool, dir)
+		if err != nil && ctx.Err() == nil {
+			if cause, absent := m.probeAbsence(s, t.Probe, dir, err); absent {
+				return "", &absentTool{cause: cause}
+			}
 		}
-	}
+		return out, err
+	})
 	if err != nil {
-		slog.WarnContext(ctx, "magus: tool-version probe failed; cache key records UNPROBED",
-			slog.String("spell", s.Name()), slog.String("tool", tool),
-			slog.String("dir", dir), slog.String("err", err.Error()))
-		return toolReading{token: "UNPROBED"}
+		var absent *absentTool
+		switch {
+		case errors.As(err, &absent):
+			if absent.recorded {
+				slog.DebugContext(ctx, absentMessage(tool, absent.cause), slog.String("spell", s.Name()), slog.Bool("recorded", true))
+			} else {
+				slog.WarnContext(ctx, absentMessage(tool, absent.cause), slog.String("spell", s.Name()))
+			}
+			return toolReading{token: unprobedToken}, nil
+		case ctx.Err() != nil:
+			// A cancelled run keys nothing, and its failure says nothing about the tool.
+			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
+		default:
+			return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
+				"%s:%s runs in %s but cannot say which build it is, so no cache key could tell its upgrades apart: %v",
+				s.Name(), tool, dir, err)
+		}
 	}
 	token, note := spells.VersionToken(probed, t.Key)
 	if note != "" {
@@ -1251,7 +1336,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	if full, ok := spells.ExtractVersion(probed); ok {
 		r.full = full
 	}
-	return r
+	return r, nil
 }
 
 // probeObservations runs each resolved spell's declared observation probes and returns
@@ -1273,25 +1358,30 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 	for _, p := range projects {
 		drivenHere := driven[p.Path]
 		for _, s := range p.ResolvedSpells {
-			if !s.HasObservationProbe() {
-				continue
-			}
 			for _, tool := range s.ToolNames() {
 				t, _ := s.Tool(tool)
+				probe, fork := t.Observe, func() (string, error) { return s.ProbeObservation(ctx, tool, p.Dir) }
+				drivenAs := s.Name() + ":" + tool
 				if !t.HasObservationProbe() {
-					continue
+					// A tool the symbol indexer uses is observed through its version argv,
+					// for the scip op alone: only a caller scoped to that op names it.
+					if driven == nil || !slices.Contains(indexerUses(s, spells.SymbolIndexOp), tool) {
+						continue
+					}
+					probe, fork = t.Probe, func() (string, error) { return s.ProbeVersion(ctx, tool, p.Dir) }
+					drivenAs = indexerUseKey(s.Name(), tool)
 				}
 				// The spawn the doc above promises a target does not pay for unless it
 				// drives the binary. observationsForTarget already dropped an undriven
 				// tool from the KEY, so skipping it here changes no key; it only stops
 				// `magus run build` paying govulncheck's spawn on every project.
-				if driven != nil && !drivenHere[s.Name()+":"+tool] {
+				if driven != nil && !drivenHere[drivenAs] {
 					continue
 				}
 				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
 				value, hit := memo[tk]
 				if !hit {
-					probed, err := s.ProbeObservation(ctx, tool, p.Dir)
+					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
 					if err != nil {
 						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),
@@ -1311,8 +1401,9 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 	return out
 }
 
-// targetDrivenBins is the "spell:bin" set target's body statically reaches, the same
-// walk observationsForTarget narrows the key with. Returning it separately is what lets
+// targetDrivenBins is the "spell:bin" set target's body statically reaches, plus the bin
+// of a spell op named target itself, which runs with no body to walk (the scip op, `magus
+// run go-vet`): the same walk observationsForTarget narrows the key with. Returning it separately is what lets
 // the SPAWN be skipped rather than only the key line: a nil result means the target
 // drives nothing, and probeObservations reads nil as "probe everything" for callers that
 // have no target to scope by, so the two are not interchangeable.
@@ -1327,6 +1418,14 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 			if op, ok := p.ResolvedSpells[i].Op(opName); ok && op.Bin != "" {
 				driven[use.Spell+":"+op.Bin] = true
 			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok && op.Bin != "" {
+			driven[s.Name()+":"+op.Bin] = true
+		}
+		for _, tool := range indexerUses(s, target) {
+			driven[indexerUseKey(s.Name(), tool)] = true
 		}
 	}
 	return driven
@@ -1379,30 +1478,51 @@ func targetDrivenEnvKeys(p *types.Project, target string) []string {
 // through a helper the walk cannot follow is invisible, and TargetSpellUse.Spell is the
 // IMPORT HANDLE, which equals the spell name only for an unaliased import. Both leave a
 // target keyed as it was before, never keyed on the wrong thing.
+//
+// A spell op named target itself counts too, as in targetDrivenBins: a bare op has no
+// body for the walk to read, and the scip op keys on its indexer's version this way, and
+// on the version of each tool the indexer declares it uses.
 func observationsForTarget(p *types.Project, target string, probed map[string]string) []string {
 	if len(probed) == 0 {
 		return nil
 	}
 	var out []string
+	add := func(spell, tool string) {
+		key := spell + ":" + tool
+		value, ok := probed[key]
+		if !ok {
+			return
+		}
+		if line := key + ":" + value; !slices.Contains(out, line) {
+			out = append(out, line)
+		}
+	}
+	// A declared tool with no observe probe never counts through an op's binary. probed
+	// can still hold one the indexer uses, read through its version argv when scip runs
+	// beside a build, and that line keys the scip op alone.
+	addBin := func(handle string, s *spells.Spell, bin string) {
+		if t, ok := s.Tool(bin); ok && !t.HasObservationProbe() {
+			return
+		}
+		add(handle, bin)
+	}
 	for _, use := range p.TargetSpellOps[target] {
 		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
 		if i < 0 {
 			continue
 		}
-		sp := p.ResolvedSpells[i]
 		for _, opName := range use.Ops {
-			op, ok := sp.Op(opName)
-			if !ok || op.Bin == "" {
-				continue
+			if op, ok := p.ResolvedSpells[i].Op(opName); ok {
+				addBin(use.Spell, p.ResolvedSpells[i], op.Bin)
 			}
-			key := use.Spell + ":" + op.Bin
-			value, ok := probed[key]
-			if !ok {
-				continue
-			}
-			if line := key + ":" + value; !slices.Contains(out, line) {
-				out = append(out, line)
-			}
+		}
+	}
+	for _, s := range p.ResolvedSpells {
+		if op, ok := s.Op(target); ok {
+			addBin(s.Name(), s, op.Bin)
+		}
+		for _, tool := range indexerUses(s, target) {
+			add(s.Name(), tool)
 		}
 	}
 	return out
@@ -1420,9 +1540,9 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
 	out := opts.out(m)
-	// `--` args reach only the named stages' handlers, never this ctx: the preflight
-	// pass, the skip_cache gates run ahead of a replay, and the derived-order settle
-	// all dispatch other targets from it, and an op there with no explicit args would
+	// `--` args reach only the named stages' handlers, never this ctx: the skip_cache
+	// gates run ahead of a replay and the derived-order settle both dispatch other
+	// targets from it, and an op there with no explicit args would
 	// append the forwarded ones (`go mod edit -json -run X`).
 	namedCtx := func(ctx context.Context) context.Context {
 		return project.WithExtraArgs(ctx, opts.ExtraArgs)
@@ -1490,17 +1610,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// effectful host ops (exec, fs writes, network, env) record their intent and
 		// skip instead of running. Sequential, so each project's commands stay grouped
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
-		recCtx := types.WithTrace(m.withRecordedOutput(ctx))
+		stageCtx := namedCtx(types.WithTrace(m.withRecordedOutput(ctx)))
 		dryStart := time.Now()
 		out.emit(ctx, report.RunDry{})
 		planned := 0
-		for i, st := range append(slices.Clone(opts.preflight), stages...) {
-			stageCtx := recCtx
-			// The forwarded args are shown on the named target's command, where a
-			// real run appends them, and nowhere else.
-			if i >= len(opts.preflight) {
-				stageCtx = namedCtx(recCtx)
-			}
+		for _, st := range stages {
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
@@ -1542,7 +1656,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			uniqueProjects = append(uniqueProjects, p)
 		}
 	}
-	for _, st := range append(slices.Clone(opts.preflight), stages...) {
+	for _, st := range stages {
 		for _, p := range st.projects {
 			addProj(p)
 			// A target declaring ctx.writesFiles(<alias>.file(...)) mutates ANOTHER
@@ -1639,11 +1753,15 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 	}
 	toolWindows := map[string]string{}
-	prober.probeVersions(ctx, keyed, nil, toolWindows)
+	if _, err := prober.probeVersions(ctx, keyed, nil, toolWindows); err != nil {
+		return err
+	}
 	for _, p := range unkeyed {
-		prober.probeVersions(ctx, []*types.Project{p}, func(spell, tool string) bool {
+		if _, err := prober.probeVersions(ctx, []*types.Project{p}, func(spell, tool string) bool {
 			return hasToolWindow(p, spell, tool)
-		}, toolWindows)
+		}, toolWindows); err != nil {
+			return err
+		}
 	}
 	if err := checkToolWindows(uniqueProjects, toolWindows); err != nil {
 		return err
@@ -1660,7 +1778,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Scoped per project to the union of the targets this invocation will key, since
 	// newStep mints steps for every stage off this one probe.
 	drivenByProject := make(map[string]map[string]bool, len(uniqueProjects))
-	for _, st := range append(slices.Clone(opts.preflight), stages...) {
+	for _, st := range stages {
 		for _, p := range st.projects {
 			if drivenByProject[p.Path] == nil {
 				drivenByProject[p.Path] = map[string]bool{}
@@ -1676,7 +1794,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	sizeMemory := memorySizer(m.peakIndex(history), forecast.NewShape(charmKey, opts.ExtraArgs))
 	// keyedStep is newStep without the revision, for the planning below that must not
 	// wait on it.
-	keyedStep := func(p *types.Project, target string) cache.Step {
+	keyedStep := func(p *types.Project, target string) (cache.Step, error) {
 		step := m.buildStep(p, target)
 		if sizeMemory != nil {
 			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
@@ -1688,14 +1806,30 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		}
 		var toolVersions []string
 		if keysTools(p, target) {
-			toolVersions = prober.probeVersions(ctx, []*types.Project{p}, nil, nil)[p.Path]
+			// A project the pass above probed replays its memo; one a composed target
+			// reaches only now is probed here, and refused the same way.
+			byProject, err := prober.probeVersions(ctx, []*types.Project{p}, nil, nil)
+			if err != nil {
+				return cache.Step{}, err
+			}
+			toolVersions = byProject[p.Path]
 		}
 		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
-		return step
+		return step, nil
 	}
-	newStep := func(p *types.Project, target string) cache.Step {
-		step := keyedStep(p, target)
+	newStep := func(p *types.Project, target string) (cache.Step, error) {
+		step, err := keyedStep(p, target)
 		stampRevision(&step)
+		return step, err
+	}
+	// stepOrUncached is newStep for the settle pass, which takes no error. Every step it
+	// re-runs was keyed above, so an error here is the memo of one already returned;
+	// should one slip past, the step runs uncached rather than keyed without the tool.
+	stepOrUncached := func(p *types.Project, target string) cache.Step {
+		step, err := newStep(p, target)
+		if err != nil {
+			step.NoCache = true
+		}
 		return step
 	}
 
@@ -1711,7 +1845,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			trackVolatile = true
 		}
 		for _, p := range st.projects {
-			step := keyedStep(p, st.target)
+			step, err := keyedStep(p, st.target)
+			if err != nil {
+				return err
+			}
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
@@ -1737,7 +1874,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 		}
 	}
-	if len(steps) == 0 && len(opts.preflight) == 0 {
+	if len(steps) == 0 {
 		return nil
 	}
 
@@ -1911,9 +2048,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for i := range steps {
 		stampRevision(&steps[i])
 	}
-	// The loop above joins the revision goroutine only when there is a step, and a
-	// preflight pass can leave none.
-	<-revisionDone
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,
@@ -1923,10 +2057,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	runStep := func(handlers map[string]TargetHandler, projects map[string]*types.Project) func(context.Context, cache.Step) error {
 		return func(ctx context.Context, s cache.Step) error {
 			// Each step's body gets its own TargetRuns, seeded from the run's, so a target
-			// a preflight pass or a composer's key already ran starts out done.
+			// a composer's key already ran starts out done.
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(runs.Passed(s.ProjectPath)...))
-			// The step's own args, which are nil for a preflight step: only a named
-			// target's step carries the forwarded ones, and they key it too.
+			// The step's own args: only a named target's step carries the forwarded ones,
+			// and they key it too.
 			ctx = project.WithExtraArgs(ctx, s.ExtraArgs)
 
 			p := projects[s.ProjectPath]
@@ -1962,14 +2096,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			return err
 		}
 	}
-	if len(opts.preflight) > 0 {
-		if err := m.runPreflight(ctx, opts.preflight, newStep, opts, runStep, cacheOpts); err != nil {
-			return err
-		}
-	}
-	if len(steps) == 0 {
-		return nil
-	}
 	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), append(slices.Clone(cacheOpts), cache.WithTargetRunner(composed.runSkipCache))...)
 
 	if volatilityRT != nil {
@@ -1981,7 +2107,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if runErr == nil {
 		// After the batch so it holds every step's finished bytes, before the race
 		// replay so what that verifies is the settled tree.
-		runErr = m.settleDerivedOrder(ctx, settle, steps, results, newStep, cacheOpts)
+		runErr = m.settleDerivedOrder(ctx, settle, steps, results, stepOrUncached, cacheOpts)
 	}
 
 	if opts.RaceReplay && runErr == nil {

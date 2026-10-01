@@ -326,10 +326,11 @@ type Descriptor struct {
 	// LanguageExtensions are the file extensions that ARE the language, from
 	// the Language record's extensions field. See spells.Language.
 	LanguageExtensions []string `json:"language_extensions,omitempty"`
-	// Comments is the language's comment and string syntax, from the Language
-	// record; nil for a spell that declares none. The gate's comment-only
-	// classifier is the consumer.
-	Comments *CommentSyntax `json:"comments,omitempty"`
+	// Syntax is the language's comment and stub syntax, from the Language
+	// record; nil for a spell that declares neither. The risk classifier's
+	// comment-only check reads Comments; the branch splitter reads Stubs
+	// through magus\describe\spell.
+	Syntax *Syntax `json:"syntax,omitempty"`
 	// SymbolIndexer is the spell's declared symbol-indexing capability, from
 	// mgs_getSymbolIndexer; nil for a spell that declares none. Its presence is the
 	// whole capability test, replacing a string match against the op list.

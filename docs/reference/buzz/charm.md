@@ -176,7 +176,7 @@ Return the JSON Pointer ("/N") of the first argv element for which fn(s) is trut
 
 ### move
 
-Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
+Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).
 
 **Signature:** `charm\move(argv, anchor, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L333)
 
@@ -204,7 +204,7 @@ Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 ### copy
 
-Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm.path(...)).
+Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/0" front, or charm\path(...)).
 
 **Signature:** `charm\copy(argv, anchor, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L357)
 

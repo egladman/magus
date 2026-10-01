@@ -36,7 +36,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                   |
 | [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                  |
 | [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned           |
-| [lease-vcs](lease-vcs.md)                         | a worker lease committing, pushing, stashing or reverting the tree it is landed from              |
+| [lease-vcs](lease-vcs.md)                         | a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout  |
 | [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns        |
 | [magus-timeout](magus-timeout.md)                 | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside            |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                     |
@@ -54,7 +54,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [sibling-checkout](sibling-checkout.md)           | a magus command relocated into another checkout, judging a tree nobody ships                      |
 | [spawn-unbriefed](spawn-unbriefed.md)             | a subagent spawned before the multi-agent skill loaded                                            |
 | [stage-all](stage-all.md)                         | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output           |
-| [symbol-search](symbol-search.md)                 | a text search for symbols or diagnostic codes the graph answers exactly                           |
+| [symbol-search](symbol-search.md)                 | a text search of the tree for a symbol, a declaration or a diagnostic code the graph answers      |
 | [throwaway-copy](throwaway-copy.md)               | a run inside a temp or scratchpad copy, which leaves the real tree unverified                     |
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store         |
 | [unknown-env](unknown-env.md)                     | a retired or misspelled MAGUS_* variable handed to a command                                      |

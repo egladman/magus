@@ -68,8 +68,8 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("sign", vm.DirectValue("crypto.sign", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		alg := ffi.Str(bzArgs, 0)
 		data := ffi.Str(bzArgs, 1)
-		key_env := ffi.Str(bzArgs, 2)
-		ret0, err := std.CryptoSign(ctx, alg, data, key_env)
+		key := ffi.Str(bzArgs, 2)
+		ret0, err := std.CryptoSign(ctx, alg, data, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -78,8 +78,8 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	m.MapSet("signFile", vm.DirectValue("crypto.signFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		alg := ffi.Str(bzArgs, 0)
 		path := ffi.Str(bzArgs, 1)
-		key_env := ffi.Str(bzArgs, 2)
-		ret0, err := std.CryptoSignFile(ctx, alg, path, key_env)
+		key := ffi.Str(bzArgs, 2)
+		ret0, err := std.CryptoSignFile(ctx, alg, path, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -98,8 +98,8 @@ func RegisterCrypto(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("publicKey", vm.DirectValue("crypto.publicKey", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		alg := ffi.Str(bzArgs, 0)
-		key_env := ffi.Str(bzArgs, 1)
-		ret0, err := std.CryptoPublicKey(ctx, alg, key_env)
+		key := ffi.Str(bzArgs, 1)
+		ret0, err := std.CryptoPublicKey(ctx, alg, key)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

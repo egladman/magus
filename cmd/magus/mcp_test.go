@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,8 +15,33 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 )
+
+// `magus mcp --help` names the HTTP URL only when the server would serve it, and otherwise
+// says which transports remain.
+func TestMCPUsageNamesOnlyServedTransports(t *testing.T) {
+	off := false
+	usage := func(cfg config.MCP) string {
+		var b strings.Builder
+		writeMCPUsage(&b, cfg)
+		return b.String()
+	}
+
+	got := usage(config.MCP{Address: "127.0.0.1:9000"})
+	assert.Contains(t, got, "http://127.0.0.1:9000/mcp")
+
+	got = usage(config.MCP{Address: "127.0.0.1:9000", HTTP: &off})
+	assert.NotContains(t, got, "http://")
+	assert.NotContains(t, got, "--probe=liveness,mcp")
+	assert.Contains(t, got, "mcp.http=false")
+	assert.Contains(t, got, "unix socket")
+
+	got = usage(config.MCP{Enabled: &off})
+	assert.NotContains(t, got, "http://")
+	assert.Contains(t, got, "mcp.enabled=false")
+}
 
 // The command's own serve path, driven over pipes: every line on the wire is a JSON-RPC
 // frame answering a request, and a print to os.Stdout while it serves lands on stderr.
@@ -23,7 +49,7 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
@@ -83,7 +109,7 @@ func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })

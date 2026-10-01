@@ -1,0 +1,65 @@
+# A stage that prints a shard plan prints it only once every magus stage upstream of it
+# has ended green, so CI's plan step fans out no shard from a tree whose generate failed.
+# With no VCS, affected selects every project.
+[windows] skip 'no kernel API proves the writer of an anonymous pipe'
+
+# Red: c's generate fails after the plan is computed. No plan reaches stdout, and the
+# plan stage itself exits non-zero, with no pipefail to lend it the status.
+! exec bash -c 'magus affected generate --no-default-charms | magus affected ci --plan'
+! stdout .
+stderr 'generate: output drifted'
+stderr 'MGS3030'
+stderr 'so this run printed nothing'
+
+# The three stages of CI's plan step: the render reads no plan, and says why.
+! exec bash -c 'magus affected generate --no-default-charms | magus affected ci --plan | magus run --stdin --dry-run -o ''template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}'''
+! stdout .
+stderr 'MGS3030'
+! stderr 'MGS3029'
+
+# Green: the plan is the one `affected ci --plan` prints alone.
+rm c/broken
+exec magus affected ci --plan
+cp stdout want.json
+exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan'
+cmp stdout want.json
+! stderr 'MGS3030'
+
+exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run --stdin --dry-run -o ''template={{range .outputs}}{{.name}}={{.value}}{{"\n"}}{{end}}'''
+stdout '^count=3$'
+stdout '^matrix='
+! stderr 'MGS30'
+
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "plan-root"});
+-- a/magusfile.buzz --
+import "magus";
+
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}
+-- c/broken --
+-- c/magusfile.buzz --
+import "magus";
+import "fs";
+import "proc";
+
+// Slow enough that the plan downstream is computed before this fails.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    if (fs\exists("broken")) {
+        proc\exec("sleep", ["2"]);
+        throw "generate: output drifted";
+    }
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+}

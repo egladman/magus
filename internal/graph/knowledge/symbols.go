@@ -19,15 +19,86 @@ import (
 // project and, once wired, loaded lazily; this file only builds the shard.
 
 // symbolsShardSuffix names a project's symbol shard: "<project>@symbols". The "@"
-// keeps it out of the plain-project namespace and marks it as lazily loaded.
+// keeps it out of the plain-project namespace and marks it as lazily loaded. A project's
+// symbols defined below its own directory are split into one shard per defining directory,
+// "<project>@symbols:<dir>" (see splitSymbolShard).
 const symbolsShardSuffix = "@symbols"
 
 // symbolsShardName returns the shard name for a project's ingested symbols.
 func symbolsShardName(project string) string { return project + symbolsShardSuffix }
 
-// isSymbolsShard reports whether a shard name is a per-project symbol shard, the
-// shards excluded from the default (non-symbol-seeded) load path.
-func isSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsShardSuffix) }
+// isSymbolsShard reports whether a shard name is a symbol shard, a project's base shard or
+// one of its directory shards: the shards excluded from the default (non-symbol-seeded)
+// load path.
+func isSymbolsShard(name string) bool {
+	return strings.HasSuffix(name, symbolsShardSuffix) || strings.Contains(name, symbolsShardSuffix+":")
+}
+
+// symbolsShardKey is a symbol shard's name less the suffix: the project for its base
+// shard, "<project>:<dir>" for a directory shard.
+func symbolsShardKey(name string) string { return strings.Replace(name, symbolsShardSuffix, "", 1) }
+
+// symbolsShardProject is the project a symbol shard belongs to.
+func symbolsShardProject(name string) string {
+	project, _, _ := strings.Cut(name, symbolsShardSuffix)
+	return project
+}
+
+// splitSymbolShard partitions one project's assembled symbol shard by where each symbol is
+// defined, so a lookup that knows its symbol decodes that directory's shard rather than the
+// project's: in this repository the root project's single shard was 106 MB.
+//
+// A symbol goes to the shard of the directory holding its definition, together with every
+// edge that ends at it (its defines, its references, the calls into it), which is exactly
+// what `refs` reads. Symbols defined at the project's top level or not in the workspace at
+// all, the file and directory nodes, and every other edge stay in the base shard, so a
+// small project keeps one shard named as before.
+//
+// The split is a partition of the deduplicated shard: no node or edge lands in two shards,
+// so merging every part rebuilds the unsplit shard exactly, whatever order they merge in.
+func splitSymbolShard(project string, sh Shard) []Shard {
+	g := NewGraph()
+	g.Merge(sh.Nodes, sh.Edges)
+	dirOf := map[string]string{}
+	for _, n := range g.Nodes() {
+		if n.Kind != types.KindSymbol {
+			continue
+		}
+		if file, _, ok := splitPathLine(n.Source); ok {
+			if d := path.Dir(file); d != project && d != "." {
+				dirOf[n.ID] = d
+			}
+		}
+	}
+	// Each part takes its nodes and edges in the order the merged graph lists them, so a
+	// part is already in canonical form and fingerprinting it need not merge it again.
+	parts := map[string]*Shard{"": {Name: sh.Name, canonical: true}}
+	part := func(dir string) *Shard {
+		p := parts[dir]
+		if p == nil {
+			p = &Shard{Name: sh.Name + ":" + dir, canonical: true}
+			parts[dir] = p
+		}
+		return p
+	}
+	for _, n := range g.Nodes() {
+		p := part(dirOf[n.ID])
+		p.Nodes = append(p.Nodes, n)
+	}
+	for _, e := range g.Edges() {
+		dir, ok := dirOf[e.Target]
+		if !ok {
+			dir = dirOf[e.Source]
+		}
+		p := part(dir)
+		p.Edges = append(p.Edges, e)
+	}
+	out := make([]Shard, 0, len(parts))
+	for _, dir := range slices.Sorted(maps.Keys(parts)) {
+		out = append(out, *parts[dir])
+	}
+	return out
+}
 
 // assembleSymbols builds one project's symbol shard from the ingested records: a
 // symbol node per record, a `defines` edge from each defining file, a

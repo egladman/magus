@@ -1,0 +1,460 @@
+namespace renderbrief;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]";
+final HELP = "cost: two job-store reads\n{USAGE}\n\n"
+    + "Prints the complete brief for the worker of job <id>, rendered from its row: criteria, setup, write, deny and\n"
+    + "read paths, dependencies and overlapping jobs, the row's one check, and `job exit` as the last step. --extra\n"
+    + "appends task-specific prose verbatim. Read-only; the same row renders the same brief.";
+// The job result schema the template is written to; `./magus job exit --schema` prints the
+// range a binary accepts.
+final RESULT_SCHEMA = 2;
+final WORD ="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:=,+@%-";
+
+export object Deny {
+    path: str,
+    reason: str,
+}
+
+export object Overlap {
+    job: str,
+    // mine and theirs are the two jobs' patterns that overlap.
+    mine: [str],
+    theirs: [str],
+    // verdict is the footprint the two have actually written: disjoint, shared, or "" when
+    // nobody measured it.
+    verdict: str,
+    shared: [str],
+}
+
+export object Dependency {
+    job: str,
+    state: str,
+}
+
+export object Gate {
+    id: str,
+    description: str,
+    command: str,
+}
+
+// Terms is everything a brief says, read off the job row and its neighbours.
+export object Terms {
+    id: str,
+    criteria: str,
+    checkpoint: str,
+    readOnly: bool,
+    writePaths: [str],
+    denyPaths: [Deny],
+    readPaths: [str],
+    dependencies: [Dependency],
+    overlaps: [Overlap],
+    // check is the row's one check as a command line, "" when the row names none.
+    check: str,
+    gates: [Gate],
+}
+
+fun quoted(word: str) > str {
+    foreach (i in 0..word.len()) {
+        if (WORD.indexOf(word.sub(i, len: 1)) == null) {
+            return "'" + word.replace("'", with: "'\\''") + "'";
+        }
+    }
+    return if (word == "") "''" else word;
+}
+
+// checkCommand renders a lease check as the command a worker types. A row with no check
+// falls back to its validation line, which older rows carry instead.
+export fun checkCommand(check: any?, validation: str) > str {
+    final target = check?["target"] ?? "";
+    if (target == "") {
+        if (validation.startsWith("magus ")) {
+            return "./{validation}";
+        }
+        return validation;
+    }
+    final words = mut ["./magus", "run", target, check!["project"] ?? "."];
+    final extra = check!["args"] ?? [];
+    if (extra.len() > 0) {
+        words.append("--");
+        foreach (a in extra) {
+            words.append(quoted(a));
+        }
+    }
+    return words.join(" ");
+}
+
+// parseDescribed reads `magus describe job <id> -o json`: the row, plus the deny paths the
+// workspace derives for it (generated files, other leases, shared build inputs).
+export fun parseDescribed(described: str) > Terms !> any {
+    final doc = json\parse(described);
+    final j = doc["job"] ?? {<str: any>};
+    final deny = mut [<Deny>];
+    foreach (p in j["deny_paths"] ?? []) {
+        deny.append(Deny{ path = p, reason = "denied by the row" });
+    }
+    foreach (d in doc["derived_deny_paths"] ?? []) {
+        deny.append(Deny{ path = d["path"] ?? "", reason = d["reason"] ?? "" });
+    }
+    final check = checkCommand(j["check"], validation: j["validation"] ?? "");
+    final gates = mut [<Gate>];
+    foreach (g in j["goals"] ?? []) {
+        gates.append(Gate{ id = g["id"] ?? "", description = g["description"] ?? "", command = checkCommand(g["check"], validation: "") });
+    }
+    if (gates.len() == 0 and check != "") {
+        gates.append(Gate{ id = "check", description = "", command = check });
+    }
+    final deps = mut [<Dependency>];
+    foreach (d in j["depends_on"] ?? []) {
+        deps.append(Dependency{ job = d, state = "" });
+    }
+    return Terms{
+        id = j["id"] ?? "",
+        criteria = j["criteria"] ?? "",
+        checkpoint = j["checkpoint"] ?? "",
+        readOnly = j["read_only"] ?? false,
+        writePaths = j["write_paths"] ?? [<str>],
+        denyPaths = deny,
+        readPaths = j["read_paths"] ?? [<str>],
+        dependencies = deps,
+        overlaps = [<Overlap>],
+        check = check,
+        gates = gates,
+    };
+}
+
+// withNeighbours fills each dependency's state and the overlaps naming t.id, read off the
+// job list: states keyed by job id, overlaps as the list reports them, either side.
+export fun withNeighbours(t: Terms, states: {str: str}, overlaps: [Overlap]) > Terms {
+    final deps = mut [<Dependency>];
+    foreach (d in t.dependencies) {
+        deps.append(Dependency{ job = d.job, state = states[d.job] ?? "missing" });
+    }
+    final sorted = mut [<Overlap>];
+    foreach (o in overlaps) {
+        sorted.append(o);
+    }
+    final ordered = sorted.sort(fun (a: Overlap, b: Overlap) > bool => a.job < b.job);
+    return Terms{
+        id = t.id, criteria = t.criteria, checkpoint = t.checkpoint, readOnly = t.readOnly,
+        writePaths = t.writePaths, denyPaths = t.denyPaths, readPaths = t.readPaths,
+        dependencies = deps, overlaps = ordered, check = t.check, gates = t.gates,
+    };
+}
+
+// overlapsOf reads `magus ls jobs -o json`'s overlap rows naming job, seen from job. Read
+// off the CLI rather than magus\job\list, which leaves every footprint unmeasured, and the
+// footprint is what says whether the two jobs have collided or only their patterns have.
+export fun overlapsOf(job: str, listed: any) > [Overlap] {
+    final found = mut [<Overlap>];
+    foreach (o in listed["overlaps"] ?? []) {
+        final verdict = o["footprint"]?["verdict"] ?? "";
+        final shared = o["footprint"]?["shared"] ?? [<str>];
+        final a = o["job_a"] ?? "";
+        final b = o["job_b"] ?? "";
+        final pathsA = o["paths_a"] ?? [<str>];
+        final pathsB = o["paths_b"] ?? [<str>];
+        if (a == job) {
+            found.append(Overlap{ job = b, mine = pathsA, theirs = pathsB, verdict = verdict, shared = shared });
+        } else if (b == job) {
+            found.append(Overlap{ job = a, mine = pathsB, theirs = pathsA, verdict = verdict, shared = shared });
+        }
+    }
+    return found;
+}
+
+// statesOf is every listed job's state, by id.
+export fun statesOf(listed: any) > {str: str} {
+    final states = mut {<str: str>};
+    foreach (j in listed["jobs"] ?? []) {
+        states[j["id"] ?? ""] = j["state"] ?? "";
+    }
+    return states;
+}
+
+// denyLines groups deny paths by reason, in first-seen order, and spells a file#declaration
+// claim out as the declarations it covers, so a worker does not read one claimed function
+// as the whole file.
+export fun denyLines(deny: [Deny]) > [str] {
+    final reasons = mut [<str>];
+    final byReason = mut {<str: mut [str]>};
+    final decls = mut {<str: mut {str: mut [str]}>};
+    final files = mut {<str: mut [str]>};
+    foreach (d in deny) {
+        if (byReason[d.reason] == null) {
+            reasons.append(d.reason);
+            byReason[d.reason] = mut [<str>];
+            decls[d.reason] = mut {<str: mut [str]>};
+            files[d.reason] = mut [<str>];
+        }
+        final hash = d.path.indexOf("#");
+        if (hash == null) {
+            byReason[d.reason]!.append("`{d.path}`");
+            continue;
+        }
+        final file = d.path.sub(0, len: hash!);
+        final decl = d.path.sub(hash! + 1);
+        if (decls[d.reason]![file] == null) {
+            decls[d.reason]![file] = mut [<str>];
+            files[d.reason]!.append(file);
+        }
+        decls[d.reason]![file]!.append(decl);
+    }
+    final lines = mut [<str>];
+    foreach (r in reasons) {
+        final parts = mut [<str>];
+        foreach (p in byReason[r]!) {
+            parts.append(p);
+        }
+        foreach (f in files[r]!) {
+            final names = decls[r]![f]!;
+            final noun = if (names.len() == 1) "declaration" else "declarations";
+            parts.append("`{f}` (only the {noun} `{names.join("`, `")}`; the rest of the file is not claimed)");
+        }
+        lines.append("- {r}: {parts.join(", ")}");
+    }
+    return lines;
+}
+
+fun bullets(items: [str], none: str) > [str] {
+    if (items.len() == 0) {
+        return ["- {none}"];
+    }
+    final lines = mut [<str>];
+    foreach (i in items) {
+        lines.append("- `{i}`");
+    }
+    return lines;
+}
+
+fun resultTemplate(t: Terms) > [str] {
+    final evidence = mut [<str>];
+    foreach (g in t.gates) {
+        if (g.command == "") {
+            continue;
+        }
+        evidence.append(`    \{"gate_id": "{g.id}", "output_ref": "<the ref its passing run printed>"\}`);
+    }
+    final changed = if (t.readOnly) "[]" else `["<every path you changed>"]`;
+    return [
+        "```json",
+        "\{",
+        `  "schema_version": {RESULT_SCHEMA},`,
+        `  "job": "{t.id}",`,
+        `  "changed_paths": {changed},`,
+        `  "validation": \{"command": "{t.check.replace("\"", with: "\\\"")}", "output_ref": "<the ref the check printed>"\},`,
+        `  "gate_evidence": [`,
+        evidence.join(",\n"),
+        "  ],",
+        `  "unresolved_risks": ["<what you could not settle, or nothing>"]`,
+        "\}",
+        "```",
+    ];
+}
+
+// brief renders t as the worker's complete instructions. extra is appended verbatim under
+// its own heading, "" for none. Raises on a row a worker cannot finish: no check, or no
+// write paths on a job that is not read-only.
+export fun brief(t: Terms, extra: str) > str !> str {
+    if (t.check == "") {
+        throw "render-brief: job {t.id} names no check, so the brief cannot say when the work is done; "
+            + "give the row one (`./magus job fork` with --check) before handing it out";
+    }
+    if (!t.readOnly and t.writePaths.len() == 0) {
+        throw "render-brief: job {t.id} is not read-only and has no write paths, so every write its worker makes is refused";
+    }
+    final text = mut [
+        "# Job {t.id}",
+        "",
+        "Row: `./magus describe job {t.id}`. It is the authority; this brief is rendered from it.",
+        "",
+        "## Criteria",
+        "",
+        t.criteria,
+    ];
+    final extraGates = mut [<str>];
+    foreach (g in t.gates) {
+        if (g.id != "check" and g.description != "") {
+            extraGates.append("- goal `{g.id}`: {g.description}");
+        }
+    }
+    if (extraGates.len() > 0) {
+        text.append("");
+        foreach (g in extraGates) {
+            text.append(g);
+        }
+    }
+    final base = if (t.checkpoint == "") "The row names no checkpoint." else "Your worktree must sit at checkpoint `{t.checkpoint}`.";
+    text.append("");
+    text.append("## Setup");
+    text.append("");
+    text.append("{base} From your worktree, with no `cd` prefix, run:");
+    text.append("");
+    text.append("    magus buzz hack/dev/bootstrap-worktree.buzz -- --job {t.id}");
+    text.append("");
+    text.append("It builds `./magus`, builds the graph, takes the lease and refuses unless the row names this worktree and its base. "
+        + "If it refuses, stop and report what it printed; do not take the lease by hand somewhere else.");
+    text.append("");
+    text.append("The guard grades your writes under the lease only once it has bound your session: at a spawn titled for this job, "
+        + "or when it sees you run `./magus job exec {t.id}` yourself. Not spawned under it? Run that once after the script.");
+    text.append("");
+    text.append("## Write paths");
+    text.append("");
+    if (t.readOnly) {
+        text.append("- none: this job is read-only, so write nothing in the tree");
+    } else {
+        foreach (l in bullets(t.writePaths, none: "")) {
+            text.append(l);
+        }
+    }
+    text.append("");
+    text.append("## Deny paths");
+    text.append("");
+    text.append("Never write these, whatever your write paths say; a lease that owns one is worked by its own holder.");
+    text.append("");
+    final denied = denyLines(t.denyPaths);
+    if (denied.len() == 0) {
+        text.append("- none");
+    }
+    foreach (l in denied) {
+        text.append(l);
+    }
+    text.append("");
+    text.append("## Read paths");
+    text.append("");
+    foreach (l in bullets(t.readPaths, none: "none declared: read what the criteria need, through the graph first")) {
+        text.append(l);
+    }
+    text.append("");
+    text.append("## Other jobs");
+    text.append("");
+    if (t.dependencies.len() == 0 and t.overlaps.len() == 0) {
+        text.append("- none depends on or overlaps this one");
+    }
+    foreach (d in t.dependencies) {
+        if (d.state == "pass") {
+            text.append("- depends on `{d.job}`, which passed: build on its result (`./magus describe job {d.job}`)");
+        } else {
+            text.append("- depends on `{d.job}`, which is {d.state}: `./magus job wait {d.job}` before touching what it changes");
+        }
+    }
+    foreach (o in t.overlaps) {
+        var now = "neither has written into the overlap yet";
+        if (o.verdict == "shared") {
+            now = "both have already written {o.shared.join(", ")}";
+        } else if (o.verdict == "") {
+            now = "nobody measured what either wrote";
+        }
+        text.append("- overlaps live job `{o.job}`: your `{o.mine.join("`, `")}` against its `{o.theirs.join("`, `")}`; {now}. "
+            + "Write only your own paths there; if the criteria need one of its, stop and name the conflict in unresolved_risks rather than work around it");
+    }
+    text.append("");
+    text.append("## Check");
+    text.append("");
+    text.append("Your one check, run exactly like this; the pipe waits out a busy checkout (MGS3009), and sleeps or retry loops are refused:");
+    text.append("");
+    text.append("    ./magus status --wait | {t.check}");
+    text.append("");
+    text.append("Run nothing else that validates: no `magus affected ci`, no other target, no raw tool. The root runs everything else, serially.");
+    text.append("");
+    text.append("## Finish");
+    text.append("");
+    text.append("Write `{t.id}-result.json` in your scratchpad directory, outside your write paths; the job id in the name keeps it apart "
+        + "from other workers sharing that directory. Fill in the output ref your passing check printed; `./magus job exit --schema` prints the schema:");
+    text.append("");
+    foreach (l in resultTemplate(t)) {
+        text.append(l);
+    }
+    text.append("");
+    text.append("Then, as your last step:");
+    text.append("");
+    text.append("    ./magus job exit {t.id} --stdin < <scratchpad>/{t.id}-result.json");
+    if (extra.trim() != "") {
+        text.append("");
+        text.append("## Task notes");
+        text.append("");
+        text.append(extra.trim());
+    }
+    return text.join("\n") + "\n";
+}
+
+// termsFor reads job's terms and neighbours through the magus module.
+export fun termsFor(job: str) > Terms !> any {
+    final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
+    final terms = parseDescribed(described);
+    if (terms.id != job) {
+        throw "render-brief: `magus describe job {job}` returned no row for it";
+    }
+    final listed = json\parse(magus\cmd("ls", args: ["jobs", "-o", "json"], opts: {"quiet": true}).stdout);
+    return withNeighbours(terms, states: statesOf(listed), overlaps: overlapsOf(job, listed: listed));
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--job", "--extra"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "render-brief: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final job = parsed.values["--job"] ?? "";
+    if (job == "") {
+        throw "render-brief: --job is required\n{USAGE}";
+    }
+    final extraPath = parsed.values["--extra"] ?? "";
+    final extra = if (extraPath == "") "" else fs\readFile(extraPath);
+    std\print(brief(termsFor(job), extra: extra).trim());
+}
+
+fun golden() > Terms !> any {
+    final described = fs\readFile("hack/testdata/render-brief-row.json");
+    final listed = json\parse(fs\readFile("hack/testdata/render-brief-jobs.json"));
+    final terms = parseDescribed(described);
+    return withNeighbours(terms, states: statesOf(listed), overlaps: overlapsOf(terms.id, listed: listed));
+}
+
+test "the fixture row renders the golden brief" {
+    final want: [str] = json\parse(fs\readFile("hack/testdata/render-brief-golden.json"));
+    final got = brief(golden(), extra: "Load magus-buzz-write before writing Buzz.\n").trim().split("\n");
+    assert\equal(got, want: want, message: "brief");
+}
+
+test "a check renders with its project and quoted tool args; a bare validation gets ./" {
+    assert\equal(checkCommand({"target": "go::go-test", "project": ".", "args": ["-run", "Guard|Shell"]}, validation: ""),
+        want: "./magus run go::go-test . -- -run 'Guard|Shell'", message: "args");
+    assert\equal(checkCommand(null, validation: "magus run lint-rules ."), want: "./magus run lint-rules .", message: "validation");
+}
+
+test "declaration claims are spelled out per file, grouped by reason" {
+    assert\equal(denyLines([
+        Deny{ path = "run.go#probeOne", reason = "owned by live lease a" },
+        Deny{ path = "symbol.go", reason = "owned by live lease a" },
+        Deny{ path = "run.go#buildStep", reason = "owned by live lease a" },
+        Deny{ path = "go.mod", reason = "shared build input" },
+    ]), want: [
+        "- owned by live lease a: `symbol.go`, `run.go` (only the declarations `probeOne`, `buildStep`; the rest of the file is not claimed)",
+        "- shared build input: `go.mod`",
+    ], message: "deny");
+}
+
+test "a row with no check or no write paths is refused" {
+    final t = golden();
+    final unchecked = Terms{ id = t.id, criteria = t.criteria, checkpoint = t.checkpoint, readOnly = false, writePaths = t.writePaths,
+        denyPaths = t.denyPaths, readPaths = t.readPaths, dependencies = t.dependencies, overlaps = t.overlaps, check = "", gates = [<Gate>] };
+    assert\equal(brief(unchecked, extra: "") catch "refused", want: "refused", message: "no check");
+    final unwritable = Terms{ id = t.id, criteria = t.criteria, checkpoint = t.checkpoint, readOnly = false, writePaths = [<str>],
+        denyPaths = t.denyPaths, readPaths = t.readPaths, dependencies = t.dependencies, overlaps = t.overlaps, check = t.check, gates = t.gates };
+    assert\equal(brief(unwritable, extra: "") catch "refused", want: "refused", message: "no write paths");
+}
+
+test "the same terms render the same bytes" {
+    assert\equal(brief(golden(), extra: ""), want: brief(golden(), extra: ""), message: "deterministic");
+}

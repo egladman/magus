@@ -1,0 +1,5 @@
+// @error: Out of bound str access
+// Upstream buzz at 294d8f9 rejects "aé—b"[7] with "Out of bound str access.": the
+// string is seven BYTES long, so index 7 is one past the end.
+final s = "aé—b";
+final __r = s[7];

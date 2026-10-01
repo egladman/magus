@@ -5,7 +5,7 @@
 # only once magus status proves the reader has actually registered its wait, so
 # the release can never race ahead of the thing it is meant to unblock.
 exec bash -c 'for i in $(seq 400); do [ -f generate-ready ] && break; sleep 0.05; done; for i in $(seq 400); do magus status -o json 2>/dev/null | grep -q pipe_waits && break; sleep 0.05; done; touch release' &
-exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms 2>upstream.err | magus run consume . -o jsonl'
+exec bash -c 'set -o pipefail; magus affected generate --no-default-charms 2>upstream.err | magus affected ci --plan 2>>upstream.err | magus run consume . -o jsonl'
 jsonl-records lock.pipe_wait
 ! stderr 'magus: waiting for pid'
 wait

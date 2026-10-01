@@ -438,9 +438,9 @@ export function linkedRows(linked: LinkedFigure): DeclaredNode[] {
   );
 }
 
-// figureForLink builds the Figure record for a shared dependency graph: one actor per node, one
-// flow per edge, dependency first. A seed is tagged "edited" and takes the accent only while the
-// figure has room for it, so a change that edits many projects is still drawn.
+// figureForLink builds the Figure record for a shared graph: one actor per node, one flow per
+// edge carrying the edge's stroke and label. A seed is tagged "edited" and takes the accent only
+// while the figure has room for it, so a change that edits many projects is still drawn.
 export function figureForLink(linked: LinkedFigure): Figure {
   const rows = linked.nodes.map((n) => ({ id: n.id, anchor: n.id, label: n.label }));
   const names = actorNames(rows);
@@ -457,11 +457,16 @@ export function figureForLink(linked: LinkedFigure): Figure {
       },
     ]),
   );
-  const flows = linked.edges.map(([src, dst]): Flow => {
-    const a = actors.get(src);
-    const b = actors.get(dst);
-    if (!a || !b) throw new Error("the link has an edge " + src + "->" + dst + " to no node");
-    return { src: { dir: null, actor: a }, dst: { dir: null, actor: b }, label: "", stroke: null };
+  const flows = linked.edges.map((e): Flow => {
+    const a = actors.get(e.from);
+    const b = actors.get(e.to);
+    if (!a || !b) throw new Error("the link has an edge " + e.from + "->" + e.to + " to no node");
+    return {
+      src: { dir: null, actor: a },
+      dst: { dir: null, actor: b },
+      label: e.label,
+      stroke: e.stroke,
+    };
   });
   return {
     ...EMPTY_FIGURE,

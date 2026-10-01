@@ -1,0 +1,35 @@
+# A graph build killed while it holds the knowledge store's build lock leaves its holder
+# record behind; the kernel drops the lock itself with the process. The next build takes
+# over at once and names the build that never released it.
+#
+# The fixture's symbol indexer sleeps, so the first build is still holding the lock when
+# bash kills it with SIGKILL, which no handler can intercept to clean up.
+exec bash -c 'magus graph build --no-sessions >first.out 2>first.err & first=$!; for i in $(seq 400); do [ -s .magus/knowledge/graph-build.holder.json ] && break; sleep 0.05; done; [ -s .magus/knowledge/graph-build.holder.json ] || exit 9; kill -9 $first; wait $first; echo "first=$?"'
+stdout 'first=137'
+exists .magus/knowledge/graph-build.holder.json
+
+exec magus graph build --no-sessions
+stderr 'magus graph build: took over the build lock from `magus graph build` \(pid [0-9]+, started [0-9-]+ [0-9:]+\), which ended without releasing it'
+! stderr 'waiting for'
+stderr 'knowledge graph rebuilt'
+! exists .magus/knowledge/graph-build.holder.json
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "spells/slow";
+magus\project({ "spells": [slow] });
+-- spells/slow/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "slow"; }
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "sh", args = ["-c", "sleep 3; : > \"$0\"", "$MAGUS_SYMBOL_INDEX"]},
+    };
+}
+fun noop(target: Target) > Command {
+    return Command{bin = "true"};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"noop": noop}; }

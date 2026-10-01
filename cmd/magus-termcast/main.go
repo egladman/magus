@@ -1,7 +1,14 @@
-// Command magus-termcast turns a recorded magus session into the animated SVG
-// the README leads with.
+// Command magus-termcast renders magus's terminal output to SVG, in two modes:
 //
-// It splits the job the GIF could not: RECORDING is a real session and cannot
+//	magus-termcast [-record] [-showcase] [-materialize dir] [-out path]
+//	magus-termcast shots [-out dir]
+//
+// With no subcommand it turns a recorded magus session into the animated SVG
+// the README leads with. The shots subcommand renders the interactive surfaces
+// as stills for the documentation; shots.go says why those are staged rather
+// than recorded.
+//
+// The recorded mode splits the job the GIF could not: RECORDING is a real session and cannot
 // be reproduced byte for byte, while RENDERING is arithmetic and can. So the two
 // live at different layers, and only the deterministic half is gated:
 //
@@ -67,62 +74,84 @@ const (
 )
 
 func main() {
-	record := flag.Bool("record", false, "re-record "+capturePath+" by running "+sessionPath+" for real")
-	out := flag.String("out", svgPath, "path to write the rendered SVG to")
-	materializeTo := flag.String("materialize", "", "write the demo workspace from "+fixturePath+" into this directory and exit")
-	showcase := flag.Bool("showcase", false, "re-record "+showCapture+" by driving a real interactive session")
-	flag.Parse()
+	name, mode, args := "magus-termcast", runCast, os.Args[1:]
+	if len(args) > 0 && args[0] == "shots" {
+		name, mode, args = "magus-termcast shots", runShots, args[1:]
+	}
+	if err := mode(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
+		os.Exit(1)
+	}
+}
+
+// runCast is the mode with no subcommand: record or render the core loop and
+// the showcase.
+func runCast(args []string) error {
+	fs := flag.NewFlagSet("magus-termcast", flag.ExitOnError)
+	fs.Usage = func() {
+		fmt.Fprint(fs.Output(), "usage: magus-termcast [flags]\n       magus-termcast shots [-out dir]\n\nflags:\n")
+		fs.PrintDefaults()
+	}
+	record := fs.Bool("record", false, "re-record "+capturePath+" by running "+sessionPath+" for real")
+	out := fs.String("out", svgPath, "path to write the rendered SVG to")
+	materializeTo := fs.String("materialize", "", "write the demo workspace from "+fixturePath+" into this directory and exit")
+	showcase := fs.Bool("showcase", false, "re-record "+showCapture+" by driving a real interactive session")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	// Without this a mistyped subcommand would be ignored and the default
+	// render would run in its place.
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unknown subcommand %q; the only one is shots", fs.Arg(0))
+	}
 
 	if *showcase {
 		if err := recordShowcaseSession(); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 	}
 
 	if *materializeTo != "" {
-		if err := materialize(*materializeTo); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
-			os.Exit(1)
-		}
-		return
+		return materialize(*materializeTo)
 	}
 
 	if *record {
 		if err := recordSession(); err != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
-			os.Exit(1)
+			return err
 		}
 		fmt.Fprintf(os.Stderr, "magus-termcast: recorded %s\n", capturePath)
 	}
 
 	if b, err := os.ReadFile(showCapture); err == nil {
 		for _, v := range screen.ThemeVariants {
-			svg, rerr := renderShowcase(string(b), v.Theme)
-			if rerr != nil {
-				fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", rerr)
-				os.Exit(1)
+			svg, err := renderShowcase(string(b), v.Theme)
+			if err != nil {
+				return err
 			}
-			write(screen.VariantPath(showSVG, v.Suffix), svg)
+			if err := write(screen.VariantPath(showSVG, v.Suffix), svg); err != nil {
+				return err
+			}
 		}
 	}
 
 	for _, v := range screen.ThemeVariants {
 		svg, err := renderFile(capturePath, v.Theme)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
-			os.Exit(1)
+			return err
 		}
-		write(screen.VariantPath(*out, v.Suffix), svg)
+		if err := write(screen.VariantPath(*out, v.Suffix), svg); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func write(path, svg string) {
+func write(path, svg string) error {
 	if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-termcast: write %s: %v\n", path, err)
-		os.Exit(1)
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 	fmt.Fprintf(os.Stderr, "magus-termcast: wrote %s (%d bytes)\n", path, len(svg))
+	return nil
 }
 
 // materialize writes the demo workspace out of the committed txtar and makes it

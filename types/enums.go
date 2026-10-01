@@ -69,7 +69,7 @@ func (v PatternType) Values() []string { return patternTypes.Strings() }
 func (v PatternType) Valid() bool      { return patternTypes.Valid(v) }
 func (v PatternType) String() string   { return enum.String(v) }
 
-var symbolIndexFreshnesses = enum.Set[SymbolIndexFreshness]{"up-to-date", "out-of-date", "not-indexed"}
+var symbolIndexFreshnesses = enum.Set[SymbolIndexFreshness]{"up-to-date", "out-of-date", "not-indexed", "unvouched"}
 
 func (v SymbolIndexFreshness) Values() []string { return symbolIndexFreshnesses.Strings() }
 func (v SymbolIndexFreshness) Valid() bool      { return symbolIndexFreshnesses.Valid(v) }

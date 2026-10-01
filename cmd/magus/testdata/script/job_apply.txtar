@@ -1,0 +1,43 @@
+# `magus job apply -f -` reads records from stdin the way `kubectl apply -f -` does. A new
+# id creates the job; a second stream upserts its spec and creates another, keeping the
+# first job's state; --dry-run prints the spec diff and writes nothing; a record adding a
+# directory (MGS3018) is refused and leaves the row as it was.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus init -local -vcs git
+mkdir src/pkg
+cp $WORK/code.go src/pkg/code.go
+cp $WORK/code.go src/pkg/other.go
+
+env 'ROW={"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}'
+exec sh -c 'printf ''%s'' "$ROW" | magus job apply -f -'
+stdout '^created wave/a, declared, with 1 write path\(s\)$'
+
+stdin $WORK/widen.jsonl
+exec magus job apply -f -
+stdout '^updated wave/a, still declared:$'
+stdout '^  write_paths \+src/pkg/other\.go$'
+stdout '^created wave/b, declared, with 1 write path\(s\)$'
+
+exec magus job apply -f $WORK/narrow.json --dry-run
+stdout '^would update wave/a, still declared:$'
+stdout '^  write_paths -src/pkg/other\.go$'
+stdout '^dry run: nothing written'
+exec magus describe job wave/a -o json
+stdout 'src/pkg/other\.go'
+
+! exec magus job apply -f $WORK/dir.json
+stderr 'MGS3018'
+exec magus describe job wave/a -o json
+stdout 'src/pkg/other\.go'
+! stdout '"src/pkg"'
+
+-- code.go --
+package pkg
+-- widen.jsonl --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go"],"check":{"target":"test","project":"."}}
+{"schema_version":11,"id":"wave/b","write_paths":["src/fresh"],"goals":[{"id":"created","kind":"paths","expect":"present","paths":["src/fresh"]}]}
+-- narrow.json --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go"],"check":{"target":"test","project":"."}}
+-- dir.json --
+{"schema_version":11,"id":"wave/a","write_paths":["src/pkg/code.go","src/pkg/other.go","src/pkg"],"check":{"target":"test","project":"."}}

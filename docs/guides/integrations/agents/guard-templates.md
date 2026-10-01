@@ -452,6 +452,10 @@ object Guard {
     payload: str,
     flags: [str],
     response: str,
+    // The event's cwd. The guard reads its workspace, job store and lease binding from
+    // its own working directory, and a host may start hooks in the repository's main
+    // checkout while the session works in a linked worktree.
+    dir: str,
 }
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
@@ -463,7 +467,7 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, opts: {
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: {
         "quiet": true,
         "allow_failure": true,
         "stdin": guard.payload,
@@ -644,7 +648,8 @@ fun main(args: [str]) > void {
         rewrites = updatedInput != "";
     }
 
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
+    final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(session, family: "unavailable-{toolName}", file: "magus-command.buzz")) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
@@ -659,7 +664,7 @@ fun main(args: [str]) > void {
     } else if (!rawEvent) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response };
+    final guard = Guard{ bin = bin, payload = payload, flags = shellFlags(args), response = response, dir = cwd };
 
     // Attribution is BEST EFFORT; the verdict is not.
     //
@@ -834,6 +839,8 @@ object Guard {
     bin: str,
     payload: str,
     response: str,
+    // The event's cwd, for the reason magus-command.buzz's Guard gives.
+    dir: str,
 }
 
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
@@ -841,7 +848,7 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     foreach (arg in extra) { args.append(arg); }
     args.append("-o");
     args.append("template={guard.response}");
-    return proc\exec(guard.bin, args: args, opts: {
+    return proc\exec(guard.bin, args: args, dir: guard.dir, opts: {
         "quiet": true,
         "allow_failure": true,
         "stdin": guard.payload,
@@ -894,7 +901,8 @@ fun main(args: [str]) > void {
     final raw = io\stdin.readAll() catch null;
     final event = json\parse(raw ?? "") catch null;
 
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
+    final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
         // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
@@ -937,7 +945,7 @@ fun main(args: [str]) > void {
     if (!hook\wholeEvent(event, dotPath: eventPath, toolPath: toolPath)) {
         payload = hook\rawField(event, dotPath: eventPath) + "\n";
     }
-    final guard = Guard{ bin = bin, payload = payload, response = response };
+    final guard = Guard{ bin = bin, payload = payload, response = response, dir = cwd };
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,

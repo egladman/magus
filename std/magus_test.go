@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -27,18 +31,23 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 	cases := []struct {
 		name     string
 		sub      string
+		args     []string
 		wantWarn bool
 	}{
-		{"describe warns", "describe", true},
-		{"run warns", "run", true},
-		{"insight does not warn", "insight", false},
-		{"doctor warns", "doctor", true},
-		{"status does not warn", "status", false},
-		{"affected does not warn", "affected", false},
-		{"no subcommand does not warn", "", false},
+		{"describe of a typed noun warns", "describe", []string{"spell", "go"}, true},
+		{"describe of a plural spelling warns", "describe", []string{"mcp-tools"}, true},
+		{"describe of an untyped noun does not warn", "describe", []string{"job", "x"}, false},
+		{"describe asked for its bytes does not warn", "describe", []string{"graph", "-o", "json"}, false},
+		{"bare describe does not warn", "describe", nil, false},
+		{"run warns", "run", nil, true},
+		{"insight does not warn", "insight", nil, false},
+		{"doctor warns", "doctor", nil, true},
+		{"status does not warn", "status", nil, false},
+		{"affected does not warn", "affected", nil, false},
+		{"no subcommand does not warn", "", nil, false},
 		// The subcommand is its own argument now, so a value that merely CONTAINS a
 		// typed name is not one: only an exact match is the escape hatch being misused.
-		{"a longer name that starts with one does not warn", "runner", false},
+		{"a longer name that starts with one does not warn", "runner", nil, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,7 +59,7 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 
 			// Test the pure decision half directly — calling MagusCmd would exec the
 			// test binary (a fork-bomb risk), and the warning is what we care about.
-			warnIfTypedSubcommand(context.Background(), tc.sub)
+			warnIfTypedSubcommand(context.Background(), tc.sub, tc.args)
 
 			got := strings.Contains(buf.String(), "subcommand with a dedicated method")
 			assert.Equal(t, tc.wantWarn, got, "warn mismatch (log=%q)", buf.String())
@@ -111,6 +120,36 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 
 	wrong := nestedExecOptions(ctx, map[string]any{"stdin": 7}, nil)
 	assert.Empty(t, wrong.Stdin, "a non-string stdin is ignored rather than rendered")
+}
+
+// TestNestedResultHonorsAllowFailure pins magus.cmd/run/describe to proc.exec's
+// contract: a non-zero exit raises, unless opts.allow_failure returns the result.
+func TestNestedResultHonorsAllowFailure(t *testing.T) {
+	full := []string{"status"}
+	failed := run.ExecResult{Stdout: "partial\n", Stderr: "boom\n", Code: 3, Started: true}
+
+	_, err := nestedResult("cmd", full, failed, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "magus.cmd: status exited with code 3")
+
+	got, err := nestedResult("cmd", full, failed, nil, map[string]any{"allow_failure": true})
+	require.NoError(t, err)
+	assert.Equal(t, types.ExecResult{Stdout: "partial", Stderr: "boom", Code: 3, OK: false}, got)
+
+	notStarted := run.ExecResult{Code: -1}
+	_, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), nil)
+	require.ErrorContains(t, err, "no such file")
+	got, err = nestedResult("cmd", full, notStarted, errors.New("no such file"), map[string]any{"allow_failure": true})
+	require.NoError(t, err)
+	assert.Equal(t, -1, got.Code)
+	assert.False(t, got.OK)
+
+	_, err = nestedResult("cmd", full, run.ExecResult{Code: -1}, types.ExecDenied, map[string]any{"allow_failure": true})
+	assert.ErrorIs(t, err, types.ExecDenied, "a sandbox denial is never swallowed")
+
+	ok, err := nestedResult("cmd", full, run.ExecResult{Stdout: "fine", Started: true}, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, ok.OK)
 }
 
 // TestMagusRaise covers the contract a magusfile author depends on: the code and url
@@ -248,7 +287,7 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
 
-// fakeToolReporter is a workspace that reports its tools, so magus\tools() can be shown
+// fakeToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
 // to answer in-process rather than forking a nested magus.
 type fakeToolReporter struct {
 	types.WorkspaceRepository
@@ -268,7 +307,7 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
 		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
 	}
-	got, err := MagusTools(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
+	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
@@ -420,6 +459,47 @@ func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, report.Jobs, 1)
 	assert.Equal(t, "on-disk", report.Jobs[0].ID, "nothing was written through the snapshot")
+}
+
+// magus\job.list measures overlaps through the function `magus ls jobs` calls, so the
+// typed call's footprints are exactly job.MeasureOverlaps over the same rows.
+func TestJobListMeasuresOverlapFootprints(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	testkit.Isolate(t)
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	root := t.TempDir()
+	git := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		return strings.TrimSpace(string(out))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "api"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\treturn\n}\n"), 0o644))
+	git("init", "-q", "-b", "main")
+	git("add", "-A")
+	git("commit", "-q", "-m", "seed")
+	rev := git("rev-parse", "HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
+		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
+		require.NoError(t, err)
+		_, _, err = MagusRegisterJob(ctx, id, rev)
+		require.NoError(t, err)
+	}
+
+	report, err := MagusListJob(ctx)
+	require.NoError(t, err)
+	require.Len(t, report.Overlaps, 1)
+	require.NotNil(t, report.Overlaps[0].Footprint, "the typed call measures footprints like `magus ls jobs`")
+	assert.Equal(t, types.FootprintShared, report.Overlaps[0].Footprint.Verdict, report.Overlaps[0].Footprint.Reason)
+	assert.Equal(t, job.MeasureOverlaps(ctx, root, report.Jobs, types.NewJobList(report.Jobs).Overlaps), report.Overlaps)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
@@ -788,5 +868,18 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 	for sub := range typedMagusSubcommands {
 		assert.True(t, members[sub], "magus.cmd(%q) points at magus.%s, which does not exist", sub, sub)
+	}
+
+	describe := map[string]bool{}
+	for _, ns := range Magus.Namespaces {
+		if ns.Name != "describe" {
+			continue
+		}
+		for _, m := range ns.Methods {
+			describe[CamelCase(m.Name)] = true
+		}
+	}
+	for noun, method := range typedDescribeNouns {
+		assert.True(t, describe[method], "magus.cmd(\"describe\", [%q]) points at magus\\describe.%s, which does not exist", noun, method)
 	}
 }

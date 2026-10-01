@@ -110,6 +110,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | ------------------- | ------------------------- | --------------------- | ----------------- |
 | `mcp.address`       | `MAGUS_MCP_ADDRESS`       | `--mcp-address`       | string            |
 | `mcp.enabled`       | `MAGUS_MCP_ENABLED`       | _(env only)_          | bool _(env only)_ |
+| `mcp.http`          | `MAGUS_MCP_HTTP`          | _(env only)_          | bool _(env only)_ |
 | `mcp.insecure_bind` | `MAGUS_MCP_INSECURE_BIND` | `--mcp-insecure-bind` | bool              |
 
 ## report

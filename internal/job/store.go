@@ -31,7 +31,6 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -64,7 +63,7 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // List and writing back the whole row takes them twice, and two such merges on one id
 // then lose whichever field the second one read before the first wrote. [Store.Update] is
 // that merge done under a single acquisition, and it is what a field-at-a-time writer (the
-// client MCP tool's magus\job\put) has to use.
+// client MCP tool's magus\job.put) has to use.
 //
 // READS take neither. Every write replaces the file by rename, so a reader either sees the
 // whole previous ledger or the whole next one; blocking List behind a writer in another
@@ -375,97 +374,6 @@ func (s *Store) Enter(ctx context.Context, id, rel string) (types.Job, error) {
 	return s.Update(ctx, id, func(u *types.Job) { u.Entries = append(u.Entries, types.JobEntry{Path: rel}) })
 }
 
-// EditOptions is the change [Store.Edit] makes to a live job's write paths.
-type EditOptions struct {
-	// AddWritePaths widens the job. A path it already holds is left where it is.
-	AddWritePaths []string
-	// RemoveWritePaths revokes paths the job holds.
-	RemoveWritePaths []string
-	// DryRun returns the row the edit would write, releases included, and writes nothing.
-	DryRun bool
-}
-
-// Edit merges opts into live job id's write paths in one write, and keeps everything else
-// the row carries, its state and registration included, where a re-fork hands a taken job
-// out again as declared. A removed path is released as a worker's own shrink releases one,
-// with the digest of what it left, and marked revoked when someone other than the holder of
-// a taken job removed it, so the holder's next write there is refused naming that.
-//
-// Who may do what is [authorizeRow]'s: an unbound writer widens, and a bound worker only
-// removes its own paths. An added path is held to the rules a fork's write paths are (see
-// [RefuseAddedWritePaths]). Naming no path, one path both ways, a path the job does not
-// hold, a job nobody declared or one that ended is an error, and nothing is written.
-func (s *Store) Edit(ctx context.Context, id string, opts EditOptions) (types.Job, error) {
-	if len(opts.AddWritePaths)+len(opts.RemoveWritePaths) == 0 {
-		return types.Job{}, fmt.Errorf("job: an edit of %s names no write path to add or remove", id)
-	}
-	for _, p := range opts.AddWritePaths {
-		if slices.Contains(opts.RemoveWritePaths, p) {
-			return types.Job{}, fmt.Errorf("job: %q is both added and removed", p)
-		}
-	}
-	if err := RefuseAddedWritePaths(ctx, s, id, opts.AddWritePaths); err != nil {
-		return types.Job{}, err
-	}
-	if !opts.DryRun {
-		return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, exists bool, _ int64) error {
-			return editWritePaths(cur, id, exists, opts)
-		})
-	}
-	rows, err := s.List()
-	if err != nil {
-		return types.Job{}, err
-	}
-	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-	var prev types.Job
-	if i >= 0 {
-		prev = rows[i]
-		if err := readOnly(prev); err != nil {
-			return types.Job{}, err
-		}
-	}
-	next := prev.Clone()
-	if err := editWritePaths(&next, id, i >= 0, opts); err != nil {
-		return types.Job{}, err
-	}
-	actor := s.Actor()
-	if err := authorizeRow(actor, id, asDeclaration, prev, next, true, rows); err != nil {
-		return types.Job{}, err
-	}
-	next.Releases = s.releases(ctx, prev, next, time.Now().Unix(), prev.Registered != 0 && actor.Lease != id)
-	return next, nil
-}
-
-// editWritePaths applies opts to cur, the stored row id, or says why it cannot.
-func editWritePaths(cur *types.Job, id string, exists bool, opts EditOptions) error {
-	switch {
-	case !exists:
-		return fmt.Errorf("job: there is no job %q to edit", id)
-	case cur.State.Terminal():
-		return fmt.Errorf("job: %s already ended %s, and an edit changes a live job", id, cur.State)
-	}
-	for _, p := range opts.RemoveWritePaths {
-		if !slices.Contains(cur.WritePaths, p) {
-			return fmt.Errorf("job: %s does not hold %q, so there is nothing to revoke; its write paths are %s",
-				id, p, strings.Join(cur.WritePaths, ", "))
-		}
-	}
-	paths := slices.DeleteFunc(slices.Clone(cur.WritePaths), func(p string) bool { return slices.Contains(opts.RemoveWritePaths, p) })
-	for _, p := range opts.AddWritePaths {
-		if !slices.Contains(paths, p) {
-			paths = append(paths, p)
-		}
-	}
-	// An empty write set is no boundary at all (the guard scopes nothing by it), so taking
-	// the last path would free the job rather than stop it.
-	if len(paths) == 0 {
-		return fmt.Errorf("job: that revokes every write path %s holds, which leaves it bounded by nothing;"+
-			" end the job with `%s` instead", id, hint.JobExit.With(id))
-	}
-	cur.WritePaths = paths
-	return nil
-}
-
 // entryPath cleans the path an entry names, refusing one that is not workspace-relative.
 func entryPath(rel string) (string, error) {
 	clean := path.Clean(filepath.ToSlash(strings.TrimSpace(rel)))
@@ -657,6 +565,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			if kind != asExec {
 				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 				row.CheckoutRoot = prev.CheckoutRoot
+			}
+			// An ended row declared again is handed out afresh: its old holder gave it up,
+			// and a checkout left on it would refuse every new taker and, once that
+			// worktree is gone, end the row again on the next sweep.
+			if kind == asDeclaration && prev.State.Terminal() && row.State.Live() {
+				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
 			}
 			if kind != asObservation {
 				row.Unattributed = prev.Unattributed

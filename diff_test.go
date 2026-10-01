@@ -2,12 +2,15 @@ package magus
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,6 +37,75 @@ func graphOf(nodes ...types.KnowledgeNode) *knowledge.Graph {
 // noExternals is the referent lookup for a workspace where nothing crosses a project
 // boundary, so a test states exposure through the Go export rule alone.
 func noExternals(*knowledge.Graph, string, string) ([]string, int) { return nil, 0 }
+
+// A file the symbol index leaves out (a build tag the host does not satisfy, in a nested
+// module) still names the declarations a change touched, under the IDs scip-go gives them,
+// and code in a raw string declares nothing.
+func TestParsedGoSymbolsNameTouchedDeclarations(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
+	}
+	write("go.mod", "module example.com/m\n\ngo 1.25\n")
+	write("libs/x/go.mod", "// the nested module\nmodule \"example.com/m/libs/x\"\n")
+	write("libs/x/vm/jit_amd64.go", `//go:build amd64
+
+package vm
+
+const script = `+"`"+`
+var i = 0;
+func fake() {}
+`+"`"+`
+
+type Asm struct {
+	n int
+}
+
+func (a *Asm) Emit(op int) {
+	a.n += op
+}
+
+func compile() int {
+	return 1
+}
+`)
+	write("vm_test.go", "package m_test\n\nfunc TestVM(t *testing.T) {\n\tcheck()\n}\n")
+
+	patch := `diff --git a/libs/x/vm/jit_amd64.go b/libs/x/vm/jit_amd64.go
+--- a/libs/x/vm/jit_amd64.go
++++ b/libs/x/vm/jit_amd64.go
+@@ -6,1 +6,1 @@
+-var j = 0;
++var i = 0;
+@@ -15,1 +15,1 @@
+-	a.n++
++	a.n += op
+@@ -17,0 +18,3 @@
++func compile() int {
++	return 1
++}
+diff --git a/vm_test.go b/vm_test.go
+--- a/vm_test.go
++++ b/vm_test.go
+@@ -4,1 +4,1 @@
+-	run()
++	check()
+`
+	lines, pf := impact.ChangedLines(patch), readPatchFacts(patch)
+	const vm = "symbol:gomod example.com/m/libs/x `example.com/m/libs/x/vm`/"
+	assert.Equal(t, []types.DiffSymbol{
+		{ID: vm + "script.", Label: "script", Change: types.DiffChangeBody, Qualified: "script"},
+		{ID: vm + "Asm#Emit().", Label: "Emit", Change: types.DiffChangeBody, Qualified: "Asm.Emit", PublicBeyondWorkspace: true},
+		{ID: vm + "compile().", Label: "compile", Change: types.DiffChangeAdded, Qualified: "compile"},
+	}, parsedGoSymbols(root, "libs/x/vm/jit_amd64.go", lines["libs/x/vm/jit_amd64.go"], pf))
+	assert.Equal(t, []types.DiffSymbol{
+		{ID: "symbol:gomod example.com/m `example.com/m_test`/TestVM().", Label: "TestVM", Change: types.DiffChangeBody, Qualified: "TestVM"},
+	}, parsedGoSymbols(root, "vm_test.go", lines["vm_test.go"], pf), "an external test package is the import path plus _test")
+	assert.Nil(t, parsedGoSymbols(root, "gone.go", []int{1}, pf), "a file no longer on disk")
+}
 
 func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 	const (

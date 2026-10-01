@@ -60,7 +60,7 @@ func ReadPathContact(dir, path string) PathContact {
 	if dir == "" || path == "" {
 		return out
 	}
-	fold, err := ReadAll(dir)
+	fold, err := ReadAgentEvents(dir)
 	if err != nil {
 		return out
 	}

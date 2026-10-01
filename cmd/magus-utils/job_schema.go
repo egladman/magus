@@ -188,7 +188,10 @@ func properties(structName string, st *ast.StructType, d *goDecls, version int) 
 		case name == "":
 			return nil, nil, fmt.Errorf("%s.%s carries no json tag, so no schema can name it", structName, field)
 		}
-		omitempty := slices.Contains(strings.Split(opts, ","), "omitempty")
+		// Under jsonv2 omitempty keeps a false or a zero, so omitzero is how a scalar says it
+		// is optional, and either makes the field one a record may leave out.
+		tagOpts := strings.Split(opts, ",")
+		omitempty := slices.Contains(tagOpts, "omitempty") || slices.Contains(tagOpts, "omitzero")
 
 		prop, err := property(f, structName, field, name, omitempty, d, version)
 		if err != nil {

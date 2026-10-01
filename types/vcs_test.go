@@ -152,3 +152,22 @@ func TestStaleSourceProjects(t *testing.T) {
 
 	assert.Empty(t, StaleSourceProjects(nil))
 }
+
+func TestCheckpointTokenRoundTrips(t *testing.T) {
+	clean := VCSCheckpoint{Revision: "abc"}
+	assert.Equal(t, "abc", clean.Token(), "a clean tree is its revision")
+	rev, digest := ParseCheckpointToken(clean.Token())
+	assert.Equal(t, "abc", rev)
+	assert.Empty(t, digest, "a clean token carries no digest")
+
+	tracked := VCSCheckpoint{Revision: "abc", Dirty: true, PatchDigest: "0123456789abcdef0123456789abcdef"}
+	assert.Equal(t, "abc+0123456789abcdef0123456789abcdef", tracked.Token(),
+		"a tracked-only token keeps the review session's patch digest")
+
+	both := tracked
+	both.UntrackedDigest = "fedcba9876543210fedcba9876543210"
+	rev, digest = ParseCheckpointToken(" " + both.Token() + "\n")
+	assert.Equal(t, "abc", rev, "surrounding space is trimmed")
+	assert.Len(t, digest, 32, "the folded digest is as wide as a patch digest")
+	assert.NotEqual(t, tracked.PatchDigest, digest, "untracked files change the digest")
+}

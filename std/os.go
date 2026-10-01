@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,20 +27,136 @@ import (
 
 func init() { Register(Os) }
 
-// magusWarnOnce fires at most once per process when a magusfile execs the magus
-// binary, directing the author to magus.cmd instead.
-var magusWarnOnce sync.Once
+// magusWarned holds each typed member warnIfMagusBinary has already named, so a script
+// looping over one invocation hears about it once.
+var magusWarned sync.Map
 
-// warnIfMagusBinary emits a one-shot slog warning when cmd resolves to the
-// magus binary. Execution is not blocked; the escape hatch stays open.
-func warnIfMagusBinary(ctx context.Context, cmd string) {
+// warnIfMagusBinary warns when cmd is the magus binary and args name an invocation a typed
+// magus\ member answers, naming that member: it returns a typed record where the exec
+// returns text to parse back, and runs the build that loaded the script rather than
+// whichever magus the path finds. An invocation no member answers (`job exec`, `queue ls`,
+// `server start`) is what proc.exec is for, so it stays silent. Execution is never blocked.
+func warnIfMagusBinary(ctx context.Context, cmd string, args []string) {
 	if filepath.Base(cmd) != "magus" {
 		return
 	}
-	magusWarnOnce.Do(func() {
-		slog.WarnContext(ctx, "magusfile: proc.exec called with 'magus' binary",
-			"hint", "use magus.cmd({...}) instead - in-process, version-pinned, no arg-quoting issues")
-	})
+	member := typedMagusMember(args)
+	if member == "" {
+		return
+	}
+	if _, seen := magusWarned.LoadOrStore(member, true); seen {
+		return
+	}
+	slog.WarnContext(ctx, "proc\\exec runs magus for an invocation a typed member answers",
+		"invocation", strings.Join(append([]string{"magus"}, args...), " "),
+		"hint", "call magus\\"+member+" instead")
+}
+
+// typedMagusMembers maps a magus invocation, by its subcommand and, where the subcommand
+// alone does not decide it, the word after, to the magus\ member that answers it. The
+// two-word key wins. `describe` takes its nouns singular or plural, so each is keyed
+// both ways; a noun with no method (`describe job`) has no member. A subcommand whose
+// member needs a particular shape of argv (`affected`, `ls`, `describe target <ref>`) is
+// decided in typedMagusMember instead.
+var typedMagusMembers = map[string]string{
+	"run":                 "run",
+	"describe charm":      "describe.charm",
+	"describe charms":     "describe.charm",
+	"describe file":       "describe.file",
+	"describe files":      "describe.file",
+	"describe graph":      "describe.graph",
+	"describe harness":    "describe.harness",
+	"describe mcp-tool":   "describe.mcpTool",
+	"describe mcp-tools":  "describe.mcpTool",
+	"describe module":     "describe.module",
+	"describe modules":    "describe.module",
+	"describe project":    "describe.project",
+	"describe projects":   "describe.project",
+	"describe rule":       "describe.rule",
+	"describe rules":      "describe.rule",
+	"describe spell":      "describe.spell",
+	"describe spells":     "describe.spell",
+	"describe tool":       "describe.tool",
+	"describe tools":      "describe.tool",
+	"describe workspace":  "describe.workspace",
+	"describe workspaces": "describe.workspace",
+	"doctor":              "doctor",
+	"clean":               "clean",
+	"diff":                "diff",
+	"query":               "query",
+	"query output":        "output",
+	"explain":             "explain",
+	"path":                "path",
+	"refs":                "refs",
+	"insight":             "insight",
+	"graph stats":         "stats",
+	"ls jobs":             "job.list",
+	"ls targets":          "describe.graph",
+	"job fork":            "job.put",
+	"job exit":            "job.exit",
+	"job wait":            "job.wait",
+	"vcs checkpoint":      "vcs.checkpoint",
+	"session attention":   "attention",
+}
+
+// typedMagusMember is the magus\ member that answers `magus <args>`, or "" when none does.
+// Global flags ahead of the subcommand leave it undecided, and undecided is silent.
+func typedMagusMember(args []string) string {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+		return ""
+	}
+	sub, rest := args[0], args[1:]
+	if len(rest) > 0 {
+		if member, ok := typedMagusMembers[sub+" "+rest[0]]; ok {
+			return member
+		}
+	}
+	positional := hasPositional(rest)
+	switch sub {
+	case "ls":
+		// A bare `ls` lists the projects; `ls <noun>` has a member only where the table says.
+		if !positional {
+			return "describe.project"
+		}
+		return ""
+	case "describe":
+		// `describe target` is the catalog; `describe target <ref>` evaluates one target.
+		if len(rest) == 0 || (rest[0] != "target" && rest[0] != "targets") {
+			return ""
+		}
+		if hasPositional(rest[1:]) {
+			return "describe.evaluatedTarget"
+		}
+		return "describe.target"
+	case "affected":
+		// `affected <target>` runs the target across the affected set, which no member does.
+		if positional {
+			return ""
+		}
+		if slices.Contains(rest, "--impact") {
+			return "impact"
+		}
+		return "affected"
+	}
+	return typedMagusMembers[sub]
+}
+
+// valueFlags are the flags `ls` and `affected` take whose value is the next argument, so
+// that value is not mistaken for a positional one.
+var valueFlags = []string{"-o", "--output", "--base", "--root"}
+
+// hasPositional reports whether args carry a positional argument once flags and their
+// values are set aside.
+func hasPositional(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		switch {
+		case slices.Contains(valueFlags, args[i]):
+			i++
+		case !strings.HasPrefix(args[i], "-"):
+			return true
+		}
+	}
+	return false
 }
 
 // The cwd/path helpers (cwdKey, WithCwd, cwdFromContext, CwdFromContext,
@@ -68,7 +185,7 @@ var Os = Module{
 	Methods: []Method{
 		{
 			Name: "with_env",
-			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os.env inside callback does not see them.",
+			Doc:  "Add env vars to subprocesses `proc\\exec` / `proc\\shell` start inside callback. Never touches the process's own environment - a lookup like os\\env inside callback does not see them.",
 			Args: []Arg{
 				{Name: "env", Type: TypeStringMap},
 				{Name: "callback", Type: TypeFunc, Func: "fun () > void !> any"},
@@ -94,7 +211,7 @@ var Os = Module{
 		},
 		{
 			Name:    "sleep",
-			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os.sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
+			Doc:     "Pause for the given number of milliseconds (fractional allowed), matching Buzz's os\\sleep. Cancellable: if the run is interrupted it returns early with the cancellation error rather than blocking.",
 			Args:    []Arg{{Name: "ms", Type: TypeFloat}},
 			Returns: nil,
 			Raises:  true,
@@ -102,7 +219,7 @@ var Os = Module{
 		},
 		{
 			Name:    "num_cpu",
-			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os.with_slots).",
+			Doc:     "Return the number of logical CPUs available, for sizing a command's own internal parallelism (see os\\with_slots).",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeInt}},
 			Impl:    OsNumCPU,
@@ -117,7 +234,7 @@ var Os = Module{
 		},
 		{
 			Name:    "executable",
-			Doc:     "Return the absolute path of the running magus binary. Pair it with fs.stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
+			Doc:     "Return the absolute path of the running magus binary. Pair it with fs\\stat inside a long-lived watch loop to detect that the binary was rebuilt or upgraded underneath the process, which means any output it goes on to generate would be stale.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeString}},
 			Raises:  true,
@@ -239,17 +356,10 @@ func OsPlatform(_ context.Context) (string, string, string, error) {
 	return osName, arch, variant, nil
 }
 
-// optBoolDefault reads a boolean option from opts, returning def when absent.
-func optBoolDefault(opts map[string]any, key string, def bool) bool {
-	if opts == nil {
-		return def
-	}
-	if v, ok := opts[key]; ok {
-		if b, ok := v.(bool); ok {
-			return b
-		}
-	}
-	return def
+// optBool reads a boolean option from opts: false when it is absent or not a bool.
+func optBool(opts map[string]any, key string) bool {
+	b, _ := opts[key].(bool)
+	return b
 }
 
 // optStringDefault reads a string option from opts, returning def when absent.
@@ -288,23 +398,23 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		Env:     overrides,
 		Stdin:   optStringDefault(opts, "stdin", ""),
 		Capture: true,
-		Quiet:   optBoolDefault(opts, "quiet", false),
-		TTY:     optBoolDefault(opts, "tty", false),
+		Quiet:   optBool(opts, "quiet"),
+		TTY:     optBool(opts, "tty"),
 	})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return types.ExecResult{}, err
 	}
-	if res.Code != 0 && !optBoolDefault(opts, "allow_failure", false) {
+	if res.Code != 0 && !optBool(opts, "allow_failure") {
 		if !res.Started {
 			// Process never started. Common footgun: proc.exec runs a single program
 			// with no shell, so a command line ("a | b", "cd x", "$VAR") fails to
 			// start as a literal program name. Nudge toward proc.shell, but only on
 			// the not-found failure of a shell-shaped command (proc.exec stays the
 			// right, faster default for a plain program).
-			if label == "proc.exec" && looksLikeShellCommand(cmd) {
+			if label == `proc\exec` && looksLikeShellCommand(cmd) {
 				interactive.Emit(os.Stderr, fmt.Sprintf(
-					"%q looks like a shell command line, but proc.exec runs a single program directly with no shell; "+
-						"use proc.shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
+					"%q looks like a shell command line, but proc\\exec runs a single program directly with no shell; "+
+						"use proc\\shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
 		}
@@ -356,14 +466,14 @@ func looksLikeShellCommand(cmd string) bool {
 // unless opts.allow_failure is true. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
 func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
-	warnIfMagusBinary(ctx, cmd)
+	warnIfMagusBinary(ctx, cmd, args)
 	wd := resolveDir(ctx, dir)
 	if wd != "" {
 		if err := checkRead(ctx, wd); err != nil {
 			return types.ExecResult{}, err
 		}
 	}
-	return runResult(ctx, cmd, args, wd, "proc.exec", cmd, opts)
+	return runResult(ctx, cmd, args, wd, `proc\exec`, cmd, opts)
 }
 
 // OsShell builds the argv that runs line through the platform shell and returns
@@ -435,7 +545,7 @@ func OsWithEnv(ctx context.Context, env map[string]string, cb Callback) error {
 // opts keys: backoff_ms (initial delay, default 500), max_backoff_ms (cap, default 30000).
 func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (any, error) {
 	if fn == nil {
-		return nil, fmt.Errorf("os.retry: fn must not be nil")
+		return nil, fmt.Errorf(`os\retry: fn must not be nil`)
 	}
 	backoffMs := 500.0
 	maxBackoffMs := 30000.0
@@ -475,7 +585,7 @@ func OsRetry(ctx context.Context, max int, fn Callback, opts map[string]any) (an
 			}
 		}
 	}
-	return nil, fmt.Errorf("os.retry: %d attempt(s): %w", max, lastErr)
+	return nil, fmt.Errorf(`os\retry: %d attempt(s): %w`, max, lastErr)
 }
 
 // retryFloat extracts a float64 from a Go any value (int, int64, or float64).

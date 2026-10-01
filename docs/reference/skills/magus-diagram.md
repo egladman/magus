@@ -3,13 +3,13 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 7984
-skill_short_bytes: 7191
+skill_full_bytes: 7983
+skill_short_bytes: 7190
 ---
 
 # magus-diagram
 
-Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-write.
+Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-lang.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2a7367b69a5e` |
+| `skill-content` | `fcb1584e12f6` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -194,7 +194,7 @@ finding: narrow the lens rather than asking for a bigger picture.
 - **Hand-drawn code edges and path strings.** An edge nobody's code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
 
-Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-write.
+Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-lang.
 ````
 
 
@@ -359,7 +359,7 @@ finding: narrow the lens rather than asking for a bigger picture.
 - **Hand-drawn code edges and path strings.** An edge nobody's code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
 
-Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-write.
+Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-lang.
 ````
 
 

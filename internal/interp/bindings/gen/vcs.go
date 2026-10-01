@@ -27,7 +27,8 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.StrVal(ret0), nil
 	}))
 	m.MapSet("base", vm.DirectValue("vcs.base", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.VcsBase(ctx)
+		dir := ffi.Str(bzArgs, 0)
+		ret0, err := std.VcsBase(ctx, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
@@ -42,14 +43,24 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("changedFiles", vm.DirectValue("vcs.changedFiles", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.Str(bzArgs, 0)
-		ret0, err := std.VcsChangedFiles(ctx, base)
+		dir := ffi.Str(bzArgs, 1)
+		ret0, err := std.VcsChangedFiles(ctx, base, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}
 		return ffi.ObjectSlice(ret0, ObjectPath), nil
 	}))
+	m.MapSet("regions", vm.DirectValue("vcs.regions", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := ffi.Str(bzArgs, 0)
+		ret0, err := std.VcsRegions(ctx, base)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectRegionChange), nil
+	}))
 	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.VcsRef(ctx)
+		dir := ffi.Str(bzArgs, 0)
+		ret0, err := std.VcsRef(ctx, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
@@ -157,6 +158,27 @@ func TestGateMatchesEachBackendsRevision(t *testing.T) {
 	}
 }
 
+// The verdict reads through the store's cached gate fold, so it must still see a gate that
+// finished after an earlier push cached the fold, and the newest verdict at a commit wins.
+func TestGateVerdictSeesAGateRecordedAfterTheLastRead(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	const commit = "42a1c0cc84b21f0e9d8c7b6a5f4e3d2c1b0a9f8"
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomeFail,
+	}, sessions.InvocationStart{Workspace: root}))
+	assert.Equal(t, gateFailed, gateVerdictAt(root, commit[:12]))
+
+	// Records order by millisecond; a later one puts the pass after the fail.
+	time.Sleep(2 * time.Millisecond)
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Commit: commit, Outcome: sessions.OutcomePass,
+	}, sessions.InvocationStart{Workspace: root}))
+	assert.Equal(t, gatePassed, gateVerdictAt(root, commit[:12]))
+}
+
 // TestGateStandsDownOnARevisionItCannotMatch pins the other half: an id that is not a
 // content hash cannot be prefix-matched against one, so the rule reports unknown and stands
 // down rather than matching by accident or asking on no evidence. hg's local revision
@@ -265,15 +287,38 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 }
 
 // TestUngatedPushDeniesALeasedWorker pins that a bound session is never offered the prompt:
-// approving it would publish from a boundary that does not own the branch.
+// approving it would publish from a boundary that does not own the branch. lease-vcs
+// refuses a worker's push before the push gate grades it, since pushing stays with the
+// orchestrator whatever the gate record says, so the gate's own worker arm is pinned
+// directly.
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	lease := narrowLease()
 	v := judgePush(t, "", lease.ID, lease)
 	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Equal(t, string(denyRuleLeaseVCS), v.Rule)
 	assert.Contains(t, v.Reason, lease.ID)
-	assert.Contains(t, v.Reason, "workers do not publish")
+	assert.Contains(t, v.Reason, "Pushing, stashing")
 	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+
+	decision, reason := gradePushWithoutGate(gateAbsent, "abc1234", lease.ID)
+	assert.Equal(t, "deny", decision)
+	assert.Contains(t, reason, lease.ID)
+	assert.Contains(t, reason, "workers do not publish")
+}
+
+// A root session holding a parentless row is the root under lease-vcs, so the push gate
+// asks it as it asks a person; only a worker is refused outright.
+func TestUngatedPushAsksARootSessionHoldingItsOwnLease(t *testing.T) {
+	lease := narrowLease()
+	lease.Parent = ""
+	ctx, _ := fleetFixture(t, lease)
+	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
+	assert.Equal(t, "ask", v.Decision)
+	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Contains(t, v.Reason, "Approving publishes")
 }
 
 // TestGatedPushIsNeverAsked pins that the prompt appears only when consent is needed.

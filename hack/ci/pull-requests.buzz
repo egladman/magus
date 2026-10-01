@@ -10,11 +10,11 @@
 //	magus buzz hack/ci/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
 //	    take the actions that change no code: queue what is green on a current base, and
 //	    rerun a red run once per head when the failure is outside the change's files
-//	magus buzz hack/ci/pull-requests.buzz -- dashboard [--all] [--base <b>] [--out <file>] [--issue <n>] [--console-base <url>]
+//	magus buzz hack/ci/pull-requests.buzz -- dashboard [--all] [--base <b>] --out <file> (--issue <n> | --preview) [--console-base <url>]
 //	    the queue as one markdown page: a link that draws the queue in the console
 //	    (--console-base, the hosted one by default), then a table per section with each
 //	    pull request's reason and a person's command; --issue replaces that issue's body
-//	    with it. `magus queue ls` needs GITHUB_TOKEN
+//	    with it, and --preview writes only the file. `magus queue ls` needs GITHUB_TOKEN
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -1240,7 +1240,7 @@ export fun selected(open: [Pull], prs: [int], author: str) > [Pull] {
 final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
     + "  status [--all | --author <login>] [--pr <n>]...\n"
     + "  apply [--author <login>] [--pr <n>]... [--method squash|merge|rebase]\n"
-    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] [--out <file>] [--issue <n>] [--run-url <url>] [--console-base <url>]";
+    + "  dashboard [--all | --author <login>] [--pr <n>]... [--base <branch>] --out <file> (--issue <n> | --preview) [--run-url <url>] [--console-base <url>]";
 
 // selectorOf parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
@@ -1279,12 +1279,20 @@ export fun selectorOf(step: str, argv: [str]) > Selector !> any {
         // apply acts on what it selects, so it never reaches past the caller's own.
         switches.append("--all");
     }
+    // A dashboard edits its issue unless --preview says it should not, so a workflow whose
+    // issue variable is unset passes an empty --issue and is refused, not rendered green.
+    final required = mut [<str>];
     if (step == "dashboard") {
         foreach (f in ["--base", "--out", "--issue", "--run-url", "--console-base"]) {
             valued.append(f);
         }
+        switches.append("--preview");
+        required.append("--out");
+        if (rest.indexOf("--preview") == null) {
+            required.append("--issue");
+        }
     }
-    final parsed = flags\parse(rest, switches: switches, valued: valued);
+    final parsed = flags\parse(rest, switches: switches, valued: valued, required: required);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "pull-requests: {step} does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
     }
@@ -1304,16 +1312,15 @@ export fun selectorOf(step: str, argv: [str]) > Selector !> any {
     if (base == "") {
         throw "pull-requests: --base needs a branch\n{usage}";
     }
-    // An empty --issue is how a workflow says its variable is unset.
     final issue = parsed.values["--issue"] ?? "";
     final number = std\parseInt(issue) ?? 0;
     if (issue != "" and (number <= 0 or "{number}" != issue)) {
         throw "pull-requests: --issue \"{issue}\" is not an issue number\n{usage}";
     }
-    final file = parsed.values["--out"] ?? "";
-    if (issue != "" and file == "") {
-        throw "pull-requests: --issue edits the issue with the --out file, so it needs --out\n{usage}";
+    if (issue != "" and parsed.values["--preview"] != null) {
+        throw "pull-requests: --preview edits no issue, so it takes no --issue\n{usage}";
     }
+    final file = parsed.values["--out"] ?? "";
     return Selector{ prs = prs, author = author ?? "", all = all, method = method,
         base = base, file = file, issue = issue, runUrl = parsed.values["--run-url"] ?? "",
         console = parsed.values["--console-base"] ?? figurelink\defaultConsoleBase };
@@ -1345,7 +1352,7 @@ fun generatedOf(paths: [str]) > [str] !> any {
     if (paths.len() == 0) {
         return acc;
     }
-    final report = serialize\Boxed.init(magus\describeFile(paths));
+    final report = serialize\Boxed.init(magus\describe.file(paths));
     foreach (f in report.q("files").listValue()) {
         final role = f.q("role").stringValue();
         if (role == "output" or role == "maintained") {
@@ -1573,7 +1580,9 @@ fun apply(sel: Selector) > void !> any {
 // The dashboard is one markdown page of every open pull request's place in the queue,
 // rebuilt whole on each render: nothing a person writes into the issue survives.
 final DASHBOARD_MARKER = "<!-- magus-queue-dashboard -->";
-final MERGED_LIMIT = 100;
+// How many merged pull requests the merged line reads. Each one carries its whole
+// statusCheckRollup, and 100 of them times out GitHub's GraphQL (HTTP 504) every time.
+final MERGED_LIMIT = 40;
 final MERGED_WINDOW = "168h";
 final RFC3339 = "2006-01-02T15:04:05Z07:00";
 // queue.yaml names each validation job this, then the pull request's number.
@@ -1990,7 +1999,7 @@ export fun dashboardOf(b: Board) > str !> any {
     lines.append("---");
     lines.append("");
     lines.append("<sub>Rendered from GitHub and `magus queue ls`, whole each time: "
-        + "`magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {cell(b.base)}`</sub>");
+        + "`magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {cell(b.base)} --preview --out dashboard.md`</sub>");
     lines.append("");
     lines.append(DASHBOARD_MARKER);
     return lines.join("\n") + "\n";
@@ -2045,13 +2054,9 @@ fun dashboard(sel: Selector) > void !> any {
     if (body.len() > BODY_LIMIT) {
         throw "pull-requests: the dashboard is {body.len()} characters, past the {BODY_LIMIT} GitHub takes in an issue body";
     }
-    if (sel.file == "") {
-        std\print(body);
-        return;
-    }
     fs\writeFile(sel.file, content: body);
     if (sel.issue == "") {
-        std\print("pull-requests: wrote the dashboard to {sel.file}; no --issue, so no issue was edited");
+        std\print("pull-requests: wrote the dashboard to {sel.file}; --preview, so no issue was edited");
         return;
     }
     capture("gh", args: ["issue", "edit", sel.issue, "--body-file", sel.file]);
@@ -2417,6 +2422,10 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
         ["dashboard", "--issue", "7"],
         ["dashboard", "--issue", "0", "--out", "d.md"],
         ["dashboard", "--base", "", "--all"],
+        ["dashboard", "--all", "--out", "d.md"],
+        ["dashboard", "--all", "--out", "d.md", "--issue", ""],
+        ["dashboard", "--all", "--preview", "--out", "d.md", "--issue", "12"],
+        ["dashboard", "--all", "--preview"],
     ]) {
         var refused = false;
         try {
@@ -2432,10 +2441,11 @@ test "status and dashboard take --all; dashboard takes its page's flags" {
     assert\equal(selectorOf("status", argv: ["--all"]).all, want: true, message: "status --all");
     final d = selectorOf("dashboard", argv: ["--all", "--base", "trunk", "--out", "d.md", "--issue", "12", "--run-url", "u"]);
     assert\equal([d.base, d.file, d.issue, d.runUrl], want: ["trunk", "d.md", "12", "u"], message: "the page's flags");
-    assert\equal(selectorOf("dashboard", argv: ["--all", "--out", "d.md", "--issue", ""]).issue, want: "", message: "an unset variable is no issue");
-    assert\equal(selectorOf("dashboard", argv: ["--all"]).base, want: "main", message: "the default base");
-    assert\equal(selectorOf("dashboard", argv: ["--all"]).console, want: figurelink\defaultConsoleBase, message: "the default console");
-    assert\equal(selectorOf("dashboard", argv: ["--all", "--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
+    final preview = ["--all", "--preview", "--out", "d.md"];
+    assert\equal(selectorOf("dashboard", argv: preview).issue, want: "", message: "a preview edits no issue");
+    assert\equal(selectorOf("dashboard", argv: preview).base, want: "main", message: "the default base");
+    assert\equal(selectorOf("dashboard", argv: preview).console, want: figurelink\defaultConsoleBase, message: "the default console");
+    assert\equal(selectorOf("dashboard", argv: preview + ["--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
 }
 
 test "selection is the requested numbers or the author's pull requests" {

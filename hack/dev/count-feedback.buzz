@@ -1,0 +1,219 @@
+namespace countfeedback;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "std";
+import "strings";
+import "time";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/count-feedback.buzz -- [--since <duration>] [-o json]";
+final HELP = "cost: none; reads this repository's feedback store\n{USAGE}\n"
+    + "Folds every mark made with mark-feedback, across sessions and checkouts, into a guard backlog: one row per marked row id, its latest verdict,\n"
+    + "how many sessions marked it, the change it asks of the guard, and examples. Rows whose latest verdict is fine are counted, not listed.";
+
+// ORDER ranks verdicts: a missing refusal first, then a wrong one, then missing advice.
+final ORDER = ["should-deny", "wrong-deny", "should-advise", "fine"];
+
+export object Item {
+    id: str,
+    section: str,
+    key: str,
+    rule: str,
+    verdict: str,
+    note: str,
+    sessions: int,
+    marks: int,
+    wants: str,
+    examples: [str],
+}
+
+// wants is the change a verdict on a row asks of the guard.
+export fun wants(section: str, verdict: str, rule: str) > str {
+    if (section == "unguarded") {
+        return if (verdict == "should-deny") "a new deny for this shape" else if (verdict == "should-advise") "a new advisory for this shape" else verdict;
+    }
+    if (section == "next-not-taken") {
+        return "a different next from {rule}";
+    }
+    if (verdict == "wrong-deny") {
+        return if (section == "refused") "narrow {rule}" else "drop {rule}'s advice here";
+    }
+    if (verdict == "should-deny" and section == "advised") {
+        return "promote {rule} to a deny";
+    }
+    if (verdict == "should-advise" and section == "refused") {
+        return "soften {rule} to an advisory";
+    }
+    return verdict;
+}
+
+object Tally {
+    latest: FeedbackMark,
+    sessions: mut {str: bool},
+    marks: int = 0,
+    examples: mut [str],
+}
+
+// fold reduces marks, oldest first, to one item per row id: the latest verdict and note,
+// every session that marked it, and up to three examples. It returns the backlog in rank
+// order and how many rows are settled as fine.
+export fun fold(marks: [FeedbackMark]) > obj{ backlog: [Item], settled: int } {
+    final byID = mut {<str: mut Tally>};
+    final order = mut [<str>];
+    foreach (m in marks) {
+        if (byID[m.id] == null) {
+            byID[m.id] = mut Tally{ latest = m, sessions = mut {<str: bool>}, examples = mut [<str>] };
+            order.append(m.id);
+        }
+        final t = byID[m.id]!;
+        t.latest = m;
+        t.marks = t.marks + 1;
+        t.sessions[m.session] = true;
+        foreach (e in m.examples) {
+            if (t.examples.len() < 3 and t.examples.indexOf(e) == null) {
+                t.examples.append(e);
+            }
+        }
+    }
+    final items = mut [<Item>];
+    var settled = 0;
+    foreach (id in order) {
+        final t = byID[id]!;
+        final m = t.latest;
+        if (m.verdict == "fine") {
+            settled = settled + 1;
+            continue;
+        }
+        items.append(Item{
+            id = id, section = m.section, key = m.key, rule = m.rule, verdict = m.verdict, note = m.note,
+            sessions = t.sessions.size(), marks = t.marks, wants = wants(m.section, verdict: m.verdict, rule: m.rule), examples = t.examples,
+        });
+    }
+    final ranked = items.sort(fun (a: Item, b: Item) > bool {
+        final ra = ORDER.indexOf(a.verdict) ?? 9;
+        final rb = ORDER.indexOf(b.verdict) ?? 9;
+        if (ra != rb) {
+            return ra < rb;
+        }
+        if (a.sessions != b.sessions) {
+            return a.sessions > b.sessions;
+        }
+        return a.marks > b.marks or (a.marks == b.marks and a.key < b.key);
+    });
+    return .{ backlog = ranked, settled = settled };
+}
+
+// since keeps the marks made at or after cutoff, unix milliseconds.
+export fun since(marks: [FeedbackMark], cutoff: int) > [FeedbackMark] {
+    final kept = mut [<FeedbackMark>];
+    foreach (m in marks) {
+        if (m.at >= cutoff) {
+            kept.append(m);
+        }
+    }
+    return kept;
+}
+
+export fun render(backlog: [Item], settled: int) > [str] {
+    final lines = mut ["read-only: guard backlog from this repository's feedback marks: {backlog.len()} row(s) want a change, {settled} settled as fine"];
+    foreach (n, it in backlog) {
+        lines.append("  {n + 1}. {it.wants}  ({it.verdict}, {it.section}, marked in {it.sessions} session" + (if (it.sessions == 1) "" else "s") + ")");
+        lines.append("       {it.key}" + (if (it.note != "") "  \"{it.note}\"" else ""));
+        foreach (e in it.examples) {
+            lines.append("       e.g. {e}");
+        }
+    }
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: ["--since", "-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "count-feedback: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "count-feedback: -o is json, or omitted for text\n{USAGE}";
+    }
+    var marks = magus\trail.marks();
+    final window = parsed.values["--since"];
+    if (window != null) {
+        final now = time\parse(time\TimeLayout.rfc3339, value: time\nowIso());
+        marks = since(marks, cutoff: std\toInt(now - time\parseDuration(window!)));
+    }
+    final folded = fold(marks);
+    if (format == "json") {
+        final rows = mut [<{str: any}>];
+        foreach (it in folded.backlog) {
+            rows.append({
+                "id": it.id, "section": it.section, "key": it.key, "rule": it.rule, "verdict": it.verdict, "note": it.note,
+                "sessions": it.sessions, "marks": it.marks, "wants": it.wants, "examples": it.examples,
+            });
+        }
+        std\print(json\stringify({"schema": 1, "settled": folded.settled, "backlog": rows}, indent: "  "));
+        return;
+    }
+    foreach (line in render(folded.backlog, settled: folded.settled)) {
+        std\print(line);
+    }
+}
+
+// marksFromJSONL reads a fixture store: one FeedbackMark per line, as the store writes it.
+export fun marksFromJSONL(text: str) > [FeedbackMark] !> any {
+    final marks = mut [<FeedbackMark>];
+    foreach (line in strings\lines(text)) {
+        if (line.trim() == "") {
+            continue;
+        }
+        final m = json\parse(line);
+        final examples = mut [<str>];
+        foreach (e in m["examples"] ?? []) {
+            examples.append(e);
+        }
+        marks.append(FeedbackMark{
+            id = m["id"] ?? "", section = m["section"] ?? "", key = m["key"] ?? "", rule = m["rule"] ?? "",
+            verdict = m["verdict"] ?? "", note = m["note"] ?? "", session = m["session"] ?? "",
+            at = std\toInt(m["at"] ?? 0), examples = examples,
+        });
+    }
+    return marks;
+}
+
+fun fixture() > [FeedbackMark] !> any {
+    return marksFromJSONL(fs\readFile("hack/testdata/feedback-marks.jsonl"));
+}
+
+test "marks fold across sessions into a ranked backlog, the latest verdict winning" {
+    final folded = fold(fixture());
+    assert\equal(render(folded.backlog, settled: folded.settled), want: [
+        "read-only: guard backlog from this repository's feedback marks: 3 row(s) want a change, 1 settled as fine",
+        "  1. a new deny for this shape  (should-deny, unguarded, marked in 2 sessions)",
+        "       grep -rn <arg>  \"use magus refs\"",
+        "       e.g. grep -rn foo src",
+        "       e.g. grep -rn bar lib",
+        "  2. a new deny for this shape  (should-deny, unguarded, marked in 1 session)",
+        "       cat <path>",
+        "       e.g. cat README.md",
+        "  3. narrow output-pipe  (wrong-deny, refused, marked in 1 session)",
+        "       output-pipe  \"the pipe was into wc -l\"",
+        "       e.g. ./magus ls | wc -l",
+    ], message: "backlog");
+}
+
+test "since keeps only marks made inside the window" {
+    assert\equal(since(fixture(), cutoff: 1790800300000).len(), want: 2, message: "recent");
+}
+
+test "every verdict on every section names a change" {
+    assert\equal(wants("advised", verdict: "should-deny", rule: "graph-pipe"), want: "promote graph-pipe to a deny", message: "promote");
+    assert\equal(wants("refused", verdict: "should-advise", rule: "raw-tool"), want: "soften raw-tool to an advisory", message: "soften");
+    assert\equal(wants("next-not-taken", verdict: "should-deny", rule: "grep-reader"), want: "a different next from grep-reader", message: "next");
+}

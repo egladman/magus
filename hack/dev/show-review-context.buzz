@@ -633,7 +633,7 @@ export fun layersSection(d: magus\Diff) > Section !> any {
 export fun architecture(d: magus\Diff, all: [Candidate], baseline: str) > [Section] {
     var deps = {<str: [str]>};
     try {
-        deps = dependsOn(magus\projects());
+        deps = dependsOn(magus\describe.project());
     } catch {
         say("show-review-context: the project list could not be read; dependencies read as undeclared");
     }

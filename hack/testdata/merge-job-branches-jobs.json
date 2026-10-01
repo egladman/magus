@@ -1,0 +1,10 @@
+{
+  "jobs": [
+    {"id": "core", "depends_on": [], "check": "magus run test .", "goals": []},
+    {"id": "api", "depends_on": ["core"], "check": "magus run test api -- -run Api", "goals": [{"id": "lint", "target": "lint", "project": "api", "args": []}]},
+    {"id": "docs", "depends_on": ["api", "elsewhere"], "check": "", "goals": []},
+    {"id": "loop-a", "depends_on": ["loop-b"], "check": "magus run test .", "goals": []},
+    {"id": "loop-b", "depends_on": ["loop-a"], "check": "magus run test .", "goals": []},
+    {"id": "held", "depends_on": [], "checkout_root": "/checkouts/held", "check": "magus run test held", "goals": []}
+  ]
+}

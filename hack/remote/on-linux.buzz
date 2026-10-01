@@ -51,6 +51,7 @@ namespace onlinux;
 
 import "encoding/toml";
 import "env";
+import "flags";
 import "fs";
 import "log";
 import "magus";
@@ -152,52 +153,27 @@ fun isName(s: str) > bool {
 // parse reads the options sudo-style: they come first, and the first word that is not one
 // of them, or a bare `--`, starts the command, which is kept verbatim.
 export fun parse(args: [str]) > Options !> str {
-    var arch = "";
+    var parsed = flags\FlagParse{ values = {<str: str>}, lists = {<str: [str]>}, positionals = [<str>], unknown = [<str>] };
+    try {
+        parsed = flags\parse(args, switches: ["-h", "--help", "--keep", "--ls"], valued: ["--arch", "--image", "--delete"],
+            repeated: ["--env"], command: true);
+    } catch (e: {str: str}) {
+        throw (e["message"] ?? "{e}").replace("flags.parse: ", with: "");
+    }
+    if (parsed.unknown.len() > 0) { throw "unknown option {parsed.unknown[0]}"; }
+    final arch = parsed.values["--arch"] ?? "";
+    if (arch != "" and arch != "amd64" and arch != "arm64") { throw "--arch takes amd64 or arm64, not {arch}"; }
     final envs = mut [<str>];
-    var image = "";
-    var keep = false;
-    var ls = false;
-    var del = "";
-    var help = false;
-    var i = 0;
-    while (i < args.len()) {
-        final a = args[i];
-        if (a == "--") {
-            i = i + 1;
-            break;
-        }
-        if (!a.startsWith("-")) { break; }
-        if (a == "-h" or a == "--help") {
-            help = true;
-        } else if (a == "--keep") {
-            keep = true;
-        } else if (a == "--ls") {
-            ls = true;
-        } else if (a == "--arch" or a == "--env" or a == "--image" or a == "--delete") {
-            if (i + 1 >= args.len()) { throw "{a} takes a value"; }
-            final v = args[i + 1];
-            if (a == "--arch") {
-                if (v != "amd64" and v != "arm64") { throw "--arch takes amd64 or arm64, not {v}"; }
-                arch = v;
-            } else if (a == "--env") {
-                if (!isName(v)) { throw "--env takes a variable NAME, not {v}: its value crosses from this host's environment"; }
-                if (envs.indexOf(v) == null) { envs.append(v); }
-            } else if (a == "--image") {
-                image = v;
-            } else {
-                del = v;
-            }
-            i = i + 1;
-        } else {
-            throw "unknown option {a}";
-        }
-        i = i + 1;
+    foreach (v in parsed.lists["--env"] ?? [<str>]) {
+        if (!isName(v)) { throw "--env takes a variable NAME, not {v}: its value crosses from this host's environment"; }
+        if (envs.indexOf(v) == null) { envs.append(v); }
     }
-    final command = mut [<str>];
-    while (i < args.len()) {
-        command.append(args[i]);
-        i = i + 1;
-    }
+    final image = parsed.values["--image"] ?? "";
+    final keep = parsed.values["--keep"] != null;
+    final ls = parsed.values["--ls"] != null;
+    final del = parsed.values["--delete"] ?? "";
+    final help = parsed.values["-h"] != null or parsed.values["--help"] != null;
+    final command = parsed.positionals;
     final opts = Options{arch = arch, envs = envs, image = image, keep = keep, ls = ls, delete = del, help = help, command = command};
     if (help) { return opts; }
     if (ls or del != "") {
@@ -413,7 +389,7 @@ fun reach(hostOS: str) > str !> any {
 // there is nothing to hold and the note is "".
 fun hold(hostOS: str) > str !> any {
     if (hostOS == "linux") { return ""; }
-    final lease: magus\ServiceLease = magus\service\acquire("podman", op: "machine");
+    final lease: magus\ServiceLease = magus\service.acquire("podman", op: "machine");
     return machineNote(lease.owned, brokered: lease.brokered, idle: lease.idle);
 }
 
@@ -608,7 +584,7 @@ test "parse refuses what it cannot run" {
         "unknown option --platform": ["--platform", "linux/arm64", "magus"],
         "--arch takes amd64 or arm64, not riscv64": ["--arch", "riscv64", "magus"],
         "--env takes a variable NAME, not A=b: its value crosses from this host's environment": ["--env", "A=b", "magus"],
-        "--image takes a value": ["--image"],
+        "--image takes a value and none followed it": ["--image"],
         "--ls stands alone: it takes no command and no other option": ["--ls", "magus"],
         "--delete stands alone: it takes no command and no other option": ["--keep", "--delete", "on-linux-1"],
         "--ls and --delete are two requests; pass one": ["--ls", "--delete", "x"],

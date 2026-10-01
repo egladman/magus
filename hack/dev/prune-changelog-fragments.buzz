@@ -1,0 +1,840 @@
+namespace prunechangelogfragments;
+
+import "flags";
+import "fs";
+import "magus";
+import "serialize";
+import "sort";
+import "std";
+import "vcs";
+
+import "assert";
+
+final FRAGMENT_DIR = "changes/unreleased/";
+
+final USAGE = "usage: magus buzz hack/dev/prune-changelog-fragments.buzz -- [-o json] [--apply]";
+final HELP = "cost: one git blame per path the fragments' commits changed, more for a commit whose lines are gone, then nested magus diffs of about 13s each: one for index coverage and one per commit in a duplicate candidate group; git only\n{USAGE}
+
+Plans which changes/unreleased fragments to drop or merge, each verdict proven from
+history: who still owns lines at HEAD (blame), who removed them, and which symbols those
+lines sit in (the symbol index, through magus\\diff).
+
+  superseded  every line the fragment's commit wrote is gone, and one later commit that
+              carries its own fragment removed or rewrote all of them
+  obsolete    every line the fragment's commit wrote is gone
+  duplicate   two single-fragment commits still own lines in exactly the same symbols;
+              the later text is kept, the earlier fragment dropped
+  keep        anything unproven, with the reason
+
+Dry run by default. --apply removes dropped fragments through the VCS and writes merged ones.";
+
+// Lines a later commit may have moved out of a path are followed into at most this many of
+// that commit's files; past it the fragment is kept as unproven.
+final MOVE_CAP = 25;
+
+export object Commit {
+    id: str,
+    subject: str,
+    files: [str],
+}
+
+// Line is one line of a file at a revision and the commit that last wrote it.
+export object Line {
+    commit: str,
+    line: int,
+    text: str,
+}
+
+// Probe is every question the plan asks of history and the symbol index, so a test can
+// answer them from a fixture. blame returns null when path does not exist at rev; copies
+// also attributes lines moved in from other files the same commit changed. symbols returns
+// the HEAD symbols the given lines sit in, null when the index covers none of their files.
+// indexed names which of paths the symbol index covers, asked once for all of them.
+export object Probe {
+    blame: fun (path: str, rev: str, copies: bool) > [Line]? !> any,
+    symbols: fun (commit: str, lines: {str: [Line]}) > [str]? !> any,
+    indexed: fun (paths: [str]) > {str: bool} !> any,
+}
+
+export object Fragment {
+    path: str,
+    group: str,
+    entry: str,
+    text: str,
+}
+
+export object Verdict {
+    fragment: str,
+    // drop, keep or rewrite.
+    action: str,
+    // superseded, obsolete, duplicate or unproven; a kept fragment that survives says live.
+    kind: str,
+    commit: str,
+    by: [str],
+    reason: str,
+    proof: [str],
+    merged: str,
+}
+
+object Trace {
+    state: str,
+    reason: str,
+    surviving: {str: [Line]},
+    eliminated: {str: str},
+    proof: [str],
+}
+
+fun short(id: str) > str {
+    if (id.len() <= 12) { return id; }
+    return id.sub(0, len: 12);
+}
+
+fun plural(n: int, word: str) > str {
+    if (n == 1) { return "1 {word}"; }
+    return "{n} {word}s";
+}
+
+fun owns(l: Line, id: str) > bool {
+    return l.commit == id or (l.commit.len() >= 7 and id.startsWith(l.commit));
+}
+
+fun ownedBy(lines: [Line]?, id: str) > [Line] {
+    final found = mut [<Line>];
+    foreach (l in lines ?? [<Line>]) {
+        if (owns(l, id: id)) { found.append(l); }
+    }
+    return found;
+}
+
+// parseBlame reads `git blame -l -s` output: "<sha> [<path>] <n>) <text>", the path column
+// present only when some line came from another file. A boundary commit's sha is prefixed
+// with ^ and one character shorter.
+export fun parseBlame(stdout: str) > [Line] {
+    final lines = mut [<Line>];
+    foreach (raw in stdout.split("\n")) {
+        final close = raw.indexOf(") ");
+        if (close == null) { continue; }
+        final words = mut [<str>];
+        foreach (w in raw.sub(0, len: close!).split(" ")) {
+            if (w != "") { words.append(w); }
+        }
+        if (words.len() < 2) { continue; }
+        var sha = words[0];
+        if (sha.startsWith("^")) { sha = sha.sub(1); }
+        final n = std\parseInt(words[words.len() - 1]) ?? 0;
+        lines.append(Line{ commit = sha, line = n, text = raw.sub(close! + 2) });
+    }
+    return lines;
+}
+
+// symbolPatch renders lines as a unified diff that adds them, so magus\diff maps exactly
+// those HEAD lines onto the HEAD symbol index.
+export fun symbolPatch(lines: {str: [Line]}) > str {
+    final patch = mut [<str>];
+    foreach (path in sort\strings(lines.keys())) {
+        final ls = mut [<Line>];
+        foreach (l in lines[path]!) { ls.append(l); }
+        ls.sort(fun (a: Line, b: Line) > bool => a.line < b.line);
+        patch.append("diff --git a/{path} b/{path}");
+        patch.append("--- a/{path}");
+        patch.append("+++ b/{path}");
+        var i = 0;
+        while (i < ls.len()) {
+            var j = i;
+            while (j + 1 < ls.len() and ls[j + 1].line == ls[j].line + 1) { j = j + 1; }
+            final start = ls[i].line;
+            final count = j - i + 1;
+            patch.append("@@ -{start},0 +{start}," + "{count} @@");
+            for (k: int = i; k <= j; k = k + 1) { patch.append("+{ls[k].text}"); }
+            i = j + 1;
+        }
+    }
+    return patch.join("\n") + "\n";
+}
+
+object Ctx {
+    commits: [Commit],
+    index: {str: int},
+    outputs: {str: bool},
+    probe: Probe,
+}
+
+fun evidence(c: Commit, outputs: {str: bool}) > [str] {
+    final found = mut [<str>];
+    foreach (f in c.files) {
+        if (!f.startsWith("changes/") and outputs[f] == null) { found.append(f); }
+    }
+    return sort\strings(found);
+}
+
+// laterTouching lists the commits after c that changed path, oldest first.
+fun laterTouching(ctx: Ctx, c: Commit, path: str) > [Commit] {
+    final found = mut [<Commit>];
+    var i = ctx.index[c.id]! - 1;
+    while (i >= 0) {
+        final cand = ctx.commits[i];
+        if (cand.files.indexOf(path) != null) { found.append(cand); }
+        i = i - 1;
+    }
+    return found;
+}
+
+fun lives(surviving: {str: [Line]}, reason: str) > Trace {
+    return Trace{ state = "lives", reason = reason, surviving = surviving, eliminated = {<str: str>}, proof = [<str>] };
+}
+
+fun unproven(reason: str) > Trace {
+    return Trace{ state = "unproven", reason = reason, surviving = {<str: [Line]>}, eliminated = {<str: str>}, proof = [<str>] };
+}
+
+// trace answers whether what c wrote still exists at HEAD. full blames every evidence path
+// so a duplicate check can compare them; otherwise the first surviving line settles it.
+fun trace(ctx: Ctx, c: Commit, full: bool) > Trace !> any {
+    final ev = evidence(c, outputs: ctx.outputs);
+    if (ev.len() == 0) {
+        return unproven("{short(c.id)} changed only changelog fragments and declared outputs, so there is nothing to trace");
+    }
+    final surviving = mut {<str: [Line]>};
+    foreach (p in ev) {
+        final own = ownedBy(ctx.probe.blame(p, rev: "HEAD", copies: false), id: c.id);
+        if (own.len() > 0) {
+            surviving[p] = own;
+            if (!full) { break; }
+        }
+    }
+    if (surviving.keys().len() > 0) { return lives(surviving, reason: ""); }
+
+    final written = mut [<str>];
+    foreach (p in ev) {
+        if (ownedBy(ctx.probe.blame(p, rev: c.id, copies: false), id: c.id).len() > 0) { written.append(p); }
+    }
+    if (written.len() == 0) {
+        return unproven("{short(c.id)} wrote no line in the paths it changed, only removals, and a removal leaves nothing at HEAD to trace");
+    }
+
+    final eliminated = mut {<str: str>};
+    final proof = mut [<str>];
+    foreach (p in written) {
+        var by: Commit? = null;
+        var removed = false;
+        foreach (later in laterTouching(ctx, c: c, path: p)) {
+            final at = ctx.probe.blame(p, rev: later.id, copies: false);
+            if (at == null or ownedBy(at, id: c.id).len() == 0) {
+                by = later;
+                removed = at == null;
+                break;
+            }
+        }
+        if (by == null) {
+            return unproven("HEAD's blame finds no line {short(c.id)} wrote in {p}, yet every later commit that touched it kept some");
+        }
+        final moved = mut [<str>];
+        foreach (f in by!.files) {
+            if (!f.startsWith("changes/") and ctx.outputs[f] == null) { moved.append(f); }
+        }
+        if (moved.len() > MOVE_CAP) {
+            return unproven("{short(by!.id)} took {short(c.id)}'s lines out of {p} while changing {moved.len()} files; following where they moved stops at {MOVE_CAP}");
+        }
+        foreach (f in moved) {
+            final own = ownedBy(ctx.probe.blame(f, rev: "HEAD", copies: true), id: c.id);
+            if (own.len() > 0) {
+                return lives({f: own}, reason: "{short(by!.id)} moved its lines from {p} into {f}");
+            }
+        }
+        eliminated[p] = by!.id;
+        if (removed) {
+            proof.append("{p}: removed or renamed by {short(by!.id)} ({by!.subject})");
+        } else {
+            proof.append("{p}: every line it wrote rewritten by {short(by!.id)} ({by!.subject})");
+        }
+    }
+    return Trace{ state = "gone", reason = "", surviving = {<str: [Line]>}, eliminated = eliminated, proof = proof };
+}
+
+fun livesReason(c: Commit, t: Trace) > str {
+    var n = 0;
+    final paths = sort\strings(t.surviving.keys());
+    foreach (p in paths) { n = n + t.surviving[p]!.len(); }
+    var where = paths[0];
+    if (paths.len() > 1) { where = "{paths[0]} and {plural(paths.len() - 1, word: "more path")}"; }
+    var s = "{short(c.id)} still owns {plural(n, word: "line")} at HEAD in {where}";
+    if (t.reason != "") { s = "{s} ({t.reason})"; }
+    return s;
+}
+
+fun extend(v: Verdict, more: str) > Verdict {
+    return Verdict{ fragment = v.fragment, action = v.action, kind = v.kind, commit = v.commit, by = v.by,
+        reason = "{v.reason}; {more}", proof = v.proof, merged = v.merged };
+}
+
+fun keep(f: Fragment, commit: str, kind: str, reason: str) > Verdict {
+    return Verdict{ fragment = f.path, action = "keep", kind = kind, commit = commit, by = [<str>], reason = reason, proof = [<str>], merged = "" };
+}
+
+// plan returns one verdict per fragment, in fragment path order. commits is newest first,
+// the order vcs\history returns.
+export fun plan(fragments: [Fragment], commits: [Commit], outputs: {str: bool}, probe: Probe) > [Verdict] !> any {
+    final index = mut {<str: int>};
+    foreach (i, c in commits) { index[c.id] = i; }
+    final ctx = Ctx{ commits = commits, index = index, outputs = outputs, probe = probe };
+
+    var migration = "";
+    final adder = mut {<str: Commit>};
+    final present = mut {<str: bool>};
+    foreach (f in fragments) { present[f.path] = true; }
+    foreach (c in commits) {
+        foreach (p in c.files) {
+            if (p.startsWith(FRAGMENT_DIR)) {
+                migration = c.id;
+                if (present[p] != null) { adder[p] = c; }
+            }
+        }
+    }
+    final byCommit = mut {<str: [str]>};
+    foreach (f in fragments) {
+        if (adder[f.path] == null) { continue; }
+        final id = adder[f.path]!.id;
+        final acc = mut [<str>];
+        foreach (x in byCommit[id] ?? [<str>]) { acc.append(x); }
+        acc.append(f.path);
+        byCommit[id] = acc;
+    }
+
+    final traces = mut {<str: Trace>};
+    final verdicts = mut {<str: Verdict>};
+    final live = mut [<Fragment>];
+    final sorted = mut [<Fragment>];
+    foreach (f in fragments) { sorted.append(f); }
+    sorted.sort(fun (a: Fragment, b: Fragment) > bool => a.path < b.path);
+
+    foreach (f in sorted) {
+        final c = adder[f.path];
+        if (c == null) {
+            verdicts[f.path] = keep(f, commit: "", kind: "unproven", reason: "no commit adds it, so it is not committed yet");
+            continue;
+        }
+        if (c!.id == migration) {
+            verdicts[f.path] = keep(f, commit: c!.id, kind: "unproven",
+                reason: "arrived with {short(c!.id)}, the commit that created {FRAGMENT_DIR}: it was moved in, so that diff is the migration's, not this change's");
+            continue;
+        }
+        final single = byCommit[c!.id]!.len() == 1;
+        if (traces[c!.id] == null) { traces[c!.id] = trace(ctx, c: c!, full: single); }
+        final t = traces[c!.id]!;
+        if (t.state == "unproven") {
+            verdicts[f.path] = keep(f, commit: c!.id, kind: "unproven", reason: t.reason);
+        } else if (t.state == "lives") {
+            live.append(f);
+            var reason = livesReason(c!, t: t);
+            if (!single) {
+                reason = "{reason}; it added {byCommit[c!.id]!.len()} fragments, so a duplicate cannot be pinned on this one";
+            }
+            verdicts[f.path] = keep(f, commit: c!.id, kind: "live", reason: reason);
+        } else if (f.group == "Removed") {
+            verdicts[f.path] = keep(f, commit: c!.id, kind: "unproven",
+                reason: "every line {short(c!.id)} wrote is gone, but a Removed entry describes an absence, which those lines do not measure");
+        } else {
+            final elim = mut [<str>];
+            foreach (_, by in t.eliminated) {
+                if (elim.indexOf(by) == null) { elim.append(by); }
+            }
+            final successors = mut [<str>];
+            if (elim.len() == 1) {
+                foreach (p in byCommit[elim[0]] ?? [<str>]) { successors.append(p); }
+            }
+            if (successors.len() > 0) {
+                verdicts[f.path] = Verdict{ fragment = f.path, action = "drop", kind = "superseded", commit = c!.id,
+                    by = sort\strings(successors), proof = t.proof, merged = "",
+                    reason = "every line {short(c!.id)} wrote was removed or rewritten by {short(elim[0])}, which carries {sort\strings(successors).join(", ")}" };
+            } else {
+                var why = "no single commit removed them all";
+                if (elim.len() == 1) { why = "{short(elim[0])}, which removed them, carries no fragment"; }
+                verdicts[f.path] = Verdict{ fragment = f.path, action = "drop", kind = "obsolete", commit = c!.id,
+                    by = [<str>], proof = t.proof, merged = "",
+                    reason = "nothing {short(c!.id)} wrote exists at HEAD; {why}" };
+            }
+        }
+    }
+
+    duplicates(ctx, live: live, adder: adder, byCommit: byCommit, traces: traces, verdicts: verdicts);
+
+    final ordered = mut [<Verdict>];
+    foreach (f in sorted) { ordered.append(verdicts[f.path]!); }
+    return ordered;
+}
+
+// duplicates groups live single-fragment commits by the indexed files they still own lines
+// in, then by the symbols those lines sit in. Only an equal, non-empty symbol set is a
+// duplicate; the later commit's text is kept unless it is empty.
+fun duplicates(ctx: Ctx, live: [Fragment], adder: {str: Commit}, byCommit: {str: [str]}, traces: {str: Trace}, verdicts: mut {str: Verdict}) > void !> any {
+    final groups = mut {<str: [Fragment]>};
+    final indexedLines = mut {<str: {str: [Line]}>};
+    final candidates = mut [<Fragment>];
+    final asked = mut [<str>];
+    foreach (f in live) {
+        final c = adder[f.path]!;
+        if (byCommit[c.id]!.len() != 1) { continue; }
+        candidates.append(f);
+        foreach (p in traces[c.id]!.surviving.keys()) {
+            if (asked.indexOf(p) == null) { asked.append(p); }
+        }
+    }
+    var covered = {<str: bool>};
+    if (asked.len() > 0) { covered = ctx.probe.indexed(sort\strings(asked)); }
+    foreach (f in candidates) {
+        final c = adder[f.path]!;
+        final t = traces[c.id]!;
+        final kept = mut {<str: [Line]>};
+        foreach (p in sort\strings(t.surviving.keys())) {
+            if (covered[p] ?? false) { kept[p] = t.surviving[p]!; }
+        }
+        if (kept.keys().len() == 0) {
+            verdicts[f.path] = extend(verdicts[f.path]!, more: "none of those files is in the symbol index, so no duplicate can be proven");
+            continue;
+        }
+        indexedLines[c.id] = kept;
+        final key = sort\strings(kept.keys()).join("\n");
+        final acc = mut [<Fragment>];
+        foreach (x in groups[key] ?? [<Fragment>]) { acc.append(x); }
+        acc.append(f);
+        groups[key] = acc;
+    }
+
+    final symbols = mut {<str: str>};
+    foreach (key, members in groups) {
+        if (members.len() < 2) {
+            final f = members[0];
+            verdicts[f.path] = extend(verdicts[f.path]!, more: "no other fragment's commit owns lines in exactly those indexed files");
+            continue;
+        }
+        final bySet = mut {<str: [Fragment]>};
+        foreach (f in members) {
+            final id = adder[f.path]!.id;
+            if (symbols[id] == null) {
+                final got = ctx.probe.symbols(id, lines: indexedLines[id]!);
+                symbols[id] = sort\strings(got ?? [<str>]).join("\n");
+            }
+            final set = symbols[id]!;
+            if (set == "") {
+                verdicts[f.path] = extend(verdicts[f.path]!, more: "the symbol index names no symbol for those lines, so no duplicate can be proven");
+                continue;
+            }
+            final acc = mut [<Fragment>];
+            foreach (x in bySet[set] ?? [<Fragment>]) { acc.append(x); }
+            acc.append(f);
+            bySet[set] = acc;
+        }
+        foreach (_, same in bySet) {
+            if (same.len() < 2) {
+                final f = same[0];
+                final others = mut [<str>];
+                foreach (m in members) {
+                    if (m.path != f.path) { others.append(m.path); }
+                }
+                verdicts[f.path] = extend(verdicts[f.path]!, more: "shares those files with {others.join(", ")}, but their symbols differ");
+                continue;
+            }
+            merge(same, adder: adder, index: ctx.index, verdicts: verdicts);
+        }
+    }
+}
+
+// merge keeps the latest fragment's text, or the latest non-empty one before it. The merge
+// is a fragment's text verbatim, never new prose, so it is already within the word cap
+// `magus run lint .` holds every fragment to.
+fun merge(same: [Fragment], adder: {str: Commit}, index: {str: int}, verdicts: mut {str: Verdict}) > void {
+    final ordered = mut [<Fragment>];
+    foreach (f in same) { ordered.append(f); }
+    // Oldest first: a larger history index is an older commit.
+    ordered.sort(fun (a: Fragment, b: Fragment) > bool => index[adder[a.path]!.id]! > index[adder[b.path]!.id]!);
+    final later = ordered[ordered.len() - 1];
+    var merged = later.text;
+    if (later.entry.trim() == "") {
+        foreach (f in ordered) {
+            if (f.entry.trim() != "") { merged = f.text; }
+        }
+    }
+    final earlier = mut [<str>];
+    foreach (f in ordered) {
+        if (f.path != later.path) { earlier.append(f.path); }
+    }
+    foreach (f in ordered) {
+        if (f.path == later.path) { continue; }
+        verdicts[f.path] = Verdict{ fragment = f.path, action = "drop", kind = "duplicate", commit = adder[f.path]!.id,
+            by = [later.path], proof = [<str>], merged = merged,
+            reason = "{short(adder[f.path]!.id)} and {short(adder[later.path]!.id)} still own lines in exactly the same symbols; {later.path} keeps the merged text" };
+    }
+    var action = "keep";
+    if (merged != later.text) { action = "rewrite"; }
+    verdicts[later.path] = Verdict{ fragment = later.path, action = action, kind = "duplicate", commit = adder[later.path]!.id,
+        by = earlier, proof = [<str>], merged = merged,
+        reason = "absorbs {earlier.join(", ")}: its commit owns lines in exactly the same symbols, and the later text wins" };
+}
+
+fun counts(verdicts: [Verdict]) > {str: int} {
+    final n = mut {<str: int>};
+    foreach (v in verdicts) {
+        n[v.action] = (n[v.action] ?? 0) + 1;
+        if (v.action == "drop") { n[v.kind] = (n[v.kind] ?? 0) + 1; }
+    }
+    return n;
+}
+
+export fun headline(verdicts: [Verdict], applied: bool) > str {
+    final n = counts(verdicts);
+    final drop = n["drop"] ?? 0;
+    final kinds = "{n["superseded"] ?? 0} superseded, {n["obsolete"] ?? 0} obsolete, {n["duplicate"] ?? 0} duplicate";
+    final rewrite = n["rewrite"] ?? 0;
+    if (applied) {
+        return "dropped {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}), rewrote {rewrite}";
+    }
+    return "dry run: would drop {drop} of {plural(verdicts.len(), word: "fragment")} ({kinds}) and rewrite {rewrite}; nothing changed, pass --apply to write";
+}
+
+fun indent(text: str, by: str) > str {
+    final indented = mut [<str>];
+    foreach (l in text.trim().split("\n")) { indented.append("{by}{l}"); }
+    return indented.join("\n");
+}
+
+export fun render(verdicts: [Verdict], texts: {str: str}, applied: bool) > str {
+    final lines = mut [headline(verdicts, applied: applied)];
+    foreach (action in ["drop", "rewrite", "keep"]) {
+        foreach (v in verdicts) {
+            if (v.action != action) { continue; }
+            lines.append("");
+            lines.append("{v.action} {v.fragment} [{v.kind}]");
+            lines.append("  {v.reason}");
+            foreach (p in v.proof) { lines.append("    {p}"); }
+            if (v.kind == "duplicate" and v.action == "drop") {
+                lines.append("  this text:");
+                lines.append(indent(texts[v.fragment] ?? "", by: "    | "));
+                lines.append("  {v.by[0]}:");
+                lines.append(indent(texts[v.by[0]] ?? "", by: "    | "));
+                lines.append("  proposed merge, written to {v.by[0]}:");
+                lines.append(indent(v.merged, by: "    | "));
+            }
+        }
+    }
+    return lines.join("\n");
+}
+
+fun encode(verdicts: [Verdict], applied: bool) > str {
+    final doc = mut [<{str: any}>];
+    foreach (v in verdicts) {
+        doc.append({"fragment": v.fragment, "action": v.action, "kind": v.kind, "commit": v.commit,
+            "by": v.by, "reason": v.reason, "proof": v.proof, "merged": v.merged});
+    }
+    final n = counts(verdicts);
+    return serialize\jsonEncode(serialize\Boxed.init({"applied": applied, "fragments": verdicts.len(),
+        "drop": n["drop"] ?? 0, "rewrite": n["rewrite"] ?? 0, "keep": n["keep"] ?? 0, "verdicts": doc}));
+}
+
+fun apply(verdicts: [Verdict]) > void !> any {
+    final root = vcs\root();
+    foreach (v in verdicts) {
+        if (v.action == "drop") {
+            // jj tracks a deletion from the working copy itself and has no rm.
+            if (vcs\name() == "jj") {
+                fs\remove(v.fragment);
+            } else {
+                vcs\cmd(["rm", "--", v.fragment], opts: {"quiet": true, "dir": root});
+            }
+        } else if (v.action == "rewrite") {
+            fs\writeFile(v.fragment, content: v.merged);
+        }
+    }
+}
+
+fun liveProbe() > Probe !> any {
+    final root = vcs\root();
+    final blames = mut {<str: [Line]?>};
+    final blamed = mut {<str: bool>};
+    return Probe{
+        blame = fun (path: str, rev: str, copies: bool) > [Line]? !> any {
+            final key = "{rev} {copies} {path}";
+            if (blamed[key] == null) {
+                blamed[key] = true;
+                final args = mut ["blame", "-l", "-s", "-M"];
+                if (copies) { args.append("-C"); }
+                args.append(rev);
+                args.append("--");
+                args.append(path);
+                final res = vcs\cmd(args, opts: {"quiet": true, "dir": root, "allow_failure": true});
+                if (res.code != 0) {
+                    blames[key] = null;
+                } else {
+                    blames[key] = parseBlame(res.stdout);
+                }
+            }
+            return blames[key];
+        },
+        symbols = fun (commit: str, lines: {str: [Line]}) > [str]? !> any {
+            final d = magus\diff({"patch": symbolPatch(lines)});
+            final found = mut [<str>];
+            var covered = false;
+            foreach (f in d.files) {
+                if (f.surface != "unknown") { covered = true; }
+                foreach (s in f.symbols) {
+                    if (found.indexOf(s.id) == null) { found.append(s.id); }
+                }
+            }
+            if (!covered) { return null; }
+            return found;
+        },
+        // One magus\diff over a line in each file: its surface reads unknown exactly where no
+        // symbol index covers the file. magus\explain answers the same per path, but loads
+        // the whole symbol graph again on every call.
+        indexed = fun (paths: [str]) > {str: bool} !> any {
+            final probeLines = mut {<str: [Line]>};
+            foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
+            final d = magus\diff({"patch": symbolPatch(probeLines)});
+            final covered = mut {<str: bool>};
+            foreach (f in d.files) { covered[f.path] = f.surface != "unknown"; }
+            return covered;
+        },
+    };
+}
+
+// parseFragment splits a fragment into its group heading and its entry lines. The grammar
+// itself is hack/magusfile/changelog.buzz's, which `magus run lint .` enforces; that module
+// parses embedded, so a strict script cannot import it.
+export fun parseFragment(path: str, text: str) > Fragment {
+    var group = "";
+    final entry = mut [<str>];
+    foreach (line in text.replace("\r\n", with: "\n").split("\n")) {
+        if (line.startsWith("### ")) {
+            group = line.sub(4).trim();
+        } else if (line.trim() != "") {
+            entry.append(line);
+        }
+    }
+    return Fragment{ path = path, group = group, entry = entry.join("\n"), text = text };
+}
+
+fun readFragments() > [Fragment] !> any {
+    final found = mut [<Fragment>];
+    foreach (name in sort\strings(fs\listDir(FRAGMENT_DIR))) {
+        if (!name.endsWith(".md")) { continue; }
+        final path = FRAGMENT_DIR + name;
+        found.append(parseFragment(path, text: fs\readFile(path)));
+    }
+    return found;
+}
+
+fun readHistory() > [Commit] !> any {
+    final found = mut [<Commit>];
+    foreach (c in vcs\history(limit: 0, first_parent: true)) {
+        found.append(Commit{ id = c.id, subject = c.subject, files = c.files });
+    }
+    return found;
+}
+
+// declaredOutputs classifies every path the fragments' commits changed, so generated files
+// are left out of what a commit is held to have written.
+fun declaredOutputs(commits: [Commit], fragments: [Fragment]) > {str: bool} !> any {
+    final wanted = mut {<str: bool>};
+    final present = mut {<str: bool>};
+    foreach (f in fragments) { present[f.path] = true; }
+    foreach (c in commits) {
+        var adds = false;
+        foreach (p in c.files) {
+            if (present[p] != null) { adds = true; }
+        }
+        if (!adds) { continue; }
+        foreach (p in c.files) {
+            if (!p.startsWith("changes/")) { wanted[p] = true; }
+        }
+    }
+    final outputs = mut {<str: bool>};
+    if (wanted.keys().len() == 0) { return outputs; }
+    foreach (f in magus\describe.file(sort\strings(wanted.keys())).files) {
+        if (f.role == "output") { outputs[f.path] = true; }
+    }
+    return outputs;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["-o"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "prune-changelog-fragments: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final format = parsed.values["-o"] ?? "text";
+    if (format != "text" and format != "json") {
+        throw "prune-changelog-fragments: -o takes text or json\n{USAGE}";
+    }
+    if (vcs\name() != "git") {
+        throw "prune-changelog-fragments: line ownership comes from git blame, which the vcs module has no method for; this checkout is {vcs\name()}";
+    }
+    if (!(fs\isDir(FRAGMENT_DIR) catch false)) {
+        throw "prune-changelog-fragments: no {FRAGMENT_DIR} here; run it from the repository root";
+    }
+    final applied = parsed.values["--apply"] != null;
+    final fragments = readFragments();
+    final commits = readHistory();
+    final verdicts = plan(fragments, commits: commits, outputs: declaredOutputs(commits, fragments: fragments), probe: liveProbe());
+    if (applied) { apply(verdicts); }
+    if (format == "json") {
+        std\print(encode(verdicts, applied: applied));
+        return;
+    }
+    final texts = mut {<str: str>};
+    foreach (f in fragments) { texts[f.path] = f.text; }
+    std\print(render(verdicts, texts: texts, applied: applied));
+}
+
+final FIXTURE = "hack/testdata/prune-changelog-fragments.json";
+
+object Fixture {
+    fragments: [Fragment],
+    commits: [Commit],
+    outputs: {str: bool},
+    probe: Probe,
+    asked: mut [str],
+}
+
+fun strings(b: serialize\Boxed) > [str] {
+    final found = mut [<str>];
+    foreach (x in b.listValue()) { found.append(x.stringValue()); }
+    return found;
+}
+
+// fixture builds a history from the JSON: blame lists each line's owner, keyed "<rev> <path>"
+// with " +C" appended for a copies-aware blame; a key it lacks is a path absent at that rev.
+fun fixture() > Fixture !> any {
+    final doc = serialize\jsonDecode(fs\readFile(FIXTURE));
+    final fragments = mut [<Fragment>];
+    foreach (path, text in doc.q("fragments").mapValue()) {
+        fragments.append(parseFragment(path, text: text.stringValue()));
+    }
+    final commits = mut [<Commit>];
+    foreach (c in doc.q("commits").listValue()) {
+        commits.append(Commit{ id = c.q("id").stringValue(), subject = c.q("subject").stringValue(), files = strings(c.q("files")) });
+    }
+    final outputs = mut {<str: bool>};
+    foreach (p in strings(doc.q("outputs"))) { outputs[p] = true; }
+    final indexedSet = strings(doc.q("indexed"));
+    final blame = doc.q("blame").mapValue();
+    final syms = doc.q("symbols").mapValue();
+    final asked = mut [<str>];
+    final probe = Probe{
+        blame = fun (path: str, rev: str, copies: bool) > [Line]? !> any {
+            var key = "{rev} {path}";
+            if (copies and blame["{key} +C"] != null) { key = "{key} +C"; }
+            if (blame[key] == null) { return null; }
+            final lines = mut [<Line>];
+            foreach (i, owner in strings(blame[key]!)) {
+                lines.append(Line{ commit = owner, line = i + 1, text = "{path}:{i + 1}" });
+            }
+            return lines;
+        },
+        symbols = fun (commit: str, lines: {str: [Line]}) > [str]? !> any {
+            asked.append(commit);
+            if (syms[commit] == null) { return null; }
+            return strings(syms[commit]!);
+        },
+        indexed = fun (paths: [str]) > {str: bool} !> any {
+            final covered = mut {<str: bool>};
+            foreach (p in paths) { covered[p] = indexedSet.indexOf(p) != null; }
+            return covered;
+        },
+    };
+    return Fixture{ fragments = fragments, commits = commits, outputs = outputs, probe = probe, asked = asked };
+}
+
+fun fixturePlan() > {str: Verdict} !> any {
+    final fx = fixture();
+    final byPath = mut {<str: Verdict>};
+    foreach (v in plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe)) { byPath[v.fragment] = v; }
+    return byPath;
+}
+
+fun frag(name: str) > str {
+    return "{FRAGMENT_DIR}{name}.md";
+}
+
+test "a fragment whose lines one later fragment-carrying commit removed is superseded by that fragment" {
+    final v = fixturePlan()[frag("old-flag")]!;
+    assert\equal(v.action, want: "drop", message: v.reason);
+    assert\equal(v.kind, want: "superseded", message: v.reason);
+    assert\equal(v.by, want: [frag("new-flag")], message: "names the successor");
+    assert\equal(v.proof, want: ["lib/flag.go: removed or renamed by c05 (replace the flag)"], message: "proof per path");
+}
+
+test "a fragment whose lines are gone with no fragment-carrying successor is obsolete" {
+    final plan = fixturePlan();
+    final v = plan[frag("temp-cmd")]!;
+    assert\equal(v.action, want: "drop", message: v.reason);
+    assert\equal(v.kind, want: "obsolete", message: v.reason);
+    assert\equal(v.proof, want: ["cmd/temp.go: removed or renamed by c12 (drop temp)"], message: "proof");
+    final rewritten = plan[frag("rewritten")]!;
+    assert\equal(rewritten.kind, want: "obsolete", message: rewritten.reason);
+    assert\equal(rewritten.proof, want: ["lib/r.go: every line it wrote rewritten by c19 (rewrite r)"], message: "a rewrite, not a removal");
+}
+
+test "two single-fragment commits owning lines in the same symbols are duplicates, and the later text is kept" {
+    final plan = fixturePlan();
+    final older = plan[frag("guard-a")]!;
+    assert\equal(older.action, want: "drop", message: older.reason);
+    assert\equal(older.kind, want: "duplicate", message: older.reason);
+    assert\equal(older.by, want: [frag("guard-b")], message: "merged into the later one");
+    final later = plan[frag("guard-b")]!;
+    assert\equal(later.action, want: "keep", message: "the later text needs no rewrite");
+    assert\equal(later.merged.indexOf("Guard B") != null, want: true, message: later.merged);
+}
+
+test "what cannot be proven is kept, with the reason" {
+    final plan = fixturePlan();
+    fun reason(name: str) > str !> any => plan[frag(name)]!.reason;
+    fun action(name: str) > str !> any => plan[frag(name)]!.action;
+    foreach (name in ["moved", "draft", "lives", "removal-only", "moved-code", "dropped-x", "symbols-differ", "lives-twin", "bulk-a", "bulk-b"]) {
+        assert\equal(action(name), want: "keep", message: "{name}: {reason(name)}");
+    }
+    assert\equal(reason("moved").indexOf("created changes/unreleased/") != null, want: true, message: reason("moved"));
+    assert\equal(reason("draft"), want: "no commit adds it, so it is not committed yet", message: "uncommitted");
+    assert\equal(reason("removal-only").indexOf("only removals") != null, want: true, message: reason("removal-only"));
+    assert\equal(reason("moved-code").indexOf("moved its lines from z.go into w.go") != null, want: true, message: reason("moved-code"));
+    assert\equal(reason("dropped-x").indexOf("Removed entry") != null, want: true, message: reason("dropped-x"));
+    assert\equal(reason("moved-code").indexOf("no other fragment's commit owns lines in exactly those indexed files") != null, want: true, message: reason("moved-code"));
+    assert\equal(reason("lives").indexOf("shares those files with changes/unreleased/symbols-differ.md, but their symbols differ") != null, want: true, message: reason("lives"));
+    assert\equal(reason("symbols-differ").indexOf("their symbols differ") != null, want: true, message: reason("symbols-differ"));
+    assert\equal(reason("bulk-a").indexOf("added 2 fragments") != null, want: true, message: reason("bulk-a"));
+    assert\equal(reason("lives-twin").indexOf("none of those files is in the symbol index") != null, want: true, message: reason("lives-twin"));
+}
+
+test "the symbol index is asked only about commits in a candidate group" {
+    final fx = fixture();
+    plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    assert\equal(sort\strings(fx.asked), want: ["c04", "c07", "c08", "c14"], message: "symbols asked");
+}
+
+test "the first line says what would happen, and json is one document" {
+    final fx = fixture();
+    final verdicts = plan(fx.fragments, commits: fx.commits, outputs: fx.outputs, probe: fx.probe);
+    final texts = mut {<str: str>};
+    foreach (f in fx.fragments) { texts[f.path] = f.text; }
+    final text = render(verdicts, texts: texts, applied: false);
+    assert\equal(text.split("\n")[0],
+        want: "dry run: would drop 4 of 16 fragments (1 superseded, 2 obsolete, 1 duplicate) and rewrite 0; nothing changed, pass --apply to write",
+        message: "headline");
+    final doc = serialize\jsonDecode(encode(verdicts, applied: false));
+    assert\equal(doc.q("verdicts").listValue().len(), want: 16, message: "one verdict per fragment");
+}
+
+test "blame output parses with and without the path column and a boundary marker" {
+    final lines = parseBlame("abcdef0123456789abcdef0123456789abcdef01 1) package main\n^bcdef0123456789abcdef0123456789abcdef0 other.go    2) x ) y\n");
+    assert\equal(lines.len(), want: 2, message: "two lines");
+    assert\equal(lines[0].text, want: "package main", message: "text");
+    assert\equal(lines[1].line, want: 2, message: "line number");
+    assert\equal(lines[1].text, want: "x ) y", message: "text keeps later parens");
+    assert\equal(owns(lines[1], id: "bcdef0123456789abcdef0123456789abcdef01x"), want: true, message: "a boundary sha matches by prefix");
+}
+
+test "the symbol patch adds exactly the owned lines, one hunk per run" {
+    final patch = symbolPatch({"a.go": [Line{ commit = "c", line = 3, text = "x" }, Line{ commit = "c", line = 1, text = "w" }, Line{ commit = "c", line = 4, text = "y" }]});
+    assert\equal(patch, want: "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1,0 +1,1 @@\n+w\n@@ -3,0 +3,2 @@\n+x\n+y\n", message: "patch");
+}

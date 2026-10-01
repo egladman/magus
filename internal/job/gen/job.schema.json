@@ -103,7 +103,11 @@
       "properties": {
         "target": {
           "type": "string",
-          "description": "Target is the magus target the check runs, without the `magus run` in front of it."
+          "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+        },
+        "script": {
+          "type": "string",
+          "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
         },
         "project": {
           "type": "string",
@@ -115,6 +119,10 @@
             "type": "string"
           },
           "description": "Args are forwarded to the tool after `--`, never to magus."
+        },
+        "no_default_charms": {
+          "type": "boolean",
+          "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
         }
       },
       "description": "Check is the one check this lease runs, and acceptance binds a worker's evidence to it."
@@ -137,7 +145,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "expect"],
+        "required": ["id", "kind"],
         "properties": {
           "id": {
             "type": "string"
@@ -158,7 +166,8 @@
           },
           "expect": {
             "type": "string",
-            "enum": ["passed", "changed", "present", "absent", "unreferenced"]
+            "enum": ["", "passed", "changed", "present", "absent", "unreferenced"],
+            "description": "Expect is optional and defaults to the kind's own: passed for check, changed for paths and symbol. The common goal names only its kind and its subject."
           },
           "check": {
             "type": "object",
@@ -167,7 +176,11 @@
             "properties": {
               "target": {
                 "type": "string",
-                "description": "Target is the magus target the check runs, without the `magus run` in front of it."
+                "description": "Target is the magus target the check runs, without the `magus run` in front of it. Empty when Script names the check instead."
+              },
+              "script": {
+                "type": "string",
+                "description": "Script is a Buzz script the check runs with `magus buzz --record` in place of a target, for a fact no target checks: a passing recorded run of it is the evidence. A check names a target or a script, never both."
               },
               "project": {
                 "type": "string",
@@ -179,6 +192,10 @@
                   "type": "string"
                 },
                 "description": "Args are forwarded to the tool after `--`, never to magus."
+              },
+              "no_default_charms": {
+                "type": "boolean",
+                "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
               }
             },
             "description": "Check is the run a GateKindCheck gate examines. Zero on every other kind."

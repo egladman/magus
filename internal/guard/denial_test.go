@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 )
 
@@ -126,22 +127,28 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 		}
 	}
 
-	got, _, _ := shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "why"+note, note, nil)
-	assert.Equal(t, "why"+note+see, got, "a reason already carrying the note does not repeat it")
+	got, ref, _ := shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "why"+note, note, nil)
+	require.NotEmpty(t, ref)
+	assert.Equal(t, "why"+note+"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got, "a reason already carrying the note does not repeat it")
 }
 
 // TestShapeDenyServesTheRemedyOnEveryFiring pins the layout a remedy adds and that it is
 // journaled, which is what pre-authorizes it: in full with its why the first time, and as
-// the command alone beside the full-verdict ref on a repeat.
+// the command alone on a repeat. Both firings cite the full-verdict ref, and it resolves.
 func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	const see = "\nsee: " + ruleDocsBase + "output-pipe/"
-	gate := hint.NewGate(t.TempDir(), "s1")
+	cacheDir := t.TempDir()
+	gate := hint.NewGate(cacheDir, "s1")
 	remedy := []hint.Next{hint.NextForDenyRemedy(string(denyRuleOutputPipe),
 		[]string{"./magus", "run", "go-build", ".", "-s"}, "-s stays quiet until something fails.")}
 
+	full := "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."
 	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", remedy)
-	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."+see, got)
-	assert.Empty(t, ref)
+	require.NotEmpty(t, ref, "the first firing stores its verdict too")
+	assert.Equal(t, full+"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got)
+	stored, err := trail.ReadBlob(cacheDir, ref)
+	require.NoError(t, err)
+	assert.Equal(t, full+see, string(stored))
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-output-pipe", servedNextPreauthorizes(gate, "./magus run go-build . -s"))
 

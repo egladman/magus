@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -8,11 +9,49 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// A bare name two workspace definitions carry must not quietly answer for one of them: refs
+// exits 2 and names each candidate as a command that asks for it alone.
+func TestRefsSymbolRefusesANameSeveralDefinitionsCarry(t *testing.T) {
+	const hintID, queueID, depID = "symbol:x `hint`/Classify().", "symbol:x `queue`/Workspace#Classify().", "symbol:dep/Classify()."
+	sym := func(id string) types.KnowledgeNode {
+		return types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: "Classify"}
+	}
+	defines := func(file, id string) types.KnowledgeEdge {
+		return types.KnowledgeEdge{Source: "file:" + file, Target: id, Relation: types.RelationDefines, Confidence: types.ConfidenceExtracted, Score: 1}
+	}
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{sym(hintID), sym(queueID), sym(depID)},
+		[]types.KnowledgeEdge{defines("hint/a.go", hintID), defines("queue/b.go", queueID)})
+
+	var stderr bytes.Buffer
+	_, err := refsSymbol(&stderr, g, "Classify")
+
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, exitUsage, silent.exitCode)
+	assert.Equal(t, `magus refs: "Classify" names 2 symbols defined in this workspace; ask for one by id:
+  `+hint.Refs.With("'"+hintID+"'")+`
+  `+hint.Refs.With("'"+queueID+"'")+"\n", stderr.String())
+
+	got, err := refsSymbol(&stderr, g, queueID)
+	require.NoError(t, err)
+	assert.Equal(t, queueID, got, "an exact id picks itself")
+
+	only := knowledge.NewGraph()
+	only.Merge([]types.KnowledgeNode{sym(hintID), sym(depID)}, []types.KnowledgeEdge{defines("hint/a.go", hintID)})
+	got, err = refsSymbol(&stderr, only, "Classify")
+	require.NoError(t, err)
+	assert.Equal(t, hintID, got, "the one workspace definition wins over a dependency's symbol of that name")
+}
 
 // checkDefinitions is what stands between a recorded range and a wrong edit. A file older
 // than its index verifies; a newer one keeps the range only as unverified; a start line
@@ -262,4 +301,51 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.NotEmpty(t, errOut)
+}
+
+// A name refs cannot resolve, from a workspace with an unbuilt index: -o json prints the
+// record with its verdict and index cause on stdout, and the text block on stderr carries
+// the same why and fix in every format.
+func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
+	ans := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef("libs/api", ""), State: types.SymbolIndexNotBuilt}})
+	ans.IndexCause = &types.KnowledgeIndexCause{
+		Why: "no server is running, so the refresh hook's `magus job run sync-graph` does nothing",
+		Fix: "`magus server start` keeps it current from now on",
+	}
+	miss := refsMiss{name: "Foo", answer: ans}
+
+	var stderr bytes.Buffer
+	var err error
+	stdout := captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: outputJSON}, miss) })
+	require.NoError(t, err)
+	var record types.KnowledgeRefsOutput
+	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
+	assert.Equal(t, "Foo", record.Symbol)
+	assert.Equal(t, types.VerdictUnknown, record.Answer.Verdict)
+	assert.Equal(t, ans.IndexCause, record.Answer.IndexCause)
+	assert.Contains(t, stdout, `"index_cause"`)
+	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
+	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
+
+	stderr.Reset()
+	stdout = captureStdout(t, func() { err = reportRefsMiss(&stderr, OutputOptions{Format: FormatText}, miss) })
+	require.NoError(t, err)
+	assert.Empty(t, stdout, "text output keeps stdout for answers")
+	assert.Contains(t, stderr.String(), `magus refs: no node matches "Foo"`)
+	assert.Contains(t, stderr.String(), "outside coverage: libs/api (not-indexed)")
+	assert.Contains(t, stderr.String(), "  why: "+ans.IndexCause.Why+"\n  fix: "+ans.IndexCause.Fix+"\n")
+}
+
+// withIndexCause diagnoses only an answer drawn from a missing or stale index; a clean
+// answer stays without the key.
+func TestWithIndexCauseFillsOnlyAnIndexBehind(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	behind := types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{{Project: types.NewProjectRef(".", ""), State: types.SymbolIndexNotBuilt}})
+	got := withIndexCause(t.Context(), w.Root(), behind)
+	require.NotNil(t, got.IndexCause)
+	assert.NotEmpty(t, got.IndexCause.Why)
+	assert.NotEmpty(t, got.IndexCause.Fix)
+
+	clean := withIndexCause(t.Context(), w.Root(), types.ClassifyAnswer(true, "", nil))
+	assert.Nil(t, clean.IndexCause)
 }
