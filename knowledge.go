@@ -253,7 +253,7 @@ func gatherKnowledgeInputs(ctx context.Context, src knowledgeSources, refresh bo
 	needs := func(cs ...knowledge.ShardClass) bool {
 		return slices.ContainsFunc(cs, func(c knowledge.ShardClass) bool { return slices.Contains(stale, c) })
 	}
-	in := knowledge.Inputs{Graph: src.graph, Spells: src.spells, Root: src.root}
+	in := knowledge.Inputs{Graph: src.graph, Spells: src.spells, Root: src.root, Tree: src.tree}
 	if needs(knowledge.ClassDomain, knowledge.ClassSymbols) {
 		// Cached as an INPUT, not as a shard, because three consumers read it: @vcs, the
 		// dir_commits roll-up in @dirs, and prose staleness. Caching it on @vcs instead

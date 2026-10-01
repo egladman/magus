@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -184,6 +185,49 @@ func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
 	w := WalkTree(root)
 	assert.True(t, w.Contains("docs/new.md"))
 	assert.False(t, w.Contains("node_modules/dep/README.md"))
+}
+
+// One walk serves every scan, and the first scan's ignore query answers for all of them.
+func TestTreeWalkScansShareOneWalkAndOneIgnoreQuery(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	write := func(rel, body string) {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
+	}
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = root
+	require.NoError(t, cmd.Run())
+	write(".gitignore", "dist/\n*.out.md\n")
+	write("README.md", "# readme\n")
+	write("notes.out.md", "# ignored\n")
+	write("lib/x.buzz", "fn x() > void {}\n")
+	write("lib/x.go", "package lib\n")
+	write("lib/x_test.go", "package lib\n")
+	write("gen/g.go", "package gen\n")
+	write("dist/bundle.go", "package dist\n")
+	write("testdata/fixture.buzz", "fn f() > void {}\n")
+
+	w := WalkTree(root)
+	docs := w.docFiles("")
+	require.Len(t, w.ignored, len(w.files), "the first scan asked about every walked file at once")
+	asked := len(w.ignored)
+
+	assert.Equal(t, []string{"README.md"}, docs)
+	assert.Equal(t, []string{"lib/x.buzz"}, w.buzzFiles())
+	assert.Equal(t, []string{"lib/x.buzz", "lib/x.go"}, w.commentSources())
+	assert.Equal(t, []string{"gen/g.go", "lib/x.go"}, w.packageSources())
+	assert.Equal(t, []string{".gitignore", "README.md", "gen/g.go", "lib/x.buzz", "lib/x.go"}, w.markerSources(nil))
+	assert.Len(t, w.ignored, asked, "no later scan asked again")
+
+	assert.Equal(t, findDocFiles(root, ""), docs, "the shared walk answers as the standalone scan does")
+	assert.Equal(t, findBuzzFiles(root), w.buzzFiles())
+	assert.Equal(t, findCommentSources(root), w.commentSources())
+	assert.Equal(t, findPackageSources(root), w.packageSources())
 }
 
 func TestInputHashPathSeesAbsenceAndChange(t *testing.T) {

@@ -100,6 +100,9 @@ type Inputs struct {
 	// the file nodes it annotates are the symbol shards'. Empty on a workspace that has
 	// never loaded a transcript, which is the default.
 	AgentContacts []AgentContact
+	// Tree is the walk of Root the stamps were computed from, reused by every tree scan the
+	// domain build runs. Nil walks Root afresh.
+	Tree *TreeWalk
 	// Extra is, per class, the workspace files the gatherer read for that class outside the
 	// tree walk, such as a source file a SCIP index points into an unwalked directory. The
 	// store records them so the caller can fold them into the class's next stamp.
@@ -246,7 +249,11 @@ func assembleDomain(in Inputs) []Shard {
 	var docNodes []types.KnowledgeNode
 	var docCites docCitations
 	if in.Root != "" {
-		if d, cites := assembleDocs(in.Root, in.Spells, in.Graph.Projects, in.NotesPath); len(d.Nodes) > 0 {
+		tree := in.Tree
+		if tree == nil {
+			tree = WalkTree(in.Root)
+		}
+		if d, cites := assembleDocsIn(tree, in.Spells, in.Graph.Projects, in.NotesPath); len(d.Nodes) > 0 {
 			for _, n := range d.Nodes {
 				pathToNode[n.Source] = n.ID
 			}
@@ -254,7 +261,7 @@ func assembleDomain(in Inputs) []Shard {
 			shards = append(shards, d)
 		}
 		fileNodePaths := map[string]bool{}
-		if b := assembleBuzz(in.Root); len(b.Nodes) > 0 {
+		if b := assembleBuzzIn(tree); len(b.Nodes) > 0 {
 			for _, n := range b.Nodes {
 				if n.Kind != types.KindFile {
 					continue
@@ -278,7 +285,7 @@ func assembleDomain(in Inputs) []Shard {
 		// doc and section nodes to cross-link against, and it mints its own file and dir
 		// nodes for the paths neither shard covers (Go sources have none in the default
 		// graph), so its edges never outlive their endpoints.
-		if l := assembleLinks(in.Root, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
+		if l := assembleLinksIn(tree, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
 			shards = append(shards, l)
 		}
 		// Markers resolve a figure id against the doc shard's pages and sections, so they
@@ -289,10 +296,10 @@ func assembleDomain(in Inputs) []Shard {
 				docPages = append(docPages, n.Source)
 			}
 		}
-		if m := assembleMarkers(in.Root, in.Graph.Projects, docPages, newDocIndex(docNodes)); len(m.Nodes) > 0 || m.Err != nil {
+		if m := assembleMarkers(tree, in.Graph.Projects, docPages, newDocIndex(docNodes)); len(m.Nodes) > 0 || m.Err != nil {
 			shards = append(shards, m)
 		}
-		if pd := assemblePackageDirs(in.Root, in.Graph.Projects, in.Layers); len(pd.Nodes) > 0 {
+		if pd := assemblePackageDirs(tree, in.Graph.Projects, in.Layers); len(pd.Nodes) > 0 {
 			owned = append(owned, ownedDirs(pd.Nodes)...)
 			shards = append(shards, pd)
 		}

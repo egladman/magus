@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -11,9 +12,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -223,9 +226,17 @@ type treeFile struct {
 // descends every directory at least one scan descends into, recording which scans admit
 // each file, so the five scans read one listing instead of walking the tree five times,
 // and the domain stamp hashes exactly the files those scans can read.
+//
+// It also answers which paths the VCS ignores, asking once for every walked file the
+// first time any scan needs to know and remembering the answer, where each scan used to
+// ask on its own.
 type TreeWalk struct {
 	root  string
 	files []treeFile // sorted by rel
+
+	ignoreMu sync.Mutex
+	ignored  map[string]bool // every path asked about so far, ignored or not
+	noIgnore bool            // the VCS gave no answer; nothing is filtered
 }
 
 // WalkTree walks root once. Unreadable entries are skipped, as each scan skipped them.
@@ -315,6 +326,73 @@ func (w *TreeWalk) Digest() string {
 		}
 	}
 	return s.Sum()
+}
+
+// scan returns, in path order, the files whose directories the scan named by bit
+// descends into and that keep reports true for, less whatever the VCS ignores.
+func (w *TreeWalk) scan(bit uint8, keep func(treeFile) bool) []string {
+	var out []string
+	for _, f := range w.files {
+		if f.scans&bit != 0 && keep(f) {
+			out = append(out, f.rel)
+		}
+	}
+	return w.dropIgnored(out)
+}
+
+// dropIgnored removes the paths the workspace's VCS ignores, with dropVCSIgnored's
+// semantics: no VCS, no ignore support, or a failed query filters nothing. The first call
+// asks about every walked file at once, so the scans after it ask nothing; a path outside
+// the walk (a directory a citation names) is asked about when it first comes up.
+func (w *TreeWalk) dropIgnored(files []string) []string {
+	if len(files) == 0 {
+		return files
+	}
+	w.ignoreMu.Lock()
+	defer w.ignoreMu.Unlock()
+	if w.noIgnore {
+		return files
+	}
+	var ask []string
+	if w.ignored == nil {
+		for _, f := range w.files {
+			ask = append(ask, f.rel)
+		}
+	}
+	for _, f := range files {
+		if _, known := w.ignored[f]; !known {
+			ask = append(ask, f)
+		}
+	}
+	if len(ask) > 0 {
+		slices.Sort(ask)
+		ask = slices.Compact(ask)
+		res, err := vcs.Resolve(context.Background(), w.root, "", types.VCSOptions{})
+		if err != nil || res.VCS == nil {
+			w.noIgnore = true
+			return files
+		}
+		got, err := res.VCS.IgnoredFiles(context.Background(), w.root, ask)
+		if err != nil {
+			return files
+		}
+		if w.ignored == nil {
+			w.ignored = make(map[string]bool, len(ask))
+		}
+		for _, p := range ask {
+			w.ignored[p] = false
+		}
+		for _, p := range got {
+			w.ignored[filepath.ToSlash(p)] = true
+		}
+	}
+	kept := files[:0:0]
+	for _, f := range files {
+		if !w.ignored[f] {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 // Contains reports whether the walk saw the file at rel.

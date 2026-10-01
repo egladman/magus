@@ -1,18 +1,15 @@
 package knowledge
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/libs/gopherbuzz/token"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -39,9 +36,13 @@ type fnLine struct {
 // call edges (function calls function), import edges (resolved to a file where
 // possible, else an inferred edge to the literal), and rationale nodes tied to
 // their enclosing function. Deterministic and LLM-free.
-func assembleBuzz(root string) Shard {
+func assembleBuzz(root string) Shard { return assembleBuzzIn(WalkTree(root)) }
+
+// assembleBuzzIn is assembleBuzz over a walk already taken.
+func assembleBuzzIn(w *TreeWalk) Shard {
+	root := w.root
 	s := Shard{Name: buzzShardName}
-	files := findBuzzFiles(root)
+	files := w.buzzFiles()
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
 		scanned[f] = true
@@ -241,25 +242,8 @@ func resolveBuzzImport(path string, scanned map[string]bool) (string, bool) {
 // skipping ignore dirs (dot-dirs, vendor, ...), testdata fixtures (not source), and
 // whatever the VCS ignores. MAGUS.md ranks file and function nodes, so an ignored build
 // output such as dist/ would otherwise reach a committed file.
-func findBuzzFiles(root string) []string {
-	var out []string
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // WalkDir: skip unreadable entries, continue walking
-		}
-		if d.IsDir() {
-			if path != root && (project.IsIgnoreDir(d.Name()) || d.Name() == "testdata") {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".buzz") {
-			if rel, err := filepath.Rel(root, path); err == nil {
-				out = append(out, filepath.ToSlash(rel))
-			}
-		}
-		return nil
-	})
-	slices.Sort(out)
-	return dropVCSIgnored(root, out)
+func findBuzzFiles(root string) []string { return WalkTree(root).buzzFiles() }
+
+func (w *TreeWalk) buzzFiles() []string {
+	return w.scan(walkBuzz, func(f treeFile) bool { return strings.HasSuffix(f.rel, ".buzz") })
 }
