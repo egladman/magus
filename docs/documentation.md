@@ -76,6 +76,7 @@ Start here to understand the model magus is built on.
 - [Knowledge graph](concepts/knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
 - [Diagnostics](reference/diagnostics.md) - every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.
 - [Engines](concepts/engines.md) - how magus loads and evaluates a magusfile.
+- [How gopherbuzz runs Buzz](concepts/buzz.md) - the pipeline from source to bytecode, the VM, and the baseline JIT, package by package.
 
 ## Going further
 

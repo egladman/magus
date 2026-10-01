@@ -18,7 +18,8 @@ The same gopherbuzz pipeline runs every Buzz program magus touches: a magusfile,
 a spell, a `magus buzz` script and the browser playground. What differs per host
 is the set of modules registered before the program runs. The magusfile engine
 gets every host module; the playground's wasm build installs only the modules
-marked WASM.
+marked WASM. [How gopherbuzz runs Buzz](buzz.md) follows one program from source
+through the compiler to the VM and the JIT.
 
 ## The engine interface
 

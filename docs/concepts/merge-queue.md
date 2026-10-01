@@ -703,13 +703,13 @@ push, the queue decides whether they still cover the head. It replays the approv
 commit's own diff onto the head's base and classifies, path by path, what the head
 holds beyond that replay:
 
-| Tier           | The change since the approval                                        |
-| -------------- | -------------------------------------------------------------------- |
-| `rebase`       | none: the approved diff, replayed onto the new base, is the head     |
-| `generated`    | only files a target declares as its output, or magus maintains       |
-| `prose`        | only files `gate_low_risk` claims (markdown by default)              |
-| `comment-only` | only comments, by the comment syntax the language's spell declares   |
-| `code`         | anything else, and any path the build tool cannot classify           |
+| Tier           | The change since the approval                                      |
+| -------------- | ------------------------------------------------------------------ |
+| `rebase`       | none: the approved diff, replayed onto the new base, is the head   |
+| `generated`    | only files a target declares as its output, or magus maintains     |
+| `prose`        | only files `gate_low_risk` claims (markdown by default)            |
+| `comment-only` | only comments, by the comment syntax the language's spell declares |
+| `code`         | anything else, and any path the build tool cannot classify         |
 
 The tiers come from the workspace's own declarations, never from file extensions alone.
 The approval carries when the base's `queue.carry_approvals` in `magus.yaml` allows the

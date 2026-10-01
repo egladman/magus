@@ -216,22 +216,22 @@ CLI spelling.
 
 The magus module, through `client`:
 
-| Call                                              | Purpose                                                                                    |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `magus\describe.<noun>`                           | The typed record `magus describe <noun>` prints: spells, targets, projects, tools, rules   |
-| `magus\describe.file`                             | Classify paths against declared globs: owning project and role                             |
-| `magus\run`                                       | Run a target for one or more projects, with the same arguments as `magus run`              |
-| `magus\clean`                                     | Remove declared outputs. Arguments are `magus clean`'s                                     |
-| `magus\where`                                     | Which project contains a directory                                                         |
-| `magus\affected`                                  | The affected project set                                                                   |
-| `magus\impact`                                    | The blast radius: why each project is in that set                                          |
-| `magus\output`                                    | Fetch one target execution's captured output by its `out...` ref                           |
-| `magus\doctor`                                    | Validate workspace health (config, cache, cycles, tool availability)                       |
-| `magus\insight`                                   | One report: hotspots, affinity, ownership, trend, volatility, unreferenced                 |
-| `magus\query`, `explain`, `path`, `refs`, `stats` | Search the graph, one node, a path, a symbol's references, and the graph's shape           |
-| `magus\memory`                                    | User-owned per-repo memory shared across worktrees                                         |
-| `magus\job`                                       | The orchestrating agent's declared jobs; magus never enforces them                         |
-| `magus\vcs.checkpoint`                            | The working state's identity: revision, branch, dirty, patch digest; writes nothing        |
+| Call                                              | Purpose                                                                                  |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `magus\describe.<noun>`                           | The typed record `magus describe <noun>` prints: spells, targets, projects, tools, rules |
+| `magus\describe.file`                             | Classify paths against declared globs: owning project and role                           |
+| `magus\run`                                       | Run a target for one or more projects, with the same arguments as `magus run`            |
+| `magus\clean`                                     | Remove declared outputs. Arguments are `magus clean`'s                                   |
+| `magus\where`                                     | Which project contains a directory                                                       |
+| `magus\affected`                                  | The affected project set                                                                 |
+| `magus\impact`                                    | The blast radius: why each project is in that set                                        |
+| `magus\output`                                    | Fetch one target execution's captured output by its `out...` ref                         |
+| `magus\doctor`                                    | Validate workspace health (config, cache, cycles, tool availability)                     |
+| `magus\insight`                                   | One report: hotspots, affinity, ownership, trend, volatility, unreferenced               |
+| `magus\query`, `explain`, `path`, `refs`, `stats` | Search the graph, one node, a path, a symbol's references, and the graph's shape         |
+| `magus\memory`                                    | User-owned per-repo memory shared across worktrees                                       |
+| `magus\job`                                       | The orchestrating agent's declared jobs; magus never enforces them                       |
+| `magus\vcs.checkpoint`                            | The working state's identity: revision, branch, dirty, patch digest; writes nothing      |
 
 Example:
 
