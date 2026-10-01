@@ -1,6 +1,3 @@
-// The registry every consumer reads. diagrams-generate lays each figure out from the knowledge
-// graph and writes the committed files; the site render inlines the committed page copy, so
-// rendering a page never needs the symbol index.
 namespace diagrams;
 
 import "assert";
@@ -35,7 +32,8 @@ import "site/diagrams/inputs-outputs" as _;
 import "site/diagrams/bootstrap" as _;
 import "site/diagrams/target-order" as _;
 
-// The committed files, relative to the docs project.
+// The committed files, relative to the docs project. The site render inlines their page
+// copies, so rendering a page never needs the symbol index.
 final PAIR_DIR = "assets/gen";
 
 // allFigures builds every registered figure. A typo in a directory or layer name raises

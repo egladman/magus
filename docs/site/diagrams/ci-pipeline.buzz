@@ -1,16 +1,11 @@
-// site/diagrams/ci-pipeline.buzz: the steps a ci target composes.
-//
-// Drawn as a fan-out, NOT a chain. `ci` is one `ctx.needs(...)` call, so the steps are
-// independent by default and order exists only where a step declares an edge of its own
-// (test depends on build, so build runs first because build says so, not because ci does).
-// An earlier version of this figure drew a six-long sequence, which read as magus owning a
-// fixed pipeline, the exact thing the surrounding page says it does not do.
 namespace ciPipeline;
 
 import "magus/figure";
 
 export fun ciPipelineFigure() > figure\Figure !> any {
     final cmd = figure\external("magus affected ci", look: figure\Look.focal);
+    // A fan-out, not a chain: drawn as a sequence, it read as magus owning a fixed pipeline,
+    // which the page around it says magus does not.
     final f = figure\of("ci-pipeline",
             title: "ci declares steps, not an order",
             eyebrow: "targets",

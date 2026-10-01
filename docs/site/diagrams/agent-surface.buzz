@@ -1,9 +1,3 @@
-// site/diagrams/agent-surface.buzz: what an agent host gets from magus. Skills and hook
-// wiring install before a session; after that every tool call, MCP included, reaches the
-// guard's hook first. The accent is on that gate.
-//
-// Hints sit last because skills, guard denials and MCP replies all render through them. The
-// harness spells are Buzz and the host is outside magus, so they are actors.
 namespace agentSurface;
 
 import "magus";
@@ -32,6 +26,7 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
         .actor(host)
         .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
         .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
+        // Last: skills, guard denials and MCP replies all render through it.
         .box(hint, label: "Hints", sub: "commands, next fields")
         .edgesFromGraph()
         .hideEdges(figure\setOf([guard]), dst: figure\setOf([skills]),

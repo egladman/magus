@@ -1,12 +1,10 @@
-// site/diagrams/image-build.buzz: which registries and tags an image-build run touches, as a
-// function of the charms stacked on it. Two diamonds, each with one connector per vertex,
-// which is all a diamond has room for.
 namespace imageBuild;
 
 import "magus/figure";
 
 export fun imageBuildFigure() > figure\Figure !> any {
     final run = figure\external("magus run image-build", look: figure\Look.focal);
+    // Each diamond takes one connector per vertex, all the room a diamond has.
     final cd = figure\external("cd?", look: figure\Look.decision);
     final local = figure\external("Load locally", sub: "pushes nothing", look: figure\Look.plain);
     final channel = figure\external("channel", look: figure\Look.decision);

@@ -1,15 +1,3 @@
-// site/diagrams/server-share.buzz: sharing a read-only view onto the LAN. Kept as its own
-// figure because the LAN listener is the only part of the server that a machine other than
-// localhost can reach, and burying that in a whole-system flowchart is how it stops being
-// obvious. The two accent elements both mark that boundary.
-//
-// The subset is drawn route by route rather than as one "read-only views" box, because the
-// asymmetry IS the message: a share link is a URL handed to a phone, so the graph, the diff
-// routes, the plan, /mcp and job control never appear on it. internal/server holds the
-// share endpoint and mounts the routes; its shareGuarded map is the split drawn here.
-//
-// The withheld box takes no connector on purpose: an arrow into it would say the listener
-// reaches it. The server imports it to mount it on loopback, and that edge is hidden.
 namespace serverShare;
 
 import "magus";
@@ -18,6 +6,8 @@ import "magus/figure";
 export fun serverShareFigure() > figure\Figure !> any {
     final server = magus\dir("internal/server");
     final lan = magus\dir("internal/share");
+    // Route by route, not one read-only box: what a share link withholds is the message.
+    // internal/server's shareGuarded map is the split drawn here.
     final served = magus\dir("internal/handler/viewer");
     final connectReads = magus\dir("internal/handler/status");
     final withheld = magus\dir("internal/handler/graph");
