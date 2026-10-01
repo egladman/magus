@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -810,7 +811,7 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 // refusal served to the worker it refused is a command that worker runs, so one naming a
 // widening hands the worker the escalation the boundary exists to withhold. An entry
 // (`enter`) admits one write into another job's paths and widens nothing, so it may stay.
-var wideningForms = []string{"--add-write-path", "job edit", `"write_paths"`, "write_paths="}
+var wideningForms = []string{"--add-write-path", "job apply", `"write_paths"`, "write_paths="}
 
 // A write outside the lease names the read-only view of what the job holds and who to
 // ask, and no command that would widen it.
@@ -859,7 +860,9 @@ func TestGradeLeasedWriteNamesARevokedPath(t *testing.T) {
 	leases[1].WritePaths = append(leases[1].WritePaths, "internal/thing/new.go")
 	ctx, root := fleetFixture(t, leases...)
 	store := storeAt(ctx)
-	revoked, err := store.Edit(ctx, "lease-b", job.EditOptions{RemoveWritePaths: []string{"internal/thing/new.go"}})
+	revoked, err := store.Update(ctx, "lease-b", func(u *types.Job) {
+		u.WritePaths = slices.DeleteFunc(u.WritePaths, func(p string) bool { return p == "internal/thing/new.go" })
+	})
 	require.NoError(t, err)
 	require.Len(t, revoked.Releases, 1)
 

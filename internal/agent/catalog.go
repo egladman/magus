@@ -259,7 +259,9 @@ import (
 // 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
 // 103: magus-diagram teaches magus/figure: boxes from Dir records, groups by layer or dirs set, edges from the graph.
 // 104: magus-diagram passes title, eyebrow, desc and direction to figure\of and paints with figure\draw.
-const SkillVersion = 104
+// 105: magus-multi-agent moves a live job's boundary and goals with `magus job apply -f`;
+// `magus job edit` is gone.
+const SkillVersion = 105
 
 const skillLicense = "GPL-3.0-or-later"
 

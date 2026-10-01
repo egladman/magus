@@ -641,3 +641,75 @@ func verifySubjectGate(gate types.CompletionGate, seen Observed) types.GateStatu
 	status.Verified = len(status.Violations) == 0
 	return status
 }
+
+// WaitIntegration grades job id's check goals, its check included, against the runs rep's
+// evidence names in checkout, the caller's tree, and records the grade as the row's
+// Integration. It is `magus job wait --integration`: the question is whether the work
+// still passes once merged with other work, which the holder's own verdict cannot say.
+//
+// Only check goals are graded, and only against resolve, which reads the caller's tree:
+// the diff, the footprint and the paths and symbol goals belong to the holder's checkout
+// and were graded there. It leaves State alone and works on an ended row, so a pass where
+// the work was written and a failure once merged stay two readable facts. Evidence naming a
+// goal the row does not hold as a check is an error, and nothing is recorded.
+func WaitIntegration(ctx context.Context, store *Store, id string, rep types.JobResult, resolve AttemptResolver, checkout string) (types.JobIntegration, error) {
+	if resolve == nil {
+		return types.JobIntegration{}, fmt.Errorf("job: no output resolver reads %s's runs", checkout)
+	}
+	rows, err := store.List()
+	if err != nil {
+		return types.JobIntegration{}, err
+	}
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return types.JobIntegration{}, fmt.Errorf("job: there is no job %q", id)
+	}
+	row := rows[i]
+	if rep.Job != "" && rep.Job != id {
+		return types.JobIntegration{}, fmt.Errorf("job: the evidence is filed under job %q and this one is %q", rep.Job, id)
+	}
+	var checks []types.CompletionGate
+	for _, gate := range row.EffectiveGoals() {
+		if gate.Kind == types.GateKindCheck {
+			checks = append(checks, gate)
+		}
+	}
+	if len(checks) == 0 {
+		return types.JobIntegration{}, fmt.Errorf("job: %s declares no check and no check goal, so no run in another tree can grade it", id)
+	}
+	refs := map[string]string{}
+	if ref := strings.TrimSpace(rep.Validation.OutputRef); ref != "" {
+		refs[types.PrimaryCompletionGateID] = ref
+	}
+	for _, evidence := range rep.GateEvidence {
+		if !slices.ContainsFunc(checks, func(g types.CompletionGate) bool { return g.ID == evidence.GateID }) {
+			return types.JobIntegration{}, fmt.Errorf("job: the evidence names goal %q, and %s holds no check goal by that id", evidence.GateID, id)
+		}
+		refs[evidence.GateID] = strings.TrimSpace(evidence.OutputRef)
+	}
+	grade := types.JobIntegration{Checkout: checkout, Verified: true}
+	for _, gate := range checks {
+		ref := refs[gate.ID]
+		var attempt types.JobAttempt
+		if ref != "" {
+			if attempt, err = resolve(ctx, ref); err != nil {
+				return types.JobIntegration{}, err
+			}
+		}
+		status := verifyGate(row, gate, ref, attempt, Observed{})
+		grade.Verified = grade.Verified && status.Verified
+		grade.Gates = append(grade.Gates, status)
+	}
+	stored, err := store.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
+		if !exists {
+			return fmt.Errorf("job: there is no job %q", id)
+		}
+		grade.At = now
+		cur.Integration = &grade
+		return nil
+	})
+	if err != nil {
+		return types.JobIntegration{}, err
+	}
+	return *stored.Integration, nil
+}

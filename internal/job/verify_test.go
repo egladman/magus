@@ -1,9 +1,12 @@
 package job
 
 import (
+	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -570,4 +573,88 @@ func TestUnclaimedFootprint(t *testing.T) {
 			assert.Equal(t, tc.want, unclaimedFootprint(tc.writePaths, tc.regions))
 		})
 	}
+}
+
+// integrationRow seeds a job checked by `test .` with one more check goal, in state.
+func integrationRow(t *testing.T, state types.JobState) *Store {
+	t.Helper()
+	s := tmpStore(t, t.TempDir())
+	_, err := s.Update(t.Context(), "w", func(u *types.Job) {
+		types.Declaration{ID: "w", WritePaths: []string{"a.go"}, Check: forkCheck(), Goals: []types.CompletionGate{
+			{ID: "lint", Check: types.LeaseCheck{Target: "lint", Project: "docs"}},
+		}}.Apply(u)
+		u.State = state
+	})
+	require.NoError(t, err)
+	return s
+}
+
+// runs resolves each ref to a recorded run of target in project, failed when named so.
+func runs(byRef map[string][2]string, failed ...string) AttemptResolver {
+	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		run, ok := byRef[ref]
+		if !ok {
+			return types.JobAttempt{}, nil
+		}
+		return types.JobAttempt{Found: true, Ref: ref, TimestampMs: time.Now().Add(time.Minute).UnixMilli(),
+			Target: run[0], Project: run[1], Failed: slices.Contains(failed, ref)}, nil
+	}
+}
+
+func integrationEvidence() types.JobResult {
+	return types.JobResult{Job: "w", Validation: types.JobResultValidation{OutputRef: "out1"},
+		GateEvidence: []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}}}
+}
+
+// A job that already passed where it was written gains an integration grade from runs in
+// the merged tree, and its state stays pass.
+func TestWaitIntegrationRecordsBesideAPassedJob(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}})
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	require.NoError(t, err)
+	assert.True(t, grade.Verified, "%+v", grade.Gates)
+	assert.Equal(t, []string{"check", "lint"}, []string{grade.Gates[0].ID, grade.Gates[1].ID})
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StatePass, rows[0].State)
+	require.NotNil(t, rows[0].Integration)
+	assert.Equal(t, "/merged", rows[0].Integration.Checkout)
+	assert.NotZero(t, rows[0].Integration.At)
+	assert.True(t, rows[0].Integration.Verified)
+}
+
+// A failing run in the merged tree records verified=false, names the goal, and moves
+// nothing else.
+func TestWaitIntegrationRecordsAFailureWithoutMovingTheState(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StateExited)
+	resolve := runs(map[string][2]string{"out1": {"test", "."}, "out2": {"lint", "docs"}}, "out2")
+	grade, err := WaitIntegration(t.Context(), s, "w", integrationEvidence(), resolve, "/merged")
+	require.NoError(t, err)
+	assert.False(t, grade.Verified)
+	assert.True(t, grade.Gates[0].Verified)
+	assert.Contains(t, strings.Join(grade.Gates[1].Violations, "\n"), "failed")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+	assert.False(t, rows[0].Integration.Verified)
+}
+
+func TestWaitIntegrationRefusesEvidenceForAGoalItDoesNotHold(t *testing.T) {
+	t.Parallel()
+
+	s := integrationRow(t, types.StatePass)
+	rep := integrationEvidence()
+	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "nope", OutputRef: "out3"})
+	_, err := WaitIntegration(t.Context(), s, "w", rep, runs(nil), "/merged")
+	require.ErrorContains(t, err, `goal "nope"`)
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Nil(t, rows[0].Integration, "a refused grade records nothing")
 }

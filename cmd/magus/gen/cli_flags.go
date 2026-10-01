@@ -281,12 +281,8 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
-	// job edit: --add-write-path
-	FlagJobEditAddWritePath = "add-write-path"
-	// job edit: --apply
-	FlagJobEditApply = "apply"
-	// job edit: --remove-write-path
-	FlagJobEditRemoveWritePath = "remove-write-path"
+	// job apply: --f
+	FlagJobApplyF = "f"
 	// job exec: --base
 	FlagJobExecBase = "base"
 	// job exit: --schema
@@ -323,6 +319,8 @@ const (
 	FlagJobPruneAll = "all"
 	// job rm: --force
 	FlagJobRmForce = "force"
+	// job wait: --integration
+	FlagJobWaitIntegration = "integration"
 	// job wait: --schema
 	FlagJobWaitSchema = "schema"
 	// job wait: --stdin
@@ -1684,6 +1682,18 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	return &f
 }
 
+// JobApplyFlags are the flags declared for `magus job apply`.
+type JobApplyFlags struct {
+	F string // -f
+}
+
+// BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
+func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
+	var f JobApplyFlags
+	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
+	return &f
+}
+
 // JobExecFlags are the flags declared for `magus job exec`.
 type JobExecFlags struct {
 	Base string // --base
@@ -1712,8 +1722,9 @@ func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
 
 // JobWaitFlags are the flags declared for `magus job wait`.
 type JobWaitFlags struct {
-	Schema bool // --schema
-	Stdin  bool // --stdin
+	Schema      bool // --schema
+	Stdin       bool // --stdin
+	Integration bool // --integration
 }
 
 // BindJobWait registers `magus job wait`'s flags on fs and returns the destination.
@@ -1721,21 +1732,7 @@ func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
 	var f JobWaitFlags
 	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
 	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
-	return &f
-}
-
-// JobEditFlags are the flags declared for `magus job edit`.
-//
-// It does NOT carry --add-write-path, --remove-write-path: a custom-valued flag is bound by the command itself,
-// which must do so alongside this binder.
-type JobEditFlags struct {
-	Apply bool // --apply
-}
-
-// BindJobEdit registers `magus job edit`'s flags on fs and returns the destination.
-func BindJobEdit(fs *flag.FlagSet) *JobEditFlags {
-	var f JobEditFlags
-	fs.BoolVar(&f.Apply, FlagJobEditApply, false, "Write the edit; without it the edit is previewed and nothing is written")
+	fs.BoolVar(&f.Integration, FlagJobWaitIntegration, false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
 	return &f
 }
 

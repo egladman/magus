@@ -2280,16 +2280,17 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
-edit adds write paths to a live job and revokes others in one write that keeps
-its state, where a re-fork would hand a taken job out again. It previews until
---apply, and only the orchestrator widens.
+apply upserts jobs' specs from -f <file|->, the way kubectl apply reads a
+manifest: the record is the whole spec, and the job keeps its state, holder and
+registration, where a re-fork would hand a taken job out again. Only the
+orchestrator widens; a holder may apply only the release of its own paths.
 
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
 
 Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
 them and magus describe job prints one job's terms.`,
-	Usage: "magus job <fork|exec|exit|wait|watch|run|edit|rm|prune> [flags]",
+	Usage: "magus job <fork|apply|exec|exit|wait|watch|run|rm|prune> [flags]",
 	Children: []Command{
 		{
 			Name:  "fork",
@@ -2317,6 +2318,23 @@ them and magus describe job prints one job's terms.`,
 			},
 		},
 		{
+			Name:  "apply",
+			Short: "Upsert jobs' specs from a file or stdin, keeping each job's state",
+			Description: "Upsert each record's spec, the way `kubectl apply -f` reads a manifest: criteria, write, deny and " +
+				"read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec " +
+				"field it leaves out is cleared, except an omitted checkpoint or timeout, which keeps the job's. Status is " +
+				"never written: the job keeps its state, holder and registration, and a record carrying state is refused. " +
+				"A new id creates the job. -f - reads stdin, and a stream holds one JSON job, an array, or one job per " +
+				"line; every record is checked, with fork's rules for what it adds, before any is written. A path the " +
+				"orchestrator drops from a taken job is recorded as a revoked release carrying the digest of what the job " +
+				"left. Widening is the orchestrator's; a session holding a lease may apply only a spec that releases some " +
+				"of its own paths. The global --dry-run prints the spec diff and writes nothing.",
+			Flags: []Flag{
+				{Name: "f", Kind: FlagString, Doc: "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line"},
+			},
+			Usage: "magus job apply -f <file|->",
+		},
+		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
 			Description: "Record the base this tree is on and the checkout the job was taken in. The guard hook binds the caller to the job when it lets this through, keyed on the session and subagent its host names; a host that names neither binds this checkout.",
@@ -2338,6 +2356,7 @@ them and magus describe job prints one job's terms.`,
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
+				{Name: "integration", Kind: FlagBool, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
 			},
 		},
 		{
@@ -2363,22 +2382,6 @@ shows what it is doing.`,
 			Usage: "magus job watch <job>",
 		},
 		{Name: "run", Short: "Submit one of the server's own jobs and return"},
-		{
-			Name:  "edit",
-			Short: "Add write paths to a live job or revoke them, keeping its state",
-			Description: "Merge write paths into a live job in one write: --add-write-path widens it and --remove-write-path " +
-				"revokes a path it holds. The job keeps its state and its holder, where a re-fork hands it out again as " +
-				"declared. A revoked path is recorded as a release carrying the digest of what the job left, and the " +
-				"holder's next write there is refused, naming the revocation and when it happened. Widening is the " +
-				"orchestrator's; a session holding a lease may only revoke its own paths. It previews and writes " +
-				"nothing until --apply. Ending a whole job is `magus job exit`, not an edit that revokes every path.",
-			Flags: []Flag{
-				{Name: "add-write-path", Kind: FlagCustom, Doc: "A path to add to the job's write paths; repeatable or comma-separated"},
-				{Name: "remove-write-path", Kind: FlagCustom, Doc: "A path to revoke from the job's write paths; repeatable or comma-separated"},
-				{Name: "apply", Kind: FlagBool, Doc: "Write the edit; without it the edit is previewed and nothing is written"},
-			},
-			Usage: "magus job edit <job> [--add-write-path <path>]... [--remove-write-path <path>]... [--apply]",
-		},
 		{
 			Name:  "rm",
 			Short: "Remove one job from the plan",
@@ -2413,7 +2416,9 @@ shows what it is doing.`,
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},
 		{"Submit a server job", "magus job run sync-graph"},
-		{"Widen a live job and write it", "magus job edit session-load/core --add-write-path internal/sessions/load.go --apply"},
+		{"Change a live job's spec, keeping its state", "magus job apply -f job.json"},
+		{"Preview that change", "magus job apply -f job.json --dry-run"},
+		{"Grade a job's checks in a merged tree", "magus job wait session-load/core --integration --stdin < evidence.json"},
 		{"See which jobs a prune would end", "magus job prune --dry-run"},
 	},
 }

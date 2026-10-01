@@ -2,6 +2,7 @@ package job
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -165,6 +166,35 @@ func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	assert.Equal(t, types.StateDeclared, row.State)
 }
 
+// `magus job apply -f` reads a manifest the three ways one arrives: one record, an array,
+// or one per line. Each record is decoded strictly, and a bad one is named by position.
+func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
+	t.Parallel()
+
+	a := declaration(`"id":"a"`)
+	one, err := io.ReadAll(a)
+	require.NoError(t, err)
+	two := fmt.Sprintf(`{"schema_version":%d,"id":"b"}`, types.JobSchemaVersion)
+	for name, raw := range map[string]string{
+		"an array":     "[" + string(one) + "," + two + "]",
+		"one per line": string(one) + "\n\n" + two + "\n",
+	} {
+		rows, err := DecodeDeclarations(strings.NewReader(raw))
+		require.NoError(t, err, name)
+		assert.Equal(t, []string{"a", "b"}, []string{rows[0].ID, rows[1].ID}, name)
+	}
+	rows, err := DecodeDeclarations(strings.NewReader(string(one)))
+	require.NoError(t, err)
+	assert.Len(t, rows, 1)
+
+	bad := fmt.Sprintf(`{"schema_version":%d,"id":"c","confidence":"high"}`, types.JobSchemaVersion)
+	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + two + "\n" + bad))
+	require.ErrorContains(t, err, "record 3:")
+	assert.Contains(t, err.Error(), "confidence")
+	_, err = DecodeDeclarations(strings.NewReader(string(one) + "\n" + string(one)))
+	require.ErrorContains(t, err, "a is record 1 too")
+}
+
 // An empty stdin is the shape of a pipeline that produced nothing, and reading it as an
 // empty record would record a row that erases the one it names.
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
@@ -245,7 +275,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			}}
 		}
 		_, err := ParseMerge(map[string]any{field: value})
-		assert.NoError(t, err, "magus\\job\\put rejects %q, which `magus job fork` accepts", field)
+		assert.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
 	for _, field := range jsonFields(types.Declaration{}) {

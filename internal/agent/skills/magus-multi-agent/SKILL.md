@@ -424,13 +424,15 @@ Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
 
-Moving a live job's boundary is yours. `magus job edit <job> --add-write-path <path>`
-widens it and `--remove-write-path <path>` revokes a path mid-flight; both merge into
-the row and keep its state, where a re-fork hands a taken job out again as declared,
-and both preview until `--apply`. A revoked path is recorded as a release with its
-digest, and the worker's next write there is refused, naming the revocation. Ending
-a whole job stays `magus job exit <job>`. A worker never widens: its refusal names
-`magus describe job` and tells it to ask you.
+Moving a live job's boundary is yours. Change its record and run `magus job apply -f
+<file>` (`-f -` reads stdin): the record is the whole spec, so it widens or revokes
+write paths and adds goals in one write, and the job keeps its state, where a re-fork
+hands a taken job out again as declared. `--dry-run` prints the spec diff and writes
+nothing. A check you find the job owes mid-flight is a goal you add this way, so
+`magus job wait` grades it from a recorded run. A revoked path is recorded as a release
+with its digest, and the worker's next write there is refused, naming the revocation.
+Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
+names `magus describe job` and tells it to ask you.
 
 Advance the row on every state change. `magus ls jobs` then answers two questions you
 would otherwise derive by hand: which live jobs claim intersecting
