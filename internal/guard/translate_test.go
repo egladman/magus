@@ -390,6 +390,9 @@ func TestFindTranslation(t *testing.T) {
 			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
 		{`find internal -name '*.go' | xargs grep -l package`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?[^/]*\.go$' -o name`, "not reproduced"},
 		{`find internal -name 'deep.go' -print`, deps, `query kind=file 'id=~^file:internal/(?:.*/)?deep\.go$' -o name`, "file:internal/store/sub/deep.go"},
+		// A negation no one pattern over ids says: the files are enumerated.
+		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, `query kind=file 'id=~^file:(?:internal/store/store\.go|internal/store/store_test\.go)$' -o name`,
+			"(2 results):\n  file:internal/store/store.go\n  file:internal/store/store_test.go"},
 
 		// Markdown has no file node, so the sets differ.
 		{`find docs -name '*.md'`, deps, "", ""},
@@ -397,7 +400,6 @@ func TestFindTranslation(t *testing.T) {
 		// A predicate the file nodes do not answer.
 		{`find internal -iname '*.go'`, deps, "", ""},
 		{`find internal -name '*.go' -newer go.mod`, deps, "", ""},
-		{`find internal -name '*.go' -not -path '*/sub/*'`, deps, "", ""},
 		{`find internal -name '*.go' -exec cat {} \;`, deps, "", ""},
 		{`find internal -type f`, deps, "", ""},
 		// find negates a class with `[!x]`, which the proof would read as a literal.

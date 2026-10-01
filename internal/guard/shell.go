@@ -2723,14 +2723,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
+	// Each translation weighs a stale graph itself: a listing proved against the disk holds
+	// at any revision, and a diagnostic code is symbol-search's.
 	if v, ok := translateVerdict(deps, cmds); ok {
-		// A diagnostic code's deny is symbol-search's, which weighs a stale graph itself.
-		if v.Deny == "" || v.Rule.Name == denyRuleSymbolSearch {
-			return v
-		}
-		if stale := graphMoved(deps); stale.reason != "" {
-			return stale.verdict()
-		}
 		return v
 	}
 	if v, ok := searchVerdict(deps, cmds); ok {

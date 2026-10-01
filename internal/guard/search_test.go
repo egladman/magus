@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,8 +24,8 @@ import (
 // as alternations and 13% as definition lookups, and the single-name deny fired 0 times.
 func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true, "Judge": true, "Verdict": true}
-	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph}
-	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, GraphIDs: diagnosticGraph, Spells: spellCatalog}
+	stale := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], false }, GraphIDs: diagnosticGraph, Spells: spellCatalog}
 
 	for _, tt := range []struct {
 		command string
@@ -245,8 +246,8 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 		"ParseConfig":   {{File: "internal/api/config.go", Count: 1, Lines: []int{3}}},
 	}
 	indexed := func(name string) (bool, bool) { return sites[name] != nil, true }
-	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, scope: workspaceScope{root: root}}
-	blind := Dependencies{SymbolDefined: indexed, scope: workspaceScope{root: root}}
+	deps := Dependencies{SymbolDefined: indexed, SymbolSites: func(name string) ([]types.KnowledgeRefSite, bool) { return sites[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}
+	blind := Dependencies{SymbolDefined: indexed, Spells: spellCatalog, scope: workspaceScope{root: root}}
 	const handler = "Its answer (2 results):\n  internal/api/handler.go  (2)  lines 4,6\n  internal/api/handler_test.go  (1)  lines 3"
 	const notReproduced = "\nThe pipe after the search is not reproduced: run it over the command's output."
 
@@ -319,10 +320,14 @@ func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
 			types.KindDiagnostic: {"diagnostic:MGS2011"},
 		}),
+		Spells:  spellCatalog,
 		scope:   workspaceScope{root: root},
 		callDir: root,
 	}
 }
+
+// spellCatalog is the built-in spells, whose symbol indexers say which files refs answers for.
+var spellCatalog = project.DefaultSpellRegistry().All
 
 var staleGraphCommands = []struct {
 	command string
@@ -473,6 +478,7 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 	deps := Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
 		GraphIDs:      graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS3010"}}),
+		Spells:        spellCatalog,
 		scope:         workspaceScope{root: root},
 		callDir:       root,
 	}
@@ -574,6 +580,7 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	stale := Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return held[name], false },
 		CacheDir:      func(string) (string, error) { return cacheDir, nil },
+		Spells:        spellCatalog,
 		scope:         workspaceScope{root: root},
 		callDir:       root,
 	}
@@ -605,12 +612,35 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 	}
 }
 
+// The files refs answers for are the languages a spell declares a symbol indexer for, read
+// from the catalog rather than a list in the guard: Go and TypeScript here, Buzz not.
+func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
+	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
+	assert.True(t, exts[".go"], "%v", exts)
+	assert.True(t, exts[".ts"], "%v", exts)
+	assert.False(t, exts[".buzz"], "no spell indexes Buzz")
+	assert.False(t, exts[".md"])
+	assert.Empty(t, indexedExtensions(Dependencies{}))
+
+	root := recordedSearchTree(t)
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return name == "CheckStatus", true },
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(deps, `grep -rn CheckStatus internal`).Rule.Name)
+	deps.Spells = nil
+	assert.Empty(t, Evaluate(deps, `grep -rn CheckStatus internal`).Deny, "with no indexer declared, nothing there is a symbol refs answers")
+}
+
 // TestMixedSearchServesTheTextOnItsOwn pins the half of a mixed alternation that is not a
 // symbol: a literal is served as magus's own literal search over the same paths.
 func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
 	root := recordedSearchTree(t)
 	deps := Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return name == "WritePaths", true },
+		Spells:        spellCatalog,
 		scope:         workspaceScope{root: root},
 		callDir:       root,
 	}

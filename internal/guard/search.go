@@ -187,7 +187,7 @@ func searchReachOf(deps Dependencies, dir string, typed, c hint.Invocation) sear
 		paths = []string{"."}
 	}
 	// refs answers for THIS workspace, so a search of another tree has no replacement here.
-	if allOutside(deps.scope, paths) || searchesRevision(typed, dir) || !searchesCode(c, deps.scope.root, dir, paths) {
+	if allOutside(deps.scope, paths) || searchesRevision(typed, dir) || !searchesCode(c, deps.scope.root, dir, paths, indexedExtensions(deps)) {
 		return reachNone
 	}
 	return reachTree
@@ -214,10 +214,22 @@ func isNamedFile(dir, p string) bool {
 	return !info.IsDir()
 }
 
-// indexedExt are the source languages the workspace's symbol indexes read (Go and
-// TypeScript). Buzz is source but no index reads it, so a search of Buzz files is text to
-// refs, which would answer with a symbol of another language that shares the name.
-var indexedExt = map[string]bool{".go": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true}
+// indexedExtensions are the file extensions of every language a spell in the catalog
+// declares a symbol indexer for: the files refs can answer for. Buzz is source no indexer
+// reads, so a search of Buzz files is text to refs, which would answer with a symbol of
+// another language that shares the name. An unwired catalog indexes nothing.
+func indexedExtensions(deps Dependencies) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range deps.spells() {
+		if s == nil || s.SymbolIndexer() == nil {
+			continue
+		}
+		for _, ext := range s.LanguageExtensions() {
+			out["."+strings.TrimPrefix(strings.ToLower(ext), ".")] = true
+		}
+	}
+	return out
+}
 
 // nonCodeDirs are directories whose contents no symbol index describes.
 var nonCodeDirs = map[string]bool{"node_modules": true}
@@ -228,14 +240,14 @@ const sourceProbeCap = 400
 // searchesCode reports a search whose files include source a symbol index covers. A file
 // filter decides when the search carries one; otherwise any operand that is source, a
 // directory, or a glob over source does. A log, a capture, Markdown or JSON is text.
-func searchesCode(c hint.Invocation, root, dir string, paths []string) bool {
+func searchesCode(c hint.Invocation, root, dir string, paths []string, exts map[string]bool) bool {
 	if filters, ok := fileFilters(c); ok {
-		return slices.ContainsFunc(filters, func(g string) bool { return indexedExt[strings.ToLower(path.Ext(g))] })
+		return slices.ContainsFunc(filters, func(g string) bool { return exts[strings.ToLower(path.Ext(g))] })
 	}
-	return slices.ContainsFunc(paths, func(p string) bool { return codeOperand(root, dir, p) })
+	return slices.ContainsFunc(paths, func(p string) bool { return codeOperand(root, dir, p, exts) })
 }
 
-func codeOperand(root, dir, p string) bool {
+func codeOperand(root, dir, p string, exts map[string]bool) bool {
 	if p == "" || strings.HasPrefix(p, unresolved) {
 		return false
 	}
@@ -259,10 +271,10 @@ func codeOperand(root, dir, p string) bool {
 	}
 	info, err := os.Stat(abs)
 	if err == nil && info.IsDir() {
-		return holdsSource(abs)
+		return holdsSource(abs, exts)
 	}
 	if ext := path.Ext(p); ext != "" && !strings.ContainsAny(ext, "/*?[") {
-		return indexedExt[strings.ToLower(ext)]
+		return exts[strings.ToLower(ext)]
 	}
 	// A glob without an extension, or a missing directory: grep finds nothing there either
 	// way, and the graph's answer for a symbol is the same.
@@ -272,7 +284,7 @@ func codeOperand(root, dir, p string) bool {
 // holdsSource reports whether a directory holds a source file, reading at most
 // sourceProbeCap entries; past the cap it is taken to, since a large tree almost always does.
 // A directory of Markdown skills or JSON fixtures holds none, and a search there is text.
-func holdsSource(abs string) bool {
+func holdsSource(abs string, exts map[string]bool) bool {
 	seen := 0
 	found := false
 	err := filepath.WalkDir(abs, func(p string, d fs.DirEntry, err error) error {
@@ -289,7 +301,7 @@ func holdsSource(abs string) bool {
 			}
 			return nil
 		}
-		if indexedExt[strings.ToLower(path.Ext(d.Name()))] {
+		if exts[strings.ToLower(path.Ext(d.Name()))] {
 			found = true
 			return fs.SkipAll
 		}
