@@ -45,7 +45,7 @@ export fun modulePath(gomod: str) > str !> str {
         if (line.startsWith("module ")) {
             // sub+trim, not split(" ")[1]: go.mod permits any run of whitespace after
             // the keyword, and on `module  path` split yields an EMPTY element at [1],
-            // so this returned "" while still reporting success. releaser.buzz parses
+            // so this returned "" while still reporting success. releases.buzz parses
             // the same line and must agree; it uses this identical form.
             return line.sub("module ".len()).trim();
         }
@@ -380,7 +380,7 @@ export fun percentOf(covered: int, statements: int) > str !> str {
 test "modulePath reads the module line" {
     assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n"), want: "github.com/egladman/magus", message: "module path");
     // go.mod permits any run of whitespace after the keyword. split(" ")[1] took the
-    // EMPTY element here and reported success, so this parsed to "" while releaser.buzz
+    // EMPTY element here and reported success, so this parsed to "" while releases.buzz
     // parsing the same line kept a leading space. Both now agree.
     assert\equal(modulePath("module  github.com/egladman/magus\n"), want: "github.com/egladman/magus", message: "two spaces after the keyword");
 }

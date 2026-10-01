@@ -89,11 +89,13 @@ Targets import these; each runs through its target rather than by hand.
 | module | holds |
 | --- | --- |
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
+| `hack/magusfile/badges.buzz` | the coverage badge SVG, in the GitHub Actions badge's palette |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
+| `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags and the release-index publish |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
 | `hack/magusfile/toolchain-policy.buzz` | the version windows the workspace requires of the binaries its spells drive |
 
