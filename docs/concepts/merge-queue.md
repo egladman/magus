@@ -743,6 +743,15 @@ run on the new head decides, and it skips a review already dismissed. So the rev
 person sees agree with what the queue merges by. A carry is noted only in the advice
 comment ("approval by @ann carries: prose").
 
+It reads every review, however many, and lists only what classifying this one change
+takes: the open changes, the merged changes it carries, and no closed ones. It walks
+back through merges of main into the change as plan does, so a merge that differs from
+the plain merge only in generated files is peeled, and the document names it under
+`regeneration_owed`: the approval stands once main's regeneration reproduces that merge,
+which apply proves before merging. An approved commit a force-push left unreachable
+cannot be compared, so its approval does not carry: "the approved commit `<id>` is no
+longer reachable".
+
 ## Verdicts: `mergequeue.verdict/v1`
 
 `validate --verdicts <dir>` first writes the plan there as `plan.json`, then one
@@ -986,8 +995,10 @@ in `queue-apply.yaml` runs on each push to a pull request from this repository, 
 main's workflow and main's code, and runs `magus queue reviews --dismiss` as the app:
 an approval the change since it does not carry is dismissed, naming the files, and one
 it carries stands. It needs the app's pull requests write, which the registration link
-already grants. GitHub lists no pull request for a fork's run, so a fork's approvals are
-never dismissed; the queue still rechecks every approval before it merges.
+already grants. A fork's pull request is covered too: GitHub lists no pull request for a
+fork's run, so the job finds it from the run's head owner, branch and commit, and still
+runs none of the fork's code. git fetches with the job's token, so a private repository
+works with no persisted credential.
 
 The next `queue-apply` run finds the variable and the secret. `setup-magus` mints a token
 for this repository alone that expires when the job ends, and the queue merges, pushes,
