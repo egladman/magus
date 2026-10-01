@@ -6,6 +6,7 @@ package proc
 import (
 	"time"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,6 +31,7 @@ const (
 	pathStatus   = "/proc/v1/status"
 	pathShutdown = "/proc/v1/shutdown"
 	pathReload   = "/proc/v1/reload"
+	pathRead     = "/proc/v1/read"
 )
 
 var (
@@ -46,6 +48,23 @@ var routeNeeds = map[string]types.Need{
 	pathStatus:   needConsoleRead,
 	pathShutdown: needConsoleWrite,
 	pathReload:   needConsoleWrite,
+	pathRead:     needConsoleRead,
+}
+
+// readRequest asks the server to answer one read-only question about the workspace at
+// Root from what it already holds. Verb names the question and Request carries its
+// parameters, both opaque here: proc moves the bytes and the [Options.Read] handler
+// interprets them.
+type readRequest struct {
+	Verb    string          `json:"verb"`
+	Request json.RawMessage `json:"request"`
+	Version string          `json:"version,omitempty"`
+	Root    string          `json:"root"`
+}
+
+// readReply carries the handler's answer, as opaque as the request.
+type readReply struct {
+	Record json.RawMessage `json:"record"`
 }
 
 // jobRequest submits a background job: the server runs `magus <Args>` asynchronously and

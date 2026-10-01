@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -54,6 +56,35 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 		slog.ErrorContext(ctx, reply.Err)
 	}
 	return reply.ExitCode, nil
+}
+
+// readTimeout bounds a Read round-trip, dial included. The caller can always answer the
+// question itself, so a server that has stopped answering is worth waiting on only as long
+// as a slow read could legitimately take.
+const readTimeout = 30 * time.Second
+
+var readExchange = exchange{op: "read", method: http.MethodPost, path: pathRead, timeout: readTimeout}
+
+// Read asks the server at addr to answer verb for the workspace at root from what it holds,
+// decoding the answer into reply. request is the verb's parameters, sent as JSON; proc
+// interprets neither side. A server that will not answer (another build, a handler that
+// declines, or no read handler at all) returns an error [NotAdopted] reports true for, and
+// the caller answers locally, quietly. Any other error is a transport failure, after which
+// the caller also answers locally.
+func Read(ctx context.Context, addr, version, root, verb string, request, reply any) error {
+	raw, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("proc: read: encode request: %w", err)
+	}
+	req := readRequest{Verb: verb, Request: raw, Version: adoptionIdentity(version), Root: root}
+	got, err := roundTrip[readReply](ctx, addr, readExchange, req)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(got.Record, reply); err != nil {
+		return fmt.Errorf("proc: read: decode record: %w", err)
+	}
+	return nil
 }
 
 // QueryStatus asks the proc server at addr for a live pool snapshot.

@@ -84,6 +84,10 @@ func Ensure(ctx context.Context, cacheDir string, opts BuildOptions, want []Shar
 	}
 	g := mergeShards(append(built, stored...), false)
 	g.SetRoot(opts.Root)
+	if len(built) == 0 {
+		// Every stored shard was checked against man, so g is the graph man describes.
+		g.base = shardsIdentity(stored, man)
+	}
 	return g, nil
 }
 

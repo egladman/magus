@@ -104,21 +104,26 @@ func plural(n int, one, many string) string {
 // gap probe's answer, printVerdict already renders it as "outside coverage", and one fact
 // stated twice in two vocabularies teaches a reader to skip both.
 //
-// The verdict comes from SymbolIndexStatus, the same probe `magus status` prints, so the
-// banner and the status table cannot disagree about one index. The concrete type is what
-// carries it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
+// The verdict comes from the stamp-checked probe behind `magus status`, so the banner and
+// the status table cannot disagree about one index, and it is checked at the moment of the
+// read rather than taken from a server's watcher memo. The concrete type is what carries
+// it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
 // question needs the cache, which no domain interface exposes.
 func staleIndexProjects(ctx context.Context, root string) []string {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil || ws == nil {
 		return nil
 	}
+	return staleIndexProjectsOf(ctx, ws)
+}
+
+func staleIndexProjectsOf(ctx context.Context, ws types.WorkspaceRepository) []string {
 	m, ok := ws.(*magus.Magus)
 	if !ok {
 		return nil
 	}
 	var stale []string
-	for _, s := range m.SymbolIndexStatus(ctx) {
+	for _, s := range m.SymbolIndexStatusByStamp(ctx) {
 		if s.Freshness != types.SymbolIndexStale {
 			continue
 		}

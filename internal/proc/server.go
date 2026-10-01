@@ -152,6 +152,12 @@ type Options struct {
 	// Server, if set, is read on every Status RPC and reported as StatusReply.Server.
 	// Only `magus server` sets it.
 	Server func() *types.StatusServer
+	// Read, if set, answers a client's read-only question (see [Read]) about the workspace
+	// at root: verb and request are the client's, the returned bytes are its answer. It runs
+	// on the request's context, so a client that hangs up cancels it. An error wrapping
+	// [ErrNotAdoptable] declines, and the client answers locally. Unset, every read is
+	// declined. Only `magus server` sets it.
+	Read func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
 	// CallerOwnsSignals leaves SIGINT, SIGTERM and SIGHUP to the caller. Without it Start
 	// installs a handler that shuts the server down on any of them and re-raises the
 	// signal, which is right for a proc server living inside one run and wrong for a
@@ -289,6 +295,7 @@ func New(opts Options) (*Server, error) {
 
 	svc := &service{
 		handler:         opts.Handler,
+		read:            opts.Read,
 		configReloader:  opts.ConfigReloader,
 		parentCtx:       serverCtx,
 		lim:             lim,
@@ -342,6 +349,7 @@ func (s *Server) routes() (http.Handler, error) {
 	proc.HandleFunc("GET "+pathStatus, s.svc.handleStatus)
 	proc.HandleFunc("POST "+pathShutdown, s.svc.handleShutdown)
 	proc.HandleFunc("POST "+pathReload, s.svc.handleReload)
+	proc.HandleFunc("POST "+pathRead, s.svc.handleRead)
 	proc.HandleFunc("/proc/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, errorReply{Message: fmt.Sprintf("proc: no route %s %s", r.Method, r.URL.Path)})
 	})
@@ -509,6 +517,30 @@ func (s *service) handleShutdown(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// handleRead answers a read only for the client's own build: an answer computed by other
+// code is another program's answer, however alike the two versions look.
+func (s *service) handleRead(w http.ResponseWriter, r *http.Request) {
+	var req readRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		refuse(w, http.StatusBadRequest, err)
+		return
+	}
+	if s.read == nil {
+		refuse(w, http.StatusInternalServerError, fmt.Errorf("%w: this server answers no reads", ErrNotAdoptable))
+		return
+	}
+	if !s.versionAdmits(req.Version) {
+		refuse(w, http.StatusInternalServerError, ErrVersionMismatch)
+		return
+	}
+	record, err := s.read(r.Context(), req.Root, req.Verb, req.Request)
+	if err != nil {
+		refuse(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, readReply{Record: record})
+}
+
 func (s *service) handleReload(w http.ResponseWriter, _ *http.Request) {
 	var reply configReloadReply
 	if s.configReloader != nil {
@@ -525,6 +557,7 @@ type activeCall struct {
 
 type service struct {
 	handler         func(ctx context.Context, args []string) error
+	read            func(ctx context.Context, root, verb string, request []byte) ([]byte, error)
 	parentCtx       context.Context
 	lim             *cache.Limiter
 	version         string // human-facing display version; surfaced as StatusReply.Version

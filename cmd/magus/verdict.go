@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
@@ -33,25 +34,28 @@ import (
 // (`kind:author` returning nothing has no bearing on a missing or stale symbol index), so an
 // ordinary domain query pays nothing for the verdict.
 func symbolCoverage(ctx context.Context, root, input string, seeded bool) knowledge.Coverage {
+	if !knowledge.CouldMatchLazyLayer(input) {
+		return knowledge.Coverage{Seeded: seeded}
+	}
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		// A probe that could not run must not come back as an empty gap list: that reads
+		// as verified coverage and would assert the very fact it failed to establish.
+		return knowledge.Coverage{Seeded: seeded}
+	}
+	return symbolCoverageOf(ctx, ws, globalCfg, input, seeded)
+}
+
+// symbolCoverageOf is symbolCoverage over a workspace the caller already holds, read under
+// cfg: the form a server answering for one of many workspaces calls.
+func symbolCoverageOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, input string, seeded bool) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}
-	cov.Gaps, cov.Probed = symbolGaps(ctx, root)
-	cov.Stale = staleIndexProjects(ctx, root)
+	cov.Gaps, cov.Probed = magus.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
+	cov.Stale = staleIndexProjectsOf(ctx, ws)
 	return cov
-}
-
-// symbolGaps lists the projects whose declared symbol index magus could not read, and
-// reports whether the probe ran. A probe that could not run must not come back as an
-// empty gap list: that reads as verified coverage and would assert the very fact it
-// failed to establish.
-func symbolGaps(ctx context.Context, root string) ([]types.KnowledgeSymbolGap, bool) {
-	ws, err := inspectWorkspace(ctx, root)
-	if err != nil {
-		return nil, false
-	}
-	return magus.SymbolGaps(ctx, ws, ws.Root(), globalCfg, slog.Default())
 }
 
 // printVerdict writes the block explaining an answer that reported nothing. It prints

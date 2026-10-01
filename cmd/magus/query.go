@@ -3,10 +3,13 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -14,11 +17,14 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -215,16 +221,23 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		input += " kind=" + k
 	}
 
-	seedsLazyLayer := knowledge.SeedsLazyLayer(input)
-	g, err := loadKnowledgeGraph(ctx, root, qf.Refresh, qf.Global, seedsLazyLayer)
-	if err != nil {
-		return err
+	read := graphRead{Input: input, Budget: qf.Budget, Nearest: opts.Format == FormatText}
+	var res queryResult
+	if qf.Refresh || qf.Global || !askServer(ctx, root, readQuery, &read, &res) {
+		ws, err := openForRead(ctx, root)
+		if err != nil {
+			return err
+		}
+		if res, err = searchGraph(ctx, ws, globalCfg, read, qf.Refresh, qf.Global); err != nil {
+			return err
+		}
 	}
-	out := g.Query(input, qf.Budget)
-	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer))
+	out := res.Out
 
+	stop := traceFromContext(ctx).phase("query.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForQuery(out))
+	stop()
 
 	// The status is decided once, for every format: a rule that held only for text would
 	// leave the callers most likely to branch on it (`-o name` in a chain, `-o json` in a
@@ -255,7 +268,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	fmt.Printf("matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
 	if out.MatchCount == 0 {
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
-		emitNearest(os.Stdout, g.NearestNode(input))
+		emitNearest(os.Stdout, res.Nearest)
 		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
 			return err
 		}
@@ -805,26 +818,29 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	seedsLazyLayer := knowledge.SeedsLazyLayer(pos[0])
-	g, err := loadKnowledgeGraph(ctx, root, xf.Refresh, xf.Global, seedsLazyLayer)
-	if err != nil {
-		return err
+	read := graphRead{Input: pos[0]}
+	var res explainResult
+	if xf.Refresh || xf.Global || !askServer(ctx, root, readExplain, &read, &res) {
+		ws, err := openForRead(ctx, root)
+		if err != nil {
+			return err
+		}
+		if res, err = explainNode(ctx, ws, globalCfg, read, xf.Refresh, xf.Global); err != nil {
+			return err
+		}
 	}
-	out, ok := g.Explain(pos[0])
-	if !ok {
-		// A bare name does not seed symbols, so explain resolved it against a graph that
-		// provably held no code symbols. Reporting that as "no node matches" is how a
-		// real symbol comes to look nonexistent, but only when the input could have
-		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
-		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsLazyLayer))
+	if !res.Found {
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
-		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
-		emitNearest(os.Stderr, g.NearestNode(pos[0]))
-		return exitForVerdict(ans.Verdict)
+		printVerdict(os.Stderr, res.Answer, hint.Refs.With(pos[0]))
+		emitNearest(os.Stderr, res.Nearest)
+		return exitForVerdict(res.Answer.Verdict)
 	}
+	out := res.Out
 
+	stop := traceFromContext(ctx).phase("explain.next")
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForExplain(out))
+	stop()
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -851,9 +867,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		fmt.Printf("(start the magus server if the graph does not load)\n")
 	}
 	printNext(os.Stdout, nx, next)
-	// explain's output carries no answer record, so the found branch builds the one every
-	// other surface builds rather than reaching past it for the raw observation.
-	return reportIndexStaleness(os.Stdout, knowledge.Answer(pos[0], true, symbolCoverage(ctx, root, pos[0], seedsLazyLayer)))
+	return reportIndexStaleness(os.Stdout, res.Answer)
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {
@@ -883,7 +897,11 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
+	ws, err := openForRead(ctx, root)
+	if err != nil {
+		return err
+	}
+	g, err := knowledgeGraphOf(ctx, ws, globalCfg, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
 	if err != nil {
 		return err
 	}
@@ -900,6 +918,250 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 
 	fmt.Print(render.PathText(out))
 	return nil
+}
+
+// A running server answers query, explain and refs for the CLI. It holds the workspace
+// open with its process warm, so the read skips process start, the workspace load and the
+// tool probes. It still runs the same cache-first build a local read runs, whose stamps
+// decide freshness against the tree as it is at that moment; nothing is trusted to a file
+// watcher, so the answer is the one a local read would give. A server answers only for the
+// client's exact build (proc refuses another) and only when the client reads under the
+// configuration the server reads under (serveGraphRead declines otherwise). No server, a
+// refusal and a broken socket all fall back to the local read.
+const (
+	readQuery   = "query"
+	readExplain = "explain"
+	readRefs    = "refs"
+)
+
+// graphRead is one read's parameters, as a client sends them to a server.
+type graphRead struct {
+	Input  string `json:"input"`
+	Budget int    `json:"budget,omitempty"`
+	// Nearest asks query for the closest node id when nothing matches. Only the text view
+	// prints one, and finding it is a fuzzy pass over the whole graph.
+	Nearest bool `json:"nearest,omitempty"`
+	// Occurrences asks refs for the occurrence read as well as the reference list.
+	Occurrences bool `json:"occurrences,omitempty"`
+	// Config is readConfigDigest of the configuration the client reads under.
+	Config string `json:"config"`
+	// Env is envDigests of the client's environment. An index freshness verdict reads the
+	// process environment (the cache key folds in allowed variables, and PATH picks the
+	// binary a version probe runs), so the server compares the variables its verdict
+	// depends on, without any value crossing the socket.
+	Env map[string]string `json:"env"`
+}
+
+// queryResult is what one `magus query` search found: everything its output formats
+// render apart from the breadcrumbs, which depend on who is asking.
+type queryResult struct {
+	Out     types.KnowledgeQueryOutput `json:"out"`
+	Nearest string                     `json:"nearest,omitempty"`
+}
+
+// explainResult is what one `magus explain` lookup found.
+type explainResult struct {
+	Out   types.KnowledgeExplainOutput `json:"out"`
+	Found bool                         `json:"found"`
+	// Answer judges the lookup: on a miss, whether the node is absent or merely unseen; on
+	// a hit, whether the index it came from is current. explain's record carries no answer
+	// of its own, so this is the one every other surface builds.
+	Answer  types.KnowledgeAnswer `json:"answer"`
+	Nearest string                `json:"nearest,omitempty"`
+}
+
+func searchGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, read graphRead, refresh, global bool) (queryResult, error) {
+	tr := traceFromContext(ctx)
+	seeded := knowledge.SeedsLazyLayer(read.Input)
+	var g *knowledge.Graph
+	var out types.KnowledgeQueryOutput
+	var err error
+	if seeded && !global {
+		// The answer knowledgeGraphOf then Query give, ranked from the names sidecar so only
+		// the shards the answer touches are decoded.
+		stop := tr.phase("query.load_and_search")
+		if refresh {
+			seedFromPublishedGraph(ws)
+		}
+		out, g, err = magus.QueryKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
+		stop()
+		if err != nil {
+			return queryResult{}, err
+		}
+	} else {
+		stop := tr.phase("query.load_graph")
+		g, err = knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
+		stop()
+		if err != nil {
+			return queryResult{}, err
+		}
+		stop = tr.phase("query.search")
+		out = g.Query(read.Input, read.Budget)
+		stop()
+	}
+	stop := tr.phase("query.coverage")
+	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, symbolCoverageOf(ctx, ws, cfg, read.Input, seeded))
+	stop()
+	res := queryResult{Out: out}
+	if out.MatchCount == 0 && read.Nearest {
+		res.Nearest = g.NearestNode(read.Input)
+	}
+	return res, nil
+}
+
+func explainNode(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, read graphRead, refresh, global bool) (explainResult, error) {
+	tr := traceFromContext(ctx)
+	seeded := knowledge.SeedsLazyLayer(read.Input)
+	stop := tr.phase("explain.load_graph")
+	g, err := knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
+	stop()
+	if err != nil {
+		return explainResult{}, err
+	}
+	stop = tr.phase("explain.search")
+	out, found := g.Explain(read.Input)
+	stop()
+	// A bare name does not seed symbols, so a miss was resolved against a graph that held
+	// no code symbols. Reporting that as "no node matches" is how a real symbol comes to
+	// look nonexistent, so the answer says so when the input could have named one, and a
+	// typo'd `kind:target` still gets the absent verdict it deserves.
+	stop = tr.phase("explain.coverage")
+	res := explainResult{Out: out, Found: found, Answer: knowledge.Answer(read.Input, found, symbolCoverageOf(ctx, ws, cfg, read.Input, seeded))}
+	stop()
+	if !found {
+		res.Nearest = g.NearestNode(read.Input)
+	}
+	return res, nil
+}
+
+// openForRead opens the workspace for a graph read no server answered. It is the same
+// Open-loaded handle startup used to preload for these verbs, so the local read is the one
+// it always was; the preload just no longer runs for a read a server answers.
+func openForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+	stop := traceFromContext(ctx).phase("read.open")
+	defer stop()
+	// inspectWorkspace reuses this handle when the open succeeded, and reports why when it
+	// did not, so the error has one place to come from.
+	_, _ = loadMagus(ctx, root)
+	return inspectWorkspace(ctx, root)
+}
+
+// askServer has a running server answer verb into reply and reports whether it did. A
+// false return is never a failure: no server, another build, another configuration and a
+// broken socket all mean the caller reads locally, at debug level only.
+func askServer(ctx context.Context, root, verb string, read *graphRead, reply any) bool {
+	if !globalCfg.Server.Enabled {
+		return false
+	}
+	stop := traceFromContext(ctx).phase("read.server")
+	defer stop()
+	sock := os.Getenv(proc.SocketEnv)
+	if sock == "" {
+		var ok bool
+		if sock, ok = proc.LookupServerSocket(ctx); !ok {
+			return false
+		}
+	}
+	wsRoot := resolveRootOrEmpty(root)
+	read.Config = readConfigDigest(globalCfg)
+	read.Env = envDigests()
+	if wsRoot == "" || read.Config == "" {
+		return false
+	}
+	if err := proc.Read(ctx, sock, version, wsRoot, verb, read, reply); err != nil {
+		slog.DebugContext(ctx, "magus: the server did not answer this read; reading locally", slog.String("error", err.Error()))
+		return false
+	}
+	return true
+}
+
+// serveGraphRead answers one CLI graph read for m, a workspace the server holds, reading
+// under cfg, the configuration the server resolves for m's root now.
+func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb string, request []byte) ([]byte, error) {
+	var read graphRead
+	if err := json.Unmarshal(request, &read); err != nil {
+		return nil, fmt.Errorf("magus server: decode the %s read: %w", verb, err)
+	}
+	if digest := readConfigDigest(cfg); digest == "" || read.Config != digest {
+		return nil, fmt.Errorf("%w: the client reads under another configuration", proc.ErrNotAdoptable)
+	}
+	// m was opened under the configuration its root had then. The cache directory is the
+	// setting m itself reads from that copy, so one moved since means a workspace the
+	// server must reopen before it answers for it.
+	if dir, err := magus.ResolveCacheDir(m.Root(), magus.WithLoadedConfig(cfg)); err != nil || dir != m.CacheDir() {
+		return nil, fmt.Errorf("%w: the workspace was opened under an older configuration", proc.ErrNotAdoptable)
+	}
+	for _, name := range m.SymbolFreshnessEnv() {
+		v, set := os.LookupEnv(name)
+		got, sent := read.Env[name]
+		if set != sent || (set && got != envDigest(v)) {
+			return nil, fmt.Errorf("%w: the client's %s differs from the server's", proc.ErrNotAdoptable, name)
+		}
+	}
+	var res any
+	var err error
+	switch verb {
+	case readQuery:
+		res, err = searchGraph(ctx, m, cfg, read, false, false)
+	case readExplain:
+		res, err = explainNode(ctx, m, cfg, read, false, false)
+	case readRefs:
+		var g *knowledge.Graph
+		if g, err = knowledgeGraphForRefsOf(ctx, m, cfg, false, read.Input); err == nil {
+			res = refsOf(ctx, m, cfg, g, read)
+		}
+	default:
+		return nil, fmt.Errorf("%w: no %q read", proc.ErrNotAdoptable, verb)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(res)
+}
+
+// envDigests maps each variable in this process's environment to envDigest of its value.
+func envDigests() map[string]string {
+	out := make(map[string]string)
+	for _, kv := range os.Environ() {
+		name, value, _ := strings.Cut(kv, "=")
+		out[name] = envDigest(value)
+	}
+	return out
+}
+
+func envDigest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:16])
+}
+
+// readConfigDigest fingerprints the configuration a graph read depends on. The fields
+// cleared here shape the process (logging, concurrency, the server and its surfaces) and
+// never an answer; a difference anywhere else makes a server decline. "" when cfg cannot
+// be encoded, which no server accepts.
+func readConfigDigest(cfg config.Config) string {
+	cfg.Telemetry = config.Telemetry{}
+	cfg.Server = config.Server{}
+	cfg.MCP = config.MCP{}
+	cfg.Console = config.Console{}
+	cfg.Report = config.Report{}
+	cfg.Log = config.Log{}
+	cfg.Hints = config.Hints{}
+	cfg.Jobs = config.Jobs{}
+	cfg.Concurrency = 0
+	cfg.ConcurrencyProfile = ""
+	cfg.Broker = ""
+	cfg.ShutdownGrace = 0
+	cfg.MaxFailures = 0
+	cfg.TargetTimeout = 0
+	cfg.StallTimeout = 0
+	cfg.DryRun = false
+	cfg.DefaultCharms = nil
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 // splitCSV splits a comma-separated flag value, trimming blanks.
