@@ -611,7 +611,12 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 			defer unmount()
 		}
 	}
-	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", httpServer.Addr().String()))
+	bound := httpServer.Addr()
+	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", bound.String()))
+	if !bound.Addr().IsLoopback() {
+		log.WarnContext(ctx, "[AGENT] HTTP server listening beyond loopback over plaintext HTTP (mcp.insecure_bind); a bearer token is the only guard on /mcp",
+			slog.String("addr", bound.String()))
+	}
 	if err := httpServer.Serve(ctx); err != nil {
 		log.WarnContext(ctx, "[AGENT] shutdown error", slog.String("error", err.Error()))
 		return err
@@ -637,9 +642,9 @@ func (s *Server) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, err
 		return nil, addr, fmt.Errorf("server: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext; front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
 	}
 
-	// Fail closed: without an operator token the server never serves. Every guard re-reads
-	// the operator file and the token store per request, so a rotate, mint or revoke takes
-	// effect without a restart.
+	// Fail closed: without an operator token the server never serves. Every guard checks the
+	// operator file and the token store through auth.Verify's view, which follows them on
+	// disk, so a rotate, mint or revoke takes effect without a restart.
 	if _, err := auth.EnsureOperator(ctx, log); err != nil {
 		return nil, addr, err
 	}
@@ -680,8 +685,8 @@ func (f *frame) socketRoute(pattern string, format rpcerr.Format, needs map[stri
 // guard mounts h at pattern behind wrap, then the bearer guard holding each path to its need.
 // wrap runs first, so it can answer a tokenless CORS preflight. Every guarded mount on the
 // loopback listener goes through here.
-func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]types.Need, wrap func(http.Handler) http.Handler, h http.Handler) {
-	g, err := httpx.ProcedureGuard(format, auth.Verify, needs, h)
+func (f *frame) guard(pattern string, format rpcerr.Format, needs map[string]types.Need, wrap func(http.Handler) http.Handler, h http.Handler, opts ...httpx.GuardOption) {
+	g, err := httpx.ProcedureGuard(format, auth.Verify, needs, h, opts...)
 	if err != nil {
 		f.errs = append(f.errs, fmt.Errorf("server: %s: %w", pattern, err))
 		return
@@ -698,13 +703,23 @@ func (f *frame) consoleWrap(format rpcerr.Format) func(http.Handler) http.Handle
 	}
 }
 
+// A caller may fail authentication on /mcp 20 times a second, in bursts of 40, before it is
+// answered 429. A client holding a stale token stops or backs off after its first 401, and
+// one session opens at most three requests at once (the GET stream, a POST, a DELETE), so a
+// burst of 40 is never a real client. A page looping on the endpoint is held to 20 refusals
+// a second, each answered from memory.
+const (
+	mcpFailuresPerSecond = 20
+	mcpFailureBurst      = 40
+)
+
 // mcpCORS lets a page on any site drive /mcp with a token: the Streamable HTTP methods,
-// its session and protocol headers both ways, the baggage header naming the caller's lease,
-// and WWW-Authenticate so the page can read why it was refused.
+// its session and protocol headers both ways, and the baggage header naming the caller's
+// lease.
 var mcpCORS = httpx.CORSPolicy{
 	Methods:       []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions},
 	AllowHeaders:  []string{"Authorization", "Content-Type", "Accept", "Mcp-Session-Id", "Mcp-Protocol-Version", "Last-Event-ID", "baggage"},
-	ExposeHeaders: []string{"Mcp-Session-Id", "Mcp-Protocol-Version", "WWW-Authenticate"},
+	ExposeHeaders: []string{"Mcp-Session-Id", "Mcp-Protocol-Version"},
 }
 
 // api mounts a JSON console route at path behind the Need apiNeeds names for it.
@@ -743,14 +758,20 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	// mux/listener so health probes share the MCP port: no second http.Server.
 	//
 	// /mcp sits behind the bearer guard and nothing else: no rebind check, and CORS open to
-	// every origin. A forged Host or a hostile page reaches it only to be refused for want
-	// of a token, so the token is the whole boundary. Health routes are left unguarded so
+	// every origin once a request is admitted. A forged Host or a hostile page reaches it
+	// only to be refused for want of a token, with a response it cannot read, throttled
+	// past a burst; the token is the whole boundary. Health routes are left unguarded so
 	// container orchestrators can probe them freely.
 	f := &frame{allowed: httpx.AllowedHosts(addr), needs: map[string]types.Need{}}
 	if s.socket != nil {
 		f.socketMux, f.socketNeeds = http.NewServeMux(), map[string]types.Need{}
 	}
-	httpServer, err := httpx.NewServer(addr)
+	bind := httpx.NewServer
+	if !addr.Addr().IsLoopback() {
+		// prepare refused this address unless mcp.insecure_bind is set.
+		bind = httpx.NewNetworkServer
+	}
+	httpServer, err := bind(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -764,7 +785,9 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	})
 	mcpNeeds := map[string]types.Need{"/mcp": needMCP}
 	if s.opts.Config.MCP.HTTPEnabled() {
-		f.guard("/mcp", rpcerr.FormatJSON, mcpNeeds, httpx.OpenCORS(mcpCORS), cappedMCP)
+		preflight, allow := httpx.OpenCORS(mcpCORS)
+		limit := httpx.NewFailureLimiter(mcpFailuresPerSecond, mcpFailureBurst)
+		f.guard("/mcp", rpcerr.FormatJSON, mcpNeeds, preflight, allow(cappedMCP), httpx.WithFailureLimit(limit))
 	}
 	f.socketRoute("/mcp", rpcerr.FormatJSON, mcpNeeds, cappedMCP)
 

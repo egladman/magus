@@ -18,40 +18,55 @@ func TestParseOrigin(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// OpenCORS answers any Origin with "*", never with credentials, and answers the preflight
-// itself so the wrapped guard never sees a tokenless OPTIONS.
+// OpenCORS answers the preflight before the guard, and lets only an admitted response carry
+// Access-Control-Allow-Origin: a refusal stays opaque to the page. Neither half allows
+// credentials.
 func TestOpenCORS(t *testing.T) {
-	reached := 0
-	h := OpenCORS(CORSPolicy{
+	preflight, allow := OpenCORS(CORSPolicy{
 		Methods:       []string{"GET", "POST"},
 		AllowHeaders:  []string{"Authorization", "Content-Type"},
 		ExposeHeaders: []string{"Mcp-Session-Id"},
-	})(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		reached++
-		w.WriteHeader(http.StatusUnauthorized)
+	})
+	guarded := 0
+	h := preflight(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guarded++
+		if r.Header.Get("Authorization") != "Bearer ok" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		allow(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })).ServeHTTP(w, r)
 	}))
+	send := func(method, token string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "/mcp", nil)
+		r.Header.Set("Origin", "https://anywhere.example")
+		r.Header.Set("Access-Control-Request-Method", "POST")
+		r.Header.Set("Access-Control-Request-Private-Network", "true")
+		if token != "" {
+			r.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
 
-	r := httptest.NewRequest(http.MethodOptions, "/mcp", nil)
-	r.Header.Set("Origin", "https://anywhere.example")
-	r.Header.Set("Access-Control-Request-Method", "POST")
-	r.Header.Set("Access-Control-Request-Private-Network", "true")
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
+	w := send(http.MethodOptions, "")
 	assert.Equal(t, http.StatusNoContent, w.Code)
-	assert.Zero(t, reached, "the preflight never reaches the guard")
+	assert.Zero(t, guarded, "the preflight never reaches the guard")
 	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "GET, POST", w.Header().Get("Access-Control-Allow-Methods"))
 	assert.Equal(t, "Authorization, Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
 	assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Private-Network"))
 	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
 
-	r = httptest.NewRequest(http.MethodPost, "/mcp", nil)
-	r.Header.Set("Origin", "https://anywhere.example")
-	w = httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	assert.Equal(t, 1, reached, "every other method reaches the wrapped handler")
-	assert.Equal(t, http.StatusUnauthorized, w.Code, "the wrapped handler's answer stands")
-	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"), "a refusal stays readable to the page")
+	w = send(http.MethodPost, "wrong")
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	for _, k := range []string{"Access-Control-Allow-Origin", "Access-Control-Expose-Headers", "Access-Control-Allow-Private-Network", "Access-Control-Allow-Credentials"} {
+		assert.Empty(t, w.Header().Get(k), "a refusal carries no %s", k)
+	}
+
+	w = send(http.MethodPost, "ok")
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"), "an admitted response is readable")
 	assert.Equal(t, "Mcp-Session-Id", w.Header().Get("Access-Control-Expose-Headers"))
 	assert.Empty(t, w.Header().Get("Access-Control-Allow-Credentials"))
 }

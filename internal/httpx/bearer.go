@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,7 +48,7 @@ func BearerGuard(format rpcerr.Format, verify Verifier, need types.Need, next ht
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) types.Need { return need }, headerToken, next), nil
+	return guard(format, verify, func(*http.Request) types.Need { return need }, headerToken, nil, next), nil
 }
 
 // BearerGuardWithQueryToken is [BearerGuard] that also accepts the token from a `?token=`
@@ -56,19 +58,35 @@ func BearerGuardWithQueryToken(format rpcerr.Format, verify Verifier, need types
 	if err := need.Validate(); err != nil {
 		return nil, fmt.Errorf("httpx: %w", err)
 	}
-	return guard(format, verify, func(*http.Request) types.Need { return need }, presentedToken, next), nil
+	return guard(format, verify, func(*http.Request) types.Need { return need }, presentedToken, nil, next), nil
 }
 
 // ProcedureGuard is [BearerGuard] for a Connect service, holding each procedure to its own
 // need: needs maps a procedure path ("/magus.job.v1alpha1.JobService/RunJob") to it. A path it
 // does not name is held to the strictest need in it, and reaches a handler that answers it
 // not found. It refuses to build with an empty table or an invalid need.
-func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]types.Need, next http.Handler) (http.Handler, error) {
+func ProcedureGuard(format rpcerr.Format, verify Verifier, needs map[string]types.Need, next http.Handler, opts ...GuardOption) (http.Handler, error) {
 	needOf, err := needTable(needs)
 	if err != nil {
 		return nil, err
 	}
-	return guard(format, verify, needOf, headerToken, next), nil
+	var o guardOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return guard(format, verify, needOf, headerToken, o.limit, next), nil
+}
+
+// GuardOption customizes [ProcedureGuard].
+type GuardOption func(*guardOptions)
+
+type guardOptions struct{ limit *FailureLimiter }
+
+// WithFailureLimit throttles each caller's refused requests through l: once its failures
+// are spent it is answered 429 with Retry-After. A request whose token verifies is never
+// throttled.
+func WithFailureLimit(l *FailureLimiter) GuardOption {
+	return func(o *guardOptions) { o.limit = l }
 }
 
 // stricter orders needs so the fallback for an unknown procedure is the one fewest grants
@@ -83,17 +101,36 @@ func stricter(a, b types.Need) bool {
 	return rank(a) > rank(b)
 }
 
-func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) types.Need, extract func(*http.Request) (string, bool), next http.Handler) http.Handler {
+// guard admits a request whose token verifies and allows its need. With limit set, a caller
+// whose failures are exhausted is answered 429 with Retry-After in place of 401, and its
+// refusals spend no more. A presented token is still verified then, so a valid one is never
+// limited; that stays cheap only with a verifier that answers from memory, as auth.Verify
+// does.
+func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) types.Need, extract func(*http.Request) (string, bool), limit *FailureLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key, wait, exhausted := "", time.Duration(0), false
+		if limit != nil {
+			key = FailureKey(r)
+			wait, exhausted = limit.Exhausted(key)
+		}
+		refuse := func(e rpcerr.Error) {
+			if exhausted {
+				w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
+				e.Code, e.Message = connect.CodeResourceExhausted, "too many refused requests from this caller; "+e.Message
+			} else if limit != nil {
+				limit.Fail(key)
+			}
+			format.Write(w, r, e)
+		}
 		presented, ok := extract(r)
 		if !ok {
-			format.Write(w, r, bearerMissing)
+			refuse(bearerMissing)
 			return
 		}
 		need := needOf(r)
 		cred, ok := admit(verify, presented, r)
 		if !ok {
-			format.Write(w, r, bearerRejected)
+			refuse(bearerRejected)
 			return
 		}
 		if !cred.Grant.Allows(need) {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -599,7 +600,7 @@ func TestMCPAuthRunsBeforeTheHandler(t *testing.T) {
 					continue
 				}
 				assert.Equal(t, before, reached.Load(), "%s reached the handler", cell)
-				assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, status, cell)
+				assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests}, status, cell)
 			}
 		}
 		before := reached.Load()
@@ -611,8 +612,9 @@ func TestMCPAuthRunsBeforeTheHandler(t *testing.T) {
 
 // TestMCPTrustsTheTokenAlone drives /mcp on a real server from a foreign Origin and a forged
 // Host: no rebind refusal stands in the way of a connector token, which opens a session the
-// page can read, and nothing without a valid one gets past 401. The console's routes keep
-// refusing the same forged Host.
+// page can read, and nothing without a valid one gets past 401. A refusal carries no CORS
+// header, so the page cannot read it and cannot tell magus from a closed port. The console's
+// routes keep refusing the same forged Host.
 func TestMCPTrustsTheTokenAlone(t *testing.T) {
 	base, _, _, _, _ := bootConsoleServer(t)
 	bearers := matrixBearers(t)
@@ -637,13 +639,20 @@ func TestMCPTrustsTheTokenAlone(t *testing.T) {
 		return resp
 	}
 
+	unreadable := func(resp *http.Response, what string) {
+		t.Helper()
+		for _, k := range []string{"Access-Control-Allow-Origin", "Access-Control-Expose-Headers", "Access-Control-Allow-Private-Network"} {
+			assert.Empty(t, resp.Header.Get(k), "%s: a refusal carries no %s", what, k)
+		}
+	}
 	for _, name := range []string{"anonymous (no token)", "not a magus token", "revoked", "expired"} {
 		resp := post("/mcp", bearers[name].token)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode, name)
-		assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"), "%s: the page can read its refusal", name)
+		unreadable(resp, name)
 	}
 	resp := post("/mcp", bearers["console"].token)
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "a console token holds no mcp=write")
+	unreadable(resp, "console token")
 
 	resp = post("/mcp", bearers["connector"].token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -698,6 +707,112 @@ func TestMCPHTTPOff(t *testing.T) {
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "the socket still serves MCP")
 	assert.NotEmpty(t, resp.Header.Get("Mcp-Session-Id"))
+}
+
+// TestMCPFailedAuthIsRateLimited floods /mcp from one Origin with 1,000 refused tokens: the
+// first burst is answered 401, the rest 429 with Retry-After, and none carries a CORS header.
+// A valid connector token sent mid-flood from the same Origin still opens a session. That the
+// flood reads the token store at most once is pinned where the reads happen, in
+// auth.TestVerifyAnswersBadTokensFromMemory.
+func TestMCPFailedAuthIsRateLimited(t *testing.T) {
+	base, _, _, _, _ := bootConsoleServer(t)
+	bearers := matrixBearers(t)
+	client := &http.Client{Timeout: 10 * time.Second}
+	post := func(token string) *http.Response {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, base+"/mcp", strings.NewReader(
+			`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"flood","version":"1"}}}`))
+		require.NoError(t, err)
+		req.Header.Set("Origin", foreignOrigin)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+		return resp
+	}
+
+	start := time.Now()
+	counts := map[int]int{}
+	for i := range 1000 {
+		resp := post(bearers["revoked"].token)
+		counts[resp.StatusCode]++
+		assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"), "refusal %d is unreadable", i)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			assert.Equal(t, "1", resp.Header.Get("Retry-After"))
+		}
+		if i == 500 {
+			ok := post(bearers["connector"].token)
+			assert.Equal(t, http.StatusOK, ok.StatusCode, "a valid token is never limited")
+			assert.NotEmpty(t, ok.Header.Get("Mcp-Session-Id"))
+			assert.Equal(t, "*", ok.Header.Get("Access-Control-Allow-Origin"))
+		}
+	}
+	refills := int(time.Since(start).Seconds()*mcpFailuresPerSecond) + 1
+	assert.GreaterOrEqual(t, counts[http.StatusUnauthorized], mcpFailureBurst, "the burst is answered 401")
+	assert.LessOrEqual(t, counts[http.StatusUnauthorized], mcpFailureBurst+refills, "then only what refilled")
+	assert.Equal(t, 1000, counts[http.StatusUnauthorized]+counts[http.StatusTooManyRequests], "every refusal is a 401 or a 429: %v", counts)
+}
+
+// TestInsecureBindListensWhereItSays starts the server on 0.0.0.0 with mcp.insecure_bind: the
+// listener binds the address it was given, and the log names it and warns that a bearer
+// token is the only guard. A caller reaching it through a non-loopback address is admitted
+// with a connector token and refused with the operator token.
+func TestInsecureBindListensWhereItSays(t *testing.T) {
+	testkit.Isolate(t)
+	m, err := magus.Open(t.Context(), fixtureWorkspace(t))
+	require.NoError(t, err)
+	port := freePort(t)
+	logs := &syncBuffer{}
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	opts := mcp.Options{
+		Magus: m, Version: "test", Logger: slog.New(slog.NewTextHandler(logs, nil)),
+		HTTPAddr:     netip.AddrPortFrom(netip.IPv4Unspecified(), port),
+		HealthRoutes: map[string]http.Handler{"/readyz": ok},
+	}
+	opts.Config.MCP.InsecureBind = true
+	_, patterns, _ := serveMounted(t, New(opts), opts.HTTPAddr)
+	assert.Contains(t, patterns, "/mcp")
+	assert.Contains(t, logs.String(), fmt.Sprintf("addr=0.0.0.0:%d", port), "the log names the address bound")
+	assert.Contains(t, logs.String(), "a bearer token is the only guard on /mcp")
+
+	lan := nonLoopbackIPv4(t)
+	if !lan.IsValid() {
+		t.Skip("no non-loopback IPv4 interface to reach the listener through")
+	}
+	bearers := matrixBearers(t)
+	client := &http.Client{Timeout: 10 * time.Second}
+	status := func(token string) int {
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/mcp", netip.AddrPortFrom(lan, port)), strings.NewReader("{}"))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	assert.Equal(t, http.StatusUnauthorized, status(bearers["operator"].token), "the operator token stays loopback-peer-only")
+	assert.NotEqual(t, http.StatusUnauthorized, status(bearers["connector"].token), "a connector token reaches /mcp over the network")
+}
+
+// nonLoopbackIPv4 returns an address of an up, non-loopback interface, or the zero Addr.
+func nonLoopbackIPv4(t *testing.T) netip.Addr {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	require.NoError(t, err)
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ip, ok := netip.AddrFromSlice(ipnet.IP.To4()); ok && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() {
+			return ip
+		}
+	}
+	return netip.Addr{}
 }
 
 // A server whose workspace failed to load still listens: status and the console shell are
