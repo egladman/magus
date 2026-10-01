@@ -110,6 +110,9 @@ entry, as `magus describe harness claude-code` prints it, in the place it lands 
 }
 ```
 
+The `Edit|Write|NotebookEdit` entry runs [`magus-path.buzz`](guard-templates.md#magus-pathbuzz)
+the same way, judging the file a write lands on rather than a shell line.
+
 This repository's own `.claude/settings.json` holds exactly what the spell prints,
 merged with the command `magus describe harness` prints beside it. The scripts are
 the glue; the harness only prints the fragments that name them. See
@@ -131,11 +134,11 @@ off the event itself.
 
 Three things in a session resolve the word `magus`, and each has its own owner:
 
-| Who runs `magus` | Resolved by | Owner |
-| --- | --- | --- |
-| Hook commands (the guard's interpreter) | `$CLAUDE_PROJECT_DIR/magus` when executable, else the first `magus` on PATH | the launcher in every hook entry |
-| The agent's own Bash tool commands | PATH, with the session root put first | the `SessionStart` entry (matcher `startup\|resume\|clear`), which appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
-| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first | magus, on every child it spawns |
+| Who runs `magus`                                        | Resolved by                                                                 | Owner                                                                                                                         |
+| ------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Hook commands (the guard's interpreter)                 | `$CLAUDE_PROJECT_DIR/magus` when executable, else the first `magus` on PATH | the launcher in every hook entry                                                                                              |
+| The agent's own Bash tool commands                      | PATH, with the session root put first                                       | the `SessionStart` entry (matcher `startup\|resume\|clear`), which appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
+| Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                         | magus, on every child it spawns                                                                                               |
 
 The `SessionStart` entry cannot serve hooks: the hooks reference says
 `CLAUDE_ENV_FILE` persists variables "for subsequent Bash commands", and names no
