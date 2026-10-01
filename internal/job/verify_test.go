@@ -194,6 +194,21 @@ func TestVerifyRejectsEvidenceCapturedBeforeJobDeclaration(t *testing.T) {
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "before job declaration")
 }
 
+// The declaration is stamped in whole seconds, so a run recorded in that same second
+// cannot be ordered against it, and a fork followed at once by its check is that case.
+func TestVerifyAcceptsEvidenceFromTheSecondOfDeclaration(t *testing.T) {
+	t.Parallel()
+
+	for _, ms := range []int64{100_000, 100_999} {
+		row := acceptRow()
+		row.Created = 100
+		attempt := passingRun
+		attempt.TimestampMs = ms
+		status := verifyClaim(row, passingResult(), attempt, nil)
+		assert.True(t, status.Verified, "%d: %v", ms, status.Violations)
+	}
+}
+
 func TestVerifyCompletionGateDependenciesPropagate(t *testing.T) {
 	t.Parallel()
 

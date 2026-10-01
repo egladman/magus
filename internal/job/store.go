@@ -566,6 +566,12 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 				row.CheckoutRoot = prev.CheckoutRoot
 			}
+			// An ended row declared again is handed out afresh: its old holder gave it up,
+			// and a checkout left on it would refuse every new taker and, once that
+			// worktree is gone, end the row again on the next sweep.
+			if kind == asDeclaration && prev.State.Terminal() && row.State.Live() {
+				row.ReportedBase, row.BaseVerdict, row.Registered, row.CheckoutRoot = "", "", 0, ""
+			}
 			if kind != asObservation {
 				row.Unattributed = prev.Unattributed
 			}
