@@ -696,6 +696,23 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	return out, true
 }
 
+// SymbolsNamed returns, sorted, the ID of every symbol labeled exactly name that a file in
+// the workspace defines. More than one means the bare name does not pick a symbol.
+func (g *Graph) SymbolsNamed(name string) []string {
+	g.ensureAdj()
+	var out []string
+	for id, n := range g.nodes {
+		if n.Kind != types.KindSymbol || n.Label != name {
+			continue
+		}
+		if slices.ContainsFunc(g.in[id], func(e types.KnowledgeEdge) bool { return e.Relation == types.RelationDefines }) {
+			out = append(out, id)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // Definitions resolves ref to a symbol and lists each file that defines it, with the
 // line range the index recorded where it recorded one. Every site is
 // DefinitionUnverified: checking a range against the tree reads files, which the graph

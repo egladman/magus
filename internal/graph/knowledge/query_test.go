@@ -804,3 +804,21 @@ func TestDirsGlobBaseAndSegments(t *testing.T) {
 	assert.Equal(t, 0, segmentsBelow("internal", "internal"))
 	assert.Equal(t, 1, segmentsBelow("", "a"))
 }
+
+// SymbolsNamed is how `refs` tells a bare name that picks one symbol from one several
+// definitions share: only exact labels, and only symbols a workspace file defines.
+func TestSymbolsNamedListsEveryWorkspaceDefinition(t *testing.T) {
+	const hintID, queueID, lowerID, depID = "symbol:x hint/Classify().", "symbol:x queue/Workspace#Classify().", "symbol:x rpc/classify().", "symbol:dep/Classify()."
+	g := NewGraph()
+	for _, n := range []struct{ id, label string }{{hintID, "Classify"}, {queueID, "Classify"}, {lowerID, "classify"}, {depID, "Classify"}} {
+		g.AddNode(types.KnowledgeNode{ID: n.id, Kind: types.KindSymbol, Label: n.label})
+	}
+	g.AddNode(types.KnowledgeNode{ID: "function:a.buzz:Classify", Kind: types.KindFunction, Label: "Classify"})
+	for _, d := range [][2]string{{"hint/a.go", hintID}, {"queue/b.go", queueID}, {"rpc/c.go", lowerID}} {
+		g.AddEdge(extractedEdge(fileID(d[0]), d[1], types.RelationDefines, d[0]))
+	}
+
+	assert.Equal(t, []string{hintID, queueID}, g.SymbolsNamed("Classify"))
+	assert.Equal(t, []string{lowerID}, g.SymbolsNamed("classify"))
+	assert.Empty(t, g.SymbolsNamed("Missing"))
+}

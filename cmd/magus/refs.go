@@ -89,7 +89,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if rf.Rename != "" {
 		return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 	}
-	out, ok := g.Refs(pos[0])
+	symbol, err := refsSymbol(os.Stderr, g, pos[0])
+	if err != nil {
+		return err
+	}
+	out, ok := g.Refs(symbol)
 	if !ok {
 		// Nothing matched. Whether that is a fact about the workspace or a fact about
 		// what magus could see is the whole question, so answer it rather than printing
@@ -219,6 +223,31 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
 	return reportIndexStaleness(os.Stdout, out.Answer)
+}
+
+// refsSymbol picks the symbol `refs` answers for. A name several workspace definitions carry
+// is refused, listing each candidate's id, rather than answered: answering for whichever
+// ranked first shows one symbol's references as though they were the name's, which is a
+// narrower answer than the text search refs stands in for, and answering for all of them
+// would merge different symbols' sites under one count, which a rename or an edit cannot
+// tell apart. The refusal costs one more call, with an exact id that also routes to that
+// symbol's shards alone. A name one definition carries picks it; a name none carries, or an
+// exact id, goes to the graph's own resolution, which also finds a dependency's symbol.
+func refsSymbol(w io.Writer, g *knowledge.Graph, ref string) (string, error) {
+	named := g.SymbolsNamed(ref)
+	switch len(named) {
+	case 0:
+		return ref, nil
+	case 1:
+		return named[0], nil
+	}
+	fmt.Fprintf(w, "magus refs: %q names %d symbols defined in this workspace; ask for one by id:\n", ref, len(named))
+	for _, id := range named {
+		// Single-quoted: a symbol id holds spaces and backticks, which a paste must not
+		// hand to the shell.
+		fmt.Fprintf(w, "  %s\n", hint.Refs.With("'"+strings.ReplaceAll(id, "'", `'\''`)+"'"))
+	}
+	return "", errSilent{exitCode: exitUsage}
 }
 
 // refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
