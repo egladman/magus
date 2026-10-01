@@ -8,24 +8,25 @@ Depends on: [(workspace root)](../MAGUS.md), [docs/guides/integrations/agents](g
 
 Query: `magus query project=docs`
 
-| Target                    | What it does                                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `site-generate`           | site-generate renders and publishes the site into gen/.                                                                                                                  |
-| `generate`                | generate regenerates the committed derived files and fails on drift.                                                                                                     |
-| `format`                  | format runs dprint over the authored pages.                                                                                                                              |
-| `lint`                    | lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.                                                                              |
-| `build`                   | build renders the site cd.yaml publishes.                                                                                                                                |
-| `test`                    |                                                                                                                                                                          |
-| `security`                | security audits what actually ships against the npm advisory database.                                                                                                   |
-| `ci`                      |                                                                                                                                                                          |
-| `build-playground`        | build-playground compiles the playground's WebAssembly interpreter with stock Go and copies that Go's wasm_exec.js beside it; the two must come from the same toolchain. |
-| `diagrams-generate`       | diagrams-generate lays every figure out from the knowledge graph and fails when the committed files move.                                                                |
-| `build-hljs`              | build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.                                                                            |
-| `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                |
-| `render`                  | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                      |
-| `install`                 | install installs node_modules through the typescript spell's pnpm-install op.                                                                                            |
-| `index-generate`          | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.                                                                                   |
-| `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree.                                                                                |
-| `changelog-page`          | changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.                                                                                       |
-| `conventions`             | conventions holds every doc page to docs/conventions.md and to what it documents.                                                                                        |
-| `buzz-test`               | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.                                                                                             |
+| Target                          | What it does                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `site-generate`                 | site-generate renders and publishes the site into gen/.                                                                                                                  |
+| `generate`                      | generate regenerates the committed derived files and fails on drift.                                                                                                     |
+| `format`                        | format runs dprint over the authored pages.                                                                                                                              |
+| `lint`                          | lint runs conventions, typos, tsc and Biome, plus the lint of each project the site embeds.                                                                              |
+| `build`                         | build renders the site cd.yaml publishes.                                                                                                                                |
+| `test`                          |                                                                                                                                                                          |
+| `security`                      | security audits what actually ships against the npm advisory database.                                                                                                   |
+| `ci`                            |                                                                                                                                                                          |
+| `build-playground`              | build-playground compiles the playground's WebAssembly interpreter with stock Go and copies that Go's wasm_exec.js beside it; the two must come from the same toolchain. |
+| `diagrams-generate`             | diagrams-generate lays every figure out from the knowledge graph and fails when the committed files move.                                                                |
+| `build-hljs`                    | build-hljs bundles highlight.js into gen/assets/hljs.js so the site highlights without a CDN.                                                                            |
+| `build-playground-editor`       | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                |
+| `render`                        | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                      |
+| `install`                       | install installs node_modules through the typescript spell's pnpm-install op.                                                                                            |
+| `index-generate`                | index-generate refreshes MAGUS.md (this project's target catalog) from this magusfile.                                                                                   |
+| `content-generate`              | content-generate regenerates the committed docs Markdown derived from the Go source tree.                                                                                |
+| `changelog-page`                | changelog-page renders the changelog from releases/*.yaml and changes/unreleased/.                                                                                       |
+| `conventions`                   | conventions holds every doc page to docs/conventions.md and to what it documents.                                                                                        |
+| `buzz-test`                     | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`.                                                                                             |
+| `figure-engine-digest-generate` | figure-engine-digest-generate writes the SHA-256 of the magus/figure source the running binary embeds to gen/figure-engine.sha256.                                       |

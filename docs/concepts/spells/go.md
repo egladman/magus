@@ -434,7 +434,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 ## scip
 
-magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
+magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it. scip-go loads packages through `go`, so the toolchain's version keys the index too.
 
 **Command:** `scip-go --output $MAGUS_SYMBOL_INDEX`
 

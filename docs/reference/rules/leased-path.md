@@ -14,7 +14,7 @@ A write into paths a running lease owns, by a caller that names no lease.
 
 ## Why
 
-The writer is either that lease, not saying so, or a second agent about to collide with it; magus cannot tell which, so it advises rather than refuses. It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first.
+The writer is either that lease, not saying so, or someone about to collide with whoever took it, a person or not; magus cannot tell which, so it advises rather than refuses, and says where the job was taken. It speaks once per session per lease. Every write used to repeat it: 8,419 servings in one audit, 52% of every advisory the guard served, for a fact the writer had after the first.
 
 ## Seeing it
 

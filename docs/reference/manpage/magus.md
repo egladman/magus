@@ -312,6 +312,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_MCP_ADDRESS**
 : host:port for the MCP Streamable HTTP server \`magus server\` starts (default: 127.0.0.1:7391). Equivalent magus.yaml key: **mcp.address**.
 
+**MAGUS_MCP_HTTP**
+: When false, the server does not mount /mcp on its HTTP listener; \`magus mcp\` (stdio) and the server socket still serve MCP (default: true). Equivalent magus.yaml key: **mcp.http**.
+
 **MAGUS_MCP_INSECURE_BIND**
 : Permit a non-loopback mcp.address, which serves bearer tokens over plaintext HTTP; without it such an address is an error (default: false). Equivalent magus.yaml key: **mcp.insecure_bind**.
 

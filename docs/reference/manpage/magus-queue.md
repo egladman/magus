@@ -11,7 +11,7 @@ Merge approved changes through a speculative, partitioned merge queue
 
 ## Synopsis
 
-**magus** queue \<describe|ls|plan|validate|gate|apply\> [flags]
+**magus** queue \<describe|ls|plan|validate|gate|apply|reviews\> [flags]
 
 ## Description
 
@@ -200,6 +200,35 @@ apply report what would merge and call nothing on the provider.
 **--workflow** *definition*
 : \`definition\` a run: source must have run, started by an event that runs the base's own copy of it (github: .github/workflows/queue.yaml); required with a run: source, whose uploads are otherwise refused (MGS3027)
 
+### queue reviews options
+
+**--base** *branch*
+: \`branch\` the change targets
+
+**--change** *id*
+: \`id\` of the change, as the provider names it (github: the pull request number)
+
+**--dismiss**
+: Dismiss each approval that does not carry, naming what changed since it
+
+**--facts** *command*
+: \`command\` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers
+
+**--head** *commit*
+: \`commit\` the change's head must be at; when it moved, nothing is classified or dismissed
+
+**--provider** *provider*
+: \`provider\`: a built-in name (github) or a .buzz file
+
+**--remote** *remote* (default: origin)
+: Name of the configured \`remote\` changes and the base are fetched from
+
+**--target** *target* (default: ci)
+: magus \`target\` the affected set is computed for; not with --facts
+
+**--vcs** *backend* (default: git)
+: Version control \`backend\` of the checkout at --root
+
 ## Subcommands
 
 **describe**
@@ -219,6 +248,9 @@ apply report what would merge and call nothing on the provider.
 
 **apply**
 : Rebuild and merge the green verdicts \<source\> holds as they arrive (holds the write credential; runs no change's code)
+
+**reviews**
+: Classify the change since each approval standing on a change, as the queue admits it, and dismiss the approvals it does not carry with --dismiss
 
 ## Examples
 
@@ -280,6 +312,18 @@ magus queue apply --provider github --base main --workflow .github/workflows/que
 
 ```sh
 magus queue plan --provider providers/gitlab.buzz --out plan.json < changes.json
+```
+
+*Say whether each approval on a pull request carries over the change since it*
+
+```sh
+magus queue reviews --provider github --base main --change 482
+```
+
+*Dismiss the approvals it does not carry*
+
+```sh
+magus queue reviews --provider github --base main --change 482 --dismiss
 ```
 
 ## See Also

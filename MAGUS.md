@@ -53,11 +53,11 @@ magus graph export -o json  # the whole graph
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                             |
 | module     | built in | `magus query kind=module`     |                                                                                                                  |
 | method     | built in | `magus query kind=method`     |                                                                                                                  |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3012`, `MGS1028`                                                                                  |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3018`, `MGS3012`                                                                                  |
 | doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                         |
 | file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `internal/queue/provider/github.buzz`                               |
-| function   |    2000+ | `magus query kind=function`   | `apiBase`, `describe`, `run`                                                                                     |
+| function   |    2000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                    |
 | import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                             |
 | rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                           |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                    |
@@ -68,13 +68,13 @@ magus graph export -o json  # the whole graph
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
 | [.](MAGUS.md)                                                               |      55 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
-| [docs](docs/MAGUS.md)                                                       |      19 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
+| [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
 | [libs/coldread](libs/coldread/MAGUS.md)                                     |       7 | `magus query project=libs/coldread`                   | `format`, `test`, `build`                                |
 | [libs/conventions](libs/conventions/MAGUS.md)                               |       7 | `magus query project=libs/conventions`                | `format`, `test`, `build`                                |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                     |
-| [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      11 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `test`, `install`                                |
 | [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `ci`, `lint`                                 |
@@ -130,7 +130,7 @@ magus graph export -o json  # the whole graph
 | `toolchain-report`       | Reports installed toolchains; excluded from CI because it probes remote tags.                                                                                                                       |
 | `serve`                  | Serves prebuilt docs and console under one local origin, laid out like the Pages deploy.                                                                                                            |
 | `image-build`            | Builds the image locally, or with `cd` pushes and signs it; `stable` and `unstable` pick the channel.                                                                                               |
-| `types-generate`         | Regenerates everything derived from the boundary registry: the runtime boundary list and the Go-to-Buzz encoders.                                                                                   |
+| `types-generate`         | Regenerates everything derived from the boundary registry: the runtime boundary list, the Go-to-Buzz encoders, the Buzz-to-Go decoders and the spell contract's signatures.                         |
 | `skills-generate`        | Reinstalls the agent skills from their embedded sources in internal/agent/skills.                                                                                                                   |
 | `index-generate`         | Renders MAGUS.md via `magus describe graph`.                                                                                                                                                        |
 | `symbol-digest-generate` | Writes gen/symbol-index.json, the symbol index digest.                                                                                                                                              |

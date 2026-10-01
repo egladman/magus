@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9989
-skill_short_bytes: 7210
+skill_full_bytes: 9990
+skill_short_bytes: 7211
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `107` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `fd9d88e57422` |
+| `skill-content` | `e7aacd93064f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -68,7 +68,7 @@ Feed every changed or conflicting path to magus in one call:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
+MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -225,7 +225,7 @@ each against the workspace's declared globs:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `client` calling `magus\describeFile([paths])`. Each path comes back with its owning
+MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.

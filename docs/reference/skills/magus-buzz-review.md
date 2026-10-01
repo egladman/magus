@@ -3,13 +3,13 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20770
-skill_short_bytes: 15415
+skill_full_bytes: 20765
+skill_short_bytes: 15410
 ---
 
 # magus-buzz-review
 
-Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.
+Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-lang for those.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `104` |
+| `agent-skill-version` | `107` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `e98ccdab3921` |
+| `skill-content` | `6a2f773fe75b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,12 +56,12 @@ magus agent install --tar | tar -xO -f - magus-buzz-review/SKILL.md
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz-write's territory. This skill covers the LANGUAGE underneath those
+magus-buzz-lang's territory. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
 
@@ -165,7 +165,7 @@ That is the fixture doing its job.
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
 - **A magusfile carrying logic that wants a test is a finding.** The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz-write's "Test what you write".
+  spell or a sibling module - see magus-buzz-lang's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -314,9 +314,9 @@ scope open-ended.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz-write.
+  makes an op a service. Use magus-buzz-lang.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
+- Teach Buzz syntax from scratch. Use magus-buzz-lang for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".
 ````
@@ -333,13 +333,13 @@ magus agent install --tar | tar -xO -f - magus-buzz-review-full/SKILL.md
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel,
 the same fan-out-and-merge shape go-review-ultra uses for Go.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz-write's territory and it already covers it; restating it here would only
+magus-buzz-lang's territory and it already covers it; restating it here would only
 drift out of sync with it. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
@@ -468,7 +468,7 @@ What reads as Buzz house style versus what merely parses.
 - **A magusfile carrying logic that wants a test is a finding.** A
   magusfile is declarative configuration; a test of it tests your
   configuration, not your logic. The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz-write's "Test what you write".
+  spell or a sibling module - see magus-buzz-lang's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -666,9 +666,9 @@ times instead of once.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz-write.
+  makes an op a service. Use magus-buzz-lang.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
+- Teach Buzz syntax from scratch. Use magus-buzz-lang for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".
 ````

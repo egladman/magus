@@ -11,7 +11,7 @@ Fork a job, take it, return it with its result, and verify that result
 
 ## Synopsis
 
-**magus** job \<fork|exec|exit|wait|watch|run|edit|rm|prune\> [flags]
+**magus** job \<fork|apply|exec|exit|wait|watch|run|rm|prune\> [flags]
 
 ## Description
 
@@ -70,9 +70,10 @@ run submits one of the server's own jobs, the housekeeping magus does for itself
 and returns. It is a no-op when no server is running, so a VCS hook can
 call it unconditionally.
 
-edit adds write paths to a live job and revokes others in one write that keeps
-its state, where a re-fork would hand a taken job out again. It previews until
---apply, and only the orchestrator widens.
+apply upserts jobs' specs from -f \<file|-\>, the way kubectl apply reads a
+manifest: the record is the whole spec, and the job keeps its state, holder and
+registration, where a re-fork would hand a taken job out again. Only the
+orchestrator widens; a holder may apply only the release of its own paths.
 
 rm removes one row that should never have been written. prune ENDS every job
 nobody is working, as exit would abandon it, and keeps each row as the record.
@@ -121,6 +122,11 @@ them and magus describe job prints one job's terms.
 **--write-paths** *\<file\>#\<declaration\>*
 : A path this job may write, or \`\<file\>#\<declaration\>\` to claim one declaration of a file (a path holding a literal # is spelled \`./a#b.md\` or \`a\\#b.md\`); repeatable or comma-separated
 
+### job apply options
+
+**-f** *string*
+: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
+
 ### job exec options
 
 **--base** *magus vcs checkpoint -o name*
@@ -136,22 +142,14 @@ them and magus describe job prints one job's terms.
 
 ### job wait options
 
+**--integration**
+: Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
+
 **--schema**
 : Print the JSON schema a result must satisfy, and exit
 
 **--stdin**
 : Read the result from stdin instead of from the job, for one that was never filed
-
-### job edit options
-
-**--add-write-path** *string*
-: A path to add to the job's write paths; repeatable or comma-separated
-
-**--apply**
-: Write the edit; without it the edit is previewed and nothing is written
-
-**--remove-write-path** *string*
-: A path to revoke from the job's write paths; repeatable or comma-separated
 
 ### job rm options
 
@@ -168,6 +166,9 @@ them and magus describe job prints one job's terms.
 **fork**
 : Declare one job, from flags or a JSON record on stdin
 
+**apply**
+: Upsert jobs' specs from a file or stdin, keeping each job's state
+
 **exec**
 : Take the lease on a job here, and record the base this checkout landed on
 
@@ -182,9 +183,6 @@ them and magus describe job prints one job's terms.
 
 **run**
 : Submit one of the server's own jobs and return
-
-**edit**
-: Add write paths to a live job or revoke them, keeping its state
 
 **rm**
 : Remove one job from the plan
@@ -236,10 +234,22 @@ magus job exit --schema
 magus job run sync-graph
 ```
 
-*Widen a live job and write it*
+*Change a live job's spec, keeping its state*
 
 ```sh
-magus job edit session-load/core --add-write-path internal/sessions/load.go --apply
+magus job apply -f job.json
+```
+
+*Preview that change*
+
+```sh
+magus job apply -f job.json --dry-run
+```
+
+*Grade a job's checks in a merged tree*
+
+```sh
+magus job wait session-load/core --integration --stdin < evidence.json
 ```
 
 *See which jobs a prune would end*
