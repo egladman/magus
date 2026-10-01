@@ -41,7 +41,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
     }
     var lease = "";
     if (req.lease != null) { lease = req.lease!.id; }
-    final said = "{req.host}|{req.description}|{req.role}|{lease}|{req.parent}|{seen}";
+    final said = "{req.host}|{req.description}|{req.role}|{lease}|{req.parent}|{req.agent}|{seen}";
     if (req.command.startsWith("gh")) { return magus\guard.deny(said); }
     return magus\guard.advise(said);
 });
@@ -55,18 +55,19 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 		Commands: []types.CommandInvocation{{Program: "gh", Args: []string{"run", "watch", "1"}}},
 	}, facts)
 	require.NoError(t, err)
-	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "claude-code|watch ci|root|||gh(run,watch,1);"}, got)
+	assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "claude-code|watch ci|root||||gh(run,watch,1);"}, got)
 
 	got, err = rule(t.Context(), types.CommandRequest{
 		Host: "codex", Command: "while true; do make; done", Role: types.AgentRoleWorker,
 		Lease:    &types.Job{ID: "guard-command"},
 		Parent:   "orchestrator/feat guard-command",
+		Agent:    "a534fcfe",
 		Commands: []types.CommandInvocation{{Program: "true", Repeats: true}, {Program: "make", Repeats: true}},
 	}, facts)
 	require.NoError(t, err)
 	assert.Equal(t, types.GuardVerdict{
 		Decision: types.GuardAdvise,
-		Reason:   "codex||worker|guard-command|orchestrator/feat guard-command|true()@loop;make()@loop;",
+		Reason:   "codex||worker|guard-command|orchestrator/feat guard-command|a534fcfe|true()@loop;make()@loop;",
 	}, got)
 }
 

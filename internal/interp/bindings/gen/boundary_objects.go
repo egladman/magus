@@ -2588,6 +2588,7 @@ func ObjectCommandRequest(v types.CommandRequest) vm.Value {
 		itemsCommands[indexCommands] = ObjectCommandInvocation(v.Commands[indexCommands])
 	}
 	out.MapSet("commands", vm.ListValue(itemsCommands))
+	out.MapSet("agent", vm.StrValue(v.Agent))
 	out.MapSet("parent", vm.StrValue(v.Parent))
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null
@@ -2609,6 +2610,7 @@ func ObjectWriteRequest(v types.WriteRequest) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("agent", vm.StrValue(v.Agent))
 	out.MapSet("parent", vm.StrValue(v.Parent))
 	out.MapSet("role", vm.StrValue(string(v.Role)))
 	optLease := vm.Null

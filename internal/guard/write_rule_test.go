@@ -77,6 +77,19 @@ func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 	}
 }
 
+// The write surface carries the payload's subagent id as the command surface does.
+func TestWriteRuleSeesTheHostsSubagentID(t *testing.T) {
+	ctx, root, _ := writeFixture(t)
+	probe := &writeRuleProbe{}
+	Judge(ctx, Dependencies{WriteRule: probe.rule()}, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+		"session_id": "s1", "agent_id": "a534fcfe", "hook_event_name": "PreToolUse", "tool_name": "Write",
+		"tool_input": map[string]any{"file_path": filepath.Join(root, "notes.md"), "content": "x\n"},
+	})})
+	require.Len(t, probe.asked, 1)
+	assert.Equal(t, "a534fcfe", probe.asked[0].Agent)
+	assert.Empty(t, probe.asked[0].Parent)
+}
+
 func canonicalDir(dir string) string {
 	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {

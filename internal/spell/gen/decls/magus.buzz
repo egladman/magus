@@ -1020,6 +1020,7 @@ export object CommandRequest {
     command: str = "",
     description: str = "",
     commands: [CommandInvocation] = [],
+    agent: str = "",
     parent: str = "",
     role: str = "",
     lease: Job? = null,
@@ -1031,6 +1032,7 @@ export object CommandRequest {
 export object WriteRequest {
     host: str = "",
     session: str = "",
+    agent: str = "",
     parent: str = "",
     role: str = "",
     lease: Job? = null,
