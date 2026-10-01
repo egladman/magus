@@ -7,7 +7,7 @@
 // one. Edit the std.Module declaration and rerun `go generate`, never this file.
 
 export extern fun executable() > str !> any;
-export extern fun exit(code: int) > void !> any;
+export extern fun exit(code: int) > void;
 export extern fun hostname() > str !> any;
 export extern fun numCpu() > int;
 export extern fun platform() > [str];
