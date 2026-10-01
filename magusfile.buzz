@@ -32,7 +32,7 @@ import "magus/spell/markdown";
 import "magus/spell/bash";
 
 import "badge" as badge;
-import "coverage" as cov;
+import "./hack/magusfile/coverage" as cov;
 import "lcov";
 
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
@@ -1736,8 +1736,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) { return; }
     fs\writeFile(COVERAGE_PROFILE,
         merge_profiles(fs\readFile(COVERAGE_PROFILE), second: fs\readFile(CMD_MAGUS_PROFILE)));
-    // Hand-written code only. coverage.buzz detects generated files by Go's marker, not by
-    // path, since gen/ directories hold hand-maintained files too.
+    // Hand-written code only. hack/magusfile/coverage.buzz detects generated files by
+    // Go's marker, not by path, since gen/ directories hold hand-maintained files too.
     fs\writeFile(COVERAGE_HAND_PROFILE,
         cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
@@ -1844,7 +1844,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // embedded engine, and holds their merged line coverage above a floor. Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
+    ctx.readsFiles("badge.buzz", "releaser.buzz", "spells/**/*.buzz",
         "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
@@ -1866,9 +1866,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    foreach (mod in ["badge.buzz", "coverage.buzz"]) {
-        cover_for(mod, [], {});
-    }
+    cover_for("badge.buzz", [], {});
     // --embedded because it is a magusfile import.
     cover_for("releaser.buzz", ["--embedded"], {});
     foreach (mod in fs\glob("std/lib/*.buzz")) {

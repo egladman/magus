@@ -329,7 +329,7 @@ export fun ships(path: str) > bool {
         if (path.startsWith(dir)) { return false; }
     }
     final exemptFiles = [
-        ".gitignore", "_typos.toml", "badge.buzz", "coverage.buzz", "dprint-base.json",
+        ".gitignore", "_typos.toml", "badge.buzz", "dprint-base.json",
         "dprint.json", "magus.yaml", "mise.toml", "opencode.json", "releaser.buzz",
     ];
     if (exemptFiles.indexOf(path) != null) {

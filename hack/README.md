@@ -91,6 +91,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/advisories.buzz` | advisory scanning that fails only on findings you can act on today |
 | `hack/magusfile/changelog.buzz` | the changelog fragments' one grammar and renderer |
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
+| `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/magusfile/toolchain.buzz` | installed toolchain versions against the ones upstream tagged |
