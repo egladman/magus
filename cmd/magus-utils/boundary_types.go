@@ -45,11 +45,13 @@ var boundaryTypes = []boundaryType{
 	{Name: "SandboxEnv", Type: reflect.TypeFor[spells.SandboxEnv](), RuntimeObject: true},
 	{Name: "SandboxCache", Type: reflect.TypeFor[spells.SandboxCache](), RuntimeObject: true},
 	{Name: "Sandbox", Type: reflect.TypeFor[spells.Sandbox](), RuntimeObject: true},
-	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], and
-	// Language carries a CommentSyntax.
+	// Leaves first: CommentSyntax carries [CommentBlock] and [Quote], Syntax
+	// carries a CommentSyntax and a StubSyntax, and Language carries a Syntax.
 	{Name: "CommentBlock", Type: reflect.TypeFor[spells.CommentBlock]()},
 	{Name: "Quote", Type: reflect.TypeFor[spells.Quote]()},
 	{Name: "CommentSyntax", Type: reflect.TypeFor[spells.CommentSyntax]()},
+	{Name: "StubSyntax", Type: reflect.TypeFor[spells.StubSyntax]()},
+	{Name: "Syntax", Type: reflect.TypeFor[spells.Syntax]()},
 	{Name: "Language", Type: reflect.TypeFor[spells.Language]()},
 	// A provider spell WRITES this one, like Project below: resolve_secret constructs it
 	// and returns it, so it needs the mirror but no Go-to-Buzz encoder.

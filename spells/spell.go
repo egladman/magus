@@ -41,7 +41,7 @@ type Spell struct {
 	targets             []string
 	language            string          // canonical source language the spell adapts; "" when it adapts none
 	languageExtensions  []string        // file extensions that ARE the language, from the Language record
-	comments            *CommentSyntax  // declared comment/string syntax; nil when the spell declares none
+	syntax              *Syntax         // declared comment and stub syntax; nil when the spell declares neither
 	symbolIndexer       *SymbolIndexer  // declared symbol-indexing capability; nil when the spell declares none
 	sandbox             *Sandbox        // declared host grants for its tools; nil when the spell declares none
 	serviceTargets      map[string]bool // target names backed by a service op (long-running; uncacheable)
@@ -112,8 +112,8 @@ func (s *Spell) Language() string { return s.language }
 // the Language record's extensions field.
 func (s *Spell) LanguageExtensions() []string { return s.languageExtensions }
 
-// Comments returns the declared comment and string syntax, or nil.
-func (s *Spell) Comments() *CommentSyntax { return s.comments }
+// Syntax returns the declared comment and stub syntax, or nil.
+func (s *Spell) Syntax() *Syntax { return s.syntax }
 
 // SymbolIndexer returns the spell's declared symbol-indexing capability, or nil when
 // it declares none. A non-nil result is what makes a project bound to this spell
@@ -370,10 +370,11 @@ func WithSandbox(sb *Sandbox) Option {
 	return func(s *Spell) { s.sandbox = sb }
 }
 
-// WithComments sets the comment and string syntax the spell declares for its
-// language, consumed by the gate's comment-only classifier.
-func WithComments(syn *CommentSyntax) Option {
-	return func(s *Spell) { s.comments = syn }
+// WithSyntax sets the comment and stub syntax the spell declares for its
+// language, read by the risk classifier's comment-only check and by the
+// branch splitter.
+func WithSyntax(syn *Syntax) Option {
+	return func(s *Spell) { s.syntax = syn }
 }
 
 // WithOpaque marks the spell as opaque: it delegates to a foreign process that

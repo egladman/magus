@@ -95,15 +95,22 @@ export fun mgs_getLanguage() > Language {
     return Language{
         name = "typescript",
         extensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-        comments = CommentSyntax{
-            lineComments = ["//"],
-            blockComments = [CommentBlock{open = "/*", close = "*/"}],
-            quotes = [
-                Quote{open = "`", close = "`"},
-                Quote{open = "\"", close = "\""},
-                Quote{open = "'", close = "'"},
-            ],
-            directives = ["@ts-", "eslint-", "<reference"],
+        syntax = Syntax{
+            comments = CommentSyntax{
+                lineComments = ["//"],
+                blockComments = [CommentBlock{open = "/*", close = "*/"}],
+                quotes = [
+                    Quote{open = "`", close = "`"},
+                    Quote{open = "\"", close = "\""},
+                    Quote{open = "'", close = "'"},
+                ],
+                directives = ["@ts-", "eslint-", "<reference"],
+            },
+            stubs = StubSyntax{
+                kinds = ["Function", "Method"],
+                bodyStyle = "brace",
+                body = "\{\n\tthrow new Error(\"unimplemented: \{\{&Name}} lands in \{\{&Branch}}\");\n\}",
+            },
         },
     };
 }
