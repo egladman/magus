@@ -1718,3 +1718,41 @@ func TestWithinBudgetReturnsOnTime(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, 7, v)
 }
+
+// A repeated deny cites a grd ref the reader resolves with `query output` in the checkout
+// the call ran in. A host may run its hook from the primary checkout while a worker sits in
+// a linked worktree, so the envelope's cwd, not the hook process's, decides the store.
+func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
+	testkit.Isolate(t)
+	resetWorkspaceMemo(t)
+	primary := initGitRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "magus.yaml"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), []byte(""), 0o644))
+	runGit(t, primary, "add", "-A")
+	runGit(t, primary, "commit", "-q", "-m", "init")
+	worktree := filepath.Join(t.TempDir(), "worker")
+	runGit(t, primary, "worktree", "add", "-q", worktree)
+	t.Chdir(primary)
+
+	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
+		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
+	judge := func() guard.Verdict {
+		ctx := t.Context()
+		return guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: envelope, Host: "claude-code"})
+	}
+	first := judge()
+	require.Equal(t, "deny", first.Decision, first.Reason)
+	again := judge()
+	ref := regexp.MustCompile(`grd[0-9a-f]{16}`).FindString(again.Reason)
+	require.NotEmpty(t, ref, "a repeat deny cites its full verdict: %s", again.Reason)
+
+	out := captureStdout(t, func() {
+		require.NoError(t, queryTrailPayload(t.Context(), worktree, ref, OutputOptions{Format: FormatText}))
+	})
+	assert.Contains(t, out, "see: https://eli.gladman.cc/magus/reference/rules/")
+
+	primaryCache, err := magus.ResolveCacheDir(primary)
+	require.NoError(t, err)
+	_, err = trail.ReadBlob(primaryCache, ref)
+	assert.ErrorIs(t, err, os.ErrNotExist, "the hook process's checkout is not where the call ran")
+}
