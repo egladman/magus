@@ -1,4 +1,4 @@
-// badge builds a flat coverage-badge SVG in Buzz using the xml host module. Text width is
+// badges builds a flat coverage-badge SVG in Buzz using the xml host module. Text width is
 // approximate - a fixed width per glyph, no font metrics - so a badge renders a touch wide,
 // which is fine.
 

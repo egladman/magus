@@ -594,7 +594,7 @@ func TestCheck_RedundantImportAliasIsMagusDialectOnly(t *testing.T) {
 // branch reads imp.Alias for more than the bound name: an alias execs the file in
 // an isolated sub-session, while no alias flat-merges its globals into this scope,
 // so the alias is what requests isolation and is never redundant there, matching
-// magusfile.buzz's own "badge"/"releaser"/"drift" imports.
+// magusfile.buzz's own "badges"/"releases"/"drift" imports.
 func TestCheck_FileImportSameNameAliasIsNotRedundant(t *testing.T) {
 	checkOK(t, `import "badge" as badge;`)
 	checkOK(t, `import "./hack/drift" as drift;`)

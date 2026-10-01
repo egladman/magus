@@ -31,13 +31,13 @@ import "magus/spell/cosign";
 import "magus/spell/markdown";
 import "magus/spell/bash";
 
-import "badge" as badge;
-import "coverage" as cov;
+import "./hack/magusfile/badges" as badges;
+import "./hack/magusfile/coverage" as cov;
 import "lcov";
 
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
-import "releaser" as releaser;
+import "./hack/magusfile/releases" as releases;
 import "spells/golang/gomod";
 
 import "project/libs/gopherbuzz";
@@ -181,10 +181,10 @@ magus\project({
     },
 });
 
-// releaser\rootReleaseTag rejects verified-refinements and per-module tags such as
+// releases\rootReleaseTag rejects verified-refinements and per-module tags such as
 // libs/gopherbuzz/v0.1.0.
 fun exact_release_tag() > str !> any {
-    return releaser\rootReleaseTag(tag_names_on_head());
+    return releases\rootReleaseTag(tag_names_on_head());
 }
 
 // Unpatterned: a glob stops at "/", and the release checks need the namespaced tags.
@@ -1042,7 +1042,7 @@ fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
 }
 
 fun refuse_overwrite(ctx: magus\Context, path: str) > void !> any {
-    final msg = releaser\overwriteRefusal(path,
+    final msg = releases\overwriteRefusal(path,
         immutable: ctx.hasCharm("immutable"), exists: fs\exists(path));
     if (msg != "") { throw msg; }
 }
@@ -1130,7 +1130,7 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     final asset = fs\join("dist", name);
     // Against the upload glob, not the basename: a "/" in the version turns the name into
     // a path the glob misses, and the build stays green.
-    if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, releaser\toSlash(asset))) {
+    if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
         throw "release-build: the asset would be `" + asset + "`, which `"
             + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
             + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
@@ -1236,7 +1236,7 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     refuse_overwrite(ctx, fs\join("dist", "SHA256SUMS.sig"));
     // The version header selfupdate's ParseManifest requires, added last before signing.
     final manifest = fs\join("dist", "SHA256SUMS");
-    fs\writeFile(manifest, releaser\manifestWithVersion(fs\readFile(manifest), version: version()));
+    fs\writeFile(manifest, releases\manifestWithVersion(fs\readFile(manifest), version: version()));
     proc\exec("go", ["run", "./cmd/magus-utils", "sign", fs\join("dist", "SHA256SUMS")]);
     proc\exec("go", ["run", "./cmd/magus-utils", "verify",
         fs\join("dist", "SHA256SUMS"), fs\join("dist", "SHA256SUMS.sig")]);
@@ -1277,7 +1277,7 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(ctx.glob("*-generate", "!deploy-generate"));
     magus\run(["generate:rw", "docs"]);
 
-    final paths = releaser\releaseIndexPaths();
+    final paths = releases\releaseIndexPaths();
     if (!vcs\isDirty(paths)) {
         magus\log.info("release-index: the signed index already matches releases/; nothing to publish");
         return;
@@ -1287,8 +1287,8 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
         return;
     }
 
-    final branch = releaser\releaseIndexBranch(vcs\commit().short);
-    final subject = releaser\releaseIndexSubject(reason);
+    final branch = releases\releaseIndexBranch(vcs\commit().short);
+    final subject = releases\releaseIndexSubject(reason);
     vcs\cmd(["switch", "-c", branch]);
     vcs\cmd(["add", "--"] + paths);
     // -c on this one commit leaves the developer's git config untouched.
@@ -1307,10 +1307,10 @@ export fun release_index(ctx: magus\Context, args: [str]) > void !> any {
     // Repository settings can forbid workflows from opening pull requests; the pushed
     // branch is the deliverable, so a refusal only warns.
     final created = proc\exec("gh", args: ["pr", "create", "--base", "main", "--head", branch,
-        "--title", subject, "--body", releaser\releaseIndexPrBody()],
+        "--title", subject, "--body", releases\releaseIndexPrBody()],
         dir: ".", opts: {"allow_failure": true});
     if (!created.ok) {
-        magus\log.warn(releaser\releaseIndexPrFallback(os\env("GITHUB_REPOSITORY") ?? "",
+        magus\log.warn(releases\releaseIndexPrFallback(os\env("GITHUB_REPOSITORY") ?? "",
             branch: branch));
     }
 }
@@ -1394,7 +1394,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
 
     // (b) Simulates version() with these tags on HEAD. Gated only on a root tag: a
     // library-only release publishes no assets.
-    final root = releaser\rootReleaseTag(wouldBeTags + onHead);
+    final root = releases\rootReleaseTag(wouldBeTags + onHead);
     if (root == "") {
         var stamped = "the nearest tag by distance";
         final near = wouldBeTags + onHead;
@@ -1410,7 +1410,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             foreach (suffix in ["_static", ""]) {
                 // toSlash: fs\join uses the rehearsing machine's separator.
                 final asset = fs\join("dist", release_asset_name(root, p[0], p[1], suffix));
-                if (!releaser\matchesGlob(RELEASE_ASSET_GLOB, releaser\toSlash(asset))) {
+                if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
                     offenders.append(asset);
                 }
             }
@@ -1462,7 +1462,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
 
     // (d) The trigger from both sides: the root tag must start a release and a module tag
     // must not.
-    if (!releaser\matchesGlob(RELEASE_TAG_REFSPEC, rootTag)) {
+    if (!releases\matchesGlob(RELEASE_TAG_REFSPEC, rootTag)) {
         checks.append(failed("workflow trigger", "`" + rootTag + "` does not match "
             + RELEASE_WORKFLOW + "'s `" + RELEASE_TAG_REFSPEC + "` trigger, so pushing it would "
             + "publish nothing"));
@@ -1472,7 +1472,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
     }
     foreach (tag in wouldBeTags) {
         if (tag == rootTag) { continue; }
-        if (releaser\matchesGlob(RELEASE_TAG_REFSPEC, tag)) {
+        if (releases\matchesGlob(RELEASE_TAG_REFSPEC, tag)) {
             checks.append(failed("workflow trigger", "the module tag `" + tag + "` also matches `"
                 + RELEASE_TAG_REFSPEC + "`, so pushing it would start a second release run"));
         } else {
@@ -1491,7 +1491,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
 export fun release(ctx: magus\Context, args: [str]) > void !> any {
     final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
-    final modules = releaser\releasableModules(magus\projects().projects);
+    final modules = releases\releasableModules(magus\projects().projects);
 
     var wanted = mut {};
     foreach (a in args) {
@@ -1512,8 +1512,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
 
     final branches = local_branches();
     foreach (m in modules) {
-        final cur = releaser\currentVersion(m["prefix"]);
-        final n = releaser\nextFor(cur);
+        final cur = releases\currentVersion(m["prefix"]);
+        final n = releases\nextFor(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
         magus\log.info("release: {m["key"]} - {at}"
@@ -1550,9 +1550,9 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     foreach (m in modules) {
         final v = wanted[m["key"]];
         if (v == null) { continue; }
-        final cur = releaser\currentVersion(m["prefix"]);
-        if (!releaser\isCandidate(v, cur)) {
-            final n = releaser\nextFor(cur);
+        final cur = releases\currentVersion(m["prefix"]);
+        if (!releases\isCandidate(v, cur)) {
+            final n = releases\nextFor(cur);
             throw "release: {m["key"]} v{v} is not a legal next version from {cur}"
                 + " - choose {n.patch}, {n.minor} or {n.major}"
                 + " (a prerelease or +metadata build of one of those is fine)";
@@ -1568,8 +1568,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (major < 2) { continue; }
         var path = "{m["gomodule"]}";
         // The root's gomodule is "" by design, so its path comes from go.mod.
-        if (m["root"] != "") { path = releaser\modulePath(fs\readFile("go.mod")); }
-        if (releaser\needsMajorSuffix(path, major: major)) {
+        if (m["root"] != "") { path = releases\modulePath(fs\readFile("go.mod")); }
+        if (releases\needsMajorSuffix(path, major: major)) {
             throw "release: " + m["key"] + " v" + v + " needs a module path ending in /v"
                 + major + ", but go.mod declares `" + path + "`. Go resolves the path, not "
                 + "the tag, so this would publish a version nobody can `go get`. Rename the "
@@ -1640,7 +1640,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
             magus\log.info("release: go.mod  " + m["gomodule"] + "  - not required by the root; tag only");
         } else if (m["gomodule"] != "") {
             magus\log.info("release: go.mod  " + m["gomodule"] + "  ->  v" + v);
-            gomod = releaser\rewriteRequire(gomod, m["gomodule"], "v" + v);
+            gomod = releases\rewriteRequire(gomod, m["gomodule"], "v" + v);
             rewrote = true;
         }
     }
@@ -1736,8 +1736,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     if (args.len() > 0) { return; }
     fs\writeFile(COVERAGE_PROFILE,
         merge_profiles(fs\readFile(COVERAGE_PROFILE), second: fs\readFile(CMD_MAGUS_PROFILE)));
-    // Hand-written code only. coverage.buzz detects generated files by Go's marker, not by
-    // path, since gen/ directories hold hand-maintained files too.
+    // Hand-written code only. hack/magusfile/coverage.buzz detects generated files by
+    // Go's marker, not by path, since gen/ directories hold hand-maintained files too.
     fs\writeFile(COVERAGE_HAND_PROFILE,
         cov\stripGenerated(fs\readFile(COVERAGE_PROFILE),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
@@ -1833,9 +1833,9 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final typescript_pct = fs\readFile(typescript).trim();
 
     fs\mkdirAll("gen/site/assets");
-    fs\writeFile("gen/site/assets/go-coverage.svg", content: badge\coverage("go coverage", percent: go_pct, radius: 3));
-    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: badge\coverage("buzz coverage", percent: buzz_pct, radius: 3));
-    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: badge\coverage("typescript coverage", percent: typescript_pct, radius: 3));
+    fs\writeFile("gen/site/assets/go-coverage.svg", content: badges\coverage("go coverage", percent: go_pct, radius: 3));
+    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: badges\coverage("buzz coverage", percent: buzz_pct, radius: 3));
+    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: badges\coverage("typescript coverage", percent: typescript_pct, radius: 3));
     magus\log.info("coverage: go " + go_pct + "% ({go_totals["covered"]}/{go_totals["statements"]} statements), buzz "
         + buzz_pct + "%, typescript " + typescript_pct + "%");
 }
@@ -1844,8 +1844,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // embedded engine, and holds their merged line coverage above a floor. Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
+    ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
@@ -1866,11 +1865,6 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
 
-    foreach (mod in ["badge.buzz", "coverage.buzz"]) {
-        cover_for(mod, [], {});
-    }
-    // --embedded because it is a magusfile import.
-    cover_for("releaser.buzz", ["--embedded"], {});
     foreach (mod in fs\glob("std/lib/*.buzz")) {
         cover_for(mod.value, ["--embedded"], {});
     }

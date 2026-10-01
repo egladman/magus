@@ -1,11 +1,11 @@
-// releaser is the version-selection machinery behind the root magusfile's
+// releases is the version-selection machinery behind the root magusfile's
 // `release` and `release-index` targets: which modules version independently,
 // what each is at now, what it may legally move to next, the one manifest edit
 // a Go release needs, and the names a release-index publish commits under.
 //
 // A sibling module rather than part of magusfile.buzz because none of this is
 // magus's build - it is a body of rules about semantic versioning that the build
-// merely calls. Named `releaser`, not `release`, because a target of the same name
+// merely calls. Named `releases`, not `release`, because a target of the same name
 // SHADOWS an import and nulls its members. The importer must also ALIAS it: an
 // unaliased import flat-merges these exports into the magusfile's scope, where
 // magus reads every exported fun as a target and rejects one whose first parameter
@@ -26,7 +26,7 @@ import "std"; // assert, for the in-file test blocks below
 // magus\projects() and passed in as projects, already did the "does the candidate file
 // exist" filesystem check. Taking the inventory as a parameter rather than calling
 // magus\projects() itself keeps this module doing what its header promises - COMPUTING,
-// not reading the workspace - and releaser.buzz has no reason to import "magus"
+// not reading the workspace - and releases.buzz has no reason to import "magus"
 // only to hand every entry straight to a foreach.
 //
 // Declaration beats inference here because inference already guessed wrong
@@ -51,7 +51,7 @@ import "std"; // assert, for the in-file test blocks below
 // repoint the root's go.mod - a non-Go project is tag-only, because nothing in
 // go.mod requires it.
 export fun releasableModules(projects: [any]) > [{str: str}] {
-    // projects is [any], not [ProjectEntry]: releaser.buzz imports no "magus" (see
+    // projects is [any], not [ProjectEntry]: releases.buzz imports no "magus" (see
     // header), so it has no way to name that type, and reads each entry by bracket
     // key instead of dot field the way this file's own {str: str} records already do.
     var mods = mut [];
@@ -325,8 +325,8 @@ export fun isCandidate(v: str, cur: str) > bool !> any {
 export fun modulePath(gomod: str) > str {
     foreach (line in gomod.split("\n")) {
         // .trim(), because go.mod permits any run of whitespace after the keyword and
-        // a bare sub() keeps it: `module  path` yielded a leading space here. Same
-        // parse as coverage.buzz's modulePath, which must agree with this one.
+        // a bare sub() keeps it: `module  path` yielded a leading space here. Same parse
+        // as hack/magusfile/coverage.buzz's modulePath, which must agree with this one.
         if (line.startsWith("module ")) { return line.sub("module ".len()).trim(); }
     }
     return "";
@@ -357,8 +357,8 @@ test "reads the module path and ignores a require of a similar name" {
     final gomod = "module example.com/root\n\ngo 1.26\n\nrequire (\n\tmodule-ish/x v1.0.0\n)\n";
     std\assert(modulePath(gomod) == "example.com/root", message: "declared path");
     std\assert(modulePath("go 1.26\n") == "", message: "no module line");
-    // Same case coverage.buzz pins: a bare sub() kept the extra space here, so the two
-    // parsers disagreed on a legal go.mod.
+    // Same case hack/magusfile/coverage.buzz pins: a bare sub() kept the extra space
+    // here, so the two parsers disagreed on a legal go.mod.
     std\assert(modulePath("module  example.com/root\n") == "example.com/root", message: "two spaces after the keyword");
 }
 
