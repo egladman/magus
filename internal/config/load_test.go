@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
@@ -506,4 +507,36 @@ func TestJobsStaleAfterRefusesANegativeWindow(t *testing.T) {
 	cfg := Defaults()
 	cfg.Jobs.StaleAfter = -1
 	assert.ErrorContains(t, Validate(cfg), "stale_after")
+}
+
+// queue.carry_approvals defaults to every tier but code when unset, an empty list is the
+// strictest policy, and a name that is no tier, or is code, stops the load with MGS1050
+// naming each entry's line.
+func TestQueueCarryApprovals(t *testing.T) {
+	for name, tc := range map[string]struct {
+		yaml    string
+		want    queuetypes.CarryPolicy
+		wantErr string
+	}{
+		"unset":  {yaml: "queue: {}\n", want: queuetypes.DefaultCarryPolicy()},
+		"empty":  {yaml: "queue:\n  carry_approvals: []\n", want: queuetypes.CarryPolicy{}},
+		"listed": {yaml: "queue:\n  carry_approvals: [rebase, prose]\n", want: queuetypes.CarryPolicy{queuetypes.CarryRebase, queuetypes.CarryProse}},
+		"unknown and code": {yaml: "queue:\n  carry_approvals:\n    - prose\n    - docs\n    - code\n",
+			wantErr: "line 4: queue.carry_approvals: \"docs\" is not an approval carry tier (want some of rebase, generated, prose, comment-only)\n" +
+				"line 5: queue.carry_approvals: \"code\" never carries an approval: a reviewer has to see a code change (want some of rebase, generated, prose, comment-only)"},
+		"not a list": {yaml: "queue:\n  carry_approvals: prose\n", wantErr: "line 2: queue.carry_approvals must be a list of tiers"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, Filename), []byte(tc.yaml), 0o644))
+			cfg, err := LoadWorkspaceOnly(root)
+			if tc.wantErr != "" {
+				require.ErrorIs(t, err, types.CarryApprovalsInvalid)
+				assert.Equal(t, "config: "+filepath.Join(root, Filename)+": "+types.DiagnosticErrorf(types.CarryApprovalsInvalid, "%s", tc.wantErr).Error(), err.Error())
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, cfg.Queue.CarryApprovals.Policy())
+		})
+	}
 }
