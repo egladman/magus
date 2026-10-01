@@ -62,8 +62,6 @@ type run struct {
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
 	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
-	Preflight         []string // targets run first as a separate pass; see WithPreflight
-	preflight         []stage  // Preflight resolved against the selection by runResolved
 	narrowing         *project.OpNarrowing
 	stdio             *ProcessStdio
 }
@@ -211,12 +209,6 @@ func (e redactedError) Unwrap() error { return e.err }
 // runResolved groups targets by name and executes them with already-applied
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
-	// Before anything runs or locks: a preflight outside the closure is a refusal.
-	pre, err := m.planPreflight(targets, o.Preflight)
-	if err != nil {
-		return err
-	}
-	o.preflight = pre
 	ctx = attributeRun(ctx)
 	if scope, ok := undeclaredScopeEvent(targets); ok {
 		journal.Emit(ctx, scope)
@@ -1420,9 +1412,9 @@ func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project
 // abort rather than the cancellation it surfaced as.
 func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel string, opts run) (err error) {
 	out := opts.out(m)
-	// `--` args reach only the named stages' handlers, never this ctx: the preflight
-	// pass, the skip_cache gates run ahead of a replay, and the derived-order settle
-	// all dispatch other targets from it, and an op there with no explicit args would
+	// `--` args reach only the named stages' handlers, never this ctx: the skip_cache
+	// gates run ahead of a replay and the derived-order settle both dispatch other
+	// targets from it, and an op there with no explicit args would
 	// append the forwarded ones (`go mod edit -json -run X`).
 	namedCtx := func(ctx context.Context) context.Context {
 		return project.WithExtraArgs(ctx, opts.ExtraArgs)
@@ -1490,17 +1482,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// effectful host ops (exec, fs writes, network, env) record their intent and
 		// skip instead of running. Sequential, so each project's commands stay grouped
 		// under its [dry] line. Reads still work, so the plan reflects real conditionals.
-		recCtx := types.WithTrace(m.withRecordedOutput(ctx))
+		stageCtx := namedCtx(types.WithTrace(m.withRecordedOutput(ctx)))
 		dryStart := time.Now()
 		out.emit(ctx, report.RunDry{})
 		planned := 0
-		for i, st := range append(slices.Clone(opts.preflight), stages...) {
-			stageCtx := recCtx
-			// The forwarded args are shown on the named target's command, where a
-			// real run appends them, and nowhere else.
-			if i >= len(opts.preflight) {
-				stageCtx = namedCtx(recCtx)
-			}
+		for _, st := range stages {
 			for _, p := range st.projects {
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
@@ -1542,7 +1528,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			uniqueProjects = append(uniqueProjects, p)
 		}
 	}
-	for _, st := range append(slices.Clone(opts.preflight), stages...) {
+	for _, st := range stages {
 		for _, p := range st.projects {
 			addProj(p)
 			// A target declaring ctx.writesFiles(<alias>.file(...)) mutates ANOTHER
@@ -1660,7 +1646,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Scoped per project to the union of the targets this invocation will key, since
 	// newStep mints steps for every stage off this one probe.
 	drivenByProject := make(map[string]map[string]bool, len(uniqueProjects))
-	for _, st := range append(slices.Clone(opts.preflight), stages...) {
+	for _, st := range stages {
 		for _, p := range st.projects {
 			if drivenByProject[p.Path] == nil {
 				drivenByProject[p.Path] = map[string]bool{}
@@ -1737,7 +1723,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 		}
 	}
-	if len(steps) == 0 && len(opts.preflight) == 0 {
+	if len(steps) == 0 {
 		return nil
 	}
 
@@ -1911,9 +1897,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	for i := range steps {
 		stampRevision(&steps[i])
 	}
-	// The loop above joins the revision goroutine only when there is a step, and a
-	// preflight pass can leave none.
-	<-revisionDone
 	ctx = types.WithInstallRunner(ctx, m.installRunner(installKeying{
 		prober: prober, revision: revision, dirty: dirty, vcsName: vcsName,
 		skipReplay: opts.NoCache, opts: cacheOpts,
@@ -1923,10 +1906,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	runStep := func(handlers map[string]TargetHandler, projects map[string]*types.Project) func(context.Context, cache.Step) error {
 		return func(ctx context.Context, s cache.Step) error {
 			// Each step's body gets its own TargetRuns, seeded from the run's, so a target
-			// a preflight pass or a composer's key already ran starts out done.
+			// a composer's key already ran starts out done.
 			ctx = buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(runs.Passed(s.ProjectPath)...))
-			// The step's own args, which are nil for a preflight step: only a named
-			// target's step carries the forwarded ones, and they key it too.
+			// The step's own args: only a named target's step carries the forwarded ones,
+			// and they key it too.
 			ctx = project.WithExtraArgs(ctx, s.ExtraArgs)
 
 			p := projects[s.ProjectPath]
@@ -1961,14 +1944,6 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			endSpan(err)
 			return err
 		}
-	}
-	if len(opts.preflight) > 0 {
-		if err := m.runPreflight(ctx, opts.preflight, newStep, opts, runStep, cacheOpts); err != nil {
-			return err
-		}
-	}
-	if len(steps) == 0 {
-		return nil
 	}
 	results, runErr := m.cache.RunAll(ctx, steps, runStep(handlerOf, byPath), append(slices.Clone(cacheOpts), cache.WithTargetRunner(composed.runSkipCache))...)
 

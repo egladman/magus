@@ -2,8 +2,8 @@
 # stops at its first failed stage with MGS3030, never a lock refusal.
 [windows] skip 'no kernel API proves the writer of an anonymous pipe; the pipe fails fast as before'
 
-! exec bash -c 'set -o pipefail; magus affected ci --plan --preflight generate --no-default-charms | magus run consume .'
-stderr 'MGS3020'
+! exec bash -c 'set -o pipefail; magus affected generate --no-default-charms | magus affected ci --plan | magus run consume .'
+stderr 'generate: output drifted'
 stderr 'MGS3030'
 ! stderr 'consume: no plan on stdin'
 ! stderr 'locked by another magus process'

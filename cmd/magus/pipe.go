@@ -343,14 +343,7 @@ func takesProjectLocks(argv []string) bool {
 	}
 	sub, subArgs := peekSub(argv[1:])
 	switch sub {
-	case "affected":
-		// --plan runs nothing, except the --preflight pass it gates the plan on: the
-		// shape `affected ci --plan --preflight generate | magus run --stdin` exists for.
-		if hasModeFlag(subArgs, "preflight") {
-			return true
-		}
-		return resolveProfile(sub, subArgs).spawnsWork
-	case "run":
+	case "affected", "run":
 		return resolveProfile(sub, subArgs).spawnsWork
 	case "clean", "x", "graph", "refs":
 		return true

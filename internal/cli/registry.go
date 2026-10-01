@@ -241,16 +241,6 @@ every project except a named few without any shell filtering. It takes the same
 project reference a positional does, and refuses a reference no project matches
 rather than skipping nothing quietly.
 
---preflight names targets to run first, as a separate pass across every
-selected project, before the invoked target starts anywhere. Each must be a
-target the invoked target already reaches through ctx.needs (the chain magus
-describe target prints); one it never reaches is refused before anything runs
-(MGS3021). If a preflight target fails, no further preflight step starts, the
-ones in flight are cancelled, nothing of the invoked target starts, and the run
-exits 3 (MGS3020) with a first line naming the target, the failing projects and
-the command that fixes them. When the pass is green the run proceeds and treats
-those targets as done, so nothing runs twice and no cache key changes.
-
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -288,12 +278,10 @@ plan renders more than once without being computed again.`,
 		{Name: "n-shards", Kind: FlagInt, Doc: "Without --stdin: the shard count the --shard label belongs to. With it the count is the saved plan's, and a different value is refused"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
-		{Name: "preflight", Kind: FlagString, Doc: "Comma-separated targets to run first across every selected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020)"},
 	},
 	Targets: commonTargets,
 	Examples: []Example{
 		{"Build everything", "magus run build"},
-		{"Check for drift everywhere before any project runs ci", "magus run ci --preflight generate"},
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
 		{"Every project that declares generate except two", "magus run generate --skip docs --skip console"},
@@ -311,8 +299,7 @@ plan renders more than once without being computed again.`,
 	ExitStatus: []ExitCode{
 		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
 		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
-		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, a --preflight target the invoked target never reaches (MGS3021), or a saved plan that cannot be run as asked (MGS3029)."},
-		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
+		{2, "Misuse: an unknown target, no project matched the filters, a flag that does not apply to this invocation, or a saved plan that cannot be run as asked (MGS3029)."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -425,12 +412,9 @@ with its tier to stderr; a trivial change runs nothing and exits 0. With --plan,
 a trivial change emits an empty matrix beside a risk block.
 --no-redundancy-check runs the full gate.
 
---preflight works as it does for magus run: the named targets run first across
-the affected set, a failure stops everything with exit 3 (MGS3020), and a name
-outside the invoked target's ctx.needs closure is refused (MGS3021). With --plan
-it gates the plan itself: the pass runs across the planned projects under the
-charms the invoked target would run with, and the plan prints only when it is
-green, so a CI workflow that fans shards out from the plan starts none.`,
+--plan downstream of magus in a pipe waits for every magus stage before it to
+end, and prints no plan if one failed (MGS3030). CI gates its shards on drift
+that way: magus affected generate --no-default-charms | magus affected ci --plan.`,
 	Usage: "magus affected <target> [flags]",
 	Flags: []Flag{
 		{Name: "impact", Kind: FlagBool, Modes: []string{"impact"}, Doc: "Report the blast radius of the changeset (read-only; runs nothing)"},
@@ -439,9 +423,8 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{Name: "null", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
 		{Name: "b", Kind: FlagString, AliasOf: "base", Modes: []string{"", "plan", "impact"}, Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
-		{Name: "no-default-charms", Kind: FlagBool, Modes: []string{"", "plan"}, Doc: "Ignore magus.yaml default_charms for this run; with --plan, for its --preflight pass"},
+		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
 		{Name: "no-redundancy-check", Kind: FlagBool, Doc: "Run the full ci gate: no deferral and no tier reduction (MGS3010); ci target only"},
-		{Name: "preflight", Kind: FlagString, Modes: []string{"", "plan"}, Doc: "Comma-separated targets to run first across every affected project; each must be in the invoked target's ctx.needs closure (MGS3021), and a failure stops the run before it starts (exit 3, MGS3020). With --plan the pass runs across the planned projects and the plan prints only if it is green"},
 		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
@@ -468,16 +451,14 @@ green, so a CI workflow that fans shards out from the plan starts none.`,
 		{"Show dependency graph for the affected scope", "magus affected build --graph"},
 		{"Graph as DOT for piping to Graphviz", "magus affected build --graph -o dot | dot -Tsvg > graph.svg"},
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
-		{"Fail fast on drift before the affected set runs ci", "magus affected ci --preflight generate"},
-		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected ci --plan --preflight generate"},
+		{"Gate a CI shard plan on drift: no plan, and no shards, unless generate passes", "magus affected generate --no-default-charms | magus affected ci --plan"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
 	},
 	ExitStatus: []ExitCode{
 		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
 		{1, "At least one target failed, already reported with the path to its captured log."},
-		{2, "Misuse: no target named, --step without an interactive terminal, or a --preflight target the invoked target never reaches (MGS3021)."},
-		{3, "A --preflight target failed, so nothing of the invoked target ran (MGS3020). The first line names the target, the failing projects and the command that fixes them."},
+		{2, "Misuse: no target named, or --step without an interactive terminal."},
 		{75, "Nothing ran, and trying again later would succeed; 75 is EX_TEMPFAIL, the transient-failure convention. A selected project's workspace lock or the machine's build budget was held by another magus invocation (magus never queues behind one; the error names the holder's pid, command and directory), or a ci gate was deferred as redundant under load (MGS3010; the error names the green gate it found and --no-redundancy-check overrides)."},
 	},
 }
@@ -2484,8 +2465,8 @@ human-authored notes anchor a file or symbol you touched, and what the authors
 asked magus while writing it. It is the same question magus affected --impact
 answers, asked of a changeset instead of a target. It is context and never a
 verdict - nothing is gated on it and the exit code is unchanged; neither the
-flag nor the section it prints says "preflight", because run --preflight IS a
-gate and this must never read as one. Each
+flag nor the section it prints says "preflight", because that word names a gate
+and this must never read as one. Each
 section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 

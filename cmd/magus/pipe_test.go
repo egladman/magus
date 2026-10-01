@@ -18,8 +18,6 @@ func TestTakesProjectLocks(t *testing.T) {
 		{[]string{"magus", "run", "build", "."}, true},
 		{[]string{"/usr/bin/magus", "-C", "/w", "run", "test", "a"}, true},
 		{[]string{"magus", "affected", "ci"}, true},
-		{[]string{"magus", "affected", "ci", "--plan", "--preflight", "generate", "--no-default-charms"}, true},
-		{[]string{"magus", "affected", "ci", "--plan", "--preflight=generate"}, true},
 		{[]string{"magus", "clean", "."}, true},
 		{[]string{"magus", "refs", "Open"}, true},
 		{[]string{"magus", "graph", "build"}, true},
