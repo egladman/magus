@@ -80,7 +80,7 @@ var Magus = Module{
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -164,7 +164,7 @@ var Magus = Module{
 		},
 		{
 			Name: "run",
-			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
+			Doc:  "Run `magus run <args>` recursively in the target's project directory and capture its output. Child invocations share the parent's concurrency budget over the local socket. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -175,7 +175,7 @@ var Magus = Module{
 		},
 		{
 			Name: "describe",
-			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
+			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit unless opts.allow_failure is true. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -1751,8 +1751,8 @@ func resolveRunDir(ctx context.Context, opts map[string]any) string {
 // caller's concurrency slot for the duration so the child can run. Output streams
 // live and is captured: on success it returns the same {stdout, stderr, code, ok}
 // object as proc.exec, so a magusfile can read a subcommand's output (e.g. `magus
-// describe graph -o markdown` to generate MAGUS.md). It raises (non-nil error, nil
-// object) when the child can't launch or exits non-zero, mirroring proc.exec. label
+// describe graph -o markdown` to generate MAGUS.md). It raises when the child can't
+// launch or exits non-zero unless opts.allow_failure is true, mirroring proc.exec. label
 // names the calling method for error messages.
 //
 // The child runs in the working directory carried by ctx (WithCwd) but loads the whole
@@ -1804,45 +1804,55 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	var cmdErr error
 	runFn := func() error {
 		res, err := run.Exec(ctx, self, full, nestedExecOptions(ctx, opts, env))
-		switch {
-		case err != nil && errors.Is(err, types.ExecDenied):
-			cmdErr = err
-		case res.Code != 0 && !res.Started:
-			// The child never launched (binary not found, permission, ctx cancelled
-			// before exec); surface the real cause, not a fabricated "code -1".
-			// Mirrors proc.exec's runResult.
-			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
-		case res.Code != 0:
-			// The child's own diagnostic is not repeated here. It reaches the console
-			// itself (printed by the child when it runs as its own process, and by
-			// proc.Forward when it was adopted), so folding it into this message too
-			// produced the same paragraph twice, once truncated into a `cause:` line.
-			// Under opts.quiet nothing streams, and the caller that gets this error gets
-			// no ExecResult either, so the child's stderr rides in the error or is lost.
-			cmdErr = fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
-			if quiet, _ := opts["quiet"].(bool); quiet {
-				if msg := strings.TrimSpace(res.Stderr); msg != "" {
-					cmdErr = fmt.Errorf("%w: %s", cmdErr, msg)
-				}
-			}
-		}
-		if res.Started {
-			// Recorded even on a non-zero exit. A child that RAN said something, and
-			// that output is the answer for a command whose failure IS its report:
-			// doctor exits 1 because a check failed, and dropping stdout there left
-			// nothing to decode. The error is still returned alongside, so a caller
-			// that only wants the happy path is unaffected.
-			rec = types.ExecResult{
-				Stdout: strings.TrimSpace(res.Stdout),
-				Stderr: strings.TrimSpace(res.Stderr),
-				Code:   res.Code,
-				OK:     res.Code == 0,
-			}
-		}
+		rec, cmdErr = nestedResult(label, full, res, err, opts)
 		return nil
 	}
 	if err := proc.RunChildSync(ctx, lim, runFn); err != nil {
 		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
+	}
+	return rec, cmdErr
+}
+
+// nestedResult turns a nested magus's exit into what the calling method returns.
+// A non-zero exit raises unless opts.allow_failure is true, which returns the
+// result instead, as proc.exec's runResult does; a sandbox denial always raises.
+func nestedResult(label string, full []string, res run.ExecResult, err error, opts map[string]any) (types.ExecResult, error) {
+	if err != nil && errors.Is(err, types.ExecDenied) {
+		return types.ExecResult{}, err
+	}
+	var rec types.ExecResult
+	if res.Started || optBoolDefault(opts, "allow_failure", false) {
+		// Recorded even on a non-zero exit. A child that RAN said something, and
+		// that output is the answer for a command whose failure IS its report:
+		// doctor exits 1 because a check failed, and dropping stdout there left
+		// nothing to decode. The error is still returned alongside, so a caller
+		// that only wants the happy path is unaffected.
+		rec = types.ExecResult{
+			Stdout: strings.TrimSpace(res.Stdout),
+			Stderr: strings.TrimSpace(res.Stderr),
+			Code:   res.Code,
+			OK:     res.Code == 0,
+		}
+	}
+	if res.Code == 0 || optBoolDefault(opts, "allow_failure", false) {
+		return rec, nil
+	}
+	if !res.Started {
+		// The child never launched (binary not found, permission, ctx cancelled
+		// before exec); surface the real cause, not a fabricated "code -1".
+		return rec, fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
+	}
+	// The child's own diagnostic is not repeated here. It reaches the console
+	// itself (printed by the child when it runs as its own process, and by
+	// proc.Forward when it was adopted), so folding it into this message too
+	// produced the same paragraph twice, once truncated into a `cause:` line.
+	// Under opts.quiet nothing streams, and a caller that only reads the error
+	// sees no ExecResult, so the child's stderr rides in the error or is lost.
+	cmdErr := fmt.Errorf("magus.%s: %s exited with code %d", label, strings.Join(full, " "), res.Code)
+	if quiet, _ := opts["quiet"].(bool); quiet {
+		if msg := strings.TrimSpace(res.Stderr); msg != "" {
+			cmdErr = fmt.Errorf("%w: %s", cmdErr, msg)
+		}
 	}
 	return rec, cmdErr
 }

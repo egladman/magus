@@ -2,7 +2,7 @@
 // @expect: [true, true, true]
 import "os";
 final __r = [
-    os.time() > 0,
-    os.tmpDir().len() > 0,
-    os.env("MAGUS_TEST_UNDEFINED_VARIABLE_XYZ") == null,
+    os\time() > 0,
+    os\tmpDir().len() > 0,
+    os\env("MAGUS_TEST_UNDEFINED_VARIABLE_XYZ") == null,
 ];

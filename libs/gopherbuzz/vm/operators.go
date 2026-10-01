@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -466,6 +467,51 @@ func getMember(vm *VM, obj Value, name string) (Value, error) {
 	default:
 		return Null, nil
 	}
+}
+
+// ReceiverKind names a primitive receiver whose built-in methods a static reader
+// can ask about through BuiltinMethods and HasBuiltinMethod.
+type ReceiverKind uint8
+
+const (
+	ListReceiver ReceiverKind = iota
+	MapReceiver
+	StrReceiver
+)
+
+// builtinMethodNames is every name listMethod, mapMethod and strMethod resolve,
+// sorted. TestBuiltinMethodNamesMatchDispatch reads those switches and fails when
+// a case and this table disagree in either direction.
+var builtinMethodNames = [...][]string{
+	ListReceiver: {
+		"append", "clone", "cloneImmutable", "cloneMutable", "copyImmutable", "copyMutable",
+		"fill", "filter", "forEach", "indexOf", "insert", "join", "len", "map", "pop",
+		"reduce", "remove", "reverse", "sort", "sub",
+	},
+	MapReceiver: {
+		"clone", "cloneImmutable", "cloneMutable", "copyImmutable", "copyMutable", "diff",
+		"filter", "forEach", "hasKey", "intersect", "keys", "len", "map", "reduce", "remove",
+		"size", "sort", "values",
+	},
+	StrReceiver: {
+		"bin", "byte", "decodeBase64", "encodeBase64", "endsWith", "hex", "indexOf", "len",
+		"lower", "repeat", "replace", "split", "startsWith", "sub", "trim", "upper",
+		"utf8Codepoints", "utf8Len", "utf8Valid",
+	},
+}
+
+// BuiltinMethods returns the sorted names of k's built-in methods. The slice is
+// a copy the caller may keep or modify.
+func BuiltinMethods(k ReceiverKind) []string {
+	return slices.Clone(builtinMethodNames[k])
+}
+
+// HasBuiltinMethod reports whether name is a built-in method of k. For a map it
+// answers for the builtin alone; a stored key of the same name still shadows it
+// at run time.
+func HasBuiltinMethod(k ReceiverKind, name string) bool {
+	_, found := slices.BinarySearch(builtinMethodNames[k], name)
+	return found
 }
 
 // listMethod returns the callable for the named built-in List method, or nil if

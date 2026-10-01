@@ -323,6 +323,12 @@ func Keywords() []string {
 type StringPart struct {
 	IsExpr bool
 	Text   string
+	// Line and Col place an expression's first token for diagnostics, in
+	// upstream's convention (StringParser.zig): Col is the column of the `{`
+	// itself, and the text of earlier expressions on the same line is not
+	// counted, because upstream's string scanner never advances over it. Zero
+	// for a literal run.
+	Line, Col int
 }
 
 // Token is a single lexical token.
@@ -777,6 +783,7 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 	escaped := false
 	runStart := l.pos
 	hasExpr := false
+	hidden := 0 // see StringPart.Col
 
 	flushLit := func() {
 		if escaped {
@@ -848,6 +855,7 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 				if esc == '\n' {
 					l.line++
 					l.col = 1
+					hidden = 0
 				} else {
 					l.col += esz
 				}
@@ -860,16 +868,19 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
+			exprLine, exprCol := l.line, l.col-1-hidden
 			expr, err := l.captureInterpExpr(line, col, true)
 			if err != nil {
 				return Token{}, err
 			}
-			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
+			hidden = hiddenAfter(hidden, expr)
 			runStart = l.pos
 			continue
 		case '\n':
 			l.line++
 			l.col = 1
+			hidden = 0
 			if escaped {
 				lit.WriteRune(r)
 			}
@@ -884,6 +895,15 @@ func (l *lexer) lexString(line, col int) (Token, error) {
 		}
 	}
 	return Token{}, fmt.Errorf("buzz: unterminated string at line %d:%d", line, col)
+}
+
+// hiddenAfter adds an expression's text to the columns upstream skips on the
+// current line. Text spanning a line counts only what follows its last newline.
+func hiddenAfter(hidden int, expr string) int {
+	if i := strings.LastIndexByte(expr, '\n'); i >= 0 {
+		return len(expr) - i - 1
+	}
+	return hidden + len(expr)
 }
 
 // validRunes returns s, with each byte that is not valid UTF-8 replaced by
@@ -917,6 +937,7 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 	var lit strings.Builder
 	escaped := false
 	hasExpr := false
+	hidden := 0 // see StringPart.Col
 	start := l.pos
 	runStart := l.pos
 	flushLit := func() {
@@ -969,15 +990,18 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 			flushLit()
 			l.pos++
 			l.col++
+			exprLine, exprCol := l.line, l.col-1-hidden
 			expr, err := l.captureInterpExpr(line, col, false)
 			if err != nil {
 				return Token{}, err
 			}
-			parts = append(parts, StringPart{IsExpr: true, Text: expr})
+			parts = append(parts, StringPart{IsExpr: true, Text: expr, Line: exprLine, Col: exprCol})
+			hidden = hiddenAfter(hidden, expr)
 			runStart = l.pos
 		case '\n':
 			l.line++
 			l.col = 1
+			hidden = 0
 			if escaped {
 				lit.WriteByte(c)
 			}
