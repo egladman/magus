@@ -92,7 +92,7 @@ fun runFigure(f: figure\Figure) > FigureRun {
         var imports = 0;
         var calls = 0;
         var flow = 0;
-        foreach (n in d.nodes) { lines.append("node {n.id} {n.role} {n.anchor}:{n.line} {n.label} / {n.sub}"); }
+        foreach (n in d.nodes) { lines.append("node {n.id} {n.role} {n.anchor} {n.label} / {n.sub}"); }
         foreach (e in d.edges) {
             lines.append("edge {e.src} {e.dst} {e.claim} {e.kind} {e.label}");
             if (e.claim == "imports") { imports = imports + 1; }

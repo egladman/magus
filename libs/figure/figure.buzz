@@ -1195,11 +1195,13 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 
 // renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
 // Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
-// followable before any script loads. A node with a link of its own is always one.
+// followable before any script loads. A node with a link of its own is always one. The
+// anchor's line is painted only with anchorHref: the committed figures carry no line, so
+// an edit above the anchored symbol does not move them.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
     if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
-    if (n.line > 0) { attrs = attrs + " data-line=\"{n.line}\""; }
+    if (s.anchorHref != "" and n.line > 0) { attrs = attrs + " data-line=\"{n.line}\""; }
     final body = renderNodeBody(n, p, s);
     if (n.link != "") {
         return "<a href=\"" + escapeSvg(n.link) + "\"" + attrs + "><g>" + body + "</g></a>";
@@ -7910,6 +7912,9 @@ test "a symbol anchors its box at the definition" {
     assert\equal(nodeOf(d, id: "internal/httpx").line, want: 12, message: "and its line");
     final svg = draw(ok, theme: Theme.light, anchorHref: "/code/\{path\}#L\{line\}") catch "threw";
     std\assert(svg.indexOf("<a href=\"/code/internal/httpx/guard.go#L12\" data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\" data-line=\"12\">") != null, message: "the link carries the line: {svg}");
+    final committed = draw(ok, theme: Theme.light) catch "threw";
+    std\assert(committed.indexOf("<g data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\">") != null and committed.indexOf("data-line") == null,
+        message: "without anchorHref the anchor stays and the line does not: {committed}");
     final elsewhere = of("t").box(mcpDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12)).unscoped(why: "x");
     std\assert(failure(elsewhere).indexOf("box(\"internal/handler/mcp\") anchors symbol \"httpx.Guard\", defined in internal/httpx/guard.go; box the directory that defines it") != null, message: "a symbol defined elsewhere");
     final none = of("t").box(guardDir(), symbol: refsAt("httpx.Gone", files: [<str>], line: 0));
