@@ -107,11 +107,13 @@ type CompletionGate struct {
 	// multiplication and reads inconsistently the moment it has four members.
 	//
 	// Both are RESOLVED before a row is stored: Resolve fills a gate that named neither,
-	// so a reader never applies a default and the published enums carry no empty member.
-	// A default applied on read is a default every reader has to know about, and the
-	// readers here are the verifier, the guard, the observer and two schemas.
-	Kind   GateKind   `json:"kind"   yaml:"kind"`
-	Expect GateExpect `json:"expect" yaml:"expect"`
+	// so a reader of a stored row never applies a default. A default applied on read is a
+	// default every reader has to know about, and the readers here are the verifier, the
+	// guard, the observer and two schemas.
+	Kind GateKind `json:"kind" yaml:"kind"`
+	// Expect is optional and defaults to the kind's own: passed for check, changed for
+	// paths and symbol. The common goal names only its kind and its subject.
+	Expect GateExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
 	// Check is the run a GateKindCheck gate examines. Zero on every other kind.
 	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Paths are the globs a GateKindPaths gate examines. Zero on every other kind.

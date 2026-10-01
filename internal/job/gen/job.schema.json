@@ -137,7 +137,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "expect"],
+        "required": ["id", "kind"],
         "properties": {
           "id": {
             "type": "string"
@@ -158,7 +158,8 @@
           },
           "expect": {
             "type": "string",
-            "enum": ["passed", "changed", "present", "absent", "unreferenced"]
+            "enum": ["", "passed", "changed", "present", "absent", "unreferenced"],
+            "description": "Expect is optional and defaults to the kind's own: passed for check, changed for paths and symbol. The common goal names only its kind and its subject."
           },
           "check": {
             "type": "object",
