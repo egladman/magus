@@ -2,6 +2,7 @@ package watch
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -116,4 +117,39 @@ func TestIgnorePatterns_LiteralGitignoreSemantics(t *testing.T) {
 func TestIgnorePatterns_Empty(t *testing.T) {
 	pred := IgnorePatterns(t.TempDir(), nil)
 	assert.False(t, pred("/anything"), "empty patterns should never match")
+}
+
+// FuzzParsePattern probes the buildx-style ignore-entry parser. The
+// invariant is "no panic": every input either returns a typed error
+// or a well-formed types.IgnorePattern that ValidatePattern accepts.
+func FuzzParsePattern(f *testing.F) {
+	for _, seed := range []string{
+		"",
+		"type=glob,pattern=**/scratch/*",
+		"type=regex,pattern=\\.tmp$",
+		"type=literal,pattern=node_modules",
+		"type=glob,pattern=foo\\,bar",
+		"pattern=foo,type=glob",
+		"type=,pattern=",
+		"unknown=foo",
+		"type=glob,pattern={invalid",
+		"\xff\x00",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		// Skip inputs containing NULs: the parser does not pretend to
+		// be NUL-safe (CLI/YAML never carries them) and treating
+		// them as out-of-scope keeps the fuzzer focused on real bugs.
+		if strings.IndexByte(s, 0) >= 0 {
+			t.Skip()
+		}
+		got, err := ParsePattern(s)
+		if err != nil {
+			return
+		}
+		if vErr := ValidatePattern(got); vErr != nil {
+			t.Fatalf("ParsePattern(%q) = %+v but ValidatePattern rejects it: %v", s, got, vErr)
+		}
+	})
 }
