@@ -7,7 +7,6 @@ import "magus";
 import "markdown";
 import "fs";
 import "io";
-import "os";
 import "template";
 import "lib/text" as _;
 import "lib/html" as _;
