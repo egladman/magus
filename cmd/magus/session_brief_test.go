@@ -124,7 +124,9 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
-	ctx := context.Background()
+	// The guard-wiring section runs the stand-in written below, which answers at
+	// once; the shipped probe deadline would measure only how loaded the machine is.
+	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
 	// An empty magusfile marks the directory as a workspace root.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))

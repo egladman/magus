@@ -36,9 +36,10 @@ const (
 	// HarnessUnprobed means presence matched (the config carries the declared
 	// fragments) but VerifyHarness could not confirm the wired command actually
 	// answers: the interpreter, jq, or the magus binary the guard script would
-	// resolve is missing from this environment. Distinct from HarnessVerified,
-	// because presence was never proof the guard runs, and distinct from
-	// HarnessUncovered, because the gap is this machine's tooling, not the config.
+	// resolve is missing from this environment, or the probe could not start or
+	// finish within its deadline. Distinct from HarnessVerified, because presence
+	// was never proof the guard runs, and distinct from HarnessUncovered, because
+	// the gap is this machine's tooling or load, not the config.
 	HarnessUnprobed HarnessStatus = "unprobed"
 )
 

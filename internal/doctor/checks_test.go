@@ -334,7 +334,7 @@ func TestCheckGuardWiring(t *testing.T) {
 	t.Run("no binary resolves at all -> fail", func(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("PATH", t.TempDir()) // empty: no magus anywhere
-		c := checkGuardWiring(context.Background(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "no ./magus and no magus on PATH")
 	})
@@ -343,7 +343,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		writeGuardProbeStub(t, root, "#!/bin/sh\nexit 0\n")
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
@@ -354,7 +354,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		writeGuardProbeStub(t, root, denyingProbeStub)
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
 		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
@@ -365,7 +365,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, denyingProbeStub)
 		writeCheckpointHarness(t, root, guardedHarnessConfig())
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget, "test-host")
 		require.Equal(t, types.CheckOK, c.Status)
 		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
 	})
@@ -375,7 +375,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardProbeStub(t, root, denyingProbeStub)
 		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
-		c := checkGuardWiring(context.Background(), root, testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget, "test-host")
 		require.Equal(t, types.CheckFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
@@ -842,13 +842,13 @@ func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
 	writeCheckpointHarness(t, root, guardedHarnessConfig())
 	wired := filepath.Join(root, "host", "hooks.json")
 
-	assert.Equal(t, []string{wired}, HookConfigs(context.Background(), root, "test-host"))
+	assert.Equal(t, []string{wired}, HookConfigs(harnessProbeCtx(), root, "test-host"))
 
 	// A config that names magus without running a hook of its own is not wiring: the
 	// same two markers the guard-wiring check reads, so neither can count a file the
 	// other would not.
 	require.NoError(t, os.WriteFile(wired, []byte(`{"note":"magus lives here"}`), 0o644))
-	assert.Empty(t, HookConfigs(context.Background(), root, "test-host"))
+	assert.Empty(t, HookConfigs(harnessProbeCtx(), root, "test-host"))
 }
 
 // sameStepFixture is the 2026-09-10 gate stall as a workspace declares it: `ci` composes a
