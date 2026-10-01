@@ -19,9 +19,9 @@
 // actor at one end. Coverage is by set: every directory scope() names is drawn or
 // excepted, so a package joining a layer joins its group or fails the figure.
 //
-// This module imports no host module. It names the magus\Dir, magus\Layer and
-// magus\RefsResult records, which every magus session declares, and a test builds them
-// as map literals.
+// The module imports magus for the Dir, Layer and RefsResult record types and calls no
+// host function: the figure hands it the records, so it never reaches into a workspace,
+// and a test builds them as map literals.
 //
 // The design system these figures follow is cathrynlavery/diagram-design (MIT),
 // https://github.com/cathrynlavery/diagram-design: its palette, role treatments, zones,
@@ -35,6 +35,7 @@ namespace figure;
 
 import "std";
 import "assert";
+import "magus";
 
 
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
