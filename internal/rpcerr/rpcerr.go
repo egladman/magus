@@ -88,6 +88,7 @@ var titles = map[types.DiagnosticCode]string{
 	types.InternalFailure:           "internal failure",
 	types.StreamingUnsupported:      "streaming unsupported",
 	types.ReviewHostFailed:          "review host failed",
+	types.AuthFailuresThrottled:     "too many failed authentications",
 }
 
 // Titles returns a copy of the Help link description for each reason that has one.
@@ -408,6 +409,21 @@ func ReviewHostFailed(message string) Error {
 		Reason:     types.ReviewHostFailed,
 		Message:    message,
 		HTTPStatus: http.StatusBadGateway,
+	}
+}
+
+// AuthFailuresThrottled is a caller that spent its allowance of failed authentications:
+// perSecond a second in bursts of burst. refused says why this request would have been
+// refused anyway. The caller sets the Retry-After header; retryAfter also rides as a
+// RetryInfo detail, and the two limits as metadata.
+func AuthFailuresThrottled(perSecond, burst int, retryAfter time.Duration, refused string) Error {
+	return Error{
+		Code:   connect.CodeResourceExhausted,
+		Reason: types.AuthFailuresThrottled,
+		Message: fmt.Sprintf("this caller failed authentication more than %d times a second (bursts of %d); only failed attempts count, and a valid token is still admitted; %s; retry after %s",
+			perSecond, burst, refused, retryAfter.Round(time.Millisecond)),
+		Metadata: map[string]string{"failuresPerSecond": strconv.Itoa(perSecond), "burst": strconv.Itoa(burst)},
+		Details:  []proto.Message{&errdetails.RetryInfo{RetryDelay: durationpb.New(retryAfter)}},
 	}
 }
 

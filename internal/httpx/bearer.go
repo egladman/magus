@@ -113,10 +113,11 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) typ
 			key = FailureKey(r)
 			wait, exhausted = limit.Exhausted(key)
 		}
-		refuse := func(e rpcerr.Error) {
+		refuse := func(e rpcerr.Error, why string) {
 			if exhausted {
 				w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(wait.Seconds()))))
-				e.Code, e.Message = connect.CodeResourceExhausted, "too many refused requests from this caller; "+e.Message
+				perSecond, burst := limit.Limits()
+				e = rpcerr.AuthFailuresThrottled(perSecond, burst, wait, why)
 			} else if limit != nil {
 				limit.Fail(key)
 			}
@@ -124,13 +125,13 @@ func guard(format rpcerr.Format, verify Verifier, needOf func(*http.Request) typ
 		}
 		presented, ok := extract(r)
 		if !ok {
-			refuse(bearerMissing)
+			refuse(bearerMissing, "this request carried no bearer token")
 			return
 		}
 		need := needOf(r)
 		cred, ok := admit(verify, presented, r)
 		if !ok {
-			refuse(bearerRejected)
+			refuse(bearerRejected, "this request's bearer token was refused")
 			return
 		}
 		if !cred.Grant.Allows(need) {

@@ -656,6 +656,10 @@ const (
 	// ReviewHostFailed is a publish or reply the code-review host refused or could not
 	// receive, so nothing reached the reviewer. Answered 502.
 	ReviewHostFailed DiagnosticCode = "MGS9029"
+	// AuthFailuresThrottled is a caller of a guarded route that has spent its allowance of
+	// failed authentications, answered 429 with Retry-After. Only refusals are counted; a
+	// request whose token verifies is admitted regardless.
+	AuthFailuresThrottled DiagnosticCode = "MGS9030"
 
 	// VCSCapabilityMissing fires when the configured version-control backend does not implement
 	// a lookup a feature needs, so the answer is reported as unavailable rather than as empty.
@@ -730,7 +734,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	GrantInsufficient, OperatorTokenFormat, TokenStoreTooOld, TokenLifetimeOutOfRange,
 	TokenRecordInvalid, ShareRequestMalformed, TokenRequestInvalid, SocketPeerNotOwner,
 	RequestInvalid, ResourceNotFound, StateConflict, WorkspaceNotWired, InternalFailure,
-	StreamingUnsupported, ReviewHostFailed,
+	StreamingUnsupported, ReviewHostFailed, AuthFailuresThrottled,
 	VCSCapabilityMissing, ReviewOpMissing, ReviewAuthorshipUnknown,
 }
 

@@ -729,9 +729,25 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		_, _ = io.Copy(io.Discard, resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		_ = resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(body))
 		return resp
+	}
+	reasonOf := func(t *testing.T, resp *http.Response) string {
+		t.Helper()
+		var got struct {
+			Error struct {
+				Details []struct {
+					Reason string `json:"reason"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		body, _ := io.ReadAll(resp.Body)
+		require.NoError(t, json.Unmarshal(body, &got), "%s", body)
+		require.NotEmpty(t, got.Error.Details)
+		return got.Error.Details[0].Reason
 	}
 
 	start := time.Now()
@@ -742,6 +758,7 @@ func TestMCPFailedAuthIsRateLimited(t *testing.T) {
 		assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"), "refusal %d is unreadable", i)
 		if resp.StatusCode == http.StatusTooManyRequests {
 			assert.Equal(t, "1", resp.Header.Get("Retry-After"))
+			assert.Equal(t, string(types.AuthFailuresThrottled), reasonOf(t, resp))
 		}
 		if i == 500 {
 			ok := post(bearers["connector"].token)

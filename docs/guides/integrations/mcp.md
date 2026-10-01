@@ -473,8 +473,9 @@ A page without a valid token, a DNS-rebinding page included, learns nothing it c
   cannot read a preflight's answer.
 - **Failures are throttled.** Each caller, keyed by its `Origin` (which a page cannot
   change) or else its peer address, may fail authentication 20 times a second in bursts of
-  40. Past that it gets `429` with `Retry-After`. A request whose token verifies is never
-  throttled.
+  40. Past that it gets `429` with `Retry-After`
+  ([MGS9030](../../reference/codes/auth/MGS9030.md)). A request whose token verifies is
+  never throttled.
 - **Failures are cheap.** Tokens are checked against an in-memory copy of the operator
   file and the token store, reloaded when either changes on disk and at least once a
   second, so a refused request costs a hash and three `stat` calls, never a file read.

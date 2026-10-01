@@ -41,6 +41,11 @@ func NewFailureLimiter(perSecond, burst int) *FailureLimiter {
 	}
 }
 
+// Limits returns the failures allowed a second and the burst, as NewFailureLimiter took them.
+func (l *FailureLimiter) Limits() (perSecond, burst int) {
+	return int(l.perSecond), int(l.burst)
+}
+
 // FailureKey names the caller a request's failures are charged to: its Origin when it sends
 // one, which a browser sets and a page cannot change, else the TCP peer's host.
 func FailureKey(r *http.Request) string {
