@@ -123,7 +123,8 @@ var SandboxCacheSource string
 var SandboxSource string
 
 // CommentBlockSource / QuoteSource / CommentSyntaxSource are the generated mirrors of
-// the comment/string syntax a spell declares via mgs_getCommentSyntax. The two leaves
+// the comment/string syntax a spell declares in the comments field of the Language
+// record mgs_getLanguage returns. The two leaves
 // must PRECEDE CommentSyntaxSource in the bundle (its fields are [CommentBlock] and
 // [Quote]); nothing else references them.
 //

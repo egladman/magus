@@ -214,7 +214,7 @@ func (c Classifier) classify(ctx context.Context, p, role, rev string) (Class, s
 	}
 	// Comment-only detection needs the language's comment and string syntax, and every
 	// language gets it the same way: a syntax the language's SPELL declared
-	// (mgs_getCommentSyntax), consumed by one string-aware stripper, Go and Buzz
+	// (the comments field of its mgs_getLanguage record), consumed by one string-aware stripper, Go and Buzz
 	// included, so "comment-only" means one thing. A language whose spell declared
 	// nothing classifies as code: guessing delimiters would trade one false comment-only
 	// for trust in every refusal after it.
