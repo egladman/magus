@@ -3,8 +3,8 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 10785
-skill_short_bytes: 8620
+skill_full_bytes: 11006
+skill_short_bytes: 8841
 ---
 
 # magus-workspace-rules
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `0451cdda8d5e` |
+| `skill-content` | `68fe01aa5415` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -208,8 +208,11 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    placed at a path without this entry is never read.
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
    guard command string, skills form, `harness_mcp` (MCP setup hint, docs
-   pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
-   the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
+   pointer, host CLI sketch), whatever the host needs. Every entry's command
+   either runs a template magus ships or ends with the shell comment
+   `# magus:harness`, after a space; describe refuses any other, because a merge
+   retires only entries it can tell are magus's. Do not edit Magus Go, the
+   cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
 4. Run `magus describe harness <id>`, have a person read and run the merge
    command it prints (magus never writes host config), then run
@@ -414,8 +417,11 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    placed at a path without this entry is never read.
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
    guard command string, skills form, `harness_mcp` (MCP setup hint, docs
-   pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
-   the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
+   pointer, host CLI sketch), whatever the host needs. Every entry's command
+   either runs a template magus ships or ends with the shell comment
+   `# magus:harness`, after a space; describe refuses any other, because a merge
+   retires only entries it can tell are magus's. Do not edit Magus Go, the
+   cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
 4. Run `magus describe harness <id>`, have a person read and run the merge
    command it prints (magus never writes host config), then run

@@ -198,8 +198,8 @@ computes and prints, and keeps it. What makes one worth keeping is the note, so
 records the position and the pointers, and leaves the prose alone. Nothing in the
 host's payload becomes the note.
 
-It forwards the event whole and magus parses the envelope itself, so it selects
-nothing and imports no JSON reader. A host that spells those fields differently
+It forwards the event whole and magus parses the envelope itself; the one field
+it reads is `cwd`, the tree it records. A host that spells those fields differently
 passes `--session` and `--transcript` instead, and one that can supply neither
 still records a usable checkpoint, because the part that matters is read from the
 tree.
@@ -223,8 +223,8 @@ the guard, and where the rules live.
 Every line of it is read off the disk at the moment it prints, which is the
 property that makes it worth wiring. A summary degrades with each retelling and
 nothing in the transcript says by how much; a fact read from the tree cannot
-degrade at all. Nothing in it is remembered between sessions, and none of it
-comes from the host's event, which the hook does not read.
+degrade at all. Nothing in it is remembered between sessions. The one thing it
+takes from the host's event is `cwd`, which names the checkout to brief.
 
 It restates no rule either. `magus session --brief` names the files this
 workspace's rules live in (AGENTS.md and the installed skill directories, when
@@ -246,6 +246,23 @@ It declares no `magus-guard-coverage` line, for the reason
 `magus-observe.buzz` declares none: it carries no verdict on any surface.
 
 <!-- embed: magus-rehydrate.buzz -->
+
+## `magus-session.buzz`
+
+The fourth template that carries no verdict, and the one that runs no magus. Wire
+it to your host's session-start event as
+`magus buzz -C <root> -s magus-session.buzz -- --env-file <file>`, where
+`<file>` is the one your host sources before each shell command, and it appends
+`export PATH="<root>:$PATH"` there. A `magus` the agent types then runs the build
+the hooks run, rather than whatever the shell that launched the host had.
+
+The directory `-C` names is what goes on PATH, so the entry states it and the
+template guesses nothing. An empty `--env-file` does nothing, which is what a
+host without such a file passes.
+
+It declares no `magus-guard-coverage` line: it carries no verdict on any surface.
+
+<!-- embed: magus-session.buzz -->
 
 ## Trying a verdict by hand
 
