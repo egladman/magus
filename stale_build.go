@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"strings"
 
@@ -61,5 +62,31 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 		"command at a time: `mv " + name + " " + name + ".old`, then `go build -o " + name + " ./" + pkg +
 		"`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in " +
 		"generated code, the checkout's committed generated files are behind its sources (a merge kept " +
-		"one side): restore them from the revision that generated them, then link again."
+		"one side), and restoring either side's copy brings back the mismatch: " + regenerate(info.Main.Path) +
+		", then link again."
+}
+
+// ownModule is the module this package was compiled from, read off a type so a renamed fork
+// still recognizes its own tree.
+var ownModule = reflect.TypeFor[Magus]().PkgPath()
+
+// ownGenerators are the commands this module's *_generate targets in magusfile.buzz run, in
+// the order their ctx.needs settle: types, spells, job, langservice, bindings, mcp_tools.
+var ownGenerators = []string{
+	"go generate ./cmd/magus-utils",
+	"go generate ./internal/spell/...",
+	"go run ./cmd/magus-utils jobschema -out internal/job/gen",
+	"go generate ./internal/langservice",
+	"go generate ./std/...",
+	"go generate ./internal/handler/mcp",
+}
+
+// regenerate names how a checkout of module rebuilds its generated files without a binary.
+// Only this module's generators are known; any other checkout is pointed at its own.
+func regenerate(module string) string {
+	if module != ownModule {
+		return "regenerate them with the `go generate` commands its generate targets run"
+	}
+	return "regenerate them, one command at a time, with what the *_generate targets run: `" +
+		strings.Join(ownGenerators, "`, then `") + "`"
 }

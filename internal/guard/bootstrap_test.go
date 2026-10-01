@@ -2,11 +2,13 @@ package guard
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,9 +25,22 @@ func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 }
 
 func judgeOwnBuild(cwd, command string) ShellVerdict {
-	deps := testDependencies()
+	return judgeOwnBuildWith(testDependencies(), cwd, command)
+}
+
+func judgeOwnBuildWith(deps Dependencies, cwd, command string) ShellVerdict {
 	d := effectiveDialect("")
-	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(deps, cwd, command, d))
+	return rankOwnBuild(Evaluate(deps, command), ownBuildVerdict(context.Background(), deps, cwd, command, d))
+}
+
+// loadingAs is testDependencies with the workspace load answering err, counting each load.
+func loadingAs(err error, loads *int) Dependencies {
+	deps := testDependencies()
+	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
+		*loads++
+		return nil, err
+	}
+	return deps
 }
 
 func TestOwnModuleIsReadFromTheBinary(t *testing.T) {
@@ -117,4 +132,116 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	assert.Equal(t, "advise", v.Decision)
 	assert.Equal(t, string(denyRuleRawTool), v.Rule)
 	assert.Contains(t, v.Context, "Use ./magus from then on")
+}
+
+// The forms recoversMagus admits, each alone on its line.
+var recoveryForms = []string{
+	"go build -o magus ./cmd/magus",
+	"go build -trimpath -o magus ./cmd/magus",
+	"go build -o magus cmd/magus",
+	"GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus",
+	"go generate ./cmd/magus-utils",
+	"go generate ./internal/spell/...",
+	"go generate ./std/... ./internal/langservice",
+	"GOEXPERIMENT=jsonv2 go generate ./internal/handler/mcp",
+	"go run ./cmd/magus-utils jobschema -out internal/job/gen",
+	"go run -trimpath ./cmd/magus-utils mockassert",
+}
+
+// A checkout that cannot load its own sources gets the relink and the generators, with or
+// without a binary, and nothing else.
+func TestRankOwnBuildAllowsRecoveryWhileTheWorkspaceCannotLoad(t *testing.T) {
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "this build does not provide that name")
+	for _, withBinary := range []bool{true, false} {
+		root := checkoutFixture(t, ownModule, withBinary)
+		for _, command := range recoveryForms {
+			loads := 0
+			v := judgeOwnBuildWith(loadingAs(stale, &loads), root, command)
+			assert.Empty(t, v.Deny, command)
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
+			assert.Contains(t, v.Context, "recovery allowed", command)
+			assert.Equal(t, 1, loads, command)
+		}
+	}
+}
+
+func TestRankOwnBuildDeniesEverythingElseWhileTheWorkspaceCannotLoad(t *testing.T) {
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
+	root := checkoutFixture(t, ownModule, true)
+	for _, command := range []string{
+		"go test ./...",
+		"go vet ./...",
+		"go build ./cmd/magus",
+		"go build -o magus.new ./cmd/magus",
+		"go build -o magus ./cmd/magus-ruledocs",
+		"go build -o magus -ldflags=-s ./cmd/magus",
+		"go generate",
+		"go generate -run bindings ./std",
+		"go generate ../other",
+		"go generate /tmp/elsewhere",
+		"go run ./cmd/magus-utils sign dist/SHA256SUMS",
+		"go run ./cmd/magus-utils cut",
+		"go run ./cmd/magus-utils release-index",
+		"go run ./cmd/magus run go-build .",
+		"CGO_ENABLED=1 go build -o magus ./cmd/magus",
+		"GOFLAGS=-mod=mod go generate ./cmd/magus-utils",
+		"GOEXPERIMENT=jsonv2 CGO_ENABLED=0 go build -o magus ./cmd/magus",
+		"env GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus",
+		"bash -c 'go generate ./cmd/magus-utils'",
+		"go generate ./cmd/magus-utils && go vet ./...",
+		"go generate ./cmd/magus-utils > generate.log",
+	} {
+		loads := 0
+		v := judgeOwnBuildWith(loadingAs(stale, &loads), root, command)
+		assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
+		assert.NotEmpty(t, v.Deny, command)
+	}
+}
+
+// Only a line that could pass pays for the workspace load.
+func TestRankOwnBuildLoadsTheWorkspaceOnlyForARecoveryForm(t *testing.T) {
+	root := checkoutFixture(t, ownModule, true)
+	loads := 0
+	deps := loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads)
+	for _, command := range []string{"go test ./...", "go vet ./...", "go run ./cmd/magus-utils sign x"} {
+		judgeOwnBuildWith(deps, root, command)
+	}
+	assert.Zero(t, loads)
+}
+
+// A workspace that loads, or fails for any reason but MGS1021, keeps every recovery form
+// denied.
+func TestRankOwnBuildDeniesRecoveryWhenTheWorkspaceLoads(t *testing.T) {
+	built := checkoutFixture(t, ownModule, true)
+	fresh := checkoutFixture(t, ownModule, false)
+	for name, loadErr := range map[string]error{
+		"loads":        nil,
+		"syntax error": errors.New("magusfile: syntax error"),
+		"other code":   types.DiagnosticErrorf(types.NoWorkspaceRoot, "no root"),
+	} {
+		for _, command := range recoveryForms {
+			loads := 0
+			v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, command)
+			assert.Equal(t, denyRuleRawTool, v.Rule.Name, name+": "+command)
+			assert.NotEmpty(t, v.Deny, name+": "+command)
+			assert.NotContains(t, v.Context, "recovery allowed", name+": "+command)
+
+			v = judgeOwnBuildWith(loadingAs(loadErr, &loads), fresh, command)
+			assert.Contains(t, v.Deny, bootstrapCommand, name+" without a binary: "+command)
+		}
+	}
+}
+
+func TestJudgeAllowsTheRelinkWhileTheWorkspaceCannotLoad(t *testing.T) {
+	testkit.Isolate(t)
+	built := checkoutFixture(t, ownModule, true)
+	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
+	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus"}}`
+	loads := 0
+
+	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
+
+	assert.Equal(t, "advise", v.Decision)
+	assert.Equal(t, string(denyRuleRawTool), v.Rule)
+	assert.Contains(t, v.Context, "cannot load its own sources")
 }

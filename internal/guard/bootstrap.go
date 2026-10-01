@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,9 +11,12 @@ import (
 	"slices"
 	"strings"
 
+	"golang.org/x/mod/modfile"
+	"mvdan.cc/sh/v3/syntax"
+
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
-	"golang.org/x/mod/modfile"
+	"github.com/egladman/magus/types"
 )
 
 // ownModule is the module this guard was compiled from, read off a type rather than
@@ -112,6 +116,84 @@ func (g goCall) linksMagus() bool {
 	return slices.ContainsFunc(g.args[1:], func(a string) bool { return path.Clean(a) == "cmd/magus" })
 }
 
+// magusUtilsGenerators are the cmd/magus-utils subcommands that write generated source, the
+// ones the *_generate targets and the go:generate directives they drive run. The rest
+// (sign, verify, cut, release-index, diffdemo) are release and demo tools, not part of
+// regenerating a tree.
+var magusUtilsGenerators = []string{
+	"api", "bindings", "boundarylist", "boundaryobjects", "cliflags", "completions", "config",
+	"jobschema", "mcptools", "mockassert", "moduledecls", "moduleset", "types",
+}
+
+// recoversMagus reports a command that rebuilds a checkout whose committed generated files
+// or binary lag its sources: the relink MGS1021 prints, `go build [-trimpath] -o magus
+// ./cmd/magus`, a `go generate` of packages inside the checkout, or `go run [-trimpath]
+// ./cmd/magus-utils` with one of magusUtilsGenerators.
+func (g goCall) recoversMagus() bool {
+	if len(g.args) == 0 {
+		return false
+	}
+	args := g.args[1:]
+	switch g.args[0] {
+	case "build":
+		args = trimpathOptional(args)
+		return len(args) == 3 && args[0] == "-o" && args[1] == "magus" && path.Clean(args[2]) == "cmd/magus"
+	case "generate":
+		return len(args) > 0 && !slices.ContainsFunc(args, func(a string) bool { return !insidePackage(a) })
+	case "run":
+		args = trimpathOptional(args)
+		return len(args) >= 2 && path.Clean(args[0]) == "cmd/magus-utils" && slices.Contains(magusUtilsGenerators, args[1])
+	}
+	return false
+}
+
+func trimpathOptional(args []string) []string {
+	if len(args) > 0 && args[0] == "-trimpath" {
+		return args[1:]
+	}
+	return args
+}
+
+// insidePackage reports a package operand naming a directory under the build root: no
+// flag, no absolute path, nothing that climbs out.
+func insidePackage(a string) bool {
+	if a == "" || strings.HasPrefix(a, "-") || path.IsAbs(a) {
+		return false
+	}
+	c := path.Clean(a)
+	return c != ".." && !strings.HasPrefix(c, "../")
+}
+
+// soleGoCommand reports a line that is one go command and nothing else: no pipe, chain,
+// redirect, wrapper or subshell, and no environment prefix but GOEXPERIMENT, which this
+// module's builds set.
+func soleGoCommand(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
+	if err != nil || len(f.Stmts) != 1 {
+		return false
+	}
+	st := f.Stmts[0]
+	call, ok := st.Cmd.(*syntax.CallExpr)
+	if !ok || st.Negated || st.Background || st.Coprocess || len(st.Redirs) > 0 || len(call.Args) == 0 {
+		return false
+	}
+	for _, a := range call.Assigns {
+		if a.Name == nil || a.Name.Value != "GOEXPERIMENT" || a.Append || a.Naked || a.Array != nil || a.Index != nil {
+			return false
+		}
+	}
+	return literalWord(call.Args[0].Parts) == "go"
+}
+
+// cannotLoad reports whether the workspace at root fails to load with MGS1021 for the
+// binary judging the call. The hook runs the checkout's own ./magus when there is one, so
+// a binary that predates its sources answers for itself; with none, the binary on PATH
+// answers, and a tree it can load needs no recovery.
+func cannotLoad(ctx context.Context, deps Dependencies, root string) bool {
+	_, err := deps.inspect(ctx, root)
+	return errors.Is(err, types.WorkspaceNeedsNewerMagus)
+}
+
 // ownSourceRoot reports whether dir is the root of a checkout of this guard's module.
 func ownSourceRoot(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, "go.mod"))
@@ -141,11 +223,17 @@ type ownBuildOutcome struct {
 	hasBinary     bool
 	multipleCmds  bool
 	advisory      ShellVerdict
+	// recovery is a recoversMagus call alone on its line in a root whose workspace fails
+	// to load with MGS1021, advised through as recoveryAdvisory.
+	recovery         bool
+	recoveryAdvisory ShellVerdict
 }
 
 // apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
+	case o.recovery:
+		return o.recoveryAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Deny += "\nNot a bootstrap: " + o.root + " already has a magus binary. Rebuild with " + ownRebuild + "."
 		return v
@@ -164,13 +252,17 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 }
 
 // ownBuildOutcomeFor builds the outcome rankOwnBuild layers onto the deny for denied.
-func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
+func ownBuildOutcomeFor(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
 	argv := bootstrapArgv
 	if root != filepath.Clean(cwd) {
 		where = root
 		argv = append([]string{"go", "-C", root}, bootstrapArgv[1:]...)
 	}
+	rule := denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)}
+	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
+	// The load is a full workspace open, so only a line that could be let through pays it.
+	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
 	return &ownBuildOutcome{
 		root:          root,
 		bootstrapArgv: argv,
@@ -180,8 +272,14 @@ func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hin
 		multipleCmds:  multipleCmds,
 		advisory: strengthenWithWorkspace(ShellVerdict{
 			Context: "magus workspace: bootstrap allowed, since " + where + " has no magus binary yet: " + bootstrapWhy + " Use ./magus from then on.",
-			Rule:    denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(denied)},
-		}, matchWorkspaceShell(deps.ShellRules, command, d)),
+			Rule:    rule,
+		}, workspaceShell),
+		recovery: recovery,
+		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
+			Context: "magus workspace: recovery allowed, since " + where + " cannot load its own sources (MGS1021) and no magus target can run until it does. " +
+				"Relink and regenerate only; once it loads, rebuild with " + ownRebuild + ".",
+			Rule: rule,
+		}, workspaceShell),
 	}
 }
 
@@ -191,12 +289,16 @@ func ownBuildOutcomeFor(deps Dependencies, command string, d Dialect, denied hin
 // yet, is advised through instead of denied, and every other raw go command there is
 // served it. Nil when the line holds no go command denied in a checkout of magus.
 //
+// The RECOVERY correction covers a checkout that cannot load its own sources (MGS1021):
+// no target runs there, so the relink and the generators (recoversMagus), each alone on
+// its line, are advised through while the load fails, with or without a binary.
+//
 // A -C outside the workspace passes the pure rule, since a foreign tree is not its to
 // funnel; a -C into another checkout of magus is this repository's policy to judge
 // (hack/policy/guard.buzz), bootstrap included.
 //
 // It reads the filesystem, so it lives beside Judge rather than inside Evaluate.
-func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuildOutcome {
+func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string, d Dialect) *ownBuildOutcome {
 	if cwd == "" {
 		return nil
 	}
@@ -213,7 +315,7 @@ func ownBuildVerdict(deps Dependencies, cwd, command string, d Dialect) *ownBuil
 		return nil
 	}
 	if root := call.buildRoot(cwd); ownSourceRoot(root) {
-		return ownBuildOutcomeFor(deps, command, d, cmds[i], call, root, len(cmds) > 1, cwd)
+		return ownBuildOutcomeFor(ctx, deps, command, d, cmds[i], call, root, len(cmds) > 1, cwd)
 	}
 	return nil
 }
