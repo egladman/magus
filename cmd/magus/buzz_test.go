@@ -13,8 +13,10 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
@@ -981,4 +983,22 @@ func TestBuzzHookProfilesEachMagusApart(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, bytes.HasPrefix(data, []byte{0x1f, 0x8b}), "%s is a gzipped profile", name)
 	}
+}
+
+func TestRecordBuzzRunKeepsTheOutputUnderItsRef(t *testing.T) {
+	root := t.TempDir()
+	recordBuzzRun(t.Context(), root, "probe.buzz", "code", []string{"--x"}, []byte("hello\n"), time.Now(), nil)
+
+	dir, err := magus.ResolveCacheDir(root)
+	require.NoError(t, err)
+	store := cache.NewOutputStore(dir)
+	ref := cache.PortableRef(buzzRunKey("probe.buzz", "code", []string{"--x"}))
+	out, d, err := store.ByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, "hello\n", string(out))
+	assert.Equal(t, "buzz probe.buzz", d.Target)
+	assert.False(t, d.Failed)
+
+	assert.NotEqual(t, buzzRunKey("probe.buzz", "code", nil), buzzRunKey("probe.buzz", "code", []string{"--x"}),
+		"different arguments are a different probe")
 }

@@ -131,6 +131,7 @@ flag buzz/e
 flag buzz/embedded
 flag buzz/no-autoload
 flag buzz/profile
+flag buzz/record
 flag buzz/t
 flag buzz/test
 flag clean/cache

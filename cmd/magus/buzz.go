@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,8 +15,11 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/service"
@@ -129,7 +135,7 @@ func contextKeyReadBy(read func(context.Context)) any {
 	return r.key
 }
 
-func buzzCmd(ctx context.Context, root string, args []string) error {
+func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
 	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
 	// than a top-level `magus lsp`, so serving other languages later needs no new
@@ -237,8 +243,16 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	if pipeStageOf(ctx).writesRecords() {
 		scriptOut = os.Stderr
 	}
+	records := io.Writer(os.Stdout)
+	var recorded bytes.Buffer
+	if bf.Record {
+		scriptOut = io.MultiWriter(scriptOut, &recorded)
+		records = io.MultiWriter(records, &recorded)
+		started := time.Now()
+		defer func() { recordBuzzRun(ctx, root, name, code, scriptArgs, recorded.Bytes(), started, retErr) }()
+	}
 	in, upstream := pipeRecordsIn(ctx)
-	ctx = std.WithPipe(ctx, std.PipeIO{In: in, Upstream: upstream, Out: os.Stdout, Prose: scriptOut})
+	ctx = std.WithPipe(ctx, std.PipeIO{In: in, Upstream: upstream, Out: records, Prose: scriptOut})
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
@@ -320,6 +334,44 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	return testErr
+}
+
+// buzzRunKey is the output-store key of a --record run: the script's source and its
+// arguments, so rerunning one probe adds an attempt under the same ref and a changed probe
+// gets a new one.
+func buzzRunKey(name, code string, args []string) string {
+	sum := sha256.Sum256([]byte("buzz\x00" + name + "\x00" + code + "\x00" + strings.Join(args, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+// recordBuzzRun keeps what a --record run printed in the output store and prints its ref
+// on stderr, so a plan, a review or a job's notes can cite the run instead of describing it.
+// A store it cannot reach is reported and leaves the run's own outcome alone.
+func recordBuzzRun(ctx context.Context, root, name, code string, args []string, out []byte, started time.Time, runErr error) {
+	if root == "" {
+		root = "."
+	}
+	dir, err := magus.ResolveCacheDir(root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: no output store here: %v\n", err)
+		return
+	}
+	d := cache.OutputDescriptor{
+		Project:     ".",
+		Target:      "buzz " + name,
+		Failed:      runErr != nil,
+		TimestampMs: started.UnixMilli(),
+		DurationMs:  time.Since(started).Milliseconds(),
+	}
+	if runErr != nil {
+		d.ErrMsg = runErr.Error()
+	}
+	stored, err := cache.NewOutputStore(dir).Persist(ctx, buzzRunKey(name, code, args), out, d)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus buzz: --record: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "ref  %s\n", stored.Ref)
 }
 
 // buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.
