@@ -437,7 +437,7 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if err := s.readMergeShard(ctx, g, man, name); err != nil {
+		if _, err := s.readMergeShard(ctx, g, man, name); err != nil {
 			return nil, err
 		}
 	}
@@ -445,20 +445,25 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 }
 
 // readMergeShard reads shard name and merges it into g, restoring an LRU-evicted file
-// from the remote by fingerprint first. Shared by Load and the symbol-shard loaders.
-func (s *Store) readMergeShard(ctx context.Context, g *Graph, man *manifest, name string) error {
-	sf, err := s.readShard(name)
+// from the remote by fingerprint first, and returns the fingerprint the file held. Shared by
+// Load and the symbol-shard loaders.
+func (s *Store) readMergeShard(ctx context.Context, g *Graph, man *manifest, name string) (string, error) {
+	return s.readMergeShardKeeping(ctx, g, man, name, true)
+}
+
+func (s *Store) readMergeShardKeeping(ctx context.Context, g *Graph, man *manifest, name string, keep bool) (string, error) {
+	sf, err := s.readShardKeeping(name, keep)
 	if err != nil {
 		// The file may have been LRU-evicted while its manifest entry stayed.
 		if s.restoreShard(ctx, name, man.Shards[name].Fingerprint) == nil {
-			sf, err = s.readShard(name)
+			sf, err = s.readShardKeeping(name, keep)
 		}
 		if err != nil {
-			return fmt.Errorf("knowledge: load shard %q: %w", name, err)
+			return "", fmt.Errorf("knowledge: load shard %q: %w", name, err)
 		}
 	}
 	g.Merge(sf.Nodes, sf.Edges)
-	return nil
+	return sf.Fingerprint, nil
 }
 
 // MergeSymbolShards merges every persisted @symbols shard into g in place, restoring
@@ -472,6 +477,28 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	if man == nil {
 		return nil
 	}
+	key := mergedKey(g, man)
+	if key != "" {
+		if cached := readCache.mergedFor(s.dir, key); cached != nil {
+			g.adopt(cached)
+			return nil
+		}
+	}
+	exact, err := s.mergeSymbolShards(ctx, g, man, key == "")
+	if err != nil {
+		return err
+	}
+	if key != "" && exact {
+		readCache.putMerged(s.dir, key, g.share(), s.lazyShardsSize(man))
+	}
+	return nil
+}
+
+// mergeSymbolShards merges what MergeSymbolShards does into g, keeping the decoded symbol
+// shards in the read cache when keep is set. exact reports that every file merged held the
+// fingerprint man names, so the result is the graph man describes and not one mixed with
+// another process's rewrite: only that graph may be cached under man's key.
+func (s *Store) mergeSymbolShards(ctx context.Context, g *Graph, man *manifest, keep bool) (exact bool, err error) {
 	// Merge in sorted shard order: if a symbol ID appears in two projects' shards
 	// with a different label/source, AddNode is first-writer-wins, so a stable order
 	// keeps the merged node deterministic (the domain Sync path merges a sorted slice).
@@ -482,17 +509,35 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 		}
 	}
 	slices.Sort(names)
+	exact = true
 	for _, name := range names {
 		if err := ctx.Err(); err != nil {
-			return err
+			return false, err
 		}
-		if err := s.readMergeShard(ctx, g, man, name); err != nil {
-			return err
+		fp, err := s.readMergeShardKeeping(ctx, g, man, name, keep)
+		if err != nil {
+			return false, err
+		}
+		exact = exact && fp == man.Shards[name].Fingerprint
+	}
+	exact = s.mergeOverlayShard(ctx, g, man, coverageShardName) && exact
+	exact = s.mergeOverlayShard(ctx, g, man, sessionShardName) && exact
+	return exact, nil
+}
+
+// lazyShardsSize sums the on-disk size of the lazy shards man lists, the read cache's
+// measure of a symbol-merged graph.
+func (s *Store) lazyShardsSize(man *manifest) int64 {
+	var total int64
+	for name := range man.Shards {
+		if !isLazyShard(name) {
+			continue
+		}
+		if info, err := os.Stat(s.shardPath(name)); err == nil {
+			total += info.Size()
 		}
 	}
-	s.mergeOverlayShard(ctx, g, man, coverageShardName)
-	s.mergeOverlayShard(ctx, g, man, sessionShardName)
-	return nil
+	return total
 }
 
 // SymbolIndexDigest identifies the @symbols shards MergeSymbolShards loads: a hex SHA-256
@@ -550,18 +595,20 @@ func isLazyShard(name string) bool {
 // overlays annotate the file/symbol nodes the symbol shards define, so they merge on the
 // symbol-load path and never in the default graph. Best-effort: a missing or unreadable
 // overlay leaves its attrs absent rather than failing the load, so a workspace that never
-// ran `magus run coverage` or `magus session load` behaves exactly as before.
-func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, name string) {
+// ran `magus run coverage` or `magus session load` behaves exactly as before. It reports
+// false only when man lists the overlay and it could not be merged.
+func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, name string) bool {
 	if _, ok := man.shard(name); !ok {
-		return
+		return true
 	}
 	sf, err := s.readVerifiedShard(ctx, man, name)
 	if err != nil {
 		s.log.DebugContext(ctx, "knowledge: overlay merge failed",
 			slog.String("shard", name), slog.String("error", err.Error()))
-		return
+		return false
 	}
 	mergeOverlay(g, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})
+	return true
 }
 
 // mergeOverlay folds an overlay into g. @session lands only on nodes g already holds: a
@@ -695,6 +742,7 @@ func (s *Store) readManifestOrNil() *manifest {
 	if m.SchemaVersion != types.KnowledgeSchemaVersion {
 		return nil // schema bump invalidates the whole store
 	}
+	readCache.sweep(s.dir, &m)
 	return &m
 }
 
@@ -868,14 +916,24 @@ func MergeShardFile(g *Graph, b []byte) error {
 	return nil
 }
 
-func (s *Store) readShard(name string) (shardFile, error) {
-	b, err := os.ReadFile(s.shardPath(name))
+// readShard decodes shard name's file, through the read cache. The nodes and edges may be
+// shared with other readers, so a caller merges them and never writes into them.
+func (s *Store) readShard(name string) (shardFile, error) { return s.readShardKeeping(name, true) }
+
+// readShardKeeping is readShard, leaving a decode out of the read cache when keep is false:
+// a full symbol merge is cached whole, and holding its shards too would double the memory.
+func (s *Store) readShardKeeping(name string, keep bool) (shardFile, error) {
+	path := s.shardPath(name)
+	sf, info, hit, err := decodeFile(path, func(b []byte) (shardFile, error) {
+		var sf shardFile
+		err := json.Unmarshal(b, &sf)
+		return sf, err
+	})
 	if err != nil {
 		return shardFile{}, err
 	}
-	var sf shardFile
-	if err := json.Unmarshal(b, &sf); err != nil {
-		return shardFile{}, err
+	if !hit && keep {
+		readCache.putFile(path, info, sf, s.dir, name, sf.Fingerprint)
 	}
 	return sf, nil
 }

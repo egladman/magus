@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -353,8 +355,6 @@ type graphReadFixture struct {
 
 func newGraphReadFixture(t *testing.T) graphReadFixture {
 	t.Helper()
-	t.Cleanup(snapshotGlobals())
-	privateSockDir(t)
 	root := t.TempDir()
 	for name, body := range map[string]string{
 		"magusfile.buzz": "",
@@ -364,28 +364,41 @@ func newGraphReadFixture(t *testing.T) graphReadFixture {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
 	}
+	return openGraphReadFixture(t, root)
+}
+
+// openGraphReadFixture is graphReadFixture over the workspace at root.
+func openGraphReadFixture(tb testing.TB, root string) graphReadFixture {
+	tb.Helper()
+	tb.Cleanup(snapshotGlobals())
+	// privateSockDir, for a benchmark too.
+	sockDir, err := os.MkdirTemp("", "mgbrk")
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = os.RemoveAll(sockDir) })
+	tb.Setenv("XDG_RUNTIME_DIR", sockDir)
+	tb.Setenv("MAGUS_PROC_SOCKET", "")
 
 	// The configuration startup builds for a CLI run, tier for tier.
 	cfg, err := config.LoadWithRoot("", root)
-	require.NoError(t, err)
-	require.NoError(t, configgen.ApplyEnv(&cfg, os.Getenv))
+	require.NoError(tb, err)
+	require.NoError(tb, configgen.ApplyEnv(&cfg, os.Getenv))
 	globalCfg = cfg
 
 	ctx := context.Background()
 	local, err := magus.Open(ctx, root, magus.WithLoadedConfig(cfg))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = local.Close() })
+	require.NoError(tb, err)
+	tb.Cleanup(func() { _ = local.Close() })
 
 	reg := newWSRegistry(ctx, cache.NewLimiter(2), nil, time.Hour, nil)
-	t.Cleanup(reg.close)
+	tb.Cleanup(reg.close)
 	srv, err := proc.New(proc.Options{
 		Handler: func(context.Context, []string) error { return nil },
 		Read:    graphReads(reg),
 		Version: version,
 	})
-	require.NoError(t, err)
-	t.Cleanup(srv.Close)
-	require.NoError(t, srv.Start())
+	require.NoError(tb, err)
+	tb.Cleanup(srv.Close)
+	require.NoError(tb, srv.Start())
 	return graphReadFixture{root: root, cfg: cfg, local: local, reg: reg, addr: srv.Addr()}
 }
 
@@ -394,33 +407,94 @@ func newGraphReadFixture(t *testing.T) graphReadFixture {
 // runs on it, so a field that does not survive the trip shows up as a difference.
 func (f graphReadFixture) answers(t *testing.T, verb string, read graphRead) (local, served string) {
 	t.Helper()
+	return f.localAnswer(t, verb, read), f.servedAnswer(t, verb, read)
+}
+
+func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead) string {
+	tb.Helper()
 	ctx := context.Background()
-	read.Config = readConfigDigest(f.cfg)
-	read.Env = envDigests()
-	var localRes, servedRes any
+	var res any
 	var err error
 	switch verb {
 	case readQuery:
-		localRes, err = searchGraph(ctx, f.local, f.cfg, read, false, false)
-		servedRes = &queryResult{}
+		res, err = searchGraph(ctx, f.local, f.cfg, read, false, false)
 	case readExplain:
-		localRes, err = explainNode(ctx, f.local, f.cfg, read, false, false)
-		servedRes = &explainResult{}
+		res, err = explainNode(ctx, f.local, f.cfg, read, false, false)
 	case readRefs:
 		var g *knowledge.Graph
 		g, err = knowledgeGraphForRefsOf(ctx, f.local, f.cfg, false, read.Input)
 		if err == nil {
-			localRes = refsOf(ctx, f.local, f.cfg, g, read)
+			res = refsOf(ctx, f.local, f.cfg, g, read)
 		}
-		servedRes = &refsResult{}
 	}
-	require.NoError(t, err)
-	require.NoError(t, proc.Read(ctx, f.addr, version, f.root, verb, read, servedRes))
-	l, err := json.Marshal(localRes)
-	require.NoError(t, err)
-	s, err := json.Marshal(servedRes)
-	require.NoError(t, err)
-	return string(l), string(s)
+	require.NoError(tb, err)
+	b, err := json.Marshal(res)
+	require.NoError(tb, err)
+	return string(b)
+}
+
+func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read graphRead) string {
+	tb.Helper()
+	read.Config = readConfigDigest(f.cfg)
+	read.Env = envDigests()
+	var res any
+	switch verb {
+	case readQuery:
+		res = &queryResult{}
+	case readExplain:
+		res = &explainResult{}
+	case readRefs:
+		res = &refsResult{}
+	}
+	require.NoError(tb, proc.Read(context.Background(), f.addr, version, f.root, verb, read, res))
+	b, err := json.Marshal(res)
+	require.NoError(tb, err)
+	return string(b)
+}
+
+// mergedSearch is searchGraph as it answered a symbol-seeded read before ranking from the
+// names sidecar: every symbol shard merged into the default graph, then queried.
+func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read graphRead) string {
+	tb.Helper()
+	ctx := context.Background()
+	g, err := knowledgeGraphOf(ctx, ws, cfg, false, false, true)
+	require.NoError(tb, err)
+	out := g.Query(read.Input, read.Budget)
+	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, symbolCoverageOf(ctx, ws, cfg, read.Input, true))
+	res := queryResult{Out: out}
+	if out.MatchCount == 0 && read.Nearest {
+		res.Nearest = g.NearestNode(read.Input)
+	}
+	b, err := json.Marshal(res)
+	require.NoError(tb, err)
+	return string(b)
+}
+
+// A symbol-seeded query ranks from the names sidecar and decodes only the shards its answer
+// touches, and answers byte for byte what merging every shard did.
+func TestQuerySymbolSeededAnswersAsTheFullMergeDid(t *testing.T) {
+	f := newGraphReadFixture(t)
+	for _, input := range []string{"SearchVerdict kind=symbol", "kind=symbol", "pkg/verdict.go", "zzzunmatched kind=symbol"} {
+		read := graphRead{Input: input, Budget: knowledge.DefaultBudget, Nearest: true}
+		assert.Equalf(t, mergedSearch(t, f.local, f.cfg, read), f.localAnswer(t, readQuery, read), "query %q", input)
+	}
+}
+
+// The server keeps what it decodes; the answers it gives from that are the ones a read with
+// nothing kept gives, on the first read and on every one after.
+func TestServerGraphReadsAnswerFromTheReadCacheAsWithout(t *testing.T) {
+	f := newGraphReadFixture(t)
+	want := make([]string, len(graphReadCases))
+	for i, tc := range graphReadCases {
+		want[i] = f.localAnswer(t, tc.verb, tc.read)
+	}
+	knowledge.SetReadCacheLimit(serverReadCacheBytes)
+	t.Cleanup(func() { knowledge.SetReadCacheLimit(0) })
+	for range 2 {
+		for i, tc := range graphReadCases {
+			assert.JSONEqf(t, want[i], f.servedAnswer(t, tc.verb, tc.read), "%s", tc.name)
+		}
+	}
 }
 
 var graphReadCases = []struct {
@@ -520,6 +594,59 @@ func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
 	globalCfg.Server.Enabled = false
 	assert.False(t, askServer(context.Background(), f.root, readQuery, &graphRead{Input: "guide"}, &queryResult{}),
 		"--server-enabled=false never asks")
+}
+
+// BenchmarkServerGraphReads times warm reads of this repository answered, one at a time, by
+// an in-process server, keeping its reads as `magus server` does and not, and reports each
+// verb's median and the heap left in use after it. It first checks the symbol queries it
+// times answer byte for byte as the full merge did, on this repository's own index. The
+// timings include the index freshness check, so build the graph first: a stale index
+// pays a tool-version probe on every read.
+func BenchmarkServerGraphReads(b *testing.B) {
+	root, err := magus.FindRoot(".")
+	require.NoError(b, err)
+	f := openGraphReadFixture(b, root)
+	for _, name := range []string{"searchVerdict", "SetReadCacheLimit", "QueryKnowledgeGraph", "ensureAdj"} {
+		// -o json, which asks for no nearest suggestion.
+		read := graphRead{Input: name + " kind=symbol", Budget: knowledge.DefaultBudget}
+		require.Equal(b, mergedSearch(b, f.local, f.cfg, read), f.localAnswer(b, readQuery, read), "query %s --kind symbol -o json", name)
+	}
+	reads := []struct {
+		name string
+		verb string
+		read graphRead
+	}{
+		{"query guard", readQuery, graphRead{Input: "guard", Budget: knowledge.DefaultBudget, Nearest: true}},
+		{"query searchVerdict --kind symbol", readQuery, graphRead{Input: "searchVerdict kind=symbol", Budget: knowledge.DefaultBudget, Nearest: true}},
+		{"refs searchVerdict --occurrences", readRefs, graphRead{Input: "searchVerdict", Occurrences: true}},
+		{"explain internal/guard", readExplain, graphRead{Input: "internal/guard"}},
+	}
+	for _, mode := range []struct {
+		name  string
+		limit int64
+	}{{"kept", serverReadCacheBytes}, {"not kept", 0}} {
+		b.Run(mode.name, func(b *testing.B) {
+			knowledge.SetReadCacheLimit(mode.limit)
+			b.Cleanup(func() { knowledge.SetReadCacheLimit(0) })
+			for _, tc := range reads {
+				b.Run(tc.name, func(b *testing.B) {
+					f.servedAnswer(b, tc.verb, tc.read)
+					var took []time.Duration
+					for b.Loop() {
+						start := time.Now()
+						f.servedAnswer(b, tc.verb, tc.read)
+						took = append(took, time.Since(start))
+					}
+					slices.Sort(took)
+					b.ReportMetric(float64(took[len(took)/2].Microseconds())/1000, "p50-ms")
+					runtime.GC()
+					var mem runtime.MemStats
+					runtime.ReadMemStats(&mem)
+					b.ReportMetric(float64(mem.HeapInuse>>20), "heap-MiB")
+				})
+			}
+		})
+	}
 }
 
 // mustOutput runs cmd and fails the test on error, surfacing combined output.

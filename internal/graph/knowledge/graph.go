@@ -42,6 +42,14 @@ type Graph struct {
 	// absolute path a human pasted. Stamped by Build; empty on a hand-built graph,
 	// which narrows normalization to the shapes that need no workspace on disk.
 	root string
+
+	// shared marks nodes, edges, out and in as held by the read cache too, so the first
+	// write copies them (see own) instead of changing a graph other readers hold.
+	shared bool
+	// base identifies the graph's content when it is exactly the stored shards Ensure
+	// merged (see shardsIdentity), the key a cached symbol merge is found by. Any write
+	// clears it.
+	base string
 }
 
 // edgeKey collapses parallel edges: at most one edge per (source, target,
@@ -75,6 +83,7 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Doc = sanitize(n.Doc, maxDocLen)
 	n.Source = sanitize(n.Source, maxSrcLen)
 	n.Attrs = sanitizeAttrs(n.Attrs)
+	g.own()
 	existing, ok := g.nodes[n.ID]
 	if !ok {
 		g.nodes[n.ID] = n
@@ -89,7 +98,12 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	if existing.Label == "" {
 		existing.Label = n.Label
 	}
-	existing.Attrs = fillAttrs(existing.Attrs, n.Attrs)
+	// Filled into n's copy, never existing's map: a clone or an adopted cached graph shares
+	// that map with another graph.
+	if len(n.Attrs) > 0 {
+		maps.Copy(n.Attrs, existing.Attrs)
+		existing.Attrs = n.Attrs
+	}
 	g.nodes[n.ID] = existing
 }
 
@@ -131,6 +145,7 @@ func fillAttrs(dst, src map[string]string) map[string]string {
 func (g *Graph) AddEdge(e types.KnowledgeEdge) {
 	e.Provenance = sanitize(e.Provenance, maxSrcLen)
 	e.Attrs = sanitizeAttrs(e.Attrs)
+	g.own()
 	k := edgeKey{e.Source, e.Target, e.Relation}
 	if prev, ok := g.edges[k]; ok {
 		if edgeStronger(prev, e) {
@@ -145,6 +160,38 @@ func (g *Graph) AddEdge(e types.KnowledgeEdge) {
 	}
 	g.edges[k] = e
 	g.out, g.in, g.projPaths = nil, nil, nil // invalidate lazy indices; rebuilt on next query
+}
+
+// own readies g for a write: it forgets g's base, and copies the maps a cached graph shares.
+// The adjacency stays shared until a new edge drops it, since nothing writes into it.
+func (g *Graph) own() {
+	g.base = ""
+	if !g.shared {
+		return
+	}
+	g.nodes = maps.Clone(g.nodes)
+	g.edges = maps.Clone(g.edges)
+	g.shared = false
+}
+
+// share builds g's adjacency and returns a graph holding g's content that the read cache
+// can keep: from here on both g and the copy treat the maps as shared.
+func (g *Graph) share() *Graph {
+	g.ensureAdj()
+	g.shared = true
+	return &Graph{nodes: g.nodes, edges: g.edges, out: g.out, in: g.in, root: g.root, shared: true}
+}
+
+// adopt makes g hold cached's content, its adjacency included, as a shared graph. g keeps
+// its own root.
+func (g *Graph) adopt(cached *Graph) {
+	g.adjMu.Lock()
+	g.nodes, g.edges, g.out, g.in = cached.nodes, cached.edges, cached.out, cached.in
+	g.adjMu.Unlock()
+	g.projMu.Lock()
+	g.projPaths = nil
+	g.projMu.Unlock()
+	g.shared, g.base = true, ""
 }
 
 func (g *Graph) node(id string) (types.KnowledgeNode, bool) {

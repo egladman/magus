@@ -172,17 +172,22 @@ func (s *Store) writeXref(shards []Shard, man manifest) error {
 	return file.WriteFileAtomic(s.routingPath(), b, 0o644)
 }
 
-// readXref loads the routing index, or nil when it is absent or unreadable.
+// readXref loads the routing index, or nil when it is absent or unreadable. It may be
+// shared with other readers through the read cache, so callers never write into it.
 func (s *Store) readXref() *symbolRouting {
-	b, err := os.ReadFile(s.routingPath())
+	path := s.routingPath()
+	r, info, hit, err := decodeFile(path, func(b []byte) (*symbolRouting, error) {
+		var r symbolRouting
+		err := json.Unmarshal(b, &r)
+		return &r, err
+	})
 	if err != nil {
 		return nil
 	}
-	var r symbolRouting
-	if err := json.Unmarshal(b, &r); err != nil {
-		return nil
+	if !hit {
+		readCache.putFile(path, info, r, s.dir, "", "")
 	}
-	return &r
+	return r
 }
 
 // MergeSymbolShardsByID merges only the @symbols shards that mention the given symbol
@@ -253,7 +258,7 @@ func (s *Store) mergeShardsNamed(ctx context.Context, g *Graph, man *manifest, n
 		if _, ok := man.Shards[name]; !ok {
 			continue // routing named a shard the manifest no longer has; skip
 		}
-		if err := s.readMergeShard(ctx, g, man, name); err != nil {
+		if _, err := s.readMergeShard(ctx, g, man, name); err != nil {
 			return err
 		}
 	}

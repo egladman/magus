@@ -967,16 +967,33 @@ type explainResult struct {
 func searchGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, read graphRead, refresh, global bool) (queryResult, error) {
 	tr := traceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
-	stop := tr.phase("query.load_graph")
-	g, err := knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
-	stop()
-	if err != nil {
-		return queryResult{}, err
+	var g *knowledge.Graph
+	var out types.KnowledgeQueryOutput
+	var err error
+	if seeded && !global {
+		// The answer knowledgeGraphOf then Query give, ranked from the names sidecar so only
+		// the shards the answer touches are decoded.
+		stop := tr.phase("query.load_and_search")
+		if refresh {
+			seedFromPublishedGraph(ws)
+		}
+		out, g, err = magus.QueryKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, read.Input, read.Budget, slog.Default())
+		stop()
+		if err != nil {
+			return queryResult{}, err
+		}
+	} else {
+		stop := tr.phase("query.load_graph")
+		g, err = knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
+		stop()
+		if err != nil {
+			return queryResult{}, err
+		}
+		stop = tr.phase("query.search")
+		out = g.Query(read.Input, read.Budget)
+		stop()
 	}
-	stop = tr.phase("query.search")
-	out := g.Query(read.Input, read.Budget)
-	stop()
-	stop = tr.phase("query.coverage")
+	stop := tr.phase("query.coverage")
 	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, symbolCoverageOf(ctx, ws, cfg, read.Input, seeded))
 	stop()
 	res := queryResult{Out: out}

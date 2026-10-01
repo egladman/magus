@@ -105,20 +105,29 @@ func (s *Store) writeSymbolNames(shards []Shard, key string) error {
 }
 
 // readSymbolNames returns the sidecar when it is bound to man's symbol shards, else nil.
+// It may be shared with other readers through the read cache, so callers never write
+// into it.
 func (s *Store) readSymbolNames(man *manifest) *symbolNames {
 	key := symbolShardsKey(man)
 	if key == "" {
 		return nil
 	}
-	b, err := os.ReadFile(s.namesPath())
+	path := s.namesPath()
+	n, info, hit, err := decodeFile(path, func(b []byte) (*symbolNames, error) {
+		var n symbolNames
+		err := json.Unmarshal(b, &n)
+		return &n, err
+	})
 	if err != nil {
 		return nil
 	}
-	var n symbolNames
-	if json.Unmarshal(b, &n) != nil || n.ShardsKey != key {
+	if !hit {
+		readCache.putFile(path, info, n, s.dir, "", "")
+	}
+	if n.ShardsKey != key {
 		return nil
 	}
-	return &n
+	return n
 }
 
 // QuerySymbols answers g.Query(input, budget) as though every symbol shard, and both
@@ -137,7 +146,13 @@ func (s *Store) QuerySymbols(ctx context.Context, g *Graph, input string, budget
 	man := s.readManifestOrNil()
 	q := parseQuery(input)
 	_, relationOnly := q.fields["relation"]
-	names := s.readSymbolNames(man)
+	// A process keeping its reads holds, or builds once, the fully merged graph with its
+	// adjacency, which answers any later query sooner than a partial merge per query does.
+	retained := mergedKey(g, man) != ""
+	var names *symbolNames
+	if !retained {
+		names = s.readSymbolNames(man)
+	}
 	if names == nil || (relationOnly && len(q.terms) == 0) {
 		if err := s.MergeSymbolShards(ctx, g); err != nil {
 			return types.KnowledgeQueryOutput{}, nil, err
