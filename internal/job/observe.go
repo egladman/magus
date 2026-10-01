@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -44,6 +45,12 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		seen := changedSince(ctx, driver, unresolved, tree, row.Checkpoint)
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
 		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
+		// Workspace only, as for every rule that acts: a default in one person's global
+		// config must not loosen what a check accepts. An unreadable magus.yaml leaves no
+		// defaults, so a check binds only to the charms it names.
+		if cfg, err := config.LoadWorkspaceOnly(tree); err == nil {
+			seen.DefaultCharms = cfg.DefaultCharms
+		}
 		return seen, nil
 	}
 }

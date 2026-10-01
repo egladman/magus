@@ -86,6 +86,10 @@ type LeaseCheck struct {
 	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
 	// Args are forwarded to the tool after `--`, never to magus.
 	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
+	// NoDefaultCharms runs the check with --no-default-charms, so only a run made without
+	// the workspace's default_charms satisfies it: the charmless `generate` that compares
+	// against HEAD, in a workspace whose default is rw.
+	NoDefaultCharms bool `json:"no_default_charms,omitempty" yaml:"no_default_charms,omitempty"`
 }
 
 // PrimaryCompletionGateID names the existing singular check when it is projected
@@ -107,11 +111,13 @@ type CompletionGate struct {
 	// multiplication and reads inconsistently the moment it has four members.
 	//
 	// Both are RESOLVED before a row is stored: Resolve fills a gate that named neither,
-	// so a reader never applies a default and the published enums carry no empty member.
-	// A default applied on read is a default every reader has to know about, and the
-	// readers here are the verifier, the guard, the observer and two schemas.
-	Kind   GateKind   `json:"kind"   yaml:"kind"`
-	Expect GateExpect `json:"expect" yaml:"expect"`
+	// so a reader of a stored row never applies a default. A default applied on read is a
+	// default every reader has to know about, and the readers here are the verifier, the
+	// guard, the observer and two schemas.
+	Kind GateKind `json:"kind" yaml:"kind"`
+	// Expect is optional and defaults to the kind's own: passed for check, changed for
+	// paths and symbol. The common goal names only its kind and its subject.
+	Expect GateExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
 	// Check is the run a GateKindCheck gate examines. Zero on every other kind.
 	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Paths are the globs a GateKindPaths gate examines. Zero on every other kind.
@@ -248,33 +254,22 @@ func (u Job) EffectiveGoals() []CompletionGate {
 	return gates
 }
 
-// String renders the check as a DECLARATION, the shape a person types and a row stores.
-// It is not the command to run: a check naming no charm means the charmless run, and
-// spelling that needs the --no-default-charms flag, which this package cannot render
-// because types imports no CLI surface. internal/job renders the runnable form through
-// the hint command builder; see gateCommand.
+// String renders the check as the command a person types and a row stores. Running it
+// satisfies the check: the charms it executes under, default_charms included, are the
+// charms the check is resolved to (internal/job.bindsTo).
 func (c LeaseCheck) String() string {
 	project := c.Project
 	if project == "" {
 		project = "."
 	}
 	line := "magus run " + c.Target + " " + project
+	if c.NoDefaultCharms {
+		line += " --no-default-charms"
+	}
 	if len(c.Args) > 0 {
 		line += " -- " + strings.Join(c.Args, " ")
 	}
 	return line
-}
-
-// NamesCharm reports whether the check pins a charm on its target, which is what decides
-// whether the runnable form needs --no-default-charms. Asked here rather than re-parsed
-// at each renderer: the charm is part of the target's identity (see internal/job.bindsTo)
-// and only this type knows how a target is spelled.
-func (c LeaseCheck) NamesCharm() bool {
-	_, target, _ := strings.Cut(c.Target, "::")
-	if target == "" {
-		target = c.Target
-	}
-	return strings.Contains(target, ":")
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
@@ -290,6 +285,10 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 		words, args = words[:i], words[i+1:]
 	}
 	for _, w := range words {
+		if w == "--no-default-charms" {
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s;"+
+				" declare the check as a record with `no_default_charms: true` instead", s, w)
+		}
 		if strings.HasPrefix(w, "-") {
 			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
@@ -1101,6 +1100,7 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
 		}
 		parsed.Args = r.Check.Args
+		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
 		return parsed, true, nil
 	case line != "":
 		parsed, err := ParseLeaseRunLine(line)

@@ -73,6 +73,10 @@ type Observed struct {
 	// GreenGate is the newest green ci gate recorded for this checkout's branch, with
 	// the tier of the change since it. The zero value means none was found or assessed.
 	GreenGate GreenGate
+	// DefaultCharms are the default_charms in effect in the job's checkout, which `magus
+	// run` stacks under the charms a target names. A check is resolved against them before
+	// it is compared with a recorded run; nil resolves every check to the charms it names.
+	DefaultCharms []string
 }
 
 // GreenGate is a passing ci gate and what changed since it.
@@ -430,8 +434,9 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (%d < %d), so historical output cannot close this job", attempt.TimestampMs, declaredAt))
 		}
 	}
-	if !bindsTo(gate.Check, attempt) {
-		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check is `%s`, so the evidence is from a different run", status.OutputRef, attempt, gate.Check))
+	if !bindsTo(gate.Check, attempt, seen.DefaultCharms) {
+		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",
+			status.OutputRef, attempt, resolveCheck(gate.Check, seen.DefaultCharms)))
 	}
 	if attempt.Failed {
 		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", status.OutputRef))
@@ -447,25 +452,89 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 // selected two ways, and rejecting that pair would make the rule fire on spelling rather
 // than on identity. Target and project are compared always: those are what a run IS.
 //
-// A CHARM is part of that identity, so `generate` and `generate:rw` are two checks, not
-// one spelled twice. They are different runs: charmless `generate` gates drift and fails
-// on it, while `generate:rw` writes the output and cannot fail. Treating them as one
-// identity made the drift gate satisfiable by the very run that produces the drift. The
-// store records what was invoked (cache.reproTarget renders `name:charm`), so a check
-// that means the written form says so in its target, `generate:rw`, and one that names no
-// charm means the charmless run.
+// A CHARM SET is part of that identity, so `generate` and `generate:rw` are two runs, not
+// one spelled twice: charmless `generate` gates drift and fails on it, while
+// `generate:rw` writes the output and cannot fail. The store records the charms a run
+// actually executed under (cache.reproTarget renders `name:charm`), which in a workspace
+// setting default_charms includes the defaults. So the check is resolved the way `magus
+// run` resolves it, defaults stacked under its own charms, before the sets are compared:
+// otherwise `magus run test .` records `test:rw` and can never satisfy its own check.
 //
 // The args past `--` are NOT compared: the output store records a run by spell, target and
 // project and holds no argv, so a rule keyed on them would reject every ref there is.
-func bindsTo(c types.LeaseCheck, a types.JobAttempt) bool {
-	spell, target, _ := strings.Cut(c.Target, "::")
+func bindsTo(c types.LeaseCheck, a types.JobAttempt, defaults []string) bool {
+	spell, target, _ := strings.Cut(resolveCheck(c, defaults).Target, "::")
 	if target == "" {
 		spell, target = "", spell
 	}
-	if target != a.Target || path.Clean(c.Project) != path.Clean(a.Project) {
+	if !sameRun(target, a.Target) || path.Clean(c.Project) != path.Clean(a.Project) {
 		return false
 	}
 	return spell == "" || a.Spell == "" || spell == a.Spell
+}
+
+// resolveCheck is c with the charm set `magus run` would execute it under: defaults first
+// unless the check opts out of them, the check's own charms stacked on top, duplicates
+// dropped (cmd/magus withDefaultCharms), and the write-granting charms removed from ci,
+// which RunCI never runs with (magus.CharmsForCI).
+func resolveCheck(c types.LeaseCheck, defaults []string) types.LeaseCheck {
+	if c.NoDefaultCharms {
+		defaults = nil
+	}
+	spell, target, filtered := strings.Cut(c.Target, "::")
+	if !filtered {
+		spell, target = "", spell
+	}
+	name, named := splitCharms(target)
+	charms := make([]string, 0, len(defaults)+len(named))
+	for _, charm := range append(slices.Clone(defaults), named...) {
+		if charm = types.NormalizeCharm(charm); !slices.Contains(charms, charm) {
+			charms = append(charms, charm)
+		}
+	}
+	if name == types.TargetCI {
+		charms = slices.DeleteFunc(charms, func(charm string) bool {
+			return charm == types.CharmReadWrite || charm == types.CharmUpdate
+		})
+	}
+	if len(charms) > 0 {
+		name += ":" + strings.Join(charms, ",")
+	}
+	if filtered {
+		name = spell + "::" + name
+	}
+	c.Target = name
+	return c
+}
+
+// sameRun reports whether two `name[:charm,...]` targets name one target under one charm
+// set. The order of the charms is not part of the identity.
+func sameRun(a, b string) bool {
+	nameA, charmsA := splitCharms(a)
+	nameB, charmsB := splitCharms(b)
+	if nameA != nameB || len(charmsA) != len(charmsB) {
+		return false
+	}
+	for _, charm := range charmsA {
+		if !slices.Contains(charmsB, charm) {
+			return false
+		}
+	}
+	return true
+}
+
+// splitCharms is a target's normalized name and charms, read the way types.ParseTarget
+// reads them but without its validation: a recorded run was validated when it ran.
+func splitCharms(target string) (string, []string) {
+	name, list, ok := strings.Cut(target, ":")
+	if !ok || list == "" {
+		return types.Normalize(name), nil
+	}
+	charms := strings.Split(list, ",")
+	for i, charm := range charms {
+		charms[i] = types.NormalizeCharm(charm)
+	}
+	return types.Normalize(name), charms
 }
 
 // claimViolations holds a job that claims declarations (`run.go#executeStages`) to them: each

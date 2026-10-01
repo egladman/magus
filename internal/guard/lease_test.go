@@ -345,7 +345,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		assert.Contains(t, reason, "`magus run diagrams_generate docs`", "%s: the verdict names the check verbatim", tt.name)
 		assert.Contains(t, reason, "The orchestrator runs every other target serially", tt.name)
 		assert.Contains(t, reason, "\nnext:\n  ", tt.name)
-		assert.Contains(t, reason, "run diagrams_generate docs --no-default-charms\n", "%s: the next is the check's command", tt.name)
+		assert.Contains(t, reason, "run diagrams_generate docs\n", "%s: the next is the check's command", tt.name)
 		assert.True(t, strings.HasSuffix(reason, "\nsee: "+ruleDocsBase+"worker-check-only/"), tt.name)
 	}
 
@@ -388,6 +388,9 @@ func TestWorkerCheckOnlyStaysQuiet(t *testing.T) {
 // quoted, and the next is a command a reader runs as printed.
 func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 	c := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Lease|CheckOnly", "./internal/guard/"}}
+	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
+
+	c.NoDefaultCharms = true
 	assert.True(t, strings.HasSuffix(checkCommand(c), " run go::go-test . --no-default-charms -- -run 'Lease|CheckOnly' ./internal/guard/"), checkCommand(c))
 }
 

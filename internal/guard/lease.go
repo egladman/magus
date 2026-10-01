@@ -517,11 +517,10 @@ func leaseProducers(ctx context.Context, deps Dependencies, workspace string, wr
 	}
 }
 
-// checkCommand renders a check as the command that runs it, quoted for a shell. A check
-// naming no charm is the charmless run, which --no-default-charms spells.
+// checkCommand renders a check as the command that runs it, quoted for a shell.
 func checkCommand(c types.LeaseCheck) string {
 	args := []string{c.Target, cmp.Or(c.Project, ".")}
-	if !c.NamesCharm() {
+	if c.NoDefaultCharms {
 		args = append(args, "--no-default-charms")
 	}
 	if len(c.Args) > 0 {
@@ -753,9 +752,9 @@ func denyOverdueLease(me types.Job, now int64) string {
 // tool. Being told first costs one verdict; finding out from a store error costs a turn
 // and teaches nothing about why.
 //
-// A READ is untouched. `magus session lease` with no operand prints the binding, and
-// `magus ledger ls` prints the plan; refusing those would deny a worker the ability to
-// find out what it is bound to, which is the opposite of what this rule is for.
+// A READ is untouched. `magus describe job` prints the row a worker is bound to, and
+// `magus ls jobs` prints the plan; refusing those would deny a worker the ability to find
+// out what it is bound to, which is the opposite of what this rule is for.
 //
 // Unbound callers are untouched too, for the reason every lease rule here gives: an
 // orchestrator and a person at a terminal both name no lease, and they are the ones who

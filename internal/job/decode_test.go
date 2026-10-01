@@ -237,6 +237,42 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	assert.ElementsMatch(t, jsonFields(types.Declaration{}), keys(schema.Properties))
 }
 
+// A goal naming only its kind and subject is the common one, so the schema must not
+// require the expect the decoder fills in, and it states the default a reader would get.
+func TestGoalExpectIsOptionalInSchemaAndDecoder(t *testing.T) {
+	t.Parallel()
+
+	var schema struct {
+		Properties struct {
+			Goals struct {
+				Items struct {
+					Required   []string `json:"required"`
+					Properties struct {
+						Expect struct {
+							Description string `json:"description"`
+						} `json:"expect"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"goals"`
+		} `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
+	goal := schema.Properties.Goals.Items
+	assert.NotContains(t, goal.Required, "expect")
+	assert.Contains(t, goal.Properties.Expect.Description, "passed for check")
+	assert.Contains(t, goal.Properties.Expect.Description, "changed for paths and symbol")
+
+	decl, err := DecodeDeclaration(declaration(`"id":"adj/store"`, `"goals":[`+
+		`{"id":"unit","kind":"check","check":{"target":"test"}},`+
+		`{"id":"done","kind":"paths","paths":["internal/job"]}]`))
+	require.NoError(t, err)
+	var row types.Job
+	decl.Apply(&row)
+	require.Len(t, row.Goals, 2)
+	assert.Equal(t, types.ExpectPassed, row.Goals[0].Expect)
+	assert.Equal(t, types.ExpectChanged, row.Goals[1].Expect)
+}
+
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
 // row the other would have recorded. ParseMerge is the MCP tool's decoder and
 // types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
