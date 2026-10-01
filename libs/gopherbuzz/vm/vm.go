@@ -1451,7 +1451,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			val := vm.pop()
 			// B=1 marks a nullable annotation (`x is int?`). The compiler already
 			// stripped the "?" and reduced the name, so this stays a flag test.
-			vm.push(BoolValue((ins.B == 1 && val.tag() == tagNull) || vm.buzzIsType(val, name)))
+			vm.push(BoolValue((ins.B == 1 && val.tag() == tagNull) || vm.buzzIsType(val, name) && vm.sameTypeDef(val, f, ins.C)))
 
 		case OpMatchTest:
 			cond := vm.pop()
@@ -1459,6 +1459,10 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			hit, err := vm.matchTest(subject, cond)
 			if err != nil {
 				return Null, err
+			}
+			// A `<Node>` arm is an `is` test, so it carries the same identity check.
+			if hit && cond.tag() == tagType && subject.tag() != tagType {
+				hit = vm.sameTypeDef(subject, f, ins.C)
 			}
 			vm.push(BoolValue(hit))
 
@@ -1471,7 +1475,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 				// through buzzCast instead made `12 as? str` answer "12" rather than null,
 				// because that helper coerces. Bare `as` below keeps coercing, which is a
 				// gopherbuzz divergence its own testdata relies on (3.9 as int == 3).
-				if vm.buzzIsType(val, name) {
+				if vm.buzzIsType(val, name) && vm.sameTypeDef(val, f, ins.C) {
 					vm.push(val)
 				} else {
 					vm.push(Null)
@@ -2438,6 +2442,38 @@ func (vm *VM) purgeCatchFrame(frameIdx int) {
 	for len(vm.catchStack) > 0 && vm.catchStack[len(vm.catchStack)-1].frameIdx >= frameIdx {
 		vm.catchStack = vm.catchStack[:len(vm.catchStack)-1]
 	}
+}
+
+// sameTypeDef reports whether v, which already matched an OpIs, OpAs or
+// OpMatchTest type by name, belongs to the very object or enum the annotation names. keyConst is the
+// instruction's C operand: one past the const holding that type's Env key, or 0
+// when the compiler named no declared type. Two modules may each declare a Node,
+// and only the one in scope at the test answers. A key that resolves to no type
+// definition (a chunk compiled before C carried it, a host type) keeps the name
+// match.
+func (vm *VM) sameTypeDef(v Value, f *frame, keyConst int32) bool {
+	if keyConst == 0 {
+		return true
+	}
+	def, ok := f.env.get(vm.asStr(f.chunk.Consts[keyConst-1]).V)
+	if !ok {
+		return true
+	}
+	switch {
+	case def.tag() == tagObjectDef && v.tag() == tagObject:
+		return vm.asObject(v).Def == vm.asObjectDef(def)
+	case def.tag() == tagEnumDef && v.tag() == tagEnumVal:
+		// Every enum value is one of its definition's interned cases (enumCase), so
+		// identity is pointer equality with the case of the same name.
+		ed, ev := vm.asEnumDef(def), vm.asEnumVal(v)
+		for i, name := range ed.Cases {
+			if name == ev.Case {
+				return vm.asEnumVal(vm.enumCase(ed, i)) == ev
+			}
+		}
+		return false
+	}
+	return true
 }
 
 // buzzIsType returns whether v's runtime type matches typeName.

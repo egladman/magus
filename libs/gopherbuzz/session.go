@@ -199,6 +199,15 @@ type Session struct {
 	// files (executed directly, not via import) are unaffected.
 	importPrivate        map[string]bool
 	collectImportPrivate bool
+	// entryQualified are the names namespace-less chunks bound under a per-module
+	// key because an import exports the same name (CompileOptions.EntryQualified).
+	// Later chunks and GetGlobal reach those names through it.
+	entryQualified map[string]bool
+	// entryTypes and entryTypeDecls are the object and enum types namespace-less
+	// chunks declared under the entry's key, for later chunks: by name for the
+	// compiler (CompileOptions.EntryTypes), in order for the checker (checkShared).
+	entryTypes     map[string]*ast.ObjectDecl
+	entryTypeDecls []ast.Node
 	// declaredNamespaces maps a flat-imported module's full `namespace a\b\c`
 	// path to the import path that first claimed it. Upstream Buzz exposes a
 	// no-alias import's exports under this declared path and rejects two imports
@@ -751,6 +760,7 @@ func (s *Session) execCached(ctx context.Context, code string) ([]string, error)
 // half of exec. A cached chunk and a chunk just compiled share it, so a hit
 // still registers the closures the source defines.
 func (s *Session) runChunk(ctx context.Context, chunk *vmpackage.Chunk) ([]string, error) {
+	s.noteEntryQualified(chunk)
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	if _, err := vm.Run(chunk, s.env); err != nil {
@@ -946,6 +956,7 @@ func (s *Session) Eval(ctx context.Context, code string) (vmpackage.Value, error
 // statement form — from a runtime error) then runs exactly once via this, so a
 // snippet with side effects never executes twice.
 func (s *Session) EvalChunk(ctx context.Context, chunk *vmpackage.Chunk) (vmpackage.Value, error) {
+	s.noteEntryQualified(chunk)
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	v, err := vm.Run(chunk, s.env)
@@ -960,6 +971,13 @@ func (s *Session) Globals() map[string]vmpackage.Value {
 	out := make(map[string]vmpackage.Value, len(names))
 	for name, slot := range names {
 		out[name] = slots[slot]
+	}
+	// The entry's own binding answers for its name, as in GetGlobal.
+	for name := range s.entryQualified {
+		if slot, ok := names[entryKeyPrefix+name]; ok {
+			out[name] = slots[slot]
+			delete(out, entryKeyPrefix+name)
+		}
 	}
 	return out
 }
@@ -1013,7 +1031,14 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 		DebugLines:      true,
 		PromoteTopLevel: s.promoteTopLevel,
 		ImportedTypes:   s.importedTypes,
-		SourceFile:      s.sourceFile,
+		ImportedNames:   s.importExportedNames(prog),
+		EntryQualified:  s.entryQualified,
+		EntryTypes:      s.entryTypes,
+		TypeBound: func(key string) bool {
+			v, ok := s.env.Get(key)
+			return ok && v.IsObjectDef()
+		},
+		SourceFile: s.sourceFile,
 	})
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseCompile, time.Since(compileStart), err)
@@ -1021,8 +1046,120 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 	if err == nil && s.lineCover != nil {
 		s.lineCover.ObserveChunk(chunk)
 	}
+	if err == nil {
+		s.keepEntryTypes(prog, chunk)
+	}
 	claimChunk(s.owner, chunk)
 	return chunk, err
+}
+
+// importExportedNames are the names only imports exported, which they bound bare.
+// Only a namespace-less prog consults them (see CompileOptions.ImportedNames), so
+// any other gets nil, as does a session with no flat import.
+func (s *Session) importExportedNames(prog *ast.Program) map[string]bool {
+	for _, stmt := range prog.Stmts {
+		if _, ok := stmt.(*ast.NamespaceStmt); ok {
+			return nil
+		}
+	}
+	var out map[string]bool
+	for name := range s.exportedNames {
+		if s.rootExportedNames[name] {
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[name] = true
+	}
+	return out
+}
+
+// noteEntryQualified records the names chunk bound under the entry's per-module
+// key. It reads the chunk's constants rather than its source, so a chunk the
+// bytecode store replays records them as a compiled one does.
+func (s *Session) noteEntryQualified(chunk *vmpackage.Chunk) {
+	for name := range entryQualifiedIn(chunk) {
+		if s.entryQualified == nil {
+			s.entryQualified = map[string]bool{}
+		}
+		s.entryQualified[name] = true
+	}
+}
+
+// entryQualifiedIn is the set of names chunk spells under the entry's key.
+func entryQualifiedIn(chunk *vmpackage.Chunk) map[string]bool {
+	var out map[string]bool
+	for _, c := range chunk.Consts {
+		if !c.IsStr() {
+			continue
+		}
+		if name, ok := strings.CutPrefix(c.AsString(), entryKeyPrefix); ok {
+			if out == nil {
+				out = map[string]bool{}
+			}
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// keepEntryTypes hands a later chunk's checker and compiler the object and enum
+// types prog declared under the entry's key, so a later `Node{}` builds and checks
+// as the Node this chunk declared rather than the one an import exports.
+func (s *Session) keepEntryTypes(prog *ast.Program, chunk *vmpackage.Chunk) {
+	qualified := entryQualifiedIn(chunk)
+	if len(qualified) == 0 {
+		return
+	}
+	for _, stmt := range prog.Stmts {
+		name, private := topLevelPrivate(stmt)
+		if !private || !qualified[name] {
+			continue
+		}
+		switch d := stmt.(type) {
+		case *ast.ObjectDecl:
+			if s.entryTypes == nil {
+				s.entryTypes = map[string]*ast.ObjectDecl{}
+			}
+			s.entryTypes[name] = d
+		case *ast.EnumDecl:
+		default:
+			continue
+		}
+		s.entryTypeDecls = slices.DeleteFunc(s.entryTypeDecls, func(n ast.Node) bool {
+			kept, _ := topLevelPrivate(n)
+			return kept == name
+		})
+		s.entryTypeDecls = append(s.entryTypeDecls, stmt)
+	}
+}
+
+// withEntryTypes returns prog as a later chunk's checker should see it: the
+// types earlier chunks kept (keepEntryTypes) declared ahead of its own
+// statements, minus any it declares again. Only a namespace-less prog gets them.
+func (s *Session) withEntryTypes(prog *ast.Program) *ast.Program {
+	if len(s.entryTypeDecls) == 0 {
+		return prog
+	}
+	own := map[string]bool{}
+	for _, stmt := range prog.Stmts {
+		if _, isNS := stmt.(*ast.NamespaceStmt); isNS {
+			return prog
+		}
+		if name, private := topLevelPrivate(stmt); private {
+			own[name] = true
+		}
+	}
+	stmts := make([]ast.Node, 0, len(s.entryTypeDecls)+len(prog.Stmts))
+	for _, d := range s.entryTypeDecls {
+		if name, _ := topLevelPrivate(d); !own[name] {
+			stmts = append(stmts, d)
+		}
+	}
+	checked := *prog
+	checked.Stmts = append(stmts, prog.Stmts...)
+	return &checked
 }
 
 // claimChunk gives o the constants of c and of every function nested in it. The
@@ -1119,7 +1256,7 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
-	errs, checkWarnings := checkWithPrelude(prog, globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
+	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -1853,6 +1990,8 @@ func (s *Session) cacheBindings(src string, names []string) *cachedImport {
 func (s *Session) bindCachedFlat(boundName, importPath string, c *cachedImport, relative bool) error {
 	s.collectImportedModule(boundName, c.src)
 	for _, n := range c.names {
+		// An export, as if the module had run here; importExportedNames reads it.
+		s.exportedNames[n] = true
 		if _, bound := s.env.Get(n); bound {
 			continue
 		}
@@ -2210,6 +2349,7 @@ func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
 
 // ExecChunk runs a previously compiled Chunk in the session's environment.
 func (s *Session) ExecChunk(ctx context.Context, chunk *vmpackage.Chunk) error {
+	s.noteEntryQualified(chunk)
 	vm := vmpackage.NewVM(ctx)
 	defer s.enter(vm)()
 	_, err := vm.Run(chunk, s.env)
@@ -2235,6 +2375,13 @@ func (s *Session) SetGlobal(name string, v vmpackage.Value) {
 // matches the cross-engine engine.Session interface (which returns a bare
 // Value); absence and an explicit null binding both yield Null.
 func (s *Session) GetGlobal(name string) vmpackage.Value {
+	// The entry's own binding, where an import exports the same name: a host asking
+	// for `main` means the script's.
+	if s.entryQualified[name] {
+		if v, ok := s.env.Get(entryKeyPrefix + name); ok {
+			return v
+		}
+	}
 	v, _ := s.env.Get(name)
 	return v
 }

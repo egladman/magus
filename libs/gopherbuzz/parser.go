@@ -2488,14 +2488,15 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 		case token.LBrace:
 			// `Name{...}` and the upstream-qualified `ns\Name{...}` are object
 			// literals. A namespaced type parses as a MemberExpr (`config\Bind`);
-			// resolve it by the last segment, which gopherbuzz's import splat binds
-			// to the same object def upstream reaches as `ns\Name`.
-			var typeName string
+			// the literal keeps the qualifier so a module's private `Bind` cannot
+			// stand in for the one `config` exports.
+			var typeName, namespace string
 			switch n := node.(type) {
 			case *ast.IdentExpr:
 				typeName = n.Name
 			case *ast.MemberExpr:
 				typeName = n.Name
+				namespace = qualifierText(n.Object)
 			default:
 				return node, nil
 			}
@@ -2503,6 +2504,7 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			if err != nil {
 				return nil, err
 			}
+			lit.Namespace = namespace
 			node = lit
 		default:
 			return node, nil
@@ -3185,6 +3187,20 @@ func (p *parser) parseListLit() (*ast.ListExpr, error) {
 		return nil, err
 	}
 	return lst, nil
+}
+
+// qualifierText spells the namespace part of a qualified type name the way the
+// source wrote it (`a\b` for `a\b\Name`), or "" when n is not a plain name chain.
+func qualifierText(n ast.Node) string {
+	switch v := n.(type) {
+	case *ast.IdentExpr:
+		return v.Name
+	case *ast.MemberExpr:
+		if outer := qualifierText(v.Object); outer != "" {
+			return outer + `\` + v.Name
+		}
+	}
+	return ""
 }
 
 // parseObjectLit parses `Name{ field = val, ... }` given the already-parsed name.
