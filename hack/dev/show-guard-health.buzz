@@ -1,0 +1,512 @@
+namespace showguardhealth;
+
+import "encoding/json";
+import "flags";
+import "fs";
+import "magus";
+import "os";
+import "path";
+import "proc";
+import "std";
+import "uuid";
+import "vcs";
+import "docs/guides/integrations/agents/lib/hook" as hook;
+
+import "assert";
+
+final SETTINGS = ".claude/settings.json";
+final USAGE = "usage: magus buzz hack/dev/show-guard-health.buzz";
+final HELP = "cost: one hook process per call, about a second each; the guard records each call in the activity trail\n{USAGE}\n\n"
+    + "Replays a canonical set of PreToolUse calls through the hook commands {SETTINGS} wires, each call's cwd this checkout,\n"
+    + "and exits non-zero when the guard answers any of them weaker than expected: a dead or misrouted guard lets\n"
+    + "every call through, and the host reads a hook that cannot start as a non-blocking error.\n"
+    + "The edit case first replays `./magus job exec` for the job taken here, so the guard binds a replay identity to it.\n"
+    + "PATH is this shell's; a host that starts hooks with another PATH can still miss the launcher.";
+// Claude Code's own limit for an entry that names none, in seconds.
+final DEFAULT_TIMEOUT = 60;
+// The prefix the hook glue opens its unavailable and could-not-judge notices with.
+final DEAD_NOTICE = "magus guard is NOT running";
+// Tried in order for the edit-outside-the-lease case; the first one the lease does not
+// cover is the one written.
+final OUTSIDE_CANDIDATES = ["magus.go", "doc.go", "README.md"];
+
+export object HookCommand {
+    matcher: str,
+    command: str,
+    timeout: int,
+}
+
+export object Case {
+    name: str,
+    tool: str,
+    input: {str: any},
+    // expect is the weakest verdict that counts as healthy: pass, advise, ask or deny.
+    expect: str,
+    // agent sends the call as a subagent's.
+    agent: bool,
+    // bind is a job the replay identity takes first, through a replayed `./magus job exec`,
+    // "" for none. The guard binds a caller when it passes that command, keyed on the
+    // host's session and agent ids, and grades every later call of that identity under the
+    // job; a replay cannot borrow the real caller's binding, since the ids are the host's.
+    bind: str,
+    // skip is why the case cannot be asked here, "" when it can.
+    skip: str,
+}
+
+export object Observed {
+    // verdict is deny, ask, advise or pass, dead when the call would run unjudged, or
+    // skipped.
+    verdict: str,
+    rule: str,
+    note: str,
+}
+
+export object Row {
+    name: str,
+    expect: str,
+    verdict: str,
+    rule: str,
+    ok: bool,
+    note: str,
+}
+
+export object Report {
+    checkout: str,
+    // launcher is the program every hook command starts, as PATH resolves it; "" when it
+    // is not on PATH.
+    launcher: str,
+    launcherName: str,
+    // judge is the binary the glue hands the call to, by the glue's own resolution.
+    judge: str,
+    rows: [Row],
+}
+
+export fun strength(verdict: str) > int {
+    if (verdict == "deny") {
+        return 3;
+    }
+    if (verdict == "ask") {
+        return 2;
+    }
+    if (verdict == "advise") {
+        return 1;
+    }
+    return 0;
+}
+
+// matcherMatches applies a Claude Code matcher to a tool name. It evaluates the forms a
+// harness writes (empty or * for every tool, exact names joined by |, and a ^-anchored
+// prefix) and raises on any other regex rather than guess what it selects.
+export fun matcherMatches(matcher: str, tool: str) > bool !> str {
+    if (matcher == "" or matcher == "*") {
+        return true;
+    }
+    final word = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
+    var prefix = false;
+    var body = matcher;
+    if (matcher.startsWith("^")) {
+        prefix = true;
+        body = matcher.sub(1);
+    }
+    foreach (i in 0..body.len()) {
+        final ch = body.sub(i, len: 1);
+        if (word.indexOf(ch) == null and !(ch == "|" and !prefix)) {
+            throw "matcher `{matcher}` is a regex this script does not evaluate; replay it by hand";
+        }
+    }
+    if (prefix) {
+        return tool.startsWith(body);
+    }
+    return body.split("|").indexOf(tool) != null;
+}
+
+// hooksFor is every command the settings wire for event, in file order.
+export fun hooksFor(settings: str, event: str) > [HookCommand] !> any {
+    final found = mut [<HookCommand>];
+    final groups = json\parse(settings)["hooks"]?[event] ?? [];
+    foreach (g in groups) {
+        foreach (h in g["hooks"] ?? []) {
+            if ((h["type"] ?? "command") != "command") {
+                continue;
+            }
+            found.append(HookCommand{
+                matcher = g["matcher"] ?? "",
+                command = h["command"] ?? "",
+                timeout = std\toInt(h["timeout"] ?? DEFAULT_TIMEOUT),
+            });
+        }
+    }
+    return found;
+}
+
+// argvOf splits a hook command into the words the host runs. A command that needs a shell
+// to mean anything is refused: replaying it word by word would judge a different call.
+export fun argvOf(command: str) > [str] !> str {
+    foreach (ch in ["\"", "'", "$", "|", ";", "&", "<", ">", "`", "\\", "(", ")"]) {
+        if (command.indexOf(ch) != null) {
+            throw "hook command `{command}` uses `{ch}`, which needs a shell; replay it by hand";
+        }
+    }
+    final words = mut [<str>];
+    foreach (w in command.replace("\t", with: " ").split(" ")) {
+        if (w != "") {
+            words.append(w);
+        }
+    }
+    if (words.len() == 0) {
+        throw "a hook entry has an empty command";
+    }
+    return words;
+}
+
+// ruleOf names the rule a reply cites: its reference page, else a `[rule]` tag.
+export fun ruleOf(text: str) > str {
+    final marker = "/reference/rules/";
+    final at = text.indexOf(marker);
+    if (at != null) {
+        final start = at! + marker.len();
+        final end = text.indexOf("/", from: start) ?? text.len();
+        return text.sub(start, len: end - start);
+    }
+    final open = text.indexOf("[");
+    if (open != null) {
+        final close = text.indexOf("]", from: open!);
+        if (close != null and close! - open! > 1 and text.sub(open! + 1, len: close! - open! - 1).indexOf(" ") == null) {
+            return text.sub(open! + 1, len: close! - open! - 1);
+        }
+    }
+    return "";
+}
+
+fun firstLine(s: str) > str {
+    foreach (line in s.split("\n")) {
+        if (line.trim() != "") {
+            return line.trim();
+        }
+    }
+    return "";
+}
+
+// classify reads one hook run the way Claude Code does: exit 2 blocks with stderr as the
+// reason, any other non-zero exit or an overrun timeout is a non-blocking error and the call
+// runs, and exit 0 is decided by the JSON reply.
+export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observed {
+    if (overran) {
+        return Observed{ verdict = "dead", rule = "", note = "ran past its timeout, so the host kills it and runs the call" };
+    }
+    if (code == 2) {
+        return Observed{ verdict = "deny", rule = ruleOf(stderr), note = "exit 2" };
+    }
+    if (code != 0) {
+        final said = firstLine(stderr);
+        final tail = if (said != "") ": {said}" else "";
+        return Observed{ verdict = "dead", rule = "",
+            note = "exited {code}, which the host reads as a non-blocking error and runs the call{tail}" };
+    }
+    if (stdout.trim() == "") {
+        return Observed{ verdict = "pass", rule = "", note = "" };
+    }
+    final reply = json\parse(stdout) catch null;
+    if (reply == null) {
+        return Observed{ verdict = "dead", rule = "", note = "replied with text that is not JSON, which the host ignores: {firstLine(stdout)}" };
+    }
+    if ((reply!["decision"] ?? "") == "block") {
+        final why = reply!["reason"] ?? "";
+        return Observed{ verdict = "deny", rule = ruleOf(why), note = "" };
+    }
+    final specific = reply!["hookSpecificOutput"] ?? {<str: any>};
+    final decision = specific["permissionDecision"] ?? "";
+    final reason = specific["permissionDecisionReason"] ?? "";
+    final context = specific["additionalContext"] ?? "";
+    if (decision == "deny" or decision == "ask") {
+        return Observed{ verdict = decision, rule = ruleOf(reason), note = "" };
+    }
+    if (context.startsWith(DEAD_NOTICE)) {
+        return Observed{ verdict = "dead", rule = "", note = firstLine(context) };
+    }
+    if (context != "") {
+        return Observed{ verdict = "advise", rule = ruleOf(context), note = "" };
+    }
+    if (specific["updatedInput"] != null) {
+        return Observed{ verdict = "pass", rule = "", note = "rewritten, so magus judged it" };
+    }
+    return Observed{ verdict = "pass", rule = "", note = "" };
+}
+
+// strongest folds the verdicts of every entry a tool matched: the host runs them all, and
+// any one that blocks blocks the call.
+export fun strongest(all: [Observed]) > Observed {
+    if (all.len() == 0) {
+        return Observed{ verdict = "dead", rule = "", note = "no PreToolUse entry matches this tool, so nothing judges it" };
+    }
+    var best = all[0];
+    foreach (o in all) {
+        if (strength(o.verdict) > strength(best.verdict) or (best.verdict == "dead" and o.verdict != "dead")) {
+            best = o;
+        }
+    }
+    return best;
+}
+
+// outsidePath is the first candidate none of writePaths covers, "" when they cover all.
+export fun outsidePath(writePaths: [str]) > str !> any {
+    foreach (p in OUTSIDE_CANDIDATES) {
+        if (!path\matchesAny(writePaths, path: p)) {
+            return p;
+        }
+    }
+    return "";
+}
+
+// Lease is the live job taken in the checkout and a path its write paths leave out; both
+// "" when no job was taken there.
+export object Lease {
+    job: str,
+    outside: str,
+}
+
+// cases is the canonical set, asked of the checkout at root.
+export fun cases(root: str, lease: Lease) > [Case] {
+    var editSkip = "";
+    if (lease.job == "") {
+        editSkip = "no live job was taken in this checkout; take one with `./magus job exec <job>` to ask it";
+    } else if (lease.outside == "") {
+        editSkip = "job {lease.job}'s write paths cover {OUTSIDE_CANDIDATES.join(", ")}";
+    }
+    final target = if (lease.outside == "") OUTSIDE_CANDIDATES[0] else lease.outside;
+    return [
+        Case{ name = "symbol grep", tool = "Bash", input = {"command": "grep -rn resolveBin internal/"}, expect = "advise", agent = false, bind = "", skip = "" },
+        Case{ name = "file listing", tool = "Bash", input = {"command": "find . -name '*.go'"}, expect = "pass", agent = false, bind = "", skip = "" },
+        Case{ name = "raw go test", tool = "Bash", input = {"command": "go test ./internal/guard/"}, expect = "deny", agent = false, bind = "", skip = "" },
+        Case{ name = "sed -i", tool = "Bash", input = {"command": "sed -i '' 's/a/b/' magus.go"}, expect = "deny", agent = false, bind = "", skip = "" },
+        Case{ name = "magus output pipe", tool = "Bash", input = {"command": "magus run lint . | tail -5"}, expect = "deny", agent = false, bind = "", skip = "" },
+        Case{ name = "push from a subagent", tool = "Bash", input = {"command": "git push origin HEAD"}, expect = "advise", agent = true, bind = "", skip = "" },
+        Case{ name = "edit outside the lease", tool = "Edit", input = {"file_path": "{root}/{target}", "old_string": "package", "new_string": "package "},
+            expect = "deny", agent = true, bind = lease.job, skip = editSkip },
+    ];
+}
+
+// event is the PreToolUse envelope Claude Code sends for a call of tool with input.
+export fun event(tool: str, input: {str: any}, root: str, session: str, agent: bool) > {str: any} {
+    final ev = mut {<str: any>};
+    ev["hook_event_name"] = "PreToolUse";
+    ev["session_id"] = session;
+    ev["tool_name"] = tool;
+    ev["tool_input"] = input;
+    ev["cwd"] = root;
+    if (agent) {
+        ev["agent_id"] = "{session}-agent";
+    }
+    return ev;
+}
+
+// runHook runs one wired command on payload from root, as the host would.
+fun runHook(h: HookCommand, launcher: str, root: str, payload: str) > Observed !> any {
+    final argv = argvOf(h.command);
+    if (launcher == "") {
+        return Observed{ verdict = "dead", rule = "",
+            note = "`{argv[0]}` is not on PATH: the host gets exit 127, a non-blocking error, and runs the call" };
+    }
+    final started = os\time();
+    final r = proc\exec(launcher, args: argv.sub(1), dir: root, opts: {"quiet": true, "allow_failure": true, "stdin": payload});
+    final overran = os\time() - started > std\toDouble(h.timeout) * 1000.0;
+    return classify(r.code, stdout: r.stdout, stderr: r.stderr, overran: overran);
+}
+
+// ask sends one call through every entry matching its tool and folds the answers.
+fun ask(tool: str, input: {str: any}, hooks: [HookCommand], launcher: str, root: str, session: str, agent: bool) > Observed !> any {
+    final payload = json\stringify(event(tool, input: input, root: root, session: session, agent: agent));
+    final seen = mut [<Observed>];
+    foreach (h in hooks) {
+        if (matcherMatches(h.matcher, tool: tool)) {
+            seen.append(runHook(h, launcher: launcher, root: root, payload: payload));
+        }
+    }
+    return strongest(seen);
+}
+
+export fun replay(c: Case, hooks: [HookCommand], launcher: str, root: str) > Row !> any {
+    if (c.skip != "") {
+        return Row{ name = c.name, expect = c.expect, verdict = "skipped", rule = "", ok = true, note = c.skip };
+    }
+    final session = "guard-health-{uuid\v7()}";
+    if (c.bind != "") {
+        final took = ask("Bash", input: {"command": "./magus job exec {c.bind}"}, hooks: hooks, launcher: launcher, root: root, session: session, agent: c.agent);
+        if (took.verdict == "deny" or took.verdict == "dead") {
+            return Row{ name = c.name, expect = c.expect, verdict = took.verdict, rule = took.rule, ok = false,
+                note = "taking job {c.bind} first was answered {took.verdict}, so no lease was bound: {took.note}" };
+        }
+    }
+    final o = ask(c.tool, input: c.input, hooks: hooks, launcher: launcher, root: root, session: session, agent: c.agent);
+    return Row{ name = c.name, expect = c.expect, verdict = o.verdict, rule = o.rule,
+        ok = o.verdict != "dead" and strength(o.verdict) >= strength(c.expect), note = o.note };
+}
+
+// leaseAt is the live job whose lease was taken in root.
+fun leaseAt(root: str) > Lease !> any {
+    final list: magus\JobList = magus\job\list();
+    foreach (j in list.jobs) {
+        if (j.checkoutRoot == root and ["declared", "running", "exited"].indexOf(j.state) != null) {
+            return Lease{ job = j.id, outside = outsidePath(j.writePaths) };
+        }
+    }
+    return Lease{ job = "", outside = "" };
+}
+
+// health replays every case against the checkout at root.
+export fun health(root: str) > Report !> any {
+    final settingsPath = "{root}/{SETTINGS}";
+    if (!fs\isFile(settingsPath)) {
+        throw "show-guard-health: {SETTINGS} does not exist in {root}, so no hook is wired; `./magus describe harness claude-code` prints what to merge";
+    }
+    final hooks = hooksFor(fs\readFile(settingsPath), event: "PreToolUse");
+    if (hooks.len() == 0) {
+        throw "show-guard-health: {SETTINGS} wires no PreToolUse hook, so the guard never runs; `./magus describe harness claude-code` prints what to merge";
+    }
+    final name = argvOf(hooks[0].command)[0];
+    final launcher = if (name.indexOf("/") != null) path\abs(name) else (proc\which(name) catch "");
+    final rows = mut [<Row>];
+    foreach (c in cases(root, lease: leaseAt(root))) {
+        rows.append(replay(c, hooks: hooks, launcher: launcher, root: root));
+    }
+    return Report{ checkout = root, launcher = launcher, launcherName = name, judge = hook\resolveBin(cwd: root), rows = rows };
+}
+
+fun pad(s: str, width: int) > str {
+    final spaces = mut [<str>];
+    for (var i = s.len(); i < width; i = i + 1) {
+        spaces.append(" ");
+    }
+    return s + spaces.join("");
+}
+
+export fun failures(r: Report) > int {
+    var n = 0;
+    foreach (row in r.rows) {
+        if (!row.ok) {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+export fun render(r: Report) > [str] {
+    final launcher = if (r.launcher == "") "NOT on PATH" else r.launcher;
+    final judge = if (r.judge == "") "none: the glue finds no binary" else r.judge;
+    final lines = mut [
+        "replayed {r.rows.len()} PreToolUse calls through {SETTINGS}, cwd {r.checkout}; nothing in the tree was written",
+        "launcher: `{r.launcherName}` -> {launcher}",
+        "judge:    {judge}",
+    ];
+    var width = 4;
+    foreach (row in r.rows) {
+        if (row.name.len() > width) {
+            width = row.name.len();
+        }
+    }
+    lines.append("{pad("CASE", width: width)}  EXPECT  GOT      RULE");
+    foreach (row in r.rows) {
+        final mark = if (row.ok) "" else "  FAIL";
+        final note = if (row.note == "") "" else "  ({row.note})";
+        final rule = if (row.rule == "") "-" else row.rule;
+        lines.append("{pad(row.name, width: width)}  {pad(row.expect, width: 6)}  {pad(row.verdict, width: 7)}  {rule}{mark}{note}");
+    }
+    final failed = failures(r);
+    lines.append(if (failed == 0) "guard healthy" else "guard UNHEALTHY: {failed} of {r.rows.len()} calls answered weaker than expected");
+    return lines;
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--help"], valued: [<str>]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "show-guard-health: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final report = health(vcs\root());
+    foreach (line in render(report)) {
+        std\print(line);
+    }
+    if (failures(report) > 0) {
+        throw "show-guard-health: the guard let a call through that it should have stopped";
+    }
+}
+
+test "matchers select by exact name, alternatives and an anchored prefix" {
+    assert\equal(matcherMatches("Bash", tool: "Bash"), want: true, message: "exact");
+    assert\equal(matcherMatches("Edit|Write|NotebookEdit", tool: "Write"), want: true, message: "alternative");
+    assert\equal(matcherMatches("Edit|Write", tool: "WriteFile"), want: false, message: "alternatives are whole names");
+    assert\equal(matcherMatches("^mcp__magus__", tool: "mcp__magus__client"), want: true, message: "prefix");
+    assert\equal(matcherMatches("", tool: "Read"), want: true, message: "empty matches all");
+    final refused = matcherMatches("Notebook.*", tool: "NotebookEdit") catch false;
+    assert\equal(refused, want: false, message: "a regex raises");
+}
+
+test "the fixture's PreToolUse entries parse in file order, Stop left out" {
+    final hooks = hooksFor(fs\readFile("hack/testdata/guard-health-settings.json"), event: "PreToolUse");
+    final got = mut [<str>];
+    foreach (h in hooks) {
+        got.append("{h.matcher} {h.timeout} {argvOf(h.command)[3]}");
+    }
+    assert\equal(got, want: [
+        "Bash 10 docs/guides/integrations/agents/magus-command.buzz",
+        "Edit|Write|NotebookEdit 10 docs/guides/integrations/agents/magus-path.buzz",
+        "^mcp__magus__ 10 docs/guides/integrations/agents/magus-command.buzz",
+        "Read 10 docs/guides/integrations/agents/magus-observe.buzz",
+    ], message: "hooks");
+}
+
+test "a command that needs a shell is refused" {
+    final got = argvOf("MAGUS=1 magus buzz x.buzz | tee log") catch ["refused"];
+    assert\equal(got, want: ["refused"], message: "pipe");
+}
+
+test "replies classify the way the host reads them" {
+    final deny = classify(0, stdout: `\{"hookSpecificOutput":\{"permissionDecision":"deny","permissionDecisionReason":"no.\nsee: https://eli.gladman.cc/magus/reference/rules/raw-tool/"\}\}`, stderr: "", overran: false);
+    assert\equal("{deny.verdict} {deny.rule}", want: "deny raw-tool", message: "deny");
+    final advise = classify(0, stdout: `\{"hookSpecificOutput":\{"additionalContext":"use refs"\}\}`, stderr: "", overran: false);
+    assert\equal(advise.verdict, want: "advise", message: "advise");
+    final rewrite = classify(0, stdout: `\{"hookSpecificOutput":\{"updatedInput":\{"command":"x"\}\}\}`, stderr: "", overran: false);
+    assert\equal("{rewrite.verdict} {rewrite.note}", want: "pass rewritten, so magus judged it", message: "rewrite");
+    final dead = classify(0, stdout: `\{"hookSpecificOutput":\{"additionalContext":"magus guard is NOT running: magus is not on PATH"\}\}`, stderr: "", overran: false);
+    assert\equal(dead.verdict, want: "dead", message: "notice");
+    assert\equal(classify(127, stdout: "", stderr: "magus: not found", overran: false).verdict, want: "dead", message: "127");
+    assert\equal(classify(2, stdout: "", stderr: "denied again [sed-in-place]: no", overran: false).rule, want: "sed-in-place", message: "exit 2");
+    assert\equal(classify(0, stdout: "", stderr: "", overran: true).verdict, want: "dead", message: "timeout");
+    assert\equal(classify(0, stdout: "", stderr: "", overran: false).verdict, want: "pass", message: "silence");
+}
+
+test "the strongest verdict wins, and no matching entry is a dead guard" {
+    final got = strongest([Observed{ verdict = "pass", rule = "", note = "" }, Observed{ verdict = "deny", rule = "r", note = "" }]);
+    assert\equal(got.verdict, want: "deny", message: "deny wins");
+    assert\equal(strongest([<Observed>]).verdict, want: "dead", message: "unmatched");
+}
+
+test "the edit case binds the lease and targets a path it does not cover" {
+    assert\equal(outsidePath(["*.go", "hack/**"]), want: "README.md", message: "first uncovered");
+    final unleased = cases("/w", lease: Lease{ job = "", outside = "" });
+    assert\equal(unleased[unleased.len() - 1].skip != "", want: true, message: "skipped without a lease");
+    final covered = cases("/w", lease: Lease{ job = "j", outside = "" });
+    assert\equal(covered[covered.len() - 1].skip, want: "job j's write paths cover magus.go, doc.go, README.md", message: "all covered");
+    final leased = cases("/w", lease: Lease{ job = "j", outside = "doc.go" });
+    final edit = leased[leased.len() - 1];
+    assert\equal("{edit.bind} {edit.input["file_path"]} {edit.skip}", want: "j /w/doc.go ", message: "bound, absolute target");
+}
+
+test "a payload carries the checkout as cwd, and a subagent's its agent id" {
+    final push = event("Bash", input: {"command": "git push"}, root: "/w", session: "s", agent: true);
+    assert\equal("{push["cwd"]} {push["session_id"]} {push["agent_id"]}", want: "/w s s-agent", message: "subagent push");
+    final grep = event("Bash", input: {"command": "grep x"}, root: "/w", session: "s", agent: false);
+    assert\equal(grep["agent_id"] == null, want: true, message: "root session");
+}
+
+test "a dead launcher fails the report" {
+    final r = Report{ checkout = "/w", launcher = "", launcherName = "magus", judge = "", rows = [
+        Row{ name = "raw go test", expect = "deny", verdict = "dead", rule = "", ok = false, note = "`magus` is not on PATH" },
+    ] };
+    final lines = render(r);
+    assert\equal(lines[1], want: "launcher: `magus` -> NOT on PATH", message: "launcher");
+    assert\equal(lines[lines.len() - 1], want: "guard UNHEALTHY: 1 of 1 calls answered weaker than expected", message: "verdict");
+}

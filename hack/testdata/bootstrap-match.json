@@ -1,0 +1,15 @@
+{
+  "job": {
+    "schema_version": 11,
+    "id": "agent-scripts",
+    "checkpoint": "7472f16fc709ab3827cd38ff281fecc0a217ca88",
+    "write_paths": ["hack/dev/bootstrap-worktree.buzz"],
+    "state": "declared",
+    "reported_base": "7472f16fc709ab3827cd38ff281fecc0a217ca88",
+    "base_verdict": "match",
+    "checkout_root": "/work/magus/.claude/worktrees/w1",
+    "created": 1790823452,
+    "updated": 1790823762
+  },
+  "projects": ["."]
+}
