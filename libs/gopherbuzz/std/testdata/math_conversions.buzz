@@ -2,7 +2,7 @@
 // @expect: [180, 7, 1.5]
 import "math";
 final __r = [
-    math.deg(math.pi),
-    math.maxInt(3, 7),
-    math.minDouble(1.5, 2.5),
+    math\deg(math\pi),
+    math\maxInt(3, 7),
+    math\minDouble(1.5, 2.5),
 ];

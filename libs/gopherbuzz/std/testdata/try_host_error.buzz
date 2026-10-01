@@ -6,7 +6,7 @@ import "std";
 import "io";
 var __r = "not caught";
 try {
-    final f = io.File.open("/definitely/not/here/buzz-try-host-42", io.FileMode.read);
+    final f = io\File.open("/definitely/not/here/buzz-try-host-42", io\FileMode.read);
     f.close();
 } catch (e) {
     final msg: str = "{e}";

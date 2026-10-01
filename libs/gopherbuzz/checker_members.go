@@ -100,8 +100,8 @@ func editDistance(a, b string) int {
 // dot form is "`std` is not defined" there; here the module is a map value, so
 // the dot form ran anyway and taught a spelling upstream refuses.
 //
-// Upstream-strict sessions only: the embedded dialect still reads the dot form,
-// and gopherbuzz's own std conformance files are written in it.
+// TODO: drop the embedded exemption once magus's embedded test sources stop
+// spelling `fs.writeFile` and `magus.log.info` (job buzz-dot-migration).
 func (c *checker) checkNamespaceDot(v *ast.MemberExpr) {
 	if v.Namespaced || c.embedded {
 		return

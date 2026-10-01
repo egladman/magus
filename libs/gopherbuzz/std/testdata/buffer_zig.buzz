@@ -5,7 +5,7 @@
 // the out-param shape (alloc, write at offsets, read back) a C fn would fill in.
 import "buffer";
 
-final b = buffer.Buffer.init(16);
+final b = buffer\Buffer.init(16);
 b.writeZAt::<int>(0, "u32", [42]);  // byte 0
 b.writeZAt::<int>(8, "i64", [100]); // byte 8 (i64-aligned)
 final lo: int = b.readZAt::<int>(0, "u32"); // element 0 -> byte 0
