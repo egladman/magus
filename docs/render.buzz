@@ -113,7 +113,8 @@ fun walkBlog(site: Site) > void !> any {
 }
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
-// root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
+// root children - gen/, src/, tour/ - are skipped at the root, node_modules/ and
+// MAGUS.md at any depth).
 fun walk(rel: str, site: Site) > void !> any {
     var dir = fs\join(site.root, site.docs);
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
@@ -127,7 +128,7 @@ fun walk(rel: str, site: Site) > void !> any {
             if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {
-            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) {
+            if (name.endsWith(".md") and isGeneratorFile(name, site.config.generatorFiles) == false) {
                 // glossary.md renders AFTER the walk (in site_render), once glossaryRefs is
                 // complete, so its per-term "referenced on" backlinks are the full set.
                 if (childRel == "glossary.md") { continue; }

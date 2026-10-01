@@ -393,7 +393,7 @@ export object Site {
                 if (rel == "" and isGeneratorDir(name, this.config.generatorDirs)) { continue; }
                 this.collectDocPages(childRel);
             } else {
-                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, this.config.generatorFiles) == false)) { this.collectDocPage(childRel); }
+                if (name.endsWith(".md") and isGeneratorFile(name, this.config.generatorFiles) == false) { this.collectDocPage(childRel); }
             }
         }
     }
