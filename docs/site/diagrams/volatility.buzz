@@ -1,50 +1,56 @@
-// site/diagrams/volatility.buzz: what magus does with a failing target before it calls
-// the failure a regression. The single accent is on "suspected regression": every other
-// path in the figure is magus absorbing noise, and that one is the path that wants a human.
-//
-// The retry is internal/retry; the questions and outcomes around it are steps of a run,
-// so they are actors.
 namespace volatility;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/buzz-stages" as _;
+import "site/diagrams/packages" as _;
 
 export fun volatilityFigure() > figure\Figure !> any {
-    final retry = magus\dir("internal/retry");
+    final decide = magus\dir("internal/ci/volatility");
     final fail = figure\external("Target fails", look: figure\Look.plain);
-    final det = figure\external("detection on?", look: figure\Look.decision);
     final report = figure\external("Report failure", look: figure\Look.plain);
-    final hist = figure\external("enough history?", look: figure\Look.decision);
-    final rate = figure\external("over threshold?", look: figure\Look.decision);
-    final pass = figure\external("retry passed?", look: figure\Look.decision);
+    final thin = codeStage(decide, symbol: "shouldRetry().", name: "enough history?", look: figure\Look.decision);
+    final touched = codeStage(decide, symbol: "shouldRetry().", name: "diff touched it?", look: figure\Look.decision);
+    final rate = codeStage(decide, symbol: "score().", name: "over threshold?", look: figure\Look.decision);
+    // invokeSpell in the root package reruns the target; codeStage cannot anchor a symbol there.
+    final retry = figure\external("Retry once", sub: "the same target", look: figure\Look.plain);
     final volatile = figure\external("Record volatile", sub: "the run continues", look: figure\Look.plain);
     final regress = figure\external("Suspected regression", sub: "chase with --bisect", look: figure\Look.focal);
     return figure\of("volatility",
             title: "When a failure is retried, and when it is believed",
             eyebrow: "volatility",
-            desc: "A failing target is retried once if history is too thin to judge, or if its "
-                + "measured volatility is above the threshold. A retry that passes is recorded "
-                + "as volatile and the run continues; anything else is a suspected regression.",
+            desc: "A failing target that opted in is retried once while its history is too thin "
+                + "to judge, when the diff did not touch its project, or when its measured "
+                + "volatility is above the threshold. A retry that passes is recorded as volatile "
+                + "and the run continues; anything else is a suspected regression.",
             direction: figure\Direction.down)
         .actor(fail)
-        .actor(det)
+        .box(decide, label: "Decide", sub: "on, and opted in?", symbol: magus\refs("Runtime#Decide()."))
         .actor(report)
-        .actor(hist)
+        .actor(thin)
+        .actor(touched)
         .actor(rate)
-        .box(retry, label: "Retry once", sub: "the same target")
-        .actor(pass)
+        .actor(retry)
         .actor(volatile)
         .actor(regress)
-        .flowAcross(fail, dst: det)
-        .flowAcross(det, dst: report, label: "no")
-        .flowAcross(det, dst: hist, label: "yes")
-        .flowIn(hist, dst: retry, label: "bootstrap")
-        .flowAcross(hist, dst: rate, label: "yes")
-        .flowIn(rate, dst: retry, label: "yes")
+        .edgesFromGraph()
+        .flowIn(fail, dst: decide)
+        .flowOut(decide, dst: report, label: "no")
+        .flowOut(decide, dst: thin, label: "yes")
+        .flowAcross(thin, dst: retry, label: "bootstrap")
+        .flowAcross(thin, dst: touched, label: "yes")
+        .flowAcross(touched, dst: retry, label: "no")
+        .flowAcross(touched, dst: rate, label: "yes")
+        .flowAcross(rate, dst: retry, label: "yes")
         .flowAcross(rate, dst: regress, label: "no")
-        .flowOut(retry, dst: pass)
-        .flowAcross(pass, dst: volatile, label: "yes")
-        .flowAcross(pass, dst: regress, label: "no")
+        .flowAcross(retry, dst: volatile, label: "passes")
+        .flowAcross(retry, dst: regress, label: "fails again")
         .legend(figure\Look.focal, label: "wants a human")
-        .scope(figure\setOf([retry]));
+        .scope(goPackages("internal/ci/**"))
+        .except(figure\setOf([magus\dir("internal/ci")]),
+            why: "plans the CI fan-out and the gate; a retry is decided per target, inside a run")
+        .except(figure\setOf([magus\dir("internal/ci/annotate")]),
+            why: "turns a retry already made into a CI notice; drawn in ci-providers")
+        .except(figure\setOf([magus\dir("internal/ci/forecast")]),
+            why: "the run history Decide reads and Record appends to; drawn, it breaks the nine-box budget");
 }
