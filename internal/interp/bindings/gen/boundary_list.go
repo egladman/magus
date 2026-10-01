@@ -99,6 +99,7 @@ var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "KnowledgeEdge", Zero: types.KnowledgeEdge{}, Encode: func(v any) vm.Value { return ObjectKnowledgeEdge(v.(types.KnowledgeEdge)) }},
 	{Name: "KnowledgeFold", Zero: types.KnowledgeFold{}, Encode: func(v any) vm.Value { return ObjectKnowledgeFold(v.(types.KnowledgeFold)) }},
 	{Name: "KnowledgeGodNode", Zero: types.KnowledgeGodNode{}, Encode: func(v any) vm.Value { return ObjectKnowledgeGodNode(v.(types.KnowledgeGodNode)) }},
+	{Name: "KnowledgeIndexCause", Zero: types.KnowledgeIndexCause{}, Encode: func(v any) vm.Value { return ObjectKnowledgeIndexCause(v.(types.KnowledgeIndexCause)) }},
 	{Name: "KnowledgeNode", Zero: types.KnowledgeNode{}, Encode: func(v any) vm.Value { return ObjectKnowledgeNode(v.(types.KnowledgeNode)) }},
 	{Name: "KnowledgeOrphan", Zero: types.KnowledgeOrphan{}, Encode: func(v any) vm.Value { return ObjectKnowledgeOrphan(v.(types.KnowledgeOrphan)) }},
 	{Name: "KnowledgeStats", Zero: types.KnowledgeStats{}, Encode: func(v any) vm.Value { return ObjectKnowledgeStats(v.(types.KnowledgeStats)) }},

@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/types"
 )
 
 // InFlightSync is a sync-graph job the server is running for one workspace, as its status
@@ -147,14 +148,7 @@ type SyncObservation struct {
 	IndexBuilt    time.Time     // when the index was last written, zero when never
 }
 
-// SyncCause is the observed reason an index is missing or behind, and the command that
-// clears it. Both are sentences; commands in them are backquoted.
-type SyncCause struct {
-	Cause  string
-	Remedy string
-}
-
-// Commands are the invocations a SyncCause names, rendered by the caller so they follow
+// Commands are the invocations a diagnosis names, rendered by the caller so they follow
 // how the reader invoked magus.
 type Commands struct {
 	GraphBuild, ServerStart, ServerStop, JobRunSync string
@@ -163,7 +157,7 @@ type Commands struct {
 // DiagnoseSync names the first cause o shows, most specific first: a sync running now
 // explains everything after it, and a hook that cannot start its binary explains a silent
 // server.
-func DiagnoseSync(o SyncObservation, c Commands) SyncCause {
+func DiagnoseSync(o SyncObservation, c Commands) types.KnowledgeIndexCause {
 	once := "`" + c.GraphBuild + "` indexes it once now"
 	switch req := o.LastRequest; {
 	case o.InFlight != nil:
@@ -171,49 +165,49 @@ func DiagnoseSync(o SyncObservation, c Commands) SyncCause {
 		if !o.InFlight.Call.StartedAt.IsZero() {
 			age = fmt.Sprintf(", running %s", o.Now.Sub(o.InFlight.Call.StartedAt).Round(time.Second))
 		}
-		return SyncCause{
-			Cause:  fmt.Sprintf("the server's sync-graph job %s is indexing this checkout now (server pid %d%s)", o.InFlight.Call.Inv, o.InFlight.PID, age),
-			Remedy: "ask again when it finishes; `" + c.GraphBuild + "` waits for it rather than starting a second build",
+		return types.KnowledgeIndexCause{
+			Why: fmt.Sprintf("the server's sync-graph job %s is indexing this checkout now (server pid %d%s)", o.InFlight.Call.Inv, o.InFlight.PID, age),
+			Fix: "ask again when it finishes; `" + c.GraphBuild + "` waits for it rather than starting a second build",
 		}
 	case o.HookChecked && o.HookCommand == "":
-		return SyncCause{
-			Cause:  "no VCS refresh hook is installed, so no checkout, merge or rebase here asks for a sync",
-			Remedy: "`" + c.ServerStart + "` from this checkout installs it; " + once,
+		return types.KnowledgeIndexCause{
+			Why: "no VCS refresh hook is installed, so no checkout, merge or rebase here asks for a sync",
+			Fix: "`" + c.ServerStart + "` from this checkout installs it; " + once,
 		}
 	case o.HookChecked && !o.HookRunnable:
-		return SyncCause{
-			Cause:  fmt.Sprintf("the refresh hook runs `%s` and %s does not exist, so no checkout, merge or rebase here has asked for a sync", o.HookCommand, o.HookBinary),
-			Remedy: fmt.Sprintf("put %s in place for the next checkout; %s", o.HookBinary, once),
+		return types.KnowledgeIndexCause{
+			Why: fmt.Sprintf("the refresh hook runs `%s` and %s does not exist, so no checkout, merge or rebase here has asked for a sync", o.HookCommand, o.HookBinary),
+			Fix: fmt.Sprintf("put %s in place for the next checkout; %s", o.HookBinary, once),
 		}
 	case req != nil && req.Outcome == SyncRefused && req.At.After(o.IndexBuilt):
-		return SyncCause{
-			Cause:  fmt.Sprintf("the server refused the sync requested at %s: %s", stamp(req.At), req.Detail),
-			Remedy: "`" + c.ServerStop + "` then `" + c.ServerStart + "` restarts it on this build; " + once,
+		return types.KnowledgeIndexCause{
+			Why: fmt.Sprintf("the server refused the sync requested at %s: %s", stamp(req.At), req.Detail),
+			Fix: "`" + c.ServerStop + "` then `" + c.ServerStart + "` restarts it on this build; " + once,
 		}
 	case !o.ServerLive:
-		cause := "no server is running, so the refresh hook's `" + c.JobRunSync + "` does nothing"
+		why := "no server is running, so the refresh hook's `" + c.JobRunSync + "` does nothing"
 		if req != nil && req.Outcome == SyncNoServer && req.At.After(o.IndexBuilt) {
-			cause = fmt.Sprintf("no server was running at the last sync request (`%s`, from the refresh hook or by hand, at %s), so it did nothing", c.JobRunSync, stamp(req.At))
+			why = fmt.Sprintf("no server was running at the last sync request (`%s`, from the refresh hook or by hand, at %s), so it did nothing", c.JobRunSync, stamp(req.At))
 		}
-		return SyncCause{Cause: cause, Remedy: "`" + c.ServerStart + "` keeps it current from now on; " + once}
+		return types.KnowledgeIndexCause{Why: why, Fix: "`" + c.ServerStart + "` keeps it current from now on; " + once}
 	case o.ServerVersion != "" && o.Version != "" && o.ServerVersion != o.Version:
-		return SyncCause{
-			Cause:  fmt.Sprintf("the server (pid %d) is %s and this checkout's magus is %s; a server refuses jobs from another build", o.ServerPID, o.ServerVersion, o.Version),
-			Remedy: "`" + c.ServerStop + "` then `" + c.ServerStart + "` restarts it on this build; " + once,
+		return types.KnowledgeIndexCause{
+			Why: fmt.Sprintf("the server (pid %d) is %s and this checkout's magus is %s; a server refuses jobs from another build", o.ServerPID, o.ServerVersion, o.Version),
+			Fix: "`" + c.ServerStop + "` then `" + c.ServerStart + "` restarts it on this build; " + once,
 		}
 	case req != nil && (req.Outcome == SyncSubmitted || req.Outcome == SyncCoalesced) && req.At.After(o.IndexBuilt):
 		job := ""
 		if req.Job != "" {
 			job = " (job " + req.Job + ")"
 		}
-		return SyncCause{
-			Cause:  fmt.Sprintf("the server took the sync requested at %s%s and the index is still not current, so that job failed or has not written it", stamp(req.At), job),
-			Remedy: "`" + c.GraphBuild + "` here builds it and shows any failure",
+		return types.KnowledgeIndexCause{
+			Why: fmt.Sprintf("the server took the sync requested at %s%s and the index is still not current, so that job failed or has not written it", stamp(req.At), job),
+			Fix: "`" + c.GraphBuild + "` here builds it and shows any failure",
 		}
 	default:
-		return SyncCause{
-			Cause:  "a server is running, but no sync has been asked for since the index was last built",
-			Remedy: "`" + c.JobRunSync + "` asks the server; " + once,
+		return types.KnowledgeIndexCause{
+			Why: "a server is running, but no sync has been asked for since the index was last built",
+			Fix: "`" + c.JobRunSync + "` asks the server; " + once,
 		}
 	}
 }

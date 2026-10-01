@@ -228,9 +228,19 @@ func observeSync(ctx context.Context, root string) maintenance.SyncObservation {
 	return o
 }
 
+// withIndexCause returns ans carrying indexCause when it was drawn from an index that is
+// missing or behind, and unchanged otherwise.
+func withIndexCause(ctx context.Context, root string, ans types.KnowledgeAnswer) types.KnowledgeAnswer {
+	if ans.IndexBehind() {
+		c := indexCause(ctx, root)
+		ans.IndexCause = &c
+	}
+	return ans
+}
+
 // indexCause is the observed reason the checkout at root has an index missing or behind,
 // with its remedy.
-func indexCause(ctx context.Context, root string) maintenance.SyncCause {
+func indexCause(ctx context.Context, root string) types.KnowledgeIndexCause {
 	return maintenance.DiagnoseSync(observeSync(ctx, resolveRootOrEmpty(root)), maintenance.Commands{
 		GraphBuild:  hint.GraphBuild.String(),
 		ServerStart: hint.ServerStart.String(),
@@ -239,10 +249,12 @@ func indexCause(ctx context.Context, root string) maintenance.SyncCause {
 	})
 }
 
-// printIndexCause writes indexCause under a verdict block, in its indentation.
-func printIndexCause(ctx context.Context, w io.Writer, root string) {
-	c := indexCause(ctx, root)
-	fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Cause, c.Remedy)
+// printIndexCause writes the answer's index cause under its verdict block, in its
+// indentation, and nothing when it carries none.
+func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
+	if c := ans.IndexCause; c != nil {
+		fmt.Fprintf(w, "  why: %s\n  fix: %s\n", c.Why, c.Fix)
+	}
 }
 
 // indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
@@ -252,11 +264,11 @@ func indexCauseForGuard() string {
 	if err != nil {
 		return ""
 	}
-	c, ok := withinBudget(guardLookupBudget, func() maintenance.SyncCause {
+	c, ok := withinBudget(guardLookupBudget, func() types.KnowledgeIndexCause {
 		return indexCause(context.Background(), root)
 	})
 	if !ok {
 		return ""
 	}
-	return "Why: " + c.Cause + ". Fix: " + c.Remedy + "."
+	return "Why: " + c.Why + ". Fix: " + c.Fix + "."
 }

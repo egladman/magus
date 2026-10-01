@@ -241,8 +241,8 @@ func TestDiagnoseSync(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DiagnoseSync(tc.obs, cmds)
-			assert.Contains(t, got.Cause, tc.cause)
-			assert.Contains(t, got.Remedy, tc.fixes)
+			assert.Contains(t, got.Why, tc.cause)
+			assert.Contains(t, got.Fix, tc.fixes)
 		})
 	}
 }

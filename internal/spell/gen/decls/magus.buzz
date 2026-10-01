@@ -467,12 +467,18 @@ export object KnowledgeTextPresence {
     files: int = 0,
 }
 
+export object KnowledgeIndexCause {
+    why: str = "",
+    fix: str = "",
+}
+
 export object KnowledgeAnswer {
     verdict: str = "",
     reason: str = "",
     gaps: [KnowledgeSymbolGap] = [],
     staleIndexes: [str] = [],
     text: KnowledgeTextPresence? = null,
+    indexCause: KnowledgeIndexCause? = null,
 }
 
 export object Unreferenced {

@@ -645,6 +645,13 @@ func ObjectKnowledgeTextPresence(v types.KnowledgeTextPresence) vm.Value {
 	return out
 }
 
+func ObjectKnowledgeIndexCause(v types.KnowledgeIndexCause) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("why", vm.StrValue(v.Why))
+	out.MapSet("fix", vm.StrValue(v.Fix))
+	return out
+}
+
 func ObjectKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
@@ -664,6 +671,11 @@ func ObjectKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 		optText = ObjectKnowledgeTextPresence((*v.Text))
 	}
 	out.MapSet("text", optText)
+	optIndexCause := vm.Null
+	if v.IndexCause != nil {
+		optIndexCause = ObjectKnowledgeIndexCause((*v.IndexCause))
+	}
+	out.MapSet("indexCause", optIndexCause)
 	return out
 }
 

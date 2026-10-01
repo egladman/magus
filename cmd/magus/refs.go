@@ -129,6 +129,20 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
 			}
 		}
+		ans = withIndexCause(ctx, root, ans)
+		// The record goes to stdout so a script reads the verdict and the index cause it
+		// would otherwise only find in the stderr block below.
+		switch opts.Format {
+		case outputJSON, outputYAML, outputJSONL, outputTemplate:
+			if err := emitFormatted(opts, types.KnowledgeRefsOutput{
+				Definition:    types.KnowledgeRefsDefinition,
+				SchemaVersion: types.KnowledgeSchemaVersion,
+				Symbol:        pos[0],
+				Answer:        ans,
+			}); err != nil {
+				return err
+			}
+		}
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
 		if ans.Text != nil {
@@ -144,9 +158,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr)
 			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
 		}
-		if len(ans.Gaps) > 0 || len(ans.StaleIndexes) > 0 {
-			printIndexCause(ctx, os.Stderr, root)
-		}
+		printIndexCause(os.Stderr, ans)
 		emitNearest(os.Stderr, g.NearestSymbol(pos[0]))
 		return exitForVerdict(ans.Verdict)
 	}
@@ -155,7 +167,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	// caveats a list that has rows and explains one that does not, so the age rides the
 	// answer as StaleIndexes either way and only downgrades the empty case.
 	coverage := symbolCoverage(ctx, root, pos[0], true)
-	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, coverage)
+	out.Answer = withIndexCause(ctx, root, knowledge.Answer(pos[0], len(out.Refs) > 0, coverage))
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
@@ -163,6 +175,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if rf.Definition || rf.Source {
 		defs, _ := g.Definitions(out.Symbol)
 		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, coverage)
+		defs.Answer.IndexCause = out.Answer.IndexCause
 		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), rf.Source)
 		return emitDefinitions(os.Stdout, opts, defs)
 	}
@@ -200,6 +213,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
+		printIndexCause(os.Stdout, out.Answer)
 		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
 			return err
 		}
@@ -342,6 +356,11 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 	// can still fail to decode here. So the gaps are recomposed rather than inherited, and
 	// an index this read could not open downgrades the verdict even when refs was clean.
 	out.Answer = types.ClassifyAnswer(len(files) > 0, refs.Answer.Reason, append(append([]types.KnowledgeSymbolGap(nil), refs.Answer.Gaps...), read.Unreadable...))
+	if out.Answer.IndexBehind() {
+		if out.Answer.IndexCause = refs.Answer.IndexCause; out.Answer.IndexCause == nil {
+			out.Answer = withIndexCause(ctx, root, out.Answer)
+		}
+	}
 	for _, f := range files {
 		out.OccurrenceCount += len(f.Occurrences)
 		if f.Stale {
