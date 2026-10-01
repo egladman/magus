@@ -67,7 +67,7 @@ export fun uncommitted() > [Entry] !> any {
     if (paths.len() == 0) {
         return entries;
     }
-    foreach (f in magus\describeFile(paths).files) {
+    foreach (f in magus\describe.file(paths).files) {
         entries.append(Entry{ path = f.path, project = f.project, role = f.role });
     }
     return entries;

@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
@@ -64,7 +65,7 @@ var Magus = Module{
 		"module, like `fs` or `vcs`: without the import line `magus` is undefined, and the " +
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
-		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
+		"script run inside a workspace reads that workspace: `describe.project`, `affected`, `projectGraph`, " +
 		"`where`, `insight`, the knowledge-graph reads (`query`, `explain`, `path`, `refs`, `stats`, `importGraph`, " +
 		"`dir`, `dirs`, `layer`, `neighborhood`) " +
 		"and `output` all answer in-process, and so does `magus\\job` (list, put, " +
@@ -76,11 +77,12 @@ var Magus = Module{
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
 		"since there is no workspace to read. The nested-command methods (`cmd`, `run`, " +
-		"`describe`, `doctor`) work there either way and discover the workspace themselves.",
+		"`doctor`, and the `magus\\describe` methods that fork) work there either way and discover " +
+		"the workspace themselves.",
 	Methods: []Method{
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, describe, doctor) when one exists - magus.cmd warns when sub names one that has. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
+			Doc:  "Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method (status, affected, agent, graph, ...). Its signature is the typed methods' signature with the subcommand pushed in front: magus.cmd(sub, args, [opts]) beside magus.run(args, [opts]), same argv, same opts, same ExecResult. The SUBCOMMAND is a typed argument rather than args[0] because it is the part of the invocation magus can reason about - it stays readable in the signature and greppable in the source, while the remaining argv stays free-form. Prefer the dedicated methods (run, doctor, the magus\\describe methods) when one exists - magus.cmd warns when sub, or a describe noun, names one that has; a describe noun with no method (job), and any noun's text in an explicit -o format, is reached here without a warning. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console; opts.stdin feeds the child's standard input, which is how a credential reaches a subcommand (`graph push`) without passing through a process listing or a run log.",
 			Args: []Arg{
 				{Name: "sub", Type: TypeString},
 				{Name: "args", Type: TypeStringSlice},
@@ -89,38 +91,6 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    MagusCmd,
-		},
-		{
-			// `projects`, not `ls`: the CLI subcommand is still `magus ls`, and this
-			// surface deliberately does not mirror it. A shell verb is abbreviated
-			// because it is TYPED many times a day; a magusfile member is read far more
-			// often than it is written, and reads inside a checked signature next to
-			// `magus\targets()`. Naming the plural noun it returns is what makes the
-			// pair legible; see std.CamelCase, which leaves a single word alone.
-			Name:    "projects",
-			Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSON round-trip.",
-			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Projects"}},
-			Raises:  true,
-			Impl:    MagusProjects,
-		},
-		{
-			Name: "targets",
-			Doc:  "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. Annotate the result `> TargetGraph` (magus's own type, no import needed) for compile-checked field access. This is the per-project view magus.projectGraph() does not carry: that is the project-level DAG, this is the targets inside each one. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not - so the same call works from a magusfile and from a `magus buzz` script with no workspace.",
-			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
-			Raises:  true,
-			Impl:    MagusTargets,
-		},
-		{
-			Name:    "tools",
-			Doc:     "Every project's tools as `magus describe tools` reports them: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Annotate the result `> ToolReport` (magus's own type, no import needed) for compile-checked field access. Probes every tool's version, and asks the wired lifecycle provider (magus\\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not, like magus.targets.",
-			Args:    nil,
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ToolReport"}},
-			Raises:  true,
-			Impl:    MagusTools,
 		},
 		{
 			Name: "affected",
@@ -172,17 +142,6 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
 			Raises:  true,
 			Impl:    MagusRun,
-		},
-		{
-			Name: "describe",
-			Doc:  "Run `magus describe <args>` in the target's project directory and capture its output. Returns {stdout, stderr, code, ok}; raises on non-zero exit (catch for non-fatal use). opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec); opts.quiet captures the output without echoing it to the console. Unlike a raw binary call, the working directory is always the contextual project dir, so a nested project describes itself, not the root workspace.",
-			Args: []Arg{
-				{Name: "args", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "ExecResult"}},
-			Raises:  true,
-			Impl:    MagusDescribe,
 		},
 		{
 			Name: "insight",
@@ -328,17 +287,6 @@ var Magus = Module{
 			Impl:    MagusImpact,
 		},
 		{
-			Name: "describe_file",
-			Doc:  "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
-			Args: []Arg{
-				{Name: "paths", Type: TypeStringSlice},
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
-			Raises:  true,
-			Impl:    MagusDescribeFile,
-		},
-		{
 			Name: "diff",
 			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. opts.rev reviews a committed range written base...head instead of the working tree, which is what a caller running where the tree is clean (a CI checkout) has to pass to see anything at all. opts.patch reviews a unified diff given as text instead, the way `magus diff --patch -` reads one: a pull request's patch, for files that may not match the tree. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Each symbol the change adds, renames or re-signs carries `checks`: what the conformance checks found against how the rest of the workspace declares the same kind of thing, with opts.minCohort and opts.minShare as their silence gates (default 5 and 0.8). opts.from reads a review an earlier `magus diff -o json` saved instead of computing it again, so several readers of one change pay for one diff. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
@@ -430,20 +378,6 @@ var Magus = Module{
 			// nothing to catch with. Declaring it raising makes the one mandatory call in
 			// every magusfile unwritable.
 			Extern: true,
-		},
-		{
-			Name: "describe_module",
-			Doc:  "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; pass one to detail it.",
-			// ONE method, not a modules()/module(name) pair, because `magus describe
-			// <noun> [<name>]` is one command: its own usage says "singular and plural
-			// are interchangeable; pass a name to detail one entity". A list/get split
-			// would be a CRUD shape this surface uses nowhere else. So a name is an
-			// optional SELECTOR and the return is a collection either way, which is
-			// also what hostmodules.Describe does underneath.
-			Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}},
-			Returns: []Ret{{Type: TypeAny, Object: "[Module]"}},
-			Raises:  true,
-			Extern:  true,
 		},
 		{
 			Name: "skills",
@@ -710,7 +644,7 @@ var Magus = Module{
 			Name: "lifecycle",
 			Doc: "Where this workspace learns when its tools' release cycles reach end of life. " +
 				"The provider spell exports list_lifecycles (see spells/lifecycle.go) and answers " +
-				"for the products the spells' tools name (Tool.lifecycle); magus\\tools() and " +
+				"for the products the spells' tools name (Tool.lifecycle); magus\\describe.tool() and " +
 				"`magus describe tools` carry the answer, and nothing it says fails a build. One " +
 				"provider per workspace. Wiring none is the ordinary state: the lifecycle columns read -.",
 			Methods: []Method{{
@@ -869,6 +803,138 @@ var Magus = Module{
 			},
 		},
 		{
+			Name: "describe",
+			Doc: "Typed reads of what `magus describe <noun>` prints, one method per noun: " +
+				"`magus\\describe.spell(\"go\")` returns the Spell records `magus describe spell go -o json` " +
+				"carries. A method whose noun takes a name takes it as an optional SELECTOR and returns " +
+				"a collection either way, so detailing one reads `[0]`. A report that carries more than " +
+				"its collection (a file classification's overlaps, the tools' lifecycle state) comes " +
+				"back whole. The methods that fork a nested magus work from a `magus buzz` script with " +
+				"no workspace loaded; opts.root and opts.dir are as for magus.run. Bound by hand in " +
+				"internal/interp/bindings (buildDescribe): a Namespace's methods are Extern by " +
+				"construction. A noun with no method here is reached through magus.cmd(\"describe\", [...]).",
+			Methods: []Method{
+				{
+					Name:    "file",
+					Doc:     "Classify paths against the workspace's declared globs: for each, the owning project and whether it is a declared `output` (generated - regenerate it, never hand-edit), a declared `source` (it feeds cache keys and the affected set), `maintained` (magus writes it outside any target - commit it, never ignore it), or `unclaimed`. Returns a typed DoctorReport-style envelope {definition, count, files, overlaps}, not text to re-parse: this is the question \"can I disregard this changed file\", and a caller branches on `role` rather than grepping. Runs a nested magus.",
+					Args:    []Arg{{Name: "paths", Type: TypeStringSlice}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "module",
+					Doc:     "The host modules magus exposes, with their fields, methods and rendered Buzz signatures - the records `magus describe module` prints. Omit `name` for every module; an unknown name raises. Read in-process from the host module registry.",
+					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[Module]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "spell",
+					Doc:     "The registered spells, sorted by name: each Spell carries its targets, the language it adapts and the rest of its mgs_getLanguage record (extensions, and syntax with its comments and stubs), so a script reads a language's comment and stub syntax as typed fields. Omit `name` for every spell; an unknown name raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[Spell]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "charm",
+					Doc:     "The charms in the workspace's inverse index: each {name, builtin, default, doc, declarations}, declarations naming every target that patches its argv for that charm. Omit `name` for every charm; an unknown name raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[CharmEntry]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "target",
+					Doc:     "The target catalog: each target NAME once, {name, kind, spells, projects}, across every project that declares it. evaluatedTarget details one project's target. Runs a nested magus.",
+					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[TargetEntry]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "evaluated_target",
+					Doc:     "The targets `ref` names (path:target, or a bare target name for every project declaring it), as magus would run them: sources, outputs, the dependency chain, the charms and each spell's rendered command. Raises on a ref nothing matches. Runs a nested magus.",
+					Args:    []Arg{{Name: "ref", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[EvaluatedTarget]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "project",
+					Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "Projects"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "evaluated_project",
+					Doc:     "The projects with their spells resolved: each project's fields plus resolvedSpells and targetPolicies, as `magus describe project --evaluated` prints them. Omit `path` for every project; an unknown path raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "path", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[EvaluatedProject]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "graph",
+					Doc:     "The TARGET dependency graph of every project: {projects}, each project {path, name, engine, nodes, cycle, dependsOn} and each node {name, declared, doc, dependencies, charms, spells, crossDependencies, inputs, outputs}. This is the per-project view magus.projectGraph() does not carry. Read statically from the magusfile source, so it never runs a target body. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
+					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "TargetGraph"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "graph_markdown",
+					Doc:     "The routing index `magus describe graph -o markdown` renders (MAGUS.md), as text. `projects` scopes it to those project paths and leaves out the workspace-wide tables; omit it for the whole index. Runs a nested magus.",
+					Args:    []Arg{{Name: "projects", Type: TypeStringSlice, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeString}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "workspace",
+					Doc:     "The workspace this call runs in: {root, vcsBaseRef, cacheDir, concurrency, projectCount}, as a one-element collection. Runs a nested magus.",
+					Args:    []Arg{{Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[WorkspaceEntry]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "tool",
+					Doc:     "Every project's tools: {workspace, count, lifecycle, tools}, each tool {project, bin, spell, installedVersion, probeError, spellBounds, workspaceBounds, effective, verdict, diagnosticCode, lifecycle, cycle, eol, support}. Probes every tool's version, and asks the wired lifecycle provider (magus\\lifecycle.provider) when each installed cycle reaches its end of life; lifecycle.state says whether that answer is live, cached, offline, unreached or unwired, and support reads unknown for a row it could not answer. Served in-process from the workspace on the context when there is one, and through a nested magus when there is not.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "ToolReport"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "rule",
+					Doc:     "The guard rules this workspace enforces: each {name, decision, catches, why}, decision `deny` or `advise`. Omit `name` for every rule; an unknown name raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[Rule]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "harness",
+					Doc:     "What each wired harness's host config needs merged: {id, files, merge, mcpHint, wired} per harness, files keyed by workspace path. magus never writes host config; the person runs merge. Omit `id` for every wired harness; an unknown id raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "id", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[HarnessPlan]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name:    "mcp_tool",
+					Doc:     "The MCP tools the magus server exposes: each {name, description, params}. Omit `name` for every tool; an unknown name raises. Runs a nested magus.",
+					Args:    []Arg{{Name: "name", Type: TypeString, Optional: true}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
+					Returns: []Ret{{Type: TypeAny, Object: "[MCPTool]"}},
+					Raises:  true,
+					Extern:  true,
+				},
+			},
+		},
+		{
 			Name: "service",
 			Doc: "Shared services a `magus buzz` script holds, the way a target holds one through " +
 				"ctx.needs: routed to the broker when one is up, so the service stays warm past the " +
@@ -939,7 +1005,7 @@ var magusMCPTools = []MCPTool{
 			"Define `main(args: [str])` and return a JSON-encodable value; the result is under `json`, and std.print text under `stdout`. " +
 			"`import \"magus\"` is required to call the workspace. Also importable: std, math, crypto, serialize, buffer, and the pure host modules (those marked WASM) except env. " +
 			"File imports, native FFI, and fs, proc, http, os, net, vcs, and env are refused. " +
-			"Call `magus\\describeModule(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. " +
+			"Call `magus\\describe.module(\"magus\")` for the signatures. Strict mode: label arguments after the first, and annotate every parameter. " +
 			"For a subsystem, `magus\\dir(path)`, `magus\\dirs(glob)`, `magus\\layer(name)` and `magus\\neighborhood(focus)` return typed records (Dir, [Dir], Layer, NeighborhoodResult) with imports, declared calls and layers; a directory the graph lacks raises MGS7005 and an undeclared layer MGS7006. " +
 			"Variables do not persist between calls; filter a large result in the script before returning it. " +
 			"Each call runs in a separate process. Bounded at 10 minutes when called directly; a host that supports MCP tasks can run it as a task without that bound. " +
@@ -1036,22 +1102,42 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "doctor": true, "clean": true,
+	"run": true, "doctor": true, "clean": true,
+}
+
+// typedDescribeNouns maps every `magus describe` noun spelling that has a
+// magus\describe method to that method's Buzz name. A noun missing here has no
+// typed method, so magus.cmd("describe", [noun, ...]) is the way to reach it and
+// draws no warning.
+var typedDescribeNouns = map[string]string{
+	"file": "file", "files": "file",
+	"module": "module", "modules": "module",
+	"spell": "spell", "spells": "spell",
+	"charm": "charm", "charms": "charm",
+	"target": "target", "targets": "target",
+	"project": "project", "projects": "project",
+	"graph": "graph", "graphs": "graph",
+	"workspace": "workspace", "workspaces": "workspace",
+	"tool": "tool", "tools": "tool",
+	"rule": "rule", "rules": "rule",
+	"harness": "harness", "harnesses": "harness",
+	"mcp-tool": "mcpTool", "mcp-tools": "mcpTool",
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
 // without the loaded workspace it reads from. Every such member serves its answer
 // IN-PROCESS off types.WorkspaceFromContext, which magus.Open puts there for a
-// magusfile target; a `magus buzz` script has no workspace open, and shelling out
-// (magus.describe/cmd, which fork and rediscover the root) is what it reaches for
-// instead. Coded so the constraint is greppable and linkable rather than one more
-// bare sentence.
+// magusfile target; a `magus buzz` script has no workspace open, and a member that
+// forks a nested magus (magus.cmd, most magus\describe methods) is what it reaches
+// for instead. Coded so the constraint is greppable and linkable rather than one
+// more bare sentence.
 func errNoWorkspace(member string) error {
 	return types.DiagnosticErrorf(types.MagusfileOnlyMember,
-		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\\describe/magus\\cmd instead, which fork a nested magus that discovers the workspace itself", member)
+		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\\cmd or a magus\\describe method that forks a nested magus, which discovers the workspace itself", member)
 }
 
-// MagusProjects lists the workspace's projects from the workspace already open on ctx.
+// MagusDescribeProject implements magus\describe.project: the workspace's projects,
+// from the workspace already open on ctx.
 //
 // The first of the read-only verbs served IN-PROCESS. The typed methods below it fork a
 // full magus subprocess via runMagus (a spawn, a second workspace load, a JSON encode
@@ -1059,36 +1145,47 @@ func errNoWorkspace(member string) error {
 //
 // The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
 // present for every magusfile target. A bare Buzz script has none, hence the guard.
-func MagusProjects(ctx context.Context) (types.ProjectsOutput, error) {
+func MagusDescribeProject(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.ProjectsOutput{}, errNoWorkspace("projects")
+		return types.ProjectsOutput{}, errNoWorkspace("describe.project")
 	}
 	return ws.ListProjects(ctx)
 }
 
-// MagusTargets returns every project's target graph. It is the typed counterpart to
-// `magus describe graph`: a caller that wants the target inventory no longer has to
-// shell out and parse the markdown that command renders. TargetGraph reads the
-// magusfile statically, so this is side-effect free.
+// MagusDescribeGraph implements magus\describe.graph: every project's target graph.
+// TargetGraph reads the magusfile statically, so this is side-effect free.
 //
 // It serves the workspace on the context when there is one and forks a nested magus
 // when there is not, because the caller asking for the target graph is asking the same
 // question either way; which magusfile it came from is magus's problem, not a name the
-// caller should have to choose between. These were two methods once; the split leaked an
-// implementation detail into the surface, and calling the wrong one raised rather than
-// answering.
-func MagusTargets(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
+// caller should have to choose between.
+func MagusDescribeGraph(ctx context.Context, opts map[string]any) (types.TargetGraphOutput, error) {
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
 		return ws.TargetGraph(ctx)
 	}
 	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
 }
 
-// MagusTools returns every project's tools, versions, windows and lifecycle columns. Like
-// MagusTargets it serves the workspace on the context when there is one and forks a nested
-// `magus describe tools` when there is not, so a `magus buzz` script gets the same report.
-func MagusTools(ctx context.Context) (types.ToolReport, error) {
+// MagusDescribeGraphMarkdown implements magus\describe.graphMarkdown: the MAGUS.md
+// routing index as text, which no record type carries.
+func MagusDescribeGraphMarkdown(ctx context.Context, projects []string, opts map[string]any) (string, error) {
+	quiet := map[string]any{"quiet": true}
+	for k, v := range opts {
+		quiet[k] = v
+	}
+	args := append([]string{"graph", "-o", "markdown"}, projects...)
+	res, err := runMagusSub(ctx, "describe", args, quiet)
+	if err != nil {
+		return "", err
+	}
+	return res.Stdout, nil
+}
+
+// MagusDescribeTool implements magus\describe.tool: every project's tools, versions,
+// windows and lifecycle columns. Like MagusDescribeGraph it serves the workspace on the
+// context when there is one and forks a nested `magus describe tools` when there is not.
+func MagusDescribeTool(ctx context.Context) (types.ToolReport, error) {
 	type toolReporter interface {
 		Tools(ctx context.Context, projects ...string) (types.ToolReport, error)
 	}
@@ -1096,6 +1193,78 @@ func MagusTools(ctx context.Context) (types.ToolReport, error) {
 		return ws.Tools(ctx)
 	}
 	return runMagusJSON[types.ToolReport](ctx, "describe", []string{"tools"}, nil)
+}
+
+// describeArgs is the argv for `magus describe <noun> [<name>]`: an empty name is
+// the bare noun, which lists every entity.
+func describeArgs(noun, name string) []string {
+	if name == "" {
+		return []string{noun}
+	}
+	return []string{noun, name}
+}
+
+// MagusDescribeCharm implements magus\describe.charm.
+func MagusDescribeCharm(ctx context.Context, name string, opts map[string]any) ([]types.CharmEntry, error) {
+	report, err := runMagusJSON[types.CharmReport](ctx, "describe", describeArgs("charm", name), opts)
+	return report.Charms, err
+}
+
+// MagusDescribeTarget implements magus\describe.target: the target catalog.
+func MagusDescribeTarget(ctx context.Context, opts map[string]any) ([]types.TargetEntry, error) {
+	report, err := runMagusJSON[types.TargetReport](ctx, "describe", []string{"target"}, opts)
+	return report.Targets, err
+}
+
+// MagusDescribeEvaluatedTarget implements magus\describe.evaluatedTarget.
+func MagusDescribeEvaluatedTarget(ctx context.Context, ref string, opts map[string]any) ([]types.EvaluatedTarget, error) {
+	report, err := runMagusJSON[types.EvaluatedTargetReport](ctx, "describe", []string{"target", ref}, opts)
+	return report.Targets, err
+}
+
+// MagusDescribeEvaluatedProject implements magus\describe.evaluatedProject.
+func MagusDescribeEvaluatedProject(ctx context.Context, path string, opts map[string]any) ([]types.EvaluatedProject, error) {
+	args := append(describeArgs("project", path), "--evaluated")
+	report, err := runMagusJSON[types.EvaluatedProjectsOutput](ctx, "describe", args, opts)
+	return report.Projects, err
+}
+
+// MagusDescribeWorkspace implements magus\describe.workspace.
+func MagusDescribeWorkspace(ctx context.Context, opts map[string]any) ([]types.WorkspaceEntry, error) {
+	report, err := runMagusJSON[types.WorkspaceReport](ctx, "describe", []string{"workspace"}, opts)
+	return report.Workspaces, err
+}
+
+// MagusDescribeRule implements magus\describe.rule. `describe rule <name>` prints
+// the one rule bare, so a named read is wrapped to keep the collection shape.
+func MagusDescribeRule(ctx context.Context, name string, opts map[string]any) ([]types.RuleDoc, error) {
+	if name == "" {
+		return runMagusJSON[[]types.RuleDoc](ctx, "describe", []string{"rule"}, opts)
+	}
+	rule, err := runMagusJSON[types.RuleDoc](ctx, "describe", []string{"rule", name}, opts)
+	if err != nil {
+		return nil, err
+	}
+	return []types.RuleDoc{rule}, nil
+}
+
+// MagusDescribeHarness implements magus\describe.harness. Like rule, a named read
+// prints one plan bare, so it is wrapped to keep the collection shape.
+func MagusDescribeHarness(ctx context.Context, id string, opts map[string]any) ([]types.HarnessPlan, error) {
+	if id == "" {
+		return runMagusJSON[[]types.HarnessPlan](ctx, "describe", []string{"harness"}, opts)
+	}
+	plan, err := runMagusJSON[types.HarnessPlan](ctx, "describe", []string{"harness", id}, opts)
+	if err != nil {
+		return nil, err
+	}
+	return []types.HarnessPlan{plan}, nil
+}
+
+// MagusDescribeMCPTool implements magus\describe.mcpTool.
+func MagusDescribeMCPTool(ctx context.Context, name string, opts map[string]any) ([]types.MCPTool, error) {
+	report, err := runMagusJSON[types.MCPToolReport](ctx, "describe", describeArgs("mcp-tool", name), opts)
+	return report.MCPTools, err
 }
 
 // MagusAffected computes the affected project set in-process. See MagusProjects for why
@@ -1244,29 +1413,41 @@ func MagusGraph(ctx context.Context) (types.GraphView, error) {
 // reading the source. Like the typed methods it runs in the contextual project dir
 // unless opts.dir says otherwise; see runMagus.
 func MagusCmd(ctx context.Context, sub string, args []string, opts map[string]any) (types.ExecResult, error) {
-	warnIfTypedSubcommand(ctx, sub)
+	warnIfTypedSubcommand(ctx, sub, args)
 	return runMagusSub(ctx, sub, args, opts)
 }
 
-// warnIfTypedSubcommand warns when sub names a subcommand with a dedicated
-// magus.<name>(...) method, nudging authors off the escape hatch. It is the pure
-// decision half of MagusCmd, split out so it can be tested without the nested exec.
-func warnIfTypedSubcommand(ctx context.Context, sub string) {
-	if typedMagusSubcommands[sub] {
-		slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
-			"subcommand", sub,
-			"hint", fmt.Sprintf("use magus.%s([...]) instead of magus.cmd(%q, [...])", sub, sub))
+// warnIfTypedSubcommand warns when sub (and, for describe, its noun) names a
+// command with a dedicated typed method, nudging authors off the escape hatch.
+// A describe noun with no method draws nothing: magus.cmd is the way to reach it.
+// Neither does one asked for in an explicit -o format, since a typed record is not
+// the CLI's bytes (a file written for another reader wants those).
+// It is the pure decision half of MagusCmd, split out so it can be tested without
+// the nested exec.
+func warnIfTypedSubcommand(ctx context.Context, sub string, args []string) {
+	hint := ""
+	switch {
+	case typedMagusSubcommands[sub]:
+		hint = fmt.Sprintf("use magus.%s([...]) instead of magus.cmd(%q, [...])", sub, sub)
+	case sub == "describe" && len(args) > 0 && typedDescribeNouns[args[0]] != "" && !asksForFormat(args):
+		hint = fmt.Sprintf("use magus\\describe.%s(...) instead of magus.cmd(\"describe\", [%q, ...])", typedDescribeNouns[args[0]], args[0])
+	default:
+		return
 	}
+	slog.WarnContext(ctx, "magus.cmd called for a subcommand with a dedicated method; prefer it for clarity and a stable signature",
+		"subcommand", sub, "hint", hint)
+}
+
+// asksForFormat reports whether args carry the global -o/--output flag.
+func asksForFormat(args []string) bool {
+	return slices.ContainsFunc(args, func(a string) bool {
+		return a == "-o" || a == "--output" || strings.HasPrefix(a, "-o=") || strings.HasPrefix(a, "--output=")
+	})
 }
 
 // MagusRun runs `magus run <args>` recursively; see runMagus.
 func MagusRun(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
 	return runMagusSub(ctx, "run", args, opts)
-}
-
-// MagusDescribe runs `magus describe <args>`; see runMagus.
-func MagusDescribe(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
-	return runMagusSub(ctx, "describe", args, opts)
 }
 
 // MagusAttention lists the open attention requests through a nested magus. Listing only:
@@ -1642,6 +1823,15 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 // a `magus buzz` script deciding whether a changed file is worth a human's attention.
 func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
+}
+
+// MagusDescribeSpell implements magus\describe.spell: the spell inventory, or the
+// one spell name selects. It forks for the reason MagusDescribeFile does, and
+// returns the list rather than the SpellReport envelope because the envelope's
+// other fields are a definition string and a count.
+func MagusDescribeSpell(ctx context.Context, name string, opts map[string]any) ([]types.Spell, error) {
+	report, err := runMagusJSON[types.SpellReport](ctx, "describe", describeArgs("spell", name), opts)
+	return report.Spells, err
 }
 
 // MagusDiff implements magus\diff: the annotated changeset, in reading order.

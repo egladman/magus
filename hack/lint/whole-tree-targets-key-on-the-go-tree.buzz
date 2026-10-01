@@ -9,7 +9,7 @@
 // still selected "." for those edits, because project claims and a target's key are
 // computed separately, which is what kept it invisible.
 //
-// It reads magus\targets(), the same static extraction buildStep depends on, so a
+// It reads magus\describe.graph(), the same static extraction buildStep depends on, so a
 // footprint moved into a helper or reworded still gets graded.
 namespace wholetree;
 

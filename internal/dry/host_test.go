@@ -395,18 +395,21 @@ export fun work(ctx: magus\Context, args: [str]) > void !> any {
     magus.log.error("e");
     magus.log.debug("d");
     magus.cmd("ls", []);
-    magus.describe(["x"]);
     magus.doctor(["z"]);
     magus.clean([]);
-    magus.describeModule();
-    magus.describeModule("go");
+    magus\describe.module();
+    magus\describe.module("go");
     magus.log.hint("h");
     magus.pry();
     magus.bustCache();
     magus.impact("main");
-    magus.describeFile(["magusfile.buzz"]);
+    magus\describe.file(["magusfile.buzz"]);
+    final _spells = magus\describe.spell("go");
+    final _projects = magus\describe.project().projects;
+    final _graph = magus\describe.graph().projects;
+    final _index = magus\describe.graphMarkdown();
     magus.insight({});
-    final _state = magus.tools().lifecycle.state;
+    final _state = magus\describe.tool().lifecycle.state;
 }
 `
 	r := Run(context.Background(), src, "work", nil)

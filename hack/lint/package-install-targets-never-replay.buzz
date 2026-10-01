@@ -4,7 +4,7 @@
 // target runs without its packages. That is how the console shard of #268 failed:
 // preflight hit, build ran, esbuild could not resolve @connectrpc/connect.
 //
-// A target installs when it calls an install op of its spell, which magus\targets()
+// A target installs when it calls an install op of its spell, which magus\describe.graph()
 // records statically; skip_cache is read from the evaluated projects.
 namespace installs;
 

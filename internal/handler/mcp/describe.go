@@ -1,37 +1,23 @@
 package mcp
 
-// MCPToolDefinition is the human-readable description of what an MCP tool is.
-const MCPToolDefinition = "An MCP tool is a function the magus server exposes to AI " +
-	"agents via the Model Context Protocol. Agents call these tools to discover, " +
-	"build, and diagnose the workspace without running shell commands. Start the " +
-	"server with `magus server start` to enable MCP."
-
-// MCPToolEntry is the structured view of a single MCP tool.
-type MCPToolEntry struct {
-	Name        string            `json:"name"                  yaml:"name"`
-	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Params      []ParamDescriptor `json:"params,omitempty"      yaml:"params,omitempty"`
-}
-
-// MCPToolsOutput is the top-level result for "describe mcp-tools".
-type MCPToolsOutput struct {
-	Definition string         `json:"definition" yaml:"definition"`
-	Count      int            `json:"count"      yaml:"count"`
-	MCPTools   []MCPToolEntry `json:"mcp_tools"  yaml:"mcp_tools"`
-}
+import "github.com/egladman/magus/types"
 
 // DescribeTools returns the catalog of MCP tools from the registry.
-func DescribeTools() MCPToolsOutput {
-	entries := make([]MCPToolEntry, 0, len(Registry))
+func DescribeTools() types.MCPToolReport {
+	entries := make([]types.MCPTool, 0, len(Registry))
 	for _, d := range Registry {
-		entries = append(entries, MCPToolEntry{
+		var params []types.MCPToolParam
+		for _, p := range d.Params {
+			params = append(params, types.MCPToolParam(p))
+		}
+		entries = append(entries, types.MCPTool{
 			Name:        d.Name,
 			Description: d.Description,
-			Params:      d.Params,
+			Params:      params,
 		})
 	}
-	return MCPToolsOutput{
-		Definition: MCPToolDefinition,
+	return types.MCPToolReport{
+		Definition: types.MCPToolDefinition,
 		Count:      len(entries),
 		MCPTools:   entries,
 	}

@@ -844,7 +844,7 @@ export fun config_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Renders MAGUS.md via `magus describe graph`.
 export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("MAGUS.md");
-    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    final doc = magus\describe.graphMarkdown();
     fs\writeFile("MAGUS.md", doc + "\n");
 }
 
@@ -871,7 +871,8 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen");
     final knowledge = magus\cmd("graph", args: ["export", "--reproducible", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
-    final targets = magus\describe(["graph", "-o", "json"], {"quiet": true}).stdout;
+    // The CLI's bytes, not magus\describe.graph(): the console reads the -o json field names.
+    final targets = magus\cmd("describe", args: ["graph", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
     // ci strips cd, so the gate never pushes.
     if (ctx.hasCharm("cd")) {
@@ -1491,7 +1492,7 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
 export fun release(ctx: magus\Context, args: [str]) > void !> any {
     final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
-    final modules = releaser\releasableModules(magus\projects().projects);
+    final modules = releaser\releasableModules(magus\describe.project().projects);
 
     var wanted = mut {};
     foreach (a in args) {
@@ -2006,12 +2007,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
                    "mise.toml", "magus.yaml");
     // An in-checkout cache: golangci-lint stores absolute paths, so sibling worktrees
     // would replay each other's findings.
-    final lintCache = magus\projects().workspace + "/.magus/golangci-lint";
+    final lintCache = magus\describe.project().workspace + "/.magus/golangci-lint";
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
         proc\exec(".magus/custom-gcl", ["run"]);
         // golangci-lint stops at a go.mod, so each other module gets its own run of the
         // tree-wide conventions.
-        final root = magus\projects().workspace;
+        final root = magus\describe.project().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
             proc\exec(root + "/.magus/custom-gcl",
                       ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter"],

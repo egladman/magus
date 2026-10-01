@@ -252,43 +252,17 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		return emptyExecResult(), nil
 	}))
 
-	// magus.cmd/describe return a captured-command result on the real module; stub
-	// each as an empty success so `magus.describe(...).stdout` and the like don't
-	// blow up in a dry run.
-	for _, name := range []string{"cmd", "describe"} {
-		m.MapSet(name, fn("magus."+name, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-			return emptyExecResult(), nil
-		}))
-	}
+	// magus.cmd returns a captured-command result on the real module; stub it as an
+	// empty success so `magus.cmd(...).stdout` and the like don't blow up in a dry run.
+	m.MapSet("cmd", fn("magus.cmd", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return emptyExecResult(), nil
+	}))
 
-	// The in-process read-only verbs return workspace data on the real module. A dry
-	// run has no workspace, so each is stubbed with its result SHAPE (an empty but
-	// correctly-keyed record), so field access (magus.ls().projects, .affected) still
+	// The read-only verbs return workspace data on the real module. A dry run has no
+	// workspace, so each is stubbed with its result SHAPE (an empty but correctly-keyed
+	// record), so field access (magus\describe.project().projects, .affected) still
 	// resolves instead of blowing up on null.
-	m.MapSet("projects", fn("magus.projects", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("workspace", vm.StrValue(""))
-		res.MapSet("count", vm.IntValue(0))
-		res.MapSet("projects", vm.ListValue(nil))
-		return res, nil
-	}))
-	// magus.tools probes and fetches in the live host; here it is the empty report, its
-	// lifecycle unwired, so `magus\tools().lifecycle.state` resolves.
-	m.MapSet("tools", fn("magus.tools", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		lifecycle := vm.NewMap()
-		lifecycle.MapSet("provider", vm.StrValue(""))
-		lifecycle.MapSet("state", vm.StrValue(types.LifecycleUnwired))
-		lifecycle.MapSet("sources", vm.ListValue(nil))
-		lifecycle.MapSet("asOf", vm.StrValue(""))
-		lifecycle.MapSet("fetchedAt", vm.StrValue(""))
-		lifecycle.MapSet("detail", vm.StrValue(""))
-		res := vm.NewMap()
-		res.MapSet("workspace", vm.StrValue(""))
-		res.MapSet("count", vm.IntValue(0))
-		res.MapSet("lifecycle", lifecycle)
-		res.MapSet("tools", vm.ListValue(nil))
-		return res, nil
-	}))
+	m.MapSet("describe", dryDescribe())
 	m.MapSet("affected", fn("magus.affected", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
@@ -298,8 +272,8 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("affected", vm.ListValue(nil))
 		return res, nil
 	}))
-	// The reports magus returns as domain types (doctor, describeFile, insight,
-	// impact) fork a real magus in the live host. Same rule as
+	// The reports magus returns as domain types (doctor, insight, impact) fork a
+	// real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
 	// internal/spell/gen/types.
@@ -325,13 +299,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res := vm.NewMap()
 		res.MapSet("requests", vm.ListValue(nil))
 		res.MapSet("store", vm.StrValue(""))
-		return res, nil
-	}))
-	m.MapSet("describeFile", fn("magus.describeFile", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("definition", vm.StrValue(""))
-		res.MapSet("count", vm.IntValue(0))
-		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("diff", fn("magus.diff", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -412,11 +379,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("volatility", volatility)
 		res.MapSet("unreferenced", unreferenced)
 		res.MapSet("graphStats", stats)
-		return res, nil
-	}))
-	m.MapSet("targets", fn("magus.targets", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		res := vm.NewMap()
-		res.MapSet("projects", vm.ListValue(nil))
 		return res, nil
 	}))
 	m.MapSet("where", fn("magus.where", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -556,16 +518,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 	addPureMagus(m)
 
-	// magus.modules()/magus.module(name) introspect the real host module registry,
-	// which the sandbox doesn't wire (pulling host/std in would bloat the playground).
-	// Stub them as empty-but-shaped so a reference and field access (e.g.
-	// magus.module(x).methods) resolve in a dry run.
-	m.MapSet("describeModule", fn("magus.describeModule", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		// An empty-but-shaped LIST: the real member returns a collection whether or
-		// not a name selects one, so a dry run must too or `describeModule(x)[0].name`
-		// stops resolving.
-		return vm.ListValue(nil), nil
-	}))
 	// The skill catalog is internal/agent's, which the sandbox does not link either.
 	m.MapSet("skills", fn("magus.skills", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.ListValue(nil), nil
@@ -956,6 +908,60 @@ func emptyExecResult() vm.Value {
 	res.MapSet("code", vm.IntValue(0))
 	res.MapSet("success", vm.BoolValue(true))
 	return res
+}
+
+// dryDescribe is magus\describe with every method stubbed by its result shape: a
+// collection method returns an empty list (the real one returns a collection whether
+// or not a name selects), and a report method returns its empty-but-keyed record, so
+// `magus\describe.tool().lifecycle.state` resolves. The module registry and the
+// skill catalog are not linked into the sandbox, so module is empty too.
+func dryDescribe() vm.Value {
+	d := vm.NewMap()
+	emptyList := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.ListValue(nil), nil }
+	for _, name := range []string{"module", "spell", "charm", "target", "evaluatedTarget", "evaluatedProject", "workspace", "rule", "harness", "mcpTool"} {
+		d.MapSet(name, fn("magus.describe."+name, emptyList))
+	}
+	d.MapSet("file", fn("magus.describe.file", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("definition", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("files", vm.ListValue(nil))
+		res.MapSet("overlaps", vm.ListValue(nil))
+		return res, nil
+	}))
+	d.MapSet("project", fn("magus.describe.project", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	d.MapSet("graph", fn("magus.describe.graph", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("projects", vm.ListValue(nil))
+		return res, nil
+	}))
+	d.MapSet("graphMarkdown", fn("magus.describe.graphMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.StrValue(""), nil
+	}))
+	// tool probes and fetches in the live host; here it is the empty report with its
+	// lifecycle unwired.
+	d.MapSet("tool", fn("magus.describe.tool", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		lifecycle := vm.NewMap()
+		lifecycle.MapSet("provider", vm.StrValue(""))
+		lifecycle.MapSet("state", vm.StrValue(types.LifecycleUnwired))
+		lifecycle.MapSet("sources", vm.ListValue(nil))
+		lifecycle.MapSet("asOf", vm.StrValue(""))
+		lifecycle.MapSet("fetchedAt", vm.StrValue(""))
+		lifecycle.MapSet("detail", vm.StrValue(""))
+		res := vm.NewMap()
+		res.MapSet("workspace", vm.StrValue(""))
+		res.MapSet("count", vm.IntValue(0))
+		res.MapSet("lifecycle", lifecycle)
+		res.MapSet("tools", vm.ListValue(nil))
+		return res, nil
+	}))
+	return d
 }
 
 // firstListStr returns the first string element of the first argument when it is a

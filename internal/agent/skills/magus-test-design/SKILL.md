@@ -37,7 +37,7 @@ runs locally, on a commit, or in CI.
    change what a lower boundary can prove: process/runtime execution,
    filesystem, network, time, scheduling, persistence, or a language boundary.
 
-Prefer `{{tool "client"}}` (`{{buzz "describe"}}`, `{{buzz "explain"}}`, `{{buzz "refs"}}`,
+Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "explain"}}`, `{{buzz "refs"}}`,
 `{{buzz "path"}}`); use the CLI commands above as fallback. Do not start a server
 solely to review test design.
 

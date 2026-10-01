@@ -13,7 +13,7 @@ import (
 // Tools reports the tools of the projects at the given paths, or of every project when none
 // is given: each probed version, the window it is held to, and where its release cycle
 // stands according to the wired lifecycle provider. `magus describe tools` and
-// magus\tools() both return it.
+// magus\describe.tool() both return it.
 //
 // It forks every tool's version probe, memoized per (spell, dir, bin), and the lifecycle
 // provider fetches (see Lifecycles). A tool without a probe is skipped: a constant-keyed

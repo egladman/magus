@@ -52,7 +52,7 @@ func (f *fakeWS) Affected(context.Context, string) (*types.AffectedResult, error
 func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	panic("not used")
 }
-func (f *fakeWS) ListCharms(context.Context) ([]types.Charm, error) {
+func (f *fakeWS) ListCharms(context.Context) ([]types.CharmEntry, error) {
 	panic("not used")
 }
 func (f *fakeWS) ListTargets(context.Context) ([]types.TargetEntry, error) { panic("not used") }

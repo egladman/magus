@@ -97,14 +97,15 @@ version-pinned, and has no arg-quoting to get wrong{{end}}:
 import "std"; import "magus";
 
 export fun main(args: [str]) > void !> any {
-    // opts.quiet captures the output instead of echoing it
-    final res = magus\describe(["file", "MAGUS.md", "-o", "json"], opts: {"quiet": true});
-    std\print(res.stdout);
+    // a typed FileReport, not CLI text to parse
+    foreach (f in magus\describe.file(["MAGUS.md"]).files) {
+        std\print("{f.path}: {f.role}");
+    }
 }
 ```
 
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
-CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
+CORRECT: the typed `magus\run` / `magus\describe.<noun>` / `insight` / `doctor`, or `magus\cmd` for the rest.
 
 Members that need a magusfile raise {{mgslink "MGS1022"}} naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
