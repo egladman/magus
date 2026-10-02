@@ -22,9 +22,10 @@ before CI does, has not gone away, and E is a large engine delivery whose measur
 resumes. It keeps the contract lines a script can keep: the checkout read-only at its own
 path, the environment crossing only by name (`--env NAME`), the floor, the command's own
 streams and exit status, 71 when the relay fails before the command starts, a landlock
-kernel checked before start, and the Go image `mise.toml` pins. Its header names the ones it
-cannot keep, among them a digest pin, no implicit pull, a TTY, stdin, and signals waited for
-without a timer. The rest of this page is unchanged.
+kernel checked before start, and magus built on the host and run in a Chainguard image
+whose git meets magus's floor (the Go image `mise.toml` pins ships an older one). It cannot
+keep a digest pin, no implicit pull, a TTY, stdin, or signals waited for without a timer.
+The rest of this page is unchanged.
 
 ## Context
 
