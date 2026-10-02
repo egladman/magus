@@ -1690,7 +1690,11 @@ func TestExportDoesNotBlockANestedRun(t *testing.T) {
 	nested := make(chan struct{})
 	go func() {
 		c.exportMu.RLock()
+		acquired := true
 		c.exportMu.RUnlock()
+		if !acquired {
+			t.Error("nested run did not acquire the read lock")
+		}
 		close(nested)
 	}()
 	select {
