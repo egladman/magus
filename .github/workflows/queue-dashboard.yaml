@@ -1,0 +1,108 @@
+name: Queue dashboard
+
+# The pinned "Merge queue" issue's boxes. queue-advice.yaml and queue-apply.yaml render the
+# page with every box unchecked; checking one edits the issue, and this answers the edit:
+# it reads which boxes went from unchecked to checked, acts on them only when the person
+# who checked them holds write, maintain or admin on this repository, and renders the page
+# again so every box is clear. Anyone else's check, and a bot's, is ignored, and the run's
+# summary says why.
+#
+# A box's marker only names a pull request and an action. Whether that action is still
+# offered is read from GitHub when the box is checked, and the sender's role from the API;
+# the issue body is never the authority for either.
+#
+# The writes are the queue app's, as queue-apply.yaml's are: auto-merge and reruns the
+# Actions token makes start no workflow, so the queue would never see them. The page's
+# own render uses the Actions token, whose edit starts no run of this workflow.
+
+on:
+  issues:
+    types: [edited]
+
+# One edit at a time, in order: a newer edit waits rather than cancelling one that is
+# acting. A box already checked in the edit before is never acted on again.
+concurrency:
+  group: queue-dashboard-boxes
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  boxes:
+    name: queue dashboard boxes
+    if: >-
+      vars.MAGUS_QUEUE_DASHBOARD_ISSUE != '' &&
+      format('{0}', github.event.issue.number) == vars.MAGUS_QUEUE_DASHBOARD_ISSUE &&
+      github.event.changes.body != null
+    runs-on: ubuntu-latest
+    # For the queue app's key, released to main's runs alone; an issues event runs main.
+    environment: magus-queue
+    timeout-minutes: 20
+    permissions:
+      contents: read # check out main; read its tip
+      pull-requests: read # every open and recently merged pull request
+      checks: read # their checks, which say green
+      statuses: read # the merge-queue status, which says why one waits
+      actions: read # queue.yaml's running validation jobs
+      issues: write # the pinned issue's body
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      - id: boxes
+        name: Read which boxes a writer checked, and what each starts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ vars.MAGUS_QUEUE_DASHBOARD_ISSUE }}
+          MAIN: ${{ github.event.repository.default_branch }}
+        run: magus buzz hack/ci/pull-requests.buzz -- boxes --event "$GITHUB_EVENT_PATH" --issue "$ISSUE" --base "$MAIN" --plan "$RUNNER_TEMP/queue-boxes.json" --out "$GITHUB_STEP_SUMMARY"
+
+      # Minted only when a box asks the queue for something: auto-merge needs contents and
+      # pull requests, a rerun and a dispatch need actions.
+      - id: app
+        if: steps.boxes.outputs.act == 'true' || steps.boxes.outputs.start == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.MAGUS_QUEUE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MAGUS_QUEUE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-actions: write
+
+      - name: Requeue, queue or rerun as the queue app
+        if: steps.boxes.outputs.act == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: magus buzz hack/ci/pull-requests.buzz -- act --plan "$RUNNER_TEMP/queue-boxes.json"
+
+      # The edit is when the person asked; a validation run that read the queue after it
+      # already covers it.
+      - name: Start a validation run on main, unless one covers it
+        if: steps.boxes.outputs.start == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          INTENT_AT: ${{ github.event.issue.updated_at }}
+        run: magus buzz hack/ci/merge-queue.buzz -- start --base "$MAIN" --intent-at "$INTENT_AT"
+
+      - name: Render the merge queue again, every box unchecked
+        if: always() && steps.boxes.outputs.rerender == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAIN: ${{ github.event.repository.default_branch }}
+          ISSUE: ${{ vars.MAGUS_QUEUE_DASHBOARD_ISSUE }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base "$MAIN" --out "$RUNNER_TEMP/dashboard.md" --issue "$ISSUE" --run-url "$RUN_URL"
