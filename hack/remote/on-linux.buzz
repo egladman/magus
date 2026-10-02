@@ -330,8 +330,13 @@ fun buildMagus(p: Plan) > str !> any {
         }
     }
     if (newest == "") { return "release-build left no linux/{p.arch} archive in dist/"; }
+    return placeMagus(p, content: archive\readFile(newest, name: "magus"));
+}
+
+// placeMagus writes the binary the container runs as `magus` into the mounted store.
+fun placeMagus(p: Plan, content: str = "", source: str = "") > str !> any {
     final bin = "{store(p)}/on-linux/magus";
-    fs\writeFile("{bin}.next", content: archive\readFile(newest, name: "magus"));
+    fs\writeFile("{bin}.next", content: if (source != "") fs\readFile(source) else content);
     fs\chmod("{bin}.next", mode: 493);
     fs\rename("{bin}.next", dst: bin);
     return "";
@@ -402,7 +407,8 @@ fun delete(id: str) > int !> any {
     return proc\exec("podman", args: ["rm", id], opts: {"allow_failure": true}).code;
 }
 
-fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
+// run builds this tree's magus for the container unless binary names one already built.
+fun run(o: Options, hostOS: str, hostArch: str, binary: str = "") > int !> any {
     final root = vcs\root();
     final cwd = path\abs(".");
     if (!under(cwd, dir: root)) {
@@ -465,7 +471,7 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
         if (!made.ok) { return refuse(RELAY_FAILED, message: "podman volume create failed: {made.stderr}"); }
     }
     fs\mkdirAll("{store(p)}/on-linux/run");
-    final unbuilt = buildMagus(p);
+    final unbuilt = if (binary == "") buildMagus(p) else placeMagus(p, source: binary);
     if (unbuilt != "") { return refuse(RELAY_FAILED, message: "building magus for linux/{p.arch} failed, so nothing ran: {unbuilt}"); }
 
     final head = vcs\commit().short;
@@ -705,5 +711,9 @@ test "live: a command's exit status crosses unchanged" {
         std\print("skip: {why}");
         return;
     }
-    assert\equal(run(parse(["sh", "-c", "uname -s | grep -qx Linux && exit 3"]), hostOS: host[0], hostArch: host[1]), want: 3, message: "exit status");
+    // A stub stands in for magus: building one is a nested magus run, which a test under
+    // buzz-test cannot start, and `sh -c` never calls it.
+    final stub = "{fs\tempDir("on-linux-stub-")}/magus";
+    fs\writeFile(stub, content: "#!/bin/sh\nexit 70\n");
+    assert\equal(run(parse(["sh", "-c", "uname -s | grep -qx Linux && exit 3"]), hostOS: host[0], hostArch: host[1], binary: stub), want: 3, message: "exit status");
 }
