@@ -3344,9 +3344,9 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 	switch code := exitCode(err); {
 	case err == nil, code == 1:
 	case code == 129:
-		// The floor already rejects git older than 2.40. 129 is a binary that
+		// The floor already rejects git older than 2.54. 129 is a binary that
 		// reports a new enough version and still has no merge-tree --write-tree.
-		return types.TreeMergeResult{}, errors.New("git merge-tree --write-tree needs git 2.40 or newer")
+		return types.TreeMergeResult{}, errors.New("git merge-tree --write-tree is missing from a git that reports a supported version")
 	default:
 		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w: %s", m.Ours, m.Theirs, err, strings.TrimSpace(stderr.String()))
 	}

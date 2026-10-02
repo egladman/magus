@@ -16,7 +16,7 @@ import (
 )
 
 func TestToolFloorIsTheReleaseThatAddedTheFlag(t *testing.T) {
-	assert.Equal(t, "2.40", toolFloors["git"].min)
+	assert.Equal(t, "2.54", toolFloors["git"].min)
 	assert.Equal(t, "0.22", toolFloors["jj"].min)
 	assert.Equal(t, "4.5", toolFloors["hg"].min)
 	assert.Equal(t, "0.2.20230523", toolFloors["sl"].min)
@@ -33,7 +33,8 @@ func TestVersionErrorRejectsTheReleaseBeforeTheFlag(t *testing.T) {
 		old         bool
 	}{
 		{"git", "git version 2.39.5 (Apple Git-155)", true},
-		{"git", "git version 2.40.0", false},
+		{"git", "git version 2.53.0", true},
+		{"git", "git version 2.54.0", false},
 		{"git", "git version 2.55.0", false},
 		{"jj", "jj 0.21.0", true},
 		{"jj", "jj 0.22.0", false},
@@ -83,11 +84,11 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 	toolProbes.Delete("git")
 	t.Cleanup(func() { toolProbes.Delete("git") })
 
-	write("2.39.0")
+	write("2.53.0")
 	require.ErrorIs(t, cachedToolVersion(t.Context(), "git"), types.ToolTooOld)
-	write("2.40.0")
+	write("2.54.0")
 	require.NoError(t, cachedToolVersion(t.Context(), "git"))
-	write("2.39.0")
+	write("2.53.0")
 	assert.NoError(t, cachedToolVersion(t.Context(), "git"), "a passing verdict is remembered")
 }
 
