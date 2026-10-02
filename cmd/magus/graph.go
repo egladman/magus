@@ -564,16 +564,36 @@ func statsText(out types.KnowledgeStats) error {
 // symbol-seeded query), the lazily-loaded @symbols shards are merged in on top of
 // the default domain graph.
 func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
-	ws, err := inspectWorkspace(ctx, root)
+	ws, err := inspectForRead(ctx, root)
 	if err != nil {
 		return nil, err
 	}
 	return knowledgeGraphOf(ctx, ws, globalCfg, refresh, global, includeSymbols)
 }
 
+// inspectForRead is inspectWorkspace for a graph read: the handle startup already opened
+// when there is one, else a lazy workspace that inspects on the first call needing the
+// model, so a read the stored graph answers never evaluates a magusfile (see openForRead).
+func inspectForRead(ctx context.Context, root string) (graphWorkspace, error) {
+	if m, ok := loadedMagus(); ok {
+		return m, nil
+	}
+	wsRoot, err := magus.FindRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	return magus.NewLazyWorkspace(wsRoot, func(ctx context.Context) (*magus.Magus, error) {
+		ws, err := inspectWorkspace(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		return asMagus(ws)
+	}), nil
+}
+
 // knowledgeGraphOf is loadKnowledgeGraph over a workspace the caller already holds, read
 // under cfg: the form a server answering for one of many workspaces calls.
-func knowledgeGraphOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
+func knowledgeGraphOf(ctx context.Context, ws graphWorkspace, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
 	if global {
 		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
 		// Warn rather than silently drop a symbol-seeded selection, so an empty result
@@ -581,7 +601,11 @@ func knowledgeGraphOf(ctx context.Context, ws types.WorkspaceRepository, cfg con
 		if includeSymbols {
 			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
 		}
-		return magus.BuildGlobalKnowledgeGraph(ctx, ws, cfg, refresh, slog.Default())
+		full, err := fullWorkspace(ctx, ws)
+		if err != nil {
+			return nil, err
+		}
+		return magus.BuildGlobalKnowledgeGraph(ctx, full, cfg, refresh, slog.Default())
 	}
 	if refresh {
 		// Before paying to rebuild, take the published copy if this workspace names one.

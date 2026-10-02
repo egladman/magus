@@ -707,3 +707,85 @@ func TestStoreConcurrentSyncsLeaveManifestAndShardsAgreeing(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, man.Shards["project:x"].Fingerprint, sf.Fingerprint, "the manifest names a shard the file does not hold")
 }
+
+// A shard is written compact: the indentation was only for a reader of the file, and it
+// made a stored graph about twice the size. Nothing about the content or its key changes,
+// and a store written indented, by an older build, still loads.
+func TestStoreWritesCompactShards(t *testing.T) {
+	cacheDir, in := buildFixture(t)
+	g1 := build(t, cacheDir, BuildOptions{}, in)
+	s := NewStore(cacheDir, false, 0, nil, nil)
+
+	b, err := os.ReadFile(s.shardPath("pkg/b"))
+	require.NoError(t, err)
+	require.True(t, json.Valid(b))
+	assert.NotContains(t, string(b), "\n", "a compact shard is one line")
+
+	sf, err := s.readShard("pkg/b")
+	require.NoError(t, err)
+	assert.Equal(t, readManifest(t, cacheDir).Shards["pkg/b"].Fingerprint, sf.Fingerprint, "the key is the content's, not the bytes'")
+
+	// The same shard written the way an older build wrote it is read to the same content.
+	indented, err := json.MarshalIndent(sf, "", "  ")
+	require.NoError(t, err)
+	require.Contains(t, string(indented), "\n  ")
+	assert.Less(t, len(b), len(indented), "compact is smaller than the indented form of the same shard")
+	t.Logf("shard pkg/b: %d bytes compact, %d indented", len(b), len(indented))
+	require.NoError(t, os.WriteFile(s.shardPath("pkg/b"), indented, 0o644))
+	again, err := s.readShard("pkg/b")
+	require.NoError(t, err)
+	assert.Equal(t, sf, again)
+
+	g2, err := s.Load(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, g1.Fingerprint(), g2.Fingerprint())
+}
+
+// mergeShards sizes its maps from the shards' counts; the sum over-counts a node two
+// shards both declare, which must cost buckets only, never a node.
+func TestMergeShardsPresizedGraphEqualsIncrementalMerge(t *testing.T) {
+	shared := types.KnowledgeNode{ID: "spell:go", Kind: types.KindSpell, Label: "go"}
+	shards := []Shard{
+		{Name: "pkg/b", Nodes: []types.KnowledgeNode{shared, {ID: "project:pkg/b", Kind: types.KindProject, Label: "b"}},
+			Edges: []types.KnowledgeEdge{{Source: "project:pkg/b", Target: "spell:go", Relation: types.RelationUses, Confidence: types.ConfidenceExtracted}}},
+		{Name: "pkg/a", Nodes: []types.KnowledgeNode{shared, {ID: "project:pkg/a", Kind: types.KindProject, Label: "a"}},
+			Edges: []types.KnowledgeEdge{{Source: "project:pkg/a", Target: "spell:go", Relation: types.RelationUses, Confidence: types.ConfidenceExtracted}}},
+		{Name: "pkg/a" + symbolsShardSuffix, Nodes: []types.KnowledgeNode{{ID: "symbol:x", Kind: types.KindSymbol, Label: "x"}}},
+	}
+	want := NewGraph()
+	want.Merge(shards[1].Nodes, shards[1].Edges)
+	want.Merge(shards[0].Nodes, shards[0].Edges)
+
+	got := mergeShards(shards, false)
+	assert.Equal(t, want.Output(), got.Output())
+	assert.Len(t, got.Nodes(), 3, "the shared node is one node")
+	assert.NotContains(t, got.nodes, "symbol:x", "a lazily loaded shard is not part of the default merge")
+}
+
+// BenchmarkMergeShards is the presizing A/B: the same default-shard merge into a graph
+// sized from the shards' counts (what mergeShards does) and into one grown from empty
+// (what it did). The 2000-project fixture is the one the other benchmarks use.
+func BenchmarkMergeShards(b *testing.B) {
+	shards := AssembleShards(syntheticInputs(benchProjects, benchTargets))
+	b.Run("presized", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			_ = mergeShards(shards, false)
+		}
+	})
+	b.Run("grown", func(b *testing.B) {
+		picked := make([]Shard, 0, len(shards))
+		for _, sh := range shards {
+			if !isLazyShard(sh.Name) {
+				picked = append(picked, sh)
+			}
+		}
+		b.ReportAllocs()
+		for b.Loop() {
+			g := NewGraph()
+			for _, sh := range picked {
+				g.Merge(sh.Nodes, sh.Edges)
+			}
+		}
+	})
+}

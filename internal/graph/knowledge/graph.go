@@ -20,7 +20,7 @@ import (
 // never seen each other: the server's warm graph hands the same *Graph to
 // concurrent HTTP/MCP requests once assembly finishes. The lazy indices below are
 // the one place a "read" still writes, so they coalesce concurrent first-builds
-// under a mutex rather than racing (see ensureAdj, projectPaths).
+// under a mutex rather than racing (see ensureAdj, searchIdx).
 type Graph struct {
 	nodes map[string]types.KnowledgeNode // by node ID
 	edges map[edgeKey]types.KnowledgeEdge
@@ -32,11 +32,15 @@ type Graph struct {
 	out   map[string][]types.KnowledgeEdge // by source ID
 	in    map[string][]types.KnowledgeEdge // by target ID
 
-	// Project paths sorted longest-first, built lazily for source-path ownership
-	// resolution (the project: query filter). Invalidated with the adjacency.
-	// projMu guards the build the same way adjMu guards out/in.
-	projMu    sync.Mutex
-	projPaths []string
+	// The search index Resolve scans (see search_index.go): per node, the lowercased
+	// id/label/doc text and the project that owns it, plus a kind partition. It is built
+	// lazily on the first query and holds node-derived data only, so AddNode drops it
+	// and an edge never does. idxMu guards the holder pointer; the holder's own mutex
+	// guards the build, the way adjMu guards out/in. The holder is shared (share, adopt)
+	// so every graph handed the same cached content builds the index once, not once per
+	// request: the index is immutable after the build.
+	idxMu  sync.Mutex
+	search *searchHolder
 
 	// Workspace root the node IDs are relative to, so a query can canonicalise an
 	// absolute path a human pasted. Stamped by Build; empty on a hand-built graph,
@@ -68,6 +72,17 @@ func NewGraph() *Graph {
 	}
 }
 
+// newGraphSized is NewGraph with the node and edge maps sized for the counts a caller
+// already knows (mergeShards sums them from the shards), so the merge does not regrow
+// them. The counts are an upper bound on the merged graph, since nodes and edges that
+// two shards share dedup; an over-estimate costs only buckets.
+func newGraphSized(nodes, edges int) *Graph {
+	return &Graph{
+		nodes: make(map[string]types.KnowledgeNode, nodes),
+		edges: make(map[edgeKey]types.KnowledgeEdge, edges),
+	}
+}
+
 // SetRoot records the workspace root the graph's node IDs are relative to. Every
 // resolution path normalizes a pasted path against it (see normalizePaths), so a graph
 // without one answers absolute and backslash spellings as if they were literal text.
@@ -84,6 +99,7 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Source = sanitize(n.Source, maxSrcLen)
 	n.Attrs = sanitizeAttrs(n.Attrs)
 	g.own()
+	g.search = nil // node text, kind and source feed the search index; rebuilt on the next query
 	existing, ok := g.nodes[n.ID]
 	if !ok {
 		g.nodes[n.ID] = n
@@ -159,7 +175,9 @@ func (g *Graph) AddEdge(e types.KnowledgeEdge) {
 		e.Attrs = fillAttrs(e.Attrs, prev.Attrs)
 	}
 	g.edges[k] = e
-	g.out, g.in, g.projPaths = nil, nil, nil // invalidate lazy indices; rebuilt on next query
+	// The search index is not dropped here: it holds node-derived data only, and the
+	// edge-reading parts of a query (relation filter, cited rank) go through out/in.
+	g.out, g.in = nil, nil // invalidate lazy indices; rebuilt on next query
 }
 
 // own readies g for a write: it forgets g's base, and copies the maps a cached graph shares.
@@ -179,7 +197,7 @@ func (g *Graph) own() {
 func (g *Graph) share() *Graph {
 	g.ensureAdj()
 	g.shared = true
-	return &Graph{nodes: g.nodes, edges: g.edges, out: g.out, in: g.in, root: g.root, shared: true}
+	return &Graph{nodes: g.nodes, edges: g.edges, out: g.out, in: g.in, search: g.searchHolder(), root: g.root, shared: true}
 }
 
 // adopt makes g hold cached's content, its adjacency included, as a shared graph. g keeps
@@ -188,9 +206,10 @@ func (g *Graph) adopt(cached *Graph) {
 	g.adjMu.Lock()
 	g.nodes, g.edges, g.out, g.in = cached.nodes, cached.edges, cached.out, cached.in
 	g.adjMu.Unlock()
-	g.projMu.Lock()
-	g.projPaths = nil
-	g.projMu.Unlock()
+	holder := cached.searchHolder()
+	g.idxMu.Lock()
+	g.search = holder
+	g.idxMu.Unlock()
 	g.shared, g.base = true, ""
 }
 

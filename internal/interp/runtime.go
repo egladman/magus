@@ -28,6 +28,7 @@ import (
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -289,15 +290,17 @@ func ContentID(data []byte) string {
 func loadReader(ctx context.Context) func(path string) ([]byte, error) {
 	read := sourceReaderFrom(ctx)
 	log, _ := ctx.Value(sourceLogCtxKey{}).(*SourceLog)
-	if log == nil {
+	reads := readlog.From(ctx)
+	if log == nil && reads == nil {
 		return read
 	}
 	if read == nil {
 		read = os.ReadFile
 	}
 	return func(path string) ([]byte, error) {
+		readlog.File(ctx, path)
 		data, err := read(path)
-		if err == nil {
+		if err == nil && log != nil {
 			log.record(path, data)
 		}
 		return data, err

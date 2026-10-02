@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
@@ -140,6 +141,12 @@ type Magus struct {
 	// policyLog is every file the root magusfile's load read, which is where a workspace
 	// guard rule can come from. Nil until preloadMagusfiles runs.
 	policyLog *interp.SourceLog
+	// loadReads is what every project's load read beyond its sources: the environment
+	// variables and files a top level consulted. The knowledge store folds them into the
+	// stamp that stands for "this evaluation still holds" (see knowledgeFastStamps), so a
+	// declaration that depends on the environment is re-evaluated when the environment
+	// moves. Nil until preloadMagusfiles runs.
+	loadReads *readlog.Log
 
 	// magusfileExports are the target keys each project's magusfile registered when
 	// load evaluated it, by project path. A project absent here was not evaluated.
@@ -425,6 +432,11 @@ func (m *Magus) load(ctx context.Context) error {
 // them. The import resolvers reach it through the workspace on the context.
 func (m *Magus) SpellImports() *remotespell.Imports { return m.spellImports }
 
+// EvaluationReads returns what this workspace's load read beyond its sources (see
+// loadReads): the inputs, with the tree, the binary and the configuration, that decide
+// whether an evaluation still holds. Empty before preloadMagusfiles ran.
+func (m *Magus) EvaluationReads() readlog.Reads { return m.loadReads.Reads() }
+
 // spellRegistryClient is the client a remote spell pull uses for host: authenticated
 // by its spells.registries entry when there is one, anonymous otherwise. It runs before
 // any magusfile could select a secret provider, so the reference resolves through the
@@ -577,6 +589,8 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 	// The workspace's resolver, not a fresh one: this path evaluates magusfile top levels,
 	// so a top-level read here must be the SAME read the run sees.
 	ctx = m.ContextWithSecrets(ctx)
+	m.loadReads = &readlog.Log{}
+	ctx = readlog.With(ctx, m.loadReads)
 	var errs []error
 	for _, p := range m.All() {
 		srcs, err := interp.FindAll(p.Dir)

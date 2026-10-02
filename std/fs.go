@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
@@ -358,6 +359,7 @@ func FsExists(ctx context.Context, path string) (bool, error) {
 		// the file is there.
 		return false, err
 	}
+	readlog.File(ctx, path)
 	_, err := os.Stat(path)
 	return err == nil, nil
 }
@@ -368,6 +370,7 @@ func FsReadFile(ctx context.Context, path string) (string, error) {
 	if err := checkRead(ctx, path); err != nil {
 		return "", err
 	}
+	readlog.File(ctx, path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("fs.read_file %q: %w", path, err)

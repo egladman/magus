@@ -491,6 +491,16 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// that spawns no child, and a forward would only be refused: the server adopts run
 		// and affected alone.
 		return dispatchProfile{needsConfig: true}
+	case "graph":
+		// stats and export are graph reads too: the stored graph answers them, and the
+		// workspace opens lazily only if that graph is stale (see inspectForRead), so a
+		// preload would put the full load the lazy open exists to skip in front of them.
+		// build runs the symbol indexers, which need the pool the preload hosts, and the
+		// other subcommands keep the default with it.
+		if len(subArgs) > 0 && (subArgs[0] == hint.GraphStats.Leaf() || subArgs[0] == hint.GraphExport.Leaf()) {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	default:
 		return dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true}
 	}

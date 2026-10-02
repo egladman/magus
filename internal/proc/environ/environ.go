@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/egladman/magus/internal/readlog"
 )
 
 // Overlay is one run's own changes to the environment: what env\set, env\unset and
@@ -94,6 +96,7 @@ func (o *Overlay) Apply(env []string) []string {
 
 // Lookup is os.LookupEnv as the run on ctx sees it: its overlay first, then the process.
 func Lookup(ctx context.Context, name string) (string, bool) {
+	readlog.Env(ctx, name)
 	if v, set, known := From(ctx).Lookup(name); known {
 		return v, set
 	}
@@ -102,5 +105,6 @@ func Lookup(ctx context.Context, name string) (string, bool) {
 
 // Of is os.Environ as the run on ctx sees it.
 func Of(ctx context.Context) []string {
+	readlog.EnvAll(ctx)
 	return From(ctx).Apply(os.Environ())
 }

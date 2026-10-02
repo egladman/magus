@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
 
@@ -56,6 +57,16 @@ type Inputs struct {
 	// @symbols shard: deterministic, so remote-shareable like the other extracted
 	// shards, and destined for lazy loading (it can dwarf the domain graph).
 	Symbols map[string][]types.KnowledgeSymbol
+	// Indexes are the symbol indexes the workspace declares, as resolved from its evaluated
+	// projects and spells. They are recorded on the manifest (see manifest.Indexes), not
+	// assembled into any shard: a read answered by the fast stamps has no evaluated
+	// workspace to resolve them from, and reads them back from there instead. nil leaves
+	// the manifest's record as it was.
+	Indexes []SymbolIndexDeclaration
+	// Reads is what the evaluation these inputs come from read beyond the tree (see
+	// manifest.Reads), recorded with the shards so the next read's fast domain stamp folds
+	// the same inputs. nil leaves the manifest's record as it was.
+	Reads *readlog.Reads
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared

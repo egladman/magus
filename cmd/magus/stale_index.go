@@ -117,9 +117,28 @@ func staleIndexProjects(ctx context.Context, root string) []string {
 	return staleIndexProjectsOf(ctx, ws)
 }
 
-func staleIndexProjectsOf(ctx context.Context, ws types.WorkspaceRepository) []string {
-	m, ok := ws.(*magus.Magus)
-	if !ok {
+func staleIndexProjectsOf(ctx context.Context, ws graphWorkspace) []string {
+	var m *magus.Magus
+	switch w := ws.(type) {
+	case *magus.Magus:
+		m = w
+	case *magus.LazyWorkspace:
+		// Freshness is a cache question (see symbol_stamp.go): it keys the scip step, which
+		// needs the evaluated workspace. A read the stored graph answered without opening
+		// one takes the verdicts the last evaluation recorded while they provably still
+		// hold (unchanged sources and index files, see magus.RecordedStaleIndexes), and
+		// opens the workspace to judge afresh otherwise, as every read did before.
+		if !w.Opened() {
+			if stale, ok := magus.RecordedStaleIndexes(ctx, w, globalCfg); ok {
+				return stale
+			}
+		}
+		opened, err := w.Magus(ctx)
+		if err != nil {
+			return nil
+		}
+		m = opened
+	default:
 		return nil
 	}
 	var stale []string
