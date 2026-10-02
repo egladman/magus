@@ -2434,7 +2434,7 @@ test "--apply writes each layer's part of a file through a temporary index, and 
     assert\equal(first, want: "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string \{\n\treturn strings.ToUpper(s)\n\}\n\nfunc Keep() int \{\n\treturn len(Base())\n\}",
         message: "layer 1 has Keep's new body and still the old name");
     final listed = gitIn(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
-    assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt"], message: "layer 1's tree");
+    assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt", "go.mod"], message: "layer 1's tree");
     final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
     assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
         message: "layer 2 builds against Helper's stub: {stubbedIn}");

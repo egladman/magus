@@ -3,7 +3,8 @@
     ".gitattributes": "*.go diff=golang\n",
     "calc/calc.go": "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string {\n\treturn strings.ToUpper(s)\n}\n\nfunc Keep() int {\n\treturn 1\n}\n",
     "cmd/main.go": "package main\n\nimport \"example.com/m/calc\"\n\nfunc main() {\n\tprintln(calc.Old(\"x\"))\n}\n",
-    "gen/top.txt": "top v1\n"
+    "gen/top.txt": "top v1\n",
+    "go.mod": "module example.com/m\n\ngo 1.25\n"
   },
   "head": {
     "calc/calc.go": "package calc\n\nimport \"strings\"\n\nfunc Shout(s string) string {\n\treturn strings.ToUpper(s)\n}\n\n// Helper calls back into Mid, so the two reference each other.\nfunc Helper(n int) string {\n\tif n > 0 {\n\t\treturn Mid() // \"}\" in a comment is not a brace\n\t}\n\treturn \"{h}\"\n}\n\nfunc Keep() int {\n\treturn len(Base())\n}\n",
