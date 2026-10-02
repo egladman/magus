@@ -4,13 +4,13 @@
 // and 2 for a refusal. It is option B' of
 // docs/decisions/0003-running-an-invocation-on-another-operating-system.md.
 //
-//	magus buzz hack/remote/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...
+//	magus buzz hack/remote/on-linux.buzz -- [--env NAME]... [--image <ref>] [--keep] <command>...
 //	magus buzz hack/remote/on-linux.buzz -- --ls
 //	magus buzz hack/remote/on-linux.buzz -- --delete <id>
 //
 // The options come first; the first word that is not one of them starts the command, which
-// runs verbatim, so `-- magus run test --keep` keeps its own --keep. --arch defaults to this
-// host's. The image defaults to DEFAULT_IMAGE, which carries git and a shell and no
+// runs verbatim, so `-- magus run test --keep` keeps its own --keep. The container runs this
+// host's architecture. The image defaults to DEFAULT_IMAGE, which carries git and a shell and no
 // toolchain; --image swaps in one that has what the command needs. Inside, `magus` and
 // `./magus` are this tree's magus, cross-compiled here by the root's release-build target.
 namespace onlinux;
@@ -37,13 +37,12 @@ import "assert";
 // ship an older Debian or Alpine git.
 final DEFAULT_IMAGE = "cgr.dev/chainguard/git:latest-dev";
 
-final USAGE = "usage: magus buzz hack/remote/on-linux.buzz -- [--arch amd64|arm64] [--env NAME]... [--image <ref>] [--keep] <command>...\n       magus buzz hack/remote/on-linux.buzz -- --ls\n       magus buzz hack/remote/on-linux.buzz -- --delete <id>";
+final USAGE = "usage: magus buzz hack/remote/on-linux.buzz -- [--env NAME]... [--image <ref>] [--keep] <command>...\n       magus buzz hack/remote/on-linux.buzz -- --ls\n       magus buzz hack/remote/on-linux.buzz -- --delete <id>";
 
 final HELP = [
     "on-linux: run a command in a local Linux container through Podman (a local container and a build of magus here, plus an image pull over the network the first time)",
     USAGE,
     "",
-    "  --arch amd64|arm64  the Linux architecture (default: this host's; podman emulates the other)",
     "  --env NAME          pass one host variable by name; nothing else crosses",
     "  --image <ref>       the image (default: {DEFAULT_IMAGE}, git and a shell only)",
     "  --keep              leave the container after the command exits",
@@ -73,7 +72,6 @@ final WRAPPER = [
 ].join("\n");
 
 export object Options {
-    arch: str = "",
     envs: [str],
     image: str = "",
     keep: bool = false,
@@ -123,14 +121,12 @@ fun isName(s: str) > bool {
 export fun parse(args: [str]) > Options !> str {
     var parsed = flags\FlagParse{ values = {<str: str>}, lists = {<str: [str]>}, positionals = [<str>], unknown = [<str>] };
     try {
-        parsed = flags\parse(args, switches: ["-h", "--help", "--keep", "--ls"], valued: ["--arch", "--image", "--delete"],
+        parsed = flags\parse(args, switches: ["-h", "--help", "--keep", "--ls"], valued: ["--image", "--delete"],
             repeated: ["--env"], command: true);
     } catch (e: {str: str}) {
         throw (e["message"] ?? "{e}").replace("flags.parse: ", with: "");
     }
     if (parsed.unknown.len() > 0) { throw "unknown option {parsed.unknown[0]}"; }
-    final arch = parsed.values["--arch"] ?? "";
-    if (arch != "" and arch != "amd64" and arch != "arm64") { throw "--arch takes amd64 or arm64, not {arch}"; }
     final envs = mut [<str>];
     foreach (v in parsed.lists["--env"] ?? [<str>]) {
         if (!isName(v)) { throw "--env takes a variable NAME, not {v}: its value crosses from this host's environment"; }
@@ -142,11 +138,11 @@ export fun parse(args: [str]) > Options !> str {
     final del = parsed.values["--delete"] ?? "";
     final help = parsed.values["-h"] != null or parsed.values["--help"] != null;
     final command = parsed.positionals;
-    final opts = Options{arch = arch, envs = envs, image = image, keep = keep, ls = ls, delete = del, help = help, command = command};
+    final opts = Options{envs = envs, image = image, keep = keep, ls = ls, delete = del, help = help, command = command};
     if (help) { return opts; }
     if (ls or del != "") {
         if (ls and del != "") { throw "--ls and --delete are two requests; pass one"; }
-        if (command.len() > 0 or arch != "" or envs.len() > 0 or image != "" or keep) {
+        if (command.len() > 0 or envs.len() > 0 or image != "" or keep) {
             final which = if (ls) "--ls" else "--delete";
             throw "{which} stands alone: it takes no command and no other option";
         }
@@ -311,10 +307,9 @@ export fun hasLandlock(kernel: str) > bool {
 
 // effect is the first line a run prints. digest is "" when the image is absent and about
 // to be pulled; machine is hold's note, "" on Linux.
-export fun effect(p: Plan, hostArch: str, podman: str, kernel: str, digest: str, tree: str, machine: str) > str {
-    final how = if (p.arch == hostArch) "native" else "emulated on {hostArch}; landlock under emulation is unmeasured";
+export fun effect(p: Plan, podman: str, kernel: str, digest: str, tree: str, machine: str) > str {
     final img = if (digest == "") "{p.image} (absent: pulling it over the network)" else "{p.image}@{digest}";
-    final line = "on-linux: `{p.command.join(" ")}` in linux/{p.arch} ({how}), podman {podman}, kernel {kernel}, image {img}, magus built from {tree}, checkout read-only at {p.root}";
+    final line = "on-linux: `{p.command.join(" ")}` in linux/{p.arch}, podman {podman}, kernel {kernel}, image {img}, magus built from {tree}, checkout read-only at {p.root}";
     if (machine == "") { return line; }
     return "{line}; {machine}";
 }
@@ -421,7 +416,7 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
     final mise = fs\readFile("{root}/mise.toml");
     final p = mut Plan{
         name = "on-linux-{uuid\randomHex(6)}",
-        arch = if (o.arch != "") o.arch else hostArch,
+        arch = hostArch,
         root = root,
         cwd = cwd,
         gitCommon = gitCommon,
@@ -475,7 +470,7 @@ fun run(o: Options, hostOS: str, hostArch: str) > int !> any {
 
     final head = vcs\commit().short;
     final tree = if (vcs\isDirty()) "{head}-dirty" else head;
-    log\info(effect(p, hostArch: hostArch, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree, machine: machine));
+    log\info(effect(p, podman: info.q(["version", "Version"]).stringValue(), kernel: kernel, digest: digest, tree: tree, machine: machine));
     final left = leftBehind(p, hostNames: host.keys());
     if (left.len() > 0) {
         log\warn("on-linux: not passing {left.join(", ")}; add --env NAME for each one the command needs");
@@ -550,8 +545,7 @@ fun fixture() > mut Plan {
 }
 
 test "parse takes the options first and the rest as the command, verbatim" {
-    final o = parse(["--arch", "amd64", "--env", "NO_COLOR", "--keep", "magus", "run", "test", "--keep", "--env", "X", "--"]);
-    assert\equal(o.arch, want: "amd64", message: "arch");
+    final o = parse(["--env", "NO_COLOR", "--keep", "magus", "run", "test", "--keep", "--env", "X", "--"]);
     assert\equal(o.envs, want: ["NO_COLOR"], message: "envs");
     assert\equal(o.keep, want: true, message: "keep");
     assert\equal(o.command, want: ["magus", "run", "test", "--keep", "--env", "X", "--"], message: "the command keeps its own flags");
@@ -567,14 +561,12 @@ test "parse ends the options at a bare --" {
 test "parse passes a command that starts with a word" {
     final o = parse(["bash"]);
     assert\equal(o.command, want: ["bash"], message: "command");
-    assert\equal(o.arch, want: "", message: "arch defaults later to the host's");
 }
 
 test "parse refuses what it cannot run" {
     final cases = {
         "no command to run": [<str>],
         "unknown option --platform": ["--platform", "linux/arm64", "magus"],
-        "--arch takes amd64 or arm64, not riscv64": ["--arch", "riscv64", "magus"],
         "--env takes a variable NAME, not A=b: its value crosses from this host's environment": ["--env", "A=b", "magus"],
         "--image takes a value and none followed it": ["--image"],
         "--ls stands alone: it takes no command and no other option": ["--ls", "magus"],
@@ -689,13 +681,12 @@ test "hasLandlock needs 5.13 or later" {
 
 test "the first line states what runs, where, and with which image" {
     final p = fixture();
-    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "sha256:abc", tree: "92b8265-dirty", machine: ""),
-        want: "on-linux: `magus run test . --keep` in linux/arm64 (native), podman 5.6.1, kernel 6.12.5, image cgr.dev/chainguard/git:latest-dev@sha256:abc, magus built from 92b8265-dirty, checkout read-only at /src/magus",
-        message: "native");
-    p.arch = "amd64";
-    assert\equal(effect(p, hostArch: "arm64", podman: "5.6.1", kernel: "6.12.5", digest: "", tree: "92b8265", machine: "podman machine: already running, left alone"),
-        want: "on-linux: `magus run test . --keep` in linux/amd64 (emulated on arm64; landlock under emulation is unmeasured), podman 5.6.1, kernel 6.12.5, image cgr.dev/chainguard/git:latest-dev (absent: pulling it over the network), magus built from 92b8265, checkout read-only at /src/magus; podman machine: already running, left alone",
-        message: "emulated and pulling, on a machine");
+    assert\equal(effect(p, podman: "5.6.1", kernel: "6.12.5", digest: "sha256:abc", tree: "92b8265-dirty", machine: ""),
+        want: "on-linux: `magus run test . --keep` in linux/arm64, podman 5.6.1, kernel 6.12.5, image cgr.dev/chainguard/git:latest-dev@sha256:abc, magus built from 92b8265-dirty, checkout read-only at /src/magus",
+        message: "present");
+    assert\equal(effect(p, podman: "5.6.1", kernel: "6.12.5", digest: "", tree: "92b8265", machine: "podman machine: already running, left alone"),
+        want: "on-linux: `magus run test . --keep` in linux/arm64, podman 5.6.1, kernel 6.12.5, image cgr.dev/chainguard/git:latest-dev (absent: pulling it over the network), magus built from 92b8265, checkout read-only at /src/magus; podman machine: already running, left alone",
+        message: "pulling, on a machine");
 }
 
 test "the machine note says whether magus started the machine and when it stops" {
