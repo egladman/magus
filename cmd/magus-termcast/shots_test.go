@@ -80,6 +80,19 @@ func TestShotsAreDeterministic(t *testing.T) {
 	}
 }
 
+func TestShotsIgnoreShellColorSettings(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("NO_COLOR", "")
+	color, err := renderShots()
+	require.NoError(t, err)
+
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	plainShell, err := renderShots()
+	require.NoError(t, err)
+	assert.Equal(t, color, plainShell)
+}
+
 // TestShotsAreNotBlank guards the failure mode a picture cannot show you: every
 // surface here stands down without a terminal, so a probe that stopped
 // answering would render empty frames and the gate would happily pin them.

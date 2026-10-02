@@ -121,6 +121,15 @@ func TestWantsColorIsFalseUnderTermDumb(t *testing.T) {
 	assert.False(t, WantsColor(&ttyBuf{}, fakeProbe{isTTY: true}))
 }
 
+func TestCaptureProbeIgnoresShellCapabilities(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	t.Setenv("NO_COLOR", "1")
+	p := CaptureProbe(132, 21)
+	assert.True(t, CanRender(&ttyBuf{}, p))
+	assert.True(t, WantsColor(&ttyBuf{}, p))
+	assert.False(t, WantsColor(&bytes.Buffer{}, p), "a capture still needs a terminal writer")
+}
+
 // TestIsTerminalReaderIsFalseForDevNull pins the flaw that os.ModeCharDevice
 // checks (formerly in cmd/magus/buzz.go and internal/interp/pry_display.go)
 // got wrong: /dev/null IS a character device, so a mode check alone
