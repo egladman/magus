@@ -13,8 +13,8 @@ import "assert";
 final USAGE = "usage: magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] | --check --from <checkout>)";
 final HELP = "cost: a Go build of ./magus and a graph build, about two minutes cold; with --from an eligible binary is copied instead, in seconds\n{USAGE}\n\n"
     + "Makes a fresh worktree of this repository usable for the worker holding <id>: builds ./magus with the magus on\n"
-    + "PATH, builds the graph, takes the job's lease, then refuses unless the row names this worktree as its checkout\n"
-    + "and the base it recorded matches the row's checkpoint. Writes ./magus, the graph and the job row.\n\n"
+    + "PATH, refreshes the wired harness skills, builds the graph, takes the job's lease, then refuses unless the row names this worktree as its checkout\n"
+    + "and the base it recorded matches the row's checkpoint. Writes ./magus, the graph, harness skills and the job row.\n\n"
     + "--from <checkout> reuses that checkout's ./magus instead of building, only when it is provably the binary this\n"
     + "worktree would build: built at this worktree's HEAD, and no path the workspace declares a source of project .\n"
     + "differs from that commit, neither in the uncommitted changes it was built from nor in this worktree. Anything\n"
@@ -206,7 +206,7 @@ fun reusable(root: str, source: str) > obj{ bin: str, build: BuildFacts } !> any
     return .{ bin = bin, build = build };
 }
 
-// bootstrap places ./magus in root, builds the graph, takes job, and returns the row as the
+// bootstrap places ./magus in root, refreshes harness skills, builds the graph, takes job, and returns the row as the
 // fresh binary reads it back. ./magus is reused from source when that binary is provably
 // root's own build, and built with the magus on PATH otherwise. Raises on any step that fails
 // and on a row unfit for a worker here, so a caller never starts work on a wrong binding.
@@ -235,6 +235,11 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
         }
         std\print("built {local} with {onPath}");
     }
+    // A bound job cannot rewrite the skills that steer it, so refresh every wired
+    // harness before job exec takes the lease. Do this before graph build so it
+    // indexes the installed skill content when the installer updates it.
+    magusAt(local, root: root, args: ["agent", "harness", "install"]);
+    std\print("refreshed the wired harness skills");
     magusAt(local, root: root, args: ["graph", "build", "--silent"]);
     std\print("built the graph");
     final took = magusAt(local, root: root, args: ["job", "exec", job]);
