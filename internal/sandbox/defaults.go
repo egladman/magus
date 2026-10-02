@@ -72,6 +72,9 @@ type ToolHost struct {
 //
 // The shared temp dirs are not granted: they hold ssh-agent, gpg and docker sockets.
 // Children get o.TempDir as TMPDIR instead.
+//
+// Children's git reads no global config unless a declaration passes GIT_CONFIG_GLOBAL
+// through: see gitConfigGlobal.
 func BuildPolicy(o PolicyOptions) *Policy {
 	vars := envMap(o.Environ)
 	host := hostDirs{vars: vars, home: o.Home, goos: o.GOOS}
@@ -122,6 +125,9 @@ func BuildPolicy(o PolicyOptions) *Policy {
 	if o.TempDir != "" {
 		kept = append(kept, "TMPDIR="+o.TempDir)
 	}
+	if !slices.ContainsFunc(kept, func(kv string) bool { return strings.HasPrefix(kv, gitConfigGlobal+"=") }) {
+		kept = append(kept, gitConfigGlobal+"=/dev/null")
+	}
 	slices.Sort(kept)
 	var gitDirs []string
 	for _, d := range []string{o.GitDir, o.GitCommonDir} {
@@ -147,6 +153,13 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		scoped:     newScopedPolicies(),
 	}
 }
+
+// gitConfigGlobal is set to /dev/null in every child's environment that does not
+// already name a file. ~/.gitconfig and $XDG_CONFIG_HOME/git/config are outside every
+// policy, and git dies on a global config it cannot read where it skips a missing one,
+// so under landlock every git a child ran failed before doing anything. The system
+// config needs no GIT_CONFIG_NOSYSTEM: /etc and the toolchain trees are granted.
+const gitConfigGlobal = "GIT_CONFIG_GLOBAL"
 
 func ro(path string) filesystem.Rule { return filesystem.Rule{Path: path, Read: true} }
 func rx(path string) filesystem.Rule { return filesystem.Rule{Path: path, Read: true, Exec: true} }

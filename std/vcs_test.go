@@ -400,6 +400,23 @@ func TestVcsIsDirtyRaisesWhenTheProbeFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "status")
 }
 
+// A git that dies reading its configuration names the file only on stderr, so MGS3002
+// has to carry that text: under landlock it was an unreadable ~/.gitconfig, and the
+// message said only "read git status". A directory fails the same way, with the same
+// "unable to access" warning, and needs no landlock: git skips a file that access(2)
+// already calls unreadable, which landlock's denial of open(2) never is.
+func TestVcsIsDirtySaysWhyGitFailed(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, exec.Command("git", "init", "-q", dir).Run())
+	unreadable := t.TempDir()
+	t.Setenv("GIT_CONFIG_GLOBAL", unreadable)
+
+	_, err := VcsIsDirty(context.Background(), nil)
+	require.ErrorIs(t, err, types.VCSUnavailable)
+	assert.Contains(t, err.Error(), unreadable)
+}
+
 // TestVcsNameNeverRaises: name is the detection half of the pair and must stay answerable
 // without a catch, the same split as os.env and os.lookupEnv, and what lets the accessors
 // above afford to raise.

@@ -297,6 +297,13 @@ func VcsChangedFiles(ctx context.Context, base, dir string) ([]types.Path, error
 	return out, nil
 }
 
+// vcsFailed is MGS3002 for a backend command that failed, with what the backend said
+// in the message. WrapDiagnostic keeps its cause out of the rendered text, and a git
+// that died reading its configuration names the file only in that cause.
+func vcsFailed(err error, format string, args ...any) error {
+	return types.WrapDiagnostic(types.VCSUnavailable, err, format+": %v", append(args, err)...)
+}
+
 // VcsRegions refines the files VcsChangedFiles lists into the declarations their changed
 // lines land in, through the driver's Regions: the one implementation the job store's
 // footprint reads, so a script and `magus job wait` never disagree about a declaration.
@@ -314,7 +321,7 @@ func VcsRegions(ctx context.Context, base, dir string) ([]types.RegionChange, er
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "find the %s repository root", v.Name())
+		return nil, vcsFailed(err, "find the %s repository root", v.Name())
 	}
 	paths, err := v.ChangedFiles(ctx, dir, base)
 	if err != nil {
@@ -362,7 +369,7 @@ func VcsRef(ctx context.Context, dir string) (*string, error) {
 	}
 	ref, err := v.Ref(ctx, dir)
 	if err != nil {
-		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s metadata", v.Name())
+		return nil, vcsFailed(err, "read %s metadata", v.Name())
 	}
 	var name *string
 	if ref != "" {
@@ -394,7 +401,7 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	}
 	dirty, err := v.DirtyFiles(ctx, dir, paths)
 	if err != nil {
-		return types.Status{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+		return types.Status{}, vcsFailed(err, "read %s status", v.Name())
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
@@ -428,7 +435,7 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 		// passes having checked nothing: the one outcome a gate must never produce
 		// silently. No VCS at all is still false above; that is a known state, not a
 		// failed probe.
-		return false, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+		return false, vcsFailed(err, "read %s status", v.Name())
 	}
 	return dirty, nil
 }
@@ -468,7 +475,7 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 		if which == "" {
 			which = "the current revision"
 		}
-		return types.Commit{}, types.WrapDiagnostic(types.VCSUnavailable, err, "look up %s in %s", which, v.Name())
+		return types.Commit{}, vcsFailed(err, "look up %s in %s", which, v.Name())
 	}
 	return c, nil
 }
@@ -484,7 +491,7 @@ func VcsHistory(ctx context.Context, limit int, paths []string, firstParent bool
 	q := types.HistoryQuery{Limit: limit, Paths: paths, FirstParent: firstParent}
 	commits, err := v.History(ctx, vcsDir(ctx), q)
 	if err != nil {
-		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s history", v.Name())
+		return nil, vcsFailed(err, "read %s history", v.Name())
 	}
 	return commits, nil
 }
@@ -500,7 +507,7 @@ func VcsDescribe(ctx context.Context) (string, error) {
 	}
 	out, err := v.Describe(ctx, vcsDir(ctx))
 	if err != nil {
-		return "", types.WrapDiagnostic(types.VCSUnavailable, err, "describe %s revision", v.Name())
+		return "", vcsFailed(err, "describe %s revision", v.Name())
 	}
 	return out, nil
 }
