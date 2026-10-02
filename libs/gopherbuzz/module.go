@@ -45,6 +45,12 @@ type ModuleEnv struct {
 	// under, so one session can route output per caller. Set Out or OutFunc, not
 	// both; std's Bind refuses both. A nil writer from OutFunc fails that print.
 	OutFunc func(context.Context) io.Writer
+	// StdoutFunc and StderrFunc pick, per call, the writer io.stdout.write and
+	// io.stderr.write reach. A host running several programs in one process routes each
+	// program's streams to its own caller with them. Nil, or a nil writer, is the
+	// process's own stream, which is what upstream Buzz writes.
+	StdoutFunc func(context.Context) io.Writer
+	StderrFunc func(context.Context) io.Writer
 }
 
 // Well-known module labels, classifying a module by origin. Labels are free-form
