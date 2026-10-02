@@ -268,9 +268,10 @@ func TestAHooksEnvironmentIsTheSandboxesInItsBox(t *testing.T) {
 	assert.Equal(t, "p", seen["PASSED"])
 	assert.Equal(t, "g", seen["GLOB_X"])
 	assert.Equal(t, "s", seen["SET"])
+	assert.Equal(t, "/dev/null", seen["GIT_CONFIG_GLOBAL"], "a child reads no global git config")
 	allowed := slices.Concat(sandboxenv.DefaultAllow(), boxedNames, []string{"PASSED", "GLOB_X", "SET"},
-		// What magus gives every sandboxed child: itself and its mode.
-		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar},
+		// What magus gives every sandboxed child: itself, its mode, and no global git config.
+		[]string{"MAGUS", "MAGUS_LEVEL", procrun.AncestorsEnvVar, procrun.SandboxEnvVar, "GIT_CONFIG_GLOBAL"},
 		[]string{"SHLVL", "_", "OLDPWD", "PWD"}) // what sh sets itself
 	for name := range seen {
 		assert.Contains(t, allowed, name, "%s reaches the hook", name)
