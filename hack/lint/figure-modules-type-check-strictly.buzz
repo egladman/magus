@@ -131,6 +131,7 @@ test "findings reads each diagnostic, its code and its see line" {
 test "a figure with an unlabeled argument or a warning is reported, a clean one is not" {
     final lib = "fun add(a: int, b: int) > int \{\n    return a + b;\n}\n\n";
     final got = check(support\fixture({
+        "go.mod": "module example.com/lint-fixture\n\ngo 1.26\n",
         "docs/site/diagrams/clean.buzz": "namespace clean;\n\n" + lib + "fun sum() > int \{\n    return add(1, b: 2);\n}\n",
         "docs/site/diagrams/positional.buzz": "namespace positional;\n\n" + lib + "fun sum() > int \{\n    return add(1, 2);\n}\n",
         "docs/site/diagrams/rebuilt.buzz": "namespace rebuilt;\n\nfun join(parts: [str]) > str \{\n    var s = \"\";\n"
