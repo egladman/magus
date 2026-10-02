@@ -236,10 +236,10 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		return model, modelErr
 	}
 	opts := knowledge.BuildOptions{
-		Immutable:  cacheImmutable(cfg),
-		Refresh:    refresh,
-		MaxBytes:   int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
-		Remote:     remoteShards(ws),
+		Immutable: cacheImmutable(cfg),
+		Refresh:   refresh,
+		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
+		Remote:    remoteShards(ws),
 		FastStampsFunc: func(ctx context.Context, reads readlog.Reads, known bool) knowledge.Stamps {
 			return knowledgeFastStamps(ctx, cfg, root, cacheDir, tree, want, reads, known)
 		},

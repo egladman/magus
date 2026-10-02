@@ -142,7 +142,7 @@ func Ensure(ctx context.Context, cacheDir string, opts BuildOptions, want []Shar
 			return nil, err
 		}
 	}
-	g := mergeShards(slices.Concat(built, stored), false)
+	g := mergeShards(slices.Concat(built, stored))
 	g.SetRoot(opts.Root)
 	if len(built) == 0 {
 		// Every stored shard was checked against man, so g is the graph man describes.

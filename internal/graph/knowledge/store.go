@@ -170,7 +170,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if err := s.syncClasses(ctx, shards, fps, syncPlan{refresh: refresh}); err != nil {
 		return nil, err
 	}
-	return mergeShards(shards, false), nil
+	return mergeShards(shards), nil
 }
 
 // syncPlan says which part of the store a sync owns and what to record for it.
@@ -178,8 +178,8 @@ type syncPlan struct {
 	// classes are the classes shards carries in full; nil means every class. Shards of any
 	// other class keep their manifest entries and files untouched, which is what lets a
 	// build reassemble one class without the inputs of the rest.
-	classes []ShardClass
-	stamps  Stamps
+	classes    []ShardClass
+	stamps     Stamps
 	fastStamps Stamps                   // see manifest.FastStamps; nil records none
 	indexes    []SymbolIndexDeclaration // see manifest.Indexes; nil keeps the recorded ones
 	reads      *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
@@ -200,14 +200,15 @@ func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]
 	})
 }
 
-// mergeShards merges shards into a fresh graph in shard-name order, the order Load uses,
-// so a graph answered from the store and one assembled in memory are the same graph:
-// AddNode and AddEdge are first-writer-wins on conflict, so merge order is content.
-// lazy selects the lazily loaded shards instead of the default ones.
-func mergeShards(shards []Shard, lazy bool) *Graph {
+// mergeShards merges the default shards into a fresh graph in shard-name order, the
+// order Load uses, so a graph answered from the store and one assembled in memory are
+// the same graph: AddNode and AddEdge are first-writer-wins on conflict, so merge
+// order is content. Lazily loaded shards stay out; a caller that wants them merges
+// them itself.
+func mergeShards(shards []Shard) *Graph {
 	picked := make([]Shard, 0, len(shards))
 	for _, sh := range shards {
-		if isLazyShard(sh.Name) == lazy {
+		if !isLazyShard(sh.Name) {
 			picked = append(picked, sh)
 		}
 	}
