@@ -81,7 +81,7 @@ export extern fun history(limit: int = 10, paths: [str] = [<str>], first_parent:
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;
 export extern fun name() > str;
 export extern fun ref(dir: str = "") > str? !> any;
-export extern fun regions(base: str = "") > [RegionChange] !> any;
+export extern fun regions(base: str = "", dir: str = "") > [RegionChange] !> any;
 export extern fun root() > str !> any;
 export extern fun status(paths: [str] = [<str>]) > Status !> any;
 export extern fun tags(pattern: str = "") > [Tag] !> any;

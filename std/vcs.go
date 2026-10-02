@@ -58,9 +58,10 @@ var Vcs = Module{
 		},
 		{
 			Name: "regions",
-			Doc:  "The declarations the change against base (defaults to vcs\\base) lands in: one {file, side, lines, declaration, driver} per declaration each hunk touches, ordered by path, then side, then line, for the same files vcs\\changedFiles lists. side is `old` for lines only the merge base's version has (a deletion) and `new` for the working tree's; lines is the first and last line on that side, 1-based and inclusive; declaration is the enclosing declaration's line as the file's diff driver matched it (`func (m *Magus) run(ctx context.Context) error {`), empty above a file's first declaration; driver is that diff driver (`golang`, `markdown`, `buzz`), empty for a file with none, whose regions then say only which lines changed. It is the footprint `magus job wait` prints. Empty when no VCS is resolved; raises when the backend cannot place regions (only git can) or the diff cannot be computed, since an empty footprint reads as a change that touched nothing.",
+			Doc:  "The declarations the change against base (defaults to vcs\\base) lands in: one {file, side, lines, declaration, driver} per declaration each hunk touches, ordered by path, then side, then line, for the same files vcs\\changedFiles lists, and dir reads the repository holding that directory as it does there. side is `old` for lines only the merge base's version has (a deletion) and `new` for the working tree's; lines is the first and last line on that side, 1-based and inclusive; declaration is the enclosing declaration's line as the file's diff driver matched it (`func (m *Magus) run(ctx context.Context) error {`), empty above a file's first declaration; driver is that diff driver (`golang`, `markdown`, `buzz`), empty for a file with none, whose regions then say only which lines changed. It is the footprint `magus job wait` prints. Empty when no VCS is resolved; raises when the backend cannot place regions (only git can) or the diff cannot be computed, since an empty footprint reads as a change that touched nothing.",
 			Args: []Arg{
 				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "dir", Type: TypeString, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAny, Object: "[RegionChange]"}},
 			Raises:  true,
@@ -299,15 +300,18 @@ func VcsChangedFiles(ctx context.Context, base, dir string) ([]types.Path, error
 // VcsRegions refines the files VcsChangedFiles lists into the declarations their changed
 // lines land in, through the driver's Regions: the one implementation the job store's
 // footprint reads, so a script and `magus job wait` never disagree about a declaration.
-func VcsRegions(ctx context.Context, base string) ([]types.RegionChange, error) {
-	v, defaultBase := resolveVCS(ctx)
+// dir "" is the target's cwd.
+func VcsRegions(ctx context.Context, base, dir string) ([]types.RegionChange, error) {
+	v, defaultBase, dir, err := vcsAt(ctx, "regions", dir)
+	if err != nil {
+		return nil, err
+	}
 	if v == nil {
 		return nil, nil
 	}
 	if base == "" {
 		base = defaultBase
 	}
-	dir := vcsDir(ctx)
 	root, err := v.Root(ctx, dir)
 	if err != nil {
 		return nil, types.WrapDiagnostic(types.VCSUnavailable, err, "find the %s repository root", v.Name())

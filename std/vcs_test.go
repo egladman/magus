@@ -184,7 +184,7 @@ func gitTopicRepo(t *testing.T, dir, topic, file string) string {
 
 // A dir argument reads the repository holding it, not the one holding the cwd: a guard
 // rule runs in the hook process's checkout while the caller pushes from its own.
-func TestVcsRefAndChangedFilesReadTheRepositoryHoldingDir(t *testing.T) {
+func TestVcsDirArgumentsReadTheRepositoryHoldingDir(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
@@ -212,6 +212,11 @@ func TestVcsRefAndChangedFilesReadTheRepositoryHoldingDir(t *testing.T) {
 			require.Len(t, files, 1)
 			assert.Equal(t, "b.txt", files[0].Value)
 			assert.Equal(t, canonical(t, caller), canonical(t, files[0].Base))
+
+			regions, err := VcsRegions(ctx, "main", dir)
+			require.NoError(t, err)
+			require.Len(t, regions, 1)
+			assert.Equal(t, "b.txt", regions[0].File.Path)
 		})
 	}
 
@@ -346,6 +351,9 @@ func TestVcsDirArgumentsRaiseForAMissingDir(t *testing.T) {
 	files, err := VcsChangedFiles(ctx, "", missing)
 	require.ErrorContains(t, err, "vcs.changedFiles: dir")
 	assert.Nil(t, files)
+	regions, err := VcsRegions(ctx, "", missing)
+	require.ErrorContains(t, err, "vcs.regions: dir")
+	assert.Nil(t, regions)
 	base, err := VcsBase(ctx, missing)
 	require.ErrorContains(t, err, "vcs.base: dir")
 	assert.Empty(t, base)
@@ -505,7 +513,7 @@ func TestVcsRegionsNamesEachChangedDeclaration(t *testing.T) {
 	git("commit", "-qm", "base")
 	write("a.go", "package a\n\nfunc One() int {\n\treturn 2\n}\n\nfunc Two() int {\n\treturn One()\n}\n")
 
-	got, err := VcsRegions(WithCwd(context.Background(), dir), "main")
+	got, err := VcsRegions(WithCwd(context.Background(), dir), "main", "")
 	require.NoError(t, err)
 	var placed []string
 	for _, r := range got {
