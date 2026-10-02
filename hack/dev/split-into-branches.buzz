@@ -1927,10 +1927,10 @@ fun readTexts(root: str, mergeBase: str, paths: [str]) > {str: FileText} !> any 
 }
 
 // settledRegions reads the change's regions in root and settles each file's against its two
-// sides. vcs\regions reads the checkout the script runs in, so root must be that checkout.
-fun settledRegions(base: str, texts: {str: FileText}) > [Region] !> any {
+// sides.
+fun settledRegions(root: str, base: str, texts: {str: FileText}) > [Region] !> any {
     final byPath = mut {<str: [Region]>};
-    foreach (r in vcs\regions(base)) {
+    foreach (r in vcs\regions(base, dir: root)) {
         final acc = mut [<Region>];
         foreach (x in byPath[r.file.path] ?? [<Region>]) { acc.append(x); }
         acc.append(Region{ path = r.file.path, side = r.side, lo = r.lines[0], hi = r.lines[1], declaration = r.declaration, driver = r.driver });
@@ -1997,7 +1997,7 @@ fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > Symb
     final paths = mut [<str>];
     foreach (c in files) { paths.append(c.path); }
     final texts = readTexts(root, mergeBase: mergeBase, paths: paths);
-    final regions = settledRegions(base, texts: texts);
+    final regions = settledRegions(root, base: base, texts: texts);
     final syms = changedSymbols(base);
     return SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexedPaths(regions, syms: syms, files: files),
         texts = texts, languages = languagesOf(regions) };
@@ -2257,8 +2257,9 @@ test "the push commands publish every branch and open each pull request against 
     assert\equal(cmds[5], want: "gh pr create --base topic-4-docs --head topic-5-proto --fill", message: "the top targets the branch below");
 }
 
-final REGIONS_SNIPPET = `import "std"; import "vcs"; import "serialize"; fun main(args: [str]) > void !> any { final rs = mut [<any>]; foreach (r in vcs\regions("main")) { rs.append({"path": r.file.path, "side": r.side, "lo": r.lines[0], "hi": r.lines[1], "declaration": r.declaration, "driver": r.driver}); } std\print(serialize\jsonEncode(serialize\Boxed.init(rs))); }`;
-
+// TEST_ENV is the environment of every git command a test runs. The host's git config is
+// not the fixture's: a sandboxed child cannot read ~/.gitconfig, and a setting in it would
+// change what git reports.
 final TEST_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
     "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"};
 
@@ -2281,15 +2282,6 @@ fun writeTree(root: str, files: {str: serialize\Boxed}) > void !> any {
 // The symbols and the classification stand in for an index and a workspace it cannot have.
 fun symbolRepo() > Repo !> any {
     final doc = serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches-symbols.json"));
-    final root = fs\tempDir("split-symbols-");
-    writeTree(root, files: doc.q("base").mapValue());
-    os\withEnv(TEST_ENV, callback: fun () > void !> any {
-        gitIn(root, args: ["init", "-q", "-b", "main"]);
-        gitIn(root, args: ["add", "."]);
-        gitIn(root, args: ["-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"]);
-    });
-    writeTree(root, files: doc.q("head").mapValue());
-
     final files = mut [<Change>];
     final paths = mut [<str>];
     foreach (f in doc.q("files").listValue()) {
@@ -2311,22 +2303,18 @@ fun symbolRepo() > Repo !> any {
         syms.append(Sym{ id = s.q("id").stringValue(), label = s.q("label").stringValue(), path = s.q("path").stringValue(),
             change = s.q("change").stringValue(), line = s.q("line").integerValue(), refs = sites });
     }
-    final texts = readTexts(root, mergeBase: "main", paths: paths);
-    final raw = magus\cmd("buzz", args: ["-e", REGIONS_SNIPPET], opts: {"dir": root, "quiet": true}).stdout;
-    final byPath = mut {<str: [Region]>};
-    foreach (r in serialize\jsonDecode(raw).listValue()) {
-        final p = r.q("path").stringValue();
-        final acc = mut [<Region>];
-        foreach (x in byPath[p] ?? [<Region>]) { acc.append(x); }
-        acc.append(Region{ path = p, side = r.q("side").stringValue(), lo = r.q("lo").integerValue(), hi = r.q("hi").integerValue(),
-            declaration = r.q("declaration").stringValue(), driver = r.q("driver").stringValue() });
-        byPath[p] = acc;
-    }
-    final regions = mut [<Region>];
-    foreach (p in sort\strings(byPath.keys())) {
-        final t = texts[p]!;
-        foreach (r in settleRegions(byPath[p]!, oldLines: linesOf(t.old), newLines: linesOf(t.new))) { regions.append(r); }
-    }
+    final root = fs\tempDir("split-symbols-");
+    writeTree(root, files: doc.q("base").mapValue());
+    var texts = {<str: FileText>};
+    var regions = [<Region>];
+    os\withEnv(TEST_ENV, callback: fun () > void !> any {
+        gitIn(root, args: ["init", "-q", "-b", "main"]);
+        gitIn(root, args: ["add", "."]);
+        gitIn(root, args: ["-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"]);
+        writeTree(root, files: doc.q("head").mapValue());
+        texts = readTexts(root, mergeBase: "main", paths: paths);
+        regions = settledRegions(root, base: "main", texts: texts);
+    });
     final indexed = mut [<str>];
     foreach (p in paths) { if (p.endsWith(".go")) { indexed.append(p); } }
     final golang = magus\Syntax{
@@ -2429,24 +2417,24 @@ test "--apply writes each layer's part of a file through a temporary index, and 
     assert\equal(writes[0].partial.keys(), want: ["calc/calc.go"], message: "calc.go is split across layers 1 and 2");
     os\withEnv(TEST_ENV, callback: fun () > void !> any {
         writeLayers(repo.root, mergeBase: gitIn(repo.root, args: ["rev-parse", "main"]), layers: writes, changed: repo.paths);
+        final first = gitIn(repo.root, args: ["show", "topic-1-calc-base:calc/calc.go"]);
+        assert\equal(first, want: "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string \{\n\treturn strings.ToUpper(s)\n\}\n\nfunc Keep() int \{\n\treturn len(Base())\n\}",
+            message: "layer 1 has Keep's new body and still the old name");
+        final listed = gitIn(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
+        assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt", "go.mod"], message: "layer 1's tree");
+        final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
+        assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
+            message: "layer 2 builds against Helper's stub: {stubbedIn}");
+        assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: linesOf(repo.texts["calc/calc.go"]!.new).join("\n"),
+            message: "layer 3 writes the real Helper over the stub");
+        final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths);
+        foreach (path in repo.paths) {
+            assert\equal(top[path]!.old, want: top[path]!.new, message: "the top layer holds the working tree's {path}");
+        }
+        assert\equal(gitIn(repo.root, args: ["cat-file", "-s", "topic-1-calc-base:calc/calc.go"]), want: "{first.len() + 1}",
+            message: "a partial file keeps its final newline");
+        assert\equal(gitIn(repo.root, args: ["diff", "--cached", "--name-only"]), want: "", message: "the real index is untouched");
     });
-    final first = gitIn(repo.root, args: ["show", "topic-1-calc-base:calc/calc.go"]);
-    assert\equal(first, want: "package calc\n\nimport \"strings\"\n\nfunc Old(s string) string \{\n\treturn strings.ToUpper(s)\n\}\n\nfunc Keep() int \{\n\treturn len(Base())\n\}",
-        message: "layer 1 has Keep's new body and still the old name");
-    final listed = gitIn(repo.root, args: ["ls-tree", "-r", "--name-only", "topic-1-calc-base"]);
-    assert\equal(listed.split("\n"), want: [".gitattributes", "calc/base.go", "calc/calc.go", "cmd/main.go", "gen/top.txt", "go.mod"], message: "layer 1's tree");
-    final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
-    assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
-        message: "layer 2 builds against Helper's stub: {stubbedIn}");
-    assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: linesOf(repo.texts["calc/calc.go"]!.new).join("\n"),
-        message: "layer 3 writes the real Helper over the stub");
-    final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths);
-    foreach (path in repo.paths) {
-        assert\equal(top[path]!.old, want: top[path]!.new, message: "the top layer holds the working tree's {path}");
-    }
-    assert\equal(gitIn(repo.root, args: ["cat-file", "-s", "topic-1-calc-base:calc/calc.go"]), want: "{first.len() + 1}",
-        message: "a partial file keeps its final newline");
-    assert\equal(gitIn(repo.root, args: ["diff", "--cached", "--name-only"]), want: "", message: "the real index is untouched");
     fs\removeAll(repo.root);
 }
 
