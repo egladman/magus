@@ -2283,9 +2283,11 @@ fun symbolRepo() > Repo !> any {
     final doc = serialize\jsonDecode(fs\readFile("hack/testdata/split-into-branches-symbols.json"));
     final root = fs\tempDir("split-symbols-");
     writeTree(root, files: doc.q("base").mapValue());
-    gitIn(root, args: ["init", "-q", "-b", "main"]);
-    gitIn(root, args: ["add", "."]);
-    gitIn(root, args: ["-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"]);
+    os\withEnv(TEST_ENV, callback: fun () > void !> any {
+        gitIn(root, args: ["init", "-q", "-b", "main"]);
+        gitIn(root, args: ["add", "."]);
+        gitIn(root, args: ["-c", "core.hooksPath=/dev/null", "commit", "-qm", "base"]);
+    });
     writeTree(root, files: doc.q("head").mapValue());
 
     final files = mut [<Change>];
