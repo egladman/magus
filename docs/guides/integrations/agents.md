@@ -199,12 +199,12 @@ launch command, and evidence contract. A descriptor must represent a real host
 dispatch path; the runner never substitutes a fixture and calls that an
 end-to-end pass.
 
-|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                              |
-| ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | ------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending             |
-| Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending       |
-| Cursor      | yes           | yes                  | yes  | yes    | undocumented                                      | gated: `beforeMCPExecution` (advise unwired) |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed |
+|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                               |
+| ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | -------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending              |
+| Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending        |
+| Cursor      | yes           | yes                  | yes  | yes    | undocumented                                     | gated: `beforeMCPExecution` (advise unwired) |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed  |
 
 "Fixture-verified" means the adapter executed against this binary with a
 controlled host event on stdin. "Manual-E2E-proven" means a locally installed
@@ -230,19 +230,19 @@ mapping, not a claim that the manual command/deny E2E run has proven delivery of
 each row. Path, MCP, and lifecycle delivery remain pending unless the evidence
 matrix above explicitly marks them proven.
 
-| job                         | Claude Code                                | Codex                                                            | Cursor                                                    | OpenCode                          |
-| --------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------- |
-| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                                              | `beforeShellExecution`                                    | `tool.execute.before`             |
-| command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                              | `tool.execute.before`             |
-| write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)       | not wired: tool name unconfirmed  |
+| job                         | Claude Code                                | Codex                                                            | Cursor                                                                  | OpenCode                          |
+| --------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------- |
+| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                                              | `beforeShellExecution`                                                  | `tool.execute.before`             |
+| command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
+| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                                            | `tool.execute.before`             |
+| write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)                     | not wired: tool name unconfirmed  |
 | post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible after compact; `sessionStart` sets env + budgeted brief | not wired: only a PRE hook exists |
-| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                              | the `session.idle` bus event      |
-| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
-| read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                 | not wired                         |
-| tool-failure hint           | not wired                                  | not wired                                                        | not expressible: no response fields                       | not wired                         |
-| session-load adapter        | ships one                                  | ships one                                                        | none written                                              | ships one                         |
+| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                                            | the `session.idle` bus event      |
+| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                                       | not wired: no confirmed tool id   |
+| read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                               | not wired                         |
+| tool-failure hint           | not wired                                  | not wired                                                        | not expressible: no response fields                                     | not wired                         |
+| session-load adapter        | ships one                                  | ships one                                                        | none written                                                            | ships one                         |
 
 Two kinds of blank belong in that table and they are not the same. **Not
 expressible** is a host contract magus cannot reach through, and it is named
