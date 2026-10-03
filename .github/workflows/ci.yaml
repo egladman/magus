@@ -670,10 +670,8 @@ jobs:
 
   # One stable check name a branch rule can require, standing for the whole run.
   #
-  # Neither existing job can be that name. `magus report` is GREEN on a red run, because
-  # ci-outcome writes a summary and never exits non-zero. The shards are the real verdict,
-  # but their names come from a matrix the plan sizes at run time, so requiring
-  # "magus shard 1" blocks any pull request whose plan needed only one.
+  # The shards are the real verdict, but their names come from a matrix the plan sizes
+  # at run time. Requiring "magus shard 1" blocks a PR whose plan needed only one.
   gate:
     name: ci gate
     needs: [plan, ci, figures]
@@ -682,11 +680,44 @@ jobs:
     # as an infrastructure problem rather than a red build.
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
+      - if: needs.plan.result == 'success'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      # merge-history folds this run into the restored history. Holds only contents: read.
+      - if: needs.plan.result == 'success'
+        uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: artifact
+          artifact: ${{ needs.plan.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
+          restore-history: 'true'
+
+      # Outcome first: it describes the run that just finished, and the history merge
+      # below changes what a later reader would see.
+      - if: always() && needs.plan.result == 'success'
+        uses: ./.github/actions/ci-outcome
+        with:
+          ci-result: ${{ needs.ci.result }}
+          shard-count: ${{ needs.plan.outputs.count }}
+
+      # A pull request's shard histories describe a branch that is about to disappear,
+      # so only fold main's history into the kept history.
+      - if: always() && needs.plan.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/magus
+        with:
+          merge-history: 'true'
+          ci-result: ${{ needs.ci.result }}
+
       - name: Require the plan, doctor, every shard and the figures to have passed
+        if: always()
         env:
           PLAN_RESULT: ${{ needs.plan.result }}
           DOCTOR_RESULT: ${{ needs.plan.outputs.doctor }}
@@ -719,50 +750,3 @@ jobs:
             *) echo "::error::docs figures did not pass (${FIGURES_RESULT})"; failed=1 ;;
           esac
           exit "$failed"
-
-  report:
-    # One job for everything that runs AFTER the shards: the run summary always, and the
-    # history merge only where there is a history to keep. They shared a checkout, a magus
-    # install, and a trigger condition; two jobs meant two of each and two rows in the
-    # checks list for one idea.
-    name: magus report
-    needs: [plan, ci]
-    if: always() && needs.plan.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # merge-history folds this run into the restored history. Holds only contents: read.
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: artifact
-          artifact: ${{ needs.plan.outputs.magus_artifact }}
-          artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
-          artifact-commit: ${{ github.sha }}
-          restore-history: 'true'
-
-      # Outcome first: it describes the run that just finished, and the history merge
-      # below changes what a later reader would see.
-      - uses: ./.github/actions/ci-outcome
-        with:
-          ci-result: ${{ needs.ci.result }}
-          shard-count: ${{ needs.plan.outputs.count }}
-
-      # merge-history only on main: a pull request's shard histories describe a branch
-      # that is about to disappear, and folding them into the kept history would skew it.
-      #
-      # always(), because a bare `if:` implies success() of every step before it, and the
-      # runs whose timings the forecaster most needs are the ones that went red. This
-      # used to be one composite step whose own merge steps carried always(); splitting
-      # the summary out moved that guard up here.
-      - if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: ./.github/actions/magus
-        with:
-          merge-history: 'true'
-          ci-result: ${{ needs.ci.result }}
