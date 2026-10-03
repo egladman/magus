@@ -316,10 +316,15 @@ Key properties:
   asks one. Nothing has to release cleanly: each claim rides the run's one connection
   to the broker, and a run that dies, even to `SIGKILL`, releases it when the kernel
   closes that connection.
-- **Only runs pay for it, and only for as long as they need it.** `magus ls`,
-  `describe`, and `query` cost the same however loaded the machine is, so none of them
-  starts a broker. The broker exits by itself ten minutes after it last held a claim
-  or a service with a dependent.
+- **Runs pay for it, and so does host work that loads a workspace the same way.**
+  `magus ls`, `describe`, and `query` cost the same however loaded the machine is, so
+  none of them starts a broker. `magus session --brief` is the exception among
+  non-run verbs: it Inspects the workspace for classification and harness wiring, so
+  it starts the broker and claims a declared `session-brief` seat (slots + memory)
+  for the duration of that load. A full budget refuses it (exit 75) rather than
+  letting parallel agent hooks stack Inspects past what the machine can hold. The
+  broker exits by itself ten minutes after it last held a claim or a service with a
+  dependent.
 
 `magus status` shows the whole budget: what is held, and by whom, across every
 worktree on the machine.

@@ -1,31 +1,49 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
+      }
+    ],
     "beforeShellExecution": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "failClosed": true,
+        "timeout": 10
       }
     ],
     "preToolUse": [
       {
         "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read",
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
       }
     ],
     "postToolUse": [
       {
         "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch",
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
       }
     ],
     "subagentStart": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
       }
     ],
     "sessionEnd": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor"
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
       }
     ]
   }

@@ -40,9 +40,9 @@ import (
 // only config loaded, so the per-subcommand usage reaches the caller's stderr.
 func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 	usageOnly := dispatchProfile{needsConfig: true}
-	// spawnsWork is what makes a run pay for machine-wide admission (and start the
-	// server that owns it), so it belongs to exactly the invocations that run targets:
-	// every usage-only, --detach and forensic case below must NOT carry it.
+	// spawnsWork is what makes an invocation pay for machine-wide admission (and start
+	// the broker): target runs and session --brief. Every usage-only, --detach,
+	// forensic, and plain session listing case below must NOT carry it.
 	full := dispatchProfile{needsConfig: true, needsForward: true, needsWorkspace: true, spawnsWork: true}
 	// server subcommands never forward and never host their own proc server: doing so let a
 	// version-mismatched `server stop` shut down its own throwaway server instead of the real
@@ -87,6 +87,10 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected --bisect still forwards", "affected", []string{"--bisect", "docs"}, full},
 		{"a longer mode flag is a different flag", "affected", []string{"ci", "--impactful"}, full},
 		{"run is never a forensic mode", "run", []string{"build", "--impact"}, full},
+		{"session listing stays config-only", "session", nil, usageOnly},
+		{"session --brief pays for the host", "session", []string{"--brief"}, dispatchProfile{needsConfig: true, spawnsWork: true}},
+		{"session -brief pays for the host", "session", []string{"-brief"}, dispatchProfile{needsConfig: true, spawnsWork: true}},
+		{"brief past the separator is not magus's", "session", []string{"--", "--brief"}, usageOnly},
 		{"server stop never forwards", "server", []string{"stop"}, serverProfile},
 		{"server start never forwards", "server", []string{"start"}, serverProfile},
 		{"server job never forwards", "server", []string{"job", "sync-graph"}, serverProfile},

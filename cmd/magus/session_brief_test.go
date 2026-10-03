@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -229,6 +230,35 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "running", brief.Leases[0].ID)
+}
+
+// A dirty job store of exited holders is still "live" for the write guard, but the
+// brief must not dump every one into a compacted context window.
+func TestSessionBriefCapsLiveLeases(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+
+	store, err := openJobs(root)
+	require.NoError(t, err)
+	for i := 0; i < briefMaxLeases+5; i++ {
+		row := types.Job{ID: "exited-" + strconv.Itoa(i), State: types.StateExited}
+		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	running := types.Job{ID: "running", State: types.StateRunning}
+	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
+	require.NoError(t, err)
+
+	brief := gatherSessionBrief(ctx, root, nil)
+	require.Len(t, brief.Leases, briefMaxLeases)
+	assert.Equal(t, "running", brief.Leases[0].ID, "editing jobs are named before exited holders")
+	assert.Equal(t, 6, brief.LeasesOmitted)
+	text := brief.Text()
+	assert.Contains(t, text, "and 6 more:")
+	assert.Contains(t, text, hint.LsJobs.String())
+	assertBriefIsContextSafe(t, text)
 }
 
 // briefClock is a session idle long enough that one window is behind it and the rest

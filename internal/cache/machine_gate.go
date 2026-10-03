@@ -55,6 +55,35 @@ const ExitCodeMachineDeclaration = 78
 // retry a host with no arbiter at all.
 const ExitCodeBrokerUnavailable = 69
 
+// AdmitMachine claims the machine budget for host work that is not a Cache.Run step - a
+// session brief's workspace Inspect, and any future hook path that loads the same
+// way. Same refuse/wait rules as a step: another invocation's claims refuse at once
+// (exit 75); this process or run's claims wait.
+//
+// A nil admitter is a no-op grant, matching a Cache with no WithMachineAdmission.
+// Zero PID, Dir, Invocation, Ancestors and Slots are filled the way claimMachine
+// fills a step's claim, so a caller names the work (Project, Target, MemoryMB) and
+// nothing else.
+func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineClaim, required bool) (release func(), err error) {
+	if c.PID == 0 {
+		c.PID = os.Getpid()
+	}
+	if c.Dir == "" {
+		c.Dir = workingDir()
+	}
+	if c.Invocation == "" {
+		c.Invocation = selfInvocation(ctx)
+	}
+	if c.Ancestors == nil {
+		c.Ancestors = ancestorInvocations(ctx)
+	}
+	if c.Slots == 0 {
+		c.Slots = 1
+	}
+	g := &machineGate{admit: admit, required: required, log: slog.Default()}
+	return g.acquire(ctx, c)
+}
+
 // machineGate is the client half of admission: it asks the budget, and either proceeds,
 // waits on its own run, or refuses.
 type machineGate struct {

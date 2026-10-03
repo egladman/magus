@@ -203,7 +203,7 @@ end-to-end pass.
 | ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | ------------------------------------------- |
 | Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending             |
 | Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending       |
-| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                      | not wired: event exists, payload does not   |
+| Cursor      | yes           | yes                  | yes  | yes    | undocumented                                      | gated: `beforeMCPExecution` (advise unwired) |
 | OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed |
 
 "Fixture-verified" means the adapter executed against this binary with a
@@ -236,8 +236,8 @@ matrix above explicitly marks them proven.
 | command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
 | write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                              | `tool.execute.before`             |
 | write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | not wired: payload unconfirmed                            | not wired: tool name unconfirmed  |
-| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible: `preCompact` returns `user_message` only | not wired: only a PRE hook exists |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)       | not wired: tool name unconfirmed  |
+| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible after compact; `sessionStart` sets env + budgeted brief | not wired: only a PRE hook exists |
 | checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                              | the `session.idle` bus event      |
 | lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
 | read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                 | not wired                         |

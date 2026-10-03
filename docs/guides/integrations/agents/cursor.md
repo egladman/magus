@@ -1,6 +1,6 @@
 ---
 title: Cursor
-description: Wiring magus into Cursor - AGENTS.md for guidance, one self-contained hook script for all five of its events, and the one job Cursor's contract cannot express.
+description: Wiring magus into Cursor - AGENTS.md for guidance, one self-contained hook script for its wired events, and the one job Cursor's contract cannot express.
 tags: [agents, cursor, AGENTS.md, guard, hooks]
 ---
 
@@ -17,7 +17,8 @@ integration is a single download.
 | guard wiring     | `.cursor/hooks.json`                                                                          |
 | command surface  | deny and advise both reach the model                                                          |
 | file surface     | deny and advise both reach the model                                                          |
-| MCP call surface | not wired: `beforeMCPExecution`/`afterMCPExecution` exist, their payload does not (see below) |
+| MCP call surface | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below)                    |
+| session start    | `sessionStart` (`env` + size-budgeted `session --brief`)                                      |
 | checkpoint       | `sessionEnd`                                                                                  |
 | lease            | `subagentStart` (unverified live, see below)                                                  |
 | MCP              | [MCP](../mcp.md)                                                                              |
@@ -106,13 +107,15 @@ and points every event at that copy, name included:
 {
   "version": 1,
   "hooks": {
-    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
-    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
+    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
+    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
     "postToolUse": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
     ],
-    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }],
-    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor" }]
+    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }]
   }
 }
 ```
@@ -178,17 +181,29 @@ script also accepts `file_path`.
 // the shell commands the guard already judges, and gated on preToolUse, because
 // a deny has to land before the tool runs.
 //
+// beforeMCPExecution carries tool_name, tool_input and mcp_server_name. Magus
+// grades MCP as mcp__<server>__<tool>, so this file rewrites the envelope before
+// judging. afterMCPExecution is observation-only, and postToolUse still has no
+// server identity, so MCP advise stays unwired here.
+//
+// sessionStart sets PATH / __MAGUS_BIN for later hooks and may inject a brief.
+// The brief is size-budgeted: a nested `magus session --brief` has been measured
+// (MAGUS_PPROF=mem, buzz --profile) at tens of MB of workspace Buzz load on this
+// tree, so a reply over SESSION_BRIEF_MAX_BYTES keeps env and drops the context.
+// Cursor has also raced additional_context away before; env is the half that sticks.
+// Compaction still has no model-facing rehydrate event.
+//
 // magus-guard-template: 20
 // magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none ask=none
-// The mcp row is none because beforeMCPExecution and afterMCPExecution name no
-// field for the tool. This file does not guess one.
+// magus-guard-coverage: schema=1 host=cursor surface=mcp deny=model advise=none pass=none ask=human
 
 import "std";
 import "flags";
 import "io";
 import "encoding/json";
+import "env";
+import "fs";
 import "math";
 import "proc";
 import "lib/hook" as hook;
@@ -211,6 +226,11 @@ final GATE = `{{if eq .decision "deny"}}` + PERMISSION_DENY
 // postToolUse is the advise channel. Anything else renders an empty object,
 // which Cursor accepts as no opinion.
 final ADVISE = `{{if eq .decision "advise"}}{"additional_context":{{toJson .context}}}{{else}}{}{{end}}`;
+
+// SESSION_BRIEF_MAX_BYTES caps additional_context from session --brief. Measured
+// post-lease-cap briefs on this tree are a few KB; anything larger is a store that
+// grew past the brief's own caps and must not refill Cursor's window (or RSS).
+final SESSION_BRIEF_MAX_BYTES = 16384;
 
 final ALLOW = `{"permission":"allow"}`;
 final EMPTY = `{}`;
@@ -431,7 +451,77 @@ fun verdict(scope: Scope, payload: str, template: str, ask: bool, asPath: bool, 
 }
 
 fun gates(eventName: str) > bool {
-    return eventName == "beforeShellExecution" or eventName == "preToolUse" or eventName == "subagentStart";
+    return eventName == "beforeShellExecution"
+        or eventName == "beforeMCPExecution"
+        or eventName == "preToolUse"
+        or eventName == "subagentStart";
+}
+
+// mcpPayload rewrites Cursor's beforeMCPExecution into the mcp__<server>__<tool>
+// envelope magus shell grades. A missing server or tool is the empty string: the
+// caller denies rather than guessing.
+fun mcpPayload(event: any?) > str {
+    final server = hook\field(event, dotPath: "mcp_server_name");
+    var tool = hook\field(event, dotPath: "tool_name");
+    if (server == "" or tool == "") { return ""; }
+    if (!tool.startsWith("mcp__")) {
+        tool = "mcp__{server}__{tool}";
+    }
+    final input = hook\dig(event, dotPath: "tool_input");
+    final envelope = {
+        "tool_name": tool,
+        "tool_input": input ?? {<str: any>},
+        "session_id": sessionOf(event),
+        "cwd": firstField(event, keys: ["cwd"]),
+        "hook_event_name": "beforeMCPExecution",
+    };
+    return json\stringify(envelope) catch "";
+}
+
+// sessionStartReply puts this checkout's magus first for later hook runs, and
+// may hand the model a brief under SESSION_BRIEF_MAX_BYTES. Env always; context
+// only when the brief fits. Profile a suspect run with
+// MAGUS_PPROF=mem:/tmp/s.mem (and buzz --profile on the outer hook).
+fun sessionStartReply(bin: str) > str {
+    final root = hook\workspaceRoot();
+    if (root == "") { return EMPTY; }
+    final pathEnv = env\get("PATH") catch "";
+    final envMap = mut {<str: str>};
+    if (pathEnv != "") {
+        envMap["PATH"] = "{root}:{pathEnv}";
+    } else {
+        envMap["PATH"] = root;
+    }
+    if (bin != "" and hook\isExecutable(bin)) {
+        envMap["__MAGUS_BIN"] = bin;
+    } else {
+        final local = "{root}/magus";
+        if (hook\isExecutable(local)) { envMap["__MAGUS_BIN"] = local; }
+    }
+    final reply = mut {<str: any>};
+    reply["env"] = envMap;
+    if (bin != "" and hook\isExecutable(bin)) {
+        final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+            "quiet": true,
+            "allow_failure": true,
+        }) catch null;
+        var context = "";
+        if (result != null) {
+            context = hook\trimTrailingNewlines(result!.stdout);
+        }
+        if (context != "") {
+            final hasRules = fs\isFile("{root}/AGENTS.md") catch false;
+            if (hasRules) {
+                context = context + "\nstanding rules: AGENTS.md; re-read it, the summary above is not it";
+            }
+            if (context.len() <= SESSION_BRIEF_MAX_BYTES) {
+                reply["additional_context"] = context;
+            } else if (hook\noticeOnce("", family: "brief-budget", file: "cursor-hook.buzz")) {
+                io\stderr.write("magus guard: session --brief was {context.len()} bytes, over SESSION_BRIEF_MAX_BYTES={SESSION_BRIEF_MAX_BYTES}; keeping env only\n") catch void;
+            }
+        }
+    }
+    return json\stringify(reply) catch EMPTY;
 }
 
 fun eventNameOf(event: any?) > str {
@@ -506,6 +596,9 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         session = sessionOf(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
     };
+    if (eventName == "sessionStart") {
+        return sessionStartReply(bin);
+    }
     if (eventName == "sessionEnd") {
         checkpoint(scope.bin, agent: scope.agent, session: scope.session, transcript: scope.transcript);
         return "";
@@ -513,6 +606,13 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
     if (eventName == "subagentStart") {
         recordSpawn(scope.bin, agent: scope.agent, event: event);
         return ALLOW;
+    }
+    if (eventName == "beforeMCPExecution") {
+        final payload = mcpPayload(event);
+        if (payload == "") {
+            return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
+        }
+        return gate(scope, payload: payload, asPath: false, family: "failed-mcp");
     }
     if (eventName == "beforeShellExecution") {
         return gate(scope, payload: hook\field(event, dotPath: "command"), asPath: false, family: "failed-command");
@@ -614,15 +714,12 @@ never fires costs nothing and a missing one cannot be found; check
 
 ## Coverage and limits
 
-**The MCP call surface is declared but not wired.** Cursor's hooks schema DOES
-name `beforeMCPExecution` and `afterMCPExecution` - the MCP-call twins of
-`beforeShellExecution` and `preToolUse`/`postToolUse` above - so this is not
-the "transport does not carry it" gap it is on Codex and OpenCode. What is
-missing is the payload: no schema, published or transcribed, says what field
-on those two events carries the tool name and params, and this script does not
-wire an event whose shape it cannot verify - the same caution `subagentStart`
-below already gets ("unverified live"). Confirm the payload against a real
-Cursor session before flipping this.
+**The MCP call surface is gated on `beforeMCPExecution`.** Cursor publishes
+`tool_name`, `tool_input`, and `mcp_server_name` on that event; the script
+rewrites them to `mcp__<server>__<tool>` before `magus shell` grades the call.
+`failClosed` is set so a hook crash blocks the tool. Advise stays unwired:
+`afterMCPExecution` is observation-only, and `postToolUse` still carries no
+server identity, so this host cannot form the graded name after the call.
 
 **Both surfaces now reach the model on both decisions.** That is new, and it cost
 two events per judged call: the write gate moved from `afterFileEdit`, which
@@ -635,13 +732,15 @@ explains, on every host. Reporting it to the PERSON was, and that is what change
 the explanation has to come from a second event, and magus is asked about the same
 call twice. The activity trail therefore carries two rows per judged call here.
 
-**Post-compaction rehydration is not expressible.** Every other host has an event
-that hands a compacted session its state back. Cursor's `preCompact` returns
-`user_message` only, which reaches the person and not the model, and
-`beforeSubmitPrompt` explicitly cannot inject context. So there is nothing to wire
-and nothing is faked: run `magus session --brief` and paste it, or read it
-yourself. `sessionStart.additional_context` does reach the model, but it fires
-when nothing has been lost yet.
+**Session start is wired; post-compaction rehydration is still not.**
+`sessionStart` sets `env.PATH` / `__MAGUS_BIN` and may inject
+`magus session --brief` via `additional_context` when the brief is at most
+`SESSION_BRIEF_MAX_BYTES` (16KiB). Profile a heavy run with
+`MAGUS_PPROF=mem:/tmp/s.mem` and `magus buzz --profile` on the outer hook: the
+Buzz compile of the hook itself is milliseconds; the nested brief pays the
+workspace load. Cursor has raced `additional_context` away before (env sticks).
+Compaction still has no model-facing event. Every hook entry carries
+`"timeout": 10`.
 
 **A tool failure carries no hint.** `postToolUseFailure` has no response fields at
 all, so the one place a host could explain a failing command is closed here.
@@ -663,7 +762,8 @@ product's published hook documentation and has not been executed here, so
 confirm it against [Cursor hooks](https://cursor.com/docs/agent/hooks).
 
 There is also no session-load adapter for this host, where the other three ship
-one. Nothing in Cursor prevents it; nobody has written it.
+one. Nothing in Cursor prevents it; that remains separate from the hook parity
+above.
 
 ## Verify
 

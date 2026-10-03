@@ -67,7 +67,7 @@ func brokerUsage() {
 	fmt.Fprintln(os.Stderr, "usage: magus broker [status|stop|units] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The broker holds this host's capacity (slots and declared memory) and the")
-	fmt.Fprintln(os.Stderr, "services every magus on it shares. A run starts one when none answers; it")
+	fmt.Fprintln(os.Stderr, "services every magus on it shares. A run or session brief starts one when none answers; it")
 	fmt.Fprintln(os.Stderr, "listens on a unix socket only and exits once it has held nothing for ten minutes.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
