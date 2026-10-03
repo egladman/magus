@@ -1,12 +1,9 @@
 ### Changed
 
-- **Cursor's harness gates MCP calls and starts a session with a budgeted brief.**
-  `.cursor/hooks.json` wires `beforeMCPExecution` (fail-closed) and `sessionStart`
-  (sets `PATH` / `__MAGUS_BIN`; injects `magus session --brief` only when under
-  `SESSION_BRIEF_MAX_BYTES`; every entry has `"timeout": 10`). Profile a heavy
-  hook with `MAGUS_PPROF=mem:...` and `magus buzz --profile`: the outer Buzz
-  compile is milliseconds; the nested brief pays the workspace load. MCP advise
-  and post-compaction rehydrate stay host limits.
+- **Cursor's harness guards MCP calls and budgets session start.**
+  `beforeMCPExecution` fails closed. `sessionStart` sets `PATH` and `__MAGUS_BIN`,
+  then injects `magus session --brief` only below 16 KiB. Every hook has a
+  10-second timeout. MCP advice and post-compaction rehydration remain unwired.
 
 - **`magus session --brief` caps live leases it names.** Editing jobs come first;
   at most 12 live leases are printed, with an `and N more: magus ls jobs` line for
