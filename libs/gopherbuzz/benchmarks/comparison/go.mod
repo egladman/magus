@@ -8,7 +8,7 @@ require (
 	github.com/yuin/gopher-lua v1.1.1
 )
 
-require github.com/egladman/magus/libs/diagnostics v0.1.0 // indirect
+require github.com/egladman/magus/libs/diagnostics v0.2.0 // indirect
 
 require (
 	github.com/dlclark/regexp2 v1.12.0 // indirect
