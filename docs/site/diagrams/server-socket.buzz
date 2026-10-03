@@ -1,14 +1,8 @@
-// site/diagrams/server-socket.buzz: the local path into the server, a CLI invocation over
-// the unix socket, and the shared state the socket dispatches into. The HTTP surface is a
-// separate figure (server-http); this one is deliberately silent about it, because the two
-// entry points share only the state at the far right.
-//
-// The pool and the registries are server state, not packages of their own, so they are
-// actors the socket hands work to. The broker is a separate daemon reached as a client.
 namespace serverSocket;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun serverSocketFigure() > figure\Figure !> any {
     final sock = magus\dir("internal/proc");
@@ -18,6 +12,7 @@ export fun serverSocketFigure() > figure\Figure !> any {
     final ws = figure\external("Workspace registry", sub: "graph, SCIP, cache", look: figure\Look.store);
     final runs = figure\external("Run registry", sub: "live runs", look: figure\Look.store);
     final svc = figure\external("Broker", sub: "shared services");
+    // The HTTP entry is server-http's; the two share only the registries drawn here as actors.
     return figure\of("server-socket",
             title: "How a local command reaches the server",
             eyebrow: "magus server",
@@ -37,5 +32,14 @@ export fun serverSocketFigure() > figure\Figure !> any {
         .flowIn(cli, dst: share, label: "spawns", stroke: figure\Stroke.optional)
         .legend(figure\Look.store, label: "shared server state")
         .legend(figure\Look.optional, label: "spawned on demand")
-        .scope(figure\setOf([sock, share]));
+        .scope(goPackages("internal/proc/**"))
+        .scope(goPackages("internal/share/**"))
+        .except([magus\dir("internal/proc/endpoint")],
+            why: "parses the transport address a client dials, a value type the CLI and config share")
+        .except([magus\dir("internal/proc/environ")],
+            why: "one run's environment for the env host module; nothing on the socket reads it")
+        .except([magus\dir("internal/proc/run")],
+            why: "the subprocess helper spells run tools through, under the pool rather than at the socket")
+        .except([magus\dir("internal/proc/sockdir")],
+            why: "picks the 0700 directory the socket lives in, which the box's sub names");
 }

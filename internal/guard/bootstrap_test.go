@@ -63,19 +63,22 @@ func TestRankOwnBuild(t *testing.T) {
 		says string
 	}{
 		{name: "bootstrap", cwd: fresh, command: bootstrapCommand, advise: true, says: "Go's build cache stays on"},
-		{name: "bare package operand", cwd: fresh, command: "go run -trimpath cmd/magus run go-build --no-cache .", advise: true},
-		{name: "trailing slash", cwd: fresh, command: "go run -trimpath ./cmd/magus/ run go-build --no-cache .", advise: true},
-		{name: "wrapped", cwd: fresh, command: "mise exec -- " + bootstrapCommand, advise: true},
-		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: "go run -C " + filepath.Base(fresh) + " -trimpath ./cmd/magus run go-build --no-cache .", advise: true, says: fresh},
+		{name: "bare package operand", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath cmd/magus run go-build --no-cache .", advise: true},
+		{name: "trailing slash", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus/ run go-build --no-cache .", advise: true},
+		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: "GOEXPERIMENT=jsonv2 go run -C " + filepath.Base(fresh) + " -trimpath ./cmd/magus run go-build --no-cache .", advise: true, says: fresh},
 
 		{name: "binary exists", cwd: built, command: bootstrapCommand, deny: true, says: "already has a magus binary"},
 		{name: "a bare link with a binary", cwd: built, command: "go build -o magus ./cmd/magus", deny: true, says: "already has a magus binary"},
 		{name: "a bare link is served the bootstrap", cwd: fresh, command: "go build -o magus ./cmd/magus", deny: true, says: bootstrapCommand},
 		{name: "a trimmed link is served the bootstrap", cwd: fresh, command: "go build -trimpath -o magus ./cmd/magus", deny: true, says: bootstrapCommand},
-		{name: "without --no-cache", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build .", deny: true, says: bootstrapCommand},
-		{name: "without -trimpath", cwd: fresh, command: "go run ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
-		{name: "another target", cwd: fresh, command: "go run -trimpath ./cmd/magus run test --no-cache .", deny: true},
-		{name: "another package", cwd: fresh, command: "go run -trimpath ./cmd/magus-docs run go-build --no-cache .", deny: true},
+		{name: "without the prefix", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
+		{name: "another experiment", cwd: fresh, command: "GOEXPERIMENT=none go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
+		{name: "a second prefix", cwd: fresh, command: "CGO_ENABLED=0 " + bootstrapCommand, deny: true, says: bootstrapCommand},
+		{name: "wrapped", cwd: fresh, command: "env " + bootstrapCommand, deny: true, says: bootstrapCommand},
+		{name: "without --no-cache", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .", deny: true, says: bootstrapCommand},
+		{name: "without -trimpath", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
+		{name: "another target", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run test --no-cache .", deny: true},
+		{name: "another package", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus-docs run go-build --no-cache .", deny: true},
 		{name: "go generate", cwd: fresh, command: "go generate ./...", deny: true, says: bootstrapCommand},
 		{name: "chained", cwd: fresh, command: bootstrapCommand + " && go vet ./...", deny: true, says: "alone on its line"},
 		{name: "foreign module", cwd: foreign, command: bootstrapCommand, deny: true},
@@ -83,7 +86,7 @@ func TestRankOwnBuild(t *testing.T) {
 		// A -C outside the workspace passes the pure rule, which has no way to know what is
 		// there; a checkout of magus there is this repository's policy to judge.
 		{name: "another magus checkout by -C", cwd: elsewhere, command: "go -C " + built + " test ./..."},
-		{name: "a bootstrap into another checkout by -C", cwd: elsewhere, command: "go -C " + fresh + " run -trimpath ./cmd/magus run go-build --no-cache ."},
+		{name: "a bootstrap into another checkout by -C", cwd: elsewhere, command: "GOEXPERIMENT=jsonv2 go -C " + fresh + " run -trimpath ./cmd/magus run go-build --no-cache ."},
 		{name: "foreign tree by -C", cwd: elsewhere, command: "go -C " + foreign + " test ./..."},
 		{name: "magus against another root", cwd: elsewhere, command: "./magus --root " + fresh + " run go-build ."},
 	}
@@ -115,6 +118,7 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 		v := judgeOwnBuild(fresh, command)
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, bootstrapArgv, v.Next[0].Argv, command)
+		assert.Equal(t, bootstrapCommand, v.Next[0].Run, command)
 		assert.Equal(t, Evaluate(testDependencies(), command), judgeOwnBuild(built, command), command)
 	}
 }

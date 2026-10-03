@@ -1,13 +1,3 @@
-// site/diagrams/dogfood.buzz: magus builds magus, and the two ways CI runs it against
-// this commit's magusfile.
-//
-// The figure is about a deliberate asymmetry, not a build loop. Nearly every job builds
-// the magus THIS commit defines and runs it here, so a magusfile change that needs an
-// unreleased feature is exercised by the commit introducing it. Exactly one job pins the
-// last release instead; it may go red, since it is a compatibility signal, not a gate.
-//
-// An earlier version of this diagram drew the build as a three-node cycle. That was true
-// and useless: it showed the bootstrap without showing why there are two tracks.
 namespace dogfood;
 
 import "magus/figure";
@@ -18,6 +8,8 @@ export fun dogfoodFigure() > figure\Figure !> any {
     final gates = figure\external("Every gate", sub: "lint, build, test, ci", look: figure\Look.focal);
     final pinned = figure\external("Last release", sub: "setup-magus git-ref");
     final compat = figure\external("audit compat", sub: "red is a signal, not a stop", look: figure\Look.optional);
+    // Two tracks, not a build cycle: a cycle shows the bootstrap but not why one job pins the
+    // last release.
     return figure\of("dogfood",
             title: "magus builds magus, then runs the last release at it too",
             eyebrow: "development",

@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,6 +63,31 @@ type manifest struct {
 	// class with no entry matches no stamp, so a store written before stamps existed, or
 	// by a Sync that had none, is reassembled on its next build.
 	Inputs map[ShardClass]string `json:"inputs,omitempty"`
+	// FastStamps is the cheap stamp each class's shards were last synced under (see
+	// BuildOptions.FastStamps): Inputs minus the evaluated workspace model. A read whose
+	// fast stamp matches is answered from the store without evaluating the workspace; one
+	// whose does not falls back to Inputs. Absent for a class synced before fast stamps
+	// existed, which Ensure repairs on the first read the full stamp settles.
+	FastStamps map[ShardClass]string `json:"fast_stamps,omitempty"`
+	// Reads is what the evaluation the shards were last synced from read beyond the tree
+	// (see Inputs.Reads): the environment variables and files its magusfile top levels
+	// consulted. The next read's fast domain stamp folds their current values, so an
+	// evaluation that depends on the environment is redone when the environment moves.
+	Reads readlog.Reads `json:"reads,omitempty"`
+	// ReadsKnown distinguishes an evaluation that read nothing from a manifest that never
+	// recorded its reads, which the encoding of an empty record cannot. A fast domain
+	// stamp computed without known reads matches nothing recorded with them.
+	ReadsKnown bool `json:"reads_known,omitempty"`
+	// Indexes are the symbol indexes the workspace declared when its shards were last
+	// synced from an evaluated workspace (see Inputs.Indexes), each with the freshness
+	// verdict that evaluation reached and the identity of the index file it judged. They
+	// are a function of the same inputs as FastStamps[ClassDomain], so a read whose domain
+	// fast stamp matches may use them in place of evaluating the workspace; one whose
+	// does not must not.
+	Indexes []SymbolIndexDeclaration `json:"indexes,omitempty"`
+	// IndexesKnown distinguishes a workspace that declares no index from a manifest that
+	// never recorded them, which the encoding of an empty list cannot.
+	IndexesKnown bool `json:"indexes_known,omitempty"`
 	// Extra is, per class, the workspace files its assembly read that the tree walk does
 	// not cover, so the caller can fold them into that class's next stamp.
 	Extra map[ShardClass][]string `json:"extra,omitempty"`
@@ -74,6 +100,27 @@ type shardMeta struct {
 	Fingerprint string `json:"fingerprint"`
 	NodeCount   int    `json:"node_count"`
 	EdgeCount   int    `json:"edge_count"`
+}
+
+// SymbolIndexDeclaration is one symbol index a workspace declares: the project it covers,
+// where that project's directory is, the language its symbols are written in, and the
+// absolute path of the index file. The resolution is the caller's (it reads the evaluated
+// projects and spells); the store only records and returns it.
+//
+// Freshness is the verdict the evaluation reached about the index file at Path (one of
+// types.SymbolIndexFreshness, "" when none was reached), and Size and ModTime identify the
+// file it judged. The verdict is a function of the sources, which the domain fast stamp
+// covers, and of that file: a later read may reuse it while both are unchanged, and must
+// re-judge once the file differs.
+type SymbolIndexDeclaration struct {
+	Project   string `json:"project"`
+	Dir       string `json:"dir"`
+	Language  string `json:"language,omitempty"`
+	Path      string `json:"path"`
+	Freshness string `json:"freshness,omitempty"`
+	Detail    string `json:"detail,omitempty"`
+	Size      int64  `json:"size,omitempty"`
+	ModTime   int64  `json:"mod_time,omitempty"`
 }
 
 // shardFile is one shard's on-disk form. Name is stored so filenames never need
@@ -123,7 +170,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 	if err := s.syncClasses(ctx, shards, fps, syncPlan{refresh: refresh}); err != nil {
 		return nil, err
 	}
-	return mergeShards(shards, false), nil
+	return mergeShards(shards), nil
 }
 
 // syncPlan says which part of the store a sync owns and what to record for it.
@@ -131,10 +178,13 @@ type syncPlan struct {
 	// classes are the classes shards carries in full; nil means every class. Shards of any
 	// other class keep their manifest entries and files untouched, which is what lets a
 	// build reassemble one class without the inputs of the rest.
-	classes []ShardClass
-	stamps  Stamps
-	extra   map[ShardClass][]string
-	refresh bool
+	classes    []ShardClass
+	stamps     Stamps
+	fastStamps Stamps                   // see manifest.FastStamps; nil records none
+	indexes    []SymbolIndexDeclaration // see manifest.Indexes; nil keeps the recorded ones
+	reads      *readlog.Reads           // see manifest.Reads; nil keeps the recorded ones
+	extra      map[ShardClass][]string
+	refresh    bool
 }
 
 func (p syncPlan) covers(c ShardClass) bool { return p.classes == nil || slices.Contains(p.classes, c) }
@@ -150,19 +200,32 @@ func (s *Store) syncClasses(ctx context.Context, shards []Shard, fps map[string]
 	})
 }
 
-// mergeShards merges shards into a fresh graph in shard-name order, the order Load uses,
-// so a graph answered from the store and one assembled in memory are the same graph:
-// AddNode and AddEdge are first-writer-wins on conflict, so merge order is content.
-// lazy selects the lazily loaded shards instead of the default ones.
-func mergeShards(shards []Shard, lazy bool) *Graph {
+// mergeShards merges the default shards into a fresh graph in shard-name order, the
+// order Load uses, so a graph answered from the store and one assembled in memory are
+// the same graph: AddNode and AddEdge are first-writer-wins on conflict, so merge
+// order is content. Lazily loaded shards stay out; a caller that wants them merges
+// them itself.
+func mergeShards(shards []Shard) *Graph {
 	picked := make([]Shard, 0, len(shards))
 	for _, sh := range shards {
-		if isLazyShard(sh.Name) == lazy {
+		if !isLazyShard(sh.Name) {
 			picked = append(picked, sh)
 		}
 	}
 	slices.SortFunc(picked, func(a, b Shard) int { return strings.Compare(a.Name, b.Name) })
-	g := NewGraph()
+	// optimization: size the node and edge maps from the shards' own counts. Merge
+	// inserts every node and edge, so growing from empty rehashes each map about log2(n)
+	// times; the counts are known before the first insert. Shards share few nodes (an
+	// op or spell node two shards both declare), so the sum is a tight upper bound.
+	//
+	//	measured: BenchmarkMergeShards presized vs grown (means, n=6, 2000-project
+	//	          fixture): 92.2 ms -> 76.7 ms (-17%), 53.3 MB -> 33.6 MB/op (-37%).
+	nodes, edges := 0, 0
+	for _, sh := range picked {
+		nodes += len(sh.Nodes)
+		edges += len(sh.Edges)
+	}
+	g := newGraphSized(nodes, edges)
 	for _, sh := range picked {
 		g.Merge(sh.Nodes, sh.Edges)
 	}
@@ -180,6 +243,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		SchemaVersion: types.KnowledgeSchemaVersion,
 		Shards:        map[string]shardMeta{},
 		Inputs:        map[ShardClass]string{},
+		FastStamps:    map[ShardClass]string{},
 		Extra:         map[ShardClass][]string{},
 	}
 	if old != nil {
@@ -194,11 +258,24 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 				newMan.Inputs[c] = stamp
 			}
 		}
+		for c, stamp := range old.FastStamps {
+			if !plan.covers(c) {
+				newMan.FastStamps[c] = stamp
+			}
+		}
+		newMan.Indexes, newMan.IndexesKnown = old.Indexes, old.IndexesKnown
+		newMan.Reads, newMan.ReadsKnown = old.Reads, old.ReadsKnown
 		for c, paths := range old.Extra {
 			if !plan.covers(c) {
 				newMan.Extra[c] = paths
 			}
 		}
+	}
+	if plan.indexes != nil {
+		newMan.Indexes, newMan.IndexesKnown = plan.indexes, true
+	}
+	if plan.reads != nil {
+		newMan.Reads, newMan.ReadsKnown = *plan.reads, true
 	}
 	prev := old
 	if plan.refresh {
@@ -238,8 +315,21 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		if stamp := plan.stamps[c]; stamp != "" {
 			newMan.Inputs[c] = stamp
 		}
+		if stamp := plan.fastStamps[c]; stamp != "" {
+			newMan.FastStamps[c] = stamp
+		}
 		if paths := plan.extra[c]; len(paths) > 0 {
 			newMan.Extra[c] = paths
+		}
+	}
+	// A fast stamp for a class this plan does not cover belongs to one Ensure settled fresh
+	// by its full stamp in the same read (a wanted class is either rebuilt here or fresh),
+	// so it is current and worth recording: a store written before fast stamps existed
+	// would otherwise keep paying the full stamps for that class until a read rebuilt
+	// nothing at all (see recordFastStamps).
+	for c, stamp := range plan.fastStamps {
+		if stamp != "" && !plan.covers(c) && newMan.Inputs[c] != "" {
+			newMan.FastStamps[c] = stamp
 		}
 	}
 	var pruned []string
@@ -290,7 +380,9 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 	//   measured: folded into the BenchmarkBuildNoop delta above; removes the
 	//             one guaranteed write from the otherwise write-free hot path.
 	//   trade-off: none; the manifest is only skipped when it would be identical.
-	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) &&
+	if !changed && len(pruned) == 0 && maps.Equal(old.inputs(), newMan.Inputs) && maps.Equal(old.fastStamps(), newMan.FastStamps) &&
+		slices.Equal(old.indexes(), newMan.Indexes) && old.indexesKnown() == newMan.IndexesKnown &&
+		readsEqual(old.reads(), newMan.Reads) && old.readsKnown() == newMan.ReadsKnown &&
 		maps.EqualFunc(old.extra(), newMan.Extra, slices.Equal) && old.routing() == newMan.Routing {
 		return nil
 	}
@@ -323,6 +415,66 @@ func staleClasses(man *manifest, stamps Stamps, want []ShardClass, refresh bool)
 		}
 	}
 	return stale
+}
+
+// recordFastStamps writes the fast stamp of each class in classes whose recorded one is missing or
+// differs, and nothing else: no shard moves, so the full stamps and the shard entries stay
+// as man has them. Called when the full stamps settled a class the fast ones could not,
+// which is a store written before fast stamps existed, so that one read pays for the full
+// stamps and the next does not. A class with no fast stamp records nothing: a stamp the
+// caller could not compute must never be recorded as a match. Immutable stores, and a
+// manifest another process rewrote since man was read, record nothing either.
+func (s *Store) recordFastStamps(ctx context.Context, man *manifest, rec fastStampRecord) error {
+	if s.immutable || man == nil {
+		return nil
+	}
+	var missing []ShardClass
+	for _, c := range rec.classes {
+		if cur := rec.stamps[c]; cur != "" && man.FastStamps[c] != cur {
+			missing = append(missing, c)
+		}
+	}
+	recordIndexes := rec.indexes != nil && !man.IndexesKnown
+	recordReads := rec.reads != nil && !man.ReadsKnown
+	if len(missing) == 0 && !recordIndexes && !recordReads {
+		return nil
+	}
+	return file.WithLock(ctx, filepath.Join(s.dir, ".sync.lock"), syncLockWait, func() error {
+		cur := s.readManifestOrNil()
+		if cur == nil || !maps.Equal(cur.inputs(), man.inputs()) || !maps.Equal(cur.Shards, man.Shards) {
+			// The store moved under this read; whoever moved it recorded its own stamps.
+			return nil
+		}
+		if cur.FastStamps == nil {
+			cur.FastStamps = map[ShardClass]string{}
+		}
+		for _, c := range missing {
+			cur.FastStamps[c] = rec.stamps[c]
+		}
+		if recordIndexes {
+			cur.Indexes, cur.IndexesKnown = rec.indexes, true
+		}
+		if recordReads {
+			cur.Reads, cur.ReadsKnown = *rec.reads, true
+		}
+		return s.writeManifest(*cur)
+	})
+}
+
+// fastStampRecord is what recordFastStamps writes onto a manifest whose shards stay as
+// they are: the fast stamps of the classes a read settled by their full stamps, and, when
+// the caller resolved the evaluation anyway, what it read and the indexes it declared. A
+// nil indexes or reads records none.
+type fastStampRecord struct {
+	stamps  Stamps
+	classes []ShardClass
+	indexes []SymbolIndexDeclaration
+	reads   *readlog.Reads
+}
+
+// readsEqual reports whether two evaluation reads name the same inputs.
+func readsEqual(a, b readlog.Reads) bool {
+	return a.EnvAll == b.EnvAll && slices.Equal(a.Files, b.Files) && slices.Equal(a.Env, b.Env)
 }
 
 // ExtraInputs returns the files the last assembly of class read outside the tree walk.
@@ -801,7 +953,17 @@ func (s *Store) writeShard(ctx context.Context, sh Shard, fp string) error {
 		Nodes:         nodes,
 		Edges:         edges,
 	}
-	b, err := json.MarshalIndent(sf, "", "  ")
+	// optimization: write the shard compact. The indentation was only for a human reading
+	// the file, and every reader goes through json.Unmarshal, which takes either. The
+	// content fingerprint hashes fields, not these bytes, and canonicalContent fixes the
+	// order, so the file's content and its key are unchanged.
+	//
+	//	measured: this repo's stored graph (10,487 nodes, 19,504 edges) was 9.5 MB
+	//	          indented. BenchmarkStoreLoad p200 (means, n=6): 39.6 -> 35.6 ms (-10%,
+	//	          inside the run-to-run spread), 13.5 -> 11.9 MB/op (-12%); p2000 is flat in
+	//	          time (358 vs 363 ms) and -11% in B/op.
+	//	trade-off: a shard is no longer pleasant to read with `cat`; pipe it through jq.
+	b, err := json.Marshal(sf)
 	if err != nil {
 		return err
 	}
@@ -982,6 +1144,54 @@ func (m *manifest) inputs() map[ShardClass]string {
 		return nil
 	}
 	return m.Inputs
+}
+
+func (m *manifest) fastStamps() map[ShardClass]string {
+	if m == nil {
+		return nil
+	}
+	return m.FastStamps
+}
+
+func (m *manifest) indexes() []SymbolIndexDeclaration {
+	if m == nil {
+		return nil
+	}
+	return m.Indexes
+}
+
+func (m *manifest) indexesKnown() bool { return m != nil && m.IndexesKnown }
+
+func (m *manifest) reads() readlog.Reads {
+	if m == nil {
+		return readlog.Reads{}
+	}
+	return m.Reads
+}
+
+func (m *manifest) readsKnown() bool { return m != nil && m.ReadsKnown }
+
+// EvaluationReads returns what the evaluation the store was last synced from read beyond
+// the tree, and whether that was ever recorded. The caller folds them into the fast domain
+// stamp it computes, so they need no validation of their own: a stamp computed over stale
+// reads is a stamp that will not match.
+func (s *Store) EvaluationReads() (readlog.Reads, bool) {
+	man := s.readManifestOrNil()
+	return man.reads(), man.readsKnown()
+}
+
+// SymbolIndexDeclarations returns the symbol indexes the workspace declared at its last
+// evaluated sync, when fastDomain, the caller's current domain fast stamp, is the one that
+// sync recorded: the declarations are a function of the same inputs, so a matching stamp
+// means they still hold. Any other stamp, a store that never recorded them, or an empty
+// fastDomain answers false, and the caller resolves them from the evaluated workspace as
+// it always did. An empty slice with true is a workspace that declares no index.
+func (s *Store) SymbolIndexDeclarations(fastDomain string) ([]SymbolIndexDeclaration, bool) {
+	man := s.readManifestOrNil()
+	if man == nil || fastDomain == "" || man.FastStamps[ClassDomain] != fastDomain || !man.IndexesKnown {
+		return nil, false
+	}
+	return slices.Clone(man.Indexes), true
 }
 
 func (m *manifest) extra() map[ShardClass][]string {

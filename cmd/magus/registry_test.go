@@ -89,7 +89,7 @@ func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"fs\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {\n  final x: int = \"s\";\n}\n"), 0o644))
+		[]byte("import \"magus\";\nimport \"fs\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {\n  final x: int = \"s\";\n}\n"), 0o644))
 	r := newTestRegistry()
 	defer close(r.stopCh)
 
@@ -101,7 +101,7 @@ func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
 	require.NotNil(t, got[0].Error)
 	assert.Equal(t, []types.SourceDiagnostic{{
 		Code: "BZZ1005", URL: "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/BZZ1005.md",
-		File: "magusfile.buzz", Line: 3, Column: 3, Message: `cannot assign str to int variable "x"`,
+		File: "magusfile.buzz", Line: 4, Column: 3, Message: `cannot assign str to int variable "x"`,
 	}}, got[0].Error.Diagnostics)
 }
 

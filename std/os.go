@@ -206,8 +206,10 @@ var Os = Module{
 			Doc:     "Abort the current run with the given exit code - typically after logging an error. Does NOT call os.Exit (that would kill a shared server); it raises, ending the target, and the code becomes magus's process exit status.",
 			Args:    []Arg{{Name: "code", Type: TypeInt}},
 			Returns: nil,
-			Raises:  true,
-			Impl:    OsExit,
+			// NOT Raises, though the binding fails to end the run: upstream declares
+			// exit with no error set, so a script calling it from a function with no
+			// `!>` checks clean under both.
+			Impl: OsExit,
 		},
 		{
 			Name:    "sleep",

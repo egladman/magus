@@ -109,7 +109,7 @@ jobs:
         if: hashFiles('hack/ci/pull-requests.buzz') == ''
         run: echo "::notice::hack/ci/pull-requests.buzz is not on main yet; this job runs main's copy and resumes once the change that adds it merges"
 
-      # An unset variable arrives as an empty --issue, and the page goes to the summary alone.
+      # MAGUS_QUEUE_DASHBOARD_ISSUE names the pinned issue; unset, the empty --issue is refused.
       - name: Render the merge queue into the run summary and the pinned issue
         if: hashFiles('hack/ci/pull-requests.buzz') != ''
         env:

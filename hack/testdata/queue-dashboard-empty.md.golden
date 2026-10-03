@@ -1,0 +1,28 @@
+## 🚦 Merge queue
+
+> [!NOTE]
+> Nothing is queued · `main` [🟢 green](https://github.com/o/r/actions/runs/70)
+
+<sub>Updated 2026-09-26 20:00 UTC · `main` at `cba6465e8617` · 📦 merged in 7 days: **0** by the queue, **0** past it</sub>
+
+- [ ] <!-- magus-queue: start --> 🔁 **Run the queue now**: start a validation run on `main`, unless one already waits to read the queue
+- [ ] <!-- magus-queue: render --> 🖌️ **Re-render this page**
+
+🏁 Nothing to merge right now: no pull request is validating, queued or ready to join.
+
+---
+
+<details><summary>ℹ️ How this page works</summary>
+
+- It is rendered whole from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; nothing written here survives.
+- Rows rank by how near each is to merging: validating, then queued in queue order, then could join; 🔧 and 🛑 rows were kicked back and sit below.
+- **Progress** has a cell per stage: checks green, approved, queued, first in line, validating. 🟩 passed, 🟨 under way, 🟥 failed (a kick-back fails *queued*), ⬜ not yet. A merge takes the row off the board.
+- GitHub draws no box inside a table, so each row's boxes are listed under it, in rank order; **Next** says ☐ when the row has one.
+- A box runs its action when someone with write, maintain or admin access checks it. Anyone else's check, and a bot's, is ignored, and the page is rendered again with every box clear.
+- **Requeue** and **Queue** enable auto-merge as the queue app, which is merge intent; **Rerun** reruns the failed jobs; **Run the queue now** starts a validation run on `main` unless one already waits to read the queue. A stack is queued by a label on its top, which only a person can apply.
+- *Past it* counts merges whose `merge-queue` status was not success when they merged.
+- To render it yourself: `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base main --preview --out dashboard.md`
+
+</details>
+
+<!-- magus-queue-dashboard -->

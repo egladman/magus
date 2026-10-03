@@ -1,15 +1,3 @@
-// site/diagrams/server-share.buzz: sharing a read-only view onto the LAN. Kept as its own
-// figure because the LAN listener is the only part of the server that a machine other than
-// localhost can reach, and burying that in a whole-system flowchart is how it stops being
-// obvious. The two accent elements both mark that boundary.
-//
-// The subset is drawn route by route rather than as one "read-only views" box, because the
-// asymmetry IS the message: a share link is a URL handed to a phone, so the graph, the diff
-// routes, the plan, /mcp and job control never appear on it. internal/server holds the
-// share endpoint and mounts the routes; its shareGuarded map is the split drawn here.
-//
-// The withheld box takes no connector on purpose: an arrow into it would say the listener
-// reaches it. The server imports it to mount it on loopback, and that edge is hidden.
 namespace serverShare;
 
 import "magus";
@@ -18,6 +6,8 @@ import "magus/figure";
 export fun serverShareFigure() > figure\Figure !> any {
     final server = magus\dir("internal/server");
     final lan = magus\dir("internal/share");
+    // Route by route, not one read-only box: what a share link withholds is the message.
+    // internal/server's shareGuarded map is the split drawn here.
     final served = magus\dir("internal/handler/viewer");
     final connectReads = magus\dir("internal/handler/status");
     final withheld = magus\dir("internal/handler/graph");
@@ -39,7 +29,7 @@ export fun serverShareFigure() > figure\Figure !> any {
         .box(connectReads, label: "Shared Connect reads", sub: "status, activity, metrics, insight", look: figure\Look.store)
         .box(withheld, label: "Never on a share", sub: "graph, diff, plan, job, /mcp", look: figure\Look.optional)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([server]), dst: figure\setOf([withheld]),
+        .hideEdges([server], dst: [withheld],
             why: "the server mounts it on loopback only; drawn, it would read as served on a share")
         .markEdge(server, dst: lan, label: "mints token")
         .markEdge(server, dst: served, label: "mounts")
@@ -49,5 +39,14 @@ export fun serverShareFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "reachable off-machine")
         .legend(figure\Look.store, label: "served on a share")
         .legend(figure\Look.optional, label: "loopback only")
-        .scope(figure\setOf([lan, served, connectReads, withheld]));
+        .scope([lan])
+        .scope(magus\layer("handler").dirs)
+        .except([magus\dir("internal/handler/activity"), magus\dir("internal/handler/insight"), magus\dir("internal/handler/metrics")],
+            why: "shared read services, folded into the two shared boxes")
+        .except([magus\dir("internal/handler/diff"), magus\dir("internal/handler/job"), magus\dir("internal/handler/mcp"), magus\dir("internal/handler/plan")],
+            why: "loopback only, named in the never-on-a-share box")
+        .except([magus\dir("internal/handler/attention"), magus\dir("internal/handler/diagram"), magus\dir("internal/handler/notes"), magus\dir("internal/handler/token"), magus\dir("internal/handler/tool")],
+            why: "loopback only: a person's blocks, the figures, private notes, token management and a service that execs tools")
+        .except([magus\dir("internal/handler/trailrpc")],
+            why: "the audit interceptor around Connect services, not a route");
 }

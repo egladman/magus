@@ -84,7 +84,7 @@ func TestConsole_status(t *testing.T) {
 	require.True(t, ok)
 	assert.Contains(t, status, "target")
 
-	ok, status = s.SetSource(context.Background(), "export fun x(ctx: magus\\Context, _a: [str]) > void { let ; }")
+	ok, status = s.SetSource(context.Background(), "import \"magus\";\nexport fun x(ctx: magus\\Context, _a: [str]) > void { let ; }")
 	require.False(t, ok, "expected parse error badge")
 	assert.True(t, strings.HasPrefix(status, "fail"), "expected parse error badge, got %q", status)
 }

@@ -71,6 +71,14 @@ Two consequences worth knowing before you pick a build:
   valuable report. See the [gopherbuzz JIT notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
   for the full matrix.
 
+## Version control
+
+magus drives the repository's own version control binary, and refuses one older than the
+release it relies on with [MGS3005](reference/codes/sandbox/MGS3005.md): git 2.54, jj 0.22,
+Mercurial 4.5, Sapling 0.2.20230523. git's floor is a fix, not a flag. Before 2.54 a
+histogram diff could shift its hunks, so which declarations a change lands in depended on
+the git that read it.
+
 ## Next steps
 
 - **[Verify the release](setup/verify.md)** before first run. Every build ships an Ed25519-signed `SHA256SUMS`; on a first install, verify it by hand rather than with the binary you just downloaded.

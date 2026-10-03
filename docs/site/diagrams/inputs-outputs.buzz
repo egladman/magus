@@ -1,23 +1,18 @@
-// site/diagrams/inputs-outputs.buzz: where a target's globs stop, and what reaches its cache
-// key. An output glob stops at a nested project's directory, an input glob does not, and a
-// project handle is the declared way across. The accents are the key and that crossing.
-//
-// Rules drawn: types/workspace.go (a nested project owns its files), internal/cache
-// (NestedDirs narrows a snapshot, never the key), MGS3001 (a write into a descendant project),
-// describe.go (a cross-project input's owner joins DependsOn).
-//
-// The globs are magusfile declarations and the tool probe is a run step, so they are actors.
 namespace inputsOutputs;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun inputsOutputsFigure() > figure\Figure !> any {
+    // NestedDirs narrows a snapshot here, never the key.
     final cache = magus\dir("internal/cache");
     final audit = magus\dir("internal/audit");
+    // types/workspace.go: a nested project owns its files.
     final claims = magus\dir("types");
     final reads = figure\external("readsFiles(\"**/*.go\")", sub: "matches nested files too", tag: "root", look: figure\Look.plain);
     final writes = figure\external("writesFiles(\"**/gen/mocks/*.go\")", sub: "the root's gen/ only", tag: "root", look: figure\Look.plain);
+    // describe.go joins a cross-project input's owner to DependsOn.
     final handle = figure\external("workspace\\file(...)", sub: "the root's tree, as upstream", tag: "docs", look: figure\Look.plain);
     final probe = figure\external("Tool probe", sub: "the version, or UNPROBED", look: figure\Look.plain);
     return figure\of("inputs-outputs",
@@ -40,7 +35,7 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .box(cache, label: "Cache key", sub: "source walk, key, snapshot", focal: true)
         .box(claims, label: "Output claim", sub: "stops at a nested dir")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([audit]), dst: figure\setOf([claims]),
+        .hideEdges([audit], dst: [claims],
             why: "the audit reads the same claim rule; the figure draws it from the snapshot")
         .flowIn(reads, dst: cache, label: "src:")
         .flowIn(handle, dst: cache, label: "+ depends_on", stroke: figure\Stroke.focal)
@@ -48,8 +43,16 @@ export fun inputsOutputsFigure() > figure\Figure !> any {
         .flowIn(writes, dst: cache, label: "snapshot")
         .flowIn(writes, dst: audit, label: "stray write", stroke: figure\Stroke.optional)
         .zone("root project .", actors: [reads, writes])
-        .zone("a nested project", dirs: figure\setOf([audit]), actors: [handle])
-        .zone("the cache", dirs: figure\setOf([cache, claims]), actors: [probe])
+        .zone("a nested project", dirs: [audit], actors: [handle])
+        .zone("the cache", dirs: [cache, claims], actors: [probe])
         .legend(figure\Look.focal, label: "what a hit is keyed on")
-        .scope(figure\setOf([cache]));
+        .scope(goPackages("internal/cache/**"))
+        .scope(goPackages("internal/audit/**"))
+        .scope(goPackages("types/**"))
+        .except([magus\dir("internal/cache/reflink")],
+            why: "copies files in and out of the store; it reads no glob and keys nothing")
+        .except([magus\dir("internal/cache/remotetest")], why: "a fake remote cache for tests")
+        .except([magus\dir("types/enum")],
+            why: "the closed string sets every package checks values against; no claim rule")
+        .except([magus\dir("types/gen/mocks")], why: "generated test mocks");
 }

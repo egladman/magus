@@ -4,6 +4,7 @@
 // generated-name lists come from Config (generatorDirs/generatorFiles), not hardcoded.
 namespace path;
 
+import "assert";
 import "fs";
 
 // True if path is a directory.
@@ -59,10 +60,11 @@ export fun isGeneratorDir(name: str, dirs: [str]) > bool {
     return false;
 }
 
-// isGeneratorFile reports whether a docs-ROOT .md file is an SSG artifact rather than
-// content. MAGUS.md (the generated target catalog) sits at the docs root but must not
-// render as a doc page; it surfaces instead via renderDevelopment. Like isGeneratorDir,
-// consulted only at the docs root (rel == "").
+// isGeneratorFile reports whether a .md file is a generated artifact rather than content,
+// at ANY depth. MAGUS.md is every project's generated routing index: docs/ has one, and so
+// does each sub-project under it (docs/guides/integrations/agents). None renders as a doc
+// page; each project surfaces instead via renderDevelopment. Root-only would publish a
+// nested one, whose "Up" link climbs out of docs/ to a page the site never renders.
 export fun isGeneratorFile(name: str, files: [str]) > bool {
     foreach (f in files) {
         if (name == f) { return true; }
@@ -84,7 +86,7 @@ export fun isNeverContentDir(name: str) > bool {
 }
 
 test "isNeverContentDir catches node_modules at any depth, and nothing else" {
-    assert\equal(isNeverContentDir("node_modules"), true);
+    assert\equal(isNeverContentDir("node_modules"), true, "node_modules is never content");
     assert\equal(isNeverContentDir("gen"), false, "gen is root-only, handled by isGeneratorDir");
-    assert\equal(isNeverContentDir("guides"), false);
+    assert\equal(isNeverContentDir("guides"), false, "a content dir is walked");
 }

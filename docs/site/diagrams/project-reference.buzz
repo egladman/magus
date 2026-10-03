@@ -1,7 +1,3 @@
-// site/diagrams/project-reference.buzz: the four spellings of a project reference magus
-// accepts, and the two it emits. The figure exists to make one point: input is forgiving
-// and output is not, so an agent can pass whatever it has and still get a stable string
-// back to key on.
 namespace projectReference;
 
 import "magus/figure";

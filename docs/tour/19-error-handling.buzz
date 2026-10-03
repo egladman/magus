@@ -19,7 +19,6 @@
 // Run `run stamp`, then `run tools`, then `run gate`.
 
 import "magus";
-import "os";
 import "proc";
 import "vcs";
 

@@ -37,11 +37,11 @@ stdout 'assert\\equal failed'
 stdout '0 passed, 1 failed, 0 skipped'
 stderr '1 of 1 tests failed'
 
-# an undefined variable is a diagnostic, not a bare panic: a BZZ code, a source
-# position, and a see: URL to look it up
+# an unimported namespace is a diagnostic, not a bare panic: a BZZ code, a source
+# position, the import line to add, and a see: URL to look it up
 ! exec magus buzz -e 'std\print("hi");'
-stderr '\[BZZ1001\] buzz: line 1:1: undefined: std'
-stderr 'see: https://.*BZZ1001'
+stderr '\[BZZ1009\] buzz: line 1:1: undefined: std\\print: no import binds std in this module; add `import "std";`'
+stderr 'see: https://.*BZZ1009'
 
 # `import "magus"` resolves, and a member that needs no magusfile runs
 exec magus buzz -e 'import "std"; import "magus"; std\print(magus\canonicalName("HTTPServer"));'

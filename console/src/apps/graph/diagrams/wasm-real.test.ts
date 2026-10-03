@@ -91,7 +91,7 @@ async function relay(): Promise<void> {
     assert.ok(solid, "the plain edge is drawn");
     assert.doesNotMatch(solid, /stroke-dasharray/);
     assert.match(linkSvg, /<path data-edge="external:app->external:tool"[^>]*stroke-dasharray/);
-    assert.match(linkSvg, />after</);
+    assert.match(linkSvg, />AFTER</);
 
     const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
     const imports = figureFor(

@@ -57,6 +57,8 @@ magus buzz -C internal/auth
 Call `magus\pry()` anywhere in a magusfile target to suspend execution and drop into the REPL at that exact point. The REPL inherits the calling Runner's bindings and exposes the surrounding scope.
 
 ```buzz
+import "magus";
+
 export fun build(ctx: magus\Context, args: [str]) > void {
     const outputs = ["bin/foo", "bin/bar"];
     proc\exec("go", ["generate", "./..."]);

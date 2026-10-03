@@ -137,6 +137,7 @@ function per seam. magus's own repository does this in
 [`hack/policy/guard.buzz`](https://github.com/egladman/magus/blob/main/hack/policy/guard.buzz):
 
 ```buzz
+import "magus";
 import "./hack/policy/guard" as agentpolicy;
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);

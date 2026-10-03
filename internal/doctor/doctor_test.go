@@ -60,32 +60,32 @@ func TestCheckCITarget(t *testing.T) {
 	})
 	t.Run("ci declared", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
-			projectWith(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("ci declared (buzz, any casing)", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
-			projectWith(map[string]string{"magusfile.buzz": "export fun CI(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun CI(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("ci declared in one of several projects", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
-			projectWith(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
-			projectWith(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("no ci anywhere fails", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
-			projectWith(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
 	t.Run("cipher is not ci", func(t *testing.T) {
 		got := (&runner{}).checkCITarget([]*types.Project{
-			projectWith(map[string]string{"magusfile.buzz": "export fun cipher(ctx: magus\\Context, _a: [str]) > void {}\n"}),
+			projectWith(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun cipher(ctx: magus\\Context, _a: [str]) > void {}\n"}),
 		})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
@@ -95,7 +95,7 @@ func TestCheckCITarget(t *testing.T) {
 // define ci and references the MGS1001 doc.
 func TestCheckCITarget_FailDetails(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "magusfile.buzz"), "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n")
+	writeFile(t, filepath.Join(dir, "magusfile.buzz"), "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n")
 	got := (&runner{}).checkCITarget([]*types.Project{{Dir: dir}})
 	require.Equal(t, types.CheckFail, got.Status)
 	joined := strings.Join(got.Details, "\n")
@@ -180,21 +180,21 @@ func TestCheckTargetNameConventions(t *testing.T) {
 	}
 
 	t.Run("consistent snake_case", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun go_test(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun go_test(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("neutral names only", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun test(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun test(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("snake and camel mixed", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun goTest(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun go_build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun goTest(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	})
 	t.Run("mixed across magusfiles dir", func(t *testing.T) {
 		got := run(map[string]string{
-			"magusfiles/a.buzz": "export fun go_build(ctx: magus\\Context, _a: [str]) > void {}\n",
-			"magusfiles/b.buzz": "export fun GoTest(ctx: magus\\Context, _a: [str]) > void {}\n",
+			"magusfiles/a.buzz": "import \"magus\";\nexport fun go_build(ctx: magus\\Context, _a: [str]) > void {}\n",
+			"magusfiles/b.buzz": "import \"magus\";\nexport fun GoTest(ctx: magus\\Context, _a: [str]) > void {}\n",
 		})
 		assert.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	})
@@ -214,20 +214,20 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	}
 
 	t.Run("canonical names only", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun lint(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\nexport fun lint(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("typecheck flagged", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun typecheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun typecheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "typecheck")
 	})
 	t.Run("camelCase typeCheck normalizes to type-check and is flagged", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun typeCheck(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		require.Equal(t, types.CheckAdvice, got.Status, got.Message)
 	})
 	t.Run("vet audit style prettify all flagged", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun vet(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun audit(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun style(ctx: magus\\Context, _a: [str]) > void {}\n" +
 			"export fun prettify(ctx: magus\\Context, _a: [str]) > void {}\n"})
@@ -239,7 +239,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	// independently of the tree, so it carries skip_cache, and composing it into lint
 	// would cost that whole phase its caching. magus's own projects declare one.
 	t.Run("security is not flagged", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun security(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun security(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
@@ -251,7 +251,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 		for _, dir := range []string{"web", "docs"} {
 			require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"),
-				[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+				[]byte("import \"magus\";\nexport fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		}
 		r := &runner{root: root}
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{
@@ -269,7 +269,7 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 	t.Run("an empty root still names the file", func(t *testing.T) {
 		root := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("export fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
+			[]byte("import \"magus\";\nexport fun vet(ctx: magus\\Context, _a: [str]) > void {}\n"), 0o644))
 		r := &runner{} // no root, no workspace
 		got := r.checkBespokePhaseFragmentTargets([]*types.Project{{Path: ".", Dir: root}})
 		require.Equal(t, types.CheckAdvice, got.Status, got.Message)
@@ -287,11 +287,11 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 	}
 
 	t.Run("reachable declaration is clean", func(t *testing.T) {
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n")
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n")
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("orphan in uncalled helper is flagged", func(t *testing.T) {
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles(\"dist/**\"); }\n")
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\nfun dead() > void { ctx.writesFiles(\"dist/**\"); }\n")
 		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		assert.Contains(t, got.Details[0], "ctx.writesFiles")
 	})
@@ -307,10 +307,10 @@ func TestCheckCacheableSecretReads(t *testing.T) {
 		r := &runner{root: root}
 		return r.checkCacheableSecretReads([]*types.Project{{Path: ".", Dir: root, TargetPolicies: policies}})
 	}
-	const readsSecret = "export fun login(ctx: magus\\Context, _a: [str]) > void { final t = magus\\secret.read(\"TOKEN\"); }\n"
+	const readsSecret = "import \"magus\";\nexport fun login(ctx: magus\\Context, _a: [str]) > void { final t = magus\\secret.read(\"TOKEN\"); }\n"
 
 	t.Run("a target that reads no secret is clean", func(t *testing.T) {
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n", nil)
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.readsFiles(\"src/**\"); }\n", nil)
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("a cacheable secret read is flagged", func(t *testing.T) {
@@ -325,7 +325,7 @@ func TestCheckCacheableSecretReads(t *testing.T) {
 	})
 	t.Run("a lookalike member is not a secret read", func(t *testing.T) {
 		// `.read` on anything that is not the magus\secret namespace must not trip it.
-		got := run("export fun build(ctx: magus\\Context, _a: [str]) > void { final t = fs\\file.read(\"x\"); }\n", nil)
+		got := run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { final t = fs\\file.read(\"x\"); }\n", nil)
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 }
@@ -359,11 +359,11 @@ func TestCheckCacheableExternalOps(t *testing.T) {
 	// when the handle came from a spell import, so a body without it produces no ops and
 	// the check would pass for the wrong reason.
 	const imports = "import \"magus/spell/docker\";\n"
-	const scan = imports + "export fun scan(ctx: magus\\Context, _a: [str]) > void { docker[\"trivy-image\"](ctx); }\n"
-	const push = imports + "export fun ship(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-push\"](ctx); }\n"
+	const scan = imports + "import \"magus\";\nexport fun scan(ctx: magus\\Context, _a: [str]) > void { docker[\"trivy-image\"](ctx); }\n"
+	const push = imports + "import \"magus\";\nexport fun ship(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-push\"](ctx); }\n"
 
 	t.Run("an op that declares nothing is clean", func(t *testing.T) {
-		got := run(imports+"export fun build(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-build\"](ctx); }\n", scanner(false), nil)
+		got := run(imports+"import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-build\"](ctx); }\n", scanner(false), nil)
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("a cacheable reads-external op with no probe is flagged", func(t *testing.T) {
@@ -456,27 +456,27 @@ func TestCheckMagusfileSyntax(t *testing.T) {
 	}
 
 	t.Run("clean magusfile", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
 	t.Run("embedding constructs are allowed", func(t *testing.T) {
 		// Top-level host calls and statements are embedding-only constructs that
 		// upstream-strict parsing rejects; magusfiles parse in embedded mode.
-		got := run(map[string]string{"magusfile.buzz": "magus.log.info(\"hi\");\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nmagus.log.info(\"hi\");\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
 	t.Run("syntax error fails", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun ci(ctx: magus\\Context, _a: [str]) > void {\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun ci(ctx: magus\\Context, _a: [str]) > void {\n"})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 		assert.NotEmpty(t, got.Details, "expected the offending file in details")
 	})
 
 	t.Run("all magusfiles reported, not just the first", func(t *testing.T) {
 		got := run(map[string]string{
-			"magusfiles/a.buzz": "export fun a(ctx: magus\\Context, _a: [str]) > void {\n", // broken
-			"magusfiles/b.buzz": "export fun b(ctx: magus\\Context, _a: [str]) > void {\n", // broken
+			"magusfiles/a.buzz": "import \"magus\";\nexport fun a(ctx: magus\\Context, _a: [str]) > void {\n", // broken
+			"magusfiles/b.buzz": "import \"magus\";\nexport fun b(ctx: magus\\Context, _a: [str]) > void {\n", // broken
 		})
 		require.Equal(t, types.CheckFail, got.Status, got.Message)
 		assert.Len(t, got.Details, 2, "both broken magusfiles should be reported in one pass")
@@ -500,19 +500,19 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 	}
 
 	t.Run("no charms, no collision", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("charm distinct from every target", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 	t.Run("body charm shares a target name", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun container(ctx: magus\\Context, _a: [str]) > void {}\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun container(ctx: magus\\Context, _a: [str]) > void {}\nexport fun build(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n"})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
 	t.Run("target named like a reserved charm", func(t *testing.T) {
-		got := run(map[string]string{"magusfile.buzz": "export fun cd(ctx: magus\\Context, _a: [str]) > void {}\n"})
+		got := run(map[string]string{"magusfile.buzz": "import \"magus\";\nexport fun cd(ctx: magus\\Context, _a: [str]) > void {}\n"})
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
 }
@@ -526,20 +526,20 @@ func TestCheckHasCharmTypos(t *testing.T) {
 	}
 
 	t.Run("no has_charm reads", func(t *testing.T) {
-		assert.Equal(t, types.CheckOK, run("export fun build(ctx: magus\\Context, _a: [str]) > void {}\n").Status)
+		assert.Equal(t, types.CheckOK, run("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n").Status)
 	})
 	t.Run("live read of a reserved charm", func(t *testing.T) {
-		assert.Equal(t, types.CheckOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw\"); }\n").Status)
+		assert.Equal(t, types.CheckOK, run("import \"magus\";\nexport fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw\"); }\n").Status)
 	})
 	t.Run("separator variant of a real charm is live, not a typo", func(t *testing.T) {
 		// has_charm("rw_") normalizes to "rw", so the branch is live and must not flag.
-		assert.Equal(t, types.CheckOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw_\"); }\n").Status)
+		assert.Equal(t, types.CheckOK, run("import \"magus\";\nexport fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rw_\"); }\n").Status)
 	})
 	t.Run("novel undeclared charm has no near match, so no flag", func(t *testing.T) {
-		assert.Equal(t, types.CheckOK, run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n").Status)
+		assert.Equal(t, types.CheckOK, run("import \"magus\";\nexport fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"container\"); }\n").Status)
 	})
 	t.Run("misspelling of a real charm is flagged", func(t *testing.T) {
-		got := run("export fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rww\"); }\n")
+		got := run("import \"magus\";\nexport fun b(ctx: magus\\Context, _a: [str]) > void { ctx.hasCharm(\"rww\"); }\n")
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 		require.Len(t, got.Details, 1)
 		assert.Contains(t, got.Details[0], "rww")

@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -289,11 +290,12 @@ func (p *stepProbe) RecordBuzzJITRun(context.Context) {}
 func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	prev := buzzHostBindingsFn
 	buzzHostBindingsFn = func(_ context.Context, sess *buzz.Session, _ map[string]vm.Callable, _ map[string]vm.Value, _ bool) {
+		sess.SetNativeModule("magus", vm.NewMap())
 		spell.DeclareMagusTypes(sess, nil)
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
 	root := t.TempDir()
-	const magusfile = "export fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
+	const magusfile = "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
 		"export fun test(ctx: magus\\Context, args: [str]) > void {}\n"
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
 	granted := t.TempDir()
@@ -453,12 +455,15 @@ func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
 	require.NotEmpty(t, stamp)
 	assert.Equal(t, stamp, compilerStampOf(fresh))
 
-	i := strings.Index(string(body), "Go build ID: \"")
-	require.GreaterOrEqual(t, i, 0, "the test binary carries a Go build ID")
-	other := slices.Clone(body)
-	other[i+len("Go build ID: \"")] ^= 1
+	id := goBuildID(exe)
+	require.NotEmpty(t, id, "the test binary carries a Go build ID")
+	replacement := []byte(id)
+	replacement[0] ^= 1
+	other := bytes.ReplaceAll(body, []byte(id), replacement)
+	require.False(t, bytes.Equal(body, other), "the test must change the stored build ID")
 	rebuilt := filepath.Join(t.TempDir(), "magus")
 	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
+	assert.Equal(t, string(replacement), goBuildID(rebuilt))
 	assert.NotEqual(t, stamp, compilerStampOf(rebuilt), "another build is another compiler")
 }
 
@@ -501,7 +506,8 @@ func TestGuardLoadRefusesATamperedChunk(t *testing.T) {
 // magusfile's syntax, and the copy says what a parse says.
 func TestRuntimeStoredMagusfileFactsMatchParsed(t *testing.T) {
 	t.Parallel()
-	const code = `import "magus/spell/go";
+	const code = `import "magus";
+import "magus/spell/go";
 import "lib/x" as helper;
 import "fs";
 import "ghcr.io/team/spells/lint" as lint;
@@ -513,7 +519,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 export fun plain(args: [str]) > void {}
 `
 	want := magusfileFacts{
-		Imports:       map[string]string{"go": "magus/spell/go", "helper": "lib/x", "fs": "fs", "lint": "ghcr.io/team/spells/lint"},
+		Imports:       map[string]string{"magus": "magus", "go": "magus/spell/go", "helper": "lib/x", "fs": "fs", "lint": "ghcr.io/team/spells/lint"},
 		CtxForm:       []string{"build"},
 		SpellHandles:  []string{"go"},
 		RemoteImports: []string{"ghcr.io/team/spells/lint"},

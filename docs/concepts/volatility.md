@@ -72,6 +72,8 @@ into retry rather than the whole tree, and a sibling target in the same run is
 unaffected by a neighbor's opt-in:
 
 ```buzz
+import "magus";
+
 magus\project({
     "targets": {
         "integration": { "retry_on_volatile": "talks to a shared broker that drops a connection under load" },

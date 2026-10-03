@@ -31,6 +31,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/oci"
+	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
@@ -193,37 +194,206 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 		log = slog.Default()
 	}
 	cacheDir := resolveCacheDir(root, cfg)
-	spells, err := ListSpells(ctx)
-	if err != nil {
-		return nil, err
-	}
-	graph, err := ws.TargetGraph(ctx)
-	if err != nil {
-		return nil, err
-	}
-	projects, err := ws.ListProjects(ctx)
-	if err != nil {
-		return nil, err
-	}
-	src := knowledgeSources{
-		cfg: cfg, root: root, cacheDir: cacheDir,
-		spells: spells, graph: graph, projects: projects, log: log,
-	}
-	if root != "" {
-		src.tree = knowledge.WalkTree(root)
+	var tree *knowledge.TreeWalk
+	if lw, ok := ws.(*LazyWorkspace); ok && lw.root == root {
+		// One read, one walk: the coverage probe that follows the read folds the same tree.
+		tree = lw.tree()
+	} else if root != "" {
+		tree = knowledge.WalkTree(root)
 	}
 	store := knowledge.NewStore(cacheDir, true, 0, nil, log)
+
+	// The workspace model (its target graph, projects and spells) is what the full stamps
+	// and every rebuild read, and it is the one input that costs a workspace evaluation:
+	// on a *LazyWorkspace, the first TargetGraph call parses every magusfile. So it is
+	// resolved once, on demand, and a read the fast stamps settle never asks for it.
+	var (
+		modelOnce sync.Once
+		model     knowledgeSources
+		modelErr  error
+	)
+	resolveModel := func(ctx context.Context) (knowledgeSources, error) {
+		modelOnce.Do(func() {
+			var spells []types.Spell
+			var graph types.TargetGraphOutput
+			var projects types.ProjectsOutput
+			// Spells after the workspace: ListSpells reads the global registry, which a
+			// workspace load is what populates with the workspace's own spells.
+			if graph, modelErr = ws.TargetGraph(ctx); modelErr != nil {
+				return
+			}
+			if projects, modelErr = ws.ListProjects(ctx); modelErr != nil {
+				return
+			}
+			if spells, modelErr = ListSpells(ctx); modelErr != nil {
+				return
+			}
+			model = knowledgeSources{
+				cfg: cfg, root: root, cacheDir: cacheDir,
+				spells: spells, graph: graph, projects: projects, tree: tree, log: log,
+			}
+		})
+		return model, modelErr
+	}
 	opts := knowledge.BuildOptions{
 		Immutable: cacheImmutable(cfg),
 		Refresh:   refresh,
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
 		Remote:    remoteShards(ws),
-		Stamps:    knowledgeStamps(ctx, src, store, want),
-		Root:      root,
+		FastStampsFunc: func(ctx context.Context, reads readlog.Reads, known bool) knowledge.Stamps {
+			return knowledgeFastStamps(ctx, cfg, root, cacheDir, tree, want, reads, known)
+		},
+		StampsFunc: func(ctx context.Context) (knowledge.Stamps, error) {
+			src, err := resolveModel(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return knowledgeStamps(ctx, src, store, want), nil
+		},
+		IndexesFunc: func(ctx context.Context) ([]knowledge.SymbolIndexDeclaration, error) {
+			src, err := resolveModel(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws)), nil
+		},
+		ReadsFunc: func(ctx context.Context) (readlog.Reads, error) {
+			if _, err := resolveModel(ctx); err != nil {
+				return readlog.Reads{}, err
+			}
+			reads, _ := evaluationReads(ctx, ws)
+			return reads, nil
+		},
+		Root: root,
 	}
 	return knowledge.Ensure(ctx, cacheDir, opts, want, func(stale []knowledge.ShardClass) (knowledge.Inputs, error) {
-		return gatherKnowledgeInputs(ctx, src, refresh, stale), nil
+		src, err := resolveModel(ctx)
+		if err != nil {
+			return knowledge.Inputs{}, err
+		}
+		in := gatherKnowledgeInputs(ctx, src, refresh, stale)
+		in.Indexes = symbolIndexDeclarationRecords(ctx, src.symbolInputs(), indexFreshness(ctx, ws))
+		if reads, ok := evaluationReads(ctx, ws); ok {
+			in.Reads = &reads
+		}
+		return in, nil
 	}, log)
+}
+
+// magusBehind returns the *Magus a knowledge read's workspace is, opening a lazy one: the
+// handle whose evaluation just produced the model, which is where its reads and its index
+// freshness verdicts live. nil for any other Inspector (a test double), whose evaluation
+// records neither.
+func magusBehind(ctx context.Context, ws types.Inspector) *Magus {
+	switch w := ws.(type) {
+	case *Magus:
+		return w
+	case *LazyWorkspace:
+		if m, err := w.Magus(ctx); err == nil {
+			return m
+		}
+	}
+	return nil
+}
+
+// evaluationReads returns what the evaluation behind ws read beyond the tree, and false
+// when ws carries no evaluation to ask.
+func evaluationReads(ctx context.Context, ws types.Inspector) (readlog.Reads, bool) {
+	m := magusBehind(ctx, ws)
+	if m == nil {
+		return readlog.Reads{}, false
+	}
+	return m.EvaluationReads(), true
+}
+
+// indexFreshness is the freshness verdict of every symbol index the evaluation behind ws
+// declares, by project path, or nil when ws carries no evaluation to ask. It costs the
+// probe SymbolIndexStatusByStamp costs, paid where the evaluation already was.
+func indexFreshness(ctx context.Context, ws types.Inspector) map[string]types.SymbolIndexStatus {
+	m := magusBehind(ctx, ws)
+	if m == nil {
+		return nil
+	}
+	out := map[string]types.SymbolIndexStatus{}
+	for _, s := range m.SymbolIndexStatusByStamp(ctx) {
+		path := s.Project.Path
+		if path == "" {
+			path = "."
+		}
+		out[path] = s
+	}
+	return out
+}
+
+// symbolIndexDeclarationRecords is symbolIndexDeclarations in the form the knowledge store
+// records on its manifest, so a read the fast stamps settle can probe coverage without the
+// evaluated workspace the resolution needs. Never nil: a workspace that declares no index
+// records an empty list, which the store tells apart from none recorded.
+func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, freshness map[string]types.SymbolIndexStatus) []knowledge.SymbolIndexDeclaration {
+	dirByPath := make(map[string]string, len(in.projects.Projects))
+	for _, p := range in.projects.Projects {
+		dirByPath[p.Path] = p.Dir
+	}
+	decls := symbolIndexDeclarations(ctx, in)
+	out := make([]knowledge.SymbolIndexDeclaration, 0, len(decls))
+	for _, d := range decls {
+		rec := knowledge.SymbolIndexDeclaration{Project: d.project, Dir: dirByPath[d.project], Language: d.language, Path: d.path}
+		if s, ok := freshness[d.project]; ok {
+			// The verdict and the file it judged, so a later read can reuse the one while
+			// the other is unchanged (see RecordedStaleIndexes). An index that cannot be
+			// stat'ed records no identity, and so is re-judged by every read.
+			rec.Freshness, rec.Detail = string(s.Freshness), s.Detail
+			if info, err := os.Stat(d.path); err == nil {
+				rec.Size, rec.ModTime = info.Size(), info.ModTime().UnixNano()
+			}
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+// recordedSymbolIndexDeclarations answers the declared indexes for a lazy workspace that
+// has not been opened, from what the store recorded at its last evaluated sync, provided
+// the domain fast stamp still matches. false means the caller must open the workspace to
+// resolve them; it never guesses.
+func recordedSymbolIndexDeclarations(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]knowledge.SymbolIndexDeclaration, bool) {
+	cacheDir := resolveCacheDir(lw.root, cfg)
+	store := knowledge.NewStore(cacheDir, true, 0, nil, nil)
+	reads, known := store.EvaluationReads()
+	fast := knowledgeFastStamps(ctx, cfg, lw.root, cacheDir, lw.tree(), []knowledge.ShardClass{knowledge.ClassDomain}, reads, known)
+	return store.SymbolIndexDeclarations(fast[knowledge.ClassDomain])
+}
+
+// RecordedStaleIndexes answers, for a lazy workspace that has not been opened, which
+// declared symbol indexes the last evaluation judged stale, from the verdicts the store
+// recorded: valid while the domain fast stamp matches (the sources are as they were) and
+// every judged index file is the one it judged (same size and mtime). false means the
+// caller must open the workspace and judge afresh, as every read did before; it never
+// guesses, so an index rebuilt since the record, or one the record never judged, sends
+// the read to the workspace rather than to a stale verdict.
+func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]string, bool) {
+	decls, ok := recordedSymbolIndexDeclarations(ctx, lw, cfg)
+	if !ok {
+		return nil, false
+	}
+	var stale []string
+	for _, d := range decls {
+		if d.Freshness == "" {
+			return nil, false
+		}
+		info, err := os.Stat(d.Path)
+		switch {
+		case err != nil && d.Size == 0 && d.ModTime == 0:
+			// Judged absent then, absent now: the verdict (not built) stands.
+		case err != nil, info.Size() != d.Size, info.ModTime().UnixNano() != d.ModTime:
+			return nil, false
+		}
+		if d.Freshness == string(types.SymbolIndexStale) {
+			stale = append(stale, d.Project)
+		}
+	}
+	slices.Sort(stale)
+	return stale, true
 }
 
 // knowledgeSources is what both the stamps and the gathered inputs are derived from,
@@ -468,14 +638,10 @@ func vcsIgnoreSources(ctx context.Context, root string) (paths []string, ok bool
 // and spells the workspace describes.
 func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
 	h := knowledge.NewInputHash("base")
-	if !foldBinary(h) {
+	if !foldKnowledgeSite(h, src.cfg, src.root, src.cacheDir) {
 		return "", false
 	}
-	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
-	h.String(src.root)
-	h.String(src.cacheDir)
-	h.String(src.cfg.HistoryPath)
-	for _, v := range []any{src.cfg.Knowledge, src.graph, src.projects, src.spells} {
+	for _, v := range []any{src.graph, src.projects, src.spells} {
 		b, err := json.Marshal(v)
 		if err != nil {
 			return "", false
@@ -483,6 +649,108 @@ func baseKnowledgeStamp(src knowledgeSources) (string, bool) {
 		h.String(string(b))
 	}
 	return h.Sum(), true
+}
+
+// foldKnowledgeSite folds the part of the base stamp that costs no workspace evaluation:
+// the binary, the store's schema, where the workspace and its cache are, and the knowledge
+// config. It is the whole base of a fast stamp and the first half of a full one.
+func foldKnowledgeSite(h *knowledge.InputHash, cfg config.Config, root, cacheDir string) bool {
+	if !foldBinary(h) {
+		return false
+	}
+	h.String(fmt.Sprint(types.KnowledgeSchemaVersion))
+	h.String(root)
+	h.String(cacheDir)
+	h.String(cfg.HistoryPath)
+	b, err := json.Marshal(cfg.Knowledge)
+	if err != nil {
+		return false
+	}
+	h.String(string(b))
+	return true
+}
+
+// foldEvaluationReads folds what an evaluation read beyond the tree: each file's identity
+// (inside the tree it is already in the digest; outside it this is its only coverage), each
+// environment variable's current value or absence, and, after a read of the whole
+// environment, every variable. known false folds a marker no recorded stamp carries.
+func foldEvaluationReads(h *knowledge.InputHash, reads readlog.Reads, known bool) {
+	if !known {
+		h.String("reads:unknown")
+		return
+	}
+	for _, p := range reads.Files {
+		h.Path(p)
+	}
+	for _, name := range reads.Env {
+		if v, ok := os.LookupEnv(name); ok {
+			h.String("env:" + name + "=" + v)
+		} else {
+			h.String("env:" + name + ":unset")
+		}
+	}
+	if reads.EnvAll {
+		for _, kv := range slices.Sorted(slices.Values(os.Environ())) {
+			h.String("environ:" + kv)
+		}
+	}
+}
+
+// knowledgeFastStamps computes the fast stamps (see knowledge.BuildOptions.FastStamps) of
+// the default classes in want: every input their full stamps fold except the evaluated
+// workspace model, so computing one costs the tree walk and a few stats, never a magusfile
+// parse. The domain's model is a function of the tree (magusfiles, spells, magus.yaml,
+// magus.lock), the binary (embedded spells), the config, the provider answers cached under
+// the cache dir, and whatever its magusfile top levels read beyond the tree: the
+// environment variables and files the last evaluation recorded (reads). The stamp folds
+// every one, so a matching fast stamp means the evaluation would reach the same model.
+// A manifest that never recorded its reads (known false) folds that fact instead, so its
+// stamp matches nothing recorded with them and the next read evaluates once to record
+// them. A full build still records the full stamp beside it, and --refresh ignores both.
+//
+// The lazy classes get none: their stamps fold the symbol index declarations, which come
+// from the evaluated projects, so a symbol read pays for the model as it always did.
+func knowledgeFastStamps(ctx context.Context, cfg config.Config, root, cacheDir string, tree *knowledge.TreeWalk, want []knowledge.ShardClass, reads readlog.Reads, known bool) knowledge.Stamps {
+	out := knowledge.Stamps{}
+	if tree == nil {
+		return out
+	}
+	if slices.Contains(want, knowledge.ClassDomain) {
+		vcsHead := vcsInputFingerprint(ctx, cfg, root)
+		historyKnown := vcsHead != "" || !cfg.Knowledge.VCS.Enabled
+		ignoreSources, ignoreKnown := vcsIgnoreSources(ctx, root)
+		h := knowledge.NewInputHash("fast:" + string(knowledge.ClassDomain))
+		if historyKnown && ignoreKnown && foldKnowledgeSite(h, cfg, root, cacheDir) {
+			h.String(tree.Digest())
+			h.String(vcsHead)
+			for _, p := range ignoreSources {
+				h.Path(p)
+			}
+			h.Dirs(filepath.Join(cacheDir, "providers"))
+			foldEvaluationReads(h, reads, known)
+			for _, s := range []struct {
+				scope    notes.Scope
+				declared string
+			}{{notes.ScopeShared, cfg.Knowledge.Notes.Shared}, {notes.ScopePrivate, cfg.Knowledge.Notes.Private}} {
+				if dir, err := notes.Dir(root, s.scope, s.declared); err == nil {
+					h.Path(dir)
+				}
+			}
+			out[knowledge.ClassDomain] = h.Sum()
+		}
+	}
+	if slices.Contains(want, knowledge.ClassRuntime) {
+		h := knowledge.NewInputHash("fast:" + string(knowledge.ClassRuntime))
+		if foldKnowledgeSite(h, cfg, root, cacheDir) {
+			h.Path(knowledge.RuntimeRecordsPath(cacheDir))
+			if cfg.HistoryPath != "" {
+				h.Path(cfg.HistoryPath)
+			}
+			h.Dirs(filepath.Join(cacheDir, "outputs"))
+			out[knowledge.ClassRuntime] = h.Sum()
+		}
+	}
+	return out
 }
 
 // loadKnowledgePackages reads each project's third-party dependencies out of the
@@ -1050,6 +1318,14 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	if log == nil {
 		log = slog.Default()
 	}
+	if lw, isLazy := ws.(*LazyWorkspace); isLazy && !lw.Opened() && lw.root == root {
+		// The read this probe follows was answered without evaluating the workspace; the
+		// declarations it recorded then answer the probe the same way. A store that cannot
+		// vouch for them opens the workspace below, as every probe did before.
+		if decls, recorded := recordedSymbolIndexDeclarations(ctx, lw, cfg); recorded {
+			return probeSymbolIndexes(decls), true
+		}
+	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: symbol gap probe cannot list spells", slog.String("error", err.Error()))
@@ -1243,24 +1519,25 @@ type SymbolOccurrenceRead struct {
 // symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
 // loadKnowledgeSymbols does, so the two cannot disagree about which indexes exist.
 func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSymbolGap {
-	dirByPath := map[string]string{}
-	for _, p := range in.projects.Projects {
-		dirByPath[p.Path] = p.Dir
-	}
+	return probeSymbolIndexes(symbolIndexDeclarationRecords(ctx, in, nil))
+}
 
+// probeSymbolIndexes is the probe itself, over declarations however they were resolved: one Stat
+// per declared index, and a gap for each that is not a readable file.
+func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration) []types.KnowledgeSymbolGap {
 	var out []types.KnowledgeSymbolGap
-	for _, decl := range symbolIndexDeclarations(ctx, in) {
+	for _, decl := range decls {
 		// Detail carries what Stat can actually distinguish: absent, or present but
 		// unreadable. State stays the machine-branchable field and is accurate for both,
 		// since neither yields a usable index.
 		var detail string
-		if _, err := os.Stat(decl.path); err == nil {
+		if _, err := os.Stat(decl.Path); err == nil {
 			continue
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			detail = "unreadable"
 		}
 		out = append(out, types.KnowledgeSymbolGap{
-			Project: types.NewProjectRef(decl.project, dirByPath[decl.project]),
+			Project: types.NewProjectRef(decl.Project, decl.Dir),
 			State:   types.SymbolIndexNotBuilt,
 			Detail:  detail,
 		})
@@ -1697,8 +1974,11 @@ func (p *publishedShards) PutShard(context.Context, string, io.Reader) error {
 // A ws that is not a *Magus is ignored: a caller holding some other Inspector has no
 // store for this to back.
 func UsePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
-	if m, ok := ws.(*Magus); ok {
-		m.publishedShards.Store(&r)
+	switch w := ws.(type) {
+	case *Magus:
+		w.publishedShards.Store(&r)
+	case *LazyWorkspace:
+		w.usePublishedShards(r)
 	}
 }
 
@@ -1731,6 +2011,9 @@ func (c shardChain) PutShard(ctx context.Context, key string, r io.Reader) error
 // nil means local-only, which is what an Inspect-constructed *Magus with no published ref
 // gets, because it has no cache either.
 func remoteShards(ws types.Inspector) knowledge.RemoteShards {
+	if lw, ok := ws.(*LazyWorkspace); ok {
+		return lazyRemoteShards{lw}
+	}
 	m, ok := ws.(*Magus)
 	if !ok {
 		return nil

@@ -112,6 +112,8 @@ magus.yaml:9: unknown key "concurrencyy"; did you mean "concurrency"?
 ### `tools`: the version window this project requires
 
 ```buzz
+import "magus";
+
 magus\project({
     "spells": [typescript],
     "tools": { "node": { "min": "22", "below": "25" } },
@@ -139,6 +141,8 @@ told which it is. Requiring a reason keeps the exemption a decision the next
 reader can evaluate rather than a switch someone flipped to get a green check:
 
 ```buzz
+import "magus";
+
 magus\project({
     "no_language": "promptfoo harness: yaml tasks, .mjs libs, .py tools; no single pack describes it",
 });
@@ -161,6 +165,8 @@ a mechanism - every spelled language through a declared comment/string syntax
 table, and a language with no declaration is always code.
 
 ```buzz
+import "magus";
+
 magus\project({
     "gate_low_risk": ["**/*.md", "**/*.markdown", "notes/**"],
 });
@@ -179,6 +185,8 @@ mechanism off workspace-wide, the same reach a `gate_low_risk` declaration has,
 because inheritance is one decision over the plan rather than a per-project one.
 
 ```buzz
+import "magus";
+
 magus\project({
     "gate_inherit": false,
 });
@@ -195,6 +203,8 @@ treats its globs as low risk. See the
 [merge queue](merge-queue.md#auto-resolving-source-conflicts).
 
 ```buzz
+import "magus";
+
 magus\project({
     "merge_low_risk": ["testdata/golden/**"],
 });
@@ -215,6 +225,8 @@ The `targets` sub-map keys a target name to a policy table:
 | `cache.include`     | overrides the workspace's `cache.include.os/arch.enabled` for this target, for an artifact that varies along one axis but not the other. Nested to mirror `magus.yaml` exactly; a misspelled nesting level is a load error rather than a silent inherit                                         |
 
 ```buzz
+import "magus";
+
 magus\project({
     "spells": [go],
     "depends_on": ["../shared"],
@@ -261,6 +273,8 @@ repo/                 # workspace root (magus.yaml, go.mod)
 `magus\project` also accepts an explicit path as its first argument. This is the rarer **central form**: one magusfile declares options for a discovered project at another workspace path.
 
 ```buzz
+import "magus";
+
 magus\project({ "spells": [go] });          // configures THIS project (path from context)
 magus\project("api", { "depends_on": ["shared"] });  // configures the discovered "api" project
 ```

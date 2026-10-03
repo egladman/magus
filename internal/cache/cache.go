@@ -207,12 +207,12 @@ type Step struct {
 	// because they move independently; see config.CacheInclude.
 	IncludeOS   bool
 	IncludeArch bool
-	// Stamps are files (relative to WorkspaceRoot) a tool writes when its work
-	// completes. They are not hashed: they change DURING the run, so the key computed
-	// before it could never match an entry filed after it. Instead the entry records
-	// each stamp's digest as the run left it, and a hit replays only while every stamp
-	// still reads the same. A stamped entry describes one local tree, so it is never
-	// fetched from or pushed to a remote.
+	// Stamps are files a tool writes when its work completes, relative to WorkspaceRoot
+	// or absolute for one outside the tree (a symbol index). They are not hashed: they
+	// change DURING the run, so the key computed before it could never match an entry
+	// filed after it. Instead the entry records each stamp's digest as the run left it,
+	// and a hit replays only while every stamp still reads the same. A stamped entry
+	// describes one local tree, so it is never fetched from or pushed to a remote.
 	Stamps     []string
 	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
 	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
@@ -503,7 +503,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && len(movedStamps(s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+	return hash, mErr == nil && len(c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
@@ -604,16 +604,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		c.mtimes.flush(ctx)
 	}
 
-	// exportMu.RLock ensures Export/Import cannot race with an active Run. A
-	// composed target can start a cache run while its skip_cache parent is being
-	// captured by this same Cache. Do not take a second RLock in that case: a
-	// waiting Export owns writer intent, so Go's RWMutex would block the child
-	// behind it while the parent still holds the read lock Export needs.
-	if exportReadLockCacheFrom(ctx) != c {
-		c.exportMu.RLock()
-		defer c.exportMu.RUnlock()
-		ctx = withExportReadLockCache(ctx, c)
-	}
+	// exportMu.RLock ensures Export/Import cannot race with an active Run. Nesting is
+	// safe because Export never queues as a writer; see lockForExport.
+	c.exportMu.RLock()
+	defer c.exportMu.RUnlock()
 
 	// Named, so a wait here says which step holds the key and so the slot watch can see
 	// that this step's seat is parked rather than working: this lock is one of the two
@@ -916,17 +910,6 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	}
 	rc.fireResults(rc.step, &result, nil)
 	return result, nil
-}
-
-type exportReadLockCacheKey struct{}
-
-func withExportReadLockCache(ctx context.Context, c *Cache) context.Context {
-	return context.WithValue(ctx, exportReadLockCacheKey{}, c)
-}
-
-func exportReadLockCacheFrom(ctx context.Context) *Cache {
-	c, _ := ctx.Value(exportReadLockCacheKey{}).(*Cache)
-	return c
 }
 
 // HintUnchangedFailure is the stable id of the line a step prints when its inputs are
@@ -1626,13 +1609,37 @@ func (c *Cache) importLimit() int64 {
 	return c.maxImportBytes
 }
 
-// Export writes the cache as a gzip-compressed tar archive (paths relative to
-// the cache root, so Import can extract into any target directory).
-func (c *Cache) Export(ctx context.Context, w io.Writer) error {
+// exportLockPoll paces lockForExport's retries.
+const exportLockPoll = 20 * time.Millisecond
+
+// lockForExport takes exportMu for writing without ever queueing as a writer.
+//
+// A blocked sync.RWMutex.Lock holds off every new RLock. Runs nest: a composed member, a
+// run adopted from a nested magus, and a target delegated to its lock's owner all take a
+// read lock while the run waiting on them still holds one. Queued behind a waiting Export,
+// the nested run never starts, the outer run never finishes, and the Export waits on the
+// outer run forever. Polling TryLock leaves readers free, so an Export waits instead for a
+// moment with no run in flight, or until ctx ends.
+func (c *Cache) lockForExport(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	c.exportMu.Lock()
+	for !c.exportMu.TryLock() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(exportLockPoll):
+		}
+	}
+	return nil
+}
+
+// Export writes the cache as a gzip-compressed tar archive (paths relative to
+// the cache root, so Import can extract into any target directory).
+func (c *Cache) Export(ctx context.Context, w io.Writer) error {
+	if err := c.lockForExport(ctx); err != nil {
+		return err
+	}
 	defer c.exportMu.Unlock()
 
 	gz := gzip.NewWriter(w)
@@ -1701,10 +1708,9 @@ func (c *Cache) Export(ctx context.Context, w io.Writer) error {
 // Import extracts a gzip-compressed tar archive produced by Export into the cache directory.
 // Existing files are overwritten; entries older than what is on disk are skipped.
 func (c *Cache) Import(ctx context.Context, r io.Reader) error {
-	if err := ctx.Err(); err != nil {
+	if err := c.lockForExport(ctx); err != nil {
 		return err
 	}
-	c.exportMu.Lock()
 	defer c.exportMu.Unlock()
 
 	gz, err := gzip.NewReader(r)

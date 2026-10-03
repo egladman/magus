@@ -90,7 +90,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	var res refsResult
 	var g *knowledge.Graph
 	if !routable || !askServer(ctx, root, readRefs, &read, &res) {
-		ws, err := openForRead(ctx, root)
+		// Eager, unlike query and explain: refs always merges symbols, which needs the
+		// evaluated projects, and classifies files below.
+		ws, err := openWorkspaceForRead(ctx, root)
 		if err != nil {
 			return err
 		}

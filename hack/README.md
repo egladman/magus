@@ -58,7 +58,7 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/mark-feedback.buzz -- --verdict should-deny\|should-advise\|wrong-deny\|fine [--note <text>] [--session <id>] [--since ...] [--until ...] [--apply] -- <label\|id>...` | records a verdict on feedback rows under their stable ids in the per-repository store; dry run by default | as show-feedback |
 | `magus buzz hack/dev/count-feedback.buzz -- [--since <duration>] [-o json]` | read-only: every mark across sessions folded into a ranked guard backlog | none |
 | `magus buzz hack/dev/show-session-figure.buzz -- [--session <id>] [--since ...] [--all] [-o svg] [--theme light\|dark] [--console <base>]` | read-only: a session's job hierarchy as a summary and the console link that explores it; `-o svg` prints the figure for you to redirect | every checkout's trail that changed in the window, and the job store |
-| `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] \| --check --from <checkout>)` | builds ./magus, builds the graph and takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` copies another checkout's ./magus instead, only when it was built at this HEAD with no declared build input changed on either side; `--check` prints that verdict and writes nothing | a Go build and a graph build, about two minutes cold; seconds when `--from` reuses |
+| `magus buzz hack/dev/bootstrap-worktree.buzz -- (--job <id> [--from <checkout>] \| --check --from <checkout>)` | builds ./magus, refreshes the wired harness skills, builds the graph, then takes the job's lease; refuses unless the row names this worktree and its checkpoint. `--from` copies another checkout's ./magus instead, only when it was built at this HEAD with no declared build input changed on either side; `--check` prints that verdict and writes nothing | a Go build and a graph build, about two minutes cold; seconds when `--from` reuses |
 | `magus buzz hack/dev/render-brief.buzz -- --job <id> [--extra <file>]` | read-only: a worker's complete brief from its job row | two job-store reads |
 | `magus buzz hack/dev/summarize-transcript.buzz -- [--match <pattern>] -- <file>...` | read-only: a session transcript's calls per tool, refusals by rule, retries, followed suggestions and tokens | grows with transcript size |
 | `magus buzz hack/dev/diff-dirs.buzz -- --a <dir> --b <dir> [--unified]` | read-only: two trees compared file by file, declared outputs left out | grows with tree size |
@@ -90,7 +90,7 @@ and 0004 pin and `flags` cannot express.
 | script | does | cost |
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |
-| `magus buzz hack/ci/pull-requests.buzz -- status \| apply \| dashboard` | named before the verb rule: each open pull request's state and the action it needs; `apply` queues and reruns; the queue workflows render `dashboard` | network |
+| `magus buzz hack/ci/pull-requests.buzz -- status \| apply \| dashboard \| boxes \| act` | named before the verb rule: each open pull request's state and the action it needs; `apply` queues and reruns; the queue workflows render `dashboard`, and queue-dashboard.yaml answers its boxes with `boxes` and `act` | network |
 | `magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]` | named before the verb rule: prints the `gh label` commands for this repository's label taxonomy | none |
 
 `ci/completion-checks/` holds the shell scripts the root `completion-test` target runs in
@@ -109,6 +109,7 @@ Targets import these; each runs through its target rather than by hand.
 | `hack/magusfile/commits.buzz` | the conventional-commit rule the pull request title check and the commit hook share |
 | `hack/magusfile/coverage.buzz` | the Go coverage profile filtered to hand-written code, and the static statement count the published figure divides by |
 | `hack/magusfile/drift.buzz` | drift measured by content, for every generated-file gate |
+| `hack/magusfile/harness.buzz` | which committed host config files lack what their wired harness spell renders, and the merge command for each |
 | `hack/magusfile/index.buzz` | each project's MAGUS.md routing index, which the root index links |
 | `hack/magusfile/mockassert.buzz` | the compile-time assertions that each published mock still satisfies its interface, derived from `.mockery.yaml` |
 | `hack/magusfile/releases.buzz` | which modules version independently, the versions each may move to, release tags, the release signature check and the release-index publish |

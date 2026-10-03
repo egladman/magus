@@ -1,15 +1,3 @@
-// site/diagrams/target-order.buzz: the order a project's targets compose in. magus requires
-// only that ci exists (MGS1001 when no project in scope declares it; doctor's ci-target check);
-// the rest is the order this workspace recommends. Only ci takes the accent.
-//
-// A shared order keeps `magus run <verb> <project>` meaning one thing across projects. Lint
-// reports and format rewrites, so they stay two targets; security reads advisory data outside
-// the tree, so it is its own step.
-//
-// Edges are the root magusfile's ctx.needs calls, except install -> generate, which is docs':
-// the root declares no install. Other projects deviate; see `magus describe target ci <project>`.
-//
-// A target is a declaration in a magusfile, not a directory, so every box is an actor.
 namespace targetOrder;
 
 import "magus/figure";
@@ -40,6 +28,8 @@ export fun targetOrderFigure() > figure\Figure !> any {
         .actor(security)
         .actor(ci)
         .actor(cd)
+        // The root magusfile's ctx.needs calls, except install -> generate, which is docs': the
+        // root declares no install.
         .flowAcross(install, dst: generate)
         .flowAcross(generate, dst: format)
         .flowAcross(generate, dst: security)

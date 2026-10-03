@@ -1,9 +1,3 @@
-// site/diagrams/agent-surface.buzz: what an agent host gets from magus. Skills and hook
-// wiring install before a session; after that every tool call, MCP included, reaches the
-// guard's hook first. The accent is on that gate.
-//
-// Hints sit last because skills, guard denials and MCP replies all render through them. The
-// harness spells are Buzz and the host is outside magus, so they are actors.
 namespace agentSurface;
 
 import "magus";
@@ -15,7 +9,7 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
     final hint = magus\dir("internal/hint");
     final tools = magus\dir("internal/handler/mcp");
     final nested: [magus\Dir] = magus\dirs("internal/handler/mcp/**");
-    final mcp = figure\setOf(nested + [tools]);
+    final mcp = nested + [tools];
     final harness = figure\external("Harness spells", sub: "hook entries per host", look: figure\Look.plain);
     final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor", tag: "client");
     return figure\of("agent-surface",
@@ -32,9 +26,10 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
         .actor(host)
         .box(guard, label: "Guard", sub: "deny, advise, ask", tag: "gate", focal: true)
         .group(mcp, label: "MCP tools", sub: "./magus mcp or /mcp")
+        // Last: skills, guard denials and MCP replies all render through it.
         .box(hint, label: "Hints", sub: "commands, next fields")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([guard]), dst: figure\setOf([skills]),
+        .hideEdges([guard], dst: [skills],
             why: "the guard names skills in its denials; the skills reach the host by install, drawn from the catalog")
         .markEdge(skills, dst: hint, label: "command names")
         .markEdge(guard, dst: hint, label: "denial hints")
@@ -43,9 +38,9 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
         .flowAcross(harness, dst: host, label: "hooks to merge")
         .flowIn(host, dst: guard, label: "every call", stroke: figure\Stroke.focal)
         .flowIn(host, dst: tools, label: "if allowed")
-        .zone("installed before a session", dirs: figure\setOf([skills]), actors: [harness])
-        .zone("on every call", dirs: mcp.plus([guard, hint]))
+        .zone("installed before a session", dirs: [skills], actors: [harness])
+        .zone("on every call", dirs: mcp + [guard, hint])
         .legend(figure\Look.focal, label: "the gate")
         .legend(figure\Look.external, label: "outside magus")
-        .scope(mcp.plus([skills, hint]));
+        .scope(mcp + [skills, hint]);
 }

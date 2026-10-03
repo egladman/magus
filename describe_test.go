@@ -23,8 +23,9 @@ import (
 func TestDeriveCrossProjectDeps(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
-		"gopherbuzz/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"web/magusfile.buzz": `import "project/../gopherbuzz";
+		"gopherbuzz/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"web/magusfile.buzz": `import "magus";
+import "project/../gopherbuzz";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(gopherbuzz.build);
 }
@@ -72,13 +73,13 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 
 	t.Run("comment does not count", func(t *testing.T) {
 		t.Parallel()
-		src := "// export fun ci composes the gate\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
+		src := "import \"magus\";\n// export fun ci composes the gate\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"
 		assert.False(t, declares(t, src), "ci in a comment must not count as declaring ci")
 	})
 
 	t.Run("real declaration counts", func(t *testing.T) {
 		t.Parallel()
-		src := "export fun ci(ctx: magus\\Context, args: [str]) > void {}\n"
+		src := "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n"
 		assert.True(t, declares(t, src), "export fun ci must count as declaring ci")
 	})
 }
@@ -1072,7 +1073,8 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("GEN.md");
 }
 `
@@ -1096,7 +1098,8 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 func TestClassifyFiles_ExcludedOutputIsASource(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 export fun test(ctx: magus\Context, args: [str]) > void {
@@ -1127,7 +1130,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("!gen/runtime.go");
 }
 `,
@@ -1143,7 +1147,8 @@ func TestOpen_RefusesAnExclusionThatNarrowsNothing(t *testing.T) {
 func TestClassifyFiles_ExclusionsStayWithTheirCall(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("a/x.go");
     ctx.writesFiles("!a/x.go", "a/*.go");
 }
@@ -1166,12 +1171,14 @@ func TestClassifyFiles_ExclusionsStayWithTheirCall(t *testing.T) {
 func TestOpen_ValidatesACrossProjectExclusionAgainstItsOwnProject(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `import "project/site";
+		"magusfile.buzz": `import "magus";
+import "project/site";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**", site.file("!gen/x"));
 }
 `,
-		"site/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {}
+		"site/magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `,
 	})
 
@@ -1188,7 +1195,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `import "project/api";
+		"magusfile.buzz": `import "magus";
+import "project/api";
 export fun generate(ctx: magus\Context, args: [str]) > void {}
 export fun build(ctx: magus\Context, args: [str]) > void {}
 export fun ci(ctx: magus\Context, args: [str]) > void {
@@ -1196,7 +1204,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
     ctx.needs(api.build, build);
 }
 `,
-		"api/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {}
+		"api/magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {}
 `,
 	})
 
@@ -1228,7 +1237,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 func TestObservesReachesTheCacheKey(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun scan(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", "2026-08-15");
 }
 `,
@@ -1256,7 +1266,8 @@ func TestObservesReachesTheCacheKey(t *testing.T) {
 func TestObservesRejectsAComputedValue(t *testing.T) {
 	t.Parallel()
 	root := writeWorkspace(t, map[string]string{
-		"magusfile.buzz": `export fun scan(ctx: magus\Context, args: [str]) > void {
+		"magusfile.buzz": `import "magus";
+export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", probe());
 }
 fun probe() > str { return "x"; }
@@ -1277,7 +1288,8 @@ fun probe() > str { return "x"; }
 func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("GEN.md");
 }
 `
@@ -1319,8 +1331,9 @@ func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		"skills/note.md":        "# a source another project renders\n",
-		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"site/magusfile.buzz": `import "project/../skills";
+		"skills/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"site/magusfile.buzz": `import "magus";
+import "project/../skills";
 export fun render(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(skills.file("note.md"));
     ctx.writesFiles("gen/*.html");
@@ -1358,9 +1371,10 @@ func TestClassifyFiles_Claims(t *testing.T) {
 	// other project (MGS1012): site reads skills and writes dist.
 	files := map[string]string{
 		"skills/note.md":        "# a source another project renders\n",
-		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"dist/magusfile.buzz":   "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
-		"site/magusfile.buzz": `import "project/../skills";
+		"skills/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"dist/magusfile.buzz":   "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"site/magusfile.buzz": `import "magus";
+import "project/../skills";
 import "project/../dist";
 export fun render(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(skills.file("note.md"));

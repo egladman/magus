@@ -144,6 +144,7 @@ tag each one tracks and `magus.lock` pins its digest, so a harness versions apar
 from the binary:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";
 import "ghcr.io/egladman/magus/spells/harness/codex";
 import "ghcr.io/egladman/magus/spells/harness/claude-code" as claude;
@@ -172,8 +173,11 @@ Workspace-owned adaptation: declare an override, change no import and no provide
    placed at a path without this entry is never read.
 3. Edit the workspace Buzz spell: matchers, managed host-config fragments, the
    guard command string, skills form, `harness_mcp` (MCP setup hint, docs
-   pointer, host CLI sketch), whatever the host needs. Do not edit Magus Go,
-   the cached copy of a pinned spell (it is re-hashed and replaced), or stamped
+   pointer, host CLI sketch), whatever the host needs. Every entry's command
+   either runs a template magus ships or ends with the shell comment
+   `# magus:harness`, after a space; describe refuses any other, because a merge
+   retires only entries it can tell are magus's. Do not edit Magus Go, the
+   cached copy of a pinned spell (it is re-hashed and replaced), or stamped
    skills.
 4. Run `{{cmd "describe harness"}} <id>`, have a person read and run the merge
    command it prints (magus never writes host config), then run

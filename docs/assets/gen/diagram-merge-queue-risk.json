@@ -2,10 +2,9 @@
   "claims": {
     "calls": 0,
     "flow": 8,
-    "imports": 3
+    "imports": 4
   },
   "figure": "merge-queue-risk",
   "findings": [],
-  "stamp": "sha256:6f3bc811852d5ff62c4034740f814d277030357960941708c0dd5de4c8617cdb",
-  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+  "stamp": "sha256:af87cf636bf8f25a99b041062981f50c1a7843b5c5a0c7b5751efb3b84bd8417"
 }

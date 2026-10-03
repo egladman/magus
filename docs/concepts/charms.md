@@ -136,6 +136,8 @@ and its libraries, a docker daemon, or a long run. A project's `test` target kee
 default tier and, under `extended`, also needs the rest:
 
 ```buzz
+import "magus";
+
 export fun test(ctx: magus\Context, args: [str]) > void {
     ctx.needs(unit_test);
     if (ctx.hasCharm("extended")) {
@@ -310,6 +312,8 @@ The six ops are exactly RFC 6902's (`add`/`remove`/`replace`/`move`/`copy`/`test
 When the argv needs to be computed, branch in code. A magusfile function target receives the forwarded CLI args:
 
 ```buzz
+import "magus";
+
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;
     for (a in args) { if (a == "--write") { fix = true; } }
@@ -320,6 +324,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 A function target reads the active charm set directly with **`ctx.hasCharm(name)`**, including the built-in read→write toggle, `has_charm("rw")`. This is how a function target _selects which command to run_, the one thing a charm itself cannot do (see [the boundary](#charm-vs-target-the-command-boundary)). For example, a `build` target can compile the host binary by default and switch to the container image under a `container` charm:
 
 ```buzz
+import "magus";
+
 export fun build(ctx: magus\Context, args: [str]) > void {
     if (ctx.hasCharm("container")) { ctx.needs(image_build); }
     else { ctx.needs(go_build); }
@@ -449,6 +455,7 @@ Conditional or per-invocation logic belongs in a **function target**, not a char
 
 ```buzz
 // magusfile.buzz
+import "magus";
 import "os";
 export fun lint(ctx: magus\Context, args: [str]) > void {
     var fix = false;

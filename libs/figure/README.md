@@ -1,7 +1,7 @@
 # libs/figure
 
 `magus/figure` draws an architecture figure from the knowledge graph's own records.
-A box takes a `magus\Dir`, a group takes a set of them, and the edges come from the
+A box takes a `magus\Dir`, a group takes a list of them, and the edges come from the
 imports and declared calls those records carry. The binary embeds the module through
 `std/lib.go`, so a figure imports it by path and needs no checkout of this directory.
 
@@ -15,7 +15,7 @@ export fun serverHttp() > Figure !> any {
     return figure\of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(figure\layerSet(magus\layer("handler")).without([mcp]), label: "Connect RPC")
+        .group(figure\without(magus\layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
         .edgesFromGraph();
 }
 ```
@@ -25,18 +25,18 @@ export fun serverHttp() > Figure !> any {
 | Call                                   | What it does                                                     |
 | -------------------------------------- | ---------------------------------------------------------------- |
 | `of(id, title:, eyebrow:, desc:, ...)` | Starts a figure; `direction:` and `generated:` set the rest.     |
-| `setOf(dirs)`, `layerSet(layer)`       | Build a `DirSet`; `.without(dirs)` and `.plus(dirs)` derive one. |
+| `without(dirs, drop:)`                 | `dirs` less `drop`; raises when `drop` names one `dirs` lacks.   |
 | `external(name, ...)`                  | An `Actor`: a box that names no directory.                       |
 | `.box(dir, ...)`                       | One directory; `symbol:` takes a `magus\refs` result.            |
-| `.group(set, label:, ...)`             | Every directory in the set as one box.                           |
+| `.group(dirs, label:, ...)`            | Every directory in `dirs` as one box.                            |
 | `.actor(a)`                            | Draws an actor at this point in declaration order.               |
-| `.scope(set)`                          | Directories the figure answers for.                              |
-| `.except(set, why:)`                   | Directories in scope it leaves out, and why.                     |
+| `.scope(dirs)`                         | Directories the figure answers for.                              |
+| `.except(dirs, why:)`                  | Directories in scope it leaves out, and why.                     |
 | `.edgesFromGraph()`                    | Draws imports and declared calls between drawn boxes.            |
-| `.hideEdges(src, dst:, why:)`          | Hides graph edges from one set to another.                       |
+| `.hideEdges(src, dst:, why:)`          | Hides graph edges from one list of dirs to another.              |
 | `.markEdge(src, dst:, ...)`            | Labels or strokes one graph edge.                                |
 | `.flowIn`, `.flowOut`, `.flowAcross`   | Hand edges; each has an actor at one end.                        |
-| `.zone`, `.boundary`, `.rank`, `.row`  | Bands over sets and actors; an edge inside a rank lies flat.     |
+| `.zone`, `.boundary`, `.rank`, `.row`  | Bands over dirs and actors; an edge inside a rank lies flat.     |
 | `.legend(look, label:)`                | One legend entry.                                                |
 | `draw(f, theme:, anchorHref:)`         | Lay out and paint with `Theme.page`, `.light` or `.dark`.        |
 | `.diagram()`                           | Lay out only, for a receipt of the placed boxes and edges.       |
@@ -46,8 +46,9 @@ export fun serverHttp() > Figure !> any {
 `Figure` is a plain record: `id`, `title`, `eyebrow`, `desc`, `direction`, `generated`,
 `unscopedWhy` (empty for a figure that draws code), `graphEdges`, and the lists `boxes`,
 `scopes`, `exclusions`, `hiddenEdges`, `edgeMarks`, `flows`, `zones`, `alignments` and
-`legends`. Their records are `Box`, `DirSet`, `Exclusion`, `HiddenEdges`, `EdgeMark`, `Flow`
-(two `End`s, each a directory or an actor), `Zone`, `Alignment` and `Legend`. A look, stroke,
+`legends`. Their records are `Box`, `Exclusion`, `HiddenEdges`, `EdgeMark`, `Flow` (two
+`End`s, each a directory or an actor), `Zone`, `Alignment` and `Legend`; every set of
+directories is a plain `[magus\Dir]`. A look, stroke,
 direction or axis is always its enum (`Look`, `Stroke`, `Direction`, `Axis`), never a string.
 
 The builder methods only fill those fields, so a `Figure{...}` literal holding the same
@@ -61,8 +62,8 @@ Go mirror drifts from the records declared here.
 
 ## Rules the module enforces
 
-- A directory is drawn once. A box inside a group's set is refused; drop it with
-  `.without([...])`.
+- A directory is drawn once. A box inside a group's dirs is refused; drop it with
+  `without(dirs, drop: [...])`.
 - Every directory a `scope()` names is drawn or excepted. A package that joins a layer
   joins the group built from that layer, and nothing else in the figure changes.
 - Two or more code boxes need `edgesFromGraph()`, and every drawn directory needs a
@@ -71,7 +72,8 @@ Go mirror drifts from the records declared here.
   `flow`, which nothing checks.
 
 Declarations never raise. `draw()` and `diagram()` raise every finding at once, one per
-line, each naming the call to change. `setOf`, `layerSet`, `without` and `plus` raise
+line, each naming the call to change and naming a list of dirs by the deepest directory
+holding them all (`scope("internal/handler/**")`), never by every path. `without` raises
 immediately when handed something that is not a record.
 
 ## Tests

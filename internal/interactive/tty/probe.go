@@ -56,6 +56,14 @@ type fixedProbe struct{ width, height int }
 func (fixedProbe) IsTerminal(uintptr) bool          { return true }
 func (p fixedProbe) Size(uintptr) (int, int, error) { return p.width, p.height, nil }
 
+// CaptureProbe models a color-capable terminal for committed recordings. Its
+// rendering cannot depend on the shell running the generator.
+func CaptureProbe(width, height int) Probe {
+	return captureProbe{fixedProbe{width: width, height: height}}
+}
+
+type captureProbe struct{ fixedProbe }
+
 // Fd returns the file descriptor backing w, and whether w has one at
 // all. A bytes.Buffer, an io.Pipe writer, and a network connection all
 // report false.
@@ -97,6 +105,7 @@ func IsTerminalWriter(w io.Writer, p Probe) bool {
 
 // CanRender reports whether escape sequences may be written to w at all: it
 // must be a terminal, and TERM must not declare one that understands none.
+// CaptureProbe supplies a fixed rendering capability for generated recordings.
 //
 // TERM=dumb is not a hypothetical. Emacs shell-mode sets it, and the pty behind
 // it IS a terminal, so a descriptor check alone says yes and the cursor
@@ -107,6 +116,9 @@ func IsTerminalWriter(w io.Writer, p Probe) bool {
 // This is the gate for anything that MOVES the cursor or reserves rows.
 // [WantsColor] adds NO_COLOR on top for the narrower question of styling.
 func CanRender(w io.Writer, p Probe) bool {
+	if _, ok := p.(captureProbe); ok {
+		return IsTerminalWriter(w, p)
+	}
 	return IsTerminalWriter(w, p) && os.Getenv("TERM") != "dumb"
 }
 
@@ -142,7 +154,8 @@ func WantsHyperlinks(w io.Writer, p Probe) bool {
 }
 
 // WantsColor reports whether output written to w should carry ANSI
-// color: w must be a terminal, and NO_COLOR must be unset.
+// color: w must be a terminal, and NO_COLOR must be unset unless a CaptureProbe
+// fixes the capability for a generated recording.
 //
 // This is one question with one answer, so it lives in one place. Before
 // this existed, the cache's log handler, the doctor command, and the
@@ -153,6 +166,9 @@ func WantsHyperlinks(w io.Writer, p Probe) bool {
 // disables it too, via [CanRender]; this function's documentation has always
 // said so, and until now only the NO_COLOR half was true.
 func WantsColor(w io.Writer, p Probe) bool {
+	if _, ok := p.(captureProbe); ok {
+		return CanRender(w, p)
+	}
 	if os.Getenv("NO_COLOR") != "" {
 		return false
 	}

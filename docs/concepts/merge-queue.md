@@ -94,12 +94,21 @@ and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squa
 and read `queue:`, so none ever reads as intent.
 
 In this repository a `queue dashboard` job keeps one pinned issue, "Merge queue", whose
-body shows every open pull request: a link that draws the queue in the console, each
-change after the one it is stacked on, then a table per section (in flight, queued, needs the author, needs a manual merge,
-could join, drafts and forks) with each one's reason and a person's command. It is
-rewritten whole after every apply run and on every label, review or auto-merge event,
-and the same page goes to the run's summary. To render it locally:
+body shows every open pull request: an alert with the queue's state and `main`'s, then a
+table per section, what needs a person first (needs the author, needs a manual merge,
+could join, in flight, queued), with each one's checks, review, age and next step, the
+reasons and a person's commands folded under it, and a link that draws the queue in the
+console. It is rewritten whole after every apply run and on every label, review or
+auto-merge event, and the same page goes to the run's summary. To render it locally:
 `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --preview --out dashboard.md`.
+
+The page also draws a box per action that starts something back up: requeue a pull
+request that was kicked back, queue one that could join, rerun a pull request's failed
+jobs, start a validation run, or render the page again. Checking one edits the issue,
+and `.github/workflows/queue-dashboard.yaml` answers the edit: it acts only when whoever
+checked the box holds write, maintain or admin, takes the action as the queue app, and
+renders the page again with every box clear. The box names the pull request; whether the
+action is still offered is read from GitHub at that moment, never from the issue body.
 
 GitHub's auto-merge follows GitHub's own mergeability, which says nothing of what the
 queue can settle. A pull request GitHub reports as conflicting is queued by the label
@@ -654,6 +663,8 @@ reads the class alone, not the tier. Code settles only where its project opts it
 project-relative globs beside `gate_low_risk`:
 
 ```buzz
+import "magus";
+
 magus\project({"merge_low_risk": ["testdata/golden/**"]});
 ```
 

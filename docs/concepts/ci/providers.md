@@ -40,6 +40,7 @@ matching. Everything else crosses into the spell at most once per failure.
 A provider is an ordinary spell, selected in your magusfile when the caller asks for it:
 
 ```buzz
+import "magus";
 import "spells/github/actions" as github;
 
 if (os\env("CI_PROVIDER") == "github-actions") {

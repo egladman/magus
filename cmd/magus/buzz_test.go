@@ -258,6 +258,7 @@ var guardGlueScripts = []string{
 	"magus-observe.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
+	"magus-session.buzz",
 	"cursor-hook.buzz",
 }
 
@@ -409,6 +410,68 @@ func TestBuzzCmd_ScriptImportsResolveBesideTheFile(t *testing.T) {
 	assert.Contains(t, stdout, "ok")
 }
 
+// A hook runs in whatever directory the session is in, so its command names the root
+// with -C and the script by a root-relative path.
+func TestBuzzCmd_WorkDirResolvesRootRelativeScripts(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "hooks", "lib"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub", "deeper"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "lib", "answer.buzz"), []byte(
+		"export fun answer() > str { return \"ok\"; }\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "hooks", "main.buzz"), []byte(
+		"import \"std\";\nimport \"lib/answer\";\nfun main() > void { std\\print(answer()); }\n"), 0o644))
+
+	for _, args := range [][]string{
+		{"-C", root, "-s", "hooks/main.buzz"},
+		{"-C=" + root, "hooks/main.buzz"},
+		{"-s", "-C", root, "hooks/main.buzz"},
+	} {
+		t.Run(strings.Join(args[:len(args)-1], " "), func(t *testing.T) {
+			t.Chdir(filepath.Join(root, "sub", "deeper"))
+			var runErr error
+			stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), "", args) })
+			require.NoError(t, runErr)
+			assert.Equal(t, "ok\n", stdout)
+		})
+	}
+}
+
+func TestBuzzCmd_WorkDirMissingNamesTheDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	missing := filepath.Join(t.TempDir(), "gone")
+	for _, args := range [][]string{
+		{"-C", missing, "-e", "fun main() > void {}"},
+		{"-e", "fun main() > void {}", "-C", missing},
+		{"-C", missing, "lsp"},
+	} {
+		err := buzzCmd(t.Context(), "", args)
+		require.Error(t, err, "%v", args)
+		assert.Contains(t, err.Error(), "-C "+missing+": no such file or directory")
+	}
+}
+
+// The SessionStart entry runs from the root with -C, and that root is what goes on PATH.
+func TestSessionGlueAppendsTheWorkDirToTheEnvFile(t *testing.T) {
+	repo, err := filepath.Abs(filepath.Join("..", ".."))
+	require.NoError(t, err)
+	t.Chdir(t.TempDir())
+	envFile := filepath.Join(t.TempDir(), "env")
+	require.NoError(t, os.WriteFile(envFile, []byte("export A=1\n"), 0o644))
+
+	glue := []string{"-C", repo, "-s", "docs/guides/integrations/agents/magus-session.buzz", "--"}
+	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", envFile)))
+	require.NoError(t, buzzCmd(t.Context(), "", append(glue, "--env-file", "")), "no env file is nothing to do")
+
+	body, err := os.ReadFile(envFile)
+	require.NoError(t, err)
+	assert.Equal(t, "export A=1\nexport PATH=\""+repo+":$PATH\"\n", string(body))
+}
+
+func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
+	assert.False(t, buzzScriptStage([]string{"-C", "/x", "lsp"}), "lsp is no pipe stage")
+	assert.True(t, buzzScriptStage([]string{"-C", "/x", "hooks/main.buzz"}), "a script is")
+}
+
 // --root names the checkout a script's vcs calls read. The process cwd here is the
 // magus checkout this test runs in, a different repository on a different ref.
 func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
@@ -516,6 +579,38 @@ export fun language() > str {
 	assert.Contains(t, trace, "buzz.register_namespace")
 }
 
+// The entry's `import "magus"` puts the magus types in the session, and a module it
+// imports still names them only through an import of its own. A failure there is
+// reported in the module's file.
+func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
+	for _, tc := range []struct {
+		name, lib string
+		wantErr   bool
+	}{
+		{name: "lib does not import magus", lib: "export fun f(o: magus\\DirsOptions?) > void {}\n", wantErr: true},
+		{name: "lib imports magus", lib: "import \"magus\";\nexport fun f(o: magus\\DirsOptions?) > void {}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			lib := filepath.Join(dir, "lib.buzz")
+			require.NoError(t, os.WriteFile(lib, []byte(tc.lib), 0o644))
+			script := filepath.Join(dir, "main.buzz")
+			require.NoError(t, os.WriteFile(script, []byte("import \"magus\";\nimport \"lib\";\nfun g(o: magus\\DirsOptions?) > void { f(o); }\n"), 0o644))
+
+			diags, err := buzzCheckFile(t.Context(), script, false)
+			require.NoError(t, err)
+			if !tc.wantErr {
+				assert.Empty(t, diags)
+				return
+			}
+			require.Len(t, diags, 1)
+			assert.Equal(t, lib, diags[0].File)
+			assert.Equal(t, 1, diags[0].Line)
+			assert.Contains(t, diags[0].Msg, "no import binds magus")
+		})
+	}
+}
+
 func TestBuzzReachesMagus(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, src string) {
@@ -527,6 +622,7 @@ func TestBuzzReachesMagus(t *testing.T) {
 	write("lib/deep.buzz", `import "magus/spell";`)
 	write("lib/mid.buzz", `import "deep" as deep;`)
 	write("cycle.buzz", `import "cycle";`)
+	write("commented.buzz", "// import \"magus\";\nimport \"std\";")
 
 	sess := buzz.NewSession(t.Context())
 	t.Cleanup(func() { _ = sess.Close() })
@@ -544,6 +640,10 @@ func TestBuzzReachesMagus(t *testing.T) {
 		`import "lib/mid" as mid;`:                    true,
 		`import "spells/hello";`:                      true,
 		"import \"std\";\nimport \"magus/figure\";\n": true,
+		"// import \"magus\";\nimport \"std\";":       false,
+		"import \"std\"; // import \"magus\";":        false,
+		"final s = \"import \\\"magus\\\";\";":        false,
+		`import "commented";`:                         false,
 	} {
 		assert.Equal(t, want, buzzReachesMagus(sess, code), code)
 	}

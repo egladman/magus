@@ -52,7 +52,8 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("regions", vm.DirectValue("vcs.regions", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := ffi.Str(bzArgs, 0)
-		ret0, err := std.VcsRegions(ctx, base)
+		dir := ffi.Str(bzArgs, 1)
+		ret0, err := std.VcsRegions(ctx, base, dir)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

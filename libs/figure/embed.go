@@ -48,7 +48,7 @@ type Figure struct {
 	UnscopedWhy string        `json:"unscopedWhy"`
 	GraphEdges  bool          `json:"graphEdges"`
 	Boxes       []Box         `json:"boxes"`
-	Scopes      []DirSet      `json:"scopes"`
+	Scopes      [][]Dir       `json:"scopes"`
 	Exclusions  []Exclusion   `json:"exclusions"`
 	HiddenEdges []HiddenEdges `json:"hiddenEdges"`
 	EdgeMarks   []EdgeMark    `json:"edgeMarks"`
@@ -61,20 +61,14 @@ type Figure struct {
 // Box mirrors figure's Box: exactly one of Dir, Group and Actor is set. A host has no
 // magus\refs result to anchor a symbol with, so Box carries no symbol.
 type Box struct {
-	Dir   *Dir    `json:"dir"`
-	Group *DirSet `json:"group"`
-	Actor *Actor  `json:"actor"`
-	Label string  `json:"label"`
-	Sub   string  `json:"sub"`
-	Tag   string  `json:"tag"`
-	Focal bool    `json:"focal"`
-	Look  *Look   `json:"look"`
-}
-
-// DirSet mirrors figure's DirSet. Named is how the set was built, for findings.
-type DirSet struct {
-	Dirs  []Dir  `json:"dirs"`
-	Named string `json:"named"`
+	Dir   *Dir   `json:"dir"`
+	Group *[]Dir `json:"group"`
+	Actor *Actor `json:"actor"`
+	Label string `json:"label"`
+	Sub   string `json:"sub"`
+	Tag   string `json:"tag"`
+	Focal bool   `json:"focal"`
+	Look  *Look  `json:"look"`
 }
 
 // Actor mirrors figure's Actor. A nil Look is Look("external").
@@ -88,14 +82,14 @@ type Actor struct {
 
 // Exclusion mirrors figure's Exclusion.
 type Exclusion struct {
-	Set DirSet `json:"set"`
-	Why string `json:"why"`
+	Dirs []Dir  `json:"dirs"`
+	Why  string `json:"why"`
 }
 
 // HiddenEdges mirrors figure's HiddenEdges.
 type HiddenEdges struct {
-	Src DirSet `json:"src"`
-	Dst DirSet `json:"dst"`
+	Src []Dir  `json:"src"`
+	Dst []Dir  `json:"dst"`
 	Why string `json:"why"`
 }
 
@@ -124,7 +118,7 @@ type Flow struct {
 // Zone mirrors figure's Zone.
 type Zone struct {
 	Label    string  `json:"label"`
-	Dirs     *DirSet `json:"dirs"`
+	Dirs     []Dir   `json:"dirs"`
 	Actors   []Actor `json:"actors"`
 	Boundary bool    `json:"boundary"`
 }
@@ -132,7 +126,7 @@ type Zone struct {
 // Alignment mirrors figure's Alignment.
 type Alignment struct {
 	Axis   Axis    `json:"axis"`
-	Dirs   *DirSet `json:"dirs"`
+	Dirs   []Dir   `json:"dirs"`
 	Actors []Actor `json:"actors"`
 }
 
@@ -319,7 +313,7 @@ fun decoded(f: figure\Figure) > figure\Figure !> str {
 // Draw lays fig out with figure\draw and paints it with Theme.page, the palette that
 // follows a page's CSS variables. anchorHref is figure's link template, {path} and {line}.
 //
-// sess must resolve "magus/figure" and declare the magus\ record types the module names.
+// sess must resolve "magus/figure" and "magus", which the module imports for its record types.
 // Draw executes its entry program in sess, so a caller gives it a session of its own. A
 // figure the module refuses, or a case name no enum holds, is a *Findings.
 func Draw(ctx context.Context, sess *buzz.Session, fig Figure, anchorHref string) (string, error) {
@@ -370,7 +364,7 @@ func (f Figure) value() vm.Value {
 		{"unscopedWhy", vm.StrValue(f.UnscopedWhy)},
 		{"graphEdges", vm.BoolValue(f.GraphEdges)},
 		{"boxes", list(f.Boxes, Box.value)},
-		{"scopes", list(f.Scopes, DirSet.value)},
+		{"scopes", list(f.Scopes, dirs)},
 		{"exclusions", list(f.Exclusions, Exclusion.value)},
 		{"hiddenEdges", list(f.HiddenEdges, HiddenEdges.value)},
 		{"edgeMarks", list(f.EdgeMarks, EdgeMark.value)},
@@ -384,7 +378,7 @@ func (f Figure) value() vm.Value {
 func (b Box) value() vm.Value {
 	return record([]field{
 		{"dir", optional(b.Dir, Dir.value)},
-		{"group", optional(b.Group, DirSet.value)},
+		{"group", optional(b.Group, dirs)},
 		{"actor", optional(b.Actor, Actor.value)},
 		{"label", vm.StrValue(b.Label)},
 		{"sub", vm.StrValue(b.Sub)},
@@ -395,9 +389,7 @@ func (b Box) value() vm.Value {
 	})
 }
 
-func (s DirSet) value() vm.Value {
-	return record([]field{{"dirs", list(s.Dirs, Dir.value)}, {"named", vm.StrValue(s.Named)}})
-}
+func dirs(ds []Dir) vm.Value { return list(ds, Dir.value) }
 
 func (a Actor) value() vm.Value {
 	return record([]field{
@@ -410,11 +402,11 @@ func (a Actor) value() vm.Value {
 }
 
 func (e Exclusion) value() vm.Value {
-	return record([]field{{"set", e.Set.value()}, {"why", vm.StrValue(e.Why)}})
+	return record([]field{{"dirs", dirs(e.Dirs)}, {"why", vm.StrValue(e.Why)}})
 }
 
 func (h HiddenEdges) value() vm.Value {
-	return record([]field{{"src", h.Src.value()}, {"dst", h.Dst.value()}, {"why", vm.StrValue(h.Why)}})
+	return record([]field{{"src", dirs(h.Src)}, {"dst", dirs(h.Dst)}, {"why", vm.StrValue(h.Why)}})
 }
 
 func (m EdgeMark) value() vm.Value {
@@ -442,7 +434,7 @@ func (f Flow) value() vm.Value {
 func (z Zone) value() vm.Value {
 	return record([]field{
 		{"label", vm.StrValue(z.Label)},
-		{"dirs", optional(z.Dirs, DirSet.value)},
+		{"dirs", dirs(z.Dirs)},
 		{"actors", list(z.Actors, Actor.value)},
 		{"boundary", vm.BoolValue(z.Boundary)},
 	})
@@ -451,7 +443,7 @@ func (z Zone) value() vm.Value {
 func (a Alignment) value() vm.Value {
 	return record([]field{
 		{"axis", vm.StrValue(string(a.Axis))},
-		{"dirs", optional(a.Dirs, DirSet.value)},
+		{"dirs", dirs(a.Dirs)},
 		{"actors", list(a.Actors, Actor.value)},
 	})
 }

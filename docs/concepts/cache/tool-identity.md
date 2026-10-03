@@ -102,6 +102,8 @@ A single target can override the workspace answer, using the same nesting so one
 decision reads the same way wherever it is written:
 
 ```buzz
+import "magus";
+
 magus\project({"targets": {
     "image": {"cache": {"include": {"arch": {"enabled": false}}}},
 }});

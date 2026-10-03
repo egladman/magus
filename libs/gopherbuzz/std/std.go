@@ -64,12 +64,12 @@ var Modules = []buzz.Module{
 	}},
 	{Name: "gc", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("gc", gcModule)},
 	{Name: "debug", Labels: []string{buzz.LabelUpstream}, Bind: synthetic("debug", debugModule)},
-	{Name: "iocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetNativeModule("iocore", ioCoreModule(s)) // io binds against the session
+	{Name: "iocore", Labels: []string{buzz.LabelGopherbuzz}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
+		s.SetNativeModule("iocore", ioCoreModule(s, env)) // io binds against the session
 		return nil
 	}},
-	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, _ buzz.ModuleEnv) error {
-		s.SetNativeModule("io", ioCoreModule(s))
+	{Name: "io", Labels: []string{buzz.LabelUpstream}, Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
+		s.SetNativeModule("io", ioCoreModule(s, env))
 		s.SetModuleDecls("io", ioSource)
 		s.SetModuleDecls("os", osSource)
 		return nil

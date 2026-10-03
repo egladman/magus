@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +26,7 @@ import (
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/libs/gopherbuzz/token"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -136,6 +136,24 @@ func contextKeyReadBy(read func(context.Context)) any {
 }
 
 func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
+	// A relative --root names a directory from where magus started, so it is pinned
+	// before -C moves the process.
+	if root != "" {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return fmt.Errorf("magus buzz: --root: %w", err)
+		}
+		root = abs
+	}
+	// A leading -C is taken here so it reaches `lsp`, which is intercepted before the
+	// flag parse; anywhere else it arrives through bf.C below.
+	if dir, rest, ok := cutBuzzWorkDir(args); ok {
+		if err := buzzChdir(dir); err != nil {
+			return err
+		}
+		args = rest
+	}
+
 	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
 	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
 	// than a top-level `magus lsp`, so serving other languages later needs no new
@@ -164,10 +182,15 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	if err != nil {
 		return err
 	}
+	if bf.C != "" {
+		if err := buzzChdir(bf.C); err != nil {
+			return err
+		}
+	}
 	isRepl := bf.E == "" && !bf.Test && !bf.Check && len(rest) == 0
-	if !isRepl && (bf.NoAutoload || bf.C != "") {
-		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
-			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
+	if !isRepl && bf.NoAutoload {
+		return usagef("magus buzz: --%s applies to the REPL, not to a script, -%s, or -%s",
+			gen.FlagBuzzNoAutoload, gen.FlagBuzzE, gen.FlagBuzzT)
 	}
 	if bf.Coverprofile != "" && !bf.Test {
 		return usagef("magus buzz: --%s requires -%s", gen.FlagBuzzCoverprofile, gen.FlagBuzzT)
@@ -213,7 +236,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, bf.C, bf.NoAutoload)
+		return buzzRepl(ctx, bf.NoAutoload)
 	}
 
 	code, name, scriptArgs, err := buzzSource(bf.E, rest)
@@ -498,12 +521,10 @@ func addProfileObserver(ctx context.Context, sess *buzz.Session) {
 	}
 }
 
-var buzzImportPattern = regexp.MustCompile(`\bimport\s+(?:[\w\s,]+?\s+from\s+)?"([^"]+)"`)
-
 // buzzReachesMagus reports whether code, or any file or source module it imports
 // transitively, imports the magus namespace, a magus/* module or a spell. An import
-// found nowhere counts as not reaching magus. An import named in a comment also
-// matches, which only costs the eager load.
+// found nowhere counts as not reaching magus, and so does one inside a comment or a
+// string: the lexer, not a pattern, finds them.
 func buzzReachesMagus(sess *buzz.Session, code string) bool {
 	sources := map[string]string{}
 	for _, m := range std.AllSource() {
@@ -512,8 +533,8 @@ func buzzReachesMagus(sess *buzz.Session, code string) bool {
 	seen := map[string]bool{}
 	var reaches func(code, dir string) bool
 	reaches = func(code, dir string) bool {
-		for _, m := range buzzImportPattern.FindAllStringSubmatch(code, -1) {
-			p := strings.TrimPrefix(m[1], "buzz:")
+		for _, path := range buzzImportPaths(code) {
+			p := strings.TrimPrefix(path, "buzz:")
 			if p == "magus" || strings.HasPrefix(p, "magus/") || strings.HasPrefix(p, "spells/") {
 				return true
 			}
@@ -542,6 +563,31 @@ func buzzReachesMagus(sess *buzz.Session, code string) bool {
 		return false
 	}
 	return reaches(code, "")
+}
+
+// buzzImportPaths lists the paths code's import statements name, or none when code
+// does not lex; the session reports that error itself.
+func buzzImportPaths(code string) []string {
+	toks, err := token.Tokenize(code)
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for i, t := range toks {
+		if t.Kind != token.Import {
+			continue
+		}
+		for _, next := range toks[i+1:] {
+			if next.Kind == token.String {
+				paths = append(paths, next.Val)
+				break
+			}
+			if next.Kind != token.Ident && next.Kind != token.Comma {
+				break
+			}
+		}
+	}
+	return paths
 }
 
 // buzzFindImport resolves p the way the session does for a file import: beside the
@@ -618,6 +664,33 @@ func scriptImportDir(name string) string {
 	return filepath.Dir(abs)
 }
 
+// cutBuzzWorkDir takes a -C that leads args, in any spelling the flag package accepts.
+func cutBuzzWorkDir(args []string) (dir string, rest []string, ok bool) {
+	if len(args) == 0 {
+		return "", args, false
+	}
+	switch a := args[0]; {
+	case a == "-"+gen.FlagBuzzC || a == "--"+gen.FlagBuzzC:
+		if len(args) < 2 {
+			return "", args, false
+		}
+		return args[1], args[2:], true
+	case strings.HasPrefix(a, "-"+gen.FlagBuzzC+"="), strings.HasPrefix(a, "--"+gen.FlagBuzzC+"="):
+		_, v, _ := strings.Cut(a, "=")
+		return v, args[1:], true
+	}
+	return "", args, false
+}
+
+// buzzChdir moves the process to dir. `magus buzz` is never forwarded to a server, so
+// the directory it changes is its own.
+func buzzChdir(dir string) error {
+	if err := os.Chdir(dir); err != nil {
+		return usagef("magus buzz: -%s %s: %v", gen.FlagBuzzC, dir, errors.Unwrap(err))
+	}
+	return nil
+}
+
 // buzzResolveFile returns the path to use for reading a script. If the path
 // contains a separator it is used as-is. Otherwise BUZZ_INCLUDE_PATH
 // (colon-separated) is searched for the first match, falling back to the original
@@ -640,7 +713,8 @@ func buzzResolveFile(path string) string {
 }
 
 func buzzUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus buzz              # open a REPL with the magusfile loaded")
+	fmt.Fprintln(os.Stderr, "Usage: magus buzz [-C dir] ... # every form below takes -C")
+	fmt.Fprintln(os.Stderr, "       magus buzz              # open a REPL with the magusfile loaded")
 	fmt.Fprintln(os.Stderr, "       magus buzz <file>       # run a script")
 	fmt.Fprintln(os.Stderr, "       magus buzz -            # run a script from stdin")
 	fmt.Fprintln(os.Stderr, "       magus buzz -e <code>    # run an inline snippet")
@@ -662,7 +736,8 @@ func buzzUsage() {
 	fmt.Fprintln(os.Stderr, "  --embedded  relax upstream strictness (top-level statements, optional")
 	fmt.Fprintln(os.Stderr, "              argument labels) to match the magusfile engine")
 	fmt.Fprintln(os.Stderr, "  --no-autoload  start the REPL without executing the magusfile")
-	fmt.Fprintln(os.Stderr, "  -C <dir>    working directory for the REPL's import resolution")
+	fmt.Fprintln(os.Stderr, "  -C <dir>    change to dir before anything else, as go -C does; script")
+	fmt.Fprintln(os.Stderr, "              paths and imports resolve from it (lsp: only as the first flag)")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Parsing is upstream-strict by default. A file written for the magusfile")
 	fmt.Fprintln(os.Stderr, "engine needs --embedded, or it fails on rules upstream Buzz enforces and")
@@ -803,7 +878,9 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 }
 
 // buzzCheckFile checks one path, returning its diagnostics with File set so each
-// one renders as <file>:L:C, the position shape an editor can jump to.
+// one renders as <file>:L:C, the position shape an editor can jump to. A diagnostic
+// inside an imported file names that file, relative to the working directory when
+// it sits beneath it.
 func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diagnostic, error) {
 	resolved := buzzResolveFile(path)
 	data, err := os.ReadFile(resolved)
@@ -827,8 +904,18 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 	installBuzzHost(ctx, sess, string(data), os.Stderr, traceFromContext(ctx))
 
 	diags := sess.Diagnostics(string(data))
+	wd, _ := os.Getwd()
 	for i := range diags {
-		diags[i].File = resolved
+		switch f := diags[i].File; {
+		case f == "":
+			diags[i].File = resolved
+		case !filepath.IsAbs(f):
+			diags[i].File = filepath.Clean(f)
+		default:
+			if rel, err := filepath.Rel(wd, f); err == nil && !strings.HasPrefix(rel, "..") {
+				diags[i].File = rel
+			}
+		}
 	}
 	return diags, nil
 }

@@ -16,15 +16,15 @@ import (
 // as well as in io.buzz: the native File.open reads the enum VALUE it is handed,
 // while the Buzz declaration is what gives the checker a type to resolve an
 // inferred case against.
-func ioCoreModule(sess *buzz.Session) vm.Value {
+func ioCoreModule(sess *buzz.Session, env buzz.ModuleEnv) vm.Value {
 	m := mod()
 	m.MapSet("FileMode", vm.EnumDefValue("FileMode", []string{"read", "write", "update"}, nil))
 	fileDef := mod()
 	fileDef.MapSet("open", fn("File.open", fileOpen))
 	m.MapSet("File", fileDef)
 	m.MapSet("stdin", makeFileValue(os.Stdin))
-	m.MapSet("stdout", makeFileValue(os.Stdout))
-	m.MapSet("stderr", makeFileValue(os.Stderr))
+	m.MapSet("stdout", makeStreamValue(os.Stdout, env.StdoutFunc))
+	m.MapSet("stderr", makeStreamValue(os.Stderr, env.StderrFunc))
 	m.MapSet("runFile", fn("io.runFile", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 1 || !args[0].IsStr() {
 			return vm.Null, fmt.Errorf("io.runFile: requires a str path argument")
@@ -73,6 +73,29 @@ func fileOpen(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.Null, fmt.Errorf("File.open: %w", err)
 	}
 	return makeFileValue(f), nil
+}
+
+// makeStreamValue is f's File value with write sent, per call, to pick's writer when it
+// answers one. Every other method still acts on f.
+func makeStreamValue(f *os.File, pick func(context.Context) io.Writer) vm.Value {
+	v := makeFileValue(f)
+	if pick == nil {
+		return v
+	}
+	v.MapSet("write", fn("File.write", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) < 1 || !args[0].IsStr() {
+			return vm.Null, fmt.Errorf("File.write: requires a str bytes argument")
+		}
+		w := pick(ctx)
+		if w == nil {
+			w = f
+		}
+		if _, err := io.WriteString(w, args[0].AsString()); err != nil {
+			return vm.Null, fmt.Errorf("File.write: %w", err)
+		}
+		return vm.Null, nil
+	}))
+	return v
 }
 
 func makeFileValue(f *os.File) vm.Value {

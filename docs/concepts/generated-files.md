@@ -151,6 +151,8 @@ coverage.
 A target declares what it writes:
 
 ```buzz
+import "magus";
+
 export fun index_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("MAGUS.md");
     ...

@@ -1,10 +1,3 @@
-// site/diagrams/merge-queue-risk.buzz: how a candidate's risk decides what the merge queue
-// runs. The queue asks which projects a change reaches and, for a conflicted file, whether the
-// edit is low risk; the answers pick between gating those projects, gating every project, and
-// kicking the change back. The accent is on the classifier.
-//
-// Gate sizing's tier table is not drawn: this repository's queue gate
-// (hack/ci/merge-queue.buzz) runs no sizing. The gate, verdict and decision are actors.
 namespace mergeQueueRisk;
 
 import "magus";
@@ -16,11 +9,13 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
     final sdk = magus\dir(".");
     final risk = magus\dir("internal/risk");
     final nested: [magus\Dir] = magus\dirs("internal/queue/*");
-    final queue = figure\setOf(nested + [queueDir]).without([provider]);
+    final queue = figure\without(nested + [queueDir], drop: [provider]);
     final github = figure\external("GitHub", sub: "auto-merge or a label");
     final low = figure\external("low risk?", look: figure\Look.decision);
     final gate = figure\external("Gate the projects", sub: "every one when unbounded", look: figure\Look.plain);
     final verdict = figure\external("Verdict", sub: "green, red or kicked back", look: figure\Look.plain);
+    // No gate-sizing tier table: this repository's queue gate, hack/ci/merge-queue.buzz, runs
+    // no sizing.
     return figure\of("merge-queue-risk",
             title: "What a candidate's risk makes the queue run",
             eyebrow: "merge queue",
@@ -47,9 +42,9 @@ export fun mergeQueueRiskFigure() > figure\Figure !> any {
         .flowAcross(low, dst: verdict, label: "no: kick back")
         .flowAcross(gate, dst: verdict, label: "exit status")
         .flowAcross(verdict, dst: github, label: "apply")
-        .zone("the workspace", dirs: figure\setOf([sdk, risk]))
+        .zone("the workspace", dirs: [sdk, risk])
         .legend(figure\Look.focal, label: "reads what an edit is")
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.decision, label: "the queue decides")
-        .scope(queue.plus([provider, risk]));
+        .scope(queue + [provider, risk]);
 }

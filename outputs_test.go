@@ -73,7 +73,8 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 // project-wide outputs: AllOutputs unions the per-target globs back in.
 func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
 }
 `
@@ -101,7 +102,8 @@ func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 // to regenerate it from, while the generated file beside it goes.
 func TestCleanOutputsKeepsAnExcludedFile(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 `
@@ -406,7 +408,8 @@ func TestCarvedOutputsNamesTrackedHandFilesAmongOutputs(t *testing.T) {
 	gitRun(t, root, "init", "-q")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".magus/\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`export fun generate(ctx: magus\Context, args: [str]) > void {
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go", "!gen/claimed.go", "!gen/scratch.go");
 }
 export fun other(ctx: magus\Context, args: [str]) > void {
@@ -529,7 +532,8 @@ func TestTwoWritersClaimingOnePathAreRejected(t *testing.T) {
 func TestWriterClaimingOwnersOwnOutputIsRejected(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{
 		"magusfile.buzz": "",
-		"site/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {
+		"site/magusfile.buzz": `import "magus";
+export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("shared.txt");
 }
 `,
@@ -647,7 +651,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // delete: regeneration rewrites the marked region, not the prose around it.
 func TestCleanSkipsUpdates(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
     ctx.modifiesExistingFiles("concepts/spells.md");
 }
@@ -684,7 +689,8 @@ func TestCleanSkipsUpdates(t *testing.T) {
 // stays out of the output set (so it is never snapshotted, replayed, or cleaned).
 func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
 	root := t.TempDir()
-	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.modifiesExistingFiles("concepts/spells.md");
 }
 `

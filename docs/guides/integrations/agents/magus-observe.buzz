@@ -21,6 +21,7 @@
 //   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_CWD_PATH  dot-path to the directory the call runs in
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //
 // REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
@@ -36,7 +37,7 @@
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -107,11 +108,12 @@ fun main(args: [str]) > void {
     // unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
     // here, there is no rule, so the same announcement would be a per-read interruption
     // reporting that an optional record was not written.
-    final bin = hook\resolveBin();
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
-
     final raw = io\stdin.readAll() catch "";
     final event = json\parse(raw) catch null;
+    // The event's cwd, for the reason magus-command.buzz's Guard gives.
+    final cwd = field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     // The path is extracted rather than forwarding the whole event, because a payload
     // magus does not recognize as an envelope is judged as the literal text it is, and
@@ -133,5 +135,5 @@ fun main(args: [str]) > void {
         "--session", field(event, dotPath: sessionPath),
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
-    ], opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
 }

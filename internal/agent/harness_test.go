@@ -386,6 +386,84 @@ func TestPlanHarnessRetiresTheEntriesTheOldDescriptorWrote(t *testing.T) {
 	requireCurrent(t, root, "test-host")
 }
 
+// TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus pins ownership to the two marks a
+// descriptor renders, a shipped template's path or types.HarnessOwnedMarker, and nothing a
+// command merely says. A marked `magus shell` entry whose command changed is retired
+// rather than kept beside its replacement, and so is a second copy of a declared entry. A
+// hook of the person's own stays where it was, whether it runs magus or only mentions it.
+func TestPlanHarnessRetiresOnlyEntriesMarkedAsMagus(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "env-host", `{
+  "schema_version": 2,
+  "id": "env-host",
+  "display": {"name": "Env Host"},
+  "config": {"path": "env-host/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "start"],
+    "entries": [
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell --agent-name env-host # magus:harness"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]}
+    ]
+  }]
+}`)
+	path := filepath.Join(root, "env-host", "hooks.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{
+  "hooks": {
+    "start": [
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell -o json # magus:harness"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "echo \"remember to rebuild magus\""}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus session notify"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "my-own-hook"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]},
+      {"match": "compact", "commands": [{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}]}
+    ]
+  }
+}`), 0o644))
+
+	plan := mergeHarness(t, root, "env-host")
+	stale := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "magus shell -o json # magus:harness"}}}
+	wanted := map[string]any{"match": "start", "commands": []any{map[string]any{"type": "command", "command": "magus shell --agent-name env-host # magus:harness"}}}
+	rehydrate := map[string]any{"match": "compact", "commands": []any{map[string]any{"type": "command", "command": "magus buzz -s magus-rehydrate.buzz"}}}
+	assert.Equal(t, []types.HarnessChange{
+		{Op: types.HarnessAdd, Key: "hooks.start", Value: wanted},
+		{Op: types.HarnessRetire, Key: "hooks.start", Value: stale},
+		{Op: types.HarnessRetire, Key: "hooks.start", Value: rehydrate},
+	}, normalizeFiles(t, plan.Files)["env-host/hooks.json"].Changes)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var doc struct {
+		Hooks struct {
+			Start []map[string]any `json:"start"`
+		} `json:"hooks"`
+	}
+	require.NoError(t, json.Unmarshal(body, &doc))
+	var commands []string
+	for _, entry := range doc.Hooks.Start {
+		_, cmds := EntryCommands(entry)
+		commands = append(commands, cmds...)
+	}
+	assert.Equal(t, []string{
+		`echo "remember to rebuild magus"`,
+		"magus session notify",
+		"my-own-hook",
+		"magus buzz -s magus-rehydrate.buzz",
+		"magus shell --agent-name env-host # magus:harness",
+	}, commands, "the declared entries once each, and the person's own where they were")
+
+	requireCurrent(t, root, "env-host")
+}
+
+func TestCarriesOwnedMarkerOnlyAsATrailingComment(t *testing.T) {
+	assert.True(t, carriesOwnedMarker("magus shell # magus:harness"))
+	assert.True(t, carriesOwnedMarker("magus shell\t# magus:harness  "))
+	assert.False(t, carriesOwnedMarker("magus shell# magus:harness"), "no blank before it: part of a word the shell runs")
+	assert.False(t, carriesOwnedMarker("echo '# magus:harness'"), "quoted, so the shell prints it")
+	assert.False(t, carriesOwnedMarker("magus shell # magus:harness; rm -rf out"), "a comment ends the line, so the marker does too")
+}
+
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "bad", `{
@@ -410,12 +488,37 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [{
     "path": ["hooks"],
-    "entries": [{"command": "bypass"}]
+    "entries": [{"command": "bypass # magus:harness"}]
   }]
 }`)
 	_, _, err = LoadHarness(context.Background(), root, "bypass")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "does not invoke magus")
+}
+
+// TestHarnessDescriptorRefusesAnUnmarkedEntry pins the other half of explicit ownership: a
+// declared entry that runs no shipped template and carries no marker would be one a later
+// merge could not retire, so the descriptor is refused with the entry named and the fix.
+func TestHarnessDescriptorRefusesAnUnmarkedEntry(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "unmarked", `{
+  "schema_version": 2,
+  "id": "unmarked",
+  "display": {"name": "Unmarked"},
+  "config": {"path": "unmarked/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "before"],
+    "entries": [
+      {"match": "run", "commands": [{"type": "command", "command": "magus buzz -s magus-command.buzz"}]},
+      {"match": "start", "commands": [{"type": "command", "command": "magus shell -o json"}]}
+    ]
+  }]
+}`)
+	_, _, err := LoadHarness(context.Background(), root, "unmarked")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `managed_entries[0]: entries[1] (matcher "start", commands ["magus shell -o json"])`)
+	assert.Contains(t, err.Error(), `end its command with " # magus:harness"`)
 }
 
 // TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified pins the opencode.json defect:
@@ -519,7 +622,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			Skills:        HarnessSkills{Paths: []string{".agents/skills"}, Form: FormFull},
 			ManagedEntries: []HarnessEntries{{
 				Path:    []string{"hooks", "before"},
-				Entries: []map[string]any{{"command": "magus shell"}},
+				Entries: []map[string]any{{"command": "magus shell # magus:harness"}},
 			}},
 		}, "spell:test-host", true, nil
 	}

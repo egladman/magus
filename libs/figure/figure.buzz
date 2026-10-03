@@ -9,19 +9,19 @@
 //         return figure\of("server-http")
 //             .box(guard, label: "Guard", focal: true)
 //             .box(mcp, label: "/mcp")
-//             .group(figure\layerSet(magus\layer("handler")).without([mcp]), label: "Connect RPC")
+//             .group(figure\without(magus\layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
 //             .edgesFromGraph();
 //     }
 //
-// A box takes a Dir, a group takes a DirSet, and an actor nobody's code holds takes an
+// A box takes a Dir, a group takes a list of them, and an actor nobody's code holds takes an
 // external(). Edges come from the records: imports and declared calls between drawn
 // boxes. The only hand-drawn edges are flowIn, flowOut and flowAcross, and each has an
 // actor at one end. Coverage is by set: every directory scope() names is drawn or
 // excepted, so a package joining a layer joins its group or fails the figure.
 //
-// This module imports no host module. It names the magus\Dir, magus\Layer and
-// magus\RefsResult records, which every magus session declares, and a test builds them
-// as map literals.
+// The module imports magus for the Dir, Layer and RefsResult record types and calls no
+// host function: the figure hands it the records, so it never reaches into a workspace,
+// and a test builds them as map literals.
 //
 // The design system these figures follow is cathrynlavery/diagram-design (MIT),
 // https://github.com/cathrynlavery/diagram-design: its palette, role treatments, zones,
@@ -35,6 +35,7 @@ namespace figure;
 
 import "std";
 import "assert";
+import "magus";
 
 
 // escapeSvg makes s safe as SVG text or as a double-quoted attribute value.
@@ -1195,11 +1196,13 @@ fun renderSecurity(n: Node, p: Palette, s: Style) > str {
 
 // renderNode wraps each node's shapes in one group a viewer can hook by id and anchor. With
 // Style.anchorHref set, an anchored node becomes a link: an SVG <a> is focusable and
-// followable before any script loads. A node with a link of its own is always one.
+// followable before any script loads. A node with a link of its own is always one. The
+// anchor's line is painted only with anchorHref: the committed figures carry no line, so
+// an edit above the anchored symbol does not move them.
 fun renderNode(n: Node, p: Palette, s: Style) > str {
     var attrs = " data-node=\"" + escapeSvg(n.id) + "\"";
     if (n.anchor != "") { attrs = attrs + " data-anchor=\"" + escapeSvg(n.anchor) + "\""; }
-    if (n.line > 0) { attrs = attrs + " data-line=\"{n.line}\""; }
+    if (s.anchorHref != "" and n.line > 0) { attrs = attrs + " data-line=\"{n.line}\""; }
     final body = renderNodeBody(n, p, s);
     if (n.link != "") {
         return "<a href=\"" + escapeSvg(n.link) + "\"" + attrs + "><g>" + body + "</g></a>";
@@ -6691,83 +6694,27 @@ export enum<str> Stroke { plain, focal, external, optional }
 // light and dark bake hex for a file a page cannot style.
 export enum<str> Theme { page, light, dark }
 
-// DirSet is an immutable set of Dir records, kept sorted by path. A set built from a Layer
-// holds every directory the layer covers, so a package added to the layer joins whatever
-// the set feeds without an edit to the figure.
-export object DirSet {
-    dirs: [magus\Dir] = [<magus\Dir>],
-    // How the set was built, for findings: layerSet("handler").without([...]).
-    named: str = "",
-
-    // without drops dirs from the set. Raises naming any it does not hold, so a drop left
-    // behind by a rename fails rather than hiding nothing.
-    fun without(drop: [magus\Dir]) > DirSet !> str {
-        mustBeDirs(drop, call: "{this.named}.without");
-        final gone: mut {str: bool} = mut {<str: bool>};
-        foreach (d in drop) {
-            if (this.holds(d.path) == false) {
-                throw "{this.named}.without names {quote(d.path)}, which the set does not hold; drop it from without([...])";
-            }
-            gone[d.path] = true;
+// without is dirs less drop, in the order dirs holds them.
+//
+// Raises naming a dir in drop that dirs does not hold, so a drop left behind by a rename
+// fails rather than hiding nothing.
+export fun without(dirs: [magus\Dir], drop: [magus\Dir]) > [magus\Dir] !> str {
+    mustBeDirs(dirs, call: "without");
+    mustBeDirs(drop, call: "without(drop:)");
+    final held: mut {str: bool} = mut {<str: bool>};
+    foreach (d in dirs) { held[d.path] = true; }
+    final gone: mut {str: bool} = mut {<str: bool>};
+    foreach (d in drop) {
+        if (held[d.path] == null) {
+            throw "without drops {quote(d.path)}, which dirs does not hold; take it out of drop:";
         }
-        final kept: mut [magus\Dir] = mut [<magus\Dir>];
-        foreach (d in this.dirs) {
-            if (gone[d.path] == null) { kept.append(d); }
-        }
-        return DirSet{ dirs = kept, named = "{this.named}.without({pathList(drop)})" };
+        gone[d.path] = true;
     }
-
-    // plus adds dirs to the set. Raises naming any it already holds.
-    fun plus(add: [magus\Dir]) > DirSet !> str {
-        mustBeDirs(add, call: "{this.named}.plus");
-        final all: mut [magus\Dir] = mut [<magus\Dir>];
-        foreach (d in this.dirs) { all.append(d); }
-        foreach (d in add) {
-            if (this.holds(d.path)) {
-                throw "{this.named}.plus names {quote(d.path)}, which the set already holds; drop it from plus([...])";
-            }
-            all.append(d);
-        }
-        return DirSet{ dirs = sortedDirs(all), named = "{this.named}.plus({pathList(add)})" };
-    }
-
-    fun holds(path: str) > bool {
-        foreach (d in this.dirs) {
-            if (d.path == path) { return true; }
-        }
-        return false;
-    }
-
-    fun paths() > [str] {
-        final list: mut [str] = mut [<str>];
-        foreach (d in this.dirs) { list.append(d.path); }
-        return list;
-    }
-}
-
-// setOf is the set of the given dirs; a dir named twice is held once. Raises when an item
-// is not a Dir record.
-export fun setOf(dirs: [magus\Dir]) > DirSet !> str {
-    mustBeDirs(dirs, call: "setOf");
-    final seen: mut {str: bool} = mut {<str: bool>};
     final kept: mut [magus\Dir] = mut [<magus\Dir>];
     foreach (d in dirs) {
-        if (seen[d.path] == null) {
-            seen[d.path] = true;
-            kept.append(d);
-        }
+        if (gone[d.path] == null) { kept.append(d); }
     }
-    return DirSet{ dirs = sortedDirs(kept), named = "setOf({pathList(dirs)})" };
-}
-
-// layerSet is every directory layer covers. Raises when layer is not a Layer record.
-export fun layerSet(layer: magus\Layer) > DirSet !> str {
-    final name: str? = layer.name;
-    final dirs: [magus\Dir]? = layer.dirs;
-    if (name == null or dirs == null) { throw "layerSet takes a Layer from magus\\layer, and this argument is not one"; }
-    final call = "layerSet({quote(name!)})";
-    mustBeDirs(dirs!, call: call);
-    return DirSet{ dirs = sortedDirs(dirs!), named = call };
+    return kept;
 }
 
 // recordPath is a Dir's path, or empty when d is not a Dir record. The checker lets any
@@ -6820,7 +6767,7 @@ export enum<str> Axis { rank, row }
 // actor's own fields name and paint it.
 export object Box {
     dir: magus\Dir? = null,
-    group: DirSet? = null,
+    group: [magus\Dir]? = null,
     actor: Actor? = null,
     label: str = "",
     sub: str = "",
@@ -6831,18 +6778,18 @@ export object Box {
     symbol: magus\RefsResult? = null,
 }
 
-// Exclusion leaves the directories in set undrawn on purpose; each must sit in a scope, and
-// why reaches the drift summary.
+// Exclusion leaves dirs undrawn on purpose; each must sit in a scope, and why reaches the
+// drift summary.
 export object Exclusion {
-    set: DirSet = DirSet{},
+    dirs: [magus\Dir] = [<magus\Dir>],
     why: str = "",
 }
 
 // HiddenEdges keeps the graph's edges from a directory in src to one in dst out of the
 // picture.
 export object HiddenEdges {
-    src: DirSet = DirSet{},
-    dst: DirSet = DirSet{},
+    src: [magus\Dir] = [<magus\Dir>],
+    dst: [magus\Dir] = [<magus\Dir>],
     why: str = "",
 }
 
@@ -6874,7 +6821,7 @@ export object Flow {
 // painted as a trust boundary. A group joins only whole.
 export object Zone {
     label: str = "",
-    dirs: DirSet? = null,
+    dirs: [magus\Dir] = [<magus\Dir>],
     actors: [Actor] = [<Actor>],
     boundary: bool = false,
 }
@@ -6882,7 +6829,7 @@ export object Zone {
 // Alignment lines the boxes drawing dirs, and the actors, up along axis.
 export object Alignment {
     axis: Axis,
-    dirs: DirSet? = null,
+    dirs: [magus\Dir] = [<magus\Dir>],
     actors: [Actor] = [<Actor>],
 }
 
@@ -6910,7 +6857,7 @@ export object Figure {
     // Draws the imports and declared calls the drawn records hold.
     graphEdges: bool = false,
     boxes: [Box] = [<Box>],
-    scopes: [DirSet] = [<DirSet>],
+    scopes: [[magus\Dir]] = [<[magus\Dir]>],
     exclusions: [Exclusion] = [<Exclusion>],
     hiddenEdges: [HiddenEdges] = [<HiddenEdges>],
     edgeMarks: [EdgeMark] = [<EdgeMark>],
@@ -6933,10 +6880,10 @@ export object Figure {
         return this;
     }
 
-    // group draws every directory in set as one box. A directory joining the set later
-    // joins the box with it.
-    mut fun group(set: DirSet, label: str, sub: str = "", tag: str = "", focal: bool = false, look: Look? = null) > mut Figure {
-        this.boxes = this.boxes + [Box{ group = set, label = label, sub = sub, tag = tag, focal = focal, look = look }];
+    // group draws every directory in dirs as one box. Handed a layer's dirs, it takes a
+    // directory joining the layer later.
+    mut fun group(dirs: [magus\Dir], label: str, sub: str = "", tag: str = "", focal: bool = false, look: Look? = null) > mut Figure {
+        this.boxes = this.boxes + [Box{ group = dirs, label = label, sub = sub, tag = tag, focal = focal, look = look }];
         return this;
     }
 
@@ -6948,15 +6895,15 @@ export object Figure {
     }
 
     // scope names directories the figure answers for: each must be drawn by a box or a
-    // group, or excluded with except(set, why:).
-    mut fun scope(set: DirSet) > mut Figure {
-        this.scopes = this.scopes + [set];
+    // group, or excluded with except(dirs, why:).
+    mut fun scope(dirs: [magus\Dir]) > mut Figure {
+        this.scopes = this.scopes + [dirs];
         return this;
     }
 
     // except leaves directories in scope undrawn on purpose; why reaches the drift summary.
-    mut fun except(set: DirSet, why: str) > mut Figure {
-        this.exclusions = this.exclusions + [Exclusion{ set = set, why = why }];
+    mut fun except(dirs: [magus\Dir], why: str) > mut Figure {
+        this.exclusions = this.exclusions + [Exclusion{ dirs = dirs, why = why }];
         return this;
     }
 
@@ -6970,7 +6917,7 @@ export object Figure {
 
     // hideEdges keeps the graph's edges from a directory in src to one in dst out of the
     // picture. why is required, and a hide that matches nothing is a finding.
-    mut fun hideEdges(src: DirSet, dst: DirSet, why: str) > mut Figure {
+    mut fun hideEdges(src: [magus\Dir], dst: [magus\Dir], why: str) > mut Figure {
         this.hiddenEdges = this.hiddenEdges + [HiddenEdges{ src = src, dst = dst, why = why }];
         return this;
     }
@@ -7007,28 +6954,28 @@ export object Figure {
 
     // zone stacks the boxes drawing dirs, and the actors, into one band. A group joins
     // only whole: a zone taking part of one is a finding.
-    mut fun zone(label: str, dirs: DirSet? = null, actors: [Actor]? = null) > mut Figure {
-        this.zones = this.zones + [Zone{ label = label, dirs = dirs, actors = actors ?? [<Actor>] }];
+    mut fun zone(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+        this.zones = this.zones + [Zone{ label = label, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
     // boundary is a zone painted as a trust boundary.
-    mut fun boundary(label: str, dirs: DirSet? = null, actors: [Actor]? = null) > mut Figure {
-        this.zones = this.zones + [Zone{ label = label, dirs = dirs, actors = actors ?? [<Actor>], boundary = true }];
+    mut fun boundary(label: str, dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+        this.zones = this.zones + [Zone{ label = label, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>], boundary = true }];
         return this;
     }
 
     // rank puts the boxes drawing dirs, and the actors, in one rank. A connector between two
     // of them lies flat, across the rank, so a chain declared in one rank reads across a
     // down() figure instead of down it.
-    mut fun rank(dirs: DirSet? = null, actors: [Actor]? = null) > mut Figure {
-        this.alignments = this.alignments + [Alignment{ axis = Axis.rank, dirs = dirs, actors = actors ?? [<Actor>] }];
+    mut fun rank(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+        this.alignments = this.alignments + [Alignment{ axis = Axis.rank, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
     // row lines the boxes drawing dirs, and the actors, up on one midline across ranks.
-    mut fun row(dirs: DirSet? = null, actors: [Actor]? = null) > mut Figure {
-        this.alignments = this.alignments + [Alignment{ axis = Axis.row, dirs = dirs, actors = actors ?? [<Actor>] }];
+    mut fun row(dirs: [magus\Dir]? = null, actors: [Actor]? = null) > mut Figure {
+        this.alignments = this.alignments + [Alignment{ axis = Axis.row, dirs = dirs ?? [<magus\Dir>], actors = actors ?? [<Actor>] }];
         return this;
     }
 
@@ -7166,11 +7113,39 @@ fun sameActor(a: Actor, b: Actor) > bool {
     return a.name == b.name and a.sub == b.sub and a.tag == b.tag and a.link == b.link and a.look == b.look;
 }
 
-// setPaths is s.paths() for a set a host built as data, which carries no methods.
-fun setPaths(s: DirSet) > [str] {
+// dirPaths is the paths of dirs, sorted, each once. An item that is not a Dir record is a
+// finding naming call, and is left out.
+fun dirPaths(dirs: [magus\Dir], call: str, found: mut [str]) > [str] {
+    final seen: mut {str: bool} = mut {<str: bool>};
     final list: mut [str] = mut [<str>];
-    foreach (d in s.dirs) { list.append(d.path); }
-    return list;
+    var i = 0;
+    while (i < dirs.len()) {
+        final path = recordPath(dirs[i]);
+        if (path == "") {
+            found.append("{call} takes Dir records from magus\\dir or magus\\dirs, and item {i} is not one");
+        } else if (seen[path] == null) {
+            seen[path] = true;
+            list.append(path);
+        }
+        i = i + 1;
+    }
+    return list.sort(fun (a: str, b: str) > bool { return a < b; });
+}
+
+// setName is how a finding names a set of directories: its one path, or a glob over the
+// deepest directory holding them all, so it never prints every path.
+fun setName(paths: [str]) > str {
+    if (paths.len() == 0) { return "[]"; }
+    if (paths.len() == 1) { return quote(paths[0]); }
+    var common = paths[0].split("/");
+    foreach (path in paths) {
+        final segs = path.split("/");
+        var n = 0;
+        while (n < common.len() and n < segs.len() and common[n] == segs[n]) { n = n + 1; }
+        common = common.sub(0, len: n);
+    }
+    if (common.len() == 0 or common[0] == ".") { return quote(paths[0]) + " and {paths.len() - 1} more"; }
+    return quote(common.join("/") + "/**");
 }
 
 // roleOf is the role a box paints with, and a finding when its look is not a Look or
@@ -7244,20 +7219,23 @@ fun partOf(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, foun
         };
     }
     if (b.group != null) {
-        final set = b.group!;
+        final dirs = b.group!;
         final call = "group({quote(b.label)})";
-        if (b.label == "") { found.append("group over {set.named} has no label; name what the box stands for in group(set, label:)"); }
-        if (set.dirs.len() == 0) {
-            found.append("{call} takes {set.named}, which holds no directory; drop the group or give it a set that holds one");
+        final paths = dirPaths(dirs, call: call, found: found);
+        if (b.label == "") { found.append("group over {setName(paths)} has no label; name what the box stands for in group(dirs, label:)"); }
+        if (dirs.len() == 0) {
+            found.append("{call} takes no directory; drop the group or give it the dirs it stands for");
         }
-        foreach (d in set.dirs) { records[d.path] = d; }
+        foreach (d in dirs) {
+            if (recordPath(d) != "") { records[d.path] = d; }
+        }
         final role = roleOf(call, focal: b.focal, look: lookName(b.look), found: found);
         if (role == "decision") {
             found.append("{call} is a Look.decision; a group of directories is never a diamond");
         }
         return Part{
             id = "group:" + b.label, kind = "group", call = call, label = b.label, sub = b.sub, tag = b.tag,
-            role = role, dirs = setPaths(set),
+            role = role, dirs = paths,
         };
     }
     if (b.actor != null) {
@@ -7331,18 +7309,6 @@ fun actorId(name: str) > str {
     return "external:" + name;
 }
 
-fun pathList(dirs: [magus\Dir]) > str {
-    final quoted: mut [str] = mut [<str>];
-    foreach (d in dirs) { quoted.append(quote(d.path)); }
-    return "[" + quoted.join(", ") + "]";
-}
-
-fun sortedDirs(dirs: [magus\Dir]) > [magus\Dir] {
-    final copy: mut [magus\Dir] = mut [<magus\Dir>];
-    foreach (d in dirs) { copy.append(d); }
-    return copy.sort(fun (a: magus\Dir, b: magus\Dir) > bool { return a.path < b.path; });
-}
-
 // inside reports whether a workspace-relative file sits in dir, "." holding everything.
 fun inside(file: str, dir: str) > bool {
     if (dir == ".") { return true; }
@@ -7351,13 +7317,10 @@ fun inside(file: str, dir: str) > bool {
 
 // bandOf resolves a zone or an alignment's members to paths and actor names; verb is the
 // builder that declares it.
-fun bandOf(verb: str, label: str, dirs: DirSet?, actors: [Actor], boundary: bool) > DrawnBand {
-    var paths = [<str>];
+fun bandOf(verb: str, label: str, dirs: [magus\Dir], actors: [Actor], boundary: bool, found: mut [str]) > DrawnBand {
+    final paths = dirPaths(dirs, call: verb, found: found);
     var named = "";
-    if (dirs != null) {
-        paths = setPaths(dirs!);
-        named = dirs!.named;
-    }
+    if (paths.len() > 0) { named = setName(paths); }
     final names: mut [str] = mut [<str>];
     foreach (a in actors) { names.append(a.name); }
     var call = "{verb}({named})";
@@ -7388,21 +7351,28 @@ fun lowered(fig: Figure) > Sketch !> str {
         final p = partOf(b, records: records, actors: actorRecords, found: found);
         if (p != null) { parts.append(p!); }
     }
-    foreach (s in fig.scopes) {
-        foreach (d in s.dirs) { records[d.path] = d; }
+    final scopes: mut [[str]] = mut [<[str]>];
+    foreach (dirs in fig.scopes) {
+        foreach (d in dirs) {
+            if (recordPath(d) != "") { records[d.path] = d; }
+        }
+        scopes.append(dirPaths(dirs, call: "scope", found: found));
     }
     final exclusions: mut [DrawnExclusion] = mut [<DrawnExclusion>];
     foreach (ex in fig.exclusions) {
-        final call = "except({ex.set.named})";
-        if (ex.why == "") { found.append("{call} gives no reason; say why in except(set, why:)"); }
-        if (ex.set.dirs.len() == 0) { found.append("{call} excludes nothing; drop it"); }
-        exclusions.append(DrawnExclusion{ dirs = setPaths(ex.set), why = ex.why, call = call });
+        final paths = dirPaths(ex.dirs, call: "except", found: found);
+        final call = "except({setName(paths)})";
+        if (ex.why == "") { found.append("{call} gives no reason; say why in except(dirs, why:)"); }
+        if (paths.len() == 0) { found.append("{call} excludes nothing; drop it"); }
+        exclusions.append(DrawnExclusion{ dirs = paths, why = ex.why, call = call });
     }
     final hides: mut [DrawnHide] = mut [<DrawnHide>];
     foreach (h in fig.hiddenEdges) {
-        final call = "hideEdges({h.src.named}, dst: {h.dst.named})";
+        final src = dirPaths(h.src, call: "hideEdges", found: found);
+        final dst = dirPaths(h.dst, call: "hideEdges(dst:)", found: found);
+        final call = "hideEdges({setName(src)}, dst: {setName(dst)})";
         if (h.why == "") { found.append("{call} gives no reason; say why in hideEdges(src, dst:, why:)"); }
-        hides.append(DrawnHide{ src = setPaths(h.src), dst = setPaths(h.dst), why = h.why, call = call });
+        hides.append(DrawnHide{ src = src, dst = dst, why = h.why, call = call });
     }
     final marks: mut [DrawnMark] = mut [<DrawnMark>];
     foreach (m in fig.edgeMarks) {
@@ -7423,7 +7393,7 @@ fun lowered(fig: Figure) > Sketch !> str {
     foreach (z in fig.zones) {
         var verb = "zone";
         if (z.boundary) { verb = "boundary"; }
-        bands.append(bandOf(verb, label: z.label, dirs: z.dirs, actors: z.actors, boundary: z.boundary));
+        bands.append(bandOf(verb, label: z.label, dirs: z.dirs, actors: z.actors, boundary: z.boundary, found: found));
     }
     foreach (a in fig.alignments) {
         final axis: str? = a.axis.value;
@@ -7431,7 +7401,7 @@ fun lowered(fig: Figure) > Sketch !> str {
             found.append("an alignment takes axis: Axis.<case>, not a string");
             continue;
         }
-        bands.append(bandOf(axis!, label: "", dirs: a.dirs, actors: a.actors, boundary: false));
+        bands.append(bandOf(axis!, label: "", dirs: a.dirs, actors: a.actors, boundary: false, found: found));
     }
     final direction: str? = fig.direction.value;
     if (direction == null) { found.append("of() takes direction: Direction.<case>, not a string"); }
@@ -7462,7 +7432,7 @@ fun lowered(fig: Figure) > Sketch !> str {
         foreach (d in part.dirs) {
             final prior = drawnBy[d];
             if (prior != null and prior! != part.id) {
-                found.append("{quote(d)} is drawn by {callOf[prior!] ?? prior!} and {part.call}; draw it once, dropping it from a group's set with .without([...])");
+                found.append("{quote(d)} is drawn by {callOf[prior!] ?? prior!} and {part.call}; draw it once, dropping it from the group's dirs with without(dirs, drop: [...])");
             }
             if (prior == null) { drawnBy[d] = part.id; }
         }
@@ -7480,12 +7450,12 @@ fun lowered(fig: Figure) > Sketch !> str {
         }
     }
     final scoped: mut {str: bool} = mut {<str: bool>};
-    foreach (s in fig.scopes) {
-        foreach (d in s.dirs) {
-            if (scoped[d.path] != null) { continue; }
-            scoped[d.path] = true;
-            if (drawnBy[d.path] == null and excluded[d.path] == null) {
-                found.append("{quote(d.path)} is in scope({s.named}) but nothing draws it; add it to a box or a group, or except(setOf([...]), why:)");
+    foreach (paths in scopes) {
+        foreach (path in paths) {
+            if (scoped[path] != null) { continue; }
+            scoped[path] = true;
+            if (drawnBy[path] == null and excluded[path] == null) {
+                found.append("{quote(path)} is in scope({setName(paths)}) but nothing draws it; add it to a box or a group, or except([...], why:)");
             }
         }
     }
@@ -7751,7 +7721,7 @@ fun serverHttp(layer: magus\Layer) > mut Figure !> str {
     return of("server-http", title: "The HTTP surface")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
-        .group(layerSet(layer).without([mcp]), label: "Connect RPC")
+        .group(without(layer.dirs, drop: [mcp]), label: "Connect RPC")
         .edgesFromGraph();
 }
 
@@ -7797,51 +7767,59 @@ test "a package added to a layer joins its group" {
 }
 
 test "every directory in scope is drawn or excepted" {
-    final f = (serverHttp(handlers()) catch of("x")).scope(setOf([guardDir(), serverDir()]));
-    assert\equal(failure(f), want: "figure \"server-http\": \"internal/server\" is in scope(setOf([\"internal/httpx\", \"internal/server\"])) but nothing draws it; add it to a box or a group, or except(setOf([...]), why:)",
+    final f = (serverHttp(handlers()) catch of("x")).scope([serverDir(), guardDir()]);
+    assert\equal(failure(f), want: "figure \"server-http\": \"internal/server\" is in scope(\"internal/**\") but nothing draws it; add it to a box or a group, or except([...], why:)",
         message: "an undrawn directory in scope is a finding");
-    final d = f.except(setOf([serverDir()]), why: "builds the guard and mounts every route").diagram() catch Diagram{};
+    final d = f.except([serverDir()], why: "builds the guard and mounts every route").diagram() catch Diagram{};
     assert\equal(d.omits["internal/server"] ?? "", want: "builds the guard and mounts every route", message: "the reason reaches the Diagram");
     std\assert(listHolds(d.scope, item: "internal/server"), message: "an excepted directory stays in scope");
 }
 
-test "except is by set, with a reason, over a scope" {
+test "a finding names a set by the directory holding it, never every path" {
+    assert\equal(setName([<str>]), want: "[]", message: "empty");
+    assert\equal(setName(["internal/httpx"]), want: "\"internal/httpx\"", message: "one path is itself");
+    assert\equal(setName(["internal/handler/graph", "internal/handler/job", "internal/handler/mcp"]), want: "\"internal/handler/**\"", message: "siblings");
+    assert\equal(setName(["internal/file", "internal/file/diff"]), want: "\"internal/file/**\"", message: "a directory and its child");
+    assert\equal(setName(["internal/file", "internal/filex"]), want: "\"internal/**\"", message: "by segment, not by character");
+    assert\equal(setName(["cmd/magus", "internal/guard", "libs/figure"]), want: "\"cmd/magus\" and 2 more", message: "no shared directory");
+    assert\equal(setName([".", "internal/guard"]), want: "\".\" and 1 more", message: "the root shares nothing");
+}
+
+test "except takes dirs, with a reason, over a scope" {
     final base = serverHttp(handlers()) catch of("x");
-    final msg = failure(base.except(setOf([guardDir(), serverDir()]), why: ""));
+    final msg = failure(base.except([serverDir(), guardDir()], why: ""));
     final want = [
-        "figure \"server-http\": except(setOf([\"internal/httpx\", \"internal/server\"])) gives no reason; say why in except(set, why:)",
-        "figure \"server-http\": except(setOf([\"internal/httpx\", \"internal/server\"])) excludes \"internal/httpx\", which box(\"internal/httpx\") draws; drop one of them",
-        "figure \"server-http\": except(setOf([\"internal/httpx\", \"internal/server\"])) excludes \"internal/httpx\", which no scope(...) holds; drop it from the except",
-        "figure \"server-http\": except(setOf([\"internal/httpx\", \"internal/server\"])) excludes \"internal/server\", which no scope(...) holds; drop it from the except",
+        "figure \"server-http\": except(\"internal/**\") gives no reason; say why in except(dirs, why:)",
+        "figure \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which box(\"internal/httpx\") draws; drop one of them",
+        "figure \"server-http\": except(\"internal/**\") excludes \"internal/httpx\", which no scope(...) holds; drop it from the except",
+        "figure \"server-http\": except(\"internal/**\") excludes \"internal/server\", which no scope(...) holds; drop it from the except",
     ];
     assert\equal(msg, want: want.join("\n"), message: "except findings");
 }
 
 test "a directory is drawn once" {
-    final f = of("t").box(mcpDir()).group(layerSet(handlers()), label: "handlers").edgesFromGraph();
-    assert\equal(failure(f), want: "figure \"t\": \"internal/handler/mcp\" is drawn by box(\"internal/handler/mcp\") and group(\"handlers\"); draw it once, dropping it from a group's set with .without([...])",
-        message: "a box inside a group's set is a finding");
+    final f = of("t").box(mcpDir()).group(handlers().dirs, label: "handlers").edgesFromGraph();
+    assert\equal(failure(f), want: "figure \"t\": \"internal/handler/mcp\" is drawn by box(\"internal/handler/mcp\") and group(\"handlers\"); draw it once, dropping it from the group's dirs with without(dirs, drop: [...])",
+        message: "a box inside a group's dirs is a finding");
 }
 
-test "set operations refuse a stale member" {
-    final set = layerSet(handlers());
+test "without refuses a stale drop" {
     var gone = "";
     try {
-        set.without([guardDir()]);
+        without(handlers().dirs, drop: [guardDir()]);
     } catch (e: str) {
         gone = e;
     }
-    assert\equal(gone, want: "layerSet(\"handler\").without names \"internal/httpx\", which the set does not hold; drop it from without([...])", message: "without");
-    var twice = "";
-    try {
-        set.plus([mcpDir()]);
-    } catch (e: str) {
-        twice = e;
-    }
-    assert\equal(twice, want: "layerSet(\"handler\").plus names \"internal/handler/mcp\", which the set already holds; drop it from plus([...])", message: "plus");
-    final grown = set.plus([guardDir()]) catch DirSet{};
-    assert\equal(grown.paths().join(","), want: "internal/handler/graph,internal/handler/job,internal/handler/mcp,internal/httpx", message: "plus keeps the set sorted");
-    assert\equal(setOf([guardDir(), guardDir()]).paths().join(","), want: "internal/httpx", message: "setOf holds a directory once");
+    assert\equal(gone, want: "without drops \"internal/httpx\", which dirs does not hold; take it out of drop:", message: "a stale drop");
+    final kept = without([jobDir(), mcpDir(), graphDir()], drop: [mcpDir()]) catch [<magus\Dir>];
+    assert\equal(kept.len(), want: 2, message: "one dropped");
+    assert\equal(kept[0].path + "," + kept[1].path, want: "internal/handler/job,internal/handler/graph", message: "in the order dirs holds them");
+}
+
+test "a dir named twice draws once" {
+    final d = of("t").box(mcpDir()).group([guardDir(), guardDir()], label: "Guard").edgesFromGraph().diagram() catch Diagram{};
+    assert\equal(nodeOf(d, id: "group:Guard").label, want: "Guard", message: "the group lays out");
+    assert\equal(d.scope.join(","), want: "internal/handler/mcp,internal/httpx", message: "and holds the directory once");
 }
 
 test "a declared call claims calls and outranks an import" {
@@ -7852,13 +7830,13 @@ test "a declared call claims calls and outranks an import" {
     assert\equal(d.edges[0].claim, want: "calls", message: "the declared call wins");
 }
 
-test "hideEdges takes graph edges out by set, and a stale hide is a finding" {
+test "hideEdges takes graph edges out by dirs, and a stale hide is a finding" {
     final f = serverHttp(handlers()) catch of("x");
-    final d = f.hideEdges(setOf([mcpDir()]), dst: setOf([guardDir()]), why: "requests run the other way").diagram() catch Diagram{};
+    final d = f.hideEdges([mcpDir()], dst: [guardDir()], why: "requests run the other way").diagram() catch Diagram{};
     assert\equal(d.edges.len(), want: 1, message: "the hidden import is gone");
     std\assert(edgeBetween(d, src: "internal/handler/mcp", dst: "internal/httpx") == null, message: "and it is that one");
-    final stale = (serverHttp(handlers()) catch of("x")).hideEdges(setOf([guardDir()]), dst: setOf([mcpDir()]), why: "x");
-    assert\equal(failure(stale), want: "figure \"server-http\": hideEdges(setOf([\"internal/httpx\"]), dst: setOf([\"internal/handler/mcp\"])) hides no edge the graph draws; drop it",
+    final stale = (serverHttp(handlers()) catch of("x")).hideEdges([guardDir()], dst: [mcpDir()], why: "x");
+    assert\equal(failure(stale), want: "figure \"server-http\": hideEdges(\"internal/httpx\", dst: \"internal/handler/mcp\") hides no edge the graph draws; drop it",
         message: "a hide that matches nothing");
 }
 
@@ -7910,6 +7888,9 @@ test "a symbol anchors its box at the definition" {
     assert\equal(nodeOf(d, id: "internal/httpx").line, want: 12, message: "and its line");
     final svg = draw(ok, theme: Theme.light, anchorHref: "/code/\{path\}#L\{line\}") catch "threw";
     std\assert(svg.indexOf("<a href=\"/code/internal/httpx/guard.go#L12\" data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\" data-line=\"12\">") != null, message: "the link carries the line: {svg}");
+    final committed = draw(ok, theme: Theme.light) catch "threw";
+    std\assert(committed.indexOf("<g data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\">") != null and committed.indexOf("data-line") == null,
+        message: "without anchorHref the anchor stays and the line does not: {committed}");
     final elsewhere = of("t").box(mcpDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12)).unscoped(why: "x");
     std\assert(failure(elsewhere).indexOf("box(\"internal/handler/mcp\") anchors symbol \"httpx.Guard\", defined in internal/httpx/guard.go; box the directory that defines it") != null, message: "a symbol defined elsewhere");
     final none = of("t").box(guardDir(), symbol: refsAt("httpx.Gone", files: [<str>], line: 0));
@@ -7917,11 +7898,11 @@ test "a symbol anchors its box at the definition" {
 }
 
 test "a zone takes a group whole" {
-    final guarded = layerSet(handlers()).plus([guardDir()]) catch DirSet{};
+    final guarded = handlers().dirs + [guardDir()];
     final zoned = (serverHttp(handlers()) catch of("x")).zone("guarded", dirs: guarded);
     final d = zoned.diagram() catch Diagram{};
     assert\equal(d.zones.len(), want: 1, message: "the zone lays out");
-    final part = (serverHttp(handlers()) catch of("x")).zone("guarded", dirs: setOf([guardDir(), graphDir()]));
+    final part = (serverHttp(handlers()) catch of("x")).zone("guarded", dirs: [guardDir(), graphDir()]);
     assert\equal(failure(part), want: "figure \"server-http\": zone(\"guarded\") takes part of group(\"Connect RPC\"), leaving out \"internal/handler/job\"; name every directory of the group or none",
         message: "a split group");
 }
@@ -7982,18 +7963,14 @@ test "a Figure written as data draws the bytes its builders draw" {
 test "a value that is not a record is refused where it enters" {
     final notDir = asRecord::<magus\Dir>({ "id": "dir:x" });
     assert\equal(failure(of("t").box(notDir).unscoped(why: "x")), want: "figure \"t\": box takes a Dir from magus\\dir, and this argument is not one", message: "box");
+    assert\equal(failure(of("t").group([guardDir(), notDir], label: "g").unscoped(why: "x")),
+        want: "figure \"t\": group(\"g\") takes Dir records from magus\\dir or magus\\dirs, and item 1 is not one\nfigure \"t\": draws directories and declares unscoped(why:); drop the unscoped",
+        message: "group");
     var msg = "";
     try {
-        setOf([guardDir(), notDir]);
+        without([guardDir(), notDir], drop: [<magus\Dir>]);
     } catch (e: str) {
         msg = e;
     }
-    assert\equal(msg, want: "setOf takes Dir records from magus\\dir or magus\\dirs, and item 1 is not one", message: "setOf");
-    msg = "";
-    try {
-        layerSet(asRecord::<magus\Layer>({ "declared": [<str>] }));
-    } catch (e: str) {
-        msg = e;
-    }
-    assert\equal(msg, want: "layerSet takes a Layer from magus\\layer, and this argument is not one", message: "layerSet");
+    assert\equal(msg, want: "without takes Dir records from magus\\dir or magus\\dirs, and item 1 is not one", message: "without");
 }

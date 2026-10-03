@@ -970,7 +970,7 @@ type explainResult struct {
 	Nearest string                `json:"nearest,omitempty"`
 }
 
-func searchGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, read graphRead, refresh, global bool) (queryResult, error) {
+func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead, refresh, global bool) (queryResult, error) {
 	tr := traceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
 	var g *knowledge.Graph
@@ -1009,7 +1009,7 @@ func searchGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.C
 	return res, nil
 }
 
-func explainNode(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, read graphRead, refresh, global bool) (explainResult, error) {
+func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read graphRead, refresh, global bool) (explainResult, error) {
 	tr := traceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
 	stop := tr.phase("explain.load_graph")
@@ -1034,16 +1034,74 @@ func explainNode(ctx context.Context, ws types.WorkspaceRepository, cfg config.C
 	return res, nil
 }
 
-// openForRead opens the workspace for a graph read no server answered. It is the same
-// Open-loaded handle startup used to preload for these verbs, so the local read is the one
-// it always was; the preload just no longer runs for a read a server answers.
-func openForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+// graphWorkspace is what a graph read needs of its workspace: the root, and the Inspector
+// facts a rebuild reads. The *magus.Magus a server holds satisfies it, and so does the
+// *magus.LazyWorkspace a CLI read opens, which evaluates the workspace only if the stored
+// graph turns out stale.
+type graphWorkspace interface {
+	types.Inspector
+	Root() string
+}
+
+// openForRead opens the workspace for a graph read no server answered, lazily: the read
+// gets a handle that evaluates the workspace on the first call that needs the model, and
+// a read the stored graph answers makes none. Measured 2026-10-02 on this repository, the
+// eager open was 425ms of a warm `magus query`'s 590ms. When startup already opened the
+// workspace, that handle answers, as it always did.
+//
+// The open, when it comes, is the one openWorkspaceForRead makes: the cache-backed handle
+// whose remote shard backing a rebuild pushes to.
+func openForRead(ctx context.Context, root string) (graphWorkspace, error) {
 	stop := traceFromContext(ctx).phase("read.open")
 	defer stop()
+	if m, ok := loadedMagus(); ok {
+		return m, nil
+	}
+	wsRoot, err := magus.FindRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	return magus.NewLazyWorkspace(wsRoot, func(ctx context.Context) (*magus.Magus, error) {
+		ws, err := openWorkspaceForRead(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		return asMagus(ws)
+	}), nil
+}
+
+// openWorkspaceForRead opens the workspace eagerly for a read that needs the whole
+// repository surface (refs, which reads symbols and classifies files). It is the same
+// Open-loaded handle startup used to preload for these verbs, so the local read is the one
+// it always was; the preload just no longer runs for a read a server answers.
+func openWorkspaceForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 	// inspectWorkspace reuses this handle when the open succeeded, and reports why when it
 	// did not, so the error has one place to come from.
 	_, _ = loadMagus(ctx, root)
 	return inspectWorkspace(ctx, root)
+}
+
+// asMagus is the *magus.Magus behind a workspace handle. Open and Inspect both return one,
+// so anything else is a programming error worth naming rather than a nil to chase.
+func asMagus(ws types.WorkspaceRepository) (*magus.Magus, error) {
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return nil, fmt.Errorf("magus: the workspace handle is a %T, not a *magus.Magus", ws)
+	}
+	return m, nil
+}
+
+// fullWorkspace is the whole repository surface behind a graph workspace, opening a lazy
+// one: for the reads that need more than the Inspector (the global graph unions
+// WorkspaceRepository handles).
+func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepository, error) {
+	switch w := ws.(type) {
+	case types.WorkspaceRepository:
+		return w, nil
+	case *magus.LazyWorkspace:
+		return w.Magus(ctx)
+	}
+	return nil, fmt.Errorf("magus: %T is not a workspace", ws)
 }
 
 // askServer has a running server answer verb into reply and reports whether it did. A

@@ -176,7 +176,12 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // argv with no room for a variable prefix. This bumps because the CONFIG and the glue moved
 // together: under a config written for 19, an 18 copy reports the flags as unsupported and
 // prints plain text, which a host that drops plain text ignores without a word.
-const GuardTemplateVersion = 19
+//
+// 20: the observe, checkpoint and rehydrate glue run magus in the directory the event's
+// cwd names rather than their own, because a config written for 20 starts every hook in
+// the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
+// session's PATH that a shell line in the config used to.
+const GuardTemplateVersion = 20
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

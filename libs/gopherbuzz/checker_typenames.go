@@ -101,20 +101,30 @@ func (w *typeNameWalk) annot(pos ast.Pos, annot string, generics map[string]bool
 		if w.reported[key] {
 			return
 		}
+		if w.c.unboundQualifier(qual) {
+			w.mark(key)
+			w.c.unimportedNamespace(pos, qual, `undefined type "`+spelled+`"`)
+			return
+		}
 		if msg := w.c.undefinedTypeName(qual, name); msg != "" {
-			if w.reported == nil {
-				w.reported = map[typeNameReport]bool{}
-			}
-			w.reported[key] = true
+			w.mark(key)
 			w.c.errorfc(pos, UndefinedType, "%s", msg)
 		}
 	})
 }
 
+func (w *typeNameWalk) mark(key typeNameReport) {
+	if w.reported == nil {
+		w.reported = map[typeNameReport]bool{}
+	}
+	w.reported[key] = true
+}
+
 // undefinedTypeName is the message for a type name that resolves to nothing, or ""
 // when it resolves. A qualifier bound to a namespace the checker built must declare
 // the type itself; any other qualifier (a module declaring nothing, a `namespace`
-// line reached through a flat import) falls back to the bare name.
+// line reached through a flat import) falls back to the bare name. The caller
+// reports an unbound qualifier before asking.
 func (c *checker) undefinedTypeName(qual, name string) string {
 	if qual != "" {
 		if t, known := c.namespaceMemberType(qual, name); known {
@@ -142,6 +152,18 @@ func (c *checker) undefinedTypeName(qual, name string) string {
 		name = qual + `\` + name
 	}
 	return `undefined type "` + name + `"`
+}
+
+// unboundQualifier reports whether qual is a single namespace segment this chunk
+// binds nowhere. Upstream resolves `ns\T` only through the importing script's own
+// globals, so a module that did not import ns cannot name its types, however the
+// session came to know them.
+func (c *checker) unboundQualifier(qual string) bool {
+	if qual == "" || strings.IndexByte(qual, '\\') >= 0 {
+		return false
+	}
+	_, ok := c.lookup(qual)
+	return !ok
 }
 
 // namespaceMemberType resolves `qual\name` through the namespace bound to qual.

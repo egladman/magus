@@ -178,12 +178,26 @@ func TestBuildPolicyBaseEnv(t *testing.T) {
 	assert.Equal(t, filepath.Join(root, "tmp"), p.TempDir)
 }
 
-// A policy's BaseEnv is never nil, so a child never falls back to the host's
-// environment, however bare the host is.
-func TestBuildPolicyBaseEnvIsNeverNil(t *testing.T) {
+// A policy's BaseEnv is never the host's environment, however bare the host is.
+func TestBuildPolicyBaseEnvIsNeverTheHosts(t *testing.T) {
 	p := BuildPolicy(PolicyOptions{})
-	assert.NotNil(t, p.BaseEnv)
-	assert.Empty(t, p.BaseEnv)
+	assert.Equal(t, []string{"GIT_CONFIG_GLOBAL=/dev/null"}, p.BaseEnv)
+}
+
+// A child's git reads no global config, since the files it lives in are outside the
+// policy and an unreadable one is fatal to git, unless a declaration passes one through.
+func TestBuildPolicyGitReadsNoGlobalConfig(t *testing.T) {
+	o, _ := hostOptions(t)
+	o.Environ = append(o.Environ, "GIT_CONFIG_GLOBAL=/srv/ci.gitconfig")
+
+	p := BuildPolicy(o)
+	assert.Contains(t, p.BaseEnv, "GIT_CONFIG_GLOBAL=/dev/null")
+	assert.Contains(t, p.EnvDropped, "GIT_CONFIG_GLOBAL", "the host's own value is scrubbed like any other")
+
+	o.Sandbox.Env.Passthrough = append(o.Sandbox.Env.Passthrough, "GIT_CONFIG_GLOBAL")
+	p = BuildPolicy(o)
+	assert.Contains(t, p.BaseEnv, "GIT_CONFIG_GLOBAL=/srv/ci.gitconfig")
+	assert.NotContains(t, p.BaseEnv, "GIT_CONFIG_GLOBAL=/dev/null")
 }
 
 func TestBuildPolicyKeepsUserRulesAndPassthrough(t *testing.T) {

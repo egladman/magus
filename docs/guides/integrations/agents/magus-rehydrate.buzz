@@ -14,8 +14,8 @@
 // instead, read off the disk at the moment it prints.
 //
 // Contract: runs `magus session --brief`, prints what it says, and adds one line
-// naming your host's own instruction file. It judges nothing, reads no event, and
-// exits 0 whatever happens. Arguments, after `--`:
+// naming your host's own instruction file, for the checkout its event's cwd names. It
+// judges nothing and exits 0 whatever happens. Arguments, after `--`:
 //
 //   --rules <file>   your host's instruction file, relative to the workspace root;
 //                    CLAUDE.md when omitted
@@ -42,7 +42,7 @@
 // carries no verdict on no surface. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -86,18 +86,23 @@ fun main(args: [str]) > void {
     if (format != "" and format != "json") {
         warn("unsupported {FORMAT_FLAG} \"{format}\"; the one format is json. Printing plain text.");
     }
-    final root = hook\workspaceRoot();
+    // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
+    // Guard gives. The working directory stands in when the event names none.
+    final cwd = hook\field(json\parse(io\stdin.readAll() catch "") catch null, dotPath: "cwd");
+    var root = "";
+    if (cwd != "") { root = hook\workspaceRootAt(cwd); }
+    if (root == "") { root = hook\workspaceRoot(); }
 
     // An absent magus is SILENT, where an absent guard is loud. Nothing here is
     // unenforced (there is no rule), so announcing it would open every compacted
     // session with a report that an optional context block was not written.
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     // Captured rather than streamed, because the json arm has to wrap it. stderr is
     // discarded by `quiet`: a magus too old for `session --brief` prints its usage
     // there, and that would otherwise be injected as this hook's answer.
-    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: {
         "quiet": true,
         "allow_failure": true,
     }) catch null;

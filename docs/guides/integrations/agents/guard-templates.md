@@ -228,7 +228,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 19
+// magus-guard-template: 20
 // magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
@@ -334,9 +334,10 @@ final SUPPORTED_FLAGS = ["--observes-skill-loads"];
 final AGENT_NAME_FLAG = "--agent-name";
 
 
-// findUp returns the nearest ancestor holding relative, or "" when there is none.
-fun findUp(relative: str) > str {
-    var dir = path\abs(".") catch "";
+// findUp returns the nearest ancestor of start holding relative, or "" when there is none.
+fun findUp(relative: str, start: str) > str {
+    var dir = start;
+    if (dir == "") { dir = path\abs(".") catch ""; }
     while (dir != "") {
         final candidate = "{dir}/{relative}";
         final found = fs\isFile(candidate) catch false;
@@ -370,7 +371,7 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
     if (pushRule == null) {
         return "no Codex approval rule matches this call, only a plain git push, hg push, sl push or jj git push command";
     }
-    final rules = findUp(".codex/rules/magus.rules");
+    final rules = findUp(".codex/rules/magus.rules", start: hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd")));
     if (rules != "") {
         // A file that is THERE and unreadable is not the same as one that carries no
         // matching rule, and collapsing the two produced a deny whose stated reason was
@@ -802,7 +803,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 19
+// magus-guard-template: 20
 // magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
 
@@ -1017,6 +1018,7 @@ surface, and this file carries no verdict on no surface.
 //   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 //   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_CWD_PATH  dot-path to the directory the call runs in
 //   __MAGUS_BIN  path to the binary, when it is not on PATH
 //
 // REQUIRED argument: `-- --agent-name <host>`, the host recorded alongside the
@@ -1032,7 +1034,7 @@ surface, and this file carries no verdict on no surface.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1103,11 +1105,12 @@ fun main(args: [str]) > void {
     // unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
     // here, there is no rule, so the same announcement would be a per-read interruption
     // reporting that an optional record was not written.
-    final bin = hook\resolveBin();
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
-
     final raw = io\stdin.readAll() catch "";
     final event = json\parse(raw) catch null;
+    // The event's cwd, for the reason magus-command.buzz's Guard gives.
+    final cwd = field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    final bin = hook\resolveBin(cwd: cwd);
+    if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     // The path is extracted rather than forwarding the whole event, because a payload
     // magus does not recognize as an envelope is judged as the literal text it is, and
@@ -1129,7 +1132,7 @@ fun main(args: [str]) > void {
         "--session", field(event, dotPath: sessionPath),
         "--transcript", field(event, dotPath: transcriptPath),
         "--event", "PreToolUse",
-    ], opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
+    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": reached}) catch void;
 }
 ```
 
@@ -1182,8 +1185,8 @@ computes and prints, and keeps it. What makes one worth keeping is the note, so
 records the position and the pointers, and leaves the prose alone. Nothing in the
 host's payload becomes the note.
 
-It forwards the event whole and magus parses the envelope itself, so it selects
-nothing and imports no JSON reader. A host that spells those fields differently
+It forwards the event whole and magus parses the envelope itself; the one field
+it reads is `cwd`, the tree it records. A host that spells those fields differently
 passes `--session` and `--transcript` instead, and one that can supply neither
 still records a usable checkpoint, because the part that matters is read from the
 tree.
@@ -1225,15 +1228,15 @@ It declares no `magus-guard-coverage` line, for the reason
 // cannot supply either still records a usable checkpoint, because the part that
 // matters is read from the tree rather than from the event.
 //
-// There is no JSON import here, unlike its judging siblings. This wrapper selects
-// nothing: magus parses the envelope itself, so the event is forwarded whole.
+// The event is forwarded whole: magus parses the envelope itself. The one field read
+// here is cwd, the tree the record describes.
 //
 // NO magus-guard-coverage line, for the same reason magus-observe.buzz has
 // none: a coverage declaration states how much of a VERDICT a host can carry, and
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1242,6 +1245,7 @@ It declares no `magus-guard-coverage` line, for the reason
 import "io";
 import "flags";
 import "proc";
+import "encoding/json";
 import "lib/hook" as hook;
 
 // warn names the file; see magus-command.buzz. STDERR, which is why it does not break
@@ -1277,16 +1281,16 @@ fun main(args: [str]) > void {
         return;
     }
 
+    final event = io\stdin.readAll() catch "";
+    // The event's cwd names the tree whose state is recorded, for the reason
+    // magus-command.buzz's Guard gives.
+    final cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
+
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
     // unenforced, because there is no rule, so announcing it would interrupt the end of
     // every session to report that an optional record was not written.
-    //
-    // Checked before stdin is touched, leaving the event unread on this arm: there is
-    // nobody to forward it to.
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
-
-    final event = io\stdin.readAll() catch "";
 
     // Both streams are discarded by `quiet`: a magus too old for `session checkpoint`
     // prints its usage, and that would otherwise reach the host as this hook's response
@@ -1295,7 +1299,7 @@ fun main(args: [str]) > void {
     proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
-    ], opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
 }
 ```
 
@@ -1313,8 +1317,8 @@ the guard, and where the rules live.
 Every line of it is read off the disk at the moment it prints, which is the
 property that makes it worth wiring. A summary degrades with each retelling and
 nothing in the transcript says by how much; a fact read from the tree cannot
-degrade at all. Nothing in it is remembered between sessions, and none of it
-comes from the host's event, which the hook does not read.
+degrade at all. Nothing in it is remembered between sessions. The one thing it
+takes from the host's event is `cwd`, which names the checkout to brief.
 
 It restates no rule either. `magus session --brief` names the files this
 workspace's rules live in (AGENTS.md and the installed skill directories, when
@@ -1352,8 +1356,8 @@ It declares no `magus-guard-coverage` line, for the reason
 // instead, read off the disk at the moment it prints.
 //
 // Contract: runs `magus session --brief`, prints what it says, and adds one line
-// naming your host's own instruction file. It judges nothing, reads no event, and
-// exits 0 whatever happens. Arguments, after `--`:
+// naming your host's own instruction file, for the checkout its event's cwd names. It
+// judges nothing and exits 0 whatever happens. Arguments, after `--`:
 //
 //   --rules <file>   your host's instruction file, relative to the workspace root;
 //                    CLAUDE.md when omitted
@@ -1380,7 +1384,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on no surface. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1424,18 +1428,23 @@ fun main(args: [str]) > void {
     if (format != "" and format != "json") {
         warn("unsupported {FORMAT_FLAG} \"{format}\"; the one format is json. Printing plain text.");
     }
-    final root = hook\workspaceRoot();
+    // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
+    // Guard gives. The working directory stands in when the event names none.
+    final cwd = hook\field(json\parse(io\stdin.readAll() catch "") catch null, dotPath: "cwd");
+    var root = "";
+    if (cwd != "") { root = hook\workspaceRootAt(cwd); }
+    if (root == "") { root = hook\workspaceRoot(); }
 
     // An absent magus is SILENT, where an absent guard is loud. Nothing here is
     // unenforced (there is no rule), so announcing it would open every compacted
     // session with a report that an optional context block was not written.
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
 
     // Captured rather than streamed, because the json arm has to wrap it. stderr is
     // discarded by `quiet`: a magus too old for `session --brief` prints its usage
     // there, and that would otherwise be injected as this hook's answer.
-    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+    final result = proc\exec(bin, args: ["session", "--brief"], dir: cwd, opts: {
         "quiet": true,
         "allow_failure": true,
     }) catch null;
@@ -1464,6 +1473,74 @@ fun main(args: [str]) > void {
     }
 
     io\stdout.write(brief + "\n") catch void;
+}
+```
+
+## `magus-session.buzz`
+
+The fourth template that carries no verdict, and the one that runs no magus. Wire
+it to your host's session-start event as
+`magus buzz -C <root> -s magus-session.buzz -- --env-file <file>`, where
+`<file>` is the one your host sources before each shell command, and it appends
+`export PATH="<root>:$PATH"` there. A `magus` the agent types then runs the build
+the hooks run, rather than whatever the shell that launched the host had.
+
+The directory `-C` names is what goes on PATH, so the entry states it and the
+template guesses nothing. An empty `--env-file` does nothing, which is what a
+host without such a file passes.
+
+It declares no `magus-guard-coverage` line: it carries no verdict on any surface.
+
+```buzz
+import "io";
+import "flags";
+import "fs";
+import "path";
+
+// magus session hook: puts the workspace's own magus first on PATH for the shell
+// commands a session runs, so a `magus` typed there is the build its hooks run.
+//
+// Wire it to your host's session-start event as `magus buzz -C <root> -s
+// magus-session.buzz -- --env-file <file>`. The directory -C names is the one that goes
+// on PATH, and <file> is the one your host sources before each shell command. It
+// appends `export PATH="<root>:$PATH"` there, keeping what other hooks wrote, and
+// leaves `$PATH` for that shell to expand. An empty or absent --env-file does nothing:
+// a host that sources no such file has no PATH to set. It prints nothing on stdout and
+// exits 0.
+//
+// NO magus-guard-coverage line: it judges nothing on any surface.
+//
+// magus-guard-template: 20
+
+final ENV_FILE_FLAG = "--env-file";
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-session.buzz: {message}\n") catch void;
+}
+
+fun envFileOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [ENV_FILE_FLAG]) catch null;
+    if (parsed == null) {
+        warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
+        return "";
+    }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares only {ENV_FILE_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    return parsed!.values[ENV_FILE_FLAG] ?? "";
+}
+
+fun main(args: [str]) > void {
+    final envFile = envFileOf(args);
+    if (envFile == "") { return; }
+    final root = path\abs(".") catch "";
+    if (root == "") { return; }
+    try {
+        fs\appendFile(envFile, content: "export PATH=\"{root}:$PATH\"\n");
+    } catch {
+        warn("could not append to {envFile}; the session's commands find magus on PATH as it was.");
+    }
 }
 ```
 

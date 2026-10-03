@@ -47,6 +47,7 @@ magus knows nothing about any forge. It calls four reserved function names on a 
 magusfile selected, and reads what comes back:
 
 ```buzz
+import "magus";
 import "spells/github/review" as ghReview;
 
 magus\review.provider(ghReview);

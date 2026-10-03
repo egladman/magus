@@ -1,14 +1,3 @@
-// site/diagrams/server-http.buzz - what reaches the server's HTTP listener, and what bypasses the
-// guard. Split out of the README's single whole-system flowchart, which carried this
-// alongside four other subjects and blew every complexity budget in the design system.
-//
-// The figure has one claim: every route except the health probes sits behind the guard.
-// The accent pair (the guard box, the probe connector) is spent entirely on making that
-// one exception visible.
-//
-// The console's routes are the handler layer the root magusfile declares, less /mcp, so a
-// handler package added there joins that box. The server builds the guard and mounts every
-// route, and answers the probes itself.
 namespace serverHttp;
 
 import "magus";
@@ -18,8 +7,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
     final server = magus\dir("internal/server");
-    final handlers = figure\layerSet(magus\layer("handler"));
-    final routes = handlers.without([mcp]);
+    final handlers = magus\layer("handler").dirs;
+    final routes = figure\without(handlers, drop: [mcp]);
     final agent = figure\external("AI agents", sub: "Claude Code, IDE", tag: "client", look: figure\Look.plain);
     final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);
     final probe = figure\external("kubelet", sub: "scripts, probes", tag: "client");
@@ -43,8 +32,8 @@ export fun serverHttpFigure() > figure\Figure !> any {
         .flowIn(agent, dst: guard)
         .flowIn(console, dst: guard)
         .flowIn(probe, dst: server, label: "unguarded", stroke: figure\Stroke.focal)
-        .zone("through the guard", dirs: handlers.plus([guard]), actors: [agent, console])
+        .zone("through the guard", dirs: handlers + [guard], actors: [agent, console])
         .legend(figure\Look.focal, label: "authenticated")
         .legend(figure\Look.external, label: "open to any caller")
-        .scope(handlers.plus([guard, server]));
+        .scope(handlers + [guard, server]);
 }

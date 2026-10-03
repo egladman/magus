@@ -389,6 +389,19 @@ shard, and rebuilds only the stale ones - the "cache that gets hit first". First
 run pays a full build; steady state is a fingerprint check. `--refresh` forces a
 full rebuild.
 
+The check is two-tiered. Each class carries a full stamp, which folds in the
+evaluated target graph (and so costs every magusfile a parse), and a fast stamp,
+which folds everything that evaluation is a function of without redoing it: the
+tree, the binary, the configuration, the cached provider answers, and every
+environment variable and file the magusfile top levels read the last time they ran
+(recorded with the shards). A read whose fast stamps match the manifest answers from
+the store without evaluating the workspace at all; one whose do not falls back to
+the full stamps, and only a full mismatch rebuilds. The manifest records the
+declared symbol indexes beside the stamps, each with the freshness verdict the
+evaluation reached and the identity of the index file it judged, so such a read
+reports the same coverage and the same stale indexes an evaluating read would, and
+goes back to the workspace the moment an index file or the sources differ.
+
 Two optional knobs bound and share the store. `knowledge.max_size_mb` soft-caps
 the shard directory: over the cap, least-recently-used shard files are evicted
 (their manifest entries stay, so an evicted shard is restored from the remote

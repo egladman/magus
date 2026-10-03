@@ -27,48 +27,18 @@ fun claude_skills_paths() > [str] {
     return [".claude/skills"];
 }
 
-// The one command that builds a checkout of magus its first binary, verbatim from
-// internal/ward/version.go. The guard exempts exactly this line in a root with no ./magus
-// yet (internal/guard/catalog.go), and claude_launch exempts it too: a launcher that
-// refused it would leave a fresh checkout no way to get the binary it is asking for.
-final BOOTSTRAP = "go run -trimpath ./cmd/magus run go-build --no-cache .";
-
-// Exit 2 is the only code Claude Code treats as a block. Any other is a non-blocking
-// error and the tool call runs unjudged, which is how a session once ran every guard
-// rule open on `magus: command not found` (exit 127).
-final BLOCKS = 2;
-
-// Stop and SubagentStop read exit 2 as "do not stop", so a missing magus there would
-// keep the agent from ever stopping. They report and let it stop.
-final REPORTS = 1;
-
-// claude_launch wraps a `buzz` argv in the shell that picks which magus RUNS the glue.
+// claude_buzz_command is one glue script as a plain magus command line.
 //
-// Claude Code runs a hook command through `sh -c` and exports CLAUDE_PROJECT_DIR, the
-// root the session started in, so the checkout's own build is found from any session
-// directory and the string is the same on every machine. PATH is the fallback, for a
-// workspace that uses an installed magus and builds none. The SessionStart PATH entry
-// cannot stand in for this: CLAUDE_ENV_FILE reaches later Bash tool commands only, never
-// a hook command (code.claude.com/docs/en/hooks, "Persist environment variables").
+// PATH's magus, because this spell ships to workspaces that build no magus of their own.
+// One that does is still judged by its own build: magus re-execs into the ./magus of the
+// tree -C names before it does anything else. Claude Code exports CLAUDE_PROJECT_DIR, the
+// root the session started in, to every hook command, so the string is the same on every
+// machine. -C makes that root the working directory first, so the root-relative script
+// path resolves wherever the session is; the glue reads the session's own directory off
+// the event.
 //
-// With neither, the hook exits `missing`: BLOCKS where the host can block, so a missing
-// interpreter refuses the call instead of waving it through.
-//
-// Shell, because nothing here can be trusted to be a magus until it has been found; it
-// is the price of failing closed, and it costs Windows its Git Bash. if/then rather than
-// a brace group, which Buzz would read as interpolation.
-fun claude_launch(argv: str, missing: int) > str {
-    var exempt = "";
-    if (missing == BLOCKS) {
-        exempt = "grep -Fq '\"command\":\"{BOOTSTRAP}\"' && exit 0; ";
-    }
-    final reason = "magus: no ./magus in this checkout and no magus on PATH, so this hook cannot run; build one: {BOOTSTRAP}";
-    return "m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); "
-        + "if [ -z \"$m\" ]; then {exempt}echo '{reason}' >&2; exit {missing}; fi; "
-        + "exec \"$m\" {argv}";
-}
-
-// claude_buzz_command is the argv claude_launch execs.
+// With no magus on PATH the command exits 127, which Claude Code reports and does not
+// treat as a block: the guard is open until one resolves.
 //
 // `-s` keeps the interpreter quiet: `magus buzz` reports an unused import and other
 // BZZ advisories on stderr, and Claude Code shows a hook's first stderr line as an
@@ -79,7 +49,7 @@ fun claude_launch(argv: str, missing: int) > str {
 // script as its own argv, never in a leading `VAR=value`: the glue reads everything it
 // acts on off the event and its argv.
 fun claude_buzz_command(script: str, flags: [str]) > str {
-    final base = "buzz -s docs/guides/integrations/agents/{script}.buzz";
+    final base = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/{script}.buzz";
     if (flags.len() == 0) { return base; }
     return base + " -- " + flags.join(" ");
 }
@@ -139,16 +109,25 @@ fun claude_agent_command() > str {
     return claude_glue_command("command", flags: ["--observes-skill-loads"]);
 }
 
-// The two lifecycle wrappers go through the same interpreter helper as the guard
-// glue, so this host's whole wiring names one runtime. They judge nothing, which is
-// why they are built from claude_buzz_command directly: their names are their own
-// rather than a surface of the hook template.
+// The lifecycle wrappers judge nothing, which is why they are built from
+// claude_buzz_command directly: their names are their own rather than a surface of the
+// hook template.
 fun claude_rehydrate_command() > str {
     return claude_buzz_command("magus-rehydrate", flags: [<str>]);
 }
 
 fun claude_checkpoint_command() > str {
     return claude_named_command("magus-checkpoint", flags: [<str>]);
+}
+
+// claude_session_command puts the root first on PATH for the agent's own Bash tool
+// commands, and through them everything those commands start, so `magus` typed there is
+// the checkout's build rather than whatever the shell that launched Claude Code had.
+// CLAUDE_ENV_FILE is the file Claude Code sources before each Bash tool command; it
+// never reaches a hook command (code.claude.com/docs/en/hooks, "Persist environment
+// variables").
+fun claude_session_command() > str {
+    return claude_buzz_command("magus-session", flags: ["--env-file", "\"$CLAUDE_ENV_FILE\""]);
 }
 
 fun claude_command_hook(cmd: str) > {str: any} {
@@ -166,24 +145,6 @@ fun claude_matched_entry(matcher: str, cmd: str) > {str: any} {
     };
 }
 
-fun claude_pretool_entry(matcher: str, argv: str) > {str: any} {
-    return claude_matched_entry(matcher, cmd: claude_launch(argv, missing: BLOCKS));
-}
-
-// claude_session_path_command puts the session root first on PATH for the agent's own Bash
-// tool commands, and through them everything those commands start, so `magus` typed there
-// is the checkout's build rather than whatever the shell that launched Claude Code had.
-// The root is expanded now and $PATH left for the Bash tool's shell to expand.
-//
-// The one entry that runs no magus: it fixes the PATH a magus would be found on. It also
-// says, at session start, when no magus resolves at all, since every guarded call is then
-// refused and the agent should learn why before its first one.
-fun claude_session_path_command() > str {
-    return "[ -z \"$CLAUDE_ENV_FILE\" ] || printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\" >> \"$CLAUDE_ENV_FILE\"; "
-        + "[ -x \"$CLAUDE_PROJECT_DIR/magus\" ] || command -v magus >/dev/null || "
-        + "echo 'no ./magus in this checkout and no magus on PATH, so every guarded tool call is refused until one exists; build one: {BOOTSTRAP}'";
-}
-
 // The session starts that get a fresh CLAUDE_ENV_FILE. compact keeps the session's
 // environment and only rehydrates.
 final SESSION_PATH_MATCHER = "startup|resume|clear";
@@ -193,39 +154,38 @@ fun claude_entries() > [any] {
         {
             "path": ["hooks", "PreToolUse"],
             "entries": [
-                claude_pretool_entry("Bash", argv: claude_guard_command()),
-                claude_pretool_entry("Edit|Write|NotebookEdit", argv: claude_path_command()),
-                claude_pretool_entry("^mcp__magus__", argv: claude_guard_command()),
-                claude_pretool_entry("Read", argv: claude_observe_command()),
+                claude_matched_entry("Bash", cmd: claude_guard_command()),
+                claude_matched_entry("Edit|Write|NotebookEdit", cmd: claude_path_command()),
+                claude_matched_entry("^mcp__magus__", cmd: claude_guard_command()),
+                claude_matched_entry("Read", cmd: claude_observe_command()),
                 // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
                 // the read rules judge it like the shell read it replaces.
-                claude_pretool_entry("Read", argv: claude_guard_command()),
+                claude_matched_entry("Read", cmd: claude_guard_command()),
                 // Likewise a content or file search as the rg or find line it stands for,
                 // so the symbol-search and listing rules hold whichever way it was asked.
-                claude_pretool_entry("Grep|Glob", argv: claude_guard_command()),
-                claude_pretool_entry(SKILL_MATCHER, argv: claude_guard_command()),
-                claude_pretool_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, argv: claude_agent_command()),
+                claude_matched_entry("Grep|Glob", cmd: claude_guard_command()),
+                claude_matched_entry(SKILL_MATCHER, cmd: claude_guard_command()),
+                claude_matched_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, cmd: claude_agent_command()),
             ],
         },
-        // After the call nothing is left to block, so these report a missing magus.
         {
             "path": ["hooks", "PostToolUse"],
             "entries": [
-                claude_matched_entry(SPAWN_MATCHER, cmd: claude_launch(claude_guard_command(), missing: REPORTS)),
+                claude_matched_entry(SPAWN_MATCHER, cmd: claude_guard_command()),
             ],
         },
         {
             "path": ["hooks", "SessionStart"],
             "entries": [
-                claude_matched_entry(SESSION_PATH_MATCHER, cmd: claude_session_path_command()),
-                claude_matched_entry("compact", cmd: claude_launch(claude_rehydrate_command(), missing: REPORTS)),
+                claude_matched_entry(SESSION_PATH_MATCHER, cmd: claude_session_command()),
+                claude_matched_entry("compact", cmd: claude_rehydrate_command()),
             ],
         },
         {
             "path": ["hooks", "Stop"],
             "entries": [
                 {
-                    "hooks": [claude_command_hook(claude_launch(claude_checkpoint_command(), missing: REPORTS))],
+                    "hooks": [claude_command_hook(claude_checkpoint_command())],
                 },
             ],
         },
@@ -235,7 +195,7 @@ fun claude_entries() > [any] {
             "path": ["hooks", "SubagentStop"],
             "entries": [
                 {
-                    "hooks": [claude_command_hook(claude_launch(claude_guard_command(), missing: REPORTS))],
+                    "hooks": [claude_command_hook(claude_guard_command())],
                 },
             ],
         },
@@ -315,8 +275,8 @@ test "a Read is both recorded and judged" {
         if ((entry["matcher"] as? str) != "Read") { continue; }
         foreach (hook in entry["hooks"] as [any]) {
             final command = (hook["command"] as? str) ?? "";
-            if (command == claude_launch(claude_observe_command(), missing: BLOCKS)) { observed = true; }
-            if (command == claude_launch(claude_guard_command(), missing: BLOCKS)) { judged = true; }
+            if (command == claude_observe_command()) { observed = true; }
+            if (command == claude_guard_command()) { judged = true; }
         }
     }
     assert\isTrue(observed, "the observer records the path");
@@ -328,23 +288,19 @@ test "guard commands name the Buzz glue, never the sh copies" {
     assert\isTrue(claude_path_command().indexOf("magus-path.buzz") != null, "path surface");
     assert\isTrue(claude_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(claude_guard_command().indexOf(".sh") == null, "no POSIX shell dependency");
-    assert\isTrue(claude_guard_command().indexOf("buzz -s ") != null, "quiet interpreter");
+    assert\isTrue(claude_guard_command().indexOf(" -s docs/") != null, "quiet interpreter");
 }
 
 test "no entry carries an environment assignment" {
-    // The glue reads the raw-event question off the event and its flags off argv, so the
-    // only assignment an entry makes is the launcher's own choice of interpreter.
+    // The glue reads the raw-event question off the event and its flags off argv, so an
+    // entry is the binary and its arguments and nothing else.
     foreach (block in claude_entries()) {
         foreach (entry in block["entries"] as [any]) {
             foreach (hook in entry["hooks"] as [any]) {
                 final cmd = "{hook["command"]}";
                 assert\isTrue(cmd.indexOf("HOST_EVENT_RAW") == null, "the event decides that, not the entry: {cmd}");
                 assert\isTrue(cmd.indexOf("__MAGUS_SHELL_FLAGS") == null, "shell flags ride after --: {cmd}");
-                final launched = cmd.indexOf("exec \"$m\" ");
-                if (launched != null) {
-                    final argv = cmd.sub(launched! + 9);
-                    assert\isTrue(argv.split(" ")[0].indexOf("=") == null, "the exec'd argv starts with a subcommand: {cmd}");
-                }
+                assert\isTrue(cmd.startsWith("magus buzz -C "), "the argv starts with the binary: {cmd}");
             }
         }
     }
@@ -355,7 +311,7 @@ test "the spawn entry also sees every continuation" {
     var matched = "";
     foreach (entry in pre["entries"] as [any]) {
         foreach (hook in entry["hooks"] as [any]) {
-            if (((hook["command"] as? str) ?? "") == claude_launch(claude_agent_command(), missing: BLOCKS)) { matched = (entry["matcher"] as? str) ?? ""; }
+            if (((hook["command"] as? str) ?? "") == claude_agent_command()) { matched = (entry["matcher"] as? str) ?? ""; }
         }
     }
     assert\equal(matched, "Agent|Task|SendMessage", "spawn and continue share one entry, and so one verdict path");
@@ -402,8 +358,7 @@ test "the spawn entry declares observed skill loads only while a matcher reports
 }
 
 test "the lifecycle wrappers name the Buzz ports too" {
-    // The glue is Buzz everywhere; the only shell left is the launcher every entry shares,
-    // so no entry depends on a script file the others do not.
+    // The glue is Buzz everywhere, so no entry depends on a script file the others do not.
     assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.buzz") != null, "SessionStart rehydrate");
     assert\isTrue(claude_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
     foreach (block in claude_entries()) {
@@ -421,62 +376,38 @@ test "the interpreter is the same string on every machine" {
     // merging checkout happened to have into a COMMITTED config, so every other
     // checkout computed the other one and reported the harness uncovered. The host
     // expands CLAUDE_PROJECT_DIR, so the string names no machine's layout.
-    final launched = claude_launch(claude_guard_command(), missing: BLOCKS);
-    assert\isTrue(launched.startsWith("m=\"$CLAUDE_PROJECT_DIR/magus\"; [ -x \"$m\" ] || m=$(command -v magus); "),
-        "the session root's build first, then PATH");
-    assert\isTrue(launched.endsWith("exec \"$m\" " + claude_guard_command()), "and the glue runs under whichever was found");
-    assert\isTrue(launched.indexOf("/Users/") == null and launched.indexOf("/home/") == null, "no absolute path");
+    final head = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
     // Every surface, because one command built by hand rather than through the helper
     // is one entry describe keeps replacing against a config that already holds it.
-    assert\isTrue(claude_guard_command().startsWith("buzz -s "), "command mcp and skill surfaces");
-    assert\isTrue(claude_agent_command().startsWith("buzz -s "), "spawn surface");
-    assert\isTrue(claude_path_command().startsWith("buzz -s "), "path surface");
-    assert\isTrue(claude_observe_command().startsWith("buzz -s "), "read surface");
-    assert\isTrue(claude_rehydrate_command().startsWith("buzz -s "), "SessionStart rehydrate");
-    assert\isTrue(claude_checkpoint_command().startsWith("buzz -s "), "Stop checkpoint");
+    assert\isTrue(claude_guard_command().startsWith(head), "command mcp and skill surfaces");
+    assert\isTrue(claude_agent_command().startsWith(head), "spawn surface");
+    assert\isTrue(claude_path_command().startsWith(head), "path surface");
+    assert\isTrue(claude_observe_command().startsWith(head), "read surface");
+    assert\isTrue(claude_rehydrate_command().startsWith(head), "SessionStart rehydrate");
+    assert\isTrue(claude_checkpoint_command().startsWith(head), "Stop checkpoint");
+    assert\isTrue(claude_session_command().startsWith(head), "SessionStart PATH");
+    assert\isTrue(claude_guard_command().indexOf("/Users/") == null and claude_guard_command().indexOf("/home/") == null,
+        "no absolute path");
 }
 
-// A missing interpreter exited 127 here, which Claude Code reads as a non-blocking error:
-// a whole session ran with every guard rule open and nothing said so.
-test "a PreToolUse entry blocks when no magus resolves, except the bootstrap" {
-    foreach (entry in claude_entries()[0]["entries"] as [any]) {
-        final cmd = "{(entry["hooks"] as [any])[0]["command"]}";
-        assert\isTrue(cmd.indexOf(">&2; exit 2; fi; ") != null, "refuses with the one blocking code: {cmd}");
-        assert\isTrue(cmd.indexOf("build one: {BOOTSTRAP}") != null, "and names the command that fixes it: {cmd}");
-        // The closing quote is what keeps `<bootstrap> && anything` from riding through.
-        assert\isTrue(cmd.indexOf("grep -Fq '\"command\":\"{BOOTSTRAP}\"' && exit 0; ") != null,
-            "the bootstrap alone is let through, or a fresh checkout could never build: {cmd}");
-    }
-}
-
-test "no entry outside PreToolUse blocks on a missing magus" {
-    final entries = claude_entries();
-    var i = 1;
-    while (i < entries.len()) {
-        foreach (entry in entries[i]["entries"] as [any]) {
-            final cmd = "{(entry["hooks"] as [any])[0]["command"]}";
-            assert\isTrue(cmd.indexOf("exit 2") == null, "exit 2 on Stop would keep the agent from stopping: {cmd}");
-            assert\isTrue(cmd.indexOf("grep") == null, "only a blocking entry needs the bootstrap exemption: {cmd}");
-        }
-        i = i + 1;
-    }
-}
-
-test "the session PATH entry is the only one that runs no magus" {
-    final pathless = mut [<str>];
+// Every entry runs a template magus ships, which is the mark a merge retires it by, so
+// none needs the `# magus:harness` marker an adapted entry carries.
+test "every entry runs a shipped template and nothing else" {
     foreach (block in claude_entries()) {
         foreach (entry in block["entries"] as [any]) {
             final cmd = "{(entry["hooks"] as [any])[0]["command"]}";
-            if (cmd.indexOf("exec \"$m\" buzz -s ") == null) { pathless.append(cmd); }
+            assert\isTrue(cmd.indexOf(" -s docs/guides/integrations/agents/magus-") != null, "a shipped template: {cmd}");
+            assert\isTrue(cmd.indexOf("#") == null, "no marker: {cmd}");
+            foreach (meta in [";", "&&", "||", "|", ">", "$("]) {
+                assert\isTrue(cmd.indexOf(meta) == null, "one plain command, no shell around it: {cmd}");
+            }
         }
     }
-    assert\equal(pathless.len(), 1, "every other entry launches the glue");
-    assert\equal(pathless[0], claude_session_path_command(), "and that one fixes PATH");
-    final cmd = claude_session_path_command();
-    assert\isTrue(cmd.indexOf(">> \"$CLAUDE_ENV_FILE\"") != null, "appends, keeping what other hooks wrote");
-    assert\isTrue(cmd.indexOf("printf 'export PATH=\"%s:$PATH\"\\n' \"$CLAUDE_PROJECT_DIR\"") != null,
-        "the root goes first, and $PATH stays for the Bash tool's shell to expand");
-    assert\isTrue(cmd.indexOf(BOOTSTRAP) != null, "a session with no magus learns the fix at start");
+}
+
+test "the session entry hands the glue the file the Bash tool sources" {
+    final cmd = claude_session_command();
+    assert\isTrue(cmd.endsWith("magus-session.buzz -- --env-file \"$CLAUDE_ENV_FILE\""), cmd);
 }
 
 test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and SubagentStop" {
@@ -520,7 +451,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and Subage
     assert\equal(subagent_path[1], "SubagentStop", "a subagent's usage for a later continue");
     final subagent_entries = subagent["entries"] as [any];
     final subagent_hooks = subagent_entries[0]["hooks"] as [any];
-    assert\equal("{subagent_hooks[0]["command"]}", claude_launch(claude_guard_command(), missing: REPORTS),
+    assert\equal("{subagent_hooks[0]["command"]}", claude_guard_command(),
         "the guard glue reads the stop whole");
 }
 

@@ -6,19 +6,11 @@
 // project-relative import search paths.
 namespace render;
 
-import "markdown";
+import "magus";
 import "proc";
 import "fs";
-import "io";
-import "os";
-import "proc";
 import "std";
-import "serialize";
-import "time";
-import "template";
-import "crypto";
 import "assert";
-import "encoding/yaml";
 // Text/path/URL helpers. Flat import (`as _`) merges a module's exports into this scope,
 // so callers name them unqualified (escapeAttr, relativePath, ...); same for the imports
 // below.
@@ -113,7 +105,8 @@ fun walkBlog(site: Site) > void !> any {
 }
 
 // Recursively walk docs/ (the render reads its co-located markdown; the SSG's own
-// root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).
+// root children - gen/, src/, tour/ - are skipped at the root, node_modules/ and
+// MAGUS.md at any depth).
 fun walk(rel: str, site: Site) > void !> any {
     var dir = fs\join(site.root, site.docs);
     if (rel != "") { dir = site.root + "/" + site.docs + "/" + rel; }
@@ -127,7 +120,7 @@ fun walk(rel: str, site: Site) > void !> any {
             if (rel == "" and isGeneratorDir(name, site.config.generatorDirs)) { continue; }
             walk(childRel, site);
         } else {
-            if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, site.config.generatorFiles) == false)) {
+            if (name.endsWith(".md") and isGeneratorFile(name, site.config.generatorFiles) == false) {
                 // glossary.md renders AFTER the walk (in site_render), once glossaryRefs is
                 // complete, so its per-term "referenced on" backlinks are the full set.
                 if (childRel == "glossary.md") { continue; }
@@ -142,7 +135,7 @@ fun walk(rel: str, site: Site) > void !> any {
 
 // site_render rebuilds gen/ from ../docs and the root README. Pure function of git
 // history (footers) and the source tree - reproducible and gate-stable.
-export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph) > Site !> any {
+export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\Graph) > Site !> any {
     // Generator state for one render pass, threaded explicitly into every renderer as a
     // `site` arg - no module-global singleton, so parallel renders never share state.
     // (outDir, not out: `out` is a reserved word in buzz.)
@@ -391,9 +384,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     return site;
 }
 
-// site_publish is the cacheable publication unit used by docs:site-generate. Keep every
-// output that belongs to the completed site in this one phase: the page tree, pnpm-backed
-// vendor bundles, the integrity manifest, and (only for rw) the URL ledger.
 // site_conventions re-exports the gates check for the magusfile. engine/gates is
 // flat-imported here, and a flat import does not RE-export, so the magusfile cannot
 // reach conventionsCheck through this module without a wrapper.
@@ -401,21 +391,15 @@ export fun site_conventions(root: str, docs: str) > void !> any {
     conventionsCheck(root, docs);
 }
 
-export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: TargetGraph, graph: Graph, updateUrls: bool) > void !> any {
+// site_publish is the cacheable publication unit used by docs:site-generate. Keep every
+// output that belongs to the completed site in this one phase: the page tree, the
+// integrity manifest, and (only for rw) the URL ledger. The npm-backed bundles are not
+// built here: site-generate needs build-hljs and build-playground-editor, so they are in
+// gen/ before the render starts.
+export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: magus\TargetGraph, graph: magus\Graph, updateUrls: bool) > void !> any {
     final site = site_render(root, docs, blog, outDir, targets, graph);
-    generateJsBundles();
     writeSiteManifest(site);
     if (updateUrls) { updateUrlLock(site); }
-}
-
-// generateJsBundles builds the committed browser bundles that import npm packages. pnpm
-// is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time
-// rather than behind an isDir check: an interrupted install leaves a node_modules that
-// exists but is incomplete, and the guard read that as ready and fed esbuild a half
-// tree. See the install() note in magusfile.buzz.
-fun generateJsBundles() > void !> any {
-    proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
-    proc\exec("pnpm", ["run", "build"], ".", {});
 }
 
 // site_figures writes every figure's SVGs and receipt for the diagrams-generate target and

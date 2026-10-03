@@ -11,17 +11,19 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// toolFloor is the oldest release whose flags this package passes. A minimum
-// only: a ceiling would reject a newer binary over a bound nobody verified.
+// toolFloor is the oldest release whose flags and output this package relies
+// on. A minimum only: a ceiling would reject a newer binary over a bound nobody
+// verified.
 //
 // The comparison is the spell one. spells.ExtractVersion pulls the version out
 // of the probe's prose, and VersionBounds.Check decides. Output with no
 // version in it is not a failure, and a missing binary is not "too old": the
 // command that needed it reports that itself.
 //
-// flag is the one that sets the floor, named with the command it belongs to.
-// A global flag has to precede the subcommand; vcsExec places --color=never
-// there, and that flag is older than every floor below. A subcommand flag is
+// flag is what sets the floor, named with the command it belongs to: the flag
+// the release added, or the flag whose output the release changed. A global
+// flag has to precede the subcommand; vcsExec places --color=never there, and
+// that flag is older than every floor below. A subcommand flag is
 // an argument of that subcommand. A binary that reports a new enough version
 // and still lacks the flag fails at the call, which is what git merge-tree's
 // exit 129 is for.
@@ -33,10 +35,13 @@ type toolFloor struct {
 
 // toolFloors is keyed by the binary name gitExec and vcsExec pass to exec.
 //
-// git 2.40: merge-tree --merge-base is a flag of merge-tree (Git 2.40).
-// --write-tree and --no-messages are flags of that same subcommand.
-// --end-of-options is a rev-parse option from 2.29, and cat-file --batch is
-// older than both.
+// git 2.54: a fix, not a flag. Regions pin diff --diff-algorithm=histogram,
+// and before 2.54 the diff's final clean-up pass could shift histogram hunks
+// (yc/histogram-hunk-shift-fix), so two releases placed one change's lines in
+// different declarations and a split plan depended on the box. Every flag
+// magus passes is older: merge-tree --merge-base is 2.40, --write-tree and
+// --no-messages belong to that same subcommand, --end-of-options is a
+// rev-parse option from 2.29, and cat-file --batch is older than all of them.
 //
 // jj 0.22: workspace add --sparse-patterns is a flag of workspace add, added in
 // 0.22. That release also renamed the log template keyword to bookmarks, which
@@ -53,7 +58,7 @@ type toolFloor struct {
 // read it as a prerelease, and a leading zero (a morning build) makes the
 // token invalid, which would skip the floor.
 var toolFloors = map[string]toolFloor{
-	"git": {probe: []string{"--version"}, min: "2.40", flag: "merge-tree --merge-base"},
+	"git": {probe: []string{"--version"}, min: "2.54", flag: "diff --diff-algorithm=histogram, whose hunks older releases shift"},
 	"jj":  {probe: []string{"version"}, min: "0.22", flag: "workspace add --sparse-patterns"},
 	"hg":  {probe: []string{"version"}, min: "4.5", flag: "merge --abort"},
 	"sl":  {probe: []string{"version"}, min: "0.2.20230523", flag: "status --root-relative"},

@@ -1,14 +1,8 @@
-// site/diagrams/server-jobs.buzz: the background work that keeps the warm workspace honest.
-// Everything here converges on one node, which is the point: the file watchers, the SCIP
-// indexer and the graph-build job exist only to keep the workspace registry current, and
-// nothing else in the server writes to it.
-//
-// The registry is the server's in-memory graph, and the indexer and the build job are work
-// the server schedules, so all three are actors; the watchers are their own package.
 namespace serverJobs;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun serverJobsFigure() > figure\Figure !> any {
     final watch = magus\dir("internal/file/watch");
@@ -34,5 +28,11 @@ export fun serverJobsFigure() > figure\Figure !> any {
         .flowAcross(job, dst: ws, label: "rebuild")
         .legend(figure\Look.external, label: "outside the server")
         .legend(figure\Look.focal, label: "the one warm copy")
-        .scope(figure\setOf([watch]));
+        .scope(goPackages("internal/file/**"))
+        .except([magus\dir("internal/file")],
+            why: "filesystem primitives every package shares; no background work of their own")
+        .except([magus\dir("internal/file/diff")],
+            why: "attributes one run's concurrent writes by mtime and size; inside a run, not between runs")
+        .except([magus\dir("internal/file/record")],
+            why: "one-file records for lock owners; nothing here writes the registry through them");
 }

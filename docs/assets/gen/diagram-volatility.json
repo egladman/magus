@@ -1,11 +1,10 @@
 {
   "claims": {
     "calls": 0,
-    "flow": 10,
+    "flow": 11,
     "imports": 0
   },
   "figure": "volatility",
   "findings": [],
-  "stamp": "sha256:572a9559dbcce9371223ec8409f55371d801ea6a84a5e4ab06f9dd314a509897",
-  "symbolIndex": "cdaa51870080267565de3c5870e2f412453046a09340b9dca274ca6e5f95e4af"
+  "stamp": "sha256:24c46dc345c2ec8f6c72dd7438e4f8838dd9af9303634a95be5011c004685bbd"
 }

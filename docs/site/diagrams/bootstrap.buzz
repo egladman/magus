@@ -1,34 +1,30 @@
-// site/diagrams/bootstrap.buzz: how a checkout gets its first ./magus. The guard allows go run
-// once, in a checkout root with no magus binary, and even then it runs the real go-build
-// target (internal/guard/catalog.go). The accent is that command and the escape back to it.
-//
-// The escape (hack/policy/stale.buzz: move the stale binary aside, then the same go run) is the
-// one edge against the flow. Commands, Buzz and embedded files are not packages, so they are
-// actors.
 namespace bootstrap;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun bootstrapFigure() > figure\Figure !> any {
     final cli = magus\dir("cmd/magus");
     final rule = magus\dir("internal/guard");
     final stamp = magus\dir("internal/interp/bindings");
     final person = figure\external("Person or hook", sub: "shell or PreToolUse");
+    // internal/guard/catalog.go advises this one command, and only with no ./magus.
     final exempt = figure\external("go run ./cmd/magus", sub: "run go-build, alone", look: figure\Look.focal);
     final target = figure\external("go-build", sub: "generate, link, stamp", tag: "target", look: figure\Look.plain);
     final spells = figure\external("Spell bytecode", sub: "spells-generate", look: figure\Look.store);
+    // hack/policy/stale.buzz holds both the stamp comparison and the escape.
     final stale = figure\external("Stale policy", sub: "stamp vs sources", look: figure\Look.input);
     final escape = figure\external("Relink escape", sub: "mv magus magus.old", look: figure\Look.plain);
     return figure\of("bootstrap",
             title: "One go run, then magus builds magus",
             eyebrow: "bootstrap",
             desc: "In a checkout with no ./magus, the guard's raw-tool rule advises exactly one "
-                + "command through, alone on its line: go run -trimpath ./cmd/magus run go-build "
-                + "--no-cache ., which runs the real go-build target. It regenerates the spell "
-                + "bytecode first and links a stamp of the sources the binary was built from. "
-                + "Every other raw go command, a bare go build included, is refused and served that "
-                + "command; once ./magus exists the rule names ./magus run go-build . instead. The "
+                + "command through, alone on its line: GOEXPERIMENT=jsonv2 go run -trimpath "
+                + "./cmd/magus run go-build --no-cache ., which runs the real go-build target. It "
+                + "regenerates the spell bytecode first and links a stamp of the sources the binary "
+                + "was built from. Every other raw go command, a bare go build included, is refused "
+                + "and served that command; once ./magus exists the rule names ./magus run go-build . instead. The "
                 + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
                 + "the checkout, and when a binary can no longer load the tree the escape moves it "
                 + "aside, which is the one way back to the bootstrap.",
@@ -43,7 +39,7 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .actor(stale)
         .actor(escape)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([cli]), dst: figure\setOf([stamp]),
+        .hideEdges([cli], dst: [stamp],
             why: "the CLI imports the bindings to run any magusfile; the stamp reaches them by go-build's -X flag, drawn from go-build")
         .markEdge(cli, dst: rule, label: "judges")
         .flowIn(person, dst: cli, label: "runs magus")
@@ -55,13 +51,32 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .flowIn(stale, dst: stamp, label: "reads")
         .flowAcross(stale, dst: escape, label: "decls moved")
         .flowAcross(escape, dst: exempt, label: "mv magus.old", stroke: figure\Stroke.focal)
-        .zone("no ./magus yet", dirs: figure\setOf([rule]), actors: [exempt])
-        .zone("magus builds magus", dirs: figure\setOf([stamp]), actors: [target, spells])
+        .zone("no ./magus yet", dirs: [rule], actors: [exempt])
+        .zone("magus builds magus", dirs: [stamp], actors: [target, spells])
         .zone("kept fresh", actors: [stale, escape])
-        .rank(dirs: figure\setOf([cli, rule]), actors: [person, exempt])
+        .rank(dirs: [cli, rule], actors: [person, exempt])
         .legend(figure\Look.focal, label: "the one go run")
         .legend(figure\Look.external, label: "outside magus")
         .legend(figure\Look.store, label: "embedded in the binary")
         .legend(figure\Look.input, label: "this repo's rules")
-        .scope(figure\setOf([cli, rule, stamp]));
+        .scope(goPackages("cmd/**"))
+        .scope(goPackages("internal/guard/**"))
+        .scope(goPackages("internal/interp/**"))
+        .except([magus\dir("cmd/magus/gen")],
+            why: "the CLI's generated config flags, linked into the same binary")
+        .except(figure\without(cmdTools(), drop: [magus\dir("cmd/magus-utils")]),
+            why: "docs generators and the browser playground, each built by its own target once ./magus exists; go-build links ./cmd/magus alone")
+        .except([magus\dir("cmd/magus-utils")],
+            why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
+        .except([
+            magus\dir("internal/interp"),
+            magus\dir("internal/interp/bindings/ffi"),
+            magus\dir("internal/interp/bindings/gen"),
+            magus\dir("internal/interp/bindings/gen/decode"),
+            magus\dir("internal/interp/engine"),
+            magus\dir("internal/interp/engine/buzz"),
+            magus\dir("internal/interp/mcpclient"),
+            magus\dir("internal/interp/transform"),
+        ],
+            why: "the rest of the magusfile interpreter; go-build's -X flag names bindings.buildStamp alone");
 }

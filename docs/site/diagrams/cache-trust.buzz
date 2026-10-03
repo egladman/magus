@@ -1,13 +1,8 @@
-// site/diagrams/cache-trust.buzz: who may write which cache tier in CI. The argument is
-// in the connectors that are missing: no pull request run writes the remote tier, and
-// nothing carries a pull request's local tier to the default branch.
-//
-// The runs and the local tier live in the CI workflow, not in a package, so they are
-// actors; the remote tier and its signature check are internal/cache.
 namespace cacheTrust;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun cacheTrustFigure() > figure\Figure !> any {
     final remote = magus\dir("internal/cache");
@@ -28,6 +23,8 @@ export fun cacheTrustFigure() > figure\Figure !> any {
         .box(remote, label: "Remote tier", sub: "verified on every read", tag: "ed25519", focal: true)
         .actor(main)
         .actor(reject)
+        // The argument is the connectors left out: no pull request run writes the remote tier,
+        // and nothing carries a pull request's local tier to the default branch.
         .flowAcross(pr, dst: local, label: "read + write")
         .flowOut(remote, dst: pr, label: "read only")
         .flowIn(main, dst: remote, label: "sign + put", stroke: figure\Stroke.focal)
@@ -37,5 +34,9 @@ export fun cacheTrustFigure() > figure\Figure !> any {
         .legend(figure\Look.focal, label: "the one shared store")
         .legend(figure\Look.store, label: "one pull request only")
         .legend(figure\Look.optional, label: "never replayed")
-        .scope(figure\setOf([remote]));
+        .scope(goPackages("internal/cache/**"))
+        .except([magus\dir("internal/cache/reflink")],
+            why: "copy-on-write file clones for a local restore; no tier, key or signature")
+        .except([magus\dir("internal/cache/remotetest")],
+            why: "a test server for the remote protocols, linked only by tests");
 }

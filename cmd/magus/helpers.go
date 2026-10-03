@@ -140,6 +140,16 @@ func (o openedRoot) check(singleton, override string) error {
 	return nil
 }
 
+// loadedMagus returns the singleton workspace handle when startup, or an earlier call,
+// already opened it successfully, and false without opening anything: the question a lazy
+// graph read asks before deciding whether it must defer the open at all.
+func loadedMagus() (*magus.Magus, bool) {
+	if magusLoaded.Load() && magusErr == nil && magusValue != nil {
+		return magusValue, true
+	}
+	return nil, false
+}
+
 // loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
 // to the first, memoizing call: the server serve path passes magus.WithMetricsCollection()
 // so the bridge Magus feeds the /dashboard, while one-shot CLI callers pass none and stay a

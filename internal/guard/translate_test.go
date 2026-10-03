@@ -222,10 +222,10 @@ func TestSearchTranslationHeadings(t *testing.T) {
 // target the graph holds, so one call or comment among the hits keeps it silent.
 func TestSearchTranslationTargets(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"magusfile.buzz": "// lint everything\nexport fun lint(ctx: magus\\Context) > void {}\n" +
+		"magusfile.buzz": "import \"magus\";\n// lint everything\nexport fun lint(ctx: magus\\Context) > void {}\n" +
 			"export fun lint_build(ctx: magus\\Context) > void {}\n" +
 			"export fun build(ctx: magus\\Context) > void {\n    go[\"go-build\"](ctx);\n}\n",
-		"docs/magusfile.buzz": "export fun render(ctx: magus\\Context) > void {}\n",
+		"docs/magusfile.buzz": "import \"magus\";\nexport fun render(ctx: magus\\Context) > void {}\n",
 	})
 	deps := Dependencies{GraphIDs: graphOf(map[string][]string{"target": {
 		"target:.:lint", "target:.:lint-build", "target:.:build", "target:docs:render",

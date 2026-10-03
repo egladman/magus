@@ -502,7 +502,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
-		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
+		assert.Equal(t, "pass", judgeIn(t, checkout(t, false), "GOEXPERIMENT=jsonv2 go -C "+bare+" run -trimpath ./cmd/magus run go-build --no-cache .").Decision,
 			"the bootstrap into a checkout with no binary passes")
 		assert.Equal(t, "deny", judgeIn(t, checkout(t, false), "go -C "+bare+" build -o magus ./cmd/magus").Decision,
 			"a bare link is not the bootstrap")

@@ -2,16 +2,18 @@ namespace buzzEngine;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
+import "site/diagrams/buzz-stages" as _;
 
 export fun buzzEngineFigure() > figure\Figure !> any {
     final session = magus\dir("libs/gopherbuzz");
-    final pipeline = figure\setOf([
+    final pipeline = [
         session,
         magus\dir("libs/gopherbuzz/token"),
         magus\dir("libs/gopherbuzz/ast"),
         magus\dir("libs/gopherbuzz/types"),
         magus\dir("libs/gopherbuzz/vm"),
-    ]);
+    ];
     final engine = magus\dir("internal/interp");
     final bindings = magus\dir("internal/interp/bindings");
     final trampolines = magus\dir("internal/interp/bindings/gen");
@@ -37,9 +39,9 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .actor(playground)
         .box(dry, label: "Dry evaluator", sub: "records host calls", focal: true)
         .edgesFromGraph()
-        .hideEdges(figure\setOf([bindings, trampolines, hostModules]), dst: pipeline,
+        .hideEdges([bindings, trampolines, hostModules], dst: pipeline,
             why: "modules and bindings pass vm and gopherbuzz values; a program reaches the pipeline through the engine or the dry evaluator")
-        .hideEdges(figure\setOf([engine, bindings, dry]), dst: figure\setOf([hostModules]),
+        .hideEdges([engine, bindings, dry], dst: [hostModules],
             why: "they read module descriptors and std.WithCwd; every module is wired through its trampoline")
         .markEdge(engine, dst: session, label: "magusfile")
         .markEdge(bindings, dst: engine, label: "init()")
@@ -48,7 +50,31 @@ export fun buzzEngineFigure() > figure\Figure !> any {
         .markEdge(dry, dst: session, label: "editor source")
         .flowIn(playground, dst: dry, label: "runs")
         .legend(figure\Look.focal, label: "the browser's subset")
-        .scope(figure\setOf([engine, bindings, trampolines, hostModules, buzzStdlib, dry]))
-        .except(figure\setOf([buzzStdlib]),
-            why: "both hosts install it the same way, so it tells the two apart in nothing");
+        .scope(gopherbuzzPackages())
+        .scope(goPackages("internal/interp/**"))
+        .scope(goPackages("internal/dry/**"))
+        .scope(goPackages("std/**"))
+        .except([buzzStdlib, magus\dir("libs/gopherbuzz/internal/codec")],
+            why: "the Buzz stdlib and its JSON codec: both hosts install them the same way, so they tell the two apart in nothing")
+        .except(gopherbuzzAround(), why: AROUND_WHY)
+        .except([magus\dir("internal/interp/bindings/ffi"), magus\dir("internal/interp/bindings/gen/decode")],
+            why: "the register call and the generated argument decoders every trampoline uses")
+        .except([magus\dir("internal/interp/engine"), magus\dir("internal/interp/engine/buzz")],
+            why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
+        .except([magus\dir("internal/interp/mcpclient"), magus\dir("internal/interp/transform")],
+            why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
+        .except([magus\dir("internal/dry/gen/mocks")], why: "generated test mocks")
+        .except([
+            magus\dir("std/encoding"),
+            magus\dir("std/encoding/base64"),
+            magus\dir("std/encoding/csv"),
+            magus\dir("std/encoding/hex"),
+            magus\dir("std/encoding/ini"),
+            magus\dir("std/encoding/json"),
+            magus\dir("std/encoding/toml"),
+            magus\dir("std/encoding/url"),
+            magus\dir("std/encoding/xml"),
+            magus\dir("std/encoding/yaml"),
+        ],
+            why: "the encoding host modules, wired through the trampolines like every module in the Host modules box");
 }

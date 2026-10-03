@@ -2164,7 +2164,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		// Split from the !outDirty case below on purpose: they were one branch, so a
 		// failed probe returned the same "clean" verdict as a genuinely clean tree. A
 		// drift diagnosis that cannot read the tree has no verdict to give.
-		return types.DriftResult{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
+		return types.DriftResult{}, vcsFailed(err, "read %s status", v.Name())
 	}
 	if len(dirtyFiles) == 0 {
 		return clean, nil

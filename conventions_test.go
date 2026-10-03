@@ -170,7 +170,7 @@ type hookSettings struct {
 // The config is TRACKED, so its absence is a failure rather than a skip. It used to be
 // per-developer, on the theory that committing one machine's settings.json would ship that
 // machine's wiring everywhere: true of a config naming an absolute path, false of this
-// one, which names only a repo-relative script that resolves magus from PATH itself.
+// one, which names only the session root's build and a repo-relative script.
 //
 // The skip is what made the change worth making: it fired in every fresh clone and in CI,
 // so the one test that checks this repo's own guard wiring had effectively never run. An
@@ -183,12 +183,6 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
 	require.NotEmpty(t, cfg.Hooks["PreToolUse"], "%s declares no PreToolUse hooks", dogfoodedHookConfig)
 
-	// The one hook that runs with no magus, the session PATH fix, cannot invoke a template,
-	// because only magus resolves an embedded one. It is exempt here and held instead to the
-	// spell by TestRepoSessionPathHookIsWhatTheSpellPrints in cmd/magus, which links the
-	// harness spell loader this package cannot.
-	inlined := 0
-
 	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook
 	// inlining its own copy of a template drifts from the file a reader downloads
 	// exactly as a guard hook would, and used to do so unwatched.
@@ -196,9 +190,10 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 		for _, entry := range entries {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
-				if event == "SessionStart" && !strings.Contains(h.Command, hookTemplateDir) && !strings.Contains(h.Command, "buzz -s ") {
-					inlined++
-					continue
+				// One magus command per hook: a shell around it is logic no template
+				// carries and no reader downloads.
+				for _, control := range []string{";", "&&", "||", "|", ">", "$(", "#"} {
+					assert.NotContains(t, h.Command, control, "the %s %q hook must be one plain magus command", event, entry.Matcher)
 				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
@@ -215,7 +210,6 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 			}
 		}
 	}
-	assert.LessOrEqual(t, inlined, 1, "only the session PATH hook may inline its command")
 }
 
 // crosscheckLib holds the docs checks that compare a page with the files it documents:

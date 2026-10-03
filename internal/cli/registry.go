@@ -2655,7 +2655,10 @@ pass.
 It cannot resolve magus/spell/*, which the workspace loader binds, so a
 magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; --check is for the ones
-nothing loads.`,
+nothing loads.
+
+-C changes the working directory first, in every mode, so one command line
+runs the same from any directory: magus buzz -C "$ROOT" -s hooks/guard.buzz.`,
 	Flags: []Flag{
 		// Backticks are load-bearing: flag.UnquoteUsage reads the quoted word as the
 		// value's name, so this renders `-e code` rather than `-e string`. The
@@ -2670,9 +2673,9 @@ nothing loads.`,
 		{Name: "record", Kind: FlagBool, Doc: "Keep what the script printed in the output store and print its ref, so a plan or a review can cite the run (`magus query output <ref>` reopens it)"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
-		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
+		{Name: "C", Kind: FlagString, Doc: "Change to `dir` before anything else, as go -C does, so script paths and imports resolve from it; lsp takes it only as the first flag"},
 	},
-	Usage: "magus buzz [file...|-|lsp] [flags]",
+	Usage: "magus buzz [-C dir] [file...|-|lsp] [flags]",
 	Children: []Command{
 		{Name: "lsp", Short: "Language server over stdio (LSP)"},
 	},
@@ -2686,6 +2689,7 @@ nothing loads.`,
 		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
 		{"See which imports a script spends its time on", "magus buzz --profile scripts/report.buzz"},
 		{"Run a probe and keep its output to cite", "magus buzz --record probes/does-the-key-move.buzz"},
+		{"Run a root-relative script from any directory", "magus buzz -C ~/src/app scripts/report.buzz"},
 	},
 }
 

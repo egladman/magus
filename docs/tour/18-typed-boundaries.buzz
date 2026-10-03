@@ -17,7 +17,6 @@
 // tell you which variables to set), then `run login:prod ghcr.io`.
 
 import "magus";
-import "os";
 
 import "proc";
 // The shape, declared once. Note what user_ref holds: a REFERENCE to a credential -

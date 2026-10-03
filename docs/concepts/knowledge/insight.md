@@ -17,6 +17,8 @@ has already loaded, so they are reached where that workspace already is, two way
 both computed in the process that already has it open:
 
 ```buzz
+import "magus";
+
 // From a magusfile target: the typed report, or the rendered document.
 final r = magus\insight();               // > InsightReport
 magus\log.info(magus\insightMarkdown()); // the INSIGHT.md page

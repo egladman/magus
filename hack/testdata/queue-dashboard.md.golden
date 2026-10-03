@@ -1,0 +1,71 @@
+## 🚦 Merge queue
+
+> [!CAUTION]
+> 🛑 **1** kicked back · 🔧 **1** to merge by hand · 📥 **2** could join · 🚀 **1** validating · ⏳ **4** queued · 📝 **2** draft or fork · `main` [🟢 green](https://github.com/o/r/actions/runs/70)
+>
+> A person is needed: the queue kicked back the rows marked 🛑 and 🔧.
+
+<sub>Updated 2026-09-26 20:00 UTC by [this run](https://github.com/o/r/actions/runs/77) · `main` at `cba6465e8617` · [🕸️ the queue as a graph](https://eli.gladman.cc/magus/console/graph/#figure=eyJ2IjoyLCJraW5kIjoiZGVwcyIsInRpdGxlIjoiTWVyZ2UgcXVldWUgaW50byBtYWluIiwibm9kZXMiOlt7ImlkIjoiYmFzZSIsImxhYmVsIjoibWFpbiIsInNlZWQiOmZhbHNlfSx7ImlkIjoicHIyIiwibGFiZWwiOiIjMiBmaXgocXVldWUpOiBuYW1lIHRoZSBjaGFuZ2UgYSB3YWl0IGlzLi4uIiwic2VlZCI6ZmFsc2V9LHsiaWQiOiJwcjMiLCJsYWJlbCI6IiMzIGZlYXQoY2xpKTogYWRkIC0tc2luY2UgdG8gbHMiLCJzZWVkIjpmYWxzZX0seyJpZCI6InByNCIsImxhYmVsIjoiIzQgcmVmYWN0b3IoZ3JhcGgpOiBzcGxpdCB0aGUgd2Fsa2VyIiwic2VlZCI6ZmFsc2V9LHsiaWQiOiJwcjUiLCJsYWJlbCI6IiM1IGZlYXQoZ3JhcGgpOiB3YWxrIGluIHBhcmFsbGVsIiwic2VlZCI6ZmFsc2V9LHsiaWQiOiJwcjEiLCJsYWJlbCI6IiMxIHBlcmYoY2FjaGUpOiBza2lwIHRoZSBzZWNvbmQgc3RhdCIsInNlZWQiOmZhbHNlfSx7ImlkIjoicHI2IiwibGFiZWwiOiIjNiBraWNrZWQgS0lDS19SRUQiLCJzZWVkIjpmYWxzZX0seyJpZCI6InByNyIsImxhYmVsIjoiIzcga2lja2VkIEtJQ0tfUkVHRU5FUkFUSU9OIiwic2VlZCI6ZmFsc2V9XSwiZWRnZXMiOltbImJhc2UiLCJwcjIiXSxbImJhc2UiLCJwcjMiXSxbImJhc2UiLCJwcjQiXSxbInByNCIsInByNSJdLFsiYmFzZSIsInByMSJdXX0) · 📦 merged in 7 days: **2** by the queue, **1** past it</sub>
+
+- [ ] <!-- magus-queue: start --> 🔁 **Run the queue now**: start a validation run on `main`, unless one already waits to read the queue
+- [ ] <!-- magus-queue: render --> 🖌️ **Re-render this page**
+
+| # | Pull request | Progress | CI | Review | Next |
+| :-: | --- | --- | :-: | :-: | --- |
+| 🥇 | #1 perf(cache): skip the second stat<br><sub>eli · `fast-path`</sub> | 🟩🟩🟩🟩🟨 validating · 8m | 🟢 | ✅ | merging: [its run](https://github.com/o/r/actions/runs/9/job/8) |
+| 🥈 | #2 fix(queue): name the change a wait is behind<br><sub>ana · `waits`</sub> | 🟩🟩🟩🟩⬜ queued 1st · 1h | 🟢 | ✅ | wait: WAIT_BEHIND a change validated beneath it did not merge |
+| 🥉 | #3 feat(cli): add --since to ls<br><sub>eli · `red-queued`</sub> | 🟥🟩🟩⬜⬜ queued 2nd · 2h | 🔴 1 | ✅ | ☐ rerun |
+| 4 | #4 refactor(graph): split the walker<br><sub>bo · `s1`</sub> | 🟩🟩🟩⬜⬜ queued 3rd | 🟢 | ✅ | wait: queued |
+| 5 | #5 feat(graph): walk in parallel<br><sub>bo · `s2`</sub> | 🟩🟩🟩⬜⬜ queued 4th | 🟢 | ✅ | wait: stacked on #4, which has not merged |
+| 6 | #8 docs: say what the dashboard's boxes do<br><sub>ana · `ready`</sub> | 🟩🟩⬜⬜⬜ could join | 🟢 | ✅ | ☐ queue |
+| 7 | #9 fix(spell): keep the go op's env<br><sub>cy · `conflicts`</sub> | 🟩🟩⬜⬜⬜ could join | 🟢 | ✅ | queue it (see how) |
+| 🔧 | #7 kicked KICK_REGENERATION<br><sub>eli · `k7`</sub> | 🟩🟩🟥⬜⬜ needs regeneration · 1h | 🟢 | ✅ | regenerate, then ☐ requeue |
+| 🛑 | #6 kicked KICK_RED<br><sub>eli · `k6`</sub> | 🟥⬜🟥⬜⬜ kicked back · 1h | 🔴 1 | 👀 | fix it, then ☐ requeue |
+
+- [ ] <!-- magus-queue: rerun 3 --> 🔂 **Rerun #3's failed jobs** in 1 workflow run
+- [ ] <!-- magus-queue: queue 8 --> 📥 **Queue #8** with auto-merge (squash)
+- [ ] <!-- magus-queue: requeue 7 --> 🔁 **Requeue #7** as it is now: auto-merge (rebase); it was kicked back with `KICK_REGENERATION`
+- [ ] <!-- magus-queue: requeue 6 --> 🔁 **Requeue #6** as it is now: auto-merge (rebase); it was kicked back with `KICK_RED`
+- [ ] <!-- magus-queue: rerun 6 --> 🔂 **Rerun #6's failed jobs** in 1 workflow run
+
+<details><summary>Why, and the commands by hand</summary>
+
+- **#8** approved, checks green: `gh pr merge 8 --auto --squash`
+- **#9** approved, checks green: `gh pr edit 9 --add-label "merge-queue: squash"`
+- **#7** `KICK_REGENERATION`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/7#issuecomment-1)<br>merge `main` in, run `magus run generate:rw`, push, then `gh pr merge 7 --auto --rebase`; or a person merges it past the queue: `gh pr merge 7 --squash --admin`
+- **#6** `KICK_RED`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/6#issuecomment-1)<br>by hand, once fixed: `gh pr merge 6 --auto --rebase`
+
+</details>
+
+<details><summary>📝 <b>Drafts and forks</b> (2)</summary>
+
+- #10 wip: try a radix cache: a draft
+- #11 fix: typo \| in &lt;b>docs&lt;/b>: from a fork, which the queue refuses; a person decides how it reaches `main`
+
+</details>
+
+<details><summary>💤 <b>2 more open</b>, with no merge intent and not both approved and green</summary>
+
+- #12 test(job): pin the lease order: red (lint, magus shard 1: docs) outside the files the change touched
+- #13 chore: bump buzz: green on a current base
+
+- [ ] <!-- magus-queue: rerun 12 --> 🔂 **Rerun #12's failed jobs** in 1 workflow run
+
+</details>
+
+---
+
+<details><summary>ℹ️ How this page works</summary>
+
+- It is rendered whole from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; nothing written here survives.
+- Rows rank by how near each is to merging: validating, then queued in queue order, then could join; 🔧 and 🛑 rows were kicked back and sit below.
+- **Progress** has a cell per stage: checks green, approved, queued, first in line, validating. 🟩 passed, 🟨 under way, 🟥 failed (a kick-back fails *queued*), ⬜ not yet. A merge takes the row off the board.
+- GitHub draws no box inside a table, so each row's boxes are listed under it, in rank order; **Next** says ☐ when the row has one.
+- A box runs its action when someone with write, maintain or admin access checks it. Anyone else's check, and a bot's, is ignored, and the page is rendered again with every box clear.
+- **Requeue** and **Queue** enable auto-merge as the queue app, which is merge intent; **Rerun** reruns the failed jobs; **Run the queue now** starts a validation run on `main` unless one already waits to read the queue. A stack is queued by a label on its top, which only a person can apply.
+- *Past it* counts merges whose `merge-queue` status was not success when they merged.
+- To render it yourself: `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base main --preview --out dashboard.md`
+
+</details>
+
+<!-- magus-queue-dashboard -->

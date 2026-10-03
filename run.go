@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
+	"github.com/egladman/magus/internal/hint"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/observability"
@@ -32,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -277,14 +279,13 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 			// The hint has to name the fix the scope can actually apply: a provided
 			// project has no magusfile to declare ci in, so telling its user to edit
 			// one sends them somewhere that does not exist.
-			hint := "define a ci target in your magusfile to compose the gate, e.g.  " +
-				"export fun ci(ctx: magus\\Context, args: [str]) > void { ctx.needs(build, test, lint); }  " +
-				"(run 'magus describe targets' to see available stages)"
+			advice := "define a ci target in your magusfile to compose the gate, e.g.  " +
+				hint.CITargetExample + "  (run 'magus describe targets' to see available stages)"
 			if allProvided(projects) {
-				hint = "these projects come from a workspace provider, so ci lives on the provider spell: " +
+				advice = "these projects come from a workspace provider, so ci lives on the provider spell: " +
 					"expose a \"ci\" op in its mgs_listTargets and the anchor is satisfied"
 			}
-			o.out(m).EmitNotice(ctx, slog.LevelInfo, "", hint)
+			o.out(m).EmitNotice(ctx, slog.LevelInfo, "", advice)
 			return types.DiagnosticErrorf(types.NoCITarget,
 				"no %q target defined in the selected project(s); it is the anchor %q and %q key off, "+
 					"so this run would do nothing", types.TargetCI, "magus affected ci", "magus affected --plan")
@@ -498,6 +499,13 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			if p.Path != "." {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
 			}
+		}
+		// The index lands in the cache dir, outside every output glob, so a replay cannot
+		// restore it: an entry for reverted sources would replay over an index built from
+		// the edit. As a stamp, an entry replays only while the index is the one its run
+		// wrote.
+		if _, ok := symbolCapableLanguage(p); ok {
+			step.Stamps = append(step.Stamps, symbols.IndexPath(m.CacheDir(), p.Dir))
 		}
 	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.

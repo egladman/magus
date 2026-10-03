@@ -138,6 +138,28 @@ func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
 	}
 }
 
+// `magus buzz -C <dir>` runs its script from dir, so a line typed in a subdirectory still
+// names the script it runs.
+func TestGuardJudgesTheBuzzScriptUnderItsWorkDir(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "internal"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "internal/x.go"), []byte("package x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "rewrite.buzz"),
+		[]byte("fs\\writeFileAtomic(\"internal/x.go\", content: body);\n"), 0o644))
+	deps := Dependencies{scope: workspaceScope{root: dir}}
+	for _, command := range []string{
+		"magus buzz -C .. rewrite.buzz",
+		"magus buzz -C " + dir + " -s rewrite.buzz",
+		"magus buzz -s -C=.. rewrite.buzz",
+	} {
+		v := denyScriptContent(deps, filepath.Join(dir, "sub"), command, DialectBash)
+		assert.Equal(t, denyRuleInterpreterRewrite, v.Rule.Name, command)
+	}
+	assert.Empty(t, denyScriptContent(deps, filepath.Join(dir, "sub"), "magus buzz rewrite.buzz", DialectBash).Deny,
+		"without -C the script is looked for beside the call, where there is none")
+}
+
 // A line that earned its own deny keeps it, and a script's deny outranks an advisory.
 func TestRankScriptContent(t *testing.T) {
 	script := ShellVerdict{Deny: "script", Rule: denyRule{Name: denyRuleBusyWait}}

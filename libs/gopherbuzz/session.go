@@ -199,6 +199,13 @@ type Session struct {
 	// files (executed directly, not via import) are unaffected.
 	importPrivate        map[string]bool
 	collectImportPrivate bool
+	// entryImports and moduleImports name the namespaces imports bound in env: by
+	// an entry chunk, and by a module it imported (or a parent session). A flat
+	// import executes in this env, so without them every module would see every
+	// namespace any other module imported. Upstream parses each import with its own
+	// globals (Parser.zig importScript), so a module names only what it imports.
+	entryImports  map[string]bool
+	moduleImports map[string]bool
 	// entryQualified are the names namespace-less chunks bound under a per-module
 	// key because an import exports the same name (CompileOptions.EntryQualified).
 	// Later chunks and GetGlobal reach those names through it.
@@ -1251,12 +1258,16 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 		if s.importPrivate[name] && !s.exportedNames[name] {
 			continue
 		}
+		if s.hidesImport(name) {
+			continue
+		}
 		globals = append(globals, name)
 	}
 	checkStart := time.Now()
 	s.syncHostTypes()
 	s.checkPrelude = s.checkPrelude.sync(s.importedTypes)
 	errs, checkWarnings := checkWithPrelude(s.withEntryTypes(prog), globals, s.checkPrelude, s.importedModuleFuncs, s.importedModuleTypes, s.importedModuleVars, s.importPrivateHint(), s.embedded, s.resolverBound)
+	s.adviseImports(errs)
 	warnings = append(warnings, checkWarnings...)
 	if obs := s.compileObserver; obs != nil {
 		var firstErr error
@@ -1268,6 +1279,72 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 	return prog, errs, warnings, nil
 }
 
+// adviseImports names the line to add on each UnimportedNamespace error whose
+// namespace a registered native module binds.
+func (s *Session) adviseImports(errs []typeError) {
+	for i, e := range errs {
+		if e.Code != UnimportedNamespace {
+			continue
+		}
+		if path, ok := s.nativeImportPath(e.namespace); ok {
+			errs[i].Msg += fmt.Sprintf("; add `import %q;`", path)
+		}
+	}
+}
+
+// nativeImportPath is the registered native module path an import binds as ns:
+// ns itself, else the only path whose last segment is ns. Two candidates name
+// nothing, since guessing between them would hand the reader a wrong line.
+func (s *Session) nativeImportPath(ns string) (string, bool) {
+	if _, ok := s.nativeModules[ns]; ok {
+		return ns, true
+	}
+	found := ""
+	for path := range s.nativeModules {
+		if path[strings.LastIndexByte(path, '/')+1:] != ns {
+			continue
+		}
+		if found != "" {
+			return "", false
+		}
+		found = path
+	}
+	return found, found != ""
+}
+
+// moduleError is an imported file failing to load: err is the failure, and its
+// position is in file, not in the importer.
+type moduleError struct {
+	file string
+	err  error
+}
+
+func (e *moduleError) Error() string { return e.err.Error() }
+func (e *moduleError) Unwrap() error { return e.err }
+
+// importFailed reports the module file that importPath resolved to failing with err.
+func importFailed(importPath, file string, err error) error {
+	return bzz.Wrapf(UnresolvedImport, &moduleError{file: file, err: err}, "buzz: import %q: %v", importPath, err)
+}
+
+// parseDiagnostic locates err, a failure before type-checking, in the file it
+// happened in: the innermost module whose import failed, else the checked source.
+func parseDiagnostic(err error) Diagnostic {
+	var me *moduleError
+	var inner *moduleError
+	for e := err; errors.As(e, &me); e = me.err {
+		inner = me
+	}
+	if inner != nil {
+		if d, ok := DiagnosticOf(inner.err); ok {
+			d.File = inner.file
+			return d
+		}
+	}
+	line, col, msg := splitBuzzPos(err.Error())
+	return Diagnostic{Line: line, Col: col, Msg: msg}
+}
+
 // Diagnostic is a positioned diagnostic for editor tooling. Line and Col are
 // 1-based; a zero Line means no position was recoverable (Col is only meaningful
 // beside a nonzero Line). Msg has the "buzz: line L:C:" prefix stripped; the
@@ -1276,15 +1353,16 @@ func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Progr
 // every diagnostic before this field existed (a parse error has no Severity set either,
 // so it reads as an error, correctly). Msg/Line/Col/Code/Severity mirror the unexported
 // checker typeError; keep the two shapes in sync if either gains a field. File does not:
-// a Session is handed source text, never a path, so only a caller can fill it in.
+// a Session is handed source text, never its path, so File is set only on a
+// diagnostic inside an imported file and the caller fills in the rest.
 type Diagnostic struct {
 	Line, Col int
 	Code      diagnostics.Code
 	Msg       string
 	Severity  Severity
-	// File is the path this diagnostic is reported against. A caller that knows one
-	// should set it: a warning naming only "line 37:66" sends its reader grepping the
-	// tree for which file aired it.
+	// File is the path this diagnostic is reported against. A caller that knows the
+	// checked source's path should set it where it is empty: a warning naming only
+	// "line 37:66" sends its reader grepping the tree for which file aired it.
 	File string
 }
 
@@ -1346,8 +1424,7 @@ func (s *Session) Diagnostics(code string) []Diagnostic {
 	// against the session's own lifetime like the rest of the no-ctx surface.
 	_, errs, warnings, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
-		line, col, msg := splitBuzzPos(parseErr.Error())
-		return []Diagnostic{{Line: line, Col: col, Msg: msg}}
+		return []Diagnostic{parseDiagnostic(parseErr)}
 	}
 	out := make([]Diagnostic, 0, len(errs)+len(warnings))
 	for _, e := range errs {
@@ -1456,6 +1533,8 @@ func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[a
 			continue
 		}
 		start := time.Now()
+		name, binds := importNamespace(imp)
+		_, wasBound := s.env.Get(name)
 		outcome, err := s.resolveImport(ctx, imp)
 		outcomes[imp.Pos] = outcome
 		if obs := s.compileObserver; obs != nil {
@@ -1464,8 +1543,51 @@ func (s *Session) loadFileImports(ctx context.Context, prog *ast.Program) (map[a
 		if err != nil {
 			return outcomes, err
 		}
+		if binds {
+			s.noteNamespaceImport(name, wasBound)
+		}
 	}
 	return outcomes, nil
+}
+
+// importNamespace is the name imp binds its module under, and whether it binds one:
+// a flat (`as _`) or selective import binds members instead.
+func importNamespace(imp *ast.ImportStmt) (string, bool) {
+	if imp.Alias == "_" || len(imp.Only) > 0 {
+		return "", false
+	}
+	if imp.Alias != "" {
+		return imp.Alias, true
+	}
+	parts := strings.Split(strings.TrimPrefix(imp.Path, "buzz:"), "/")
+	return parts[len(parts)-1], true
+}
+
+// noteNamespaceImport records that an import bound name. A name the host bound
+// before any import did stays a host global, visible to every module.
+func (s *Session) noteNamespaceImport(name string, wasBound bool) {
+	if wasBound && !s.entryImports[name] && !s.moduleImports[name] {
+		return
+	}
+	set := &s.entryImports
+	if s.collectImportPrivate {
+		set = &s.moduleImports
+	}
+	if *set == nil {
+		*set = map[string]bool{}
+	}
+	(*set)[name] = true
+}
+
+// hidesImport reports whether name is a namespace some other module imported,
+// which the chunk being checked must import itself to name. An imported module
+// sees none it did not import; an entry chunk also sees what earlier entry chunks
+// imported, as a REPL line sees the lines before it.
+func (s *Session) hidesImport(name string) bool {
+	if s.collectImportPrivate {
+		return s.entryImports[name] || s.moduleImports[name]
+	}
+	return s.moduleImports[name] && !s.entryImports[name]
 }
 
 // importUsageIsReliable reports whether an unreferenced namespace binding can be
@@ -1744,7 +1866,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 		// from the same collection (see CompileOptions.ImportedTypes).
 		s.collectImportedModule(imp.Alias, string(data))
 		if err = s.loadImportAsAlias(ctx, imp.Path, string(data), imp.Alias); err != nil {
-			return ImportFile, err
+			return ImportFile, importFailed(imp.Path, path, err)
 		}
 		if len(s.importFrames) > 0 {
 			noted.files = append(noted.files, isolatedClosure(s.lastClosure)...)
@@ -1760,7 +1882,7 @@ func (s *Session) resolveImport(ctx context.Context, imp *ast.ImportStmt) (outco
 	s.collectImportedModule(boundName, string(data))
 	exports, err := s.execImport(ctx, string(data))
 	if err != nil {
-		return ImportFile, bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", imp.Path, err)
+		return ImportFile, importFailed(imp.Path, path, err)
 	}
 	if len(s.importFrames) > 0 {
 		noted.files = append(noted.files, nestedClosure(s.lastClosure, moduleDir)...)
@@ -2236,16 +2358,26 @@ func (s *Session) loadImportAsAlias(ctx context.Context, importPath, src, alias 
 	sub.collectedDecls = maps.Clone(s.collectedDecls)
 
 	// Copy parent's current globals into the sub-session so the imported file
-	// can reference host APIs (magus, print, etc.).
+	// can reference host APIs (print, a host's own globals). The namespaces the
+	// parent's imports bound come along at run time and stay hidden from the
+	// sub-session's checker until the file imports them itself.
 	hostNames := s.env.Names()
 	hostSlots := s.env.Slots()
 	for name, slot := range hostNames {
 		sub.env.Define(name, hostSlots[slot])
 	}
+	for _, set := range []map[string]bool{s.entryImports, s.moduleImports} {
+		for name := range set {
+			if sub.moduleImports == nil {
+				sub.moduleImports = map[string]bool{}
+			}
+			sub.moduleImports[name] = true
+		}
+	}
 
 	// Execute the imported file.
 	if err := sub.Exec(ctx, src); err != nil {
-		return bzz.Errorf(UnresolvedImport, "buzz: import %q: %v", importPath, err)
+		return err
 	}
 	if s.bytecodeStore != nil {
 		s.lastClosure = append([]bytecodeFile(nil), sub.lastClosure...)

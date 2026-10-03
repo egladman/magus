@@ -11,6 +11,7 @@ namespace types;
 // a real section index page instead. See Site.renderSubtree.
 final maxSubtreeRows = 40;
 
+import "magus";
 import "fs";
 import "io";
 import "semver";
@@ -152,7 +153,7 @@ export object Site {
     // Host-owned mirror types are available to the checker, but their values arrive
     // from magus\describe.graph() at the render boundary; they are not constructors in a
     // file-imported renderer module. null is only this pre-injection placeholder.
-    targets: TargetGraph = null,
+    targets: magus\TargetGraph = null,
 
     // The PROJECT dependency DAG, injected the same way from magus\projectGraph(). targets
     // above carries the targets inside each project; this carries how the projects
@@ -160,7 +161,7 @@ export object Site {
     // and its blast radius. /development/ needs both: one answers "what can I run in
     // this project", the other "what does changing it reach".
     // Graph is the generated Buzz return type of magus\projectGraph().
-    graph: Graph = null,
+    graph: magus\Graph = null,
 
     // The site-specific config, injected once by site_render() from site/config.buzz.
     // Immutable input kept beside the mutable build state so every engine function that
@@ -393,7 +394,7 @@ export object Site {
                 if (rel == "" and isGeneratorDir(name, this.config.generatorDirs)) { continue; }
                 this.collectDocPages(childRel);
             } else {
-                if (name.endsWith(".md") and (rel != "" or isGeneratorFile(name, this.config.generatorFiles) == false)) { this.collectDocPage(childRel); }
+                if (name.endsWith(".md") and isGeneratorFile(name, this.config.generatorFiles) == false) { this.collectDocPage(childRel); }
             }
         }
     }

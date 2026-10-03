@@ -1565,3 +1565,139 @@ func TestCheckPrelude_CloneIsIsolated(t *testing.T) {
 	assert.NotContains(t, parent.types, "Late")
 	assert.Empty(t, parent.imported)
 }
+
+// Upstream parses each imported script with its own globals (Parser.zig importScript),
+// so a module names a namespace only by importing it, whoever else in the closure did.
+func TestImport_NamespaceVisibleOnlyWhereImported(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		modules map[string]string
+		entry   string
+		wantErr string
+	}{
+		{
+			name:    "type in a flat import the entry's import does not reach",
+			modules: map[string]string{"b.buzz": `export fun f(t: demo\Thing?) > void {}`},
+			entry:   "import \"example/demo\";\nimport \"b\";\n_ = demo\\answer;",
+			wantErr: `no import binds demo in this module`,
+		},
+		{
+			name:    "value in a flat import the entry's import does not reach",
+			modules: map[string]string{"b.buzz": `export fun f() > int { return demo\answer; }`},
+			entry:   "import \"example/demo\";\nimport \"b\";\n_ = demo\\answer;",
+			wantErr: `undefined: demo`,
+		},
+		{
+			name:    "type in an aliased import",
+			modules: map[string]string{"b.buzz": `export fun f(t: demo\Thing?) > void {}`},
+			entry:   "import \"example/demo\";\nimport \"b\" as bb;\n_ = demo\\answer;",
+			wantErr: `no import binds demo in this module`,
+		},
+		{
+			name:    "entry names what only its import imported",
+			modules: map[string]string{"b.buzz": "import \"example/demo\";\nexport fun f() > int { return demo\\answer; }"},
+			entry:   "import \"b\";\nfun g(t: demo\\Thing?) > void {}",
+			wantErr: `no import binds demo in this module`,
+		},
+		{
+			name:    "sibling module names what another sibling imported",
+			modules: map[string]string{"a.buzz": "import \"example/demo\";\nexport fun f() > int { return demo\\answer; }", "c.buzz": `export fun g() > int { return demo\answer; }`},
+			entry:   "import \"a\";\nimport \"c\";",
+			wantErr: `undefined: demo`,
+		},
+		{
+			name:    "both modules import it",
+			modules: map[string]string{"b.buzz": "import \"example/demo\";\nexport fun f(t: demo\\Thing?) > int { return demo\\answer; }"},
+			entry:   "import \"example/demo\";\nimport \"b\";\nfun g(t: demo\\Thing?) > void { f(t); }",
+		},
+		{
+			name:    "aliased module imports it",
+			modules: map[string]string{"b.buzz": "import \"example/demo\";\nexport fun f(t: demo\\Thing?) > int { return demo\\answer; }"},
+			entry:   "import \"example/demo\";\nimport \"b\" as bb;\nfun g(t: demo\\Thing?) > void { _ = bb\\f(t); }",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, src := range tc.modules {
+				writeModule(t, dir, name, src)
+			}
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer sess.Close()
+			sess.SetIncludeDirs([]string{dir})
+			demo := vmpackage.NewMap()
+			demo.MapSet("answer", vmpackage.IntValue(42))
+			sess.SetNativeModule("example/demo", demo)
+			sess.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }\nexport final answer: int = 0;")
+
+			err := sess.Exec(ctx, tc.entry)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.wantErr)
+		})
+	}
+}
+
+// A REPL line sees the namespaces earlier lines imported.
+func TestImport_EntryNamespaceOutlivesItsChunk(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	demo := vmpackage.NewMap()
+	demo.MapSet("answer", vmpackage.IntValue(42))
+	sess.SetNativeModule("example/demo", demo)
+	sess.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }\nexport final answer: int = 0;")
+
+	require.NoError(t, sess.Exec(ctx, `import "example/demo";`))
+	require.NoError(t, sess.Exec(ctx, "fun g(t: demo\\Thing?) > int { return demo\\answer; }"))
+}
+
+// A namespace no import in the module binds is BZZ1009, apart from BZZ1002 (the
+// namespace is imported but declares no such type): the fix is an import line, not a
+// declaration. The line is named when a registered native module binds the namespace.
+func TestUnimportedNamespace(t *testing.T) {
+	const fix = "; add `import \"example/demo\";`"
+	for _, tc := range []struct {
+		name, src string
+		code      diagnostics.Code
+		msg       string
+	}{
+		{"type annotation", `fun f(t: demo\Thing?) > void {}`, UnimportedNamespace, `undefined type "demo\Thing": no import binds demo in this module` + fix},
+		{"object literal", `final t = demo\Thing{};`, UnimportedNamespace, `undefined type "demo\Thing": no import binds demo in this module` + fix},
+		{"value", `final n = demo\answer;`, UnimportedNamespace, `undefined: demo\answer: no import binds demo in this module` + fix},
+		{"unregistered namespace", `fun f(t: other\Thing?) > void {}`, UnimportedNamespace, `undefined type "other\Thing": no import binds other in this module`},
+		{"imported, type missing", "import \"example/demo\";\nfun f(t: demo\\Nope?) > void {}", UndefinedType, `undefined type "demo\Nope": demo declares no type Nope`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			sess := NewSession(ctx, WithEmbedded())
+			defer sess.Close()
+			sess.SetNativeModule("example/demo", vmpackage.NewMap())
+			sess.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }\nexport final answer: int = 0;")
+
+			err := sess.Exec(ctx, tc.src)
+			d, ok := DiagnosticOf(err)
+			require.True(t, ok, "want a positioned diagnostic, got %v", err)
+			assert.Equal(t, tc.code, d.Code)
+			assert.Equal(t, tc.msg, d.Msg)
+		})
+	}
+}
+
+// Two registered modules binding the same name leave the import line unnamed rather
+// than guess between them.
+func TestUnimportedNamespace_AmbiguousPathNamesNoLine(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetNativeModule("a/demo", vmpackage.NewMap())
+	sess.SetNativeModule("b/demo", vmpackage.NewMap())
+
+	d, ok := DiagnosticOf(sess.Exec(ctx, `final n = demo\answer;`))
+	require.True(t, ok)
+	assert.Equal(t, UnimportedNamespace, d.Code)
+	assert.Equal(t, `undefined: demo\answer: no import binds demo in this module`, d.Msg)
+}

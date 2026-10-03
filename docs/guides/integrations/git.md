@@ -141,6 +141,7 @@ runs its own version of the hook, and a non-zero exit from `main` blocks the git
 Wire it to two targets:
 
 ```buzz
+import "magus";
 import "spells/git/hooks" as githooks;
 
 export fun git_hooks_install(ctx: magus\Context, args: [str]) > void !> any {

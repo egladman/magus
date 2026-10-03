@@ -31,15 +31,15 @@
 // cannot supply either still records a usable checkpoint, because the part that
 // matters is read from the tree rather than from the event.
 //
-// There is no JSON import here, unlike its judging siblings. This wrapper selects
-// nothing: magus parses the envelope itself, so the event is forwarded whole.
+// The event is forwarded whole: magus parses the envelope itself. The one field read
+// here is cwd, the tree the record describes.
 //
 // NO magus-guard-coverage line, for the same reason magus-observe.buzz has
 // none: a coverage declaration states how much of a VERDICT a host can carry, and
 // this file carries no verdict on no surface. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 19
+// magus-guard-template: 20
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -48,6 +48,7 @@
 import "io";
 import "flags";
 import "proc";
+import "encoding/json";
 import "lib/hook" as hook;
 
 // warn names the file; see magus-command.buzz. STDERR, which is why it does not break
@@ -83,16 +84,16 @@ fun main(args: [str]) > void {
         return;
     }
 
+    final event = io\stdin.readAll() catch "";
+    // The event's cwd names the tree whose state is recorded, for the reason
+    // magus-command.buzz's Guard gives.
+    final cwd = hook\field(json\parse(event) catch null, dotPath: "cwd");
+
     // An absent recorder is SILENT, where an absent guard is loud. Nothing here is
     // unenforced, because there is no rule, so announcing it would interrupt the end of
     // every session to report that an optional record was not written.
-    //
-    // Checked before stdin is touched, leaving the event unread on this arm: there is
-    // nobody to forward it to.
-    final bin = hook\resolveBin();
+    final bin = hook\resolveBin(cwd: cwd);
     if (bin == "" or !hook\isExecutable(bin)) { return; }
-
-    final event = io\stdin.readAll() catch "";
 
     // Both streams are discarded by `quiet`: a magus too old for `session checkpoint`
     // prints its usage, and that would otherwise reach the host as this hook's response
@@ -101,5 +102,5 @@ fun main(args: [str]) > void {
     proc\exec(bin, args: [
         "session", "checkpoint",
         "--agent-name", agentName,
-    ], opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
+    ], dir: cwd, opts: {"quiet": true, "allow_failure": true, "stdin": event}) catch void;
 }

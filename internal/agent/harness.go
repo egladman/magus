@@ -262,10 +262,12 @@ func validateHarnessEntries(group HarnessEntries) error {
 		if len(entry) == 0 {
 			return fmt.Errorf("entries[%d] must be an object", i)
 		}
+		if !ownedByMagus(entry) {
+			matcher, cmds := EntryCommands(entry)
+			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it; end its command with %q",
+				i, matcher, cmds, " "+types.HarnessOwnedMarker)
+		}
 		collectCommands(entry, &commands)
-	}
-	if len(commands) == 0 {
-		return fmt.Errorf("entries must include at least one command that invokes magus")
 	}
 	// One invoking command per group, not every command: an entry may prepare the
 	// environment a magus is found in, like a host's session-start entry that puts the
@@ -561,48 +563,81 @@ func pathEntries(config map[string]any, path []string) ([]any, error) {
 	return nil, fmt.Errorf("empty path")
 }
 
-// mergeManagedGroup returns group's array in config as it reads once the declared entries
-// are in place, and what that changes. config is not modified.
+// mergeManagedGroup returns group's array in config as it reads holding exactly the declared
+// entries plus the person's own, and what that changes. The person's entries keep their
+// positions, an entry a descriptor wrote that no declared entry takes the place of is
+// retired, and declared entries nothing matched are appended. config is not modified.
 func mergeManagedGroup(config map[string]any, group HarnessEntries) ([]any, []types.HarnessChange, error) {
 	existing, err := pathEntries(config, group.Path)
 	if err != nil {
 		return nil, nil, err
 	}
-	entries := slices.Clone(existing)
-	key := strings.Join(group.Path, ".")
-	var changes []types.HarnessChange
-	for _, wanted := range group.Entries {
-		exact, err := containsExactEntry(entries, wanted)
-		if err != nil {
-			return nil, nil, err
-		}
-		if exact {
+	claimed, ops, err := claimExisting(existing, group.Entries)
+	if err != nil {
+		return nil, nil, err
+	}
+	entries := make([]any, 0, len(existing)+len(group.Entries))
+	var retired []any
+	for j, raw := range existing {
+		if i, ok := claimed[j]; ok {
+			entries = append(entries, group.Entries[i])
 			continue
 		}
-		replaced := false
-		for i, raw := range entries {
-			entry, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			if sameManagedIdentity(entry, wanted) {
-				entries[i] = wanted
-				replaced = true
-				break
-			}
+		if entry, ok := raw.(map[string]any); ok && ownedByMagus(entry) {
+			retired = append(retired, raw)
+			continue
 		}
-		op := types.HarnessReplace
-		if !replaced {
-			entries = append(entries, wanted)
-			op = types.HarnessAdd
-		}
-		changes = append(changes, types.HarnessChange{Op: op, Key: key, Value: wanted})
+		entries = append(entries, raw)
 	}
-	entries, retired := dropSupersededEntries(entries, group.Entries)
+	key := strings.Join(group.Path, ".")
+	var changes []types.HarnessChange
+	for i, wanted := range group.Entries {
+		if ops[i] == types.HarnessAdd {
+			entries = append(entries, wanted)
+		}
+		if ops[i] != "" {
+			changes = append(changes, types.HarnessChange{Op: ops[i], Key: key, Value: wanted})
+		}
+	}
 	for _, entry := range retired {
 		changes = append(changes, types.HarnessChange{Op: types.HarnessRetire, Key: key, Value: entry})
 	}
 	return entries, changes, nil
+}
+
+// claimExisting pairs each declared entry with the existing entry it takes the place of:
+// one equal to it, else the first with its managedIdentityKey. claimed maps an index into
+// existing to one into wanted. ops[i] is empty for an equal entry, HarnessReplace for an
+// identity match and HarnessAdd for an entry nothing matched.
+func claimExisting(existing []any, wanted []map[string]any) (claimed map[int]int, ops []types.HarnessChangeOp, err error) {
+	claimed = make(map[int]int, len(wanted))
+	ops = make([]types.HarnessChangeOp, len(wanted))
+	for i, entry := range wanted {
+		j, err := exactEntryIndex(existing, entry, claimed)
+		if err != nil {
+			return nil, nil, err
+		}
+		if j < 0 {
+			ops[i] = types.HarnessAdd
+			continue
+		}
+		claimed[j] = i
+	}
+	for i, entry := range wanted {
+		if ops[i] != types.HarnessAdd {
+			continue
+		}
+		identity := managedIdentityKey(entry)
+		for j, raw := range existing {
+			have, ok := raw.(map[string]any)
+			if _, taken := claimed[j]; !ok || taken || managedIdentityKey(have) != identity {
+				continue
+			}
+			claimed[j], ops[i] = i, types.HarnessReplace
+			break
+		}
+	}
+	return claimed, ops, nil
 }
 
 func setDescriptorEntries(config map[string]any, path []string, entries []any) {
@@ -622,82 +657,70 @@ func setDescriptorEntries(config map[string]any, path []string, entries []any) {
 }
 
 func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
+	j, err := exactEntryIndex(entries, wanted, nil)
+	return j >= 0, err
+}
+
+// exactEntryIndex is the index of the first entry in entries equal to wanted and not in
+// skip, or -1.
+func exactEntryIndex(entries []any, wanted map[string]any, skip map[int]int) (int, error) {
 	want, err := json.Marshal(wanted)
 	if err != nil {
-		return false, fmt.Errorf("agent: marshal managed entry: %w", err)
+		return -1, fmt.Errorf("agent: marshal managed entry: %w", err)
 	}
-	for _, raw := range entries {
+	for j, raw := range entries {
 		entry, ok := raw.(map[string]any)
-		if !ok {
+		if _, skipped := skip[j]; !ok || skipped {
 			continue
 		}
 		got, err := json.Marshal(entry)
 		if err != nil {
-			return false, fmt.Errorf("agent: marshal existing harness entry: %w", err)
+			return -1, fmt.Errorf("agent: marshal existing harness entry: %w", err)
 		}
 		if bytes.Equal(got, want) {
-			return true, nil
+			return j, nil
 		}
 	}
-	return false, nil
+	return -1, nil
 }
 
-// dropSupersededEntries removes, from one managed group, every entry that runs a
-// template magus ships and that this descriptor no longer wants.
+// ownedByMagus reports whether a descriptor wrote entry, which is what lets a merge retire
+// it once no declared entry takes its place. Without that, managedIdentityKey being built
+// from the command means any rewrite of a command appends the new entry beside the old,
+// and every tool call is then judged twice, once by wiring the tree replaced.
 //
-// Without it the merge APPENDS on any command rewrite, because managedIdentityKey is
-// built from the command: change the descriptor and the new entry matches nothing,
-// so both the old and the new wiring end up in the config and every tool call is
-// judged twice, recorded twice, and (where the old one is stale) answered by a
-// binary the tree replaced. A reader upgrading gets that silently.
-//
-// Narrower than invokesMagus on purpose. That one also answers true for a bare
-// `magus ...` line, and a reader's own `magus session notify` hook is theirs to
-// keep. An entry naming a SHIPPED template came from a descriptor, so a descriptor
-// may retire it.
-func dropSupersededEntries(entries []any, wanted []map[string]any) (kept []any, dropped []any) {
-	keep := make(map[string]bool, len(wanted))
-	for _, entry := range wanted {
-		keep[managedIdentityKey(entry)] = true
-	}
-	kept = make([]any, 0, len(entries))
-	for _, raw := range entries {
-		entry, ok := raw.(map[string]any)
-		if ok && runsAShippedTemplate(entry) && !keep[managedIdentityKey(entry)] {
-			dropped = append(dropped, raw)
-			continue
-		}
-		kept = append(kept, raw)
-	}
-	return kept, dropped
-}
-
-// runsAShippedTemplate reports whether any command inside entry names a template
-// this repository ships.
-func runsAShippedTemplate(entry map[string]any) bool {
+// Two marks say so, and validateHarnessEntries refuses a declared entry carrying neither:
+// a command that runs a template magus ships, whose path is magus's own, or one ending in
+// types.HarnessOwnedMarker. Anything else is the person's, whatever it mentions.
+func ownedByMagus(entry map[string]any) bool {
 	var commands []string
 	collectCommands(entry, &commands)
-	for _, command := range commands {
-		switch {
-		case strings.Contains(command, "magus-command"),
-			strings.Contains(command, "magus-path"),
-			strings.Contains(command, "magus-observe"),
-			strings.Contains(command, "cursor-hook."),
-			strings.Contains(command, "magus-checkpoint"),
-			strings.Contains(command, "magus-rehydrate"):
+	return slices.ContainsFunc(commands, func(command string) bool {
+		return runsAShippedTemplate(command) || carriesOwnedMarker(command)
+	})
+}
+
+// carriesOwnedMarker reports whether command ends in the marker as a shell comment. A
+// marker with no blank before it is part of a word, which the shell does run.
+func carriesOwnedMarker(command string) bool {
+	before, found := strings.CutSuffix(strings.TrimRight(command, " \t"), types.HarnessOwnedMarker)
+	return found && strings.TrimRight(before, " \t") != before
+}
+
+// runsAShippedTemplate reports whether command names a template this repository ships.
+// Narrower than invokesMagus on purpose: that one also answers true for a bare
+// `magus ...` line, which says nothing about who wrote it.
+func runsAShippedTemplate(command string) bool {
+	for _, template := range []string{"magus-command", "magus-path", "magus-observe", "cursor-hook.", "magus-checkpoint", "magus-rehydrate", "magus-session.buzz"} {
+		if strings.Contains(command, template) {
 			return true
 		}
 	}
 	return false
 }
 
-// sameManagedIdentity treats matcher/match (when present) plus collected command
-// strings as the stable key so a statusMessage or timeout edit replaces in place
-// instead of appending a duplicate hook.
-func sameManagedIdentity(existing, wanted map[string]any) bool {
-	return managedIdentityKey(existing) == managedIdentityKey(wanted)
-}
-
+// managedIdentityKey is matcher/match (when present) plus the collected command strings,
+// the key under which a statusMessage or timeout edit replaces an entry in place.
 func managedIdentityKey(entry map[string]any) string {
 	var b strings.Builder
 	switch {

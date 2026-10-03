@@ -179,6 +179,8 @@ Each umbrella below is a real target you can export alongside them. The comment
 on each is exactly what `ctx.glob` resolves to.
 
 ```buzz
+import "magus";
+
 // GLOB: the whole -generate family.
 //   -> index-generate, site-generate, vendor-generate
 export fun all_generate(ctx: magus\Context, args: [str]) > void {
@@ -226,6 +228,8 @@ without executing anything.
 One list is an error rather than a set:
 
 ```buzz
+import "magus";
+
 // ONLY A NEGATION: refused. There is nothing for it to subtract from, and
 // neither reading of it is safe (see the rules below).
 //   -> error: negation "!site-generate" has no pattern to narrow
@@ -237,6 +241,8 @@ export fun nothing_at_all(ctx: magus\Context, args: [str]) > void {
 And three that surprise people, each one a no-op rather than an error:
 
 ```buzz
+import "magus";
+
 // NEGATION IS EXACT, NOT SHORTHAND: "!generate" removes the target literally
 // named `generate`, which the include never selected anyway. Nothing is
 // subtracted. To drop the family, write "!*-generate".

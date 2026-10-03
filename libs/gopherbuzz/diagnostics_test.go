@@ -141,6 +141,29 @@ func TestSession_Diagnostics_ImportUsedInInterpolation(t *testing.T) {
 	}
 }
 
+// Upstream marks an import referenced when a type annotation names one of its types
+// (Parser.zig parseUserType), including the annotations this parser consumes as raw
+// tokens rather than through skipType.
+func TestSession_Diagnostics_ImportUsedOnlyInTypeArgument(t *testing.T) {
+	for _, tc := range []struct{ name, code string }{
+		{name: "parameter", code: `fun f(t: demo\Thing) > void {}`},
+		{name: "typed list literal", code: `fun f() > void { _ = [<demo\Thing>]; }`},
+		{name: "typed map literal", code: `fun f() > void { _ = {<str: demo\Thing>}; }`},
+		{name: "nested list literal", code: `fun f() > void { _ = [<[demo\Thing]>]; }`},
+		{name: "anonymous object type", code: `fun f(t: obj{ a: demo\Thing }) > void {}`},
+		{name: "generic call argument", code: "fun id::<T>(x: T) > T { return x; }\nfun f() > void { _ = id::<demo\\Thing?>(null); }"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewSession(context.Background(), WithEmbedded())
+			s.SetNativeModule("example/demo", vm.NewMap())
+			s.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }")
+			for _, d := range s.Diagnostics("import \"example/demo\";\n" + tc.code) {
+				assert.NotEqual(t, UnusedImport, d.Code, "%s", d)
+			}
+		})
+	}
+}
+
 func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("example/demo", vm.NewMap())
@@ -327,4 +350,30 @@ func TestDiagnostic_String_NamesTheFileWhenSet(t *testing.T) {
 	d := Diagnostic{Line: 37, Col: 66, Msg: "something", Severity: SeverityWarning, File: "docs/lib/conventions.buzz"}
 
 	assert.Equal(t, "buzz: docs/lib/conventions.buzz:37:66: warning: something", d.String())
+}
+
+// A module that fails to check is reported in its own file at its own position, not
+// at that line of whichever file imported it.
+func TestSession_Diagnostics_ImportedFileErrorNamesItsFile(t *testing.T) {
+	for _, tc := range []struct{ name, entry string }{
+		{name: "flat", entry: `import "bad";`},
+		{name: "aliased", entry: `import "bad" as b;`},
+		{name: "through another module", entry: `import "mid";`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.buzz"), []byte("export fun f() > void {\n    var x: int = \"s\";\n}\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "mid.buzz"), []byte("import \"bad\";\nexport fun g() > void {}\n"), 0o644))
+			s := NewSession(context.Background(), WithEmbedded())
+			s.SetIncludeDirs([]string{dir})
+
+			got := s.Diagnostics(tc.entry)
+
+			require.Len(t, got, 1)
+			assert.Equal(t, filepath.Join(dir, "bad.buzz"), got[0].File)
+			assert.Equal(t, 2, got[0].Line)
+			assert.Equal(t, 5, got[0].Col)
+			assert.Equal(t, TypeMismatch, got[0].Code)
+		})
+	}
 }

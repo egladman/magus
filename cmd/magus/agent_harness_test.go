@@ -238,6 +238,78 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 }
 `
 
+// TestShippedHarnessEntriesRetireWhenRewritten holds every entry a shipped harness spell
+// renders to being one a later merge recognizes as magus's. It merges each host's config
+// from nothing, rewrites every command the way a new spell version would, and merges again:
+// an entry the planner did not recognize stays beside its replacement, which is how Claude
+// Code's session PATH entry came to be wired twice while describe called the file current.
+func TestShippedHarnessEntriesRetireWhenRewritten(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "shipped_harness_retire.txtar")
+	require.NoError(t, os.WriteFile(script, []byte(shippedHarnessRetireTxtar), 0o644))
+	testscript.Run(t, testscript.Params{
+		Files: []string{script},
+		Setup: func(e *testscript.Env) error {
+			e.Setenv("MAGUS_SERVER_ENABLED", "false")
+			e.Setenv("MAGUS_BROKER", "off")
+			e.Setenv("MAGUS_HINTS_ENABLED", "false")
+			for _, id := range []string{"claude-code", "codex", "cursor"} {
+				spell := filepath.Join("spells", "harness", id, "spell.buzz")
+				body, err := os.ReadFile(filepath.Join("..", "..", spell))
+				if err != nil {
+					return err
+				}
+				if err := os.MkdirAll(filepath.Join(e.WorkDir, filepath.Dir(spell)), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(filepath.Join(e.WorkDir, spell), body, 0o644); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	})
+}
+
+const shippedHarnessRetireTxtar = `exec sh merge.sh
+grep 'magus-command.buzz' .claude/settings.json
+grep 'CLAUDE_ENV_FILE' .claude/settings.json
+grep 'magus-command.buzz' .codex/hooks.json
+grep 'cursor-hook.buzz' .cursor/hooks.json
+exec sh rewrite.sh
+grep 'stale-rendering' .claude/settings.json
+exec sh merge.sh
+! grep 'stale-rendering' .claude/settings.json
+! grep 'stale-rendering' .codex/hooks.json
+! grep 'stale-rendering' .cursor/hooks.json
+exec magus describe harness claude-code
+stdout '^claude-code harness: current$'
+exec magus describe harness codex
+stdout '^codex harness: current$'
+exec magus describe harness cursor
+stdout '^cursor harness: current$'
+
+-- magusfile.buzz --
+import "magus";
+import "spells/harness/claude-code" as claude;
+import "spells/harness/codex";
+import "spells/harness/cursor";
+magus\harness.provider(claude);
+magus\harness.provider(codex);
+magus\harness.provider(cursor);
+-- merge.sh --
+set -e
+for id in claude-code codex cursor; do
+  magus describe harness "$id" -o 'template={{.merge}}' > "merge-$id.sh"
+  sh "merge-$id.sh"
+done
+-- rewrite.sh --
+set -e
+for f in .claude/settings.json .codex/hooks.json .cursor/hooks.json; do
+  sed 's/"command": "/"command": ": stale-rendering; /g' "$f" > rewritten
+  mv rewritten "$f"
+done
+`
+
 // TestAgentHarnessHasNoWritingVerb pins that no verb writes host config: magus prints it
 // through `describe harness` and the person merges it.
 func TestAgentHarnessHasNoWritingVerb(t *testing.T) {

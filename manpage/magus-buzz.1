@@ -3,7 +3,7 @@
 magus\-buzz \- Run a Buzz script
 .SH SYNOPSIS
 .B magus
-.RI "buzz [file...|\-|lsp] [flags]"
+.RI "buzz [\-C dir] [file...|\-|lsp] [flags]"
 .SH DESCRIPTION
 Run Buzz source from a REPL, a file, stdin, or an inline snippet.
 .PP
@@ -39,11 +39,14 @@ It cannot resolve magus/spell/*, which the workspace loader binds, so a
 magusfile or a target definition reports an unresolved import. Those are
 the files magus already checks by loading them; \-\-check is for the ones
 nothing loads.
+.PP
+\-C changes the working directory first, in every mode, so one command line
+runs the same from any directory: magus buzz \-C "$ROOT" \-s hooks/guard.buzz.
 .SH OPTIONS
 .RS
 .TP
-\fB\-C\fR \fIstring\fR
-Working directory for the REPL's import resolution (default: cwd)
+\fB\-C\fR \fIdir\fR
+Change to `dir` before anything else, as go \-C does, so script paths and imports resolve from it; lsp takes it only as the first flag
 .TP
 \fB\-\-check\fR
 Parse and type\-check the named files without running them; report every diagnostic
@@ -131,6 +134,12 @@ magus buzz --profile scripts/report.buzz
 .PP
 .EX
 magus buzz --record probes/does-the-key-move.buzz
+.EE
+.PP
+\fIRun a root\-relative script from any directory\fR
+.PP
+.EX
+magus buzz -C ~/src/app scripts/report.buzz
 .EE
 .PP
 .SH SEE ALSO

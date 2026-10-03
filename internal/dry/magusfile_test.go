@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/hint"
 )
 
 // A real magusfile that imports a spell and calls magus.* must lint clean: the
@@ -19,14 +21,29 @@ func TestDiagnostics_CleanMagusfile(t *testing.T) {
 func TestDiagnostics_MultipleErrorsSorted(t *testing.T) {
 	// Two undefined references on different lines; both must surface (Exec would
 	// stop at the first), sorted by position.
-	src := "export fun a(ctx: magus\\Context, args: [str]) > void { missingOne(); }\n" +
+	src := "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { missingOne(); }\n" +
 		"export fun b(ctx: magus\\Context, args: [str]) > void { missingTwo(); }"
 	got := Diagnostics(context.Background(), src)
 	require.Len(t, got, 2, "both undefined references should be reported, got %+v", got)
-	assert.Equal(t, 1, got[0].Line)
+	assert.Equal(t, 2, got[0].Line)
 	assert.Contains(t, got[0].Msg, "missingOne")
-	assert.Equal(t, 2, got[1].Line)
+	assert.Equal(t, 3, got[1].Line)
 	assert.Contains(t, got[1].Msg, "missingTwo")
+}
+
+// A magusfile line a hint tells the reader to paste must load as pasted, beside only
+// the targets it names.
+func TestDiagnostics_HintSnippetsTypeCheck(t *testing.T) {
+	for name, src := range map[string]string{
+		"target": hint.TargetExample,
+		"ci": hint.CITargetExample + "\n" + hint.TargetExample + "\n" +
+			"fun test(ctx: magus\\Context, args: [str]) > void {}\n" +
+			"fun lint(ctx: magus\\Context, args: [str]) > void {}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Empty(t, Diagnostics(context.Background(), src))
+		})
+	}
 }
 
 // New-in-0.6 syntax (expression-body / arrow functions) must lint clean through
@@ -70,13 +87,13 @@ func TestExecs_spellBufferAndFailure(t *testing.T) {
 	assert.Nil(t, diag)
 	assert.Empty(t, got, "a spell buffer's ops are declared, not traced")
 
-	got, diag = Execs(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
+	got, diag = Execs(context.Background(), "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
 	assert.Empty(t, got)
 	assert.NotNil(t, diag)
 }
 
 func TestDiagnostics_ParseError(t *testing.T) {
-	got := Diagnostics(context.Background(), "export fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
+	got := Diagnostics(context.Background(), "import \"magus\";\nexport fun a(ctx: magus\\Context, args: [str]) > void { var x = ; }")
 	require.Len(t, got, 1)
 	assert.NotZero(t, got[0].Line, "parse error should carry a position: %+v", got[0])
 	assert.NotEmpty(t, got[0].Msg)

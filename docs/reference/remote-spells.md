@@ -10,6 +10,7 @@ A spell that is neither built in nor in your workspace can be imported from a co
 registry by its repository path, the way a Go import path names its repository:
 
 ```buzz
+import "magus";
 import "ghcr.io/egladman/magus/spells/harness/cursor";   // binds `cursor`
 magus\harness.provider(cursor);
 ```

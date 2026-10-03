@@ -101,7 +101,8 @@ func TestWorkspaceClassifyCountsOnlyTheRegenerationsUpdates(t *testing.T) {
 	root := t.TempDir()
 	for rel, body := range map[string]string{
 		"magusfile.buzz": "",
-		"api/magusfile.buzz": `export fun generate(ctx: magus\Context, args: [str]) > void {
+		"api/magusfile.buzz": `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.needs(stamp);
 }
 export fun stamp(ctx: magus\Context, args: [str]) > void {

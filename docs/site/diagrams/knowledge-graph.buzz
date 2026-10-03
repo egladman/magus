@@ -1,12 +1,8 @@
-// site/diagrams/knowledge-graph.buzz: where the knowledge graph's nodes come from and who reads
-// them. Every source lands in its own shard, and every reader asks the one merged graph, which
-// takes the accent, the same four verbs.
-//
-// The adapters are files of internal/graph/knowledge, not packages, so they are actors.
 namespace knowledgeGraph;
 
 import "magus";
 import "magus/figure";
+import "site/diagrams/packages" as _;
 
 export fun knowledgeGraphFigure() > figure\Figure !> any {
     final graph = magus\dir("internal/graph/knowledge");
@@ -37,7 +33,7 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .box(cli, label: "magus CLI", sub: "text or -o json", tag: "reader")
         .box(mcp, label: "MCP client", sub: "magus\\query and kin", tag: "reader")
         .edgesFromGraph()
-        .hideEdges(figure\setOf([cli]), dst: figure\setOf([graph, mcp]),
+        .hideEdges([cli], dst: [graph, mcp],
             why: "graph build drives the store and the CLI serves the MCP tools; the reads go through the verbs")
         .flowIn(core, dst: graph)
         .flowIn(files, dst: graph)
@@ -47,5 +43,9 @@ export fun knowledgeGraphFigure() > figure\Figure !> any {
         .zone("a shard per source", actors: [core, files, symbols, vcs, notes])
         .legend(figure\Look.focal, label: "what every reader asks")
         .legend(figure\Look.input, label: "built by a SCIP indexer")
-        .scope(figure\setOf([graph]));
+        .scope(goPackages("internal/graph/**"))
+        .except([magus\dir("internal/graph/dependency")],
+            why: "the project dependency DAG targets run in, a different graph")
+        .except([magus\dir("internal/graph/url")],
+            why: "composes the console explorer's URL; it reads no shard and asks no verb");
 }

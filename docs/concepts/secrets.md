@@ -338,6 +338,8 @@ with the registry's own 401, far from the cause, on a pipeline whose login step 
 So declare it, with the reason:
 
 ```buzz
+import "magus";
+
 magus\project({
     "targets": {
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
@@ -383,6 +385,8 @@ read it. Use a BuildKit secret instead: magus resolves the credential, passes it
 through the environment, and the Dockerfile mounts it at a path that never enters a layer.
 
 ```buzz
+import "magus";
+
 export fun build(ctx: magus\Context, args: [str]) > void {
     final token = magus\secret.read("Private/Registry/token");
     docker["docker-buildx"](ctx.withEnv({"BK_TOKEN": token}), {"args": [
@@ -462,6 +466,8 @@ the child at that instead of the real API, and magus attaches the credential on 
 upstream:
 
 ```buzz
+import "magus";
+
 object SecretGrant {
     ref: str = "",
     host: str = "",
@@ -633,6 +639,8 @@ Where types DO earn their place is in your own declarations. Keep the registry t
 `object` with named fields and keep the helpers' signatures honest:
 
 ```buzz
+import "magus";
+
 fun publish_registries(ctx: magus\Context) > [Registry] { ... }
 ```
 

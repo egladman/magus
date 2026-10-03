@@ -424,12 +424,12 @@ Do not have a magus yet? [Install a release](https://eli.gladman.cc/magus/setup/
 Failing that, a clone with no magus and no release can bootstrap one with Go directly. This is the only place a raw `go build` (or `go run`) belongs, and only to produce the binary that runs everything after it:
 
 ```sh
-GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build .   # bootstrap only
+GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .   # bootstrap only
 ```
 
-`GOEXPERIMENT=jsonv2` is not optional: [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml) sets it for this repository, so a build without it differs from every other build here and shows up later as generated-file drift that is not yours.
+`GOEXPERIMENT=jsonv2` is not optional: magus refuses to compile without it. [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml) sets it for this repository, and the bootstrap carries it so the line works where mise does not.
 
-Under an agent hook the guard holds that order: it lets `go build -o magus ./cmd/magus` through once, alone on its line, in a checkout with no `./magus`, and denies every raw build after that in favor of `./magus run go-build .`.
+Under an agent hook the guard holds that order: it lets that exact line through, alone on its line, in a checkout with no `./magus`, refuses every other raw go command there (a bare `go build -o magus ./cmd/magus` included) and serves the bootstrap, and denies every raw build after that in favor of `./magus run go-build .`.
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-bootstrap-light.svg">

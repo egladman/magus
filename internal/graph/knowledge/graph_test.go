@@ -88,7 +88,7 @@ func TestUnionIntoDistinctWorkspaces(t *testing.T) {
 }
 
 // buildConcurrencyFixture returns a Graph with several hundred edges and none of
-// its lazy indices (out/in/projPaths) populated yet, the state right after a
+// its lazy indices (out/in and the search index) populated yet, the state right after a
 // server rebuild, before any query has touched the graph.
 func buildConcurrencyFixture() *Graph {
 	g := NewGraph()
@@ -132,9 +132,9 @@ func buildConcurrencyFixture() *Graph {
 // TestConcurrentQueriesDoNotRaceOnLazyIndices reproduces the server's warm-graph
 // scenario: one *Graph, published with no lazy indices built yet, handed to many
 // concurrent readers at once (concurrent HTTP/MCP requests hitting the SAME graph
-// right after a rebuild). ensureAdj (out/in) and projectPaths (projPaths) used to
-// build those indices behind a bare nil check, so two goroutines racing the first
-// query after a rebuild could write g.out/g.in/g.projPaths at the same time, a
+// right after a rebuild). ensureAdj (out/in) and the project-path index (now part of
+// searchIdx) used to build those indices behind a bare nil check, so two goroutines
+// racing the first query after a rebuild could write g.out/g.in and the index at the same time, a
 // concurrent map write, which is an unrecoverable Go runtime fatal (crashes the
 // whole server process), not a recoverable panic. Run with -race: before the fix
 // this trips the race detector; after, it is clean.
@@ -158,8 +158,8 @@ func TestConcurrentQueriesDoNotRaceOnLazyIndices(t *testing.T) {
 			// Refs resolves a symbol then calls ensureAdj.
 			_, _ = g.Refs(sym)
 
-			// A project: filter drives projectOf -> g.projectPaths() for every node
-			// scanned by Resolve.
+			// A project: filter drives the search index and its lazily built project
+			// owners, which every concurrent Resolve shares.
 			_ = g.Query("project:"+proj, 50)
 
 			// A relation-only query drives touchesRelation, which also calls

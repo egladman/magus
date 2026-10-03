@@ -211,6 +211,8 @@ A project composes the op it actually needs into its own top-level `install` tar
 (`build`/`test`/`lint` need `install`, not the spell op by name):
 
 ```buzz
+import "magus";
+
 export fun install(ctx: magus\Context, args: [str]) > void !> any { typescript["pnpm-install"](ctx); }
 ```
 

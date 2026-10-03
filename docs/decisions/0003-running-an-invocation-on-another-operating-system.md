@@ -14,17 +14,18 @@ tags: [adr, decision, platform, linux, macos, containers, podman, docker, sandbo
 
 ## Amendment, 2026-09-29: B' revived while E is on hold
 
-E is on hold indefinitely, and B' is revived as `hack/on-linux.buzz`:
-`magus buzz hack/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
+E is on hold indefinitely, and B' is revived as `hack/remote/on-linux.buzz`:
+`magus buzz hack/remote/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
 Linux container through Podman. The need that opened this page, seeing a Linux-only failure
 before CI does, has not gone away, and E is a large engine delivery whose measurements
 (decision 4) have not been made. A script costs the engine nothing, so nothing is lost if E
 resumes. It keeps the contract lines a script can keep: the checkout read-only at its own
 path, the environment crossing only by name (`--env NAME`), the floor, the command's own
 streams and exit status, 71 when the relay fails before the command starts, a landlock
-kernel checked before start, and the Go image `mise.toml` pins. Its header names the ones it
-cannot keep, among them a digest pin, no implicit pull, a TTY, stdin, and signals waited for
-without a timer. The rest of this page is unchanged.
+kernel checked before start, and magus built on the host and run in a Chainguard image
+whose git meets magus's floor (the Go image `mise.toml` pins ships an older one). It cannot
+keep a digest pin, no implicit pull, a TTY, stdin, or signals waited for without a timer.
+The rest of this page is unchanged.
 
 ## Context
 

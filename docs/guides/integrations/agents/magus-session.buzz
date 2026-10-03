@@ -1,0 +1,50 @@
+import "io";
+import "flags";
+import "fs";
+import "path";
+
+// magus session hook: puts the workspace's own magus first on PATH for the shell
+// commands a session runs, so a `magus` typed there is the build its hooks run.
+//
+// Wire it to your host's session-start event as `magus buzz -C <root> -s
+// magus-session.buzz -- --env-file <file>`. The directory -C names is the one that goes
+// on PATH, and <file> is the one your host sources before each shell command. It
+// appends `export PATH="<root>:$PATH"` there, keeping what other hooks wrote, and
+// leaves `$PATH` for that shell to expand. An empty or absent --env-file does nothing:
+// a host that sources no such file has no PATH to set. It prints nothing on stdout and
+// exits 0.
+//
+// NO magus-guard-coverage line: it judges nothing on any surface.
+//
+// magus-guard-template: 20
+
+final ENV_FILE_FLAG = "--env-file";
+
+fun warn(message: str) > void {
+    io\stderr.write("magus-session.buzz: {message}\n") catch void;
+}
+
+fun envFileOf(args: [str]) > str {
+    final parsed = flags\parse(args, switches: [<str>], valued: [ENV_FILE_FLAG]) catch null;
+    if (parsed == null) {
+        warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
+        return "";
+    }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this surface declares only {ENV_FILE_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    return parsed!.values[ENV_FILE_FLAG] ?? "";
+}
+
+fun main(args: [str]) > void {
+    final envFile = envFileOf(args);
+    if (envFile == "") { return; }
+    final root = path\abs(".") catch "";
+    if (root == "") { return; }
+    try {
+        fs\appendFile(envFile, content: "export PATH=\"{root}:$PATH\"\n");
+    } catch {
+        warn("could not append to {envFile}; the session's commands find magus on PATH as it was.");
+    }
+}

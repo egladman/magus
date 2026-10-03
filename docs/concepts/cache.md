@@ -77,6 +77,8 @@ to _one_ target, declare it in that target's body with `ctx.readsFiles(...)` /
 `ctx.writesFiles(...)`:
 
 ```buzz
+import "magus";
+
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("schema/**", "codegen.config.json");
     ctx.writesFiles("dist/**");
@@ -99,6 +101,8 @@ A `!` argument excludes. It narrows every glob of the same call, wherever it sit
 the call, and never a glob declared by another call:
 
 ```buzz
+import "magus";
+
 export fun bindings_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/*_test.go"); // every generated file, not the tests
 }
@@ -131,6 +135,8 @@ That last case is for a hand-written page with a generated region between marker
 or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.
 
 ```buzz
+import "magus";
+
 export fun content_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("reference/buzz/*.md");          // created and fully owned
     ctx.modifiesExistingFiles("concepts/spells.md"); // existing page; only the table changes
@@ -395,6 +401,8 @@ makes the invisible input visible instead, so caching becomes correct rather tha
 forbidden:
 
 ```buzz
+import "magus";
+
 export fun scan(ctx: magus\Context, args: [str]) > void {
     ctx.observes("trivy-db", "2026-08-15");
     trivy.scan(ctx);

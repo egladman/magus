@@ -1674,3 +1674,40 @@ func ExampleCache_RunAll() {
 	// results: 2
 	// missed: [api web]
 }
+
+// TestExportDoesNotBlockANestedRun is the deadlock a writer-preferring lock made: an
+// outer run holds the read lock while it waits on a run nested inside it, an Export
+// queues for the write lock, and the nested run's read lock waits behind the Export.
+// The nested run must start, and the Export must finish once both runs are done.
+func TestExportDoesNotBlockANestedRun(t *testing.T) {
+	_, _, c := newMutableCache(t)
+
+	c.exportMu.RLock() // the outer run
+	exported := make(chan error, 1)
+	go func() { exported <- c.Export(t.Context(), io.Discard) }()
+	time.Sleep(3 * exportLockPoll) // the Export is now waiting
+
+	nested := make(chan struct{})
+	go func() {
+		c.exportMu.RLock()
+		acquired := true
+		c.exportMu.RUnlock()
+		if !acquired {
+			t.Error("nested run did not acquire the read lock")
+		}
+		close(nested)
+	}()
+	select {
+	case <-nested:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a nested run's read lock waited behind a pending Export")
+	}
+
+	c.exportMu.RUnlock()
+	select {
+	case err := <-exported:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Export did not finish once no run held the cache")
+	}
+}

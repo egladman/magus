@@ -95,7 +95,7 @@ const (
 // newTerminal returns a screen and a zone that draws on it.
 func newTerminal() (*screen.Screen, *tty.Zone) {
 	s := screen.New(shotCols, shotRows)
-	return s, tty.NewZone(s, tty.FixedProbe(shotCols, shotRows))
+	return s, tty.NewZone(s, tty.CaptureProbe(shotCols, shotRows))
 }
 
 // runBand: ordinary output scrolling past a band that does not move. The
@@ -126,7 +126,7 @@ func runBand(t screen.Theme) (string, error) {
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(shotCols, shotRows)
-	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.FixedProbe(shotCols, shotRows), demoClock())
+	h := cache.NewPrettyHandlerWith(s, slog.LevelInfo, tty.CaptureProbe(shotCols, shotRows), demoClock())
 
 	fmt.Fprint(s, "$ magus affected ci\n")
 	fmt.Fprint(s, "[pass] build std (cached, 0.0s)\n")
@@ -215,7 +215,7 @@ func picker(t screen.Theme) (string, error) {
 	// The REAL picker composition, not an imitation of it. Hand-writing this
 	// block is how the shot came to show a selection marker and a frame the
 	// picker had stopped drawing.
-	p := tty.FixedProbe(shotCols, shotRows)
+	p := tty.CaptureProbe(shotCols, shotRows)
 	view := tty.NewInlineView(s, p)
 	frame := tty.RenderPick(s, p,
 		[]string{"console", "docs", "libs/gopherbuzz", "std", "types"},

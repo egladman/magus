@@ -34,7 +34,7 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 			probes.Add(1)
 			return "counted 1.2.3", nil
 		}),
-		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
+		spells.WithInvoker(writesTheIndex),
 	)
 	project.DefaultSpellRegistry().RegisterSpell(spell)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -52,8 +52,6 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 
 	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.SymbolIndexOp}}), "scip run")
 	index = symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root())
-	require.NoError(t, os.MkdirAll(filepath.Dir(index), 0o755))
-	require.NoError(t, os.WriteFile(index, []byte("scip"), 0o644))
 	probes.Store(0)
 	return m, src, index, probes
 }
@@ -115,7 +113,7 @@ func TestSymbolStampMovesWithTheIndex(t *testing.T) {
 	require.NoError(t, os.WriteFile(index, []byte("scip, rebuilt"), 0o644))
 
 	probes.Store(0)
-	assert.Equal(t, types.SymbolIndexFresh, stampedFreshness(t, m))
+	assert.Equal(t, types.SymbolIndexStale, stampedFreshness(t, m), "no run wrote these bytes, so no entry vouches for them")
 	assert.Positive(t, probes.Load(), "a rewritten index is a different file, so the stamp vouches for it no longer")
 }
 

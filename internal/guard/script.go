@@ -260,20 +260,33 @@ func scriptRunOf(words []string) (scriptRun, bool) {
 	return scriptRun{}, false
 }
 
-// buzzScriptFile is the file a `magus buzz` line runs. An -e snippet or stdin carries its
-// program on the line, where denyInterpreterRewrite reads it; --check runs nothing.
+// buzzScriptFile is the file a `magus buzz` line runs, joined to the directory its -C
+// moves to first. An -e snippet or stdin carries its program on the line, where
+// denyInterpreterRewrite reads it; --check runs nothing.
 func buzzScriptFile(args []string) (string, bool) {
 	if len(args) == 0 || args[0] != "buzz" {
 		return "", false
 	}
+	dir := ""
 	for i := 1; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "-e" || a == "-" || a == "--" || a == "--check" || a == "lsp" || strings.HasPrefix(a, unresolved):
 			return "", false
-		case a == "-C":
+		case a == "-C" || a == "--C":
+			if i+1 < len(args) {
+				dir = args[i+1]
+			}
 			i++
+		case strings.HasPrefix(a, "-C=") || strings.HasPrefix(a, "--C="):
+			_, dir, _ = strings.Cut(a, "=")
 		case strings.HasPrefix(a, "-"):
 		default:
+			if strings.HasPrefix(dir, unresolved) {
+				return "", false
+			}
+			if dir != "" && !filepath.IsAbs(a) {
+				a = filepath.Join(dir, a)
+			}
 			return a, true
 		}
 	}

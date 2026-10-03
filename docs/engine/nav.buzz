@@ -5,7 +5,6 @@
 namespace nav;
 
 import "assert";
-import "fs";
 import "io";
 import "markdown";
 import "template";

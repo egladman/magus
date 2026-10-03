@@ -58,6 +58,8 @@ From a target, the [vcs module](../reference/buzz/vcs.md) reads the rest:
 - `ci` composes it, so `magus affected ci` runs it with the rest of the gate.
 
 ```buzz
+import "magus";
+
 magus\project({
     "targets": {
         "security": {

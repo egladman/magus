@@ -42,6 +42,7 @@ var hookTemplates = []string{
 	"magus-observe.buzz",
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
+	"magus-session.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	"opencode-plugin.ts",
@@ -84,7 +85,13 @@ var shippedHookConfigs = map[string]string{
 // hookConfigExemptions records a template one config deliberately does not run,
 // with the reason it does not. An exemption is the sanctioned way to differ; the
 // unsanctioned way is to differ silently, which is what the gate refuses.
-var hookConfigExemptions = map[string]map[string]string{}
+var hookConfigExemptions = map[string]map[string]string{
+	"codex": {
+		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
+			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
+			"checkout root on PATH for later shell commands",
+	},
+}
 
 // mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
 // wired under it guards a different surface from the same template, so the name

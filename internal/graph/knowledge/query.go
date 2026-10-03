@@ -14,13 +14,13 @@ import (
 
 	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
-	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/types"
 )
 
 // Query is deterministic name resolution and retrieval over the knowledge graph:
 // no LLM. It reuses magus's existing fuzzy-finding score (interactive.LeafScore,
-// which powers `magus x`/`magus where`), generalized from project paths to node
+// which powers `magus x`/`magus where`; leafScoreLower is the same arithmetic over text
+// the search index already lowercased), generalized from project paths to node
 // IDs and labels. The fielded grammar here is a pragmatic subset: field:value
 // matchers (kind/project/relation/id), free-text terms (AND), and negation; the
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
@@ -245,20 +245,44 @@ func tokenize(s string) []string {
 
 // Resolve returns nodes matching the query, ranked by score (desc) then ID (asc),
 // truncated to limit (0 = no limit).
+//
+// It scans the graph's search index (see search_index.go), not g.nodes: the lowercased
+// text and the project owner of every node are computed once per graph, and a positive
+// kind= filter visits only the entries of the kinds it names. The match set, scores and
+// order are those of the straightforward per-node scan.
 func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 	q := g.normalizePaths(parseQuery(input))
+	ix := g.searchIdx()
+	cq := g.compileQuery(q)
 	var matches []types.KnowledgeMatch
-	for id, n := range g.nodes {
-		score, ok := g.scoreNode(n, id, q)
+	add := func(i int) {
+		score, ok := g.scoreNode(ix, i, cq)
 		if !ok {
-			continue
+			return
 		}
-		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
+		n := &ix.entries[i].node
+		m := types.KnowledgeMatch{ID: n.ID, Kind: n.Kind, Label: n.Label, Score: score}
 		// Prose whose subject moved on is LABELED, never reordered; see stalenessLabel for
 		// why ranking on it is the wrong repair. The label travels with the match so a caller
 		// can show "400 days behind its subject" beside the result and let the reader judge.
 		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
 		matches = append(matches, m)
+	}
+	if len(cq.kindPos) > 0 {
+		// A kind= filter names a handful of kinds; the partition skips every other node
+		// without testing it. matchesKind runs per kind, not per node.
+		for kind, positions := range ix.byKind {
+			if !matchesKind(kind, cq.kindPos) {
+				continue
+			}
+			for _, i := range positions {
+				add(int(i))
+			}
+		}
+	} else {
+		for i := range ix.entries {
+			add(i)
+		}
 	}
 	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {
 		if a.Score != b.Score {
@@ -272,105 +296,100 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 	return matches
 }
 
-// scoreNode applies node-level field filters and free-text scoring. It returns
-// (score, true) when the node matches every positive constraint and no negation.
-// A relation-only query (no node constraints) matches nodes that touch such an
-// edge, so `magus query relation=uses` still resolves seeds.
-func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int, bool) {
-	if vals, ok := q.fields["kind"]; ok && !matchesKind(n.Kind, vals) {
+// scoreNode applies node-level field filters and free-text scoring to the index entry at
+// position i. It returns (score, true) when the node matches every positive constraint
+// and no negation. A relation-only query (no node constraints) matches nodes that touch
+// such an edge, so `magus query relation=uses` still resolves seeds.
+//
+// The decisions are the ones the per-node scan made; only where each input comes from
+// changed (lowercased text and the owner from the index, field lookups and globs from the
+// compiled query).
+func (g *Graph) scoreNode(ix *searchIndex, i int, cq *compiledQuery) (int, bool) {
+	e := &ix.entries[i]
+	n := &e.node
+	if len(cq.kindPos) > 0 && !matchesKind(n.Kind, cq.kindPos) {
 		return 0, false
 	}
-	if vals := q.negFields["kind"]; matchesKind(n.Kind, vals) {
+	if matchesKind(n.Kind, cq.kindNeg) {
 		return 0, false
 	}
-	if res := q.reFields["kind"]; len(res) > 0 && !matchesAnyRe(n.Kind, res) {
+	if len(cq.kindRe) > 0 && !matchesAnyRe(n.Kind, cq.kindRe) {
 		return 0, false
 	}
-	if vals, ok := q.fields["project"]; ok {
-		proj, owned := g.projectOf(n, id)
-		if !owned || !matchesProject(proj, vals) {
+	if cq.needsOwner {
+		o := ix.owners()[i]
+		if len(cq.projPos) > 0 && (!o.ok || !matchesProject(o.path, cq.projPos)) {
+			return 0, false
+		}
+		if len(cq.projNeg) > 0 && o.ok && matchesProject(o.path, cq.projNeg) {
+			return 0, false
+		}
+		if len(cq.projRe) > 0 && (!o.ok || !matchesAnyRe(o.path, cq.projRe)) {
 			return 0, false
 		}
 	}
-	if vals := q.negFields["project"]; len(vals) > 0 {
-		if proj, owned := g.projectOf(n, id); owned && matchesProject(proj, vals) {
-			return 0, false
-		}
-	}
-	if res := q.reFields["project"]; len(res) > 0 {
-		if proj, owned := g.projectOf(n, id); !owned || !matchesAnyRe(proj, res) {
-			return 0, false
-		}
-	}
-	if vals, ok := q.fields["id"]; ok && !containsAny(id, vals) {
+	if len(cq.idPos) > 0 && !anyIn(e.lcID, cq.idPos) {
 		return 0, false
 	}
-	if vals := q.negFields["id"]; containsAny(id, vals) {
+	if anyIn(e.lcID, cq.idNeg) {
 		return 0, false
 	}
-	if res := q.reFields["id"]; len(res) > 0 && !matchesAnyRe(id, res) {
+	if len(cq.idRe) > 0 && !matchesAnyRe(n.ID, cq.idRe) {
 		return 0, false
 	}
 	// language filters on the node's language attr (set on file and symbol nodes), so
 	// `language:go` groups every source file and symbol of a language regardless of
 	// whether magus's AST walk or a foreign SCIP index produced it. A node without the
 	// attr never matches a positive language constraint.
-	if vals, ok := q.fields["language"]; ok && !slices.Contains(vals, n.Attrs["language"]) {
-		return 0, false
-	}
-	if vals := q.negFields["language"]; slices.Contains(vals, n.Attrs["language"]) {
-		return 0, false
-	}
-	if res := q.reFields["language"]; len(res) > 0 && !matchesAnyRe(n.Attrs["language"], res) {
+	if cq.language.active() && !cq.language.allows(n.Attrs["language"]) {
 		return 0, false
 	}
 	// role filters on the doc-classification attr (readme/agent/changelog/...), so
 	// `kind=doc role=agent` finds the agent-instruction files. A node without the attr
 	// never matches a positive role constraint.
-	if vals, ok := q.fields["role"]; ok && !slices.Contains(vals, n.Attrs[attrRole]) {
-		return 0, false
-	}
-	if vals := q.negFields["role"]; slices.Contains(vals, n.Attrs[attrRole]) {
-		return 0, false
-	}
-	if res := q.reFields["role"]; len(res) > 0 && !matchesAnyRe(n.Attrs[attrRole], res) {
+	if cq.role.active() && !cq.role.allows(n.Attrs[attrRole]) {
 		return 0, false
 	}
 	// layer and family compare one attr exactly, as role does: both are closed
 	// vocabularies, not text to search.
-	for field, attr := range map[string]string{"layer": types.AttrLayer, "family": types.AttrMarkerFamily} {
-		if vals, ok := q.fields[field]; ok && !slices.Contains(vals, n.Attrs[attr]) {
-			return 0, false
-		}
-		if vals := q.negFields[field]; slices.Contains(vals, n.Attrs[attr]) {
-			return 0, false
-		}
-		if res := q.reFields[field]; len(res) > 0 && !matchesAnyRe(n.Attrs[attr], res) {
-			return 0, false
-		}
+	if cq.layer.active() && !cq.layer.allows(n.Attrs[types.AttrLayer]) {
+		return 0, false
 	}
-	if !matchesStamp(n, q) {
+	if cq.family.active() && !cq.family.allows(n.Attrs[types.AttrMarkerFamily]) {
+		return 0, false
+	}
+	if cq.stamp && !matchesStamp(*n, cq.q) {
 		return 0, false
 	}
 
 	// Negated free text must not appear anywhere in the node's text (a wildcard term
 	// excludes any node whose ID or label matches the glob).
-	hay := strings.ToLower(id + " " + n.Label + " " + n.Doc)
-	for _, t := range q.negTerms {
-		if hasWildcard(t) {
-			if globMatch(t, id) || globMatch(t, n.Label) {
+	for _, t := range cq.negTerms {
+		switch {
+		case t.glob != nil:
+			if t.glob.matchLower(e.lcID) || t.glob.matchLower(e.lcLabel) {
 				return 0, false
 			}
-		} else if strings.Contains(hay, strings.ToLower(t)) {
-			return 0, false
+		case t.span:
+			// A phrase can straddle two fields, so it is tested against the joined text the
+			// scan always used. Rare, so the join is not worth keeping in the index.
+			if strings.Contains(e.lcID+" "+e.lcLabel+" "+e.lcDoc, t.lc) {
+				return 0, false
+			}
+		default:
+			// With no space in the term, a hit cannot cross the separators of the joined
+			// text, so testing the three fields apart is the same answer.
+			if strings.Contains(e.lcID, t.lc) || strings.Contains(e.lcLabel, t.lc) || strings.Contains(e.lcDoc, t.lc) {
+				return 0, false
+			}
 		}
 	}
 
-	if len(q.terms) == 0 {
-		if _, relOnly := q.fields["relation"]; relOnly && !g.touchesRelation(id, q.fields["relation"]) {
+	if len(cq.terms) == 0 {
+		if cq.relOnly && !g.touchesRelationIn(n.ID, cq.relSet) {
 			return 0, false
 		}
-		return 1 + kindRank(n.Kind) + g.citedRank(id, n.Kind), true // field-only match; flat score plus kind bias
+		return 1 + kindRank(n.Kind) + g.citedRank(n.ID, n.Kind), true // field-only match; flat score plus kind bias
 	}
 
 	// Every positive term must match (AND); score is the sum of best per-term
@@ -380,31 +399,28 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	// which does search the doc). It contributes a flat credit so it ranks like a doc
 	// hit, not a leaf match.
 	total := 0
-	for _, t := range q.terms {
-		if hasWildcard(t) {
-			if !globMatch(t, id) && !globMatch(t, n.Label) {
+	for _, t := range cq.terms {
+		if t.glob != nil {
+			if !t.glob.matchLower(e.lcID) && !t.glob.matchLower(e.lcLabel) {
 				return 0, false
 			}
 			total += wildcardTermScore
 			continue
 		}
-		best := max(interactive.LeafScore(id, t), interactive.LeafScore(n.Label, t))
+		best := max(leafScoreLower(e.lcID, t.lc, e.idSlashes), leafScoreLower(e.lcLabel, t.lc, e.lblSlash))
 		if best <= 0 {
 			// LeafScore anchors on the leaf and charges 10 per '/', so a non-leaf hit
 			// inside a slash-heavy ID (kind:function docs -> function:docs/f.buzz:x)
 			// comes back zero or negative. A substring hit anywhere in the ID or doc still
 			// matches, with the flat doc-hit credit, instead of dropping the node.
-			switch lt := strings.ToLower(t); {
-			case strings.Contains(strings.ToLower(id), lt),
-				strings.Contains(strings.ToLower(n.Doc), lt):
-				best = 1
-			default:
+			if !strings.Contains(e.lcID, t.lc) && !strings.Contains(e.lcDoc, t.lc) {
 				return 0, false
 			}
+			best = 1
 		}
 		total += best
 	}
-	return total + kindRank(n.Kind) + g.citedRank(id, n.Kind), true
+	return total + kindRank(n.Kind) + g.citedRank(n.ID, n.Kind), true
 }
 
 // kindRank biases resolution toward primary domain entities over source-level nodes on
@@ -1392,10 +1408,10 @@ func (g *Graph) edgeRef(e types.KnowledgeEdge, dir types.EdgeDirection, other st
 	}
 }
 
-// touchesRelation reports whether id is an endpoint of any edge with one of rels.
-func (g *Graph) touchesRelation(id string, rels []string) bool {
-	g.ensureAdj()
-	relSet := toSet(rels)
+// touchesRelationIn reports whether id is an endpoint of any edge whose relation is in
+// relSet. The caller built relSet once and ensured the adjacency once: this runs per node
+// of a relation-only query, where toSet and the adjacency lock per call were the cost.
+func (g *Graph) touchesRelationIn(id string, relSet map[string]bool) bool {
 	for _, e := range g.out[id] {
 		if relSet[string(e.Relation)] {
 			return true
@@ -1425,77 +1441,15 @@ func matchesProject(proj string, vals []string) bool {
 	return false
 }
 
-// projectOf resolves the workspace-relative project path owning a node: the path
-// itself for a project node, the declaring project for a target, and for every
-// other kind the longest project path prefixing its source (files, functions,
-// docs, and symbols all carry one). This is what makes `project:web kind:function`
-// select the functions INSIDE web, not just the project node and its targets.
-// A node with no source (e.g. an unresolved import) is owned by nothing.
-func (g *Graph) projectOf(n types.KnowledgeNode, id string) (string, bool) {
-	if p, ok := projectPathOf(id); ok {
-		return p, true
-	}
-	src := n.Source
-	if i := strings.IndexByte(src, ':'); i >= 0 {
-		src = src[:i] // strip a :line suffix
-	}
-	if src == "" {
-		return "", false
-	}
-	for _, p := range g.projectPaths() {
-		if p == "." || src == p || strings.HasPrefix(src, p+"/") {
-			return p, true
-		}
-	}
-	return "", false
-}
+// The project that owns a node is resolved by the search index (searchIndex.owners,
+// owningProject): the path itself for a project node, the declaring project for a
+// target, and for every other kind the longest project path prefixing its source (files,
+// functions, docs, and symbols all carry one). This is what makes `project:web
+// kind:function` select the functions INSIDE web, not just the project node and its
+// targets. A node with no source (e.g. an unresolved import) is owned by nothing.
 
-// projectPaths returns every project node's path, longest first so projectOf's
-// prefix scan resolves nested projects before the root "." catch-all. Built
-// lazily and invalidated with the adjacency indices.
-//
-// Guarded by projMu for the same reason ensureAdj is guarded by adjMu: this runs
-// on the query path against a *Graph the server's warm graph can hand to several
-// concurrent requests, so a bare nil check would let two first-queries race
-// writing g.projPaths, a concurrent map/slice write that crashes the process.
-func (g *Graph) projectPaths() []string {
-	g.projMu.Lock()
-	defer g.projMu.Unlock()
-	if g.projPaths != nil {
-		return g.projPaths
-	}
-	var paths []string
-	for id := range g.nodes {
-		if p, ok := strings.CutPrefix(id, types.KindProject+":"); ok {
-			paths = append(paths, p)
-		}
-	}
-	// Longest first; ties break lexically so the order is deterministic.
-	slices.SortFunc(paths, func(a, b string) int {
-		if c := cmp.Compare(len(b), len(a)); c != 0 {
-			return c
-		}
-		return cmp.Compare(a, b)
-	})
-	g.projPaths = paths
-	return g.projPaths
-}
-
-// containsAny reports whether hay matches any needle: a needle with a '*' matches by
-// glob, otherwise by case-insensitive substring (the pre-wildcard behavior).
-func containsAny(hay string, needles []string) bool {
-	lh := strings.ToLower(hay)
-	for _, n := range needles {
-		if hasWildcard(n) {
-			if globMatch(n, hay) {
-				return true
-			}
-		} else if strings.Contains(lh, strings.ToLower(n)) {
-			return true
-		}
-	}
-	return false
-}
+// An id= value matches by glob when it has a '*', otherwise by case-insensitive
+// substring (the pre-wildcard behavior); see compileNeedles and anyIn.
 
 // hasWildcard reports whether a term or field value uses the '*' glob metacharacter.
 func hasWildcard(s string) bool { return strings.IndexByte(s, '*') >= 0 }
@@ -1516,23 +1470,7 @@ func matchesAnyRe(s string, res []*regexp.Regexp) bool {
 // slash-significance would surprise. No '*' means exact match. Middle segments match
 // leftmost without backtracking, which is correct because the surrounding '*' absorb any slack.
 func globMatch(pattern, s string) bool {
-	p, str := strings.ToLower(pattern), strings.ToLower(s)
-	parts := strings.Split(p, "*")
-	if len(parts) == 1 {
-		return p == str
-	}
-	if !strings.HasPrefix(str, parts[0]) {
-		return false
-	}
-	str = str[len(parts[0]):]
-	for _, mid := range parts[1 : len(parts)-1] {
-		i := strings.Index(str, mid)
-		if i < 0 {
-			return false
-		}
-		str = str[i+len(mid):]
-	}
-	return strings.HasSuffix(str, parts[len(parts)-1])
+	return compileGlob(pattern).matchLower(strings.ToLower(s))
 }
 
 // matchesKind reports whether kind matches any of vals: a val with '*' by glob, else

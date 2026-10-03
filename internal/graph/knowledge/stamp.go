@@ -246,6 +246,12 @@ type TreeWalk struct {
 	root  string
 	files []treeFile // sorted by rel
 
+	// digestOnce memoizes Digest: the fast and the full stamps of one read both fold the
+	// same walk, and a file whose mtime is inside the racy window is re-read by each
+	// computation, so the second would otherwise cost as much as the first.
+	digestOnce sync.Once
+	digest     string
+
 	ignoreMu sync.Mutex
 	ignored  map[string]bool // every path asked about so far, ignored or not
 	noIgnore bool            // the VCS gave no answer; nothing is filtered
@@ -322,6 +328,11 @@ func dirScans(p, name string) uint8 {
 // Digest identifies the walked tree: every file's path, kind, size and mtime, with a
 // symlink's target folded in, since the scans read through it.
 func (w *TreeWalk) Digest() string {
+	w.digestOnce.Do(func() { w.digest = w.computeDigest() })
+	return w.digest
+}
+
+func (w *TreeWalk) computeDigest() string {
 	s := NewInputHash("tree")
 	for _, f := range w.files {
 		s.String(f.rel)

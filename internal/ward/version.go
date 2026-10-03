@@ -111,7 +111,7 @@ const (
 
 // bootstrapCmd builds a first binary in a checkout no magus on hand can load; the guard
 // serves the same command.
-const bootstrapCmd = "go run -trimpath ./cmd/magus run go-build --no-cache ."
+const bootstrapCmd = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.
@@ -268,6 +268,8 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 const staleNameNote = "This build does not provide that name; unless it is misspelled, this magus is out of date."
 
 // staleShaped reports whether err carries one of the codes an out-of-date binary produces.
+// BZZ1009, a namespace the file never imported, is not one: no newer binary supplies a
+// missing import line.
 func staleShaped(err error) bool {
 	var d *diagnostics.Error
 	if !errors.As(err, &d) {

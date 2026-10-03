@@ -532,7 +532,8 @@ func fullInputs(t *testing.T) Inputs {
 	// A Buzz source under pkg/a gives the file node the rest of the fixture hangs off, and
 	// carries three relations itself: rationale_for (the WHY marker), imports (the import
 	// line), and calls (helper, reached from build's body).
-	write("pkg/a/magusfile.buzz", `import "std";
+	write("pkg/a/magusfile.buzz", `import "magus";
+import "std";
 
 // WHY: b generates what a compiles against, so a builds second.
 export fun build(ctx: magus\Context, args: [str]) > void !> any {

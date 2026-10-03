@@ -132,6 +132,8 @@ knows. Declare them in the magusfile with the central form, which runs after the
 fold and therefore composes:
 
 ```buzz
+import "magus";
+
 magus\project("libs/foo", { "targets": { "test": { "slots": 4 } } });
 ```
 
