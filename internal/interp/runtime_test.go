@@ -1,6 +1,7 @@
 package interp
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -454,12 +455,15 @@ func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
 	require.NotEmpty(t, stamp)
 	assert.Equal(t, stamp, compilerStampOf(fresh))
 
-	i := strings.Index(string(body), "Go build ID: \"")
-	require.GreaterOrEqual(t, i, 0, "the test binary carries a Go build ID")
-	other := slices.Clone(body)
-	other[i+len("Go build ID: \"")] ^= 1
+	id := goBuildID(exe)
+	require.NotEmpty(t, id, "the test binary carries a Go build ID")
+	replacement := []byte(id)
+	replacement[0] ^= 1
+	other := bytes.ReplaceAll(body, []byte(id), replacement)
+	require.False(t, bytes.Equal(body, other), "the test must change the stored build ID")
 	rebuilt := filepath.Join(t.TempDir(), "magus")
 	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
+	assert.Equal(t, string(replacement), goBuildID(rebuilt))
 	assert.NotEqual(t, stamp, compilerStampOf(rebuilt), "another build is another compiler")
 }
 
