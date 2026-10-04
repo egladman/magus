@@ -40,7 +40,9 @@ fun cursor_guard_command() > str {
 
 fun cursor_event_names() > [str] {
     return [
+        "sessionStart",
         "beforeShellExecution",
+        "beforeMCPExecution",
         "preToolUse",
         "postToolUse",
         "subagentStart",
@@ -59,19 +61,46 @@ fun cursor_posttool_matcher() > str {
     return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch";
 }
 
+
+// cursor_hook_timeout is how long Cursor may wait on one magus buzz hook before
+// it kills the process. Claude Code's harness uses the same bound; without it a
+// stuck or memory-heavy magus can pile up under parallel tool calls.
+fun cursor_hook_timeout() > int { return 10; }
+
+// cursor_entry is one hooks.json command entry with a timeout.
+fun cursor_entry(cmd: str) > {str: any} {
+    return {
+        "command": cmd,
+        "timeout": cursor_hook_timeout(),
+    };
+}
+
 // cursor_entries is the managed_entries list merged into .cursor/hooks.json.
 fun cursor_entries() > [any] {
     final cmd = cursor_guard_command();
     return [
         {
+            "path": ["hooks", "sessionStart"],
+            "entries": [cursor_entry(cmd)],
+        },
+        {
             "path": ["hooks", "beforeShellExecution"],
-            "entries": [{"command": cmd}],
+            "entries": [cursor_entry(cmd)],
+        },
+        {
+            "path": ["hooks", "beforeMCPExecution"],
+            "entries": [{
+                "command": cmd,
+                "timeout": cursor_hook_timeout(),
+                "failClosed": true,
+            }],
         },
         {
             "path": ["hooks", "preToolUse"],
             "entries": [{
                 "matcher": cursor_pretool_matcher(),
                 "command": cmd,
+                "timeout": cursor_hook_timeout(),
             }],
         },
         {
@@ -79,15 +108,16 @@ fun cursor_entries() > [any] {
             "entries": [{
                 "matcher": cursor_posttool_matcher(),
                 "command": cmd,
+                "timeout": cursor_hook_timeout(),
             }],
         },
         {
             "path": ["hooks", "subagentStart"],
-            "entries": [{"command": cmd}],
+            "entries": [cursor_entry(cmd)],
         },
         {
             "path": ["hooks", "sessionEnd"],
-            "entries": [{"command": cmd}],
+            "entries": [cursor_entry(cmd)],
         },
     ];
 }
@@ -169,8 +199,10 @@ test "guard command is the shipped Cursor Buzz port, not a shell script" {
 
 test "harness_entries covers every Cursor event magus uses" {
     final names = cursor_event_names();
-    assert\equal(names.len(), 5, "beforeShell, preToolUse, postToolUse, subagentStart, sessionEnd");
+    assert\equal(names.len(), 7, "sessionStart, beforeShell, beforeMCP, preToolUse, postToolUse, subagentStart, sessionEnd");
+    assert\isTrue(list_contains(names, "sessionStart"), "PATH / __MAGUS_BIN");
     assert\isTrue(list_contains(names, "beforeShellExecution"), "command guard");
+    assert\isTrue(list_contains(names, "beforeMCPExecution"), "MCP guard");
     assert\isTrue(list_contains(names, "preToolUse"), "write guard");
     assert\isTrue(list_contains(names, "postToolUse"), "advise delivery");
     assert\isTrue(list_contains(names, "subagentStart"), "lease provenance");
@@ -188,6 +220,12 @@ test "harness_entries covers every Cursor event magus uses" {
         assert\isTrue(block_entries.len() > 0, "each event has at least one entry");
         foreach (entry in block_entries) {
             assert\equal("{entry["command"]}", cursor_guard_command(), "every entry names the same guard script");
+            final timeout = entry["timeout"] as? int;
+            assert\equal(timeout, cursor_hook_timeout(), "every entry bounds how long magus may run");
+            if (path[1] == "beforeMCPExecution") {
+                final closed = entry["failClosed"] as? bool;
+                assert\equal(closed, true, "MCP gate fails closed");
+            }
         }
     }
 }

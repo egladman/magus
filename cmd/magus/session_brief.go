@@ -10,6 +10,7 @@ import (
 
 	rootmagus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
@@ -53,6 +54,19 @@ const (
 // window the brief exists to refill.
 const briefRecentSessions = 3
 
+// briefMemoryMB is the host-capacity claim session --brief takes while it Inspects
+// the workspace. Measured 2026-10-03 on this repository: a nested brief peaked near
+// 280MB RSS (~64MB heap inuse). Concurrent Inspect samples in panic reports ran
+// higher; the declaration seats one brief without inviting a stack of them onto a
+// laptop that already holds a go-build and a VM.
+const briefMemoryMB = 512
+
+// briefMaxLeases bounds how many live leases the brief names. Editing jobs (declared /
+// running) come first; exited holders still count as live for the write guard but a
+// dirty store of hundreds of them must not refill a compacted window. The omitted
+// count points at `magus ls jobs` for the rest.
+const briefMaxLeases = 12
+
 // sessionBrief is the whole payload, and the -o json shape.
 type sessionBrief struct {
 	Workspace string `json:"workspace"`
@@ -63,7 +77,9 @@ type sessionBrief struct {
 	Unpushed *briefUnpushed `json:"unpushed,omitempty"`
 	Tree     briefTree      `json:"tree"`
 	Leases   []briefLease   `json:"leases,omitempty"`
-	Failures []briefFailure `json:"failures,omitempty"`
+	// LeasesOmitted is how many live leases were not named after briefMaxLeases.
+	LeasesOmitted int            `json:"leases_omitted,omitempty"`
+	Failures      []briefFailure `json:"failures,omitempty"`
 	// GuardWiring is the host hook config paths in this checkout that invoke magus.
 	// Empty means the rules exist here and nothing runs them.
 	GuardWiring []string `json:"guard_wiring,omitempty"`
@@ -153,6 +169,14 @@ func sessionBriefCmd(ctx context.Context, root string) error {
 	if root == "" {
 		return fmt.Errorf("magus session --brief: no workspace here: the brief is read out of a checkout, so run from inside one or pass --root <path>")
 	}
+	// Claim the host budget before Inspect: the load is what panics measured stacking
+	// across parallel hooks. A full budget refuses (exit 75) so a sessionStart hook
+	// keeps env-only rather than outspending the machine next to a go-build.
+	release, err := admitSessionBrief(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer release()
 	// The magusfile is optional here for the reason `session checkpoint` makes it
 	// optional: the states where it will not load are exactly the ones where a
 	// reader most needs to be told where the work stands.
@@ -183,6 +207,22 @@ func sessionBriefCmd(ctx context.Context, root string) error {
 	return emitFormatted(opts, brief)
 }
 
+// admitSessionBrief takes the host-capacity claim for the workspace Inspect that
+// follows. broker: off skips; best-effort admits unarbitrated when no broker answers;
+// required refuses (MGS3022).
+func admitSessionBrief(ctx context.Context, root string) (func(), error) {
+	if globalCfg.Broker.Resolved() == types.BrokerOff {
+		return func() {}, nil
+	}
+	required := globalCfg.Broker.Resolved() == types.BrokerRequired
+	return cache.AdmitMachine(ctx, processBrokerClient(), types.MachineClaim{
+		Project:  ".",
+		Target:   "session-brief",
+		MemoryMB: briefMemoryMB,
+		Dir:      root,
+	}, required)
+}
+
 // gatherSessionBrief reads the checkout. ws is the loaded workspace, or nil when the
 // magusfile would not load, which costs the classification and nothing else.
 //
@@ -199,7 +239,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	if res, err := vcs.Resolve(ctx, root, "", vcsOpts); err == nil && res.VCS != nil {
 		brief.readVCS(ctx, res, ws)
 	}
-	brief.Leases = briefLeases(root)
+	brief.Leases, brief.LeasesOmitted = briefLeases(root)
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
@@ -312,17 +352,18 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 
 // briefLeases reads the rows a worker here may still be acting under, through the
 // same filter the write guard applies, so the brief and the refusals agree about
-// which leases are live.
-func briefLeases(root string) []briefLease {
+// which leases are live. Editing jobs are named first; the list stops at
+// briefMaxLeases and returns how many live rows were left unnamed.
+func briefLeases(root string) (leases []briefLease, omitted int) {
 	store, err := openJobs(root)
 	if err != nil {
-		return nil
+		return nil, 0
 	}
 	rows, err := store.List()
 	if err != nil {
-		return nil
+		return nil, 0
 	}
-	out := make([]briefLease, 0, len(rows))
+	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
 			continue
@@ -331,15 +372,24 @@ func briefLeases(root string) []briefLease {
 		if criteria == "" {
 			criteria = "no criteria recorded"
 		}
-		out = append(out, briefLease{
+		item := briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
 			Exec:       hint.JobExec.With(row.ID),
 			Criteria:   criteria,
 			Validation: row.Validation,
-		})
+		}
+		if row.State.Editing() {
+			editing = append(editing, item)
+		} else {
+			exited = append(exited, item)
+		}
 	}
-	return out
+	live := append(editing, exited...)
+	if len(live) <= briefMaxLeases {
+		return live, 0
+	}
+	return live[:briefMaxLeases], len(live) - briefMaxLeases
 }
 
 // lastRunFailures reports the failing targets of the most recent session that ran
@@ -537,7 +587,7 @@ func (b sessionBrief) writePromptCache(s *strings.Builder) {
 }
 
 func (b sessionBrief) writeLeases(s *strings.Builder) {
-	if len(b.Leases) == 0 {
+	if len(b.Leases) == 0 && b.LeasesOmitted == 0 {
 		return
 	}
 	briefLine(s, "leases live here:")
@@ -547,6 +597,9 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)
 		}
+	}
+	if b.LeasesOmitted > 0 {
+		briefLine(s, "  and %d more: %s", b.LeasesOmitted, hint.LsJobs.String())
 	}
 }
 

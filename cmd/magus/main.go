@@ -245,10 +245,11 @@ type dispatchProfile struct {
 	needsConfig    bool // load magus.yaml + env vars
 	needsForward   bool // attempt forward to a running server
 	needsWorkspace bool // call loadMagus + start per-process proc server
-	// spawnsWork marks the invocations that will run targets, as opposed to answering a
-	// question about them. Only these pay for machine-wide admission: `magus ls` costs
-	// the same however loaded the machine is, and starting a server for one would make
-	// every read command spawn a background process.
+	// spawnsWork marks the invocations that spend host capacity: target runs, and the
+	// few non-run paths that load a workspace the same way (session --brief). Only these
+	// start the broker and claim the machine budget: `magus ls` costs the same however
+	// loaded the machine is, and starting a broker for one would make every read command
+	// spawn a background process.
 	spawnsWork bool
 }
 
@@ -308,6 +309,23 @@ func hasDetachFlag(args []string) bool {
 			continue
 		}
 		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == gen.FlagRunDetach {
+			return true
+		}
+	}
+	return false
+}
+
+// hasBriefFlag reports whether a session invocation selected --brief. The profile
+// decision runs before cmdParse, so the flag is peeked the same way --detach is.
+func hasBriefFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if !strings.HasPrefix(a, "-") {
+			continue
+		}
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == "brief" {
 			return true
 		}
 	}
@@ -396,6 +414,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// thing that should route through a remote process, notify must reach the local
 		// OS notifier rather than one on the server's host, and a listing is one
 		// directory read with no warm server state to reuse.
+		//
+		// --brief is the exception that pays for the host: it Inspects the workspace
+		// (ClassifyFiles, harness names), and that load is the same class of cost a run
+		// step declares with memory_mb. Starting the broker and claiming capacity keeps
+		// a stack of sessionStart hooks from outspending the machine the way a stack of
+		// runs cannot. The listing stays config-only.
+		if hasBriefFlag(subArgs) {
+			return dispatchProfile{needsConfig: true, spawnsWork: true}
+		}
 		return dispatchProfile{needsConfig: true}
 	case "shell":
 		// The guard an agent host calls before every tool call. It reads the root magusfile's
@@ -881,8 +908,8 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	profile = resolveProfile(sub, subArgs) // re-resolve in case peekSub was approximate
 
-	// A run that executes steps here needs the broker for its host's capacity, and a run
-	// is the one thing that starts it. Only now, after the flag parse, so --broker off
+	// Work that claims host capacity needs the broker before it starts. Only now,
+	// after the flag parse, so --broker off
 	// is honored and -o decides the notice's shape.
 	if profile.spawnsWork && globalCfg.Broker.Resolved() != types.BrokerOff {
 		stopBroker := trace.phase("startup.broker")

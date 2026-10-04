@@ -290,6 +290,28 @@ func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
 	return g, adm
 }
 
+func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
+	budget, _ := testBudget(t, 1000, 2)
+	adm := &fakeAdmitter{budget: budget}
+	release, err := AdmitMachine(t.Context(), adm, types.MachineClaim{
+		Project: ".", Target: "session-brief", MemoryMB: 512,
+	}, false)
+	require.NoError(t, err)
+
+	holders := budget.Snapshot().Holders
+	require.Len(t, holders, 1)
+	assert.Equal(t, "session-brief", holders[0].Target)
+	assert.Equal(t, 512, holders[0].MemoryMB)
+	assert.Equal(t, 1, holders[0].Slots)
+	assert.Equal(t, os.Getpid(), holders[0].PID)
+	assert.NotEmpty(t, holders[0].Dir)
+
+	other := budget.Request(types.MachineClaim{Project: ".", Target: "build", MemoryMB: 600, PID: os.Getpid() + 1})
+	assert.False(t, other.Granted, "the brief's claim must count against another invocation")
+	release()
+	assert.Empty(t, budget.Snapshot().Holders)
+}
+
 func TestMachineGateFailsFastNamingTheHolder(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	g, adm := testGate(t, b)

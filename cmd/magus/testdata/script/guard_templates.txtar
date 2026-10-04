@@ -358,7 +358,7 @@ stdout 'NOTES store'
 stdout 'magus notes edit'
 cd $WORK
 
-# --- cursor-hook.buzz: one file, five events, a different response dialect ---
+# --- cursor-hook.buzz: one file, wired events, a different response dialect ---
 #
 # Cursor splits a verdict across two events: a gating event carries a deny and no
 # message on an allow, so the advisory has to ride the post-tool event. These cases
@@ -433,6 +433,41 @@ stdin cursor-post-write.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"additional_context":"'
 stdout 'every session'
+
+# --- cursor-hook.buzz: MCP via beforeMCPExecution ---------------------------
+#
+# The coverage marker now claims mcp deny/ask for Cursor. These cases run the
+# real beforeMCPExecution envelope (mcp_server_name + tool_name + tool_input)
+# so a declaration that no fixture reaches cannot land again. Same lease
+# scaffold as the shared Claude/Codex MCP block: the rebind rule is lease-
+# scoped, and an unbound session would refuse for a different reason.
+
+mkdir $WORK/home
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+cd notes-ws
+exec magus job fork harness/cursor-mcp-worker --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
+stdin $WORK/cursor-exec-mcp-worker.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+
+# case: mcp/pass
+# A judged MCP call that no rule refuses. Cursor answers allow on the gate
+# (unlike the silent shared templates), so the reply must name allow.
+stdin $WORK/cursor-mcp-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"allow"'
+
+# case: mcp/deny
+# job.clear from a bound worker is lease-rebind refuse; Cursor's dialect carries
+# permission=deny on both channels.
+stdin $WORK/cursor-mcp-call.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout 'leave your own job alone'
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+rm $WORK/home/state
 
 # A preToolUse on a tool carrying neither field allows without asking magus
 # anything. Cursor's preToolUse fires for every tool, and the shell tool in
@@ -1259,6 +1294,12 @@ not json at all
 {"hook_event_name": "preToolUse", "conversation_id": "c1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}}
 -- cursor-post-write.json --
 {"hook_event_name": "postToolUse", "conversation_id": "c1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}, "tool_output": "ok"}
+-- cursor-exec-mcp-worker.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c1", "command": "magus job exec harness/cursor-mcp-worker", "cwd": ".", "sandbox": false}
+-- cursor-mcp-read.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c1", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "import \"magus\"; magus\\describe(\"targets\")"}, "cwd": "."}
+-- cursor-mcp-call.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c1", "mcp_server_name": "magus", "tool_name": "client", "tool_input": {"script": "import \"magus\"; magus\\job.clear();"}, "cwd": "."}
 -- cursor-pre-other.json --
 {"hook_event_name": "preToolUse", "conversation_id": "c1", "tool_name": "Grep", "tool_input": {"pattern": "magus"}}
 -- cursor-session-end.json --
