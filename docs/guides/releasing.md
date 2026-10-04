@@ -212,6 +212,22 @@ Nothing above pushes. Review the tags, then push when you mean it:
 git push origin v0.4.0
 ```
 
+### Resume after the archives are published
+
+If the release workflow fails after creating the GitHub Release, run its resume mode
+from main with the published tag:
+
+```bash
+gh workflow run release.yaml --ref main -f resume_tag=v0.5.0-rc.2
+```
+
+The workflow checks out that tag, downloads the existing archives and signed
+checksums, and verifies each archive against the checksum manifest. It then cuts
+the release manifest, publishes the signed update index, spells, and container
+images. It skips the artifact builds and does not replace the published archives.
+The index target reuses its branch and pull request when rerun, and is skipped
+once the release is present in the index on main.
+
 ### Prereleases and the image channel
 
 `release` takes no channel charm, because a version tag has only one channel.
