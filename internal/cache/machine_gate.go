@@ -55,8 +55,8 @@ const ExitCodeMachineDeclaration = 78
 // retry a host with no arbiter at all.
 const ExitCodeBrokerUnavailable = 69
 
-// AdmitMachine claims the machine budget for host work that is not a Cache.Run step - a
-// session brief's workspace Inspect, and any future hook path that loads the same
+// AdmitMachine claims the machine budget for host work outside Cache.Run:
+// a session brief's workspace Inspect and any future hook path that loads the same
 // way. Same refuse/wait rules as a step: another invocation's claims refuse at once
 // (exit 75); this process or run's claims wait.
 //
