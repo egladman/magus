@@ -471,7 +471,7 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read graphRea
 }
 
 // mergedSearch is searchGraph as it answered a symbol-seeded read before ranking from the
-// names sidecar: every symbol shard merged into the default graph, then queried.
+// symbol names index: every symbol shard merged into the default graph, then queried.
 func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read graphRead) string {
 	tb.Helper()
 	ctx := context.Background()
@@ -488,7 +488,7 @@ func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config
 	return string(b)
 }
 
-// A symbol-seeded query ranks from the names sidecar and decodes only the shards its answer
+// A symbol-seeded query ranks from the symbol names index and decodes only the shards its answer
 // touches, and answers byte for byte what merging every shard did.
 func TestQuerySymbolSeededAnswersAsTheFullMergeDid(t *testing.T) {
 	f := newGraphReadFixture(t)

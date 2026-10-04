@@ -263,7 +263,7 @@ func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 }
 
 // TestResolveCacheDirReadsAnExplicitConfigFile covers WithConfigFile on the narrow
-// path a sidecar writer takes: it must find the cache location without discovering
+// path an auxiliary writer takes: it must find the cache location without discovering
 // projects or evaluating any magusfile.
 func TestResolveCacheDirReadsAnExplicitConfigFile(t *testing.T) {
 	root := writeWorkspace(t, map[string]string{"elsewhere/magus.yaml": "cache:\n  dir: cache-here\n"})

@@ -302,14 +302,14 @@ func (m *Magus) MetricsCollector() (*MetricsCollector, bool) {
 
 // CacheDir returns the resolved workspace cache directory: the same location the
 // journal run logs and per-ref output store live under. Callers that persist their own
-// sidecar stores (e.g. the MCP audit log) hang them off this so everything shares one
+// adjacent stores (e.g. the MCP audit log) hang them off this so everything shares one
 // cache root and one retention regime.
 func (m *Magus) CacheDir() string {
 	return resolveCacheDir(m.ws.Root, m.cfg)
 }
 
 // ResolveCacheDir returns the cache directory that an Open or Inspect workspace rooted at root
-// would use without discovering projects or evaluating magusfiles. Sidecar writers that need the
+// would use without discovering projects or evaluating magusfiles. Auxiliary writers that need the
 // shared cache location before a command runs use this narrow path so instrumentation does not pay
 // workspace-load cost merely to append an event.
 func ResolveCacheDir(root string, opts ...Option) (string, error) {

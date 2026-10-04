@@ -65,7 +65,7 @@ func TestPersistKeyInputsStoresNoEnvValues(t *testing.T) {
 
 	raw, err := os.ReadFile(filepath.Join(dir, "outputs", key, keyInputsName))
 	require.NoError(t, err)
-	assert.NotContains(t, string(raw), "sk-live-super-secret", "the raw sidecar must hold no env value")
+	assert.NotContains(t, string(raw), "sk-live-super-secret", "the raw file must hold no env value")
 
 	got, err := s.KeyInputsByRef(ref)
 	require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestPersistKeyInputsStoresNoEnvValues(t *testing.T) {
 }
 
 // TestPersistKeyInputsSkipsAnIdenticalRewrite: every attempt of a key carries the same
-// lines, so a repeat leaves the sidecar untouched, while changed lines replace it.
+// lines, so a repeat leaves the file untouched, while changed lines replace it.
 func TestPersistKeyInputsSkipsAnIdenticalRewrite(t *testing.T) {
 	dir := t.TempDir()
 	s := NewOutputStore(dir)
@@ -87,7 +87,7 @@ func TestPersistKeyInputsSkipsAnIdenticalRewrite(t *testing.T) {
 	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:a"}))
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.True(t, fi.ModTime().Equal(past), "identical lines must not rewrite the sidecar")
+	assert.True(t, fi.ModTime().Equal(past), "identical lines must not rewrite the file")
 
 	require.NoError(t, s.PersistKeyInputs(context.Background(), key, []string{"projectPath:b"}))
 	got, err := s.KeyInputsByKey(key)
@@ -128,9 +128,9 @@ func TestKeyInputsAbsent(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 }
 
-// TestKeyInputsSidecarInvisibleToAttemptScanners: the key-inputs sidecar must never be
+// TestKeyInputsFileInvisibleToAttemptScanners: the key-inputs file must never be
 // mistaken for an execution record by the stem-scanning paths.
-func TestKeyInputsSidecarInvisibleToAttemptScanners(t *testing.T) {
+func TestKeyInputsFileInvisibleToAttemptScanners(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	const key = "beefbeefbeefbeef"
 	ref := mustPersist(t, s, key, []byte("ok\n"), OutputDescriptor{Project: "p", Target: "build"})
@@ -138,8 +138,8 @@ func TestKeyInputsSidecarInvisibleToAttemptScanners(t *testing.T) {
 
 	attempts, err := s.Attempts(ref)
 	require.NoError(t, err)
-	require.Len(t, attempts, 1, "the sidecar is not an attempt")
-	assert.Len(t, s.ListDescriptors(), 1, "the sidecar is not a descriptor")
+	require.Len(t, attempts, 1, "the file is not an attempt")
+	assert.Len(t, s.ListDescriptors(), 1, "the file is not a descriptor")
 }
 
 // TestClassDigests: lines fold into one digest per label class, first-appearance

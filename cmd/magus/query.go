@@ -977,7 +977,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	var out types.KnowledgeQueryOutput
 	var err error
 	if seeded && !global {
-		// The answer knowledgeGraphOf then Query give, ranked from the names sidecar so only
+		// The answer knowledgeGraphOf then Query give, ranked from the symbol names index so only
 		// the shards the answer touches are decoded.
 		stop := tr.phase("query.load_and_search")
 		if refresh {

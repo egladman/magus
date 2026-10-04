@@ -63,7 +63,7 @@ notes:
           record; `--no-redundancy-check` forces the run. A merge commit in the range always
           re-gates, and a language without a declaration is always code. The per-repository
           gate history lives in the sessions store, shared across worktrees. `release-build:immutable`
-          and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
+          and `release-sign:immutable` refuse to replace an existing archive, checksum file,
           or manifest signature instead of overwriting it, so a re-run of the release process
           cannot silently replace a published artifact. The default stays overwrite, which the
           publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
@@ -184,10 +184,10 @@ notes:
         - |-
           **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
           upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
-          sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
+          `SHA256SUMS` writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
           broke every consumer at once: `sha256sum -c` per the verify docs, the install script's
           64-hex-digit gate (so a `setup-magus` `prebuilt` pin fails its checksum and audit's
-          compat job goes red), and `magus self update`'s manifest parser. The sidecar now
+          compat job goes red), and `magus self update`'s manifest parser. The `SHA256SUMS` writer now
           writes `crypto\sha256File`'s lowercase hex, and the `describe module` hint claiming
           `crypto.hash` covers `sha256_hex` is gone - that claimed equivalence is what wrote
           the bug.
@@ -266,7 +266,7 @@ body: |-
       record; `--no-redundancy-check` forces the run. A merge commit in the range always
       re-gates, and a language without a declaration is always code. The per-repository
       gate history lives in the sessions store, shared across worktrees. `release-build:immutable`
-      and `release-sign:immutable` refuse to replace an existing archive, checksum sidecar,
+      and `release-sign:immutable` refuse to replace an existing archive, checksum file,
       or manifest signature instead of overwriting it, so a re-run of the release process
       cannot silently replace a published artifact. The default stays overwrite, which the
       publish job's re-run path relies on; the rule is `releaser\overwriteRefusal`.
@@ -379,10 +379,10 @@ body: |-
       drift gate; the publish flow now regenerates and commits them alongside.
     - **`SHA256SUMS` is hex again.** Releases v0.1.0 through v0.3.0 shipped hex; an
       upstream-parity change then made Buzz's `crypto.hash` return raw digest bytes, and the
-      sidecar writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
+      `SHA256SUMS` writer, unchanged since v0.1.0, shipped v0.4.2's manifest as those bytes. That
       broke every consumer at once: `sha256sum -c` per the verify docs, the install script's
       64-hex-digit gate (so a `setup-magus` `prebuilt` pin fails its checksum and audit's
-      compat job goes red), and `magus self update`'s manifest parser. The sidecar now
+      compat job goes red), and `magus self update`'s manifest parser. The `SHA256SUMS` writer now
       writes `crypto\sha256File`'s lowercase hex, and the `describe module` hint claiming
       `crypto.hash` covers `sha256_hex` is gone - that claimed equivalence is what wrote
       the bug.

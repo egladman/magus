@@ -89,8 +89,8 @@ func TestQuerySymbolsDecodesOnlyTheShardsItsAnswerTouches(t *testing.T) {
 	assert.Equal(t, want, queryJSON(t, got))
 }
 
-// Without a current names sidecar the query merges every shard, as before.
-func TestQuerySymbolsFallsBackWithoutTheSidecar(t *testing.T) {
+// Without a current symbol names index the query merges every shard, as before.
+func TestQuerySymbolsFallsBackWithoutNamesIndex(t *testing.T) {
 	cacheDir, in := symbolQueryFixture(t)
 	want := fullQuery(t, cacheDir, in, "Alpha", 0)
 	g := build(t, cacheDir, BuildOptions{}, in)

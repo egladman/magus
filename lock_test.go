@@ -495,7 +495,7 @@ func ancestryCtx(t *testing.T, ids ...string) context.Context {
 		ctx = types.AppendInvocationAncestor(ctx, os.Getpid(), id)
 	}
 	// The owner record's Inv comes from the journal, never from the ancestry, so a test
-	// that only stamped the ancestry would leave the sidecar anonymous and prove nothing.
+	// that only stamped the ancestry would leave the owner record anonymous and prove nothing.
 	return journal.WithInvocationID(ctx, ids[len(ids)-1])
 }
 
@@ -547,7 +547,7 @@ func TestUnrelatedContentionFailsFast(t *testing.T) {
 	cacheDir := t.TempDir()
 	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
-	// A separate process, so the holder's sidecar carries an invocation id this one has
+	// A separate process, so the holder's owner record carries an invocation id this one has
 	// never heard of: the shape of two developers, or two agents, in one workspace.
 	cmd := helperHold(t, cacheDir, "app", 5_000)
 	if err := cmd.Start(); err != nil {
@@ -568,7 +568,7 @@ func TestUnrelatedContentionFailsFast(t *testing.T) {
 	}
 }
 
-// TestLockOwnerRecordsInvocation pins the sidecar field the refusal reads. Without it the
+// TestLockOwnerRecordsInvocation pins the owner record field the refusal reads. Without it the
 // holder is anonymous to its own descendants and every nested run waits forever again.
 func TestLockOwnerRecordsInvocation(t *testing.T) {
 	l := newProjectLocker(t.TempDir(), testWorkspaceRoot)
@@ -748,7 +748,7 @@ func quickSupersede(t *testing.T, bound time.Duration) {
 }
 
 // TestLockRecordRoundTripsTheSupersedeFields pins the two fields the qualifier reads. A
-// sidecar that loses either one silently disqualifies its holder, which reads as
+// owner record that loses either one silently disqualifies its holder, which reads as
 // supersession quietly not working rather than as a failure.
 func TestLockRecordRoundTripsTheSupersedeFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "lock.owner")
@@ -783,7 +783,7 @@ func TestLockRecordRoundTripsTheSupersedeFields(t *testing.T) {
 
 // TestLockRecordReadsBothDirectionsAcrossVersions is the compat half. A magus that
 // predates supersession and one that does not share a lock directory whenever two
-// checkouts share a cache, and neither may choke on the other's sidecar.
+// checkouts share a cache, and neither may choke on the other's owner record.
 func TestLockRecordReadsBothDirectionsAcrossVersions(t *testing.T) {
 	dir := t.TempDir()
 
@@ -853,7 +853,7 @@ func TestSupersedeQualifier(t *testing.T) {
 		{"the waiter is not a gate", false, holder(nil), false},
 		{"the holder started later", true, holder(func(r *processRecord) { r.Started = now.Add(time.Minute) }), false},
 		{"the holder has no start time on record", true, holder(func(r *processRecord) { r.Started = time.Time{} }), false},
-		{"a sidecar from a magus that predates supersession", true, processRecord{PID: 4821, Command: "magus run ci .", Started: now.Add(-time.Minute)}, false},
+		{"an owner record from a magus that predates supersession", true, processRecord{PID: 4821, Command: "magus run ci .", Started: now.Add(-time.Minute)}, false},
 		{"no holder on record", true, processRecord{}, false},
 	}
 	for _, tc := range cases {
@@ -865,7 +865,7 @@ func TestSupersedeQualifier(t *testing.T) {
 			l := newProjectLocker(t.TempDir(), testWorkspaceRoot, opts...)
 			l.started = now
 			if tc.owner.PID != 0 {
-				// The acquire path creates the lock directory; this writes the sidecar
+				// The acquire path creates the lock directory; this writes the owner record
 				// without acquiring, standing in for the earlier gate that did.
 				if err := os.MkdirAll(filepath.Dir(l.ownerPath("app")), 0o755); err != nil {
 					t.Fatal(err)

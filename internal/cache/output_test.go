@@ -1182,7 +1182,7 @@ func TestDescriptorByRefSkipsTheBlob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, viaBytes, desc, "both readers must report the same identity")
 
-	// Remove the sidecar: the blob still resolves, so ByRef degrades to a zero
+	// Remove the descriptor file: the blob still resolves, so ByRef degrades to a zero
 	// descriptor while DescriptorByRef must say it cannot answer.
 	require.NoError(t, os.Remove(filepath.Join(dir, "outputs", key, desc.Attempt+descExt)))
 	_, zero, err := s.ByRef(ref)

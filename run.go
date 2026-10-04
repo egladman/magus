@@ -2947,7 +2947,7 @@ func charmedTarget(target string, charms []string) string {
 // observability one.
 //
 // The consequence, and it is accepted: every non-CLI run carries an invocation id that
-// resolves to no journal file, while lock sidecars and machine claims record that id. A
+// resolves to no journal file, while lock owner records and machine claims record that id. A
 // reader who follows one there finds nothing, and the id is still doing its job, which is
 // to let a descendant recognize this run's claims.
 func attributeRun(ctx context.Context) context.Context {

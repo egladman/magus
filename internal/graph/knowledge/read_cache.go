@@ -11,7 +11,7 @@ import (
 )
 
 // The read cache keeps what a long-lived process decodes from its knowledge stores: shard
-// files, the names sidecar and the routing file, and per store the symbol-merged graph with
+// files, the symbol names index and the routing file, and per store the symbol-merged graph with
 // its adjacency built, in place of the symbol shards merged into it. A Store is built per call, so the cache is the process's, not a
 // Store's. Every entry is bound to what it was read from, so a read through it returns what
 // an uncached read returns:
@@ -41,7 +41,7 @@ type cachedFile struct {
 	value any
 	used  uint64
 	// store, name and fingerprint say which manifest entry a shard file holds, so a sweep
-	// against that store's manifest can drop it; name is empty for the sidecars.
+	// against that store's manifest can drop it; name is empty for the index files.
 	store, name, fingerprint string
 }
 
