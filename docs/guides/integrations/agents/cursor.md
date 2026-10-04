@@ -480,8 +480,9 @@ fun mcpPayload(event: any?) > str {
 
 // sessionStartReply puts this checkout's magus first for later hook runs, and
 // may hand the model a brief under SESSION_BRIEF_MAX_BYTES. Env always; context
-// only when the brief fits. Profile a suspect run with
-// MAGUS_PPROF=mem:/tmp/s.mem (and buzz --profile on the outer hook).
+// only when the brief fits. The nested session --brief claims host capacity; a
+// full budget (exit 75) or an oversized brief keeps env only. Profile a suspect
+// run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz --profile on the outer hook).
 fun sessionStartReply(bin: str) > str {
     final root = hook\workspaceRoot();
     if (root == "") { return EMPTY; }
