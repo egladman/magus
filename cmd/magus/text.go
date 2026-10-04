@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // classifyFunc classifies workspace-relative (or absolute, in-workspace) paths
@@ -79,7 +80,7 @@ func searchableFiles(root string, scopes []string) (paths []string, skipped int,
 			if d.IsDir() {
 				// The skip list applies below a scope, never to the scope itself: naming
 				// node_modules explicitly is a caller asking for it on purpose.
-				if p != scope && skipSearchDirs[d.Name()] {
+				if p != scope && (skipSearchDirs[d.Name()] || vcs.IsSecondaryCheckout(p)) {
 					return filepath.SkipDir
 				}
 				return nil
@@ -199,29 +200,23 @@ func textScan(ctx context.Context, root, pattern string, scopes []string, noGene
 		return nil, 0, skipped, 0, false, err
 	}
 
-	genSet := map[string]bool{}
-	if classify != nil {
-		if entries, clsErr := classify(ctx, paths); clsErr == nil && len(entries) == len(paths) {
+	// Only an explicit exclusion needs every path classified before reading it.
+	// The default search marks generated matches after scanning, so classifying
+	// thousands of files with no match would do work the answer never uses.
+	if noGenerated && classify != nil {
+		entries, clsErr := classify(ctx, paths)
+		if clsErr == nil && len(entries) == len(paths) {
 			classified = true
+			kept := paths[:0:0]
 			for i, e := range entries {
 				if e.Role == "output" {
-					genSet[paths[i]] = true
+					generated++
+				} else {
+					kept = append(kept, paths[i])
 				}
 			}
+			paths = kept
 		}
-	}
-
-	// Exclusion happens before the scan, not after: an excluded file must never be
-	// read, or "excluded" would just mean "read but not counted".
-	if noGenerated && classified {
-		kept := paths[:0:0]
-		for _, p := range paths {
-			if !genSet[p] {
-				kept = append(kept, p)
-			}
-		}
-		generated = len(paths) - len(kept)
-		paths = kept
 	}
 
 	r := textindex.NewReader()
@@ -231,17 +226,26 @@ func textScan(ctx context.Context, root, pattern string, scopes []string, noGene
 	if err != nil {
 		return nil, len(paths), skipped, generated, classified, err
 	}
-	if !noGenerated && classified {
+	if !noGenerated && classify != nil {
+		matchedPaths := make([]string, 0, len(matches))
 		seen := map[string]bool{}
 		for _, m := range matches {
 			if !seen[m.Path] {
 				seen[m.Path] = true
-				if genSet[m.Path] {
+				matchedPaths = append(matchedPaths, m.Path)
+			}
+		}
+		entries, clsErr := classify(ctx, matchedPaths)
+		if clsErr == nil && len(entries) == len(matchedPaths) {
+			classified = true
+			for _, e := range entries {
+				if e.Role == "output" {
 					generated++
 				}
 			}
 		}
 	}
+
 	return matches, len(paths), skipped, generated, classified, nil
 }
 

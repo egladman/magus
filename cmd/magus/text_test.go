@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,8 +62,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	require.NoError(t, err, "magus.Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	hits, files, searched, skipped, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, m.ClassifyFiles)
+	var classifiedPaths []string
+	classify := func(ctx context.Context, paths []string) ([]types.FileEntry, error) {
+		classifiedPaths = append(classifiedPaths, paths...)
+		return m.ClassifyFiles(ctx, paths)
+	}
+	hits, files, searched, skipped, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, classify)
 	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{filepath.Join(root, "src/a.go"), filepath.Join(root, "gen/b.go")}, classifiedPaths,
+		"the default search classifies matched files only")
 	assert.True(t, classified, "a loaded workspace must classify")
 	assert.Equal(t, 2, hits)
 	assert.Equal(t, 2, files, "both files matched; the generated one is marked, not hidden")
@@ -164,6 +172,31 @@ func TestSearchableFilesSkipsMachineWrittenTrees(t *testing.T) {
 		rels = append(rels, rel)
 	}
 	assert.Equal(t, []string{"kept.go"}, rels)
+}
+
+func TestSearchableFilesSkipsNestedSecondaryCheckout(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"kept.go":                           "package main",
+		".claude/skills/rule.md":            "agent rule",
+		"worktrees/source.go":               "package source",
+		".claude/worktrees/one/.git":        "gitdir: /tmp/primary/.git/worktrees/one",
+		".claude/worktrees/one/shadowed.go": "package shadowed",
+	})
+
+	paths, _, err := searchableFiles(w.Root(), nil)
+	require.NoError(t, err)
+	rels := make([]string, 0, len(paths))
+	for _, p := range paths {
+		rel, relErr := filepath.Rel(w.Root(), p)
+		require.NoError(t, relErr)
+		rels = append(rels, rel)
+	}
+	assert.ElementsMatch(t, []string{"kept.go", filepath.Join(".claude", "skills", "rule.md"), filepath.Join("worktrees", "source.go")}, rels)
+
+	paths, _, err = searchableFiles(w.Root(), []string{w.Path(".claude/worktrees/one")})
+	require.NoError(t, err)
+	assert.Contains(t, paths, w.Path(".claude/worktrees/one/shadowed.go"), "an explicitly named checkout stays searchable")
 }
 
 // TestSearchableFilesCountsWhatItDeclined is the property that keeps a short answer
@@ -319,5 +352,43 @@ func TestTextPresenceNotes(t *testing.T) {
 			got := textPresenceNotes(tc.skipped, tc.generated, tc.matched, tc.classified, tc.noGenerated)
 			assert.Equal(t, tc.want, got)
 		})
+	}
+}
+
+// BenchmarkTextPresenceSparseMatches models a large workspace where a name appears in
+// only one file. The default search still reads every file but only matched files need
+// generated-output classification.
+func BenchmarkTextPresenceSparseMatches(b *testing.B) {
+	w := testkit.NewWorkspace(b)
+	for i := 0; i < 3000; i++ {
+		name := fmt.Sprintf("src/pkg%02d/file%04d.go", i/100, i)
+		body := "package pkg\n"
+		if i == 2117 {
+			body = "package pkg\nconst Name = \"NEEDLE_VALUE\"\n"
+		}
+		w.Write(name, body)
+	}
+	w.Magusfile(`import "magus";
+magus\project({"outputs": ["gen/**"]});
+export fun build(ctx: magus\Context, args: [str]) > void {}
+`)
+	root, err := filepath.EvalSymlinks(w.Root())
+	if err != nil {
+		b.Fatal(err)
+	}
+	ctx := context.Background()
+	m, err := magus.Open(ctx, root)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer m.Close()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		hits, files, searched, _, generated, classified, err := textPresence(ctx, root, "NEEDLE_VALUE", false, m.ClassifyFiles)
+		if err != nil || hits != 1 || files != 1 || searched != 3001 || generated != 0 || !classified {
+			b.Fatalf("unexpected result: hits=%d files=%d searched=%d generated=%d classified=%t err=%v", hits, files, searched, generated, classified, err)
+		}
 	}
 }
