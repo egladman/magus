@@ -166,6 +166,31 @@ func TestSearchableFilesSkipsMachineWrittenTrees(t *testing.T) {
 	assert.Equal(t, []string{"kept.go"}, rels)
 }
 
+func TestSearchableFilesSkipsNestedSecondaryCheckout(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"kept.go":                           "package main",
+		".claude/skills/rule.md":            "agent rule",
+		"worktrees/source.go":               "package source",
+		".claude/worktrees/one/.git":        "gitdir: /tmp/primary/.git/worktrees/one",
+		".claude/worktrees/one/shadowed.go": "package shadowed",
+	})
+
+	paths, _, err := searchableFiles(w.Root(), nil)
+	require.NoError(t, err)
+	rels := make([]string, 0, len(paths))
+	for _, p := range paths {
+		rel, relErr := filepath.Rel(w.Root(), p)
+		require.NoError(t, relErr)
+		rels = append(rels, rel)
+	}
+	assert.ElementsMatch(t, []string{"kept.go", filepath.Join(".claude", "skills", "rule.md"), filepath.Join("worktrees", "source.go")}, rels)
+
+	paths, _, err = searchableFiles(w.Root(), []string{w.Path(".claude/worktrees/one")})
+	require.NoError(t, err)
+	assert.Contains(t, paths, w.Path(".claude/worktrees/one/shadowed.go"), "an explicitly named checkout stays searchable")
+}
+
 // TestSearchableFilesCountsWhatItDeclined is the property that keeps a short answer
 // distinguishable from a small one. A count that hides its exclusions is the failure
 // mode that sends a reader back to grep permanently.

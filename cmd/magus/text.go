@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/textindex"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // classifyFunc classifies workspace-relative (or absolute, in-workspace) paths
@@ -79,7 +80,7 @@ func searchableFiles(root string, scopes []string) (paths []string, skipped int,
 			if d.IsDir() {
 				// The skip list applies below a scope, never to the scope itself: naming
 				// node_modules explicitly is a caller asking for it on purpose.
-				if p != scope && skipSearchDirs[d.Name()] {
+				if p != scope && (skipSearchDirs[d.Name()] || vcs.IsSecondaryCheckout(p)) {
 					return filepath.SkipDir
 				}
 				return nil
