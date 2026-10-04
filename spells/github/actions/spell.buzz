@@ -190,7 +190,7 @@ export fun get_artifact(target: Target, cb: fun(any)) > bool !> any {
     final loc = download_url("{io["hash"]}");
     if (loc == "") { return false; }
     // The download URL is a pre-signed Azure blob URL; it needs no auth header.
-    final dcode = http\download(loc, "{io["dest"]}", {"timeout": BLOB_TIMEOUT_SECS});
+    final dcode = http\download(loc, "{io["dest"]}", {}, {"timeout": BLOB_TIMEOUT_SECS});
     if (dcode != 200) {
         cache_fail("blob GET", "status {dcode}");
     }
