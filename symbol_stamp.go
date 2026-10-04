@@ -23,7 +23,7 @@ import (
 // version, 26 subprocesses on this repository, which was most of the wall time of a
 // `magus query` that could match a symbol.
 //
-// The stamp lets a read skip that. When the probe finds an index fresh, a sidecar records
+// The stamp lets a read skip that. When the probe finds an index fresh, a stamp file records
 // what a stat-only look at the same inputs sees; a later read that sees the same is fresh
 // without forking, and any difference sends it back to the probe. The stamp can only skip
 // a probe. It never grants freshness the probe did not grant first.
@@ -33,18 +33,18 @@ import (
 // forks nothing once seen. What the stamp cannot see is a toolchain upgrade with unchanged
 // sources, which the scip key leaves out on purpose.
 
-// symbolStampFormat changes whenever the stamp's composition does, so a sidecar written
+// symbolStampFormat changes whenever the stamp's composition does, so a stamp file written
 // under an older meaning never matches.
 const symbolStampFormat = "symbol-stamp/3"
 
-// symbolStampPath is the sidecar beside one project's SCIP index.
+// symbolStampPath is the stamp file beside one project's SCIP index.
 func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
 
-// symbolIndexStamp is what the sidecar must hold for p's index to read fresh
+// symbolIndexStamp is what the stamp file must hold for p's index to read fresh
 // without a probe: the scip step's key before run keying (sources by content through the
 // mtime fast path, config, spell definitions and this binary, no tool versions and so no
 // subprocess) and the identity of each completion stamp the step declares, the index among
-// them. "" when the key cannot be computed, which matches no sidecar.
+// them. "" when the key cannot be computed, which matches no stamp file.
 func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, memo *cache.SourceMemo) string {
 	step := m.buildStep(p, spells.SymbolIndexOp)
 	key, _, err := c.StepKeyMemo(ctx, &step, memo)
@@ -74,7 +74,7 @@ func symbolStampMatches(indexPath, want string) bool {
 }
 
 // writeSymbolStamp records want once the probe has found the index fresh. Best-effort: a
-// sidecar that cannot be written costs the next read a probe and nothing else. Written
+// stamp file that cannot be written costs the next read a probe and nothing else. Written
 // atomically, so a concurrent reader never matches half a stamp.
 func writeSymbolStamp(indexPath, want string) {
 	if want == "" {
@@ -101,7 +101,7 @@ func (m *Magus) SymbolFreshnessEnv() []string {
 // SymbolIndexStatusByStamp reports each symbol-capable project's index freshness, sorted
 // by project, checked now: unlike SymbolIndexStatus it never answers from the server's
 // watcher memo, so a graph read can state freshness as of the moment it reads. A project
-// whose sidecar matches is fresh with no probe; the rest pay the tool-version and
+// whose stamp file matches is fresh with no probe; the rest pay the tool-version and
 // observation probes once for the sweep, as a run does, and each one the probe finds
 // fresh is stamped for the next read. Safe for concurrent use.
 func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus {

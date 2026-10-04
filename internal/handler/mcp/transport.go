@@ -188,7 +188,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 		mcpserver.WithHooks(hooks),
 		mcpserver.WithRecovery(),
 	)
-	// The activity trail is an append-only JSONL sidecar under the cache dir (next to the
+	// The activity trail is an append-only JSONL log file under the cache dir (next to the
 	// journal run logs). Writes are stateless (open/append/close per event). Rotate here trims
 	// it once at construction; keeping it bounded thereafter belongs to the server's
 	// rotate-activities maintenance job, which is the ONLY trigger: a second one driven off

@@ -1213,7 +1213,7 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// pathIDsFile is a sidecar holding each shard's file and dir node IDs, bound to the
+// pathIDsFile is an index file holding each shard's file and dir node IDs, bound to the
 // fingerprint they were read at. The @session overlay resolves contacts against exactly
 // those IDs across every class, so reassembling it alone reads this instead of decoding
 // every stored symbol shard to learn which files exist.
@@ -1255,9 +1255,9 @@ func (s *Store) readPathIDs() map[string]pathIDEntry {
 	return idx
 }
 
-// recordPathIDs brings the sidecar in line with man: entries for shards it no longer
+// recordPathIDs brings the path ID index in line with man: entries for shards it no longer
 // names, or names at another fingerprint, are dropped, and every synced shard is indexed.
-// Best-effort: a sidecar that is missing or behind only costs the next overlay rebuild a
+// Best-effort: a path ID index that is missing or behind only costs the next overlay rebuild a
 // read of the shards it lacks.
 func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[string]string, man manifest) {
 	old := s.readPathIDs()
@@ -1287,12 +1287,12 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 		err = file.WriteFileAtomic(s.pathIDsPath(), b, 0o644)
 	}
 	if err != nil {
-		s.log.DebugContext(ctx, "knowledge: path id sidecar write failed", slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "knowledge: path ID index write failed", slog.String("error", err.Error()))
 	}
 }
 
 // storedPathIDs returns the file and dir node IDs of every stored shard whose class is
-// not in skip, from the sidecar where it is current and from the shard file otherwise.
+// not in skip, from the path ID index where it is current and from the shard file otherwise.
 func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardClass) (map[string]bool, error) {
 	out := map[string]bool{}
 	if man == nil {

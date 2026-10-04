@@ -62,7 +62,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	assert.Equal(t, rA.Hash, hashOfLines(DigestEnvValues(lines)), "the imported lines re-derive the shared key")
 
 	// Ref equality alone proves nothing: refs are key-derived, so B would compute
-	// A's ref even if the artifact shipped no sidecars at all. Assert what actually
+	// A's ref even if the artifact shipped no metadata files at all. Assert what actually
 	// crossed the wire.
 	names := tarMemberNames(t, findBackendArtifact(t, remote, "test__pkg"))
 	assert.Contains(t, names, "outputs/"+rA.Hash+"/"+keyInputsName, "the artifact must carry the key inputs")

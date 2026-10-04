@@ -48,12 +48,12 @@ func symbolRefKey(symbolID string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// routingFormat versions what the routing file and the names sidecar hold. It is folded
+// routingFormat versions what the routing file and the symbol names index hold. It is folded
 // into symbolShardsKey, so a file written in an older format never matches and is rebuilt
 // on the next sync.
 //
 //	2: Labels.
-//	3: the names sidecar.
+//	3: the symbol names index.
 const routingFormat = 3
 
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
@@ -148,7 +148,7 @@ func (s *Store) routingPath() string { return filepath.Join(s.dir, "shards", sym
 // at the write layer: callers treat a failure as non-fatal (the graph still works,
 // lookups just fall back to loading all symbol shards).
 //
-// The names sidecar a symbol query ranks from is derived from the same shards under the
+// The symbol names index a symbol query ranks from is derived from the same shards under the
 // same key, so it is written here too.
 func (s *Store) writeXref(shards []Shard, man manifest) error {
 	key := symbolShardsKey(&man)

@@ -1062,7 +1062,7 @@ notes:
         - |-
           The knowledge graph's git-history (`@vcs`) scan is now cached through the standard shard
           store - keyed by an input fingerprint (HEAD + window + schema) recorded in the manifest -
-          instead of a bespoke `vcs-inputs.json` sidecar. The expensive scan runs only when HEAD or
+          instead of a bespoke `vcs-inputs.json` file. The expensive scan runs only when HEAD or
           the window actually moves; an unchanged tree reuses the shard from disk with no extra
           serialization. The window (`knowledge.vcs.max_commits`, default 1000) bounds the scan so
           it never walks a whole monorepo's history.
@@ -2499,7 +2499,7 @@ body: |-
     ### Security
 
     - The remote cache artifact's signature covers every member instead of the manifest alone:
-      the build log and the portable-ref sidecars are authenticated, imported extras are staged
+      the build log and the portable reference metadata files are authenticated, imported extras are staged
       until the signature clears so a rejected artifact leaves nothing behind, and a signature
       is bound both to the KIND of object it was made over and to the (project, cache key) it
       is served for. Without that binding a signed output bundle could be re-tarred as a cache
@@ -2998,7 +2998,7 @@ body: |-
 
     - The knowledge graph's git-history (`@vcs`) scan is now cached through the standard shard
       store - keyed by an input fingerprint (HEAD + window + schema) recorded in the manifest -
-      instead of a bespoke `vcs-inputs.json` sidecar. The expensive scan runs only when HEAD or
+      instead of a bespoke `vcs-inputs.json` file. The expensive scan runs only when HEAD or
       the window actually moves; an unchanged tree reuses the shard from disk with no extra
       serialization. The window (`knowledge.vcs.max_commits`, default 1000) bounds the scan so
       it never walks a whole monorepo's history.

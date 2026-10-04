@@ -320,7 +320,7 @@ only if the ref is unknown locally. When nothing has it, the error names the sto
 checked, so a never-published ref is distinguishable from a typo.
 
 Everything the signature covers grew with this: it now authenticates the build log
-and the sidecars, not just the manifest. An artifact whose log was altered in transit
+and the metadata files, not just the manifest. An artifact whose log was altered in transit
 is rejected outright instead of having that log written to your cache, and imported
 extras are staged until the signature clears, so a rejected artifact leaves nothing
 behind. A signature is also bound to the KIND of object it was made over and to the
@@ -422,7 +422,7 @@ collides with a ref id.
   answer: it lists every matching candidate, git-style, and any longer prefix (up
   to the full 64 hex digits) still resolves.
 - Output is persisted verbatim as a per-attempt blob under the cache directory
-  (`outputs/<key>/`), alongside a small descriptor sidecar (ref, project, target,
+  (`outputs/<key>/`), alongside a small descriptor file (ref, project, target,
   status, timestamp, duration, key, attempt, magus version), on success and on
   failure. Retrieval is a straight byte read, so `magus query output` returns
   exactly the bytes the target wrote.

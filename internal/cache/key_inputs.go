@@ -22,7 +22,7 @@ import (
 // answer "WHY does my machine compute a different ref than CI" with the exact
 // disagreeing line.
 
-// keyInputsName is the per-key sidecar holding the step's pre-hash key inputs as a JSON
+// keyInputsName is the per-key file holding the step's pre-hash key inputs as a JSON
 // array: outputs/<cacheKey>/key-inputs. Deliberately NOT *.out or *.json, so the
 // attempt-file scanners (resolveRef, Attempts, ListDescriptors, pruneKey) never
 // mistake it for an execution record.
@@ -85,7 +85,7 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	if old, err := os.ReadFile(path); err == nil && bytes.Equal(old, data) {
 		return nil
 	}
-	// Not fsync'd, for the reason Persist's records are not: losing this sidecar only
+	// Not fsync'd, for the reason Persist's records are not: losing this file only
 	// leaves --identity with nothing to explain.
 	return file.ReplaceFile(path, data, 0o644)
 }
@@ -132,7 +132,7 @@ func (s *OutputStore) KeyInputsByRef(ref string) ([]string, error) {
 // KeyInputsByKey returns the stored pre-hash key inputs for an EXACT cache key, the
 // shape a manifest records. It does not scan the store the way KeyInputsByRef must: a
 // prefix search would be a slower route to the same directory, and it fails outright once
-// the key's attempt blobs have been pruned away while this sidecar remains.
+// the key's attempt blobs have been pruned away while this file remains.
 func (s *OutputStore) KeyInputsByKey(cacheKey string) ([]string, error) {
 	return readKeyInputs(filepath.Join(s.outputsDir(), cacheKey))
 }

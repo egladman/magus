@@ -249,7 +249,7 @@ func (c *Cache) RemoteSummary(ctx context.Context) (RemoteTally, bool) {
 }
 
 // exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured
-// build log, and the run's portable-ref sidecars (output descriptor + key inputs) for
+// build log, and the run's portable reference metadata files (output descriptor + key inputs) for
 // (projectPath, hash). Every non-manifest member is recorded in the signature
 // envelope's Members map, so the whole artifact is authenticated rather than just its
 // manifest and blobs.
@@ -371,7 +371,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 		}
 	}
 
-	// The portable-ref sidecars: the newest attempt's descriptor and the step's key
+	// The portable reference metadata files: the newest attempt's descriptor and the step's key
 	// lines. With these, a machine importing this artifact resolves the SAME ref the
 	// producer printed, and can diff its key against the producer's, instead of
 	// minting a fresh local ref for identical inputs.
@@ -528,7 +528,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 			manifest = stagedMember{tmp: tmp, final: clean}
 			manifestBytes = buf.Bytes()
 		case rel == logRel || strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
-			// The build log and the portable-ref sidecars, both scoped to the entry
+			// The build log and the portable reference metadata files, both scoped to the entry
 			// being imported so an artifact cannot write over another key's records.
 			tmp, sum, err := stageCacheFile(tr, clean, "", &budget)
 			if err != nil {

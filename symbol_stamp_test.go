@@ -124,6 +124,6 @@ func TestSymbolStampWithoutAnIndexIsNotBuilt(t *testing.T) {
 	require.NoError(t, os.Remove(index))
 
 	probes.Store(0)
-	assert.Equal(t, types.SymbolIndexNotBuilt, stampedFreshness(t, m), "a sidecar left behind says nothing about an index that is gone")
+	assert.Equal(t, types.SymbolIndexNotBuilt, stampedFreshness(t, m), "a stamp file left behind says nothing about an index that is gone")
 	assert.Zero(t, probes.Load())
 }

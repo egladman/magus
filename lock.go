@@ -41,7 +41,7 @@ type projectHold struct {
 // release unlocks every project this hold took and stops watching the root. Idempotent:
 // the stall watchdog is a second caller. Without that, a watchdog release followed by
 // the deferred release runs removeOwner twice, and between them another process can take
-// the lock and write its own sidecar, which the finished run would then delete, making
+// the lock and write its own owner record, which the finished run would then delete, making
 // the live holder invisible to `magus status` and to every refusal that names it.
 func (h *projectHold) release() {
 	if h.stopWatchdog != nil {
@@ -253,7 +253,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 // a handle on a given lock.
 type projectLocker struct {
 	dir string
-	// root is the resolved workspace root, recorded in every sidecar. It is what makes
+	// root is the resolved workspace root, recorded in every owner record. It is what makes
 	// "the same tree" a comparison of paths rather than of project names: a sibling
 	// worktree serves a project called "." too, and its gate judges different files.
 	root string
@@ -339,7 +339,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, opts ...lockerOption) *pro
 // nor a timeout can tell that from ordinary contention; ancestry can, and it is the only
 // signal that also covers the server, where holder and waiter are threads of one process.
 //
-// Best-effort by design: no sidecar, or an ancestry that never reached this process,
+// Best-effort by design: no owner record, or an ancestry that never reached this process,
 // yields nil and the contention is judged like any other. Over-detecting would refuse a
 // legitimate concurrent run.
 func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) error {
@@ -347,7 +347,7 @@ func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) er
 	if !types.HasInvocationAncestor(ctx, rec.PID, rec.Inv) {
 		return nil
 	}
-	// A sidecar outlives a holder that was killed between locking and cleanup, and the
+	// An owner record outlives a holder that was killed between locking and cleanup, and the
 	// flock behind it may since have been taken by someone else entirely. Believing a
 	// corpse here would diagnose re-entry against a holder that is not an ancestor, so
 	// confirm the lock is still held. Same question heldLocks asks, for the same reason.
@@ -370,7 +370,7 @@ func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) er
 // magus invocation.
 type lockContendedError struct {
 	Project string
-	Owner   string // describeOwner's rendering of the holder, "" when the sidecar says nothing
+	Owner   string // describeOwner's rendering of the holder, "" when the owner record says nothing
 }
 
 // lockContendedExit is the process status a contended acquire carries.
@@ -648,7 +648,7 @@ type processRecord struct {
 	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
 	// a DESCENDANT of it: a pid cannot, since under the server the holder and the waiter
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
-	// sidecar written by an older magus; an acquirer then has nothing to match.
+	// owner record written by an older magus; an acquirer then has nothing to match.
 	Inv string `record:"invocation,omitempty"`
 	// Run is the outermost invocation the holder runs underneath (types.InvocationRoot).
 	// A holder with the same Run as the acquirer is a sibling in the same run, and is
@@ -659,16 +659,16 @@ type processRecord struct {
 	// target. Together they are the supersede qualifier: same tree, both gates.
 	//
 	// omitempty is what makes two magus versions safe to run against one lock directory,
-	// which two checkouts sharing a cache dir already do. A sidecar written by a magus
+	// which two checkouts sharing a cache dir already do. An owner record written by a magus
 	// that predates supersession lacks both lines and decodes to the zero value, which
-	// disqualifies its holder, leaving it refused like any other; a sidecar carrying
+	// disqualifies its holder, leaving it refused like any other; an owner record carrying
 	// them decodes in the older magus too, because a record reader looks up the field
 	// names it knows and ignores every other line.
 	Root string `record:"root,omitempty"`
 	Gate bool   `record:"gate,omitempty"`
 }
 
-// The sidecar layout, in ONE place. HeldLocks previously re-derived these by hand
+// The owner record layout, in ONE place. HeldLocks previously re-derived these by hand
 // (suffix match plus filepath.Rel), so changing lockPath would have made it silently
 // return nothing instead of failing.
 const (
@@ -678,24 +678,24 @@ const (
 	locksDirName = "locks"
 )
 
-// ownerPath is the sidecar beside the lock file itself, so it inherits the same
+// ownerPath is the owner record beside the lock file itself, so it inherits the same
 // per-project directory layout and is removed with it.
 func (l *projectLocker) ownerPath(projectPath string) string {
 	return l.lockPath(projectPath) + ownerSuffix
 }
 
-// recordOwner writes the sidecar after a successful acquire. Every failure is
+// recordOwner writes the owner record after a successful acquire. Every failure is
 // swallowed: not being able to say who holds a lock must never fail a run that
 // already holds it.
 func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
-	// The owner's Started is when this invocation began LOCKING, not when the sidecar was
+	// The owner's Started is when this invocation began LOCKING, not when the owner record was
 	// written, so a supersede compares two runs against one clock.
 	_ = record.Write(l.ownerPath(projectPath), l.selfRecord(ctx, l.started))
 	l.clearStaleYield(projectPath)
 }
 
 // selfRecord builds this invocation's identity, the payload both the owner and
-// yield sidecars carry. Stored as one cattable file, so a stuck run is diagnosable
+// yield records carry. Stored as one cattable file, so a stuck run is diagnosable
 // with cat alone:
 //
 //	$ cat .magus/locks/*/lock.owner
@@ -909,21 +909,21 @@ func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, 
 		slog.String("holder_command", holder.Command))
 }
 
-// removeOwner clears the sidecar on release so a later reader never attributes a
+// removeOwner clears the owner record on release so a later reader never attributes a
 // lock to a process that has finished. Best-effort, like the write.
 func (l *projectLocker) removeOwner(projectPath string) {
 	_ = record.Remove(l.ownerPath(projectPath))
 }
 
 // HeldLocks reports every per-project workspace lock currently held under cacheDir,
-// read from the owner sidecars.
+// read from the owner records.
 //
 // Reported as state, not as a fault: a held lock is what a normal mutating run looks
 // like, but one held by a process nobody remembers starting refuses every other run.
 // Naming the holder makes that a fact instead of a mystery.
 //
-// Best-effort throughout: an unreadable sidecar is skipped rather than failing the
-// caller. A sidecar can outlive its flock if a holder was killed between unlocking and
+// Best-effort throughout: an unreadable owner record is skipped rather than failing the
+// caller. An owner record can outlive its flock if a holder was killed between unlocking and
 // cleanup, so treat an entry as a strong hint, never proof.
 func (m *Magus) HeldLocks() []types.StatusLock {
 	return heldLocks(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
@@ -937,7 +937,7 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 	dir := filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot))
 	var out []types.StatusLock
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		// The sidecar is a FILE holding the whole record, so this matches on the name and
+		// The owner record is a FILE holding the whole record, so this matches on the name and
 		// takes only files: a directory of that name is not one of ours.
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, lockFileName+ownerSuffix) {
 			return nil //nolint:nilerr // a walk error on one entry must not abort the report
@@ -954,9 +954,9 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 		if project == "." || project == "" {
 			project = "."
 		}
-		// A sidecar outlives a SIGKILLed holder, because only removeOwner deletes it
+		// An owner record outlives a SIGKILLed holder, because only removeOwner deletes it
 		// and a killed process never runs it. Ask the kernel instead: if the flock can
-		// be taken, nothing holds it and the sidecar is a corpse. Reporting a dead pid
+		// be taken, nothing holds it and the owner record is a corpse. Reporting a dead pid
 		// as the holder is worse than reporting nothing, because the escalated hint
 		// then points a user at a process that does not exist.
 		if !lockIsHeld(strings.TrimSuffix(path, ownerSuffix)) {
@@ -974,16 +974,16 @@ func heldLocks(cacheDir, workspaceRoot string) []types.StatusLock {
 	return out
 }
 
-// readOwner decodes the owner sidecar, or returns a zero record when there is nothing
+// readOwner decodes the owner record, or returns a zero record when there is nothing
 // trustworthy to read. The structured form both the stderr line and the sticky region
 // are built from, so neither has to parse the other's text.
 func (l *projectLocker) readOwner(projectPath string) processRecord {
 	return readRecord(l.ownerPath(projectPath))
 }
 
-// readRecord decodes a sidecar, or returns a zeroed record when there is nothing
+// readRecord decodes an owner record, or returns a zeroed record when there is nothing
 // trustworthy to read. PID == 0 is what every caller already tests for "nothing to
-// say", so an absent, malformed, or unreadable sidecar collapse to one answer here,
+// say", so an absent, malformed, or unreadable owner record collapse to one answer here,
 // which is safe only because these records are informational. The flock decides
 // exclusion; nothing branches on this being present.
 func readRecord(dir string) processRecord {
@@ -997,7 +997,7 @@ func readRecord(dir string) processRecord {
 // lockIsHeld reports whether some process currently holds the flock at path.
 //
 // Probing by acquisition is the only honest test: a pid check would be wrong under
-// pid reuse, and the sidecar cannot answer for itself. Taking the lock to answer is
+// pid reuse, and the owner record cannot answer for itself. Taking the lock to answer is
 // safe because it is released immediately; the race that matters (a holder acquiring
 // between the probe and the report) resolves to under-reporting for one status call,
 // never to naming a process that is not there.

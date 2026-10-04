@@ -208,7 +208,7 @@ func (s *OutputStore) mintAttempt(cacheKey string) string {
 	return RefPrefix + hex.EncodeToString(sum[:])[:attemptHexLen]
 }
 
-// outExt is the verbatim output blob; descExt is its descriptor sidecar.
+// outExt is the verbatim output blob; descExt is its descriptor file.
 const (
 	outExt  = ".out"
 	descExt = ".json"
@@ -373,7 +373,7 @@ func attemptBlobsNewestFirst(dir string) []string {
 // LatestRefsByTarget returns the newest stored execution per (project, target): one
 // OutputDescriptor each, the most recent by newerDescriptor, so the choice is stable
 // regardless of directory iteration order. It scans every cache-key
-// directory's descriptor sidecars. This is what folds each target's last output ref onto
+// directory's descriptor files. This is what folds each target's last output ref onto
 // its knowledge-graph node without the graph builder parsing the store's on-disk layout.
 //
 // Descriptors store the REPRO target (bare name plus charm suffix, see reproTarget); this

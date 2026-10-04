@@ -1056,7 +1056,7 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string,
 
 // QueryKnowledgeGraph answers input the way BuildKnowledgeGraph, then MergeWorkspaceSymbols,
 // then Graph.Query would, byte for byte, without decoding every symbol shard: matches are
-// ranked from the store's names sidecar, and only the shards the answer's neighborhood
+// ranked from the store's symbol names index, and only the shards the answer's neighborhood
 // touches are read (see knowledge.Store.QuerySymbols). It returns the answer and the graph
 // the matches were ranked over, which holds every node a near-miss suggestion searches.
 func QueryKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, cfg config.Config, refresh bool, input string, budget int, log *slog.Logger) (types.KnowledgeQueryOutput, *knowledge.Graph, error) {
