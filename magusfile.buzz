@@ -158,11 +158,11 @@ magus\project({
         "release-index": {"skip_cache": "signs the index per invocation and, with cd, pushes a branch; a replay would publish nothing"},
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
-        // /proc: pipepeer's tests read their children's /proc entries.
+        // Linux pipepeer tests read their children's /proc entries.
         "test": {
             "timeout": "15m",
             "memory_mb": 10240,
-            "sandbox": {"allow": [{"path": "/proc", "mode": "ro"}]},
+            "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
         "coverage-render": {"skip_cache": "reads the console's figure and the assembled site, which it cannot declare as inputs"},
         "security": {
