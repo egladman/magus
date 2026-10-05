@@ -1321,3 +1321,29 @@ func TestPrintSymbolIndexStatusPrintsTheDetailOfAnUnvouchedIndex(t *testing.T) {
 	assert.Contains(t, out, "    [MGS3035] typescript:tsc runs in /repos/web but cannot say which build it is\n")
 	assert.Equal(t, 1, strings.Count(out, "MGS3035"), "a fresh index prints no detail line")
 }
+
+func TestServerVersionSkewPoolParentRemedy(t *testing.T) {
+	saved := version
+	t.Cleanup(func() { version = saved })
+	version = "current-build"
+
+	pool := &types.StatusOutput{
+		ParentPID: 1314,
+		Version:   "stale-build",
+		Socket:    "unix:///tmp/magus-1314-deadbeef.sock",
+	}
+	got := serverVersionSkew(pool)
+	assert.Contains(t, got, "pool parent")
+	assert.Contains(t, got, "--pools")
+	assert.NotContains(t, got, "server start")
+
+	server := &types.StatusOutput{
+		ParentPID: 99,
+		Version:   "stale-build",
+		Socket:    "unix:///tmp/server.sock",
+	}
+	got = serverVersionSkew(server)
+	assert.Contains(t, got, "the server serving it")
+	assert.Contains(t, got, "server start")
+	assert.NotContains(t, got, "--pools")
+}

@@ -1180,6 +1180,7 @@ Signals:
 			Short: "Send a graceful shutdown request to the running server",
 			Flags: []Flag{
 				{Name: "socket", Kind: FlagString, Doc: "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)"},
+				{Name: "pools", Kind: FlagBool, Doc: "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone"},
 			},
 		},
 		{
@@ -1212,6 +1213,7 @@ so a script can chain on it.`,
 		{"Start the server (auto-backgrounds)", "magus server start"},
 		{"Run the server in the foreground (supervisor or debugging)", "magus server start --foreground"},
 		{"Stop the running server", "magus server stop"},
+		{"Stop leftover pool parents from an older build", "magus server stop --pools"},
 		{"Reload configuration without restarting", "magus server reload"},
 		{"Everything running on this host", "magus status"},
 		{"Use a custom socket path", "magus --server-address unix:///tmp/m.sock server start"},
