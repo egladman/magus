@@ -511,6 +511,9 @@ jobs:
   spells:
     name: Publish spells
     needs: publish
+    # always(): publish can succeed after skipped build jobs (resume_tag); without
+    # this, GitHub skips every job that needs publish whenever an ancestor was skipped.
+    if: ${{ always() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -539,6 +542,9 @@ jobs:
   image:
     name: Publish container images
     needs: publish
+    # always(): same as spells - resume skips the platform builds, so a bare
+    # `needs: publish` would skip this job even when publish succeeded.
+    if: ${{ always() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -594,7 +600,7 @@ jobs:
       #
       # Only the secret VALUES stay in the workflow, and they have to: nothing outside
       # a workflow can read GitHub secrets. The names below are the ones the magusfile
-      # declares; `magus run image-registries:cd,stable` prints them and says which are set.
+      # declares; `magus run image-registries:cd,tagged` prints them and says which are set.
       # image-login hands each token to docker on stdin, so no secret enters an argv
       # that magus would capture into the run log.
       #
@@ -618,7 +624,7 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-registries:cd,stable,verify --no-default-charms
+        run: magus run image-registries:cd,tagged,verify --no-default-charms
 
       - name: Log in to image registries
         env:
