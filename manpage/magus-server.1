@@ -39,6 +39,9 @@ Run in the foreground and block, instead of auto\-backgrounding
 .SS server stop options
 .RS
 .TP
+\fB\-\-pools\fR
+Stop per\-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone
+.TP
 \fB\-\-socket\fR \fIstring\fR
 Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 .RE
@@ -86,6 +89,12 @@ magus server start --foreground
 .PP
 .EX
 magus server stop
+.EE
+.PP
+\fIStop leftover pool parents from an older build\fR
+.PP
+.EX
+magus server stop --pools
 .EE
 .PP
 \fIReload configuration without restarting\fR

@@ -755,10 +755,15 @@ func serverVersionSkew(pool *types.StatusOutput) string {
 	if pool == nil || pool.Version == "" || version == "" || pool.Version == version {
 		return ""
 	}
+	isPool := proc.PoolSocketPath(pool.Socket) != ""
+	noun := "server"
+	if isPool {
+		noun = "pool parent"
+	}
 	var s strings.Builder
-	fmt.Fprintf(&s, "version skew: this magus is %s and the server serving it is %s (pid %d).\n",
-		version, pool.Version, pool.ParentPID)
-	fmt.Fprintf(&s, "  every call through that server is answered by the older build, which decodes what it knows and writes back the rest without it.\n")
+	fmt.Fprintf(&s, "version skew: this magus is %s and the %s serving it is %s (pid %d).\n",
+		version, noun, pool.Version, pool.ParentPID)
+	fmt.Fprintf(&s, "  every call through that %s is answered by the older build, which decodes what it knows and writes back the rest without it.\n", noun)
 	if len(pool.Workspaces) > 0 {
 		roots := make([]string, 0, len(pool.Workspaces))
 		for _, ws := range pool.Workspaces {
@@ -766,8 +771,13 @@ func serverVersionSkew(pool *types.StatusOutput) string {
 		}
 		fmt.Fprintf(&s, "  it was started from, and is serving: %s\n", strings.Join(roots, ", "))
 	}
-	fmt.Fprintf(&s, "  restart it to pick up this build: `%s` then `%s`. It may be serving other workspaces, which stop for them too.\n",
-		hint.ServerStop, hint.ServerStart)
+	if isPool {
+		fmt.Fprintf(&s, "  stop the leftover pool parent to pick up this build: `%s`.\n",
+			hint.ServerStop.With("--pools"))
+	} else {
+		fmt.Fprintf(&s, "  restart it to pick up this build: `%s` then `%s`. It may be serving other workspaces, which stop for them too.\n",
+			hint.ServerStop, hint.ServerStart)
+	}
 	return s.String()
 }
 

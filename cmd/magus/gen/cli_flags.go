@@ -553,6 +553,8 @@ const (
 	FlagServerStartForeground = "foreground"
 	// server status: --socket
 	FlagServerStatusSocket = "socket"
+	// server stop: --pools
+	FlagServerStopPools = "pools"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
 	// session checkpoint: --agent-name
@@ -1867,12 +1869,14 @@ func BindServerStart(fs *flag.FlagSet) *ServerStartFlags {
 // ServerStopFlags are the flags declared for `magus server stop`.
 type ServerStopFlags struct {
 	Socket string // --socket
+	Pools  bool   // --pools
 }
 
 // BindServerStop registers `magus server stop`'s flags on fs and returns the destination.
 func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
 	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)")
+	fs.BoolVar(&f.Pools, FlagServerStopPools, false, "Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone")
 	return &f
 }
 

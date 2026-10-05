@@ -601,6 +601,8 @@ func wantsForeground(args []string) bool {
 	return false
 }
 
+// serverStop shuts down the persistent server, or with --pools the live
+// per-process pool parents whose build differs from this binary.
 func serverStop(ctx context.Context, args []string) error {
 	var tf *gen.ServerStopFlags
 	_, err := cmdParse("server stop", args, func(fs *flag.FlagSet) {
@@ -616,6 +618,9 @@ func serverStop(ctx context.Context, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if tf.Pools {
+		return stopStalePools(ctx)
 	}
 
 	// Confirm a server is actually there before claiming to stop it, and capture its pid

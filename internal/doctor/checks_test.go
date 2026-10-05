@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -1248,6 +1249,31 @@ func TestCheckStaleSockets(t *testing.T) {
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Equal(t, "server live, broker not running, 1 per-process pool(s)", got.Message)
+	})
+
+	// A live pool that answers with another build is the leftover magus mcp case:
+	// sockets used to count it as OK, and server-version deliberately skips non-persistent
+	// parents. Fail with the same Fix server stop --pools runs.
+	t.Run("skewed pool parent fails with fix", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "mg_")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		addr := "unix://" + filepath.Join(dir, "magus-424242-deadbeef.sock")
+		srv, err := proc.New(proc.Options{
+			Address: addr,
+			Version: "stale-build",
+			Handler: func(context.Context, []string) error { return nil },
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { srv.Close() })
+		require.NoError(t, srv.Start())
+
+		si := named(dir)
+		si.ClientVersion = "current-build"
+		got := (&runner{opts: options{serverInfo: si}}).checkStaleSockets()
+		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Contains(t, got.Message, "from another build")
+		assert.Equal(t, []string{"server", "stop", "--pools"}, got.Fix)
 	})
 }
 

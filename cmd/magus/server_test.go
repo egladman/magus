@@ -64,6 +64,33 @@ func TestServerStopNoServerExitsNonzero(t *testing.T) {
 	assert.NotZero(t, silent.exitCode, "stopping nothing must exit non-zero")
 }
 
+// TestServerStopStalePools drives --pools against a live per-process pool whose
+// display version differs from this binary: the leftover magus mcp / orphaned-run case
+// that plain server stop never sees (it only dials server.sock).
+func TestServerStopStalePools(t *testing.T) {
+	privateSockDir(t)
+	addr := "unix://" + filepath.Join(proc.SockDir(), "magus-424242-deadbeef.sock")
+	srv, err := proc.New(proc.Options{
+		Address: addr,
+		Version: "stale-build",
+		Handler: func(context.Context, []string) error { return nil },
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+	require.True(t, proc.SocketLive(context.Background(), addr))
+
+	err = serverStop(context.Background(), []string{"--pools"})
+	require.NoError(t, err)
+	assert.False(t, proc.SocketLive(context.Background(), addr), "stale pool parent must stop")
+}
+
+func TestServerStopStalePoolsNone(t *testing.T) {
+	privateSockDir(t)
+	err := serverStop(context.Background(), []string{"--pools"})
+	require.NoError(t, err, "no stale parents is success, not an error")
+}
+
 // privateSockDir points the socket directory at a fresh one, so a test never adopts or
 // stops the developer's own broker or server. Short: a t.TempDir() path can exceed the
 // unix socket length limit on macOS.

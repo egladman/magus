@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
@@ -1762,6 +1763,22 @@ func (r *runner) checkStaleSockets() types.Check {
 	}
 	if len(stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d stale socket(s)", len(stale)))
+	}
+	stalePools, err := proc.StalePoolsIn(r.runCtx(), sockDir, si.ClientVersion)
+	if err != nil {
+		return types.Check{Name: "sockets", Status: types.CheckFail, Message: err.Error()}
+	}
+	if n := len(stalePools); n > 0 {
+		for _, p := range stalePools {
+			details = append(details, fmt.Sprintf("skewed pool pid %d (%s): %s", p.ParentPID, p.Version, p.Addr))
+		}
+		return types.Check{
+			Name:    "sockets",
+			Status:  types.CheckFail,
+			Message: fmt.Sprintf("%d live pool parent(s) from another build", n),
+			Details: details,
+			Fix:     []string{"server", "stop", "--pools"},
+		}
 	}
 	return types.Check{Name: "sockets", Status: types.CheckOK, Message: strings.Join(parts, ", "), Details: details}
 }
