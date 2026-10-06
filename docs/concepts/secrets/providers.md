@@ -24,11 +24,11 @@ needs, because a workflow's `env:` block is the only thing that can read a repos
 secret - nothing outside the workflow file can:
 
 ```yaml
-- name: Log in to image registries
+- name: Publish spells
   env:
     DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
     DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-  run: magus run image-login:cd
+  run: magus run spell-publish:cd
 ```
 
 An unset or empty variable is an error naming the variable, not an empty string. A blank
