@@ -734,6 +734,11 @@ func TestScripts(t *testing.T) {
 				return err
 			}
 			e.Setenv("__MAGUS_TEMPLATES", templates)
+			miseFile, err := filepath.Abs(filepath.Join("..", "..", "mise.toml"))
+			if err != nil {
+				return err
+			}
+			e.Setenv("__MAGUS_MISE_CONFIG", miseFile)
 			return nil
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
