@@ -146,7 +146,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
-		fmt.Fprintf(os.Stderr, "reindexed %d project(s)\n", n)
+		fmt.Fprintf(os.Stderr, "reindexed %d symbol index(es)\n", n)
 		if rerr != nil {
 			// Non-fatal: a missing/failing indexer must not block the domain-graph
 			// rebuild. Surface the actionable hints and carry on.

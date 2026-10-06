@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/edit"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/project"
+	spellpkg "github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/scip-code/scip/bindings/go/scip"
@@ -90,6 +93,12 @@ func ingest(cfg config.Config, root, cacheDir string, projects types.ProjectsOut
 	return symbolIngestInputs{cfg: cfg, root: root, cacheDir: cacheDir, projects: projects, spells: spells, log: slog.Default()}
 }
 
+// goIndexPath is where the go spell's (or any bare scip op's) index for the project at dir
+// lives under cacheDir. A helper because most tests here bind a local named spells.
+func goIndexPath(cacheDir, dir string) string {
+	return symbols.IndexPath(cacheDir, dir, spellpkg.SymbolIndexOp)
+}
+
 // writeSCIP writes a minimal one-definition index to path (creating parent dirs).
 func writeSCIP(t *testing.T, path string) {
 	t.Helper()
@@ -121,7 +130,7 @@ func TestLoadKnowledgeSymbolsAutoDerives(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
 	// The index lives in the cache at the derived path, never in the project tree.
-	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 
 	projects, spells := goWorkspace("pkg/a")
 	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
@@ -156,7 +165,7 @@ func TestSymbolGapsReportsUnbuiltIndex(t *testing.T) {
 func TestSymbolGapsEmptyWhenBuilt(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 
 	projects, spells := goWorkspace("pkg/a")
 	assert.Empty(t, symbolGaps(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
@@ -173,7 +182,7 @@ func TestSymbolGapsEmptyWhenBuilt(t *testing.T) {
 func TestSymbolGapsTreatsCorruptIndexAsPresent(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	path := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
 
@@ -217,7 +226,7 @@ func TestSymbolGapsNoneCapable(t *testing.T) {
 func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "web")))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "web")))
 
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
 		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
@@ -243,7 +252,7 @@ func TestLoadKnowledgeSymbolsNoneCapable(t *testing.T) {
 func TestLoadKnowledgeSymbolsSkipsCorrupt(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	idx := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	idx := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
 	require.NoError(t, os.MkdirAll(filepath.Dir(idx), 0o755))
 	require.NoError(t, os.WriteFile(idx, []byte("not a protobuf"), 0o644))
 
@@ -258,7 +267,7 @@ func TestSymbolIndexedAt(t *testing.T) {
 	_, ok := SymbolIndexedAt(cacheDir, filepath.Join(root, "pkg/a"))
 	assert.False(t, ok, "no index built yet")
 
-	idx := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	idx := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
 	require.NoError(t, os.MkdirAll(filepath.Dir(idx), 0o755))
 	require.NoError(t, os.WriteFile(idx, nil, 0o644))
 	when := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
@@ -301,7 +310,7 @@ func TestSymbolIndexDeclarationsDerivesCachePath(t *testing.T) {
 	decls := symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 
 	require.Len(t, decls, 1)
-	assert.Equal(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")), decls[0].path, "the derived index lives under the cache dir")
+	assert.Equal(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")), decls[0].path, "the derived index lives under the cache dir")
 }
 
 func TestSymbolIndexDeclarationsRejectsPathEscape(t *testing.T) {
@@ -557,7 +566,7 @@ func TestShortRevision(t *testing.T) {
 func TestSymbolOccurrencesReportsACorruptIndexAsAGap(t *testing.T) {
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	path := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
 
@@ -594,7 +603,7 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 	// so the read would look for the index somewhere it was never written.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg/a/pkg/a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a/pkg/a/a.go"), []byte("Foo\n"), 0o644))
-	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 
 	projects, spells := goWorkspace("pkg/a")
 	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), "gomod example.com/a Foo#")
@@ -840,7 +849,7 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 			gitRun(t, root, "commit", "-q", "-m", "c2")
 		}, tree},
 		{"a new SCIP index", func() {
-			path := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg", "a"))
+			path := goIndexPath(cacheDir, filepath.Join(root, "pkg", "a"))
 			writeSCIP(t, path)
 			settled = settled.Add(time.Second)
 			require.NoError(t, os.Chtimes(path, settled, settled))
@@ -874,7 +883,7 @@ func TestGatherKnowledgeInputsReadsSymbolsOnlyForTheirClasses(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	writeSCIP(t, symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 	projects, spells := goWorkspace("pkg/a")
 	src := knowledgeSources{cfg: config.Config{}, root: root, cacheDir: cacheDir, spells: spells, projects: projects,
 		tree: knowledge.WalkTree(root), log: slog.New(slog.DiscardHandler)}
@@ -893,7 +902,7 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
 	cacheDir := filepath.Join(root, ".magus")
-	index := symbols.IndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	index := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
 	writeSCIP(t, index)
 	settled := time.Now().Add(-time.Hour)
 	require.NoError(t, os.Chtimes(index, settled, settled))
@@ -1168,4 +1177,144 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 	_, ok = RecordedStaleIndexes(ctx, next, cfg)
 	assert.False(t, ok, "changed sources send the read back to the workspace")
 	assert.Equal(t, 0, opens, "RecordedStaleIndexes itself never opens; the caller decides")
+}
+
+// fixtureOccurrence places one occurrence of a top-level fun's symbol on a 0-based line of
+// its document; the column is wherever the fun's name sits on that line, so the range is
+// one verification accepts.
+type fixtureOccurrence struct {
+	symbol string
+	line   int
+	def    bool
+}
+
+// writeIndexOf writes a SCIP index of docs (by project-relative path) to path.
+func writeIndexOf(t *testing.T, root, path, language string, docs map[string][]fixtureOccurrence) {
+	t.Helper()
+	idx := &scip.Index{}
+	for _, rel := range slices.Sorted(maps.Keys(docs)) {
+		src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		require.NoError(t, err)
+		lines := strings.Split(string(src), "\n")
+		doc := &scip.Document{RelativePath: rel, Language: language}
+		for _, occ := range docs[rel] {
+			name := strings.TrimSuffix(occ.symbol[strings.LastIndex(occ.symbol, "/")+1:], "().")
+			col := strings.Index(lines[occ.line], name)
+			require.GreaterOrEqual(t, col, 0, "%s is not on line %d of %s", name, occ.line, rel)
+			o := &scip.Occurrence{Symbol: occ.symbol, Range: []int32{int32(occ.line), int32(col), int32(col + len(name))}}
+			if occ.def {
+				o.SymbolRoles = int32(scip.SymbolRole_Definition)
+			}
+			doc.Occurrences = append(doc.Occurrences, o)
+		}
+		idx.Documents = append(idx.Documents, doc)
+	}
+	data, err := proto.Marshal(idx)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, data, 0o644))
+}
+
+// The end-to-end shape of a project bound to a Go and a Buzz indexing spell: each declares
+// its own index at its own cache path, and the graph, refs, the occurrence read and a
+// rename all union them. The indexes stand in for scip-go's and scip-buzz's output, so
+// nothing here needs an indexer installed. The Go stand-in is not named go so the test
+// leaves the registry's go alone; the Buzz one is buzz, whose op name is under test.
+func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
+	ctx := t.Context()
+	const goSpell = "zzz-buzz-beside-go-spell"
+	for _, sp := range []*spellpkg.Spell{
+		spellpkg.NewSpell(goSpell, spellpkg.WithLanguage("go"), spellpkg.WithSources("**/*.go"),
+			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-go"}})),
+		spellpkg.NewSpell("buzz", spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
+			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-buzz"}}),
+			spellpkg.WithOps(map[string]spellpkg.Op{"scip-buzz": {Kind: spellpkg.OpKindSymbolIndex, Command: spellpkg.Command{Bin: "scip-buzz"}}})),
+	} {
+		project.DefaultSpellRegistry().RegisterSpell(sp)
+		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
+	}
+	root := t.TempDir()
+	files := map[string]string{
+		"magusfile.buzz": "",
+		"go.mod":         "module example.com/m\n\ngo 1.25\n",
+		"main.go":        "package main\n\nfunc Main() {}\n",
+		"hack/ci/pull-requests.buzz": "export fun parsePull(raw: str) > str {\n" +
+			"    // NOTE: the API pages at 100\n" +
+			"    return raw;\n}\n",
+		"hack/ci/run.buzz": "import \"hack/ci/pull-requests\" as pr;\n\nexport fun run() > str {\n    return pr\\parsePull(\"x\");\n}\n",
+	}
+	for rel, body := range files {
+		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(body), 0o644))
+	}
+	cfg := config.Config{}
+	cacheDir := resolveCacheDir(root, cfg)
+	const (
+		parsePull = "scip-buzz buzz . . `hack/ci/pull-requests.buzz`/parsePull()."
+		run       = "scip-buzz buzz . . `hack/ci/run.buzz`/run()."
+		goMain    = "scip-go gomod example.com/m v1 `example.com/m`/Main()."
+	)
+	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, spellpkg.SymbolIndexOpFor(goSpell)), "go", map[string][]fixtureOccurrence{
+		"main.go": {{goMain, 2, true}},
+	})
+	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
+		"hack/ci/pull-requests.buzz": {{parsePull, 0, true}},
+		"hack/ci/run.buzz":           {{run, 2, true}, {parsePull, 3, false}},
+	})
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
+	ws, err := Open(ctx, root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ws.Close() })
+	log := slog.New(slog.DiscardHandler)
+	gaps, ok := SymbolGaps(ctx, ws, root, cfg, log)
+	require.True(t, ok)
+	assert.Empty(t, gaps, "both indexes are declared and both are built")
+
+	g, err := BuildKnowledgeGraph(ctx, ws, root, cfg, false, log)
+	require.NoError(t, err)
+	domainHasFunction := false
+	for _, n := range g.Output().Nodes {
+		domainHasFunction = domainHasFunction || n.ID == "function:hack/ci/pull-requests.buzz:parsePull"
+	}
+	require.True(t, domainHasFunction, "the committed domain graph keeps @buzz function nodes whatever the cache holds")
+	require.NoError(t, MergeWorkspaceSymbols(ctx, ws, root, cfg, g, log))
+
+	parsePullID := ""
+	for _, n := range g.Output().Nodes {
+		switch {
+		case n.Kind == types.KindFunction && strings.HasPrefix(n.ID, "function:hack/ci/"):
+			t.Errorf("%s duplicates a Buzz symbol the index defines", n.ID)
+		case n.Kind == types.KindSymbol && n.Label == "parsePull":
+			parsePullID = n.ID
+		}
+	}
+	require.NotEmpty(t, parsePullID, "the Buzz index reached the graph")
+	explained := false
+	for _, e := range g.Output().Links {
+		explained = explained || (e.Relation == types.RelationRationaleFor && e.Target == parsePullID)
+	}
+	assert.True(t, explained, "the NOTE explains parsePull's symbol")
+
+	buzzRefs, ok := g.Refs("parsePull")
+	require.True(t, ok)
+	assert.Equal(t, []types.KnowledgeRefSite{{File: "hack/ci/pull-requests.buzz", Lines: []int{1}}}, buzzRefs.Defs)
+	require.Len(t, buzzRefs.Refs, 1)
+	assert.Equal(t, "hack/ci/run.buzz", buzzRefs.Refs[0].File)
+	goRefs, ok := g.Refs("Main")
+	require.True(t, ok, "the Go index sits beside the Buzz one")
+	require.NotEmpty(t, goRefs.Defs)
+	assert.Equal(t, "main.go", goRefs.Defs[0].File)
+
+	read, ok := SymbolOccurrences(ctx, ws, root, cfg, log, strings.TrimPrefix(parsePullID, types.KindSymbol+":"))
+	require.True(t, ok)
+	require.Empty(t, read.Unreadable)
+	for _, refused := range []string{"fun", "final"} {
+		_, refusals := edit.RenameSites(read.Files, "parsePull", refused)
+		assert.Equal(t, []types.EditRefusal{{Reason: fmt.Sprintf("%q is a Buzz keyword", refused)}}, refusals)
+	}
+	sites, refusals := edit.RenameSites(read.Files, "parsePull", "pullOf")
+	assert.Empty(t, refusals)
+	assert.Len(t, sites, 2, "the definition and the call in run.buzz")
 }

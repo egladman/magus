@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,23 +18,24 @@ import (
 // indexer the destination via the IndexEnvVar environment variable, so the command
 // writes straight into the cache and the tree stays clean. The knowledge graph reads
 // the same path back. The run and ingestion agree by both calling IndexPath with the
-// same (cacheDir, projectAbsDir).
+// same (cacheDir, projectAbsDir, op).
 const (
 	// IndexEnvVar names the environment variable magus sets to the index's cache
 	// destination when running a declared symbol indexer, which writes its index there.
 	IndexEnvVar = "MAGUS_SYMBOL_INDEX"
-	// indexFileName is the basename of every project's cached SCIP index.
+	// indexFileName is the basename of the index the bare scip op writes.
 	indexFileName = "index.scip"
 )
 
-// IndexPath returns the absolute path of a project's cached SCIP index:
-// <cacheDir>/symbols/<hash>/index.scip, where <hash> is derived from the project's
-// absolute directory. Keying on a hash of the abs dir (rather than the workspace path)
-// lets the op-run side (which knows only the project dir) and the ingestion side
-// (which joins root and the project path) compute an identical location without either
-// re-deriving the other's view. projectAbsDir is cleaned first so trivially different
-// spellings of the same dir map to one index.
-func IndexPath(cacheDir, projectAbsDir string) string {
+// IndexPath returns the absolute path of the SCIP index op writes for a project:
+// <cacheDir>/symbols/<hash>/<op>.scip, where <hash> is derived from the project's
+// absolute directory and op is the indexer op (spells.SymbolIndexOpFor), so each indexing
+// spell bound to one project has a file of its own. Keying on a hash of the abs dir
+// (rather than the workspace path) lets the op-run side (which knows only the project
+// dir) and the ingestion side (which joins root and the project path) compute an
+// identical location without either re-deriving the other's view. projectAbsDir is
+// cleaned first so trivially different spellings of the same dir map to one index.
+func IndexPath(cacheDir, projectAbsDir, op string) string {
 	// Canonicalize through EvalSymlinks so the op-run side (which learns the dir from the
 	// run context) and the ingestion side (which joins root and project.Path) hash the
 	// SAME bytes even when one spelling reaches here via a symlink (e.g. macOS /var ->
@@ -44,7 +46,13 @@ func IndexPath(cacheDir, projectAbsDir string) string {
 		dir = resolved
 	}
 	sum := sha256.Sum256([]byte(dir))
-	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), indexFileName)
+	name := op + ".scip"
+	if op == spells.SymbolIndexOp {
+		// compat: see spells.SymbolIndexOpFor. The bare op's index keeps its file, because
+		// the run's cache entry stamps that path and a new one would re-run the indexer.
+		name = indexFileName
+	}
+	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), name)
 }
 
 // FingerprintBodies sets each symbol's BodyDigest from the definition lines under root,

@@ -39,11 +39,44 @@ type SymbolIndexer struct {
 	Uses    []string     `json:"uses,omitempty"`
 }
 
-// SymbolIndexOp is the op name magus registers a declared indexer under, so an index
-// run reaches the cache, keying and freshness machinery as an ordinary command op.
-//
-// magus owns this name now; a spell no longer spells it. It stays "scip" because
-// renaming it would rekey every cached index and rename a target users and docs
-// already name, buying nothing: the format a spell emits is declared on
-// SymbolIndexer.Format, which is the conflation that mattered.
+// SymbolIndexOp is the op name the go, typescript, python and rust indexers run under,
+// and the prefix of every other spell's (see SymbolIndexOpFor). Registering the indexer
+// as an op is what lets an index run reach the cache, keying and freshness machinery as
+// an ordinary command op.
 const SymbolIndexOp = "scip"
+
+// SymbolIndexOpFor returns the op name magus registers spell's declared indexer under:
+// scip-<spell>, so each indexing spell bound to one project runs, keys, stamps and fails
+// on its own. A Buzz index rides beside the Go index of the same project, and sharing one
+// op made a missing scip-buzz fail the Go index with it.
+//
+// magus owns these names; a spell never spells them, and Decode refuses an authored op
+// that does.
+func SymbolIndexOpFor(spell string) string {
+	// compat(until: the cache key schema next changes, which re-runs every index anyway,
+	// and `magus query scip` finds no doc or CI workflow naming the bare op): these four
+	// indexed under the bare name before a project could hold two indexes, and renaming
+	// their op would re-run every cached index and break `magus run ::scip`. Two of them
+	// bound to one project still share the op and its index, as they always did.
+	switch spell {
+	case "go", "typescript", "python", "rust":
+		return SymbolIndexOp
+	}
+	return SymbolIndexOp + "-" + spell
+}
+
+// SymbolIndexOp returns the op name s's symbol indexer runs under, or "" when s has none:
+// the op of kind OpKindSymbolIndex, which Decode synthesizes from mgs_getSymbolIndexer. A
+// spell built in Go with an indexer but no such op (a test fixture) runs it under the bare
+// SymbolIndexOp.
+func (s *Spell) SymbolIndexOp() string {
+	for name, op := range s.ops {
+		if op.Kind == OpKindSymbolIndex {
+			return name
+		}
+	}
+	if s.symbolIndexer != nil {
+		return SymbolIndexOp
+	}
+	return ""
+}

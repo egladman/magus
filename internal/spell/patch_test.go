@@ -276,10 +276,18 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				{Open: `"`, Close: `"`},
 			},
 		}},
-		// No Ops, and that is the point of this entry: buzz is the one built-in that
-		// carries a language identity and no work. Its three former ops forked
-		// interpreters that know only the Buzz stdlib, so none could load a magusfile
-		// or a spell, which is every Buzz file here.
+		// Its one op is the indexer magus synthesizes, under scip-buzz rather than the
+		// bare scip, so it can sit beside a project's Go index. Its three former ops
+		// forked interpreters that know only the Buzz stdlib, so none could load a
+		// magusfile or a spell, which is every Buzz file here.
+		Ops: map[string]spells.Op{
+			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
+		},
+		Tools: map[string]spells.Tool{
+			"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}},
+		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
+			Command: spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
 	},
 	"cosign": {
 		Name:  "cosign",

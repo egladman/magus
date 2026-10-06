@@ -805,9 +805,31 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 
 	got, err := os.ReadFile(argvFile)
 	require.NoError(t, err)
-	want := symbols.IndexPath(c.Dir(), projDir)
+	want := symbols.IndexPath(c.Dir(), projDir, spells.SymbolIndexOp)
 	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
 	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
+}
+
+// A second indexing spell on the project is handed its own destination, keyed by its op,
+// so scip-buzz never writes over the index scip-go just built.
+func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
+	ctx := context.Background()
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
+	require.NoError(t, err)
+	ctx = cache.NewContext(ctx, c)
+	projDir := t.TempDir()
+
+	cmd := spells.Command{Bin: "sh", Args: []string{"-c", `printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}}
+	spec := spells.Descriptor{
+		Name:          "buzz",
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: cmd},
+		Ops:           map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: cmd}},
+	}
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: "scip-buzz", Dir: projDir})
+	require.NoError(t, err)
+
+	assert.FileExists(t, symbols.IndexPath(c.Dir(), projDir, "scip-buzz"))
+	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), projDir, spells.SymbolIndexOp), "the bare scip op's index is not this one")
 }
 
 // symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the

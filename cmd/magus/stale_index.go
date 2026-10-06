@@ -152,8 +152,9 @@ func staleIndexProjectsOf(ctx context.Context, ws graphWorkspace) []string {
 		}
 		stale = append(stale, path)
 	}
+	// A project's Go and Buzz indexes are judged apart; the advice names the project once.
 	slices.Sort(stale)
-	return stale
+	return slices.Compact(stale)
 }
 
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index

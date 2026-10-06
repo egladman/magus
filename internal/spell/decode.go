@@ -449,9 +449,12 @@ func Decode(src obj) (spells.Descriptor, error) {
 	// is the migration path: accepting it would leave such a spell running its indexer
 	// with an unresolved $MAGUS_SYMBOL_INDEX and dropping out of the symbol graph, with
 	// nothing said. There is no compat shim because the condition to retire one is
-	// "no spell anywhere still declares the op", which magus cannot observe.
-	if _, authored := m.Ops[spells.SymbolIndexOp]; authored {
-		return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, spells.SymbolIndexOp)
+	// "no spell anywhere still declares the op", which magus cannot observe. The spell's
+	// own scip-<spell> is refused for the same collision.
+	for _, reserved := range []string{spells.SymbolIndexOp, spells.SymbolIndexOpFor(name)} {
+		if _, authored := m.Ops[reserved]; authored {
+			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
+		}
 	}
 	if indexer != nil {
 		if m.Ops == nil {
@@ -460,7 +463,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 		// Synthesized rather than authored, so the run, cache and freshness paths reach
 		// the indexer as an ordinary command op while the spell declares it once, by
 		// name. The kind is what the runner matches on; nothing keys on the op's name.
-		m.Ops[spells.SymbolIndexOp] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+		m.Ops[spells.SymbolIndexOpFor(name)] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
 	}
 	if err := synthesizeInstall(&m); err != nil {
 		return spells.Descriptor{}, err
@@ -780,7 +783,7 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if !ok {
 		return nil, fmt.Errorf("symbol indexer: command is required")
 	}
-	cmd, err := decodeCommand(spellName, spells.SymbolIndexOp, cmdRec)
+	cmd, err := decodeCommand(spellName, spells.SymbolIndexOpFor(spellName), cmdRec)
 	if err != nil {
 		return nil, err
 	}

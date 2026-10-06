@@ -11,6 +11,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// The bare scip op's index keeps the file every cached run already stamped, and a second
+// indexing spell on the same project writes beside it rather than over it.
+func TestIndexPathIsOnePerIndexerOp(t *testing.T) {
+	cacheDir, dir := t.TempDir(), t.TempDir()
+	goIndex := IndexPath(cacheDir, dir, "scip")
+	buzzIndex := IndexPath(cacheDir, dir, "scip-buzz")
+
+	assert.Equal(t, "index.scip", filepath.Base(goIndex))
+	assert.Equal(t, "scip-buzz.scip", filepath.Base(buzzIndex))
+	assert.Equal(t, filepath.Dir(goIndex), filepath.Dir(buzzIndex), "both live under the project's one cache dir")
+}
+
 func TestFingerprintBodies(t *testing.T) {
 	root := t.TempDir()
 	src := "package a\n\nfunc F() {\n\treturn\n}\n\nconst C = 1"

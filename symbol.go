@@ -1,11 +1,13 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -46,7 +48,21 @@ const (
 	symbolIndexBackoffMax    = 30 * time.Minute
 )
 
-// projIndexState is one project's scheduling state, guarded by symbolIndexer.mu.
+// indexRef names one symbol index: a project and the indexer op that writes it. A project
+// bound to go and buzz holds two, scheduled, run and backed off apart, so a missing
+// scip-buzz never holds back the Go index.
+type indexRef struct {
+	project string // workspace-relative project path
+	op      string // spells.SymbolIndexOpFor the indexing spell
+}
+
+func (r indexRef) String() string { return r.project + ":" + r.op }
+
+func compareIndexRefs(a, b indexRef) int {
+	return cmp.Or(cmp.Compare(a.project, b.project), cmp.Compare(a.op, b.op))
+}
+
+// projIndexState is one index's scheduling state, guarded by symbolIndexer.mu.
 type projIndexState struct {
 	lastChange  time.Time // most recent source change under the project
 	lastRun     time.Time // start of the most recent index run
@@ -64,13 +80,13 @@ type symbolIndexer struct {
 	minInterval time.Duration
 	now         func() time.Time
 
-	projectForPath func(absPath string) (string, bool)             // changed file -> owning symbol-capable project, ok
-	runIndex       func(ctx context.Context, project string) error // execute the scip op for a project
+	indexesForPath func(absPath string) []indexRef                 // changed file -> the indexes of its owning symbol-capable project
+	runIndex       func(ctx context.Context, index indexRef) error // execute one index's op
 	onChange       func()                                          // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
 
 	busy  atomic.Bool // an auto-index run is in flight (only one at a time)
 	mu    sync.Mutex
-	state map[string]*projIndexState
+	state map[indexRef]*projIndexState
 }
 
 // loop runs the scheduler: it folds change batches into per-project state and, on each
@@ -94,25 +110,24 @@ func (si *symbolIndexer) loop(ctx context.Context, batches <-chan watch.Batch) {
 	}
 }
 
-// mark folds a change batch into per-project state: each changed path under a
-// symbol-capable project marks that project dirty and resets its quiet window.
+// mark folds a change batch into per-index state: each changed path under a
+// symbol-capable project marks every index of that project dirty and resets its quiet
+// window.
 func (si *symbolIndexer) mark(paths []string) {
 	now := si.now()
 	si.mu.Lock()
 	changed := false
 	for _, p := range paths {
-		proj, ok := si.projectForPath(p)
-		if !ok {
-			continue
+		for _, ref := range si.indexesForPath(p) {
+			st := si.state[ref]
+			if st == nil {
+				st = &projIndexState{}
+				si.state[ref] = st
+			}
+			st.lastChange = now
+			st.dirty = true
+			changed = true
 		}
-		st := si.state[proj]
-		if st == nil {
-			st = &projIndexState{}
-			si.state[proj] = st
-		}
-		st.lastChange = now
-		st.dirty = true
-		changed = true
 	}
 	si.mu.Unlock()
 	// A capable project's sources changed, so its index freshness may have too; drop
@@ -130,37 +145,36 @@ func (si *symbolIndexer) fireChange() {
 	}
 }
 
-// dispatchDue starts an index run for one due project, unless a user run is already
-// queued for a slot or an auto-index is in flight. One at a time keeps the auto-indexer
-// from ever being the reason the machine is busy.
+// dispatchDue starts an index run for one due index, unless an auto-index is in flight.
+// One at a time keeps the auto-indexer from ever being the reason the machine is busy.
 func (si *symbolIndexer) dispatchDue(ctx context.Context) {
 	if si.busy.Load() {
 		return
 	}
-	proj, ok := si.pickDue()
+	ref, ok := si.pickDue()
 	if !ok {
 		return
 	}
 	si.busy.Store(true)
-	go si.execute(ctx, proj)
+	go si.execute(ctx, ref)
 }
 
-// pickDue returns the first project (in deterministic path order) whose changes are due
-// to be indexed, or ok=false when none is.
-func (si *symbolIndexer) pickDue() (string, bool) {
+// pickDue returns the first index (in project, then op order) whose changes are due to be
+// indexed, or ok=false when none is.
+func (si *symbolIndexer) pickDue() (indexRef, bool) {
 	now := si.now()
 	si.mu.Lock()
 	defer si.mu.Unlock()
-	for _, proj := range slices.Sorted(maps.Keys(si.state)) {
-		if dueToIndex(si.state[proj], now, si.quiet, si.minInterval) {
-			return proj, true
+	for _, ref := range slices.SortedFunc(maps.Keys(si.state), compareIndexRefs) {
+		if dueToIndex(si.state[ref], now, si.quiet, si.minInterval) {
+			return ref, true
 		}
 	}
-	return "", false
+	return indexRef{}, false
 }
 
-// execute runs one project's scip op. lastRun and dirty are updated up front so a change
-// landing during the run re-marks the project; a failed run re-marks it dirty to retry.
+// execute runs one index's op. lastRun and dirty are updated up front so a change landing
+// during the run re-marks the index; a failed run re-marks it dirty to retry.
 //
 // It does NOT watch for contention and cancel itself. The limiter is already a FIFO-fair
 // semaphore bounding concurrent work, so an index run is one queued caller among many and
@@ -169,14 +183,14 @@ func (si *symbolIndexer) pickDue() (string, bool) {
 // could not tell a waiting user from its OWN wait for a slot: on a saturated pool it
 // dispatched, queued for itself, read that as contention, cancelled, and repeated every
 // tick without ever finishing an index.
-func (si *symbolIndexer) execute(ctx context.Context, proj string) {
+func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 	defer si.busy.Store(false)
 	// Freshness may change once the run finishes (index rebuilt, or a failed attempt);
 	// deferred first so it fires after the state-update lock below is released.
 	defer si.fireChange()
 
 	si.mu.Lock()
-	if st := si.state[proj]; st != nil {
+	if st := si.state[ref]; st != nil {
 		// Optimistically clear dirty; a change landing during the run re-marks it. lastRun
 		// is stamped only after the run below, NOT here: a run cancelled at shutdown would
 		// otherwise throttle its own retry by minInterval.
@@ -184,12 +198,12 @@ func (si *symbolIndexer) execute(ctx context.Context, proj string) {
 	}
 	si.mu.Unlock()
 
-	si.log.DebugContext(ctx, "magus: background symbol index starting", slog.String("project", proj))
-	err := si.runIndex(ctx, proj)
+	si.log.DebugContext(ctx, "magus: background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
+	err := si.runIndex(ctx, ref)
 
 	si.mu.Lock()
 	defer si.mu.Unlock()
-	st := si.state[proj]
+	st := si.state[ref]
 	if st == nil {
 		return
 	}
@@ -208,7 +222,7 @@ func (si *symbolIndexer) execute(ctx context.Context, proj string) {
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
 		si.log.WarnContext(ctx, "magus: background symbol index failed, backing off",
-			slog.String("project", proj), slog.Int("failures", st.failures), slog.String("error", err.Error()))
+			slog.String("project", ref.project), slog.String("op", ref.op), slog.Int("failures", st.failures), slog.String("error", err.Error()))
 		return
 	}
 	st.failures = 0
@@ -251,14 +265,20 @@ func backoffDuration(failures int) time.Duration {
 	return d
 }
 
-// capableProject is a symbol-capable project paired with its absolute directory and the
-// language it indexes, for matching a changed file back to its project and naming the
-// indexer in a failure hint.
+// capableProject is one symbol index a project declares, paired with the project's
+// absolute directory and the language it indexes, for matching a changed file back to its
+// project and naming the indexer in a failure hint. A project bound to two indexing spells
+// appears once per index.
 type capableProject struct {
 	path     string // workspace-relative project path
 	dir      string // absolute project directory
-	language string // canonical language of the project's symbol-capable spell
+	op       string // the indexer op that writes this index
+	language string // canonical language of the indexing spell
+	bin      string // the indexer binary the op forks; "" when the spell declares none
+	project  *types.Project
 }
+
+func (c capableProject) ref() indexRef { return indexRef{project: c.path, op: c.op} }
 
 // matchProject returns the symbol-capable project that owns absPath (the one whose
 // directory is the longest path-prefix of the file), or ok=false when none does. The
@@ -277,7 +297,7 @@ func matchProject(absPath string, projects []capableProject) (string, bool) {
 }
 
 // WatchSymbolIndexing starts the server's background symbol auto-indexer: a file watcher
-// that re-runs each symbol-capable project's scip op when its sources change, throttled
+// that re-runs each symbol-capable project's indexer ops when its sources change, throttled
 // and contention-gated (see symbolIndexer). It returns a stop function; the server
 // calls it once at startup, alongside WatchKnowledgeGraph. A no-op (never an error) when
 // disabled by config or when no project is symbol-capable, so nothing is spun up need-
@@ -291,9 +311,11 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	if len(capable) == 0 {
 		return func() {}, nil
 	}
-	byPath := make(map[string]capableProject, len(capable))
+	byRef := make(map[indexRef]capableProject, len(capable))
+	refsByPath := map[string][]indexRef{}
 	for _, c := range capable {
-		byPath[c.path] = c
+		byRef[c.ref()] = c
+		refsByPath[c.path] = append(refsByPath[c.path], c.ref())
 	}
 
 	quiet := defaultSymbolQuiet
@@ -306,14 +328,20 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 
 	si := &symbolIndexer{
-		log:            slog.Default(),
-		quiet:          quiet,
-		minInterval:    minInterval,
-		now:            time.Now,
-		state:          map[string]*projIndexState{},
-		projectForPath: func(abs string) (string, bool) { return matchProject(abs, capable) },
-		runIndex: func(ctx context.Context, project string) error {
-			err := m.Run(ctx, []types.Target{{Path: project, Name: spells.SymbolIndexOp}})
+		log:         slog.Default(),
+		quiet:       quiet,
+		minInterval: minInterval,
+		now:         time.Now,
+		state:       map[indexRef]*projIndexState{},
+		indexesForPath: func(abs string) []indexRef {
+			project, ok := matchProject(abs, capable)
+			if !ok {
+				return nil
+			}
+			return refsByPath[project]
+		},
+		runIndex: func(ctx context.Context, ref indexRef) error {
+			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
 					slog.Default().DebugContext(ctx, "magus: guard index not written", slog.String("error", gerr.Error()))
@@ -322,7 +350,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			if err == nil || ctx.Err() != nil {
 				return err // a clean run, or a yield-cancel that carries no useful hint
 			}
-			c := byPath[project]
+			c := byRef[ref]
 			return symbolRunError(types.NewProjectRef(c.path, c.dir), c.language, err)
 		},
 		// This watcher is what makes the freshness memo trustworthy: it drops the memo
@@ -352,28 +380,40 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}, nil
 }
 
-// symbolCapableLanguage reports whether a project is symbol-capable (bound to a spell
-// that declares a symbol indexer) and the language of that spell. The single source of
-// truth for "which projects get indexed", so the auto-indexer, ReindexSymbols, and
-// status reporting cannot disagree.
-func symbolCapableLanguage(p *types.Project) (string, bool) {
+// projectIndexes is the symbol indexes p declares, one per indexer op among the spells it
+// binds (a spell that declares a symbol indexer), in binding order. The single source of
+// truth for "which indexes get built", so the auto-indexer, ReindexSymbols, and status
+// reporting cannot disagree. Two spells registering one op (go and python both index
+// under the bare scip) share that op's index, and the first one's language names it.
+func projectIndexes(p *types.Project) []capableProject {
+	var out []capableProject
 	for _, sp := range p.ResolvedSpells {
-		if sp.SymbolIndexer() != nil {
-			return sp.Language(), true
+		op := sp.SymbolIndexOp()
+		if op == "" || slices.ContainsFunc(out, func(c capableProject) bool { return c.op == op }) {
+			continue
 		}
+		c := capableProject{path: p.Path, dir: p.Dir, op: op, language: sp.Language(), project: p}
+		if si := sp.SymbolIndexer(); si != nil {
+			c.bin = si.Command.Bin
+		}
+		out = append(out, c)
 	}
-	return "", false
+	return out
 }
 
-// symbolCapableProjects returns the symbol-capable projects, each with its absolute
-// directory and indexed language, so a changed file can be matched back to its project
-// and a failed index can name the missing indexer.
+// indexesSymbols reports whether target is one of p's indexer ops.
+func indexesSymbols(p *types.Project, target string) bool {
+	return slices.ContainsFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.SymbolIndexOp() == target && target != "" })
+}
+
+// symbolCapableProjects returns every symbol index the workspace's projects declare,
+// each with its project's absolute directory and indexed language, so a changed file can
+// be matched back to its project and a failed index can name the missing indexer.
 func (m *Magus) symbolCapableProjects() []capableProject {
-	var out []capableProject
-	for _, p := range m.All() {
-		if lang, ok := symbolCapableLanguage(p); ok {
-			out = append(out, capableProject{path: p.Path, dir: p.Dir, language: lang})
-		}
+	ps := m.All()
+	out := make([]capableProject, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, projectIndexes(p)...)
 	}
 	return out
 }
@@ -437,40 +477,25 @@ func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
 	return v
 }
 
-// symbolCapableWithLanguage returns the symbol-capable projects and each one's language,
-// in workspace order. Same predicate symbolCapableProjects uses; this shape keeps the
-// *types.Project the cache step needs.
-func (m *Magus) symbolCapableWithLanguage() ([]*types.Project, map[string]string) {
-	var capable []*types.Project
-	langs := map[string]string{}
-	for _, p := range m.All() {
-		if lang, ok := symbolCapableLanguage(p); ok {
-			capable = append(capable, p)
-			langs[p.Path] = lang
-		}
-	}
-	return capable, langs
-}
-
-// symbolIndexStep is the cache step a scip run for p mints, so a freshness probe against
+// symbolIndexStep is the cache step a run of op on p mints, so a freshness probe against
 // it finds the manifest that run wrote.
 //
 // applyRunKeying is the whole point. buildStep alone omits the tool versions and probed
 // observations the run scheduler stamps, so a probe that skipped it hashed a step no run
 // had ever minted: the lookup missed every time and every built index read as
 // out-of-date. Charmless because ReindexSymbols runs the op with no RunOptions.
-func (m *Magus) symbolIndexStep(p *types.Project, toolVersions []string, observations map[string]string) cache.Step {
-	step := m.buildStep(p, spells.SymbolIndexOp)
-	applyRunKeying(&step, toolVersions, observationsForTarget(p, spells.SymbolIndexOp, observations), nil)
+func (m *Magus) symbolIndexStep(p *types.Project, op string, toolVersions []string, observations map[string]string) cache.Step {
+	step := m.buildStep(p, op)
+	applyRunKeying(&step, runKeyTools(p, op, toolVersions), observationsForTarget(p, op, observations), nil)
 	return step
 }
 
-// symbolIndexSources is the source globs of each of p's spells that declares a symbol
-// indexer, rooted at p: what buildStep keys the scip op on.
-func symbolIndexSources(p *types.Project) []types.Glob {
+// symbolIndexSources is the source globs of each of p's spells whose indexer runs as op,
+// rooted at p: what buildStep keys that op on.
+func symbolIndexSources(p *types.Project, op string) []types.Glob {
 	var out []types.Glob
 	for _, s := range p.ResolvedSpells {
-		if s.SymbolIndexer() == nil {
+		if s.SymbolIndexOp() != op {
 			continue
 		}
 		// A spell whose globs do not parse contributed none to the project either.
@@ -486,29 +511,43 @@ func symbolIndexSources(p *types.Project) []types.Glob {
 }
 
 // indexerUses is the tools s's symbol indexer runs besides its own binary when target is
-// the scip op, and nil for any other target: their versions key the index and nothing else.
+// s's indexer op, and nil for any other target: their versions key the index and nothing
+// else.
 func indexerUses(s *spells.Spell, target string) []string {
-	if target != spells.SymbolIndexOp || s.SymbolIndexer() == nil {
+	if target == "" || target != s.SymbolIndexOp() || s.SymbolIndexer() == nil {
 		return nil
 	}
 	return s.SymbolIndexer().Uses
 }
 
-// indexerUseKey is how targetDrivenBins marks a tool the indexer uses: apart from the
+// indexerUseKey is how targetDrivenBins marks a tool s's indexer uses: apart from the
 // "spell:bin" a build op that runs the same binary is driven under, so keying a build
 // never probes the indexer's view of it.
-func indexerUseKey(spell, tool string) string {
-	return spell + ":" + tool + "@" + spells.SymbolIndexOp
+func indexerUseKey(s *spells.Spell, tool string) string {
+	return s.Name() + ":" + tool + "@" + s.SymbolIndexOp()
 }
 
-// symbolIndexDriven is, per project, the binaries the scip op drives: the set
-// ComputeTargetKey hands probeObservations for the same op. An observation outside it
-// never reaches the step's key, so probing it would fork for nothing; govulncheck's
+// symbolIndexDriven is, per project, the binaries its indexer ops drive: the set
+// ComputeTargetKey hands probeObservations for the same ops. An observation outside it
+// never reaches a step's key, so probing it would fork for nothing; govulncheck's
 // database probe was seven of a query's forks.
 func symbolIndexDriven(ps []*types.Project) map[string]map[string]bool {
-	driven := make(map[string]map[string]bool, len(ps))
+	idxs := make([]capableProject, 0, len(ps))
 	for _, p := range ps {
-		driven[p.Path] = targetDrivenBins(p, spells.SymbolIndexOp)
+		idxs = append(idxs, projectIndexes(p)...)
+	}
+	return indexesDriven(idxs)
+}
+
+// indexesDriven is symbolIndexDriven over just idxs, so a probe of the Go index never forks
+// scip-buzz: a missing one would warn on every graph read.
+func indexesDriven(idxs []capableProject) map[string]map[string]bool {
+	driven := map[string]map[string]bool{}
+	for _, idx := range idxs {
+		if driven[idx.path] == nil {
+			driven[idx.path] = map[string]bool{}
+		}
+		maps.Copy(driven[idx.path], targetDrivenBins(idx.project, idx.op))
 	}
 	return driven
 }
@@ -541,17 +580,18 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 	return m.probeCache
 }
 
-// ReindexSymbols runs the scip op for every symbol-capable project, refreshing each
-// project's cached SCIP index. A project whose indexer is missing or fails is reported
-// with an actionable install hint but does not stop the rest. It returns how many
-// projects were reindexed and the joined errors. This is the manual counterpart to the
-// server's background auto-indexer, invoked by `magus graph build`.
+// ReindexSymbols runs every indexer op of every symbol-capable project, refreshing each
+// cached SCIP index, one run per index. An index whose indexer is missing or fails is
+// reported with an actionable install hint but does not stop the rest, the project's other
+// indexes included. It returns how many indexes were rebuilt and the joined errors. This
+// is the manual counterpart to the server's background auto-indexer, invoked by `magus
+// graph build`.
 func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	capable := m.symbolCapableProjects()
 	var errs []error
 	done := 0
 	for _, c := range capable {
-		if err := m.Run(ctx, []types.Target{{Path: c.path, Name: spells.SymbolIndexOp}}); err != nil {
+		if err := m.Run(ctx, []types.Target{{Path: c.path, Name: c.op}}); err != nil {
 			errs = append(errs, symbolRunError(types.NewProjectRef(c.path, c.dir), c.language, err))
 			continue
 		}
@@ -564,28 +604,33 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 func (m *Magus) symbolCapableIn(paths []string) []string {
 	var out []string
 	for _, c := range m.symbolCapableProjects() {
-		if slices.Contains(paths, c.path) {
+		if slices.Contains(paths, c.path) && !slices.Contains(out, c.path) {
 			out = append(out, c.path)
 		}
 	}
 	return out
 }
 
-// freshenSymbolIndexes brings the symbol index of every symbol-capable project among paths up
-// to date before a review reads it, by running that project's scip target: through the run
-// scheduler and the cache, so a current index replays and a stale one rebuilds only itself.
+// freshenSymbolIndexes brings every symbol index of the symbol-capable projects among paths up
+// to date before a review reads it, by running each index's op: through the run scheduler and
+// the cache, so a current index replays and a stale one rebuilds only itself.
 //
-// It returns an MGS7003 error naming each project whose index could not be made current: the
-// indexer is missing or failed, or the run left the cache nothing to vouch for the result by.
-// A review never reads a stale index as if it were current.
+// It returns an MGS7003 error naming each index that could not be made current: the indexer
+// is missing or failed, or the run left the cache nothing to vouch for the result by. A review
+// never reads a stale index as if it were current. One exception keeps a second index from
+// costing the first its review: an index whose indexer is not installed is left out while
+// another index of the same project has its indexer (see installedIndexes).
 func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error {
-	var touched []*types.Project
-	capable, langs := m.symbolCapableWithLanguage()
-	for _, p := range capable {
-		if slices.Contains(paths, p.Path) {
-			touched = append(touched, p)
+	var touched []capableProject
+	for _, c := range m.symbolCapableProjects() {
+		if slices.Contains(paths, c.path) {
+			touched = append(touched, c)
 		}
 	}
+	touched = installedIndexes(touched, func(bin string) bool {
+		_, err := exec.LookPath(bin)
+		return err == nil
+	})
 	if len(touched) == 0 {
 		return nil
 	}
@@ -593,64 +638,91 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 	if c == nil {
 		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 			"the cache that records whether a symbol index is current could not be opened, so the index of %s cannot be vouched for",
-			projectList(touched))
+			indexList(touched))
 	}
-	probe := func(ps []*types.Project) map[string]bool {
+	probe := func(idxs []capableProject) map[indexRef]bool {
+		var ps []*types.Project
+		for _, idx := range idxs {
+			if !slices.Contains(ps, idx.project) {
+				ps = append(ps, idx.project)
+			}
+		}
 		// An unprobeable project reads as not current; its rebuild runs through m.Run,
 		// which refuses it with the MGS3035 that names the tool.
 		toolVersions, unprobeable := m.toolVersionsEach(ctx, ps)
-		observations := m.probeObservations(ctx, ps, symbolIndexDriven(ps))
-		out := map[string]bool{}
-		for _, p := range ps {
-			if unprobeable[p.Path] != nil {
-				out[p.Path] = false
+		observations := m.probeObservations(ctx, ps, indexesDriven(idxs))
+		out := map[indexRef]bool{}
+		for _, idx := range idxs {
+			if unprobeable[idx.path] != nil {
+				out[idx.ref()] = false
 				continue
 			}
-			ok, err := c.IsCached(ctx, m.symbolIndexStep(p, toolVersions[p.Path], observations[p.Path]))
-			out[p.Path] = err == nil && ok
+			ok, err := c.IsCached(ctx, m.symbolIndexStep(idx.project, idx.op, toolVersions[idx.path], observations[idx.path]))
+			out[idx.ref()] = err == nil && ok
 		}
 		return out
 	}
-	return freshenIndexes(touched, langs, probe, func(p *types.Project) error {
-		return m.Run(ctx, []types.Target{{Path: p.Path, Name: spells.SymbolIndexOp}})
+	return freshenIndexes(touched, probe, func(idx capableProject) error {
+		return m.Run(ctx, []types.Target{{Path: idx.path, Name: idx.op}})
 	}, m.cfg.Cache.WriteEnabled())
+}
+
+// installedIndexes drops each index whose indexer installed says is absent, as long as its
+// project keeps another index whose indexer is present. A project with none installed keeps
+// them all, so its review still fails naming the indexer to install rather than reading as
+// checked.
+func installedIndexes(idxs []capableProject, installed func(bin string) bool) []capableProject {
+	present := map[string]bool{}
+	for _, idx := range idxs {
+		if idx.bin == "" || installed(idx.bin) {
+			present[idx.path] = true
+		}
+	}
+	var out []capableProject
+	for _, idx := range idxs {
+		if present[idx.path] && idx.bin != "" && !installed(idx.bin) {
+			continue
+		}
+		out = append(out, idx)
+	}
+	return out
 }
 
 // freshenIndexes is freshenSymbolIndexes' policy: probe, build what is stale, and probe again,
 // because a build the cache could not record is one nothing can vouch for.
-func freshenIndexes(touched []*types.Project, langs map[string]string, probe func([]*types.Project) map[string]bool,
-	build func(*types.Project) error, writable bool,
+func freshenIndexes(touched []capableProject, probe func([]capableProject) map[indexRef]bool,
+	build func(capableProject) error, writable bool,
 ) error {
 	fresh := probe(touched)
-	var stale []*types.Project
-	for _, p := range touched {
-		if !fresh[p.Path] {
-			stale = append(stale, p)
+	var stale []capableProject
+	for _, idx := range touched {
+		if !fresh[idx.ref()] {
+			stale = append(stale, idx)
 		}
 	}
 	if len(stale) == 0 {
 		return nil
 	}
 	var problems []string
-	var built []*types.Project
-	for _, p := range stale {
-		if err := build(p); err != nil {
-			problems = append(problems, symbolRunError(types.NewProjectRef(p.Path, p.Dir), langs[p.Path], err).Error())
+	var built []capableProject
+	for _, idx := range stale {
+		if err := build(idx); err != nil {
+			problems = append(problems, symbolRunError(types.NewProjectRef(idx.path, idx.dir), idx.language, err).Error())
 			continue
 		}
-		built = append(built, p)
+		built = append(built, idx)
 	}
 	if len(built) > 0 {
 		after := probe(built)
-		for _, p := range built {
-			if after[p.Path] {
+		for _, idx := range built {
+			if after[idx.ref()] {
 				continue
 			}
 			why := "the cache recorded no run to vouch for the index it wrote"
 			if !writable {
 				why = "cache writes are off (cache.write.enabled: false), so the cache recorded no run to vouch for the index it wrote; enable them for this run, which publishes nothing without a signing key"
 			}
-			problems = append(problems, types.NewProjectRef(p.Path, p.Dir).Display()+": "+why)
+			problems = append(problems, types.NewProjectRef(idx.path, idx.dir).Display()+": "+why)
 		}
 	}
 	if len(problems) == 0 {
@@ -687,10 +759,12 @@ func diagnosticOf(err error) types.Diagnostic {
 	return types.Diagnostic{Message: err.Error()}
 }
 
-func projectList(ps []*types.Project) string {
-	names := make([]string, len(ps))
-	for i, p := range ps {
-		names[i] = types.NewProjectRef(p.Path, p.Dir).Display()
+func indexList(idxs []capableProject) string {
+	var names []string
+	for _, idx := range idxs {
+		if name := types.NewProjectRef(idx.path, idx.dir).Display(); !slices.Contains(names, name) {
+			names = append(names, name)
+		}
 	}
 	return strings.Join(names, ", ")
 }

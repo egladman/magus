@@ -230,7 +230,7 @@ func TestDecode_ServiceShapeRefused(t *testing.T) {
 // matches on rather than recognized by its name.
 func TestDecode_SymbolIndexer(t *testing.T) {
 	src := mapObj{
-		"name": "myspell",
+		"name": "go",
 		"symbol_indexer": map[string]any{
 			"format":  "scip",
 			"command": map[string]any{"bin": "scip-go", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
@@ -246,6 +246,27 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 	require.True(t, ok, "the declared indexer must reach the op table")
 	assert.Equal(t, spells.OpKindSymbolIndex, op.Kind)
 	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
+}
+
+// A spell that is not one of the four that indexed under the bare op gets an op of its
+// own, so the Buzz indexer beside scip-go on one project neither shares its cache entry
+// nor fails with it; and its name is reserved like the bare one.
+func TestDecode_SymbolIndexerOpIsPerSpell(t *testing.T) {
+	src := mapObj{
+		"name": "buzz",
+		"symbol_indexer": map[string]any{
+			"format":  "scip",
+			"command": map[string]any{"bin": "scip-buzz", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+
+	require.Len(t, m.Ops, 1, "the indexer is registered once, and not under the bare scip")
+	assert.Equal(t, spells.OpKindSymbolIndex, m.Ops["scip-buzz"].Kind)
+
+	_, err = Decode(mapObj{"name": "buzz", "ops": map[string]any{"scip-buzz": map[string]any{"bin": "scip-buzz"}}})
+	require.ErrorContains(t, err, `declares an op named "scip-buzz"`)
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a

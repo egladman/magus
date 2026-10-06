@@ -518,6 +518,7 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 		{`grep -n "RawMessage\|^func Marshal\|^import\|\"encoding/json\"" types/*.go`, "symbol and declaration beside text", "RawMessage,Marshal"},
 		{`grep -rni 'WithPreflight' internal`, "symbol: CamelCase survives -i", "WithPreflight"},
 		{`rg -n 'CheckStatus' -g '*.go'`, "symbol under a source filter", "CheckStatus"},
+		{`grep -rn 'CheckStatus' hack`, "symbol: the buzz spell indexes a directory of Buzz", "CheckStatus"},
 		{`grep -rn 'MGS3010' internal`, "diagnostic", "diagnostic:MGS3010"},
 
 		// Text: no symbol index holds it.
@@ -534,7 +535,6 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 		{`grep -n "Origin" types/*.go`, "text: a plain word over a glob", ""},
 		{`grep -rn 'func main' cmd`, "text: a lowercase declaration many share", ""},
 		{`grep -rn "object ChainStep" internal/`, "text: a Buzz declaration, which no index reads", ""},
-		{`grep -rn 'CheckStatus' hack`, "text: a directory of Buzz", ""},
 		{`grep -rn 'ast.Inspect\|ast.Walk' --include=*.go .`, "text: go/ast, not the workspace's Inspect", ""},
 		{`grep -rni 'origin' internal`, "text", ""},
 
@@ -613,12 +613,12 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 }
 
 // The files refs answers for are the languages a spell declares a symbol indexer for, read
-// from the catalog rather than a list in the guard: Go and TypeScript here, Buzz not.
+// from the catalog rather than a list in the guard: Go, TypeScript and Buzz here.
 func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 	exts := indexedExtensions(Dependencies{Spells: spellCatalog})
 	assert.True(t, exts[".go"], "%v", exts)
 	assert.True(t, exts[".ts"], "%v", exts)
-	assert.False(t, exts[".buzz"], "no spell indexes Buzz")
+	assert.True(t, exts[".buzz"], "the buzz spell declares scip-buzz")
 	assert.False(t, exts[".md"])
 	assert.Empty(t, indexedExtensions(Dependencies{}))
 
@@ -632,6 +632,28 @@ func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 	assert.Equal(t, denyRuleSymbolSearch, Evaluate(deps, `grep -rn CheckStatus internal`).Rule.Name)
 	deps.Spells = nil
 	assert.Empty(t, Evaluate(deps, `grep -rn CheckStatus internal`).Deny, "with no indexer declared, nothing there is a symbol refs answers")
+}
+
+// A Buzz name the index does not hold runs as a grep: until scip-buzz is installed and has
+// built the Buzz index, refs cannot answer for one, and the guard must not send a search
+// there. A Buzz name the index does hold is redirected like any other symbol.
+func TestBuzzSearchRedirectsOnlyWhatTheIndexHolds(t *testing.T) {
+	root := recordedSearchTree(t)
+	indexed := map[string]bool{}
+	deps := Dependencies{
+		SymbolDefined: func(name string) (bool, bool) { return indexed[name], true },
+		Spells:        spellCatalog,
+		scope:         workspaceScope{root: root},
+		callDir:       root,
+	}
+	const search = `grep -rn splitBranch hack`
+
+	assert.Empty(t, Evaluate(deps, search).Deny, "no Buzz index holds splitBranch, so grep is the only answer")
+
+	indexed["splitBranch"] = true
+	v := Evaluate(deps, search)
+	require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, v.Deny)
+	assert.Equal(t, "splitBranch", v.Rule.Arg)
 }
 
 // TestMixedSearchServesTheTextOnItsOwn pins the half of a mixed alternation that is not a
