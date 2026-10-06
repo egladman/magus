@@ -65,6 +65,26 @@ env:
   BUILT_BY: ${{ github.workflow_ref }}
 
 jobs:
+  preflight:
+    name: Check release credentials
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # Keep these values linked to the steps that use them. A check with different
+      # wiring could pass while publication still lacks a credential.
+      - name: Check required credentials before building
+        env:
+          MAGUS_SIGNING_KEY: &release_signing_key ${{ secrets.MAGUS_SIGNING_KEY }}
+          GHCR_USERNAME: &release_ghcr_username ${{ github.actor }}
+          GHCR_TOKEN: &release_ghcr_token ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for name in MAGUS_SIGNING_KEY GHCR_USERNAME GHCR_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Release credential $name is not available" >&2
+              exit 1
+            fi
+          done
+
   # One job per native runner. Each builds its own platform's static binary, and the
   # dynamically-linked one too when include_dynamic_builds is set. Static cross-compiles
   # trivially (no C toolchain needed), so there's no reason to farm it out to a separate
@@ -74,9 +94,13 @@ jobs:
   release-linux-amd64:
     name: Build release artifacts (linux/amd64)
     if: ${{ !inputs.resume_tag }}
+    needs: preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read  # publish is the only job that creates the Release/uploads assets
+    outputs:
+      magus_artifact: ${{ steps.magus.outputs.artifact }}
+      magus_sha256: ${{ steps.magus.outputs.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,13 +110,17 @@ jobs:
           # Do NOT shallow these jobs: git describe needs to reach the nearest tag.
           fetch-depth: 0
           filter: blob:none
-      - uses: ./.github/actions/setup-magus
+      # Publish the exact tag's bootstrap binary before any cache restore. Publish
+      # consumes this same-run artifact, checked against the digest and commit.
+      - id: magus
+        uses: ./.github/actions/setup-magus
         with:
           # CD must bootstrap from the commit it's releasing, not a pinned
           # older tag - magusfile.buzz can legitimately need host-module code
           # newer than the last release.
           installation-strategy: source
           git-ref: ${{ github.ref_name }}
+          publish-artifact: release-magus-${{ github.run_attempt }}
       - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
       # No remote-cache env is set in CD on purpose: a release builds clean off the
@@ -127,6 +155,7 @@ jobs:
   release-linux-arm64:
     name: Build release artifacts (linux/arm64)
     if: ${{ !inputs.resume_tag }}
+    needs: preflight
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -166,6 +195,7 @@ jobs:
   release-darwin-arm64:
     name: Build release artifacts (darwin/arm64)
     if: ${{ !inputs.resume_tag }}
+    needs: preflight
     runs-on: macos-15
     permissions:
       contents: read
@@ -216,6 +246,7 @@ jobs:
   release-darwin-amd64:
     name: Build release artifacts (darwin/amd64)
     if: ${{ !inputs.resume_tag }}
+    needs: preflight
     runs-on: macos-15-intel
     permissions:
       contents: read
@@ -262,6 +293,7 @@ jobs:
   release-windows:
     name: Build release artifacts (windows amd64 + arm64-static)
     if: ${{ !inputs.resume_tag }}
+    needs: preflight
     runs-on: windows-latest
     permissions:
       contents: read
@@ -327,12 +359,13 @@ jobs:
   publish:
     name: Publish release
     needs:
+      - preflight
       - release-linux-amd64
       - release-linux-arm64
       - release-darwin-arm64
       - release-darwin-amd64
       - release-windows
-    if: ${{ always() && (inputs.resume_tag != '' || success()) }}
+    if: ${{ always() && needs.preflight.result == 'success' && (inputs.resume_tag != '' || success()) }}
     runs-on: ubuntu-latest
     # Job-scoped because only this job runs a bare `go run`; the release-build jobs above
     # reach the toolchain through magusfile.buzz, which sets this on every Go target.
@@ -374,13 +407,24 @@ jobs:
           env: false
           cache: false
 
+      # Before a new Release exists, use the binary the linux build job made from
+      # this tag. On resume the published, signed binary for this exact tag exists.
       - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
+        if: ${{ !inputs.resume_tag }}
         with:
-          installation-strategy: source
-          git-ref: ${{ inputs.resume_tag || github.ref_name }}
+          installation-strategy: artifact
+          artifact: ${{ needs.release-linux-amd64.outputs.magus_artifact }}
+          artifact-sha256: ${{ needs.release-linux-amd64.outputs.magus_sha256 }}
+          artifact-commit: ${{ github.sha }}
 
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - uses: ./.github/actions/setup-magus
+        if: ${{ inputs.resume_tag != '' }}
+        with:
+          installation-strategy: prebuilt
+          git-ref: ${{ inputs.resume_tag }}
+
+      # The bare magus-utils calls below need mise's pinned Go even when magus came
+      # from an artifact or release and setup-magus did not install a Go toolchain.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
@@ -415,7 +459,7 @@ jobs:
       - name: Sign and verify SHA256SUMS
         if: ${{ !inputs.resume_tag }}
         env:
-          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+          MAGUS_SIGNING_KEY: *release_signing_key
         run: magus run release-sign --no-default-charms
 
       # Whether this tag is a prerelease, decided by .github/actions/magus/prerelease.buzz
@@ -496,16 +540,16 @@ jobs:
       - name: Publish the release index
         if: ${{ inputs.resume_tag == '' || steps.index_state.outputs.published != 'true' }}
         env:
-          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+          MAGUS_SIGNING_KEY: *release_signing_key
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
           REASON: the ${{ inputs.resume_tag || github.ref_name }} release
         run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"
 
   # Every spell the binary ships, one GHCR repository each, tagged with the release version.
   # After publish, so a spell never names a release that failed to go out. The artifacts are
-  # packed from the binary setup-magus builds at this tag, the same bytes `magus spell pull
+  # packed from the signed binary published at this tag, the same bytes `magus spell pull
   # magus/spell/<name>` stamps a copy with. A new GHCR package is private until someone
   # makes it public in the package settings; magus cannot do that for you.
   spells:
@@ -528,15 +572,15 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
+          installation-strategy: prebuilt
           git-ref: ${{ inputs.resume_tag || github.ref_name }}
 
       # The credentials image-login uses, under the names GHCR_SPELLS declares. Each token
       # reaches `magus spell push` on stdin, never an argv.
       - name: Publish spells
         env:
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
         run: magus run spell-publish:cd --no-default-charms
 
   image:
@@ -572,7 +616,7 @@ jobs:
 
       - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: source
+          installation-strategy: prebuilt
           git-ref: ${{ inputs.resume_tag || github.ref_name }}
 
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
@@ -620,16 +664,16 @@ jobs:
       # that have any business with it.
       - name: Verify registry credentials
         env:
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
           # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: magus run image-registries:cd,tagged,verify --no-default-charms
 
       - name: Log in to image registries
         env:
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
           # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: magus run image-login:cd,tagged --no-default-charms

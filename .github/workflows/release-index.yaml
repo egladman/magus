@@ -46,6 +46,19 @@ jobs:
       pull-requests: write
       packages: write        # graph-generate:cd publishes the knowledge graph to GHCR
     steps:
+      - name: Check required credentials before setup
+        env:
+          MAGUS_SIGNING_KEY: &index_signing_key ${{ secrets.MAGUS_SIGNING_KEY }}
+          GHCR_USERNAME: &index_ghcr_username ${{ github.actor }}
+          GHCR_TOKEN: &index_ghcr_token ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for name in MAGUS_SIGNING_KEY GHCR_USERNAME GHCR_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Release index credential $name is not available" >&2
+              exit 1
+            fi
+          done
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # release-index runs `generate:rw docs`, whose preflight execs pnpm. This job is
@@ -99,9 +112,9 @@ jobs:
 
       - name: Publish the release index
         env:
-          MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
+          MAGUS_SIGNING_KEY: *index_signing_key
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: *index_ghcr_username
+          GHCR_TOKEN: *index_ghcr_token
           REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
         run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"
