@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -81,4 +82,45 @@ func RecordEnvDropped(ctx context.Context, p *Policy, cmd string) {
 	}
 	project, _, _ := journal.StepFromContext(ctx)
 	rec.RecordSandboxEnvDropped(ctx, project, int64(len(p.EnvDropped)))
+}
+
+// withheldReads is the set of (project, target, variable) reads RecordEnvWithheld has
+// already reported. A nil set reports every read: a Policy assembled by hand, as a test
+// does, has none.
+type withheldReads struct {
+	mu       sync.Mutex
+	reported map[string]struct{}
+}
+
+// firstReport reports whether key has not been reported yet, and marks it reported.
+func (w *withheldReads) firstReport(key string) bool {
+	if w == nil {
+		return true
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.reported[key]; ok {
+		return false
+	}
+	if w.reported == nil {
+		w.reported = map[string]struct{}{}
+	}
+	w.reported[key] = struct{}{}
+	return true
+}
+
+// RecordEnvWithheld reports MGS2013: code under p read name, which is set, and p
+// withholds it, so the read answered unset. The read keeps answering unset; this is how
+// whoever reads the run learns why, with the variable named and its value never. Warn
+// rather than MGS2003's info: a read that came back empty is a decision the code went on
+// to make, where a stripped child environment is a fact about every child. Once per
+// target and variable.
+func RecordEnvWithheld(ctx context.Context, p *Policy, name string) {
+	project, target, _ := journal.StepFromContext(ctx)
+	if !p.withheld.firstReport(project + "\x00" + target + "\x00" + name) {
+		return
+	}
+	slog.WarnContext(ctx, types.FormatDiagnostic(types.EnvReadWithheld,
+		"a sandboxed read of a set variable answered unset"),
+		"name", name, "project", project, "target", target)
 }

@@ -196,6 +196,8 @@ The spell layer depends on who starts the process:
 
 The target layer reaches both a target's own processes and its ops' children.
 
+A **service spell** is left out of all three. That is the remote cache backend, and any spell that contributes no op a target could compose, such as a CI or secret provider. Its declaration names what it needs to reach its service, and the GitHub Actions spell's names the cache write token, which no target, script or hook should hold. The declaration reaches only the spell's own ops: a remote cache lookup or store runs under the workspace policy plus that spell's layer and no other spell's, with no target layer, and over an environment no target's `env\set` has touched.
+
 ### A lease narrows it further
 
 A checkout that acts as a delegated worker gets a write grant NARROWER than the one above. When the sandbox is on and the acting lease resolves to a live [job](../guides/integrations/agents/leases.md) row with a parent and non-empty `write_paths`, the write grant inside the checkout becomes those paths (globbed against the workspace root), plus the cache directory and the private temp dir; reads are unchanged, grants outside the checkout keep their writes, and a refusal is recorded on the trail as a `sandbox_denial` naming the job. It is DERIVED from the row rather than declared again here, because the agent guard already grades writes against the same field and two declarations would let the kernel refuse something other than what the guard explains. A root job, an unknown job, and a workspace with no declared jobs are all unchanged.

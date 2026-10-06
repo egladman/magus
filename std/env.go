@@ -121,6 +121,7 @@ func EnvGet(ctx context.Context, name string) (string, error) {
 		// Empty string, not an error: env.get is widely used as a "did the user
 		// set X?" probe, and a hard error would break innocuous magusfiles in
 		// the sandbox.
+		recordWithheld(ctx, p, name)
 		return "", nil
 	}
 	v, _ := environ.Lookup(ctx, name)
@@ -134,10 +135,19 @@ func EnvGet(ctx context.Context, name string) (string, error) {
 // for (mirrors EnvGet's information-hiding).
 func EnvLookup(ctx context.Context, name string) (string, bool, error) {
 	if p := sandbox.PolicyFromContext(ctx); p != nil && !p.AllowsEnv(name) {
+		recordWithheld(ctx, p, name)
 		return "", false, nil
 	}
 	v, ok := environ.Lookup(ctx, name)
 	return v, ok, nil
+}
+
+// recordWithheld reports MGS2013 to the run's log, never to the caller, when p withheld
+// name and name is set: a withheld name that is unset hid nothing.
+func recordWithheld(ctx context.Context, p *sandbox.Policy, name string) {
+	if _, set := environ.Lookup(ctx, name); set {
+		sandbox.RecordEnvWithheld(ctx, p, name)
+	}
 }
 
 // setenv writes name=value where this run's reads and children see it: the run's overlay
@@ -192,6 +202,7 @@ func EnvExpand(ctx context.Context, s string) (string, error) {
 	p := sandbox.PolicyFromContext(ctx)
 	return os.Expand(s, func(name string) string {
 		if p != nil && !p.AllowsEnv(name) {
+			recordWithheld(ctx, p, name)
 			return ""
 		}
 		v, _ := environ.Lookup(ctx, name)
@@ -238,6 +249,8 @@ func EnvRequire(ctx context.Context, name string) (string, error) {
 }
 
 // EnvList returns all environment variables as a name-value map, omitting any the sandbox policy strips.
+// It reports no MGS2013: that would name every withheld variable at once, where a read
+// names only the one the code asked for.
 func EnvList(ctx context.Context) (map[string]string, error) {
 	raw := environ.Of(ctx)
 	p := sandbox.PolicyFromContext(ctx)

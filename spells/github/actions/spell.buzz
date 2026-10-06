@@ -69,6 +69,13 @@ import "std"
 // around it to supply the vendor. See CONTRIBUTING.md#naming.
 export fun mgs_getName() > str { return "github-actions"; }
 
+// The cache ops read the service URL and token from the environment. The declaration
+// reaches this spell's own ops and nothing else: magus keeps a spell that contributes
+// no target op out of the grants every target gets, so no target sees the cache token.
+export fun mgs_getSandbox() > Sandbox {
+    return Sandbox{ env = SandboxEnv{passthrough = ["ACTIONS_RESULTS_URL", "ACTIONS_RUNTIME_TOKEN"]} };
+}
+
 // A cache provider exports the well-known cache-contract functions below
 // (get_artifact / put_artifact), which the remote-cache subsystem detects by name
 // and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a

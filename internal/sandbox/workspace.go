@@ -20,7 +20,8 @@ import (
 // FromConfig builds the sandbox policy for the workspace at root from cfg, the sandbox
 // declarations of the spells the workspace loaded (see spells.Sandboxes), and the host:
 // its environment, the running binary and the checkout's git directories. It creates
-// the private temp dir children get as TMPDIR (see privateTempDir).
+// the private temp dir children get as TMPDIR (see privateTempDir). providers names the
+// spells in spellGrants that serve magus itself; see PolicyOptions.Providers.
 //
 // A sandbox.allow entry that cannot be honored, a literal path naming an unset
 // variable, and a passthrough pattern that does not parse are errors (MGS2004): a
@@ -28,13 +29,13 @@ import (
 // trace, and one that grants more is not a sandbox. An entry reading env or a base is
 // the exception by design: it names where a tool would look, and a variable left unset
 // is a tool left at its default.
-func FromConfig(root, cacheDir string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox) (*Policy, error) {
+func FromConfig(root, cacheDir string, cfg config.SandboxConfig, spellGrants map[string]spells.Sandbox, providers ...string) (*Policy, error) {
 	tmp, err := privateTempDir(os.TempDir(), root)
 	if err != nil {
 		return nil, err
 	}
 	home, _ := os.UserHomeDir()
-	return buildFromConfig(root, cfg, spellGrants, PolicyOptions{CacheDir: cacheDir, TempDir: tmp, Home: home, Environ: os.Environ()})
+	return buildFromConfig(root, cfg, spellGrants, PolicyOptions{CacheDir: cacheDir, TempDir: tmp, Home: home, Environ: os.Environ(), Providers: providers})
 }
 
 // Box is a home and a temporary directory of their own for a policy's children, apart

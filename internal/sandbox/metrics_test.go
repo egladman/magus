@@ -5,10 +5,12 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
@@ -105,4 +107,21 @@ func TestRecordEnvDroppedLogsMGS2003(t *testing.T) {
 
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), nil, "go") }), "sandbox off")
 	assert.Empty(t, logged(t, func() { RecordEnvDropped(context.Background(), &Policy{}, "go") }), "nothing dropped")
+}
+
+// RecordEnvWithheld logs MGS2013 naming the variable and the target, never a value, and
+// once per target and variable: code reading the same name in a loop must not bury the
+// run log.
+func TestRecordEnvWithheldLogsMGS2013OncePerTargetAndName(t *testing.T) {
+	p := &Policy{withheld: &withheldReads{}}
+	inTest := journal.WithStep(context.Background(), ".", "test")
+	got := logged(t, func() {
+		RecordEnvWithheld(inTest, p, "ACTIONS_RUNTIME_TOKEN")
+		RecordEnvWithheld(inTest, p, "ACTIONS_RUNTIME_TOKEN")
+		RecordEnvWithheld(journal.WithStep(context.Background(), ".", "lint"), p, "ACTIONS_RUNTIME_TOKEN")
+	})
+	assert.Contains(t, got, "MGS2013")
+	assert.Contains(t, got, "name=ACTIONS_RUNTIME_TOKEN")
+	assert.Contains(t, got, "target=test")
+	assert.Equal(t, 2, strings.Count(got, "name=ACTIONS_RUNTIME_TOKEN"), "once for test, once for lint")
 }

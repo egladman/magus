@@ -47,7 +47,9 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 	loc := job.Location{CacheDir: m.CacheDir(), Root: m.ws.Root}
 	// Every spell the workspace loaded, so a script, a magusfile body and a nested magus
 	// get every toolchain's grants; runTarget narrows a spell op's child to its project's.
-	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox, spells.Sandboxes(project.DefaultSpellRegistry().All()))
+	// A service spell's grants are kept for its own ops alone (sandbox.ForProvider).
+	loaded := project.DefaultSpellRegistry().All()
+	p, err := sandbox.FromConfig(m.ws.Root, loc.CacheDir, m.cfg.Sandbox, spells.Sandboxes(loaded), m.serviceSpells(loaded)...)
 	if err != nil {
 		return ctx, err
 	}
@@ -67,6 +69,24 @@ func (m *Magus) ApplySandbox(ctx context.Context) (context.Context, error) {
 		recordRules(ctx, prov, p)
 	}
 	return sandbox.WithPolicy(ctx, p), nil
+}
+
+// serviceSpells names the loaded spells that serve magus rather than a target: the
+// remote cache backend, and any spell contributing no op a target composes, such as a CI
+// or secret provider. Such a spell's sandbox declaration exists for its own handler ops,
+// so it must not become a grant every script and step receives: the GitHub Actions
+// spell's cache write token would otherwise reach every target it caches for.
+func (m *Magus) serviceSpells(loaded []*spells.Spell) []string {
+	var names []string
+	if name := m.wsReg.RemoteBackend(); name != "" {
+		names = append(names, name)
+	}
+	for _, s := range loaded {
+		if len(s.Targets()) == 0 {
+			names = append(names, s.Name())
+		}
+	}
+	return names
 }
 
 // warnedKernelUnavailable keeps MGS2005 to one line per process.

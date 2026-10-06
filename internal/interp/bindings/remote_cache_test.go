@@ -22,10 +22,13 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/cache/remotetest"
+	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -281,6 +284,35 @@ func ghaRoundTrip(t *testing.T, emu *remotetest.GHA) {
 		assert.Equal(t, "Bearer test-token", got,
 			"Twirp call %d arrived without the granted credential", i)
 	}
+}
+
+// The cache is reached with the context of the step whose result it looks up or stores.
+// Under the workspace policy built from the spell's own declaration, the step sees neither
+// the service URL nor the token, while the provider's ops reach the service with both,
+// and a PATH the step set reaches neither the provider nor its children.
+func TestGHACacheBackendReachesItsServiceWhileTheStepCannot(t *testing.T) {
+	store, ctx := ghaStore(t, remotetest.NewGHA())
+	spell, ok := store.drv.(*spells.Spell)
+	require.True(t, ok, "the github spell loads as a *spells.Spell")
+	p := sandbox.BuildPolicy(sandbox.PolicyOptions{
+		TempDir:   t.TempDir(),
+		Environ:   os.Environ(),
+		Spells:    spells.Sandboxes([]*spells.Spell{spell}),
+		Providers: []string{spell.Name()},
+	})
+	step := sandbox.WithStep(sandbox.WithPolicy(environ.With(ctx), p), nil, nil)
+
+	for _, name := range []string{"ACTIONS_RESULTS_URL", "ACTIONS_RUNTIME_TOKEN"} {
+		_, found, err := std.EnvLookup(step, name)
+		require.NoError(t, err)
+		assert.False(t, found, "the step reads %s as unset", name)
+	}
+	require.NoError(t, std.EnvSet(step, "PATH", t.TempDir()))
+
+	require.NoError(t, store.PutArtifact(step, "pkg/a", "abc123", bytes.NewReader([]byte("entry"))))
+	rc, err := store.GetArtifact(step, "pkg/a", "abc123")
+	require.NoError(t, err, "a stored entry is a hit for the step, not a silent miss")
+	_ = rc.Close()
 }
 
 // ghaStore wires the spell to an emulator for one test.

@@ -134,6 +134,7 @@ Two layers run together:
 - [MGS2008](MGS2008.md): server socket withheld from sandboxed children.
 - [MGS2010](MGS2010.md): a nested or forwarded run asked for a weaker sandbox mode.
 - [MGS2012](MGS2012.md): the sandbox is required and the kernel cannot confine the run's children.
+- [MGS2013](MGS2013.md): sandboxed code read a variable that is set, and the sandbox withheld it.
 - [MGS3009](MGS3009.md): machine budget exhausted.
 - [MGS3010](MGS3010.md): redundant gate deferred.
 - [MGS3011](MGS3011.md): target exceeded its declared timeout.

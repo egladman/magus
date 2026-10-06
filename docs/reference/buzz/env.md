@@ -30,7 +30,7 @@ Return the value of name, or "" if unset. Use lookup to tell unset from set-but-
 
 Return (value, found); found is false when name is unset or stripped by the sandbox.
 
-**Signature:** `env\lookup(name) -> string, bool`[^buzz-stdlib-env-lookup] - [source](https://github.com/egladman/magus/blob/main/std/env.go#L135)
+**Signature:** `env\lookup(name) -> string, bool`[^buzz-stdlib-env-lookup] - [source](https://github.com/egladman/magus/blob/main/std/env.go#L136)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -42,7 +42,7 @@ Return (value, found); found is false when name is unset or stripped by the sand
 
 Set name to value for this run: its later reads and the processes it starts see it, other runs in the same magus process do not.
 
-**Signature:** `env\set(name, value)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L155)
+**Signature:** `env\set(name, value)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L165)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -53,7 +53,7 @@ Set name to value for this run: its later reads and the processes it starts see 
 
 Return all environment variables as a name->value map.
 
-**Signature:** `env\list() -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L241)
+**Signature:** `env\list() -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L254)
 
 **Returns:** map[string]string
 
@@ -61,7 +61,7 @@ Return all environment variables as a name->value map.
 
 Remove name for this run, the counterpart of set.
 
-**Signature:** `env\unset(name)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L172)
+**Signature:** `env\unset(name)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L182)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -71,7 +71,7 @@ Remove name for this run, the counterpart of set.
 
 Replace $VAR and ${VAR} references in s with their values (sandbox-stripped names expand to "").
 
-**Signature:** `env\expand(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L191)
+**Signature:** `env\expand(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L201)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -83,7 +83,7 @@ Replace $VAR and ${VAR} references in s with their values (sandbox-stripped name
 
 Return the current user's home directory.
 
-**Signature:** `env\home() -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L203)
+**Signature:** `env\home() -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L214)
 
 **Returns:** string
 
@@ -91,7 +91,7 @@ Return the current user's home directory.
 
 Return the value of name, or def when name is unset or stripped by the sandbox. Unlike get, an empty string is returned as-is - def only applies when the variable is absent.
 
-**Signature:** `env\getOr(name, def) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L214)
+**Signature:** `env\getOr(name, def) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L225)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -104,7 +104,7 @@ Return the value of name, or def when name is unset or stripped by the sandbox. 
 
 Return the value of name, or raise when it is unset or stripped by the sandbox. The fail-fast complement to get/lookup: a CI magusfile that needs GITHUB_TOKEN states the requirement once instead of threading a lookup-then-fatal check through every caller. A set-but-empty variable satisfies the requirement (its empty value is returned).
 
-**Signature:** `env\require(name) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L229)
+**Signature:** `env\require(name) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L240)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -116,7 +116,7 @@ Return the value of name, or raise when it is unset or stripped by the sandbox. 
 
 Parse .env-format content into a name->value map. Supports KEY=VALUE, blank lines, # comments, a leading `export` keyword, single/double quotes (double-quoted values honor \n \t \" \\ escapes), and inline comments after unquoted values. Pure: it does not touch the process environment.
 
-**Signature:** `env\parseDotenv(content) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L262)
+**Signature:** `env\parseDotenv(content) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L275)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -128,7 +128,7 @@ Parse .env-format content into a name->value map. Supports KEY=VALUE, blank line
 
 Read a .env file and return its name->value map (parse_dotenv over the file contents). Errors if the file cannot be read.
 
-**Signature:** `env\readDotenv(path) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L267)
+**Signature:** `env\readDotenv(path) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L280)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -140,7 +140,7 @@ Read a .env file and return its name->value map (parse_dotenv over the file cont
 
 Read a .env file and set each variable for this run, as set does, without overwriting names already set (the dotenv convention) or names the sandbox strips. A no-op in a recording/dry-run.
 
-**Signature:** `env\loadDotenv(path)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L282)
+**Signature:** `env\loadDotenv(path)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L295)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
