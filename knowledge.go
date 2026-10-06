@@ -377,12 +377,12 @@ func recordedSymbolIndexDeclarations(ctx context.Context, lw *LazyWorkspace, cfg
 // caller must open the workspace and judge afresh, as every read did before; it never
 // guesses, so an index rebuilt since the record, or one the record never judged, sends
 // the read to the workspace rather than to a stale verdict.
-func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]string, bool) {
+func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
 	decls, ok := recordedSymbolIndexDeclarations(ctx, lw, cfg)
 	if !ok {
 		return nil, false
 	}
-	var stale []string
+	var stale []types.KnowledgeStaleIndex
 	for _, d := range decls {
 		if d.Op == "" {
 			// A knowledge.symbols override: magus never builds its index, so no evaluation
@@ -400,11 +400,11 @@ func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Con
 			return nil, false
 		}
 		if d.Freshness == string(types.SymbolIndexStale) {
-			stale = append(stale, d.Project)
+			stale = append(stale, types.KnowledgeStaleIndex{Project: d.Project, Language: d.Language, Op: d.Op})
 		}
 	}
-	slices.Sort(stale)
-	return slices.Compact(stale), true
+	slices.SortFunc(stale, types.CompareStaleIndexes)
+	return stale, true
 }
 
 // knowledgeSources is what both the stamps and the gathered inputs are derived from,

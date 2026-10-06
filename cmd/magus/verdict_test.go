@@ -63,7 +63,7 @@ func TestPrintVerdictIsPlainASCII(t *testing.T) {
 		types.ClassifyAnswer(false, "", nil),
 		types.ClassifyAnswer(false, types.ReasonSymbolsNotLoaded, nil),
 		types.ClassifyAnswer(false, "", []types.KnowledgeSymbolGap{gap("libs/api")}),
-		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []string{"libs/api"}}),
+		knowledge.Answer("Foo", false, knowledge.Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api", Language: "go"}}}),
 	} {
 		got := renderVerdict(ans, "magus refs Foo")
 		for _, r := range got {
@@ -140,10 +140,10 @@ func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
 // case where it did not change what to do.
 func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
 	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{
-		Seeded: true, Probed: true, Stale: []string{"libs/api", "."},
+		Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{{Project: "libs/api"}, {Project: ".", Language: "buzz"}},
 	}), "")
 	assert.Contains(t, got, "verdict: unknown, not absent")
-	assert.Contains(t, got, "libs/api, .")
+	assert.Contains(t, got, "libs/api, . (buzz index)", "each project, and which of its indexes is behind when that is known")
 	assert.Contains(t, got, "magus graph build")
 	assert.NotContains(t, got, "absent (magus searched everything")
 }

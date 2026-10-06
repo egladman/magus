@@ -66,7 +66,7 @@ func reportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	if ans.Reason == types.ReasonIndexStale {
 		return errSilent{exitCode: 1}
 	}
-	notice := staleIndexNotice(ans.StaleIndexes)
+	notice := staleIndexNotice(ans)
 	if notice == "" {
 		return nil
 	}
@@ -74,16 +74,17 @@ func reportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	return errSilent{exitCode: 1}
 }
 
-// staleIndexNotice renders the line, or "" for an empty list. Split from the probe so the
-// two halves are testable apart: what is stale is the cache's answer, and what to say about
-// it is not.
-func staleIndexNotice(stale []string) string {
-	if len(stale) == 0 {
+// staleIndexNotice renders the line, or "" when no index under ans is stale. Split from the
+// probe so the two halves are testable apart: what is stale is the cache's answer, and what
+// to say about it is not.
+func staleIndexNotice(ans types.KnowledgeAnswer) string {
+	projects := len(ans.StaleIndexes)
+	if projects == 0 {
 		return ""
 	}
 	return fmt.Sprintf("\nstale index: %s changed since %s last indexed %s, so this answer may be missing sites in %s.\n",
-		plural(len(stale), "a project", "projects"), hint.GraphBuild,
-		plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
+		plural(projects, "a project", "projects"), hint.GraphBuild,
+		plural(projects, "it", "them"), ans.DescribeStale()) +
 		fmt.Sprintf("  refresh and ask again: %s\n", hint.GraphBuild)
 }
 
@@ -110,14 +111,20 @@ func plural(n int, one, many string) string {
 // it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
 // question needs the cache, which no domain interface exposes.
 func staleIndexProjects(ctx context.Context, root string) []string {
+	return types.StaleIndexProjects(staleIndexes(ctx, root))
+}
+
+// staleIndexes is staleIndexProjects an index at a time: a project with a Go and a Buzz
+// index has an entry for each one that is stale.
+func staleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil || ws == nil {
 		return nil
 	}
-	return staleIndexProjectsOf(ctx, ws)
+	return staleIndexesOf(ctx, ws)
 }
 
-func staleIndexProjectsOf(ctx context.Context, ws graphWorkspace) []string {
+func staleIndexesOf(ctx context.Context, ws graphWorkspace) []types.KnowledgeStaleIndex {
 	var m *magus.Magus
 	switch w := ws.(type) {
 	case *magus.Magus:
@@ -141,7 +148,7 @@ func staleIndexProjectsOf(ctx context.Context, ws graphWorkspace) []string {
 	default:
 		return nil
 	}
-	var stale []string
+	var stale []types.KnowledgeStaleIndex
 	for _, s := range m.SymbolIndexStatusByStamp(ctx) {
 		if s.Freshness != types.SymbolIndexStale {
 			continue
@@ -150,11 +157,10 @@ func staleIndexProjectsOf(ctx context.Context, ws graphWorkspace) []string {
 		if path == "" {
 			path = "."
 		}
-		stale = append(stale, path)
+		stale = append(stale, types.KnowledgeStaleIndex{Project: path, Language: s.Language, Op: s.Op})
 	}
-	// A project's Go and Buzz indexes are judged apart; the advice names the project once.
-	slices.Sort(stale)
-	return slices.Compact(stale)
+	slices.SortFunc(stale, types.CompareStaleIndexes)
+	return stale
 }
 
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index
@@ -166,7 +172,7 @@ func staleGraphAdvice(ctx context.Context) string {
 		}
 		return ""
 	})
-	advice := staleGraphAdviceFor(reason, staleIndexProjects(ctx, ""))
+	advice := staleGraphAdviceFor(reason, staleIndexes(ctx, ""))
 	if advice == "" {
 		return ""
 	}
@@ -178,7 +184,7 @@ func staleGraphAdvice(ctx context.Context) string {
 
 // staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
 // symbol indexes, "" when neither is stale.
-func staleGraphAdviceFor(reason string, stale []string) string {
+func staleGraphAdviceFor(reason string, stale []types.KnowledgeStaleIndex) string {
 	var b strings.Builder
 	switch {
 	case reason != "":
@@ -188,9 +194,9 @@ func staleGraphAdviceFor(reason string, stale []string) string {
 	default:
 		return ""
 	}
-	if len(stale) > 0 {
+	if projects := len(types.StaleIndexProjects(stale)); projects > 0 {
 		fmt.Fprintf(&b, "%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
-			plural(len(stale), "One project", "Several projects"), hint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", "))
+			plural(projects, "One project", "Several projects"), hint.GraphBuild, plural(projects, "it", "them"), types.DescribeStaleIndexes(stale))
 	}
 	b.WriteString("This is an advisory: a stale index still holds true facts, so the read is worth running either way.")
 	return b.String()

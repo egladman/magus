@@ -1263,7 +1263,8 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 	})
 	stale, ok := RecordedStaleIndexes(ctx, lw, cfg)
 	require.True(t, ok, "the recorded verdicts hold: sources and index files are as they were")
-	assert.Equal(t, []string{"pkg/a"}, stale)
+	assert.Equal(t, []types.KnowledgeStaleIndex{{Project: "pkg/a", Language: "go", Op: "scip"}}, stale,
+		"the index, with the language that says which of a project's indexes it is")
 	assert.Equal(t, 0, opens)
 
 	// The judged index was rebuilt: the verdict is no longer evidence.
