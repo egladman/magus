@@ -1,0 +1,164 @@
+// cd-runs-agree-across-workflows: a cd target run from more than one workflow step gets
+// the same env names at every step. A publication reads its credentials at run time,
+// often from a target it only reaches through ctx.needs, so a copy that lacks one
+// passes every check until the day it publishes. release-index:cd runs from release.yaml
+// and from the manual release-index.yaml; when graph-generate:cd began pushing to GHCR,
+// only the first copy got the registry credentials.
+//
+// Names, not values: a step may phrase its REASON differently. Job permissions are left
+// to review, since a job may hold more for its other steps.
+namespace cdruns;
+
+import "assert";
+import "encoding/yaml";
+import "fs";
+import "serialize";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+export fun reads() > [str] {
+    return [".github/workflows/*.yaml"];
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    return findings(files);
+}
+
+// Run is one step that runs a cd target.
+object Run {
+    path: str,
+    where: str,
+    line: int,
+    env: [str],
+}
+
+// cdCommand is the `magus run` invocation on line, up to any `--`, when its first target
+// carries the cd charm; otherwise "".
+fun cdCommand(line: str) > str {
+    final at = line.indexOf("magus run ");
+    if (at == null) {
+        return "";
+    }
+    var command = line.sub(at! + "magus run ".len()).trim();
+    final dashes = command.indexOf(" -- ");
+    if (dashes != null) {
+        command = command.sub(0, len: dashes!);
+    }
+    final target = command.split(" ")[0];
+    final colon = target.indexOf(":");
+    if (colon == null) {
+        return "";
+    }
+    foreach (charm in target.sub(colon! + 1).split(",")) {
+        if (charm == "cd") {
+            return command;
+        }
+    }
+    return "";
+}
+
+export fun findings(files: [Path]) > [Finding] !> any {
+    final runs = mut {<str: mut [Run]>};
+    foreach (f in files) {
+        final raw = support\read(f);
+        final wf = serialize\Boxed.init(yaml\parse(raw));
+        final at = yaml\positions(raw);
+        final file = fs\basename(f.value);
+        final jobs = wf.q(["jobs"]).mapValue();
+        foreach (name in support\sorted(jobs.keys())) {
+            final steps = jobs[name]!.q(["steps"]).listValue();
+            foreach (i in 0..steps.len()) {
+                final step = steps[i];
+                foreach (line in support\scalar(step.q(["run"])).split("\n")) {
+                    final command = cdCommand(line);
+                    if (command == "") {
+                        continue;
+                    }
+                    if (runs[command] == null) {
+                        runs[command] = mut [<Run>];
+                    }
+                    runs[command]!.append(Run{
+                        path = f.value,
+                        where = file + "/" + name,
+                        line = at.lines["/jobs/{support\pointer(name)}/steps/{i}"] ?? 0,
+                        env = support\sorted(step.q(["env"]).mapValue().keys()),
+                    });
+                }
+            }
+        }
+    }
+
+    final found = mut [<Finding>];
+    foreach (command in support\sorted(runs.keys())) {
+        final copies = runs[command]!;
+        if (copies.len() < 2) {
+            continue;
+        }
+        foreach (run in copies) {
+            final lacking = mut [<str>];
+            final passing = mut [<str>];
+            foreach (other in copies) {
+                foreach (name in other.env) {
+                    if (run.env.indexOf(name) == null and lacking.indexOf(name) == null) {
+                        lacking.append(name);
+                        if (passing.indexOf(other.where) == null) {
+                            passing.append(other.where);
+                        }
+                    }
+                }
+            }
+            if (lacking.len() == 0) {
+                continue;
+            }
+            found.append(Finding{ path = run.path, line = run.line,
+                message = "{run.where} runs `magus run {command}` without {support\sorted(lacking).join(", ")}, which {passing.join(", ")} passes",
+                fix = "Pass the same env names at every step that runs it, and check the job grants what they need (GHCR_TOKEN needs packages: write)." });
+        }
+    }
+    return found;
+}
+
+fun step(env: str, command: str) > str {
+    return "      - env:\n" + env + "        run: magus run " + command + "\n";
+}
+
+fun workflow(steps: str) > str {
+    return "on: workflow_dispatch\njobs:\n  publish:\n    runs-on: x\n    steps:\n" + steps;
+}
+
+final creds = "          KEY: $\{\{ secrets.KEY }}\n          GHCR_TOKEN: $\{\{ secrets.GITHUB_TOKEN }}\n";
+
+test "a cd run reads its command up to the forwarded args" {
+    assert\equal(cdCommand("magus run release-index:cd --no-default-charms -- \"$REASON\""), want: "release-index:cd --no-default-charms", message: "cd");
+    assert\equal(cdCommand("  magus run image-login:tagged,cd"), want: "image-login:tagged,cd", message: "cd among charms");
+    assert\equal(cdCommand("magus run release-build --no-default-charms"), want: "", message: "no charm");
+    assert\equal(cdCommand("magus run generate:rw"), want: "", message: "another charm");
+    assert\equal(cdCommand("echo magus"), want: "", message: "no run");
+}
+
+test "copies with the same env names agree, whatever their values" {
+    final files = support\fixture({
+        ".github/workflows/a.yaml": workflow(step(creds + "          REASON: one\n", command: "index:cd -- \"$REASON\"")),
+        ".github/workflows/b.yaml": workflow(step(creds + "          REASON: two\n", command: "index:cd -- \"$REASON\"")),
+    });
+    assert\equal(findings(files).len(), want: 0, message: "same names");
+}
+
+test "a copy lacking a name another passes is reported at its step" {
+    final files = support\fixture({
+        ".github/workflows/a.yaml": workflow(step(creds, command: "index:cd")),
+        ".github/workflows/b.yaml": workflow(step("          KEY: $\{\{ secrets.KEY }}\n", command: "index:cd")),
+    });
+    final got = findings(files);
+    assert\equal(support\messages(got), want: ["b.yaml/publish runs `magus run index:cd` without GHCR_TOKEN, which a.yaml/publish passes"], message: "message");
+    assert\equal(got[0].path, want: ".github/workflows/b.yaml", message: "path");
+    assert\equal(got[0].line, want: 6, message: "line");
+}
+
+test "a lone cd run, and repeated runs without cd, are left alone" {
+    final files = support\fixture({
+        ".github/workflows/a.yaml": workflow(step(creds, command: "index:cd") + step("          OS: linux\n", command: "build")),
+        ".github/workflows/b.yaml": workflow(step("          OS: mac\n          CC: clang\n", command: "build")),
+    });
+    assert\equal(findings(files).len(), want: 0, message: "nothing to compare");
+}

@@ -1009,5 +1009,8 @@ func TestCauseLinePrefersTheErrorOverTheFooter(t *testing.T) {
 	mise := "mise ERROR No version is set for shim: tinygo\nSet a global default version with one of the following:\nmise use -g tinygo@0.41.1\nmise ERROR Run with --verbose or MISE_VERBOSE=1 for more information\n"
 	assert.Equal(t, "mise ERROR No version is set for shim: tinygo", causeLine(mise))
 	assert.Equal(t, "segfault", causeLine("starting\nsegfault\n"), "with no error line, the last line")
+	rateLimited := "mise WARN Remote versions cannot be fetched: HTTP status client error (403 Forbidden) for url (https://api.github.com/repos/WebAssembly/binaryen/releases)\nmise ERROR aqua:WebAssembly/binaryen@129 is not installed\nmise ERROR Run with --verbose or MISE_VERBOSE=1 for more information\n"
+	assert.Equal(t, "mise ERROR aqua:WebAssembly/binaryen@129 is not installed", causeLine(rateLimited), "a warning quoting an error is not the cause")
+	assert.Equal(t, "mise WARN fetch error", causeLine("starting\nmise WARN fetch error\n"), "a warning still beats a line with no error")
 	assert.Empty(t, causeLine(""))
 }

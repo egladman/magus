@@ -880,6 +880,10 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
+	// The test process is isolated from the runner's trust list, but the version
+	// probe must still resolve tools pinned by this checkout's mise.toml.
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", root)
+	t.Setenv("MISE_SAFE", "1")
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")

@@ -12,11 +12,14 @@ env GOPATH=$WORK/.gopath
 env GOTOOLCHAIN=local
 env GOFLAGS=
 env XDG_STATE_HOME=$WORK/.state
+env MISE_TRUSTED_CONFIG_PATHS=$WORK
+env MISE_SAFE=1
 
 exec git init
 exec git config user.email test@example.com
 exec git config user.name Test
-exec git add .gitignore magusfile.buzz go.mod a b notes README.md
+cp $__MAGUS_MISE_CONFIG mise.toml
+exec git add .gitignore magusfile.buzz go.mod a b notes README.md mise.toml
 exec git commit -m initial
 exec git tag base
 

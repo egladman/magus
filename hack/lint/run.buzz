@@ -25,6 +25,7 @@ import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
+import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
@@ -57,6 +58,7 @@ export fun rules() > [Rule] {
     return [
         Rule{ name = "lockfiles-are-sorted", reads = lockfiles\reads(), check = lockfiles\check },
         Rule{ name = "trusted-jobs-restore-no-actions-cache", reads = trustedcache\reads(), check = trustedcache\check },
+        Rule{ name = "cd-runs-agree-across-workflows", reads = cdruns\reads(), check = cdruns\check },
         Rule{ name = "setup-magus-mints-the-queue-app-token-only-as-an-output", reads = queuetoken\reads(), check = queuetoken\check },
         Rule{ name = "published-magus-is-built-first-and-verified-by-digest", reads = publishedmagus\reads(), check = publishedmagus\check },
         Rule{ name = "package-install-targets-never-replay", reads = installs\reads(), check = installs\check },

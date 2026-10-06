@@ -691,6 +691,12 @@ func TestCIWorkflowRendersPlanOutputsAndSummary(t *testing.T) {
 // step either.
 func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 	root := filepath.Join("..", "..")
+	absRoot, err := filepath.Abs(root)
+	require.NoError(t, err)
+	// testkit removes the runner's trust list; keep this checkout's tool pins
+	// resolvable when ComputeTargetKey probes them.
+	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", absRoot)
+	t.Setenv("MISE_SAFE", "1")
 	var workflow struct {
 		Jobs map[string]struct {
 			Steps []struct {
