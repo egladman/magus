@@ -65,6 +65,7 @@ type shapeReader interface {
 // shapeReaders maps an index's language to its reader. A language missing here falls back to
 // descriptorShapes: families by kind and name only.
 var shapeReaders = map[string]shapeReader{
+	"buzz":       buzzShapes{},
 	"go":         goShapes{},
 	"typescript": colonShapes{},
 }
@@ -113,6 +114,104 @@ func (colonShapes) read(s symbolFacts) declShape {
 		}
 	}
 	return shape
+}
+
+// buzzShapes reads scip-buzz's rendered declarations: `fun name(a: T, b: U) > R !> E`,
+// `final name: T`, `var name`, `object<P> Name`, `protocol Name`, `enum<int> Name`. scip-buzz
+// indexes top-level declarations only and records no `export`, so every one is visible.
+type buzzShapes struct{}
+
+func (buzzShapes) read(s symbolFacts) declShape {
+	shape := declShape{Kind: s.Neutral, Visible: true}
+	switch s.Kind {
+	case "Object":
+		shape.Kind = declStruct
+	case "Protocol":
+		shape.Kind = declInterface
+	}
+	sig := strings.Join(strings.Fields(s.Signature), " ")
+	switch shape.Kind {
+	case declFunction:
+		rest, ok := strings.CutPrefix(strings.TrimPrefix(sig, "extern "), "fun ")
+		open := strings.IndexByte(rest, '(')
+		if !ok || open < 0 {
+			return shape
+		}
+		end := matchingClose(rest, open)
+		if end < 0 {
+			return shape
+		}
+		var classes []string
+		for list := rest[open+1 : end]; list != ""; {
+			part, more, _ := cutTopLevel(list, ',')
+			list = more
+			name, typ, _ := strings.Cut(strings.TrimSpace(part), ":")
+			typ = strings.TrimSpace(typ)
+			shape.Params = append(shape.Params, namingParam{Name: strings.TrimSpace(name), Type: typ})
+			classes = append(classes, buzzTypeClass(typ))
+		}
+		shape.Key = "fun(" + strings.Join(classes, ", ") + ") " + buzzResultClass(strings.TrimSpace(rest[end+1:]))
+		shape.Meaning = "func"
+	case declStruct:
+		shape.Key, shape.Meaning = "object", "struct"
+	case declInterface:
+		shape.Key, shape.Meaning = "protocol", "interface"
+	case declType:
+		if strings.HasPrefix(sig, "enum") {
+			shape.Key, shape.Meaning = "enum", "enum"
+		}
+	case declValue:
+		word, rest, _ := strings.Cut(sig, " ")
+		if word != "final" && word != "var" {
+			return shape
+		}
+		_, typ, _ := strings.Cut(rest, ":")
+		shape.Meaning = buzzTypeClass(typ)
+		shape.Key = strings.TrimSpace(word + " " + shape.Meaning)
+	}
+	return shape
+}
+
+// buzzResultClass collapses what follows a Buzz parameter list (`> R *> Y !> E`) to the
+// categories a caller branches on, as goResultClass does: the return's own type is dropped,
+// and a raise is the error a Go caller would check.
+func buzzResultClass(tail string) string {
+	tail, raises, _ := strings.Cut(tail, "!>")
+	tail, _, _ = strings.Cut(tail, "*>")
+	class := "value"
+	switch ret := buzzTypeClass(strings.TrimPrefix(strings.TrimSpace(tail), ">")); ret {
+	case "", "void":
+		class = "none"
+	case "bool", "ctx", "func":
+		class = ret
+	}
+	if strings.TrimSpace(raises) != "" {
+		class += ", error"
+	}
+	return class
+}
+
+// buzzTypeClass normalizes a Buzz type for comparison as goTypeClass does a Go one: an
+// optional compares as its base, a module qualifier goes, and a function type is one word.
+// Buzz has no error type, since a function may raise any value; by the convention upstream's
+// errors module keeps, a type named ...Error is one.
+func buzzTypeClass(typ string) string {
+	typ = strings.TrimSuffix(strings.TrimSpace(typ), "?")
+	switch {
+	case typ == "":
+		return ""
+	case typ == `magus\Context`:
+		return "ctx"
+	case strings.HasPrefix(typ, "fun"):
+		return "func"
+	}
+	if i := strings.LastIndexByte(typ, '\\'); i >= 0 && !strings.ContainsAny(typ[:i], "[{<(") {
+		typ = typ[i+1:]
+	}
+	if strings.HasSuffix(typ, "Error") && strings.IndexFunc(typ, func(r rune) bool { return !isIdentRune(r) }) < 0 {
+		return "error"
+	}
+	return typ
 }
 
 // descriptor is one step of a SCIP symbol's descriptor chain.

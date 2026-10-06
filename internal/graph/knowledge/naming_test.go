@@ -10,11 +10,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 )
 
@@ -494,6 +496,140 @@ func TestGoShapes(t *testing.T) {
 		got := goShapes{}.read(symbolFacts{Kind: tc.kind, Signature: tc.sig, Path: tc.path, Neutral: neutralKind(tc.path)})
 		assert.Equal(t, tc.want, got, tc.sig)
 	}
+}
+
+// The signatures are scip-buzz's renderings (libs/scipbuzz/document.go), from its snapshots
+// where one exists.
+func TestBuzzShapes(t *testing.T) {
+	for _, tc := range []struct {
+		kind, sig string
+		path      []descriptor
+		want      declShape
+	}{
+		{
+			kind: "Function", sig: "fun describe(shape: Shape, level: Level) > str",
+			path: []descriptor{{"describe", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun(Shape, Level) value", Meaning: "func",
+				Params: []namingParam{{"shape", "Shape"}, {"level", "Level"}}},
+		},
+		{
+			kind: "Function", sig: "fun main(args: [str]) > void",
+			path: []descriptor{{"main", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun([str]) none", Meaning: "func",
+				Params: []namingParam{{"args", "[str]"}}},
+		},
+		{
+			kind: "Function", sig: "fun wrap(t: T, apply: fun::<T>(x:T)>T) > Box",
+			path: []descriptor{{"wrap", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun(T, func) value", Meaning: "func",
+				Params: []namingParam{{"t", "T"}, {"apply", "fun::<T>(x:T)>T"}}},
+		},
+		{
+			kind: "Function", sig: `fun lint(ctx: magus\Context, args: [str], strict: bool?) > bool !> any`,
+			path: []descriptor{{"lint", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun(ctx, [str], bool) bool, error", Meaning: "func",
+				Params: []namingParam{{"ctx", `magus\Context`}, {"args", "[str]"}, {"strict", "bool?"}}},
+		},
+		{
+			kind: "Function", sig: "extern fun first::<T>(items: [T]) > T *> T !> str",
+			path: []descriptor{{"first", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun([T]) value, error", Meaning: "func",
+				Params: []namingParam{{"items", "[T]"}}},
+		},
+		{
+			kind: "Function", sig: "fun tick()",
+			path: []descriptor{{"tick", '('}},
+			want: declShape{Kind: declFunction, Visible: true, Key: "fun() none", Meaning: "func"},
+		},
+		{
+			kind: "Constant", sig: "final errMissing: ParseError", path: []descriptor{{"errMissing", '.'}},
+			want: declShape{Kind: declValue, Visible: true, Key: "final error", Meaning: "error"},
+		},
+		{
+			kind: "Constant", sig: `final errHost: errors\FileSystemError?`, path: []descriptor{{"errHost", '.'}},
+			want: declShape{Kind: declValue, Visible: true, Key: "final error", Meaning: "error"},
+		},
+		{
+			kind: "Variable", sig: "var counter: int", path: []descriptor{{"counter", '.'}},
+			want: declShape{Kind: declValue, Visible: true, Key: "var int", Meaning: "int"},
+		},
+		{
+			kind: "Constant", sig: "final width", path: []descriptor{{"width", '.'}},
+			want: declShape{Kind: declValue, Visible: true, Key: "final"},
+		},
+		{
+			kind: "Object", sig: "object<Shape> Rect", path: []descriptor{{"Rect", '#'}},
+			want: declShape{Kind: declStruct, Visible: true, Key: "object", Meaning: "struct"},
+		},
+		{
+			kind: "Protocol", sig: "protocol Shape", path: []descriptor{{"Shape", '#'}},
+			want: declShape{Kind: declInterface, Visible: true, Key: "protocol", Meaning: "interface"},
+		},
+		{
+			kind: "Enum", sig: "enum<int> Level", path: []descriptor{{"Level", '#'}},
+			want: declShape{Kind: declType, Visible: true, Key: "enum", Meaning: "enum"},
+		},
+		{
+			kind: "Function", sig: "not a declaration", path: []descriptor{{"odd", '('}},
+			want: declShape{Kind: declFunction, Visible: true},
+		},
+	} {
+		got := pickShapeReader("buzz").read(symbolFacts{Kind: tc.kind, Signature: tc.sig, Path: tc.path, Neutral: neutralKind(tc.path)})
+		assert.Equal(t, tc.want, got, tc.sig)
+	}
+}
+
+// buzzSignatureIndex reads, through the real ingestion, a scip-buzz index of hack/lib/doc.buzz:
+// an object ParseError, a final value of that type per name in values, each initialized with
+// one on its own line, and parse(text: str, strict: bool).
+func buzzSignatureIndex(t *testing.T, values ...string) *Graph {
+	t.Helper()
+	rel := "hack/lib/doc.buzz"
+	sym := func(name string, suffix string) string { return "scip-buzz buzz . . `" + rel + "`/" + name + suffix }
+	doc := &scip.Document{RelativePath: rel, Language: "buzz", Symbols: []*scip.SymbolInformation{
+		{Symbol: sym("ParseError", "#"), DisplayName: "ParseError", Kind: scip.SymbolInformation_Object,
+			SignatureDocumentation: &scip.Signature{Language: "buzz", Text: "object ParseError"}},
+		{Symbol: sym("parse", "()."), DisplayName: "parse", Kind: scip.SymbolInformation_Function,
+			SignatureDocumentation: &scip.Signature{Language: "buzz", Text: "fun parse(text: str, strict: bool) > Doc !> ParseError"}},
+	}}
+	def := func(moniker string, line int32) *scip.Occurrence {
+		return &scip.Occurrence{Symbol: moniker, Range: []int32{line, 0, 1}, SymbolRoles: int32(scip.SymbolRole_Definition)}
+	}
+	doc.Occurrences = append(doc.Occurrences, def(sym("ParseError", "#"), 0), def(sym("parse", "()."), 1))
+	for i, name := range values {
+		line := int32(10 + i)
+		doc.Symbols = append(doc.Symbols, &scip.SymbolInformation{Symbol: sym(name, "."), DisplayName: name,
+			Kind: scip.SymbolInformation_Constant, SignatureDocumentation: &scip.Signature{Language: "buzz", Text: "final " + name + ": ParseError"}})
+		doc.Occurrences = append(doc.Occurrences, def(sym(name, "."), line),
+			&scip.Occurrence{Symbol: sym("ParseError", "#"), Range: []int32{line, 20, 30}})
+	}
+	syms := symbols.ParseDecoded(t.Context(), &scip.Index{Documents: []*scip.Document{doc}}, ".", "buzz")
+	return mergeAll([]Shard{assembleSymbols(".", syms, []types.TargetGraphProject{{Path: "."}})})
+}
+
+func TestBuzzSymbolsGetTheNamingAndSentinelLenses(t *testing.T) {
+	t.Parallel()
+
+	g := buzzSignatureIndex(t, "errEmpty", "errEof", "errIndent", "errQuote", "errTab", "missingKey")
+	labeled := map[string]*namingDecl{}
+	for _, d := range newNamingIndex(g, ConformanceChange{}).byID {
+		labeled[d.label] = d
+	}
+	require.Contains(t, labeled, "parse")
+	assert.Equal(t, declShape{Kind: declFunction, Visible: true, Key: "fun(str, bool) value, error", Meaning: "func",
+		Params: []namingParam{{"text", "str"}, {"strict", "bool"}}}, labeled["parse"].shape)
+
+	require.Contains(t, labeled, "missingKey")
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentErrSentinelName, Scope: types.PrecedentScope{Language: "buzz"}, Key: types.PrecedentKey{Prefix: "err"},
+		Follow: 5, Cohort: 6, Share: 5.0 / 6, Established: true,
+		Cited: []types.Case{
+			{Node: labeled["errEmpty"].id, Source: "hack/lib/doc.buzz:11"},
+			{Node: labeled["errEof"].id, Source: "hack/lib/doc.buzz:12"},
+			{Node: labeled["errIndent"].id, Source: "hack/lib/doc.buzz:13"},
+		},
+		Departures: []types.Case{{Node: labeled["missingKey"].id, Source: "hack/lib/doc.buzz:16"}},
+	}, precedentRow(t, g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, types.PrecedentScope{Language: "buzz"}))
 }
 
 func TestParseDescriptors(t *testing.T) {
