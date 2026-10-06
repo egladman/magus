@@ -1,0 +1,12 @@
+fun scale(n: int) > int {
+    return n * 2;
+}
+
+fun apply(values: [int]) > [int] {
+    final doubled = values.map(fun (index: int, n: int) > int => scale(n));
+    final shadowed = values.map(fun (index: int, scale: int) > int => scale + index);
+    fun local(n: int) > int {
+        return scale(n);
+    }
+    return doubled;
+}

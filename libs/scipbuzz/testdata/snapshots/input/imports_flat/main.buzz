@@ -1,0 +1,6 @@
+import "lib/util" as _;
+
+fun main(args: [str]) > void {
+    final p: Point = Point{ x = twice(base) };
+    final h = hidden;
+}

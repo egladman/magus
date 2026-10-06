@@ -1,0 +1,20 @@
+final a = 1;
+final b = 2;
+
+fun show() > str {
+    return "{a} and {b} and {"{a}{b}"}";
+}
+
+fun raw() > str {
+    return `{a}-{b}
+  {b}`;
+}
+
+fun escaped() > str {
+    return "\{a} \"{b}\" \t{a}";
+}
+
+fun free() > str {
+    final @"type" = "x";
+    return "{@"type"}{a}";
+}

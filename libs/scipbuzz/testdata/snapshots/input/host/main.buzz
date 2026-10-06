@@ -1,0 +1,17 @@
+import "std";
+import "fs";
+import "magus";
+import "magus/spell/go";
+import "encoding/json";
+import "project/libs/coldread" as coldread;
+import print from "std";
+
+// build compiles the module.
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final text = fs\readFile("go.mod");
+    final doc = json\parse(text);
+    go["go-build"](ctx);
+    coldread.test(ctx, args: args);
+    std\print("{doc}");
+    print("done");
+}

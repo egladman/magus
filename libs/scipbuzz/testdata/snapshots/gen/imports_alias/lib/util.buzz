@@ -1,0 +1,23 @@
+//⌄ enclosing_range_start scip-buzz buzz . . `lib/util.buzz`/twice().
+  export fun twice(n: int) > int {
+//           ^^^^^ definition scip-buzz buzz . . `lib/util.buzz`/twice().
+//                 kind Function
+//                 display_name twice
+//                 signature_documentation
+//                 > fun twice(n: int) > int
+//                 ^ definition local 0
+//                   kind Parameter
+//                   display_name n
+//                   enclosing_symbol scip-buzz buzz . . `lib/util.buzz`/twice().
+      return n * 2;
+//           ^ reference local 0
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `lib/util.buzz`/twice().
+  
+  export final base = 10;
+//             ^^^^ definition scip-buzz buzz . . `lib/util.buzz`/base.
+//                  kind Constant
+//                  display_name base
+//                  signature_documentation
+//                  > final base
+  

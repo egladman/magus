@@ -1,0 +1,77 @@
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/scale().
+  fun scale(n: int) > int {
+//    ^^^^^ definition scip-buzz buzz . . `main.buzz`/scale().
+//          kind Function
+//          display_name scale
+//          signature_documentation
+//          > fun scale(n: int) > int
+//          ^ definition local 0
+//            kind Parameter
+//            display_name n
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/scale().
+      return n * 2;
+//           ^ reference local 0
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/scale().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/apply().
+  fun apply(values: [int]) > [int] {
+//    ^^^^^ definition scip-buzz buzz . . `main.buzz`/apply().
+//          kind Function
+//          display_name apply
+//          signature_documentation
+//          > fun apply(values: [int]) > [int]
+//          ^^^^^^ definition local 1
+//                 kind Parameter
+//                 display_name values
+//                 enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+      final doubled = values.map(fun (index: int, n: int) > int => scale(n));
+//          ^^^^^^^ definition local 4
+//                  kind Constant
+//                  display_name doubled
+//                  enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                    ^^^^^^ reference local 1
+//                                    ^^^^^ definition local 2
+//                                          kind Parameter
+//                                          display_name index
+//                                          enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                                                ^ definition local 3
+//                                                  kind Parameter
+//                                                  display_name n
+//                                                  enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                                                                 ^^^^^ reference scip-buzz buzz . . `main.buzz`/scale().
+//                                                                       ^ reference local 3
+      final shadowed = values.map(fun (index: int, scale: int) > int => scale + index);
+//          ^^^^^^^^ definition local 7
+//                   kind Constant
+//                   display_name shadowed
+//                   enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                     ^^^^^^ reference local 1
+//                                     ^^^^^ definition local 5
+//                                           kind Parameter
+//                                           display_name index
+//                                           enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                                                 ^^^^^ definition local 6
+//                                                       kind Parameter
+//                                                       display_name scale
+//                                                       enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//                                                                      ^^^^^ reference local 6
+//                                                                              ^^^^^ reference local 5
+      fun local(n: int) > int {
+//        ^^^^^ definition local 8
+//              kind Function
+//              display_name local
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+//              ^ definition local 9
+//                kind Parameter
+//                display_name n
+//                enclosing_symbol scip-buzz buzz . . `main.buzz`/apply().
+          return scale(n);
+//               ^^^^^ reference scip-buzz buzz . . `main.buzz`/scale().
+//                     ^ reference local 9
+      }
+      return doubled;
+//           ^^^^^^^ reference local 4
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/apply().
+  

@@ -1,0 +1,9 @@
+import "./lib/util" as u;
+
+fun quadruple() > int {
+    return u\twice(u\twice(u\base));
+}
+
+fun shadowed(u: int) > int {
+    return u + 1;
+}

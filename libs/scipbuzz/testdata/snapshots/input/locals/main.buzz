@@ -1,0 +1,28 @@
+import "std";
+
+fun total(items: [int], scale: int = 1) > int !> str {
+    var sum = 0;
+    foreach (index, item in items) {
+        sum = sum + item * scale + index;
+    }
+    for (var i = 0; i < 2; i = i + 1) {
+        sum = sum + i;
+    }
+    if (sum < 0) {
+        throw "negative";
+    }
+    return sum;
+}
+
+fun safe(items: [int]) > int {
+    try {
+        return total(items);
+    } catch (err: str) {
+        std\print(err);
+    }
+    final maybe: int? = null;
+    if (maybe -> value) {
+        return value;
+    }
+    return 0;
+}

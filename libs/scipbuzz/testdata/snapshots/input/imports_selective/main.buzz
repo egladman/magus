@@ -1,0 +1,6 @@
+import twice, Point from "lib/util";
+
+fun main(args: [str]) > void {
+    final p: Point = Point{ x = twice(2) };
+    final b = base;
+}

@@ -1,0 +1,8 @@
+import "std";
+import "lib/util";
+
+fun main(args: [str]) > void {
+    final p = util\Point{ x = util\twice(util\base) };
+    final q: util\Point = p;
+    std\print("{q.x}");
+}
