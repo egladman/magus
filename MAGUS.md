@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      58 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      57 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -85,7 +85,6 @@ magus graph export -o json  # the whole graph
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `go-build`               | Compiles the version-stamped magus binary.                                                                                                                                                                                     |
 | `image-registries`       | Reports where image-build under the same charms pushes and, with `verify`, fails when a credential does not resolve.                                                                                                           |
-| `image-login`            | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.                                                                                              |
 | `image-scan`             | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.                                                                                                                                              |
 | `security`               | Runs govulncheck and gates on dependency license terms.                                                                                                                                                                        |
 | `man-generate`           | Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock, both serialized from the internal/cli registry.                                                                                         |

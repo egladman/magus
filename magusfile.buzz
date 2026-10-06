@@ -66,7 +66,7 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus\cache.remote(github);
 }
 
-// Opt-in: a keychain answering every reference would break image-login and the
+// Opt-in: a keychain answering every reference would break the publishing and
 // release targets until each item was stored.
 import "spells/system-keychain" as system_keychain;
 if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
@@ -149,7 +149,6 @@ magus\project({
         "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
-        "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
         "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
         "spell-lock": {"skip_cache": "asks a registry under update, and writes no magus.lock while no remote spell is declared"},
         // image-scan has no skip_cache: the docker spell's trivy probe keys it on the database.
@@ -560,25 +559,6 @@ fun pad(s: str, width: int) > str !> any {
     var padded = s;
     while (padded.len() < width) { padded = padded + " "; }
     return padded + " ";
-}
-
-// Logs in to every registry the active mode publishes to, resolving each one's
-// credentials through the workspace's secret provider. The token goes on stdin because
-// magus captures argv into the run log.
-export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
-    var host = "";
-    if (args.len() > 0) { host = args[0]; }
-    final registries = select_registries(publish_registries(ctx), host);
-    if (registries.len() == 0) {
-        throw "image-login: these charms publish nowhere, so there is nothing to log in to - add the cd charm (`magus run image-login:cd`, or `:cd,stable` for a release)";
-    }
-    foreach (reg in registries) {
-        final user = magus\secret.read(reg.user_ref);
-        final token = magus\secret.read(reg.token_ref);
-        proc\exec("docker", args: ["login", reg.host, "-u", user, "--password-stdin"],
-            dir: ".", opts: {"stdin": token});
-        magus\log.info("image-login: " + reg.host + " authenticated as " + user);
-    }
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.

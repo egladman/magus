@@ -87,7 +87,7 @@ func readToken() (string, error) {
 	}
 	tok := strings.TrimSpace(string(raw))
 	if tok == "" {
-		return "", fmt.Errorf("no token on stdin; pipe one in the way `image-login` does (magus\\secret.read resolves it)")
+		return "", fmt.Errorf("no token on stdin; pipe one in the way graph-generate does (magus\\secret.read resolves it)")
 	}
 	return tok, nil
 }

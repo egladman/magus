@@ -516,8 +516,8 @@ jobs:
           installation-strategy: prebuilt
           git-ref: ${{ needs.preflight.outputs.tag }}
 
-      # The credentials image-login uses, under the names GHCR_SPELLS declares. Each token
-      # reaches `magus spell ls` and `magus spell push` on stdin, never an argv.
+      # The credentials under the names GHCR_SPELLS declares. Each token reaches `magus
+      # spell ls` and `magus spell push` on stdin, never an argv.
       - name: Publish spells
         env:
           GHCR_USERNAME: *release_ghcr_username
@@ -577,47 +577,18 @@ jobs:
         with:
           cache-binary: false
 
-      # WHICH registries to authenticate against is not written here, and neither is
-      # any parsing of them. image-login reads the same registry table image-build
-      # does, so the login set cannot drift from the push set, and adding a registry
-      # is a magusfile change with no matching edit in this file. It is also the
-      # command you run on a laptop before `magus run image-build:cd,stable`.
-      #
-      # Only the secret VALUES stay in the workflow, and they have to: nothing outside
-      # a workflow can read GitHub secrets. The names below are the ones the magusfile
-      # declares; `magus run image-registries:cd,tagged` prints them and says which are set.
-      # image-login hands each token to docker on stdin, so no secret enters an argv
-      # that magus would capture into the run log.
-      #
+      # The runner logs docker in, not a magus target: docker owns its credential store, and
+      # authenticating the tools a build drives is the environment's job, like checkout's
+      # token. `magus run image-registries:cd,tagged` lists the registries this must cover.
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       # TODO: Docker Hub publishing is disabled - the magusfile's REGISTRIES no longer
       # lists DOCKERHUB. Once DOCKERHUB_USERNAME / DOCKERHUB_TOKEN exist as repository
-      # secrets (Settings > Secrets and variables > Actions; the token is a Docker Hub
-      # access token with Read/Write scope, NOT the account password), restore that
-      # registry and the commented env lines below.
-      # Preflight, and the answer to "where do these variable names come from?" - it
-      # prints the registry-by-registry table this env block exists to satisfy, then
-      # fails on a NAMED variable if any is unset. That happens here, before the build
-      # steps below spend runner time on QEMU and a multi-arch compile.
-      #
-      # The env block is repeated on both steps rather than hoisted to the job, which
-      # is deliberate: at job level the Docker Hub token would also be in scope for
-      # every third-party setup action above. Step scope keeps it to the two steps
-      # that have any business with it.
-      - name: Verify registry credentials
-        env:
-          GHCR_USERNAME: *release_ghcr_username
-          GHCR_TOKEN: *release_ghcr_token
-          # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-registries:cd,tagged,verify --no-default-charms
-
-      - name: Log in to image registries
-        env:
-          GHCR_USERNAME: *release_ghcr_username
-          GHCR_TOKEN: *release_ghcr_token
-          # DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          # DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: magus run image-login:cd,tagged --no-default-charms
+      # secrets (the token is a Docker Hub access token with Read/Write scope, NOT the
+      # account password), restore that registry and log in to docker.io beside GHCR.
 
       - name: Build, push, and sign images
         # :cd,tagged reads the channel off the tag itself: a stable semver takes `latest`,
