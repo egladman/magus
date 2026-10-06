@@ -739,6 +739,13 @@ func TestScripts(t *testing.T) {
 				return err
 			}
 			e.Setenv("__MAGUS_MISE_CONFIG", miseFile)
+			// testscript starts a script at HOME=/no-home, where a mise shim on PATH finds
+			// no installed tools and goes to the network for each pin it cannot resolve.
+			for _, name := range []string{"MISE_DATA_DIR", "MISE_OFFLINE"} {
+				if v := os.Getenv(name); v != "" {
+					e.Setenv(name, v)
+				}
+			}
 			return nil
 		},
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){

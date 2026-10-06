@@ -173,6 +173,15 @@ func TestEnvironPinsToolDirsBeforeTheRedirect(t *testing.T) {
 	assert.Equal(t, filepath.Join("/users/me", ".local", "state", "mise"), got["MISE_STATE_DIR"], "HOME default")
 }
 
+// TestEnvironKeepsMiseOffline: the token and mise's version cache are both gone, so a
+// shim that went to the network would be an unauthenticated, rate-limited request.
+func TestEnvironKeepsMiseOffline(t *testing.T) {
+	t.Setenv("MISE_OFFLINE", "")
+	environ, err := Environ(t.TempDir(), "MISE_*")
+	require.NoError(t, err)
+	assert.Equal(t, "1", environMap(t, environ)["MISE_OFFLINE"], "a keep cannot put mise back online")
+}
+
 // TestEnvironAsksGoForUnsetDirs: with GOCACHE unset and HOME about to move, only go
 // knows where the warm cache is.
 func TestEnvironAsksGoForUnsetDirs(t *testing.T) {
