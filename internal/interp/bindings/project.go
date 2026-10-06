@@ -267,15 +267,9 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			// A tool spell bound to contribute targets that exposes none almost always
 			// means its mgs_listTargets was omitted or misnamed: the spell loads and
-			// binds cleanly, then silently adds nothing to run. Warn (not error). A
-			// declaration spell (the built-in magusfile spell, which registers
-			// magusfile.buzz) legitimately has no ops, so a non-empty declaration set
-			// is the signal to stay quiet; a pure in-VM cache backend is bound through
-			// magus.cache.remote, not here.
-			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok &&
-				len(sp.Targets()) == 0 &&
-				len(sp.DeclarationFiles()) == 0 &&
-				len(sp.DeclarationDirGlobs()) == 0 {
+			// binds cleanly, then silently adds nothing to run. Warn (not error). A pure
+			// in-VM cache backend is bound through magus.cache.remote, not here.
+			if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok && contributesNothing(sp) {
 				slog.WarnContext(ctx, "magus.project: bound spell exposes no targets; did its `mgs_listTargets` get omitted or misnamed?", "spell", name)
 			}
 			if name == magusfileSpellName {
@@ -555,6 +549,14 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 // parseLayers decodes magus.project's "layers" map, directory or glob to layer name,
 // checking each entry's shape. An empty map is refused: it declares nothing while
 // reading as a layering.
+// contributesNothing reports whether binding sp adds nothing to a project. A declaration
+// spell (the built-in magusfile spell registers magusfile.buzz) and an indexing spell (buzz
+// is bound for its symbol index alone) legitimately have no targets.
+func contributesNothing(sp *spells.Spell) bool {
+	return len(sp.Targets()) == 0 && len(sp.DeclarationFiles()) == 0 &&
+		len(sp.DeclarationDirGlobs()) == 0 && sp.SymbolIndexOp() == ""
+}
+
 func parseLayers(v vm.Value) (map[string]string, error) {
 	if !v.IsMap() || len(v.MapKeys()) == 0 {
 		return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
