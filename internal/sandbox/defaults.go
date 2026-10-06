@@ -48,6 +48,12 @@ type PolicyOptions struct {
 	// Spells is the spell layer: each loaded spell's mgs_getSandbox, keyed by spell
 	// name. Policy.Scoped keeps some of them.
 	Spells map[string]spells.Sandbox
+	// Providers names the spells in Spells that serve magus itself, such as the remote
+	// cache backend. Their declarations stay out of the spell layer every script and step
+	// gets, and reach only their own ops through ForProvider: what a provider needs to
+	// reach its service, a cache write token among it, is not a grant for the code that
+	// service stores results for.
+	Providers []string
 	// Target is the target layer, the running target's own `sandbox` policy; nil for none.
 	Target *spells.Sandbox
 }
@@ -93,7 +99,9 @@ func BuildPolicy(o PolicyOptions) *Policy {
 
 	layers := []spells.Sandbox{o.Sandbox}
 	for _, name := range slices.Sorted(maps.Keys(o.Spells)) {
-		layers = append(layers, o.Spells[name])
+		if !slices.Contains(o.Providers, name) {
+			layers = append(layers, o.Spells[name])
+		}
 	}
 	if o.Target != nil {
 		layers = append(layers, *o.Target)
@@ -140,6 +148,7 @@ func BuildPolicy(o PolicyOptions) *Policy {
 		workspace = filesystem.ResolveRulePath(o.Workspace)
 	}
 	return &Policy{
+		withheld:   &withheldReads{},
 		FS:         filesystem.Ruleset{Rules: rules},
 		Env:        allow,
 		BaseEnv:    kept,

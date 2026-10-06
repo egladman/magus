@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/project"
@@ -61,23 +62,23 @@ type spellRemoteBackend struct {
 	active      bool
 }
 
+// Name reports the spell selector this backend was opened with. Cheap and probe-free:
+// the run header prints it before any target executes.
+func (b *spellRemoteBackend) Name() string { return b.name }
+
 // Active probes the spell's optional enabled() op once and caches the result, so
 // a backend that reports itself inactive (e.g. the s3 spell without a bucket
 // configured) costs one probe per build, not one per cache operation. A spell that
 // declares no enabled() op is treated as always active. A probe *error* is not
 // cached: it's not a definitive "inactive" (a VM/network hiccup would otherwise
 // disable the remote cache for the whole build), so the next call re-probes.
-// Name reports the spell selector this backend was opened with. Cheap and probe-free:
-// the run header prints it before any target executes.
-func (b *spellRemoteBackend) Name() string { return b.name }
-
 func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.activeKnown {
 		return b.active
 	}
-	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{Target: "enabled"})
+	resp, err := b.invoke(ctx, spells.InvokeRequest{Target: "enabled"})
 	if err != nil {
 		return false // transient: don't latch, re-probe next call
 	}
@@ -92,6 +93,15 @@ func (b *spellRemoteBackend) Active(ctx context.Context) bool {
 	return b.active
 }
 
+// invoke runs one of the backend spell's ops as magus's own work, not the served
+// target's: under the workspace policy scoped to this spell's declaration (see
+// sandbox.ForProvider), and over a fresh environment overlay, so nothing a target set
+// with env\set, a PATH among it, reaches the spell or the processes it starts. Every op
+// goes through here, so a new one cannot run under the target's policy by omission.
+func (b *spellRemoteBackend) invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+	return b.drv.Invoke(environ.With(sandbox.ForProvider(ctx, b.drv.Name())), req)
+}
+
 // GetArtifact invokes the spell's get_artifact op against a fresh temp file. true yields
 // a reader over that file (deleted on Close), false is [cache.ErrRemoteMiss], and a
 // throw is an error.
@@ -100,7 +110,7 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key str
 	if err != nil {
 		return nil, err
 	}
-	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
+	resp, err := b.invoke(ctx, spells.InvokeRequest{
 		Target: "get_artifact",
 		Params: map[string]any{"project": namespace, "hash": key, "dest": dest},
 	})
@@ -131,7 +141,7 @@ func (b *spellRemoteBackend) GetArtifact(ctx context.Context, namespace, key str
 // HasArtifact invokes the spell's optional has_artifact op. A spell that declares none
 // answers [errors.ErrUnsupported].
 func (b *spellRemoteBackend) HasArtifact(ctx context.Context, namespace, key string) (bool, error) {
-	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
+	resp, err := b.invoke(ctx, spells.InvokeRequest{
 		Target: "has_artifact",
 		Params: map[string]any{"project": namespace, "hash": key},
 	})
@@ -169,7 +179,7 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, namespace, key str
 		return err
 	}
 
-	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
+	resp, err := b.invoke(ctx, spells.InvokeRequest{
 		Target: "put_artifact",
 		Params: map[string]any{"project": namespace, "hash": key, "src": src},
 	})
@@ -194,7 +204,7 @@ func (b *spellRemoteBackend) PutArtifact(ctx context.Context, namespace, key str
 // a silent success. Counts/dry-run detail are reported by the spell itself; only
 // completion crosses back here.
 func (b *spellRemoteBackend) PruneArtifacts(ctx context.Context, policy cache.RetentionPolicy) error {
-	resp, err := b.drv.Invoke(ctx, spells.InvokeRequest{
+	resp, err := b.invoke(ctx, spells.InvokeRequest{
 		Target: "prune",
 		Params: map[string]any{
 			"older_than_secs": int64(policy.OlderThan / time.Second),

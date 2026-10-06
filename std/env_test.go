@@ -1,7 +1,9 @@
 package std
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -269,4 +271,36 @@ func TestEnvLoadDotenv(t *testing.T) {
 		"an already-set name wins over the file")
 
 	require.Error(t, EnvLoadDotenv(context.Background(), filepath.Join(dir, "absent.env")))
+}
+
+// Every read the sandbox withholds still answers unset, so code gets nothing it was not
+// granted, but a variable that IS set leaves MGS2013 in the log naming it; one that is
+// not set leaves nothing, since then the sandbox hid nothing.
+func TestWithheldReadsNameTheVariableInTheLog(t *testing.T) {
+	t.Setenv("MAGUS_COV_WITHHELD", "secret-value")
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	reads := map[string]func(name string) string{
+		"get": func(name string) string { v, _ := EnvGet(covEnvSandbox(), name); return v },
+		"lookup": func(name string) string {
+			v, found, _ := EnvLookup(covEnvSandbox(), name)
+			assert.False(t, found, "withheld reads as unset")
+			return v
+		},
+		"expand": func(name string) string { v, _ := EnvExpand(covEnvSandbox(), "$"+name); return v },
+	}
+	for read, fn := range reads {
+		buf.Reset()
+		assert.Empty(t, fn("MAGUS_COV_WITHHELD"), read)
+		assert.Contains(t, buf.String(), "MGS2013", read)
+		assert.Contains(t, buf.String(), "name=MAGUS_COV_WITHHELD", read)
+		assert.NotContains(t, buf.String(), "secret-value", "%s: the value never reaches the log", read)
+
+		buf.Reset()
+		assert.Empty(t, fn("MAGUS_COV_NEVER_SET"), read)
+		assert.Empty(t, buf.String(), "%s: an unset variable was hidden by nothing", read)
+	}
 }

@@ -234,3 +234,42 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	assert.Equal(t, types.LeaseSourceMarker, events[0].LeaseFrom)
 	assert.Equal(t, "exec of /definitely/not/allowed/f", events[0].Action)
 }
+
+// A provider spell's declaration is the remote cache's credential, so it reaches the
+// provider's own op and nothing else: not a script, not a step, not a spell op's child
+// that names the provider, and the provider in turn gets no other spell's grant and no
+// step scope.
+func TestProviderGrantsReachOnlyTheProvidersOwnOp(t *testing.T) {
+	p := BuildPolicy(PolicyOptions{
+		TempDir: t.TempDir(),
+		Spells: map[string]spells.Sandbox{
+			"cache": {Env: spells.SandboxEnv{Passthrough: []string{"CACHE_TOKEN"}}},
+			"go":    {Env: spells.SandboxEnv{Passthrough: []string{"GOFLAGS"}}},
+		},
+		Providers: []string{"cache"},
+	})
+	assert.False(t, p.AllowsEnv("CACHE_TOKEN"), "a script's policy")
+	assert.True(t, p.AllowsEnv("GOFLAGS"), "a toolchain's grant still reaches everyone")
+
+	step := WithStep(WithPolicy(t.Context(), p), []string{"go"}, nil)
+	assert.False(t, PolicyFromContext(step).AllowsEnv("CACHE_TOKEN"), "a step's policy")
+	assert.False(t, PolicyFromContext(ScopeToSpell(step, "cache")).AllowsEnv("CACHE_TOKEN"),
+		"a spell op's child naming the provider")
+
+	provider := ForProvider(step, "cache")
+	assert.True(t, PolicyFromContext(provider).AllowsEnv("CACHE_TOKEN"), "the provider's own op")
+	assert.False(t, PolicyFromContext(provider).AllowsEnv("GOFLAGS"), "no other spell's grant")
+	assert.Same(t, PolicyFromContext(provider), PolicyFromContext(ScopeToSpell(provider, "go")),
+		"no step scope, so the provider's children are not re-scoped to the target's spells")
+
+	unconfined := t.Context()
+	assert.Equal(t, unconfined, ForProvider(unconfined, "cache"), "the sandbox off stays off")
+}
+
+// Every policy Scoped derives reports MGS2013 against one record, so a variable is
+// reported once per target however many spell sets read it.
+func TestScopedPoliciesShareTheWithheldRecord(t *testing.T) {
+	p := BuildPolicy(PolicyOptions{TempDir: t.TempDir()})
+	assert.Same(t, p.withheld, p.Scoped([]string{"go"}, nil).withheld)
+	assert.Same(t, p.withheld, PolicyFromContext(ForProvider(WithPolicy(t.Context(), p), "cache")).withheld)
+}

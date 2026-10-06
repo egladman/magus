@@ -334,7 +334,12 @@ const (
 	// SandboxRequired is sandbox mode required where the kernel cannot confine a child:
 	// MGS2005's fallback to binding checks, refused. Code the caller does not trust must
 	// not run behind checks it can step around.
-	SandboxRequired           DiagnosticCode = "MGS2012"
+	SandboxRequired DiagnosticCode = "MGS2012"
+	// EnvReadWithheld is code running under a sandbox reading a variable that is set but
+	// that the policy withholds. The read answers "unset" so the code gets nothing it was
+	// not granted; this names the variable and the target, never the value, for whoever
+	// reads the run.
+	EnvReadWithheld           DiagnosticCode = "MGS2013"
 	DescendantBoundaryCrossed DiagnosticCode = "MGS3001"
 	VCSUnavailable            DiagnosticCode = "MGS3002"
 	ToolNotOnPath             DiagnosticCode = "MGS3003"
@@ -722,7 +727,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	LayerDeclarationInvalid, ManifestScriptDelegation, CarryApprovalsInvalid, SpellContractViolated,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, ProcSocketWithheld,
-	SandboxWeakened, SecretTooShortToMask, SandboxRequired,
+	SandboxWeakened, SecretTooShortToMask, SandboxRequired, EnvReadWithheld,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
 	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,

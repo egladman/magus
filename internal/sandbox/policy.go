@@ -71,13 +71,24 @@ type Policy struct {
 	lease *leaseBoundary
 	// scoped memoizes Scoped by its arguments.
 	scoped *scopedPolicies
+	// withheld is which withheld reads MGS2013 has already reported, shared by every
+	// policy Scoped derives and every value copy, so a variable is reported once per
+	// target rather than once per spell set.
+	withheld *withheldReads
 }
 
 // Scoped returns the policy for one step: the core and the workspace layer as they are,
 // the spell layer cut to the named spells, and target's declaration merged on top.
-// names nil keeps every spell. Unknown names contribute nothing, and a nil policy, or
-// one BuildPolicy did not build, is returned as it is.
+// names nil keeps every spell. A provider spell's declaration is left out whatever names
+// says; ForProvider alone grants it. Unknown names contribute nothing, and a nil policy,
+// or one BuildPolicy did not build, is returned as it is.
 func (p *Policy) Scoped(names []string, target *spells.Sandbox) *Policy {
+	return p.derive(names, target, false)
+}
+
+// derive is Scoped, with provider spells' declarations kept only when withProviders is
+// set, which ForProvider alone asks for.
+func (p *Policy) derive(names []string, target *spells.Sandbox, withProviders bool) *Policy {
 	if p == nil || p.opts == nil {
 		return p
 	}
@@ -88,7 +99,7 @@ func (p *Policy) Scoped(names []string, target *spells.Sandbox) *Policy {
 	slices.Sort(names)
 	names = slices.Compact(names)
 	// A target's declaration is keyed by identity: each one is decoded once, at load.
-	key := fmt.Sprintf("%s\x00%p", strings.Join(names, "\x00"), target)
+	key := fmt.Sprintf("%s\x00%p\x00%t", strings.Join(names, "\x00"), target, withProviders)
 	p.scoped.mu.Lock()
 	defer p.scoped.mu.Unlock()
 	if q, ok := p.scoped.policies[key]; ok {
@@ -102,11 +113,14 @@ func (p *Policy) Scoped(names []string, target *spells.Sandbox) *Policy {
 		}
 	}
 	o.Target = target
+	if withProviders {
+		o.Providers = nil
+	}
 	q := BuildPolicy(o)
 	if p.lease != nil {
 		q = p.lease.apply(q)
 	}
-	q.opts, q.scoped = p.opts, p.scoped
+	q.opts, q.scoped, q.withheld = p.opts, p.scoped, p.withheld
 	p.scoped.policies[key] = q
 	return q
 }
@@ -170,6 +184,20 @@ func WithStep(ctx context.Context, projectSpells []string, target *spells.Sandbo
 	// Rebuilt even without a target: a step reached from inside another carries that
 	// step's policy, and its target's grants are not this one's.
 	return WithPolicy(ctx, PolicyFromContext(ctx).Scoped(nil, target))
+}
+
+// ForProvider returns ctx for an op of the provider spell name, one magus invokes for
+// itself while serving a step, such as a remote cache lookup: the workspace policy with
+// name's own declaration and no other spell's, and no step recorded, so neither the target
+// being served nor its declaration shapes the provider or its children. With no policy,
+// ctx is returned as it is; a policy Scoped cannot rebuild leaves the provider under it.
+func ForProvider(ctx context.Context, name string) context.Context {
+	p := PolicyFromContext(ctx)
+	if p == nil {
+		return ctx
+	}
+	ctx = context.WithValue(ctx, stepScopeKey{}, nil)
+	return WithPolicy(ctx, p.derive([]string{name}, nil, true))
 }
 
 // ScopeToSpell narrows ctx's policy for a child of an op spell declares: the spells
