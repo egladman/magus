@@ -4,6 +4,10 @@ github.com/dlclark/regexp2 v1.12.0 h1:0j4c5qQmnC6XOWNjP3PIXURXN2gWx76rd3KvgdPkCz
 github.com/dlclark/regexp2 v1.12.0/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
 github.com/ebitengine/purego v0.10.0 h1:QIw4xfpWT6GWTzaW5XEKy3HXoqrJGx1ijYHzTF0/ISU=
 github.com/ebitengine/purego v0.10.0/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
+github.com/egladman/magus/libs/diagnostics v0.2.0 h1:89Dwlu9/hKLlNN0ApzeiQqwUCeU0Zt/wT54AVV7VNm4=
+github.com/egladman/magus/libs/diagnostics v0.2.0/go.mod h1:cYH2g0LJjNB4IfZBEftZnC8ErXewh/2z19WRGMWMux0=
+github.com/egladman/magus/libs/gopherbuzz v0.2.0 h1:oeDSkqgpnJGdMxAjZbbNXlcSHO4MryMo+a1GRsC5lLM=
+github.com/egladman/magus/libs/gopherbuzz v0.2.0/go.mod h1:cD91+QU1chQpzsAAWw5pLOg6MR8w+RIf5DBpq2qqVBA=
 github.com/fatih/color v1.19.0 h1:Zp3PiM21/9Ld6FzSKyL5c/BULoe/ONr9KlbYVOfG8+w=
 github.com/fatih/color v1.19.0/go.mod h1:zNk67I0ZUT1bEGsSGyCZYZNrHuTkJJB+r6Q9VuMi0LE=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

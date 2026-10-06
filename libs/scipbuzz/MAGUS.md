@@ -4,8 +4,6 @@
 
 Up: [workspace index](../../MAGUS.md)
 
-Depends on: [libs/gopherbuzz](../gopherbuzz/MAGUS.md)
-
 Query: `magus query project=libs/scipbuzz`
 
 | Target               | What it does                                                                                                                                           |

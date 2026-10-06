@@ -4,13 +4,14 @@ import "magus";
 import "../../hack/magusfile/index" as index;
 
 import "magus/spell/go";
-import "../../spells/golang/gomod" as gomod;
 
+// go.mod requires the published gopherbuzz and diagnostics with no replace
+// directive, so `go install .../cmd/scip-buzz@<tag>` accepts the module. That is
+// why generate does not call gomod\replaceWorkspaceModules and nothing here
+// depends on ../gopherbuzz: a gopherbuzz change reaches this module only through
+// a release and a version bump.
 magus\project({
     "spells": [go],
-    // go.mod replaces gopherbuzz with the sibling directory, so its sources key this
-    // project's build and tests.
-    "depends_on": ["../gopherbuzz"],
     // The snapshot inputs are Buzz, which the go spell does not claim; without this a
     // changed input would replay a cached test.
     "sources": ["testdata/**/*.buzz"],
@@ -22,7 +23,6 @@ magus\project({
 
 // Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    gomod\replaceWorkspaceModules(ctx, go, "libs/scipbuzz");
     ctx.needs(index_generate);
 }
 
