@@ -195,7 +195,7 @@ object Record {
     base: str,
     // What the checks say; see Verdict.
     state: str,
-    // Where the pull request stands on its way to main; see stageOf.
+    // Where the pull request stands on its way to main; see mergeStage.
     stage: str = "",
     reason: str,
     action: str,
@@ -248,9 +248,9 @@ fun newer(a: Check, b: Check) > bool {
     return (std\parseInt(a.job) ?? 0) > (std\parseInt(b.job) ?? 0);
 }
 
-// checksOf keeps each check's newest run. The rollup lists every run on the head, and a
+// parseChecks keeps each check's newest run. The rollup lists every run on the head, and a
 // run superseded by a newer one is cancelled, which is not a red.
-export fun checksOf(rollup: [serialize\Boxed]) > [Check] {
+export fun parseChecks(rollup: [serialize\Boxed]) > [Check] {
     final order = mut [<str>];
     final latest = mut {<str: Check>};
     foreach (c in rollup) {
@@ -299,7 +299,7 @@ export fun checksOf(rollup: [serialize\Boxed]) > [Check] {
     return acc;
 }
 
-export fun queueStatusOf(rollup: [serialize\Boxed]) > str {
+export fun parseQueueStatus(rollup: [serialize\Boxed]) > str {
     foreach (c in rollup) {
         if (c.q("context").stringValue() == QUEUE_STATUS) {
             return c.q("state").stringValue();
@@ -308,10 +308,10 @@ export fun queueStatusOf(rollup: [serialize\Boxed]) > str {
     return "";
 }
 
-// kickOf reads the newest kick-back from the JSON line its comment ends with; the prose
+// parseKick reads the newest kick-back from the JSON line its comment ends with; the prose
 // above it is for people and may change. An unreadable marker yields an empty code,
 // which classifies as unknown.
-export fun kickOf(comments: [serialize\Boxed]) > Kick? {
+export fun parseKick(comments: [serialize\Boxed]) > Kick? {
     var kick: Kick? = null;
     foreach (c in comments) {
         final body = c.q("body").stringValue();
@@ -364,7 +364,7 @@ fun kickProse(body: str) > [str] {
     return [reason, requeue];
 }
 
-export fun pullOf(doc: serialize\Boxed) > Pull {
+export fun parsePull(doc: serialize\Boxed) > Pull {
     final labels = mut [<str>];
     foreach (l in doc.q("labels").listValue()) {
         labels.append(l.q("name").stringValue());
@@ -390,22 +390,22 @@ export fun pullOf(doc: serialize\Boxed) > Pull {
         review = doc.q("reviewDecision").stringValue(),
         labels = labels,
         files = files,
-        checks = checksOf(rollup),
-        queueStatus = queueStatusOf(rollup),
-        kick = kickOf(doc.q("comments").listValue()),
+        checks = parseChecks(rollup),
+        queueStatus = parseQueueStatus(rollup),
+        kick = parseKick(doc.q("comments").listValue()),
     };
 }
 
-export fun pullsOf(body: str) > [Pull] !> any {
+export fun parsePulls(body: str) > [Pull] !> any {
     final acc = mut[<Pull>];
     foreach (doc in serialize\jsonDecode(body).listValue()) {
-        acc.append(pullOf(doc));
+        acc.append(parsePull(doc));
     }
     return acc;
 }
 
-// parentOf is the open pull request p is stacked on: the one whose branch p targets.
-export fun parentOf(p: Pull, open: [Pull]) > Pull? {
+// stackParent is the open pull request p is stacked on: the one whose branch p targets.
+export fun stackParent(p: Pull, open: [Pull]) > Pull? {
     foreach (o in open) {
         if (o.number != p.number and o.state == "OPEN" and o.head == p.base) {
             return o;
@@ -534,11 +534,11 @@ export fun inheritedChecks(p: Pull, baseline: Baseline) > bool {
     return newFailures(p, baseline: baseline).len() == 0;
 }
 
-// verdictOf is what p's checks say. A head no check has reported on yet reads running: CI
+// judge is what p's checks say. A head no check has reported on yet reads running: CI
 // runs on every push here, so no checks is a run not yet started, never a pass. A failure
 // counts as main's only when main's latest completed run fails the same check and, below
 // it, the same Go tests; without that run read, a failure is the change's.
-export fun verdictOf(p: Pull, facts: Facts) > Verdict {
+export fun judge(p: Pull, facts: Facts) > Verdict {
     if (p.checks.len() == 0 or names(p.checks, conclusion: "PENDING").len() > 0) {
         return Verdict{ state = "running" };
     }
@@ -573,8 +573,8 @@ export fun verdictOf(p: Pull, facts: Facts) > Verdict {
 
 final failMarker = "--- FAIL: ";
 
-// failingTestsOf reads the Go tests a job log reports failing, subtests included, each once.
-export fun failingTestsOf(log: str) > [str] {
+// parseFailingTests reads the Go tests a job log reports failing, subtests included, each once.
+export fun parseFailingTests(log: str) > [str] {
     final acc = mut [<str>];
     foreach (line in log.split("\n")) {
         final at = line.indexOf(failMarker);
@@ -594,10 +594,10 @@ export fun failingTestsOf(log: str) > [str] {
     return acc;
 }
 
-// baselineRunOf picks main's latest run that judged anything from `gh run list --json
+// parseBaselineRun picks main's latest run that judged anything from `gh run list --json
 // databaseId,conclusion,url`, newest first: a cancelled or skipped run failed nothing on
 // its merits, so it is passed over. Null when none did.
-export fun baselineRunOf(body: str) > serialize\Boxed? !> any {
+export fun parseBaselineRun(body: str) > serialize\Boxed? !> any {
     foreach (run in serialize\jsonDecode(body).listValue()) {
         final conclusion = run.q("conclusion").stringValue();
         if (conclusion == "success" or conclusion == "failure") {
@@ -607,9 +607,9 @@ export fun baselineRunOf(body: str) > serialize\Boxed? !> any {
     return null;
 }
 
-// failingJobsOf names the jobs of `gh run view --json jobs` that failed. A cancelled job
+// parseFailingJobs names the jobs of `gh run view --json jobs` that failed. A cancelled job
 // on main is not proof the check fails there.
-export fun failingJobsOf(body: str) > [str] !> any {
+export fun parseFailingJobs(body: str) > [str] !> any {
     final acc = mut [<str>];
     foreach (job in serialize\jsonDecode(body).q("jobs").listValue()) {
         if (job.q("conclusion").stringValue() == "failure") {
@@ -619,9 +619,9 @@ export fun failingJobsOf(body: str) > [str] !> any {
     return acc;
 }
 
-// stageOf reads the first thing other than its checks standing between p and a merge,
-// from p's own record. What the checks say is verdictOf's.
-export fun stageOf(p: Pull, open: [Pull]) > str {
+// mergeStage reads the first thing other than its checks standing between p and a merge,
+// from p's own record. What the checks say is left to judge.
+export fun mergeStage(p: Pull, open: [Pull]) > str {
     if (p.state == "MERGED") {
         return "merged";
     }
@@ -631,7 +631,7 @@ export fun stageOf(p: Pull, open: [Pull]) > str {
     if (p.draft) {
         return "draft";
     }
-    if (parentOf(p, open: open) != null) {
+    if (stackParent(p, open: open) != null) {
         return "waiting-below";
     }
     if (p.mergeable == "CONFLICTING" or p.mergeState == "DIRTY") {
@@ -780,12 +780,12 @@ fun driftPaths(message: str) > [str] {
     return acc;
 }
 
-// annotationsOf keeps a check run's failure annotations that name a file; the runner's
+// parseAnnotations keeps a check run's failure annotations that name a file; the runner's
 // own ("Process completed with exit code 1") and magus's per-project ones name "." or
 // ".github" and say nothing about where. A drift gate's own throw is the one exception:
 // it names its files in the MESSAGE, not in path or start_line, so a "." or missing line
 // there does not disqualify it.
-export fun annotationsOf(body: str) > [Annotation] !> any {
+export fun parseAnnotations(body: str) > [Annotation] !> any {
     final acc = mut[<Annotation>];
     foreach (a in serialize\jsonDecode(body).listValue()) {
         final path = a.q("path").stringValue();
@@ -870,7 +870,7 @@ export fun checkClass(c: Check, p: Pull, facts: Facts) > str {
     return "source";
 }
 
-fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str], sensitive: [str], drifted: [str]) > Evidence {
+fun newEvidence(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str], sensitive: [str], drifted: [str]) > Evidence {
     var kick = "";
     var kickPaths = [<str>];
     var kickUrl = "";
@@ -894,8 +894,8 @@ fun evidenceOf(p: Pull, conflicts: [str], parent: int?, top: int?, rerun: [str],
     };
 }
 
-// recordOf is the action for p; classify adds its state, stage and merge command.
-fun recordOf(p: Pull, action: str, model: str, reason: str, evidence: Evidence) > Record {
+// newRecord is the action for p; classify adds its state, stage and merge command.
+fun newRecord(p: Pull, action: str, model: str, reason: str, evidence: Evidence) > Record {
     return Record{ pr = p.number, head = p.head, base = p.base, state = "", reason = reason,
         action = action, model = model, evidence = evidence };
 }
@@ -943,32 +943,32 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         i = i + 1;
     }
     final failed = names(bad, conclusion: null).join(", ");
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
+    final plain = newEvidence(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
     // An unexplained failure beside an explained one is taken to follow it, the way the
     // `ci gate` aggregate fails when a shard does. Alone, nothing says where it is.
     if (!explained) {
-        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
+        return newRecord(p, action: "fix", model: "opus", reason: "red ({failed}), and no annotation names a file", evidence: plain);
     }
     if (rerunnable and runs.len() > 0) {
         // GitHub refuses to rerun a run that is still going, so wait for it to finish.
         foreach (c in p.checks) {
             if (c.conclusion == "PENDING" and runs.indexOf(c.run) != null) {
-                return recordOf(p, action: "none", model: "none",
+                return newRecord(p, action: "none", model: "none",
                     reason: "red ({failed}) outside the files the change touched; its run is still going", evidence: plain);
             }
         }
         foreach (run in runs) {
             if ((facts.attempts[run] ?? 1) > 1) {
-                return recordOf(p, action: "fix", model: "opus",
+                return newRecord(p, action: "fix", model: "opus",
                     reason: "red again ({failed}) after this head was rerun once", evidence: plain);
             }
         }
-        return recordOf(p, action: "rerun", model: "none",
+        return newRecord(p, action: "rerun", model: "none",
             reason: "red ({failed}) outside the files the change touched",
-            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive, drifted: [<str>]));
+            evidence: newEvidence(p, conflicts: [<str>], parent: null, top: null, rerun: runs, sensitive: sensitive, drifted: [<str>]));
     }
     if (source or rerunnable) {
-        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
+        return newRecord(p, action: "fix", model: "opus", reason: "red ({failed}) in the change's own source", evidence: plain);
     }
     // Every failing check is the drift gate's own throw, or an unexplained one that
     // follows it the same way `ci gate` follows a shard above: an aggregate carries no
@@ -987,18 +987,18 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
         }
     }
     if (hasDrift and !driftOnly) {
-        return recordOf(p, action: "fix", model: "opus",
+        return newRecord(p, action: "fix", model: "opus",
             reason: "red ({failed}): a drift throw beside a failing check that is not drift", evidence: plain);
     }
     if (driftOnly) {
-        return recordOf(p, action: "fix", model: "sonnet",
+        return newRecord(p, action: "fix", model: "sonnet",
             reason: "generated files drifted: {drifted.join(", ")}; regenerate and commit them",
-            evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: drifted));
+            evidence: newEvidence(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: drifted));
     }
     // What is left is hygiene and formatting, maybe beside a transient run.
     final mechanical = classes.indexOf("mechanical") != null;
     if (mechanical and sensitive.len() > 0) {
-        return recordOf(p, action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
+        return newRecord(p, action: "fix", model: "opus", reason: "red ({failed}) in a change to {sensitive[0]}", evidence: plain);
     }
     var reason = "red ({failed}): formatting or generated output drifted";
     if (hygiene) {
@@ -1009,25 +1009,25 @@ fun redRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
             reason = "{HYGIENE} failed on a conventional title: the changelog fragment";
         }
     }
-    return recordOf(p, action: "fix", model: "sonnet", reason: reason, evidence: plain);
+    return newRecord(p, action: "fix", model: "sonnet", reason: reason, evidence: plain);
 }
 
 fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
+    final plain = newEvidence(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
     // Its merge needs generated files regenerated by code it changes. Once main is merged
     // in and they are regenerated, the merge leaves them as the branch has them and the
     // queue takes it again. The regeneration runs the change's own generator code.
     if (p.labels.indexOf(NEEDS_REGENERATION) != null or (p.kick != null and p.kick!.code == "KICK_REGENERATION")) {
-        return recordOf(p, action: "merge-base", model: "opus",
+        return newRecord(p, action: "merge-base", model: "opus",
             reason: "KICK_REGENERATION: merging it needs generated files its own code regenerates; merge main in, regenerate them, and queue it again", evidence: plain);
     }
     if (p.kick == null) {
-        return recordOf(p, action: "fix", model: "opus",
+        return newRecord(p, action: "fix", model: "opus",
             reason: "labeled {KICKED}, and no kick-back comment carries its facts", evidence: plain);
     }
     final kick = p.kick!;
     if (kick.code == "KICK_CONFLICT") {
-        return recordOf(p, action: "merge-base", model: "opus",
+        return newRecord(p, action: "merge-base", model: "opus",
             reason: "the queue found a conflict outside generated files", evidence: plain);
     }
     if (kick.code == "KICK_RED" or kick.code == "KICK_REFUSED") {
@@ -1038,12 +1038,12 @@ fun kickRecord(p: Pull, facts: Facts, sensitive: [str]) > Record {
             }
         }
         if (generated and sensitive.len() == 0 and sensitivePaths(kick.paths).len() == 0) {
-            return recordOf(p, action: "fix", model: "sonnet",
+            return newRecord(p, action: "fix", model: "sonnet",
                 reason: "{kick.code}: only generated outputs are at issue; regenerate them", evidence: plain);
         }
-        return recordOf(p, action: "fix", model: "opus", reason: "{kick.code} on the queue's candidate", evidence: plain);
+        return newRecord(p, action: "fix", model: "opus", reason: "{kick.code} on the queue's candidate", evidence: plain);
     }
-    return recordOf(p, action: "fix", model: "opus",
+    return newRecord(p, action: "fix", model: "opus",
         reason: "kicked back with code \"{kick.code}\", which this script does not know", evidence: plain);
 }
 
@@ -1056,9 +1056,9 @@ final MERGE_READY_STAGES = ["behind", "queued", "needs-queue"];
 // Anything it cannot place goes to opus; model none is only for what this script or
 // nobody does.
 export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
-    final stage = stageOf(p, open: open);
-    final verdict = verdictOf(p, facts: facts);
-    final r = actionOf(p, open: open, facts: facts, stage: stage, verdict: verdict);
+    final stage = mergeStage(p, open: open);
+    final verdict = judge(p, facts: facts);
+    final r = decideAction(p, open: open, facts: facts, stage: stage, verdict: verdict);
     var merge = "";
     final mergeable = verdict.state == "green" or verdict.state == "red-inherited";
     if (mergeable and MERGE_READY_STAGES.indexOf(stage) != null and p.mergeable == "MERGEABLE") {
@@ -1068,24 +1068,24 @@ export fun classify(p: Pull, open: [Pull], facts: Facts) > Record {
         action = r.action, model = r.model, evidence = r.evidence, verdict = verdict, merge = merge };
 }
 
-fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) > Record {
+fun decideAction(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) > Record {
     final sensitive = sensitivePaths(p.files);
-    final plain = evidenceOf(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
+    final plain = newEvidence(p, conflicts: [<str>], parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]);
     if (stage == "merged") {
-        return recordOf(p, action: "none", model: "none", reason: "merged", evidence: Evidence{});
+        return newRecord(p, action: "none", model: "none", reason: "merged", evidence: Evidence{});
     }
     if (stage == "closed") {
-        return recordOf(p, action: "none", model: "none",
+        return newRecord(p, action: "none", model: "none",
             reason: "closed without merging; reopen it or leave it out of the selection", evidence: Evidence{});
     }
     if (stage == "draft") {
-        return recordOf(p, action: "none", model: "none", reason: "a draft; take it out of draft to merge it", evidence: plain);
+        return newRecord(p, action: "none", model: "none", reason: "a draft; take it out of draft to merge it", evidence: plain);
     }
     if (stage == "waiting-below") {
-        final parent = parentOf(p, open: open)!;
-        return recordOf(p, action: "none", model: "none",
+        final parent = stackParent(p, open: open)!;
+        return newRecord(p, action: "none", model: "none",
             reason: "stacked on #{parent.number}, which has not merged",
-            evidence: evidenceOf(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
+            evidence: newEvidence(p, conflicts: [<str>], parent: parent.number, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
     if (stage == "conflicting") {
         final paths = mut [<str>];
@@ -1101,8 +1101,8 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
         } else if (sensitive.len() > 0) {
             reason = "conflicts with {p.base} in a change to {sensitive[0]}";
         }
-        return recordOf(p, action: "merge-base", model: model, reason: reason,
-            evidence: evidenceOf(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
+        return newRecord(p, action: "merge-base", model: model, reason: reason,
+            evidence: newEvidence(p, conflicts: paths, parent: null, top: null, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
     }
     if (stage == "kicked-back") {
         return kickRecord(p, facts: facts, sensitive: sensitive);
@@ -1111,7 +1111,7 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
         return redRecord(p, facts: facts, sensitive: sensitive);
     }
     if (verdict.state == "red-inherited") {
-        return recordOf(p, action: "none", model: "none",
+        return newRecord(p, action: "none", model: "none",
             reason: "every failing check and test also fails on main's run {verdict.mainRun}; nothing here to fix", evidence: plain);
     }
     var mechanical = "sonnet";
@@ -1119,7 +1119,7 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
         mechanical = "opus";
     }
     if (stage == "behind") {
-        return recordOf(p, action: "merge-base", model: mechanical,
+        return newRecord(p, action: "merge-base", model: mechanical,
             reason: "behind {p.base} with no conflict", evidence: plain);
     }
     if (stage == "queued") {
@@ -1127,10 +1127,10 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
         if (p.queueStatus != "") {
             reason = "queued; its {QUEUE_STATUS} status is {p.queueStatus}";
         }
-        return recordOf(p, action: "none", model: "none", reason: reason, evidence: plain);
+        return newRecord(p, action: "none", model: "none", reason: reason, evidence: plain);
     }
     if (p.fork) {
-        return recordOf(p, action: "fix", model: "opus",
+        return newRecord(p, action: "fix", model: "opus",
             reason: "from a fork, which the queue refuses; a person decides how it reaches main", evidence: plain);
     }
     if (verdict.state == "running") {
@@ -1138,23 +1138,23 @@ fun actionOf(p: Pull, open: [Pull], facts: Facts, stage: str, verdict: Verdict) 
         if (plain.pending.len() > 0) {
             reason = "checks still running: {plain.pending.join(", ")}";
         }
-        return recordOf(p, action: "none", model: "none", reason: reason, evidence: plain);
+        return newRecord(p, action: "none", model: "none", reason: reason, evidence: plain);
     }
     if (p.mergeable != "MERGEABLE") {
-        return recordOf(p, action: "none", model: "none",
+        return newRecord(p, action: "none", model: "none",
             reason: "GitHub has not said whether it merges cleanly ({p.mergeable})", evidence: plain);
     }
     final tops = stackTops(p, open: open, depth: 0);
     if (tops.len() > 1) {
-        return recordOf(p, action: "fix", model: "opus",
+        return newRecord(p, action: "fix", model: "opus",
             reason: "the stack on it branches; a person picks which top carries the queue label", evidence: plain);
     }
     var top: int? = null;
     if (tops.len() == 1) {
         top = tops[0];
     }
-    return recordOf(p, action: "queue", model: "none", reason: "green on a current base",
-        evidence: evidenceOf(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
+    return newRecord(p, action: "queue", model: "none", reason: "green on a current base",
+        evidence: newEvidence(p, conflicts: [<str>], parent: null, top: top, rerun: [<str>], sensitive: sensitive, drifted: [<str>]));
 }
 
 // render is the status line: the record with the evidence it holds and nothing empty.
@@ -1251,9 +1251,9 @@ final usage = "usage: magus buzz hack/ci/pull-requests.buzz -- <step> <flags>\n"
     + "  boxes --event <file> --issue <n> --plan <file> --out <file> [--base <branch>]\n"
     + "  act --plan <file>";
 
-// selectorOf parses a step's flags. --pr repeats, which flags\parse does not keep, so it
+// parseSelector parses a step's flags. --pr repeats, which flags\parse does not keep, so it
 // is taken out first.
-export fun selectorOf(step: str, argv: [str]) > Selector !> any {
+export fun parseSelector(step: str, argv: [str]) > Selector !> any {
     final prs = mut [<int>];
     final rest = mut [<str>];
     var i = 0;
@@ -1347,16 +1347,16 @@ fun capture(cmd: str, args: [str]) > str !> any {
 // openPulls lists every open pull request once. A full page may be missing some, and a
 // stack whose parent is missing would read as unstacked, so that is an error.
 fun openPulls() > [Pull] !> any {
-    final open = pullsOf(capture("gh", args: ["pr", "list", "--state", "open", "--limit", "{LIMIT}", "--json", FIELDS]));
+    final open = parsePulls(capture("gh", args: ["pr", "list", "--state", "open", "--limit", "{LIMIT}", "--json", FIELDS]));
     if (open.len() >= LIMIT) {
         throw "pull-requests: {open.len()} open pull requests fill gh's page of {LIMIT}; raise LIMIT";
     }
     return open;
 }
 
-// generatedOf asks this checkout's workspace which paths are declared outputs or
+// findGenerated asks this checkout's workspace which paths are declared outputs or
 // maintained by magus: main's declarations, the ones the queue reads.
-fun generatedOf(paths: [str]) > [str] !> any {
+fun findGenerated(paths: [str]) > [str] !> any {
     final acc = mut[<str>];
     if (paths.len() == 0) {
         return acc;
@@ -1371,10 +1371,10 @@ fun generatedOf(paths: [str]) > [str] !> any {
     return acc;
 }
 
-// conflictsOf fetches each pull request's head and its base, merges them in memory with
+// findConflicts fetches each pull request's head and its base, merges them in memory with
 // git merge-tree (nothing is checked out or written to a branch), and reads each
 // conflicted file's markers.
-fun conflictsOf(pulls: [Pull]) > {int: [Conflict]} !> any {
+fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
     final acc = mut{<int: [Conflict]>};
     if (pulls.len() == 0) {
         return acc;
@@ -1413,7 +1413,7 @@ fun conflictsOf(pulls: [Pull]) > {int: [Conflict]} !> any {
             contents["{p.number}:{path}"] = blob.stdout;
         }
     }
-    final generated = generatedOf(all);
+    final generated = findGenerated(all);
     foreach (number, paths in found) {
         final conflicts = mut [<Conflict>];
         foreach (path in paths) {
@@ -1432,7 +1432,7 @@ fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
         if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
             continue;
         }
-        acc[c.job] = annotationsOf(capture("gh", args: ["api", "repos/\{owner}/\{repo}/check-runs/{c.job}/annotations?per_page=100"]));
+        acc[c.job] = parseAnnotations(capture("gh", args: ["api", "repos/\{owner}/\{repo}/check-runs/{c.job}/annotations?per_page=100"]));
     }
     return acc;
 }
@@ -1456,7 +1456,7 @@ fun failedStepsFor(p: Pull) > {str: [str]} !> any {
     return acc;
 }
 
-fun attemptsOf(runs: [str]) > {str: int} !> any {
+fun countAttempts(runs: [str]) > {str: int} !> any {
     final acc = mut{<str: int>};
     foreach (run in runs) {
         acc[run] = std\parseInt(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}", "--jq", ".run_attempt"]).trim()) ?? 1;
@@ -1464,9 +1464,9 @@ fun attemptsOf(runs: [str]) > {str: int} !> any {
     return acc;
 }
 
-// chosenOf is what sel selects: every open pull request, the numbers asked for (open or
+// selectPulls is what sel selects: every open pull request, the numbers asked for (open or
 // not), or an author's, the caller's when nothing else is named.
-fun chosenOf(sel: Selector, open: [Pull]) > [Pull] !> any {
+fun selectPulls(sel: Selector, open: [Pull]) > [Pull] !> any {
     var author = sel.author;
     if (!sel.all and sel.prs.len() == 0 and author == "") {
         author = capture("gh", args: ["api", "user", "--jq", ".login"]).trim();
@@ -1477,7 +1477,7 @@ fun chosenOf(sel: Selector, open: [Pull]) > [Pull] !> any {
     }
     foreach (n in sel.prs) {
         if (selected(open, prs: [n], author: "").len() == 0) {
-            final view = pullOf(serialize\jsonDecode(capture("gh", args: ["pr", "view", "{n}", "--json", FIELDS])));
+            final view = parsePull(serialize\jsonDecode(capture("gh", args: ["pr", "view", "{n}", "--json", FIELDS])));
             if (author == "" or view.author == author) {
                 chosen.append(view);
             }
@@ -1490,20 +1490,20 @@ fun chosenOf(sel: Selector, open: [Pull]) > [Pull] !> any {
 // records selects the pull requests, gathers the facts each state reads, and classifies.
 fun records(sel: Selector) > [Record] !> any {
     final open = openPulls();
-    final chosen = chosenOf(sel, open: open);
+    final chosen = selectPulls(sel, open: open);
 
     final conflicting = mut [<Pull>];
     foreach (p in chosen) {
-        if (stageOf(p, open: open) == "conflicting") {
+        if (mergeStage(p, open: open) == "conflicting") {
             conflicting.append(p);
         }
     }
-    final conflicts = conflictsOf(conflicting);
+    final conflicts = findConflicts(conflicting);
     // main's run is read once, and only when a finished red needs comparing with it.
     var baseline: Baseline? = null;
     final acc = mut[<Record>];
     foreach (p in chosen) {
-        final stage = stageOf(p, open: open);
+        final stage = mergeStage(p, open: open);
         var tests = [<str>];
         if (completedRed(p) and stage != "merged" and stage != "closed") {
             if (baseline == null) {
@@ -1514,17 +1514,17 @@ fun records(sel: Selector) > [Record] !> any {
             }
         }
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests };
-        final verdict = verdictOf(p, facts: facts);
+        final verdict = judge(p, facts: facts);
         if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
             facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p), baseline = baseline, failingTests = tests };
         } else if (stage == "kicked-back" and p.kick != null) {
-            facts = Facts{ generated = generatedOf(p.kick!.paths), baseline = baseline, failingTests = tests };
+            facts = Facts{ generated = findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests };
         }
         var r = classify(p, open: open, facts: facts);
         // Attempts matter only to a rerun, so only a rerun pays for them.
         if (r.action == "rerun") {
             r = classify(p, open: open, facts: Facts{ annotations = facts.annotations, failedSteps = facts.failedSteps,
-                attempts = attemptsOf(r.evidence.rerun), baseline = baseline, failingTests = tests });
+                attempts = countAttempts(r.evidence.rerun), baseline = baseline, failingTests = tests });
         }
         acc.append(r);
     }
@@ -1540,15 +1540,15 @@ final CI_WORKFLOW = "ci.yaml";
 fun mainBaseline() > Baseline !> any {
     final runs = capture("gh", args: ["run", "list", "--branch", "main", "--event", "push", "--workflow", CI_WORKFLOW,
         "--status", "completed", "--limit", "20", "--json", "databaseId,conclusion,url"]);
-    final run = baselineRunOf(runs);
+    final run = parseBaselineRun(runs);
     if (run == null) {
         throw "pull-requests: no completed {CI_WORKFLOW} run on main passed or failed among the last 20";
     }
     final id = "{run!.q("databaseId").integerValue()}";
-    final failing = failingJobsOf(capture("gh", args: ["run", "view", id, "--json", "jobs"]));
+    final failing = parseFailingJobs(capture("gh", args: ["run", "view", id, "--json", "jobs"]));
     var tests = [<str>];
     if (failing.len() > 0) {
-        tests = failingTestsOf(capture("gh", args: ["run", "view", id, "--log-failed"]));
+        tests = parseFailingTests(capture("gh", args: ["run", "view", id, "--log-failed"]));
     }
     return Baseline{ url = run!.q("url").stringValue(), failingChecks = failing, failingTests = tests };
 }
@@ -1562,7 +1562,7 @@ fun failingTestsFor(p: Pull) > [str] !> any {
             continue;
         }
         read.append(c.run);
-        foreach (name in failingTestsOf(capture("gh", args: ["run", "view", c.run, "--log-failed"]))) {
+        foreach (name in parseFailingTests(capture("gh", args: ["run", "view", c.run, "--log-failed"]))) {
             if (acc.indexOf(name) == null) {
                 acc.append(name);
             }
@@ -1746,8 +1746,8 @@ object Response {
     choice: Choice = Choice{},
 }
 
-// queueOf reads `magus queue ls`'s mergequeue.changes/v1 document.
-export fun queueOf(body: str) > [Queued] !> any {
+// parseQueue reads `magus queue ls`'s mergequeue.changes/v1 document.
+export fun parseQueue(body: str) > [Queued] !> any {
     final acc = mut [<Queued>];
     foreach (c in serialize\jsonDecode(body).q("changes").listValue()) {
         acc.append(Queued{ id = std\parseInt(c.q("id").stringValue()) ?? 0, parent = std\parseInt(c.q("parent").stringValue()) });
@@ -1755,19 +1755,19 @@ export fun queueOf(body: str) > [Queued] !> any {
     return acc;
 }
 
-// mergedOf reads `gh pr list --state merged --json number,mergedAt,statusCheckRollup`.
-export fun mergedOf(body: str) > [Merged] !> any {
+// parseMerged reads `gh pr list --state merged --json number,mergedAt,statusCheckRollup`.
+export fun parseMerged(body: str) > [Merged] !> any {
     final acc = mut [<Merged>];
     foreach (doc in serialize\jsonDecode(body).listValue()) {
         acc.append(Merged{ number = doc.q("number").integerValue(), at = doc.q("mergedAt").stringValue(),
-            byQueue = queueStatusOf(doc.q("statusCheckRollup").listValue()) == "SUCCESS" });
+            byQueue = parseQueueStatus(doc.q("statusCheckRollup").listValue()) == "SUCCESS" });
     }
     return acc;
 }
 
-// waitOf reads the merge-queue status from a commit's combined status, null when the
+// parseWait reads the merge-queue status from a commit's combined status, null when the
 // queue has posted none.
-export fun waitOf(body: str) > Wait? !> any {
+export fun parseWait(body: str) > Wait? !> any {
     foreach (s in serialize\jsonDecode(body).q("statuses").listValue()) {
         if (s.q("context").stringValue() == QUEUE_STATUS) {
             return Wait{ description = s.q("description").stringValue(), since = s.q("updated_at").stringValue() };
@@ -1776,9 +1776,9 @@ export fun waitOf(body: str) > Wait? !> any {
     return null;
 }
 
-// flightsOf reads `gh run view <id> --json jobs` of a validation run: the validation
+// parseFlights reads `gh run view <id> --json jobs` of a validation run: the validation
 // jobs not yet completed, by pull request.
-export fun flightsOf(body: str) > {int: Flight} !> any {
+export fun parseFlights(body: str) > {int: Flight} !> any {
     final acc = mut {<int: Flight>};
     foreach (j in serialize\jsonDecode(body).q("jobs").listValue()) {
         final name = j.q("name").stringValue();
@@ -1793,10 +1793,10 @@ export fun flightsOf(body: str) > {int: Flight} !> any {
     return acc;
 }
 
-// mainRunOf reads `gh run list --json status,conclusion,url`, newest first: the newest
+// parseMainRun reads `gh run list --json status,conclusion,url`, newest first: the newest
 // run still going, or else the newest that passed or failed. A cancelled run judged
 // nothing, so it is passed over. Null when no run says either.
-export fun mainRunOf(body: str) > MainRun? !> any {
+export fun parseMainRun(body: str) > MainRun? !> any {
     foreach (run in serialize\jsonDecode(body).listValue()) {
         final url = run.q("url").stringValue();
         if (run.q("status").stringValue() != "completed") {
@@ -1988,7 +1988,7 @@ fun kickMethod(p: Pull) > str {
 // top, and the queue honors that label only from a person with write access, so no box
 // can queue one.
 fun standalone(p: Pull, open: [Pull]) > bool {
-    return parentOf(p, open: open) == null and stackTops(p, open: open, depth: 0).len() == 0;
+    return stackParent(p, open: open) == null and stackTops(p, open: open, depth: 0).len() == 0;
 }
 
 // failedRuns are the workflow runs of p's failed checks, each once. A commit status has
@@ -2062,7 +2062,7 @@ export fun offeredBoxes(b: Board, placed: [Placed]) > [Box] {
     return acc;
 }
 
-fun markerOf(action: str, pr: int) > str {
+fun boxMarker(action: str, pr: int) > str {
     if (pr == 0) {
         return BOX_MARKER + action + BOX_END;
     }
@@ -2071,12 +2071,12 @@ fun markerOf(action: str, pr: int) > str {
 
 // boxLine is a box as the page draws it: always unchecked.
 export fun boxLine(x: Box) > str {
-    return "- [ ] " + markerOf(x.action, pr: x.pr) + " " + x.label;
+    return "- [ ] " + boxMarker(x.action, pr: x.pr) + " " + x.label;
 }
 
-// marksOf reads every box in body that carries a well-formed marker; a line whose
+// parseMarks reads every box in body that carries a well-formed marker; a line whose
 // marker names no action or no pull request this page draws is not a box.
-export fun marksOf(body: str) > [Mark] {
+export fun parseMarks(body: str) > [Mark] {
     final acc = mut [<Mark>];
     foreach (line in body.split("\n")) {
         final l = line.trim();
@@ -2110,15 +2110,15 @@ export fun marksOf(body: str) > [Mark] {
 // already checked before the edit was answered by an earlier run, or is waiting for one.
 export fun checkedNow(before: str, after: str) > [Mark] {
     final was = mut [<str>];
-    foreach (m in marksOf(before)) {
+    foreach (m in parseMarks(before)) {
         if (m.checked) {
-            was.append(markerOf(m.action, pr: m.pr));
+            was.append(boxMarker(m.action, pr: m.pr));
         }
     }
     final acc = mut [<Mark>];
     final seen = mut [<str>];
-    foreach (m in marksOf(after)) {
-        final key = markerOf(m.action, pr: m.pr);
+    foreach (m in parseMarks(after)) {
+        final key = boxMarker(m.action, pr: m.pr);
         if (m.checked and was.indexOf(key) == null and seen.indexOf(key) == null) {
             seen.append(key);
             acc.append(m);
@@ -2127,8 +2127,8 @@ export fun checkedNow(before: str, after: str) > [Mark] {
     return acc;
 }
 
-// editOf reads an `issues` edited event from the file GITHUB_EVENT_PATH names.
-export fun editOf(event: str) > Edit !> any {
+// readEdit reads an `issues` edited event from the file GITHUB_EVENT_PATH names.
+export fun readEdit(event: str) > Edit !> any {
     final doc = serialize\jsonDecode(event);
     final change = doc.q("changes").q("body");
     final issue = doc.q("issue");
@@ -2142,10 +2142,10 @@ export fun editOf(event: str) > Edit !> any {
     };
 }
 
-// refusalOf says why e acts on nothing, "" when it may act. role is the sender's role on
+// editRefusal says why e acts on nothing, "" when it may act. role is the sender's role on
 // the repository, null before it is read: the checks that need no API call come first,
 // so a bot's or another issue's edit reads nothing.
-export fun refusalOf(e: Edit, issue: int, role: str?) > str {
+export fun editRefusal(e: Edit, issue: int, role: str?) > str {
     if (e.issue != issue) {
         return "issue #{e.issue} is not the dashboard, #{issue}";
     }
@@ -2191,7 +2191,7 @@ export fun choose(marks: [Mark], offered: [Box]) > Choice {
 
 // respond answers one edit given the sender's role and what the board offers.
 export fun respond(e: Edit, issue: int, role: str, offered: [Box]) > Response {
-    final refusal = refusalOf(e, issue: issue, role: role);
+    final refusal = editRefusal(e, issue: issue, role: role);
     final marks = checkedNow(e.before, after: e.after);
     if (refusal != "") {
         return Response{ refusal = refusal, marks = marks };
@@ -2199,10 +2199,10 @@ export fun respond(e: Edit, issue: int, role: str, offered: [Box]) > Response {
     return Response{ refusal = refusal, marks = marks, choice = choose(marks, offered: offered) };
 }
 
-// commandsOf is what act runs for a box, as the queue app. A requeue and a queue enable
+// boxCommands is what act runs for a box, as the queue app. A requeue and a queue enable
 // auto-merge, which is merge intent the queue reads with no labeler to check; start is
 // merge-queue.buzz's step, which the workflow runs itself.
-export fun commandsOf(x: Box) > [[str]] {
+export fun boxCommands(x: Box) > [[str]] {
     final cmds = mut [<[str]>];
     if (x.action == "requeue" or x.action == "queue") {
         cmds.append(["gh", "pr", "merge", "{x.pr}", "--auto", "--" + x.method]);
@@ -2214,8 +2214,8 @@ export fun commandsOf(x: Box) > [[str]] {
     return cmds;
 }
 
-// planOf is the plan boxes writes and act reads.
-export fun planOf(take: [Box]) > str {
+// planFromBoxes is the plan boxes writes and act reads.
+export fun planFromBoxes(take: [Box]) > str {
     final docs = mut [<any>];
     foreach (x in take) {
         final d = mut {<str: any>};
@@ -2691,22 +2691,22 @@ export fun renderDashboard(b: Board) > str !> any {
     return lines.join("\n") + "\n";
 }
 
-// boardOf reads what the page shows. Every read is a GitHub API call, reported with its
+// fetchBoard reads what the page shows. Every read is a GitHub API call, reported with its
 // count and time.
-fun boardOf(sel: Selector) > Board !> any {
+fun fetchBoard(sel: Selector) > Board !> any {
     final began = os\time();
     final open = openPulls();
     var requests = 1;
-    final pulls = chosenOf(sel, open: open);
+    final pulls = selectPulls(sel, open: open);
     final listed = magus\cmd("queue", args: ["ls", "--provider", "github", "--base", sel.base], opts: {"quiet": true, "allow_failure": true});
     if (!listed.ok) {
         throw "pull-requests: magus queue ls: {listed.stderr.trim()}";
     }
-    final queue = queueOf(listed.stdout);
-    final merged = mergedOf(capture("gh", args: ["pr", "list", "--state", "merged", "--base", sel.base,
+    final queue = parseQueue(listed.stdout);
+    final merged = parseMerged(capture("gh", args: ["pr", "list", "--state", "merged", "--base", sel.base,
         "--limit", "{MERGED_LIMIT}", "--json", "number,mergedAt,statusCheckRollup"]));
     final tip = capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{sel.base}", "--jq", ".sha"]).trim();
-    final ci = mainRunOf(capture("gh", args: ["run", "list", "--branch", sel.base, "--event", "push", "--workflow", CI_WORKFLOW,
+    final ci = parseMainRun(capture("gh", args: ["run", "list", "--branch", sel.base, "--event", "push", "--workflow", CI_WORKFLOW,
         "--limit", "20", "--json", "status,conclusion,url"]));
     requests = requests + 3;
     final ids = mut [<int>];
@@ -2716,7 +2716,7 @@ fun boardOf(sel: Selector) > Board !> any {
     final waits = mut {<int: Wait>};
     foreach (p in pulls) {
         if (p.state == "OPEN" and (ids.indexOf(p.number) != null or intent(p, open: open))) {
-            final w = waitOf(capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{p.oid}/status"]));
+            final w = parseWait(capture("gh", args: ["api", "repos/\{owner}/\{repo}/commits/{p.oid}/status"]));
             requests = requests + 1;
             if (w != null) {
                 waits[p.number] = w!;
@@ -2728,7 +2728,7 @@ fun boardOf(sel: Selector) > Board !> any {
         "--status", "in_progress", "--json", "databaseId"])).listValue();
     requests = requests + 1;
     foreach (run in runs) {
-        foreach (n, f in flightsOf(capture("gh", args: ["run", "view", "{run.q("databaseId").integerValue()}", "--json", "jobs"]))) {
+        foreach (n, f in parseFlights(capture("gh", args: ["run", "view", "{run.q("databaseId").integerValue()}", "--json", "jobs"]))) {
             flights[n] = f;
         }
         requests = requests + 1;
@@ -2742,7 +2742,7 @@ fun boardOf(sel: Selector) > Board !> any {
 
 // dashboard renders the board and writes it to --out and the --issue body.
 fun dashboard(sel: Selector) > void !> any {
-    final body = renderDashboard(boardOf(sel));
+    final body = renderDashboard(fetchBoard(sel));
     if (body.len() > BODY_LIMIT) {
         throw "pull-requests: the dashboard is {body.len()} bytes, past the {BODY_LIMIT} characters GitHub takes in an issue body";
     }
@@ -2764,7 +2764,7 @@ object BoxFlags {
     summary: str = "",
 }
 
-export fun boxFlagsOf(step: str, argv: [str]) > BoxFlags !> any {
+export fun parseBoxFlags(step: str, argv: [str]) > BoxFlags !> any {
     var valued = ["--plan"];
     var required = ["--plan"];
     if (step == "boxes") {
@@ -2798,23 +2798,23 @@ fun boxes(o: BoxFlags) > void !> any {
     if (outputs == "") {
         throw "pull-requests: GITHUB_OUTPUT is not set; the runner provides it";
     }
-    final e = editOf(fs\readFile(o.event));
+    final e = readEdit(fs\readFile(o.event));
     var role = "";
-    if (refusalOf(e, issue: o.issue, role: null) == "") {
+    if (editRefusal(e, issue: o.issue, role: null) == "") {
         role = capture("gh", args: ["api", "repos/\{owner}/\{repo}/collaborators/{e.sender}/permission", "--jq", ".role_name"]).trim();
     }
     var offered = [<Box>];
-    if (refusalOf(e, issue: o.issue, role: role) == "" and checkedNow(e.before, after: e.after).len() > 0) {
-        final b = boardOf(Selector{ all = true, base = o.base });
+    if (editRefusal(e, issue: o.issue, role: role) == "" and checkedNow(e.before, after: e.after).len() > 0) {
+        final b = fetchBoard(Selector{ all = true, base = o.base });
         offered = offeredBoxes(b, placed: placePulls(b));
     }
     final res = respond(e, issue: o.issue, role: role, offered: offered);
-    fs\writeFile(o.plan, content: planOf(res.choice.take));
+    fs\writeFile(o.plan, content: planFromBoxes(res.choice.take));
     fs\writeFile(o.summary, content: replySummary(e, role: role, res: res));
     var act = false;
     var start = false;
     foreach (x in res.choice.take) {
-        if (commandsOf(x).len() > 0) {
+        if (boxCommands(x).len() > 0) {
             act = true;
         }
         if (x.action == "start") {
@@ -2834,7 +2834,7 @@ fun boxes(o: BoxFlags) > void !> any {
 fun act(o: BoxFlags) > void !> any {
     final failed = mut [<str>];
     foreach (x in boxesFromPlan(fs\readFile(o.plan))) {
-        foreach (cmd in commandsOf(x)) {
+        foreach (cmd in boxCommands(x)) {
             final res = proc\exec(cmd[0], args: cmd.sub(1), opts: {"quiet": true, "allow_failure": true});
             std\print(encode({"pr": x.pr, "action": x.action, "command": cmd, "ok": res.ok}));
             if (!res.ok) {
@@ -2853,15 +2853,15 @@ export fun main(args: [str]) > void !> any {
     }
     final step = args[0];
     if (step == "status") {
-        status(selectorOf(step, argv: args.sub(1)));
+        status(parseSelector(step, argv: args.sub(1)));
     } else if (step == "apply") {
-        apply(selectorOf(step, argv: args.sub(1)));
+        apply(parseSelector(step, argv: args.sub(1)));
     } else if (step == "dashboard") {
-        dashboard(selectorOf(step, argv: args.sub(1)));
+        dashboard(parseSelector(step, argv: args.sub(1)));
     } else if (step == "boxes") {
-        boxes(boxFlagsOf(step, argv: args.sub(1)));
+        boxes(parseBoxFlags(step, argv: args.sub(1)));
     } else if (step == "act") {
-        act(boxFlagsOf(step, argv: args.sub(1)));
+        act(parseBoxFlags(step, argv: args.sub(1)));
     } else {
         throw "pull-requests: unknown step \"{step}\"\n{usage}";
     }
@@ -2898,7 +2898,7 @@ final SAMPLE = `{
 }`;
 
 test "a gh pr view record reads into a pull request, each check at its newest run" {
-    final p = pullOf(serialize\jsonDecode(SAMPLE));
+    final p = parsePull(serialize\jsonDecode(SAMPLE));
     assert\equal(p.number, want: 317, message: "number");
     assert\equal(p.head, want: "delete-ci-shard", message: "head");
     assert\equal(p.author, want: "egladman", message: "author");
@@ -2918,8 +2918,8 @@ test "a gh pr view record reads into a pull request, each check at its newest ru
 
 test "an unreadable kick marker is a kick with no code" {
     final comments = serialize\jsonDecode(`[{"body": "<!-- mergequeue: {not json -->", "url": "u"}]`).listValue();
-    assert\equal(kickOf(comments)!.code, want: "", message: "unknown code");
-    assert\equal(kickOf(serialize\jsonDecode(`[{"body": "no marker"}]`).listValue()), want: null, message: "no kick-back");
+    assert\equal(parseKick(comments)!.code, want: "", message: "unknown code");
+    assert\equal(parseKick(serialize\jsonDecode(`[{"body": "no marker"}]`).listValue()), want: null, message: "no kick-back");
 }
 
 test "stage is the first thing other than checks between a pull request and its merge" {
@@ -2927,7 +2927,7 @@ test "stage is the first thing other than checks between a pull request and its 
     final top = Pull{ number = 2, head = "b", base = "a", labels = ["merge-queue: squash"] };
     final open = [bottom, top];
     final expect = fun(p: Pull, want: str) > void {
-        assert\equal(stageOf(p, open: open), want: want, message: "#{p.number} {want}");
+        assert\equal(mergeStage(p, open: open), want: want, message: "#{p.number} {want}");
     };
     final failed = [red("t", conclusion: "FAILURE", job: "1")];
     expect(Pull{ number = 3, state = "MERGED" }, want: "merged");
@@ -2987,12 +2987,12 @@ test "annotations keep failures that name a file" {
       {"path": "types/diagnostic.go", "start_line": 442, "annotation_level": "failure", "message": "File is not properly formatted (gofmt)"},
       {"path": ".github", "start_line": 29, "annotation_level": "notice", "message": "."}
     ]`;
-    final notes = annotationsOf(body);
+    final notes = parseAnnotations(body);
     assert\equal(notes.len(), want: 1, message: "one file annotation");
     assert\equal(notes[0].path, want: "types/diagnostic.go", message: "path");
 }
 
-test "annotationsOf keeps a drift gate's own throw despite its generic path" {
+test "parseAnnotations keeps a drift gate's own throw despite its generic path" {
     final body = "[\{\"path\": \".\", \"start_line\": 0, \"annotation_level\": \"failure\", "
         + "\"message\": \"generate failed in magus: buzz: uncaught error: MGS4006: generate: "
         + "regeneration changed generated files, and they are already written in this tree; "
@@ -3000,7 +3000,7 @@ test "annotationsOf keeps a drift gate's own throw despite its generic path" {
         + "first: MAGUS.md\"}, "
         + "\{\"path\": \".github\", \"start_line\": 3918, \"annotation_level\": \"failure\", "
         + "\"message\": \"Process completed with exit code 1.\"}]";
-    final notes = annotationsOf(body);
+    final notes = parseAnnotations(body);
     assert\equal(notes.len(), want: 1, message: "the runner's own noise stays out; the drift throw stays in");
     assert\equal(driftPaths(notes[0].message), want: ["MAGUS.md"], message: "the trailing file list");
 }
@@ -3186,15 +3186,15 @@ test "a status line carries the record and only the evidence it has" {
 }
 
 test "selectors take a repeated --pr, and apply alone takes --method" {
-    final sel = selectorOf("status", argv: ["--pr", "316", "--pr=327", "--author", "eli"]);
+    final sel = parseSelector("status", argv: ["--pr", "316", "--pr=327", "--author", "eli"]);
     assert\equal(sel.prs, want: [316, 327], message: "both numbers");
     assert\equal(sel.author, want: "eli", message: "author");
-    assert\equal(selectorOf("apply", argv: ["--method", "rebase"]).method, want: "rebase", message: "method");
-    assert\equal(selectorOf("status", argv: [<str>]).method, want: "squash", message: "default method");
+    assert\equal(parseSelector("apply", argv: ["--method", "rebase"]).method, want: "rebase", message: "method");
+    assert\equal(parseSelector("status", argv: [<str>]).method, want: "squash", message: "default method");
     foreach (argv in [["--pr"], ["--pr", "x"], ["--pr", "0"], ["--pr", "3a"], ["--author", ""], ["--method", "squash"], ["316"], ["--extra"]]) {
         var refused = false;
         try {
-            selectorOf("status", argv: argv);
+            parseSelector("status", argv: argv);
         } catch (e) {
             refused = true;
         }
@@ -3217,7 +3217,7 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
     ]) {
         var refused = false;
         try {
-            selectorOf(c[0], argv: c.sub(1));
+            parseSelector(c[0], argv: c.sub(1));
         } catch (e) {
             refused = true;
         }
@@ -3226,14 +3226,14 @@ test "selectors take a repeated --pr, and apply alone takes --method" {
 }
 
 test "status and dashboard take --all; dashboard takes its page's flags" {
-    assert\equal(selectorOf("status", argv: ["--all"]).all, want: true, message: "status --all");
-    final d = selectorOf("dashboard", argv: ["--all", "--base", "trunk", "--out", "d.md", "--issue", "12", "--run-url", "u"]);
+    assert\equal(parseSelector("status", argv: ["--all"]).all, want: true, message: "status --all");
+    final d = parseSelector("dashboard", argv: ["--all", "--base", "trunk", "--out", "d.md", "--issue", "12", "--run-url", "u"]);
     assert\equal([d.base, d.file, d.issue, d.runUrl], want: ["trunk", "d.md", "12", "u"], message: "the page's flags");
     final preview = ["--all", "--preview", "--out", "d.md"];
-    assert\equal(selectorOf("dashboard", argv: preview).issue, want: "", message: "a preview edits no issue");
-    assert\equal(selectorOf("dashboard", argv: preview).base, want: "main", message: "the default base");
-    assert\equal(selectorOf("dashboard", argv: preview).console, want: figurelink\defaultConsoleBase, message: "the default console");
-    assert\equal(selectorOf("dashboard", argv: preview + ["--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
+    assert\equal(parseSelector("dashboard", argv: preview).issue, want: "", message: "a preview edits no issue");
+    assert\equal(parseSelector("dashboard", argv: preview).base, want: "main", message: "the default base");
+    assert\equal(parseSelector("dashboard", argv: preview).console, want: figurelink\defaultConsoleBase, message: "the default console");
+    assert\equal(parseSelector("dashboard", argv: preview + ["--console-base", "https://c.test/"]).console, want: "https://c.test/", message: "a console of one's own");
 }
 
 test "selection is the requested numbers or the author's pull requests" {
@@ -3265,26 +3265,26 @@ fun failed(name: str) > Check {
 }
 
 test "a job log's failing Go tests are read once each, subtests included" {
-    assert\equal(failingTestsOf(FAILED_LOG), want: ["TestAcquireDefersToAPredecessorThatHolds", "TestPipe/red_upstream"], message: "tests");
-    assert\equal(failingTestsOf("ok  \tgithub.com/egladman/magus\t1.2s\n").len(), want: 0, message: "a passing log");
+    assert\equal(parseFailingTests(FAILED_LOG), want: ["TestAcquireDefersToAPredecessorThatHolds", "TestPipe/red_upstream"], message: "tests");
+    assert\equal(parseFailingTests("ok  \tgithub.com/egladman/magus\t1.2s\n").len(), want: 0, message: "a passing log");
 }
 
 test "main's baseline is its latest run that passed or failed, and its failed jobs" {
     final runs = `[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}, {"databaseId": 2, "conclusion": "failure", "url": "u2"}, {"databaseId": 1, "conclusion": "success", "url": "u1"}]`;
-    assert\equal(baselineRunOf(runs)!.q("url").stringValue(), want: "u2", message: "a cancelled run judged nothing");
-    assert\equal(baselineRunOf(`[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}]`), want: null, message: "none judged");
+    assert\equal(parseBaselineRun(runs)!.q("url").stringValue(), want: "u2", message: "a cancelled run judged nothing");
+    assert\equal(parseBaselineRun(`[{"databaseId": 3, "conclusion": "cancelled", "url": "u3"}]`), want: null, message: "none judged");
     final jobs = `{"jobs": [{"name": "magus plan", "conclusion": "success"}, {"name": "magus shard 0: .", "conclusion": "failure"}, {"name": "magus advisor", "conclusion": "skipped"}, {"name": "magus shard 1: docs", "conclusion": "cancelled"}, {"name": "ci gate", "conclusion": "failure"}]}`;
-    assert\equal(failingJobsOf(jobs), want: ["magus shard 0: .", "ci gate"], message: "failed jobs only");
+    assert\equal(parseFailingJobs(jobs), want: ["magus shard 0: .", "ci gate"], message: "failed jobs only");
 }
 
 test "a check's run page is kept for the evidence" {
-    final p = pullOf(serialize\jsonDecode(SAMPLE));
+    final p = parsePull(serialize\jsonDecode(SAMPLE));
     assert\equal(p.checks[1].runUrl, want: "https://github.com/egladman/magus/actions/runs/36074168245", message: "the run, not the job");
 }
 
 test "the checks on the head decide running, green, red-inherited and red" {
     final expect = fun (checks: [Check], facts: Facts, want: str) > Verdict {
-        final v = verdictOf(Pull{ number = 1, checks = checks }, facts: facts);
+        final v = judge(Pull{ number = 1, checks = checks }, facts: facts);
         assert\equal(v.state, want: want, message: want);
         return v;
     };
@@ -3380,8 +3380,8 @@ fun figureIn(page: str) > serialize\Boxed !> any {
     return figurelink\decodeFigureLink(rest.sub(0, len: rest.indexOf(")")!));
 }
 
-// idsOf is the ids of the graph's nodes, in order.
-fun idsOf(doc: serialize\Boxed) > [str] {
+// nodeIds is the ids of the graph's nodes, in order.
+fun nodeIds(doc: serialize\Boxed) > [str] {
     final acc = mut [<str>];
     foreach (n in doc.q("nodes").listValue()) {
         acc.append(n.q("id").stringValue());
@@ -3389,8 +3389,8 @@ fun idsOf(doc: serialize\Boxed) > [str] {
     return acc;
 }
 
-// edgesOf is the graph's edges as "from>to".
-fun edgesOf(doc: serialize\Boxed) > [str] {
+// graphEdges is the graph's edges as "from>to".
+fun graphEdges(doc: serialize\Boxed) > [str] {
     final acc = mut [<str>];
     foreach (e in doc.q("edges").listValue()) {
         acc.append(e.listValue()[0].stringValue() + ">" + e.listValue()[1].stringValue());
@@ -3497,17 +3497,17 @@ test "each row says where it stands, and for how long" {
 }
 
 test "places go to the rows the queue can merge, and a kicked-back row takes none" {
-    final ranksOf = fun (b: Board) > [str] {
+    final rankLabels = fun (b: Board) > [str] {
         final acc = mut [<str>];
         foreach (x in rankedBoard(b)) {
             acc.append(x.rank);
         }
         return acc;
     };
-    assert\equal(ranksOf(board([kickedBy(1, code: "KICK_RED"), kickedBy(2, code: "KICK_REGENERATION")], queue: [<Queued>])),
+    assert\equal(rankLabels(board([kickedBy(1, code: "KICK_RED"), kickedBy(2, code: "KICK_REGENERATION")], queue: [<Queued>])),
         want: [UNRANKED, UNRANKED], message: "no place for a kicked-back row");
     final two = [Pull{ number = 1, autoMerge = true }, kickedBy(2, code: "KICK_CONFLICT"), Pull{ number = 3, review = "APPROVED", checks = [green("t")] }];
-    assert\equal(ranksOf(board(two, queue: [Queued{ id = 1 }])), want: ["1", "2", UNRANKED], message: "places skip nothing");
+    assert\equal(rankLabels(board(two, queue: [Queued{ id = 1 }])), want: ["1", "2", UNRANKED], message: "places skip nothing");
 }
 
 test "a board with nothing to rank says so in one line, and draws no table" {
@@ -3551,9 +3551,9 @@ test "a partition of three links each behind the base" {
     final doc = figureIn(page);
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "Merge queue into main", message: "title");
-    assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
+    assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
     assert\equal(doc.q("nodes").listValue()[1].q("label").stringValue(), want: "#1 one", message: "a change's label");
-    assert\equal(edgesOf(doc), want: ["base>pr1", "base>pr2", "base>pr3"], message: "each behind the base");
+    assert\equal(graphEdges(doc), want: ["base>pr1", "base>pr2", "base>pr3"], message: "each behind the base");
     has(page, want: "| 1 | #1 one<br><sub>`a`</sub> | validating, 30m | green | - | merging: [run](https://github.com/o/r/actions/runs/9/job/8) |");
     has(page, want: "| 3 | #3 three<br><sub>`c`</sub> | queued 2nd | running | - | wait: queued |");
 }
@@ -3564,7 +3564,7 @@ test "a stack links each member behind the one it is stacked on" {
         Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
     ];
     final page = renderDashboard(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
-    assert\equal(edgesOf(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
+    assert\equal(graphEdges(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
     has(page, want: "| queued 2nd | running | - | wait: stacked on #10, which has not merged |");
 }
 
@@ -3582,8 +3582,8 @@ test "each kick code goes to the author, and a regeneration to a manual merge, a
     }
     has(page, want: "- **#5** labeled {KICKED}, and no kick-back comment says why<br>by hand, once fixed: `gh pr merge 5 --auto --squash`");
     final doc = figureIn(page);
-    assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
-    assert\equal(edgesOf(doc).len(), want: 0, message: "stacked on nothing");
+    assert\equal(nodeIds(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
+    assert\equal(graphEdges(doc).len(), want: 0, message: "stacked on nothing");
     final labeled = renderDashboard(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
     has(labeled, want: "1 to merge by hand");
 }
@@ -3594,7 +3594,7 @@ test "a title cannot break a table, a box line or the graph" {
     has(page, want: "| 1 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | queued 1st | running | - | wait: queued |\n");
     final odd = Pull{ number = 31, head = "a|b", author = "x|y", title = "t", review = "APPROVED", checks = [green("t")] };
     has(renderDashboard(board([odd], queue: [<Queued>])), want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |");
-    assert\equal(marksOf(page).len(), want: 2, message: "the title's marker is no box: {marksOf(page)}");
+    assert\equal(parseMarks(page).len(), want: 2, message: "the title's marker is no box: {parseMarks(page)}");
     assert\equal(figureIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
 }
 
@@ -3609,41 +3609,41 @@ test "the week's merges are counted by who merged them" {
 
 test "the dashboard's reads parse into what it renders" {
     final ls = `{"schema":"mergequeue.changes/v1","base":"main","changes":[{"id":"4","head":"h4","base":"main","method":"squash","fork":false,"affected":[]},{"id":"5","head":"h5","base":"main","method":"squash","parent":"4","fork":false,"affected":[]}]}`;
-    final q = queueOf(ls);
+    final q = parseQueue(ls);
     assert\equal([q[0].id, q[1].id, q[1].parent ?? 0], want: [4, 5, 4], message: "queue order and parent");
     assert\equal(q[0].parent, want: null, message: "on the base");
-    assert\equal(queueOf(`{"schema":"mergequeue.changes/v1","base":"main","changes":null}`).len(), want: 0, message: "an empty queue");
+    assert\equal(parseQueue(`{"schema":"mergequeue.changes/v1","base":"main","changes":null}`).len(), want: 0, message: "an empty queue");
 
-    final merged = mergedOf(`[{"number": 9, "mergedAt": "2026-09-26T10:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}]},
+    final merged = parseMerged(`[{"number": 9, "mergedAt": "2026-09-26T10:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "SUCCESS"}]},
         {"number": 8, "mergedAt": "2026-09-26T09:00:00Z", "statusCheckRollup": [{"__typename": "StatusContext", "context": "merge-queue", "state": "PENDING"}]}]`);
     assert\equal([merged[0].byQueue, merged[1].byQueue], want: [true, false], message: "who merged");
 
-    final w = waitOf(`{"statuses": [{"context": "ci", "description": "x"}, {"context": "merge-queue", "description": "waiting: WAIT_CHECKS", "updated_at": "2026-09-26T19:00:00Z"}]}`);
+    final w = parseWait(`{"statuses": [{"context": "ci", "description": "x"}, {"context": "merge-queue", "description": "waiting: WAIT_CHECKS", "updated_at": "2026-09-26T19:00:00Z"}]}`);
     assert\equal([w!.description, w!.since], want: ["waiting: WAIT_CHECKS", "2026-09-26T19:00:00Z"], message: "the queue's status");
-    assert\equal(waitOf(`{"statuses": []}`), want: null, message: "none posted");
+    assert\equal(parseWait(`{"statuses": []}`), want: null, message: "none posted");
 
-    final flights = flightsOf(`{"jobs": [{"name": "queue plan", "status": "completed", "url": "p"},
+    final flights = parseFlights(`{"jobs": [{"name": "queue plan", "status": "completed", "url": "p"},
         {"name": "queue validate #4", "status": "in_progress", "url": "u4", "startedAt": "2026-09-26T19:30:00Z"},
         {"name": "queue validate #5", "status": "completed", "url": "u5"}]}`);
     assert\equal(flights.len(), want: 1, message: "the running validation only");
     assert\equal(flights[4]!.url, want: "u4", message: "by pull request");
 
-    final running = mainRunOf(`[{"status": "in_progress", "conclusion": "", "url": "r3"}, {"status": "completed", "conclusion": "success", "url": "r2"}]`);
+    final running = parseMainRun(`[{"status": "in_progress", "conclusion": "", "url": "r3"}, {"status": "completed", "conclusion": "success", "url": "r2"}]`);
     assert\equal([running!.state, running!.url], want: ["running", "r3"], message: "a run still going");
-    final red = mainRunOf(`[{"status": "completed", "conclusion": "cancelled", "url": "r3"}, {"status": "completed", "conclusion": "failure", "url": "r2"}]`);
+    final red = parseMainRun(`[{"status": "completed", "conclusion": "cancelled", "url": "r3"}, {"status": "completed", "conclusion": "failure", "url": "r2"}]`);
     assert\equal([red!.state, red!.url], want: ["red", "r2"], message: "a cancelled run judged nothing");
-    assert\equal(mainRunOf(`[]`), want: null, message: "no run");
+    assert\equal(parseMainRun(`[]`), want: null, message: "no run");
 }
 
 test "a kick-back comment gives its first report line and its requeue command" {
-    final p = pullOf(serialize\jsonDecode(SAMPLE));
+    final p = parsePull(serialize\jsonDecode(SAMPLE));
     assert\equal([p.kick!.reason, p.kick!.requeue], want: ["It conflicts with main outside the generated files.", "gh pr merge 317 --auto --squash"], message: "plain");
     final stack = kickProse("### Merge queue: kicked back\n\nThe gate was red.\n\nQueue the stack again once fixed: `gh pr edit 9 --add-label \"merge-queue: squash\"`\n\n<!-- mergequeue: \{} -->");
     assert\equal(stack, want: ["The gate was red.", "gh pr edit 9 --add-label \"merge-queue: squash\""], message: "a stack's");
     assert\equal(kickProse("<!-- mergequeue: \{} -->"), want: ["", ""], message: "nothing but the marker");
 }
 
-fun keysOf(marks: [Mark]) > [str] {
+fun markKeys(marks: [Mark]) > [str] {
     final acc = mut [<str>];
     foreach (m in marks) {
         var state = " ";
@@ -3664,7 +3664,7 @@ test "each box offered is drawn unchecked, and reads back as the box it is" {
     }
     assert\equal(want, want: ["  start 0", "  render 0", "  rerun 3", "  requeue 6", "  rerun 6", "  requeue 7", "  queue 8", "  rerun 12"], message: "the boxes");
     final drawn = mut [<str>];
-    foreach (k in keysOf(marksOf(renderDashboard(b)))) {
+    foreach (k in markKeys(parseMarks(renderDashboard(b)))) {
         drawn.append(k);
     }
     drawn.sort(fun (a: str, c: str) > bool => a < c);
@@ -3705,17 +3705,17 @@ test "box markers parse only in the shape the page draws" {
         + "[x] <!-- magus-queue: render --> not a list item\n"
         + "- [x] see <!-- magus-queue: render --> marker not first\n"
         + "<!-- magus-queue-dashboard -->";
-    assert\equal(keysOf(marksOf(body)), want: ["  start 0", "x requeue 514", "x rerun 7"], message: "the boxes");
+    assert\equal(markKeys(parseMarks(body)), want: ["  start 0", "x requeue 514", "x rerun 7"], message: "the boxes");
 }
 
 test "only a box unchecked before the edit and checked after it counts, once" {
     final before = "- [ ] <!-- magus-queue: start -->\n- [x] <!-- magus-queue: requeue 6 -->\n- [ ] <!-- magus-queue: queue 8 -->";
     final after = "- [x] <!-- magus-queue: start -->\n- [x] <!-- magus-queue: requeue 6 -->\n- [x] <!-- magus-queue: queue 8 -->\n- [x] <!-- magus-queue: queue 8 -->";
-    assert\equal(keysOf(checkedNow(before, after: after)), want: ["x start 0", "x queue 8"], message: "the new checks");
+    assert\equal(markKeys(checkedNow(before, after: after)), want: ["x start 0", "x queue 8"], message: "the new checks");
     assert\equal(checkedNow(after, after: after).len(), want: 0, message: "already checked runs nothing again");
-    assert\equal(keysOf(checkedNow("", after: "- [x] <!-- magus-queue: render -->")), want: ["x render 0"], message: "absent before counts as unchecked");
+    assert\equal(markKeys(checkedNow("", after: "- [x] <!-- magus-queue: render -->")), want: ["x render 0"], message: "absent before counts as unchecked");
     final web = "- [ ] <!-- magus-queue: start -->\r\n- [x] <!-- magus-queue: rerun 3 -->\r\n";
-    assert\equal(keysOf(checkedNow(web, after: web.replace("[ ]", with: "[x]"))), want: ["x start 0"], message: "the web editor's CRLF");
+    assert\equal(markKeys(checkedNow(web, after: web.replace("[ ]", with: "[x]"))), want: ["x start 0"], message: "the web editor's CRLF");
 }
 
 fun edit(sender: str, bot: bool) > Edit {
@@ -3725,17 +3725,17 @@ fun edit(sender: str, bot: bool) > Edit {
 }
 
 test "an edit acts only for a writer, on the dashboard's body" {
-    assert\equal(refusalOf(edit("eli", bot: false), issue: 515, role: null), want: "", message: "before the role is read");
+    assert\equal(editRefusal(edit("eli", bot: false), issue: 515, role: null), want: "", message: "before the role is read");
     foreach (role in ACTING_ROLES) {
-        assert\equal(refusalOf(edit("eli", bot: false), issue: 515, role: role), want: "", message: role);
+        assert\equal(editRefusal(edit("eli", bot: false), issue: 515, role: role), want: "", message: role);
     }
-    assert\equal(refusalOf(edit("eli", bot: false), issue: 516, role: "admin"), want: "issue #515 is not the dashboard, #516", message: "another issue");
+    assert\equal(editRefusal(edit("eli", bot: false), issue: 516, role: "admin"), want: "issue #515 is not the dashboard, #516", message: "another issue");
     final title = Edit{ issue = 515, sender = "eli", bot = false, bodyEdited = false };
-    assert\equal(refusalOf(title, issue: 515, role: "admin"), want: "the edit changed the title, not the body", message: "a title edit");
-    assert\equal(refusalOf(edit("renovate[bot]", bot: true), issue: 515, role: null), want: "renovate[bot] is a bot, and a bot's checks are ignored", message: "a bot");
-    assert\equal(refusalOf(edit("a/../b", bot: false), issue: 515, role: null), want: "\"a/../b\" is not a user's login", message: "a login for a path");
-    assert\equal(refusalOf(edit("pat", bot: false), issue: 515, role: "triage"), want: "pat has triage access, and a box acts only for admin, maintain, write", message: "triage");
-    assert\equal(refusalOf(edit("pat", bot: false), issue: 515, role: ""), want: "pat has no access, and a box acts only for admin, maintain, write", message: "none");
+    assert\equal(editRefusal(title, issue: 515, role: "admin"), want: "the edit changed the title, not the body", message: "a title edit");
+    assert\equal(editRefusal(edit("renovate[bot]", bot: true), issue: 515, role: null), want: "renovate[bot] is a bot, and a bot's checks are ignored", message: "a bot");
+    assert\equal(editRefusal(edit("a/../b", bot: false), issue: 515, role: null), want: "\"a/../b\" is not a user's login", message: "a login for a path");
+    assert\equal(editRefusal(edit("pat", bot: false), issue: 515, role: "triage"), want: "pat has triage access, and a box acts only for admin, maintain, write", message: "triage");
+    assert\equal(editRefusal(edit("pat", bot: false), issue: 515, role: ""), want: "pat has no access, and a box acts only for admin, maintain, write", message: "none");
 }
 
 test "an unauthorized sender's checks take nothing, even a box the board offers" {
@@ -3744,7 +3744,7 @@ test "an unauthorized sender's checks take nothing, even a box the board offers"
     assert\equal(reader.refusal != "", want: true, message: "refused");
     assert\equal(reader.marks.len(), want: 2, message: "it still says what was checked");
     assert\equal(reader.choice.take.len(), want: 0, message: "and takes none");
-    assert\equal(planOf(reader.choice.take), want: "[]", message: "an empty plan");
+    assert\equal(planFromBoxes(reader.choice.take), want: "[]", message: "an empty plan");
     has(replySummary(edit("pat", bot: false), role: "read", res: reader), want: "> [!WARNING]\n> Ignored 2 checked box(es) on #515: pat has read access");
     final bot = respond(edit("renovate[bot]", bot: true), issue: 515, role: "", offered: offered);
     assert\equal(bot.choice.take.len(), want: 0, message: "a bot takes none");
@@ -3768,8 +3768,8 @@ test "a box's commands are auto-merge and reruns; the plan carries them to act" 
     final take = [Box{ action = "requeue", pr = 6, method = "rebase" }, Box{ action = "queue", pr = 8 },
         Box{ action = "rerun", pr = 3, runs = ["11", "12"] }, Box{ action = "start" }, Box{ action = "render" }];
     final cmds = mut [<[str]>];
-    foreach (x in boxesFromPlan(planOf(take))) {
-        foreach (c in commandsOf(x)) {
+    foreach (x in boxesFromPlan(planFromBoxes(take))) {
+        foreach (c in boxCommands(x)) {
             cmds.append(c);
         }
     }
@@ -3789,25 +3789,25 @@ test "a box's commands are auto-merge and reruns; the plan carries them to act" 
 }
 
 test "an issues edited event reads into an edit" {
-    final e = editOf(`{"action": "edited", "changes": {"body": {"from": "- [ ] <!-- magus-queue: start -->"}},
+    final e = readEdit(`{"action": "edited", "changes": {"body": {"from": "- [ ] <!-- magus-queue: start -->"}},
         "issue": {"number": 515, "body": "- [x] <!-- magus-queue: start -->"}, "sender": {"login": "eli", "type": "User"}}`);
     assert\equal([e.issue, e.sender, e.bot, e.bodyEdited], want: [515, "eli", false, true], message: "the edit");
-    assert\equal(keysOf(checkedNow(e.before, after: e.after)), want: ["x start 0"], message: "the box");
-    final title = editOf(`{"action": "edited", "changes": {"title": {"from": "x"}}, "issue": {"number": 515, "body": "- [x] <!-- magus-queue: start -->"},
+    assert\equal(markKeys(checkedNow(e.before, after: e.after)), want: ["x start 0"], message: "the box");
+    final title = readEdit(`{"action": "edited", "changes": {"title": {"from": "x"}}, "issue": {"number": 515, "body": "- [x] <!-- magus-queue: start -->"},
         "sender": {"login": "github-actions[bot]", "type": "Bot"}}`);
     assert\equal([title.bodyEdited, title.bot], want: [false, true], message: "a bot's title edit");
 }
 
 test "boxes and act take their flags, and refuse what is missing" {
-    final o = boxFlagsOf("boxes", argv: ["--event", "e.json", "--issue", "515", "--plan", "p.json", "--out", "s.md"]);
+    final o = parseBoxFlags("boxes", argv: ["--event", "e.json", "--issue", "515", "--plan", "p.json", "--out", "s.md"]);
     assert\equal([o.event, o.plan, o.summary, o.base], want: ["e.json", "p.json", "s.md", "main"], message: "boxes");
     assert\equal(o.issue, want: 515, message: "the issue");
-    assert\equal(boxFlagsOf("act", argv: ["--plan", "p.json"]).plan, want: "p.json", message: "act");
+    assert\equal(parseBoxFlags("act", argv: ["--plan", "p.json"]).plan, want: "p.json", message: "act");
     foreach (c in [["boxes", "--event", "e", "--issue", "", "--plan", "p", "--out", "s"], ["boxes", "--event", "e", "--issue", "x", "--plan", "p", "--out", "s"],
             ["boxes", "--issue", "5", "--plan", "p", "--out", "s"], ["act"], ["act", "--plan", "p", "--issue", "5"]]) {
         var refused = false;
         try {
-            boxFlagsOf(c[0], argv: c.sub(1));
+            parseBoxFlags(c[0], argv: c.sub(1));
         } catch (e) {
             refused = true;
         }
