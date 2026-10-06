@@ -37,24 +37,29 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "scip-buzz: unexpected argument %q\n", flags.Arg(0))
 		return 2
 	}
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "scip-buzz: working directory: %v\n", err)
+		return 1
+	}
+	// ToolInfo.Arguments stays empty: magus passes an absolute --workspace-root,
+	// and the index must not change with where the checkout lives.
 	idx, err := scipbuzz.Index(ctx, scipbuzz.Options{
+		ProjectRoot:   wd,
 		WorkspaceRoot: *workspaceRoot,
-		Warnf: func(format string, a ...any) {
-			fmt.Fprintf(stderr, "scip-buzz: "+format+"\n", a...)
-		},
+		Warn:          func(msg string) { fmt.Fprintf(stderr, "scip-buzz: %s\n", msg) },
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "scip-buzz: %v\n", err)
 		return 1
 	}
-	idx.Metadata.ToolInfo.Arguments = args
 	var buf bytes.Buffer
 	if err := scipbuzz.Write(&buf, idx); err != nil {
 		fmt.Fprintf(stderr, "scip-buzz: %v\n", err)
 		return 1
 	}
 	if err := writeFile(*output, buf.Bytes()); err != nil {
-		fmt.Fprintf(stderr, "scip-buzz: %v\n", err)
+		fmt.Fprintf(stderr, "scip-buzz: write %s: %v\n", *output, err)
 		return 1
 	}
 	return 0

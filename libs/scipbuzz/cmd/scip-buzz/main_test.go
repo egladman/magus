@@ -43,7 +43,24 @@ func TestWritesTheIndexOfTheWorkingDirectory(t *testing.T) {
 	require.Len(t, idx.Documents, 1)
 	require.Equal(t, "main.buzz", idx.Documents[0].RelativePath)
 	require.Equal(t, "scip-buzz buzz . . `app/main.buzz`/run().", idx.Documents[0].Symbols[0].Symbol)
-	require.Equal(t, []string{"--output", "out/index.scip"}, idx.Metadata.ToolInfo.Arguments)
+	require.Empty(t, idx.Metadata.ToolInfo.Arguments, "arguments carry checkout paths")
+}
+
+// TestIndexBytesDoNotDependOnTheCheckoutPath runs the command as magus does, with
+// an absolute --workspace-root, from two checkouts of one tree.
+func TestIndexBytesDoNotDependOnTheCheckoutPath(t *testing.T) {
+	index := func(ws string) []byte {
+		project := filepath.Join(ws, "app")
+		require.NoError(t, os.MkdirAll(project, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(project, "main.buzz"), []byte("export fun run() > void {}\n"), 0o644))
+		t.Chdir(project)
+		var stdout, stderr bytes.Buffer
+		require.Equal(t, 0, run(context.Background(), []string{"--workspace-root", ws, "--output", "index.scip"}, &stdout, &stderr), stderr.String())
+		data, err := os.ReadFile(filepath.Join(project, "index.scip"))
+		require.NoError(t, err)
+		return data
+	}
+	require.Equal(t, index(t.TempDir()), index(filepath.Join(t.TempDir(), "another", "checkout")))
 }
 
 func TestDefaultsToIndexScipInTheWorkingDirectory(t *testing.T) {

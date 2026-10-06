@@ -8,9 +8,9 @@ package scipbuzz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 
@@ -25,48 +25,46 @@ const Version = "0.1.0"
 // Options configures Index.
 type Options struct {
 	// ProjectRoot is the directory whose .buzz files are indexed, and the root that
-	// Document.relative_path is relative to. Empty means the working directory.
+	// Document.relative_path is relative to. It is required.
 	ProjectRoot string
 	// WorkspaceRoot is the root symbol paths are relative to, so two projects that
 	// reference one file agree on its symbols. Empty means the nearest directory at
 	// or above ProjectRoot holding magus.yaml, else ProjectRoot. It must contain
 	// ProjectRoot.
 	WorkspaceRoot string
-	// Warnf, when set, receives a line for each file that does not parse and each
+	// Warn, when set, receives a line for each file that does not parse and each
 	// construct whose position could not be recovered exactly; Index leaves those
 	// out rather than emit a range that is wrong.
-	Warnf func(format string, args ...any)
+	Warn func(msg string)
 }
 
 // Index reads every .buzz file under the project root and returns its SCIP index.
 // Discovery skips dot-directories, testdata, node_modules and vendor, and any
 // subdirectory holding its own magusfile.buzz. A file that does not parse is left
-// out and reported through Options.Warnf; only an unreadable project fails the call.
-// The result is canonical: indexing an unchanged tree twice gives equal indexes.
+// out and reported through Options.Warn; only an unreadable project fails the call.
+//
+// The result is canonical and names no absolute path: indexing one tree twice, or
+// from two checkouts, gives equal bytes. Metadata.ProjectRoot is left empty for
+// that reason; documents are relative to the indexed directory.
 func Index(ctx context.Context, opts Options) (*scip.Index, error) {
-	project := opts.ProjectRoot
-	if project == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return nil, err
-		}
-		project = wd
+	if opts.ProjectRoot == "" {
+		return nil, errors.New("scipbuzz: no project root")
 	}
-	project, err := filepath.Abs(project)
+	project, err := filepath.Abs(opts.ProjectRoot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scipbuzz: project root: %w", err)
 	}
 	workspace := opts.WorkspaceRoot
 	if workspace == "" {
 		workspace = findWorkspaceRoot(project)
 	}
 	if workspace, err = filepath.Abs(workspace); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scipbuzz: workspace root: %w", err)
 	}
 	ix := &indexer{
 		project:   project,
 		workspace: workspace,
-		warnf:     opts.Warnf,
+		onWarn:    opts.Warn,
 		files:     map[string]*file{},
 		external:  map[string]*scip.SymbolInformation{},
 	}
@@ -75,7 +73,7 @@ func Index(ctx context.Context, opts Options) (*scip.Index, error) {
 	}
 	rels, err := discover(project)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scipbuzz: discover .buzz files: %w", err)
 	}
 
 	var docs []*file
@@ -90,7 +88,6 @@ func Index(ctx context.Context, opts Options) (*scip.Index, error) {
 	idx := &scip.Index{
 		Metadata: &scip.Metadata{
 			ToolInfo:             &scip.ToolInfo{Name: "scip-buzz", Version: Version},
-			ProjectRoot:          (&url.URL{Scheme: "file", Path: filepath.ToSlash(project)}).String(),
 			TextDocumentEncoding: scip.TextEncoding_UTF8,
 		},
 	}
@@ -119,16 +116,18 @@ func Index(ctx context.Context, opts Options) (*scip.Index, error) {
 func Write(w io.Writer, idx *scip.Index) error {
 	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(idx)
 	if err != nil {
-		return err
+		return fmt.Errorf("scipbuzz: encode index: %w", err)
 	}
-	_, err = w.Write(data)
-	return err
+	if _, err := w.Write(data); err != nil {
+		return fmt.Errorf("scipbuzz: write index: %w", err)
+	}
+	return nil
 }
 
 // indexer holds what one Index call has read.
 type indexer struct {
 	project, workspace string
-	warnf              func(format string, args ...any)
+	onWarn             func(msg string)
 	// files caches every file read, documents and import targets alike, by
 	// absolute path.
 	files map[string]*file
@@ -138,8 +137,8 @@ type indexer struct {
 }
 
 func (ix *indexer) warn(format string, args ...any) {
-	if ix.warnf != nil {
-		ix.warnf(format, args...)
+	if ix.onWarn != nil {
+		ix.onWarn(fmt.Sprintf(format, args...))
 	}
 }
 

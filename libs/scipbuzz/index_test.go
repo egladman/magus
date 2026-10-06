@@ -30,7 +30,7 @@ func indexDir(dir string) (*scip.Index, []string, error) {
 	idx, err := Index(context.Background(), Options{
 		ProjectRoot:   abs,
 		WorkspaceRoot: abs,
-		Warnf:         func(format string, args ...any) { warnings = append(warnings, fmt.Sprintf(format, args...)) },
+		Warn:          func(msg string) { warnings = append(warnings, msg) },
 	})
 	return idx, warnings, err
 }
@@ -236,7 +236,7 @@ func TestIndexMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "scip-buzz", idx.Metadata.ToolInfo.Name)
 	require.Equal(t, Version, idx.Metadata.ToolInfo.Version)
-	require.True(t, strings.HasPrefix(idx.Metadata.ProjectRoot, "file:///"))
+	require.Empty(t, idx.Metadata.ProjectRoot, "an absolute root would differ per checkout")
 	require.Len(t, idx.Documents, 1)
 	doc := idx.Documents[0]
 	require.Equal(t, "buzz", doc.Language)
@@ -257,4 +257,32 @@ func TestDocumentPathsAreProjectRelative(t *testing.T) {
 	require.Len(t, idx.Documents, 1)
 	require.Equal(t, "app.buzz", idx.Documents[0].RelativePath)
 	require.Equal(t, "scip-buzz buzz . . `libs/app/app.buzz`/run().", idx.Documents[0].Symbols[0].Symbol)
+}
+
+// TestIndexRequiresAProjectRoot keeps a caller that forgot the root from indexing
+// whatever directory the process happens to run in.
+func TestIndexRequiresAProjectRoot(t *testing.T) {
+	_, err := Index(context.Background(), Options{})
+	require.ErrorContains(t, err, "no project root")
+}
+
+// TestIndexBytesDoNotDependOnTheCheckoutPath indexes one tree from two checkouts.
+// The index is cached and published by content, so where the tree lives must not
+// reach its bytes.
+func TestIndexBytesDoNotDependOnTheCheckoutPath(t *testing.T) {
+	encode := func(ws string) []byte {
+		project := filepath.Join(ws, "libs", "app")
+		require.NoError(t, os.MkdirAll(project, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(ws, "magus.yaml"), nil, 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(ws, "shared.buzz"), []byte("export fun one() > int {\n    return 1;\n}\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(project, "app.buzz"), []byte("import \"shared\";\n\nexport fun run() > int {\n    return shared\\one();\n}\n"), 0o644))
+		idx, err := Index(context.Background(), Options{ProjectRoot: project})
+		require.NoError(t, err)
+		var buf bytes.Buffer
+		require.NoError(t, Write(&buf, idx))
+		return buf.Bytes()
+	}
+	first := encode(t.TempDir())
+	second := encode(filepath.Join(t.TempDir(), "another", "checkout"))
+	require.Equal(t, first, second)
 }
