@@ -15,9 +15,7 @@ export final LANGUAGES = ["go"];
 
 // SANCTIONED holds each departure kept on purpose, by the node the row names, with why. An
 // entry whose case no longer departs is a finding, so the list only shrinks.
-export final SANCTIONED = {
-    "file:libs/gopherbuzz/fiber_test.go": "its nolint names a std cycle it does not have (it imports buzz and vm); moving it to package buzz is a libs/gopherbuzz change",
-};
+export final SANCTIONED = {<str: str>};
 
 // THIS is where a finding sends a reader to sanction a departure.
 final THIS = "hack/lint/code-follows-mined-precedents.buzz";
