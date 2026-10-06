@@ -48,6 +48,9 @@ Signals:
 
 ### server stop options
 
+**--pools**
+: Stop per-process pool parents whose build differs from this binary (leftover magus mcp / runs), leaving a matching server alone
+
 **--socket** *string*
 : Server socket (default: config / MAGUS_SERVER_ADDRESS / server.sock)
 
@@ -93,6 +96,12 @@ magus server start --foreground
 
 ```sh
 magus server stop
+```
+
+*Stop leftover pool parents from an older build*
+
+```sh
+magus server stop --pools
 ```
 
 *Reload configuration without restarting*

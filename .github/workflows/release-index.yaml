@@ -44,6 +44,7 @@ jobs:
     permissions:
       contents: write        # push the branch the pull request is opened from
       pull-requests: write
+      packages: write        # graph-generate:cd publishes the knowledge graph to GHCR
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -100,5 +101,7 @@ jobs:
         env:
           MAGUS_SIGNING_KEY: ${{ secrets.MAGUS_SIGNING_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
         run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"

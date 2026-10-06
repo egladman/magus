@@ -77,6 +77,9 @@ var redirects = map[string]string{
 // Pinned: GOCACHE, GOENV, GOMODCACHE and GOPATH as `go env` reports them (skipped when
 // go is not on PATH), and mise's data, state and config directories, which its shims
 // on PATH need to find installed tools and trusted configs once HOME has moved.
+// mise's cache is not pinned, so MISE_OFFLINE=1 keeps a shim resolving a fuzzy pin
+// (node = "24") against installed versions instead of asking GitHub for the list
+// without the dropped token, which a shared runner's IP is often rate-limited out of.
 //
 // Set: MAGUS_BROKER=off and MAGUS_SERVER_ENABLED=false, so no test claims capacity
 // from or binds beside a broker or server the person running it has up (a test that
@@ -114,6 +117,7 @@ func Environ(root string, keep ...string) ([]string, error) {
 	for k, v := range miseDirs() {
 		vars[k] = v
 	}
+	vars["MISE_OFFLINE"] = "1"
 	vars["MAGUS_BROKER"] = "off"
 	vars["MAGUS_SERVER_ENABLED"] = "false"
 	vars["GIT_CONFIG_NOSYSTEM"] = "1"
