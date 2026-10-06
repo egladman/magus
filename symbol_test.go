@@ -1,11 +1,13 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -676,6 +678,42 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 
 	m.probeObservations(t.Context(), ps, map[string]map[string]bool{"p0": {"go:govulncheck": true}, "p1": {"go:govulncheck": true}})
 	assert.Equal(t, 2, forked["govulncheck"], "the database observation is never cached: it moves on a clock")
+}
+
+// An observed tool that is not installed keys UNPROBED without a warning: the index gap and
+// any target that runs it already say MGS3003. One that is installed and cannot answer
+// still warns, since nothing else would.
+func TestProbeObservationsWarnsOnlyForAnInstalledToolThatFails(t *testing.T) {
+	sp := spells.NewSpell("buzz",
+		spells.WithOps(map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-buzz"}}}),
+		spells.WithTools(map[string]spells.Tool{"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}}}),
+		// Answers as the real prober does: MGS3003 for a binary PATH lacks.
+		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
+			if _, err := exec.LookPath(cmd.Bin); err != nil {
+				return "", types.DiagnosticErrorf(types.ToolNotOnPath, "%q is not on PATH", cmd.Bin)
+			}
+			return "", errors.New("segmentation fault")
+		}),
+	)
+	binDir := t.TempDir()
+	t.Setenv("PATH", binDir)
+	root := t.TempDir()
+	p := &types.Project{Path: ".", Dir: root, ResolvedSpells: []*spells.Spell{sp}}
+	m := &Magus{ws: &types.Workspace{Root: root}}
+	driven := map[string]map[string]bool{".": {"buzz:scip-buzz": true}}
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	got := m.probeObservations(t.Context(), []*types.Project{p}, driven)
+	assert.Equal(t, "UNPROBED", got["."]["buzz:scip-buzz"])
+	assert.Empty(t, buf.String(), "a tool that is not installed")
+
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "scip-buzz"), []byte("\x7fELF binary"), 0o755))
+	m.probeObservations(t.Context(), []*types.Project{p}, driven)
+	assert.Contains(t, buf.String(), "observation probe failed", "an installed tool that cannot answer")
 }
 
 // TestDispatchDueSkipsARunAlreadyInFlight is the one occupancy rule the scheduler still

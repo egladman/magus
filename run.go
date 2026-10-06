@@ -1397,7 +1397,13 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if !hit {
 					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
 					if err != nil {
-						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
+						// A tool that is not installed is said where it matters: the target that
+						// runs it fails with MGS3003, and a missing indexer is an index gap.
+						level := slog.LevelWarn
+						if errors.Is(err, types.ToolNotOnPath) {
+							level = slog.LevelDebug
+						}
+						slog.Log(ctx, level, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),
 							slog.String("dir", p.Dir), slog.String("err", err.Error()))
 						probed = "UNPROBED"
