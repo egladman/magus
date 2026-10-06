@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
@@ -40,10 +39,6 @@ func configsNamingOwnBinary(ctx context.Context, root string, wired ...string) [
 	return out
 }
 
-// interpreterProbeTimeout bounds `<interpreter> version`. Far under the host's 10 s per
-// hook: a binary that cannot print its version in this long is the hang being diagnosed.
-const interpreterProbeTimeout = 3 * time.Second
-
 // interpreterSkew fails when the magus a hook would run as its interpreter is a different
 // build from this one, or cannot say which build it is.
 //
@@ -52,11 +47,13 @@ const interpreterProbeTimeout = 3 * time.Second
 // runs the call unjudged. A FAIL, because the wiring is not honored as written.
 //
 // Returns false when there is nothing to compare: this binary's own version is unknown.
-func interpreterSkew(ctx context.Context, name, bin, own string) (types.Check, bool) {
+func interpreterSkew(ctx context.Context, bin, own string) (types.Check, bool) {
 	if own == "" {
 		return types.Check{}, false
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, interpreterProbeTimeout)
+	// The hook's own budget, not a tighter one: an interpreter that answers within it runs
+	// every hook, so failing it sooner reports a hang that is only a loaded machine.
+	probeCtx, cancel := context.WithTimeout(ctx, agent.ProbeTimeout(ctx))
 	defer cancel()
 	out, err := exec.CommandContext(probeCtx, bin, "version").Output()
 	// `magus <version> (<commit>) built <date>`, the first line every release has printed.
@@ -67,7 +64,7 @@ func interpreterSkew(ctx context.Context, name, bin, own string) (types.Check, b
 			reason = err.Error()
 		}
 		return types.Check{
-			Name:    name,
+			Name:    guardBinaryCheck,
 			Status:  types.CheckFail,
 			Message: "the hook interpreter " + bin + " did not answer `version` (" + reason + "), so no guard hook it runs can render a verdict",
 			Details: []string{"rebuild: " + hint.Run.With("build", ".")},
@@ -77,7 +74,7 @@ func interpreterSkew(ctx context.Context, name, bin, own string) (types.Check, b
 		return types.Check{}, false
 	}
 	return types.Check{
-		Name:   name,
+		Name:   guardBinaryCheck,
 		Status: types.CheckFail,
 		Message: fmt.Sprintf("the hook interpreter is %s (%s) and this magus is %s, so hooks run a build other than the one checked here",
 			bin, fields[1], own),

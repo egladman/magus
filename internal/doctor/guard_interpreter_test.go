@@ -4,12 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/types"
 )
+
+// The interpreter probe waits as long as a hook would, the budget agent.ProbeTimeout names.
+// A fixed 3s of its own failed a stand-in shell script on a loaded machine, a hang that was
+// only the machine; and it ignored the one override tests use.
+func TestInterpreterSkewWaitsTheHookBudget(t *testing.T) {
+	slow := filepath.Join(t.TempDir(), "magus")
+	require.NoError(t, os.WriteFile(slow, []byte("#!/bin/sh\nsleep 1\necho 'magus v0.5.0 (abc1234) built 2026-01-01'\n"), 0o755))
+
+	_, skewed := interpreterSkew(t.Context(), slow, "v0.5.0")
+	assert.False(t, skewed, "an answer inside the hook budget is the same build")
+
+	got, skewed := interpreterSkew(agent.ContextWithProbeTimeout(t.Context(), 100*time.Millisecond), slow, "v0.5.0")
+	require.True(t, skewed, "past the budget the override sets")
+	assert.Contains(t, got.Message, "did not answer `version`")
+}
 
 // A magus on PATH does not cover a hook command that spells ./magus: the host runs the
 // string as written. This answered "hook would run <PATH magus>", which was untrue, until
