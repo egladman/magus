@@ -1,4 +1,7 @@
-  import "lib/util" as _;
+  import "lib/util";
+//            ^^^^ definition local 0
+//                 kind Module
+//                 display_name util
   
 //⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/main().
   fun main(args: [str]) > void {
@@ -20,18 +23,24 @@
 //                     ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
 //                                ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
 //                                      ^^^^ reference scip-buzz buzz . . `lib/util.buzz`/base.
-      final h = hidden;
-//          ^ definition local 3
-//            kind Constant
-//            display_name h
-//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
       final q = util\twice(1);
-//          ^ definition local 4
+//          ^ definition local 3
 //            kind Constant
 //            display_name q
 //            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
 //              ^^^^ reference local 0
 //                   ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+      final r = geo\shapes\twice(2);
+//          ^ definition local 4
+//            kind Constant
+//            display_name r
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//                         ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+      final h = hidden;
+//          ^ definition local 5
+//            kind Constant
+//            display_name h
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
   }
 //⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/main().
   

@@ -21,19 +21,23 @@ approximate convention.
 
 ## Workspace
 
-- `Options.ProjectRoot` (default: the working directory) is the directory indexed.
-  `Document.relative_path` is relative to it.
+- `Options.ProjectRoot` (required; the command passes the working directory) is
+  the directory indexed. `Document.relative_path` is relative to it.
 - `Options.WorkspaceRoot` (default: the nearest directory at or above the project
   holding `magus.yaml`, else the project) is what symbol paths are relative to, so
   two projects that reference one file produce the same symbol for it.
 - Discovery skips dot-directories, `testdata`, `node_modules`, `vendor`, and any
   subdirectory with its own `magusfile.buzz`, which is a project indexed on its own.
-- An import resolves to a workspace file found beside the importing file, then at
-  the project root, then at the workspace root, as `<path>.buzz`. gopherbuzz walks
-  the directories of the files that imported the importer instead, a chain a static
-  reader does not have.
+- An import resolves the way magus's gopherbuzz session resolves it: `<path>.buzz`
+  beside the importing file, then the search templates magus gives a magusfile
+  (`?.buzz`, `?/main.buzz`, `?/src/main.buzz`, `?/src/?.buzz`,
+  `magusfiles/?.buzz`) at the project root and then at the workspace root. Like
+  gopherbuzz, `.buzz` is always appended. gopherbuzz also walks the directories of
+  the files that imported the importer, a chain a static reader does not have.
+- The index names no absolute path, so one tree gives the same bytes from any
+  checkout: `Metadata.project_root` and `ToolInfo.arguments` are left empty.
 
-A file that does not parse is left out and reported through `Options.Warnf`, as is
+A file that does not parse is left out and reported through `Options.Warn`, as is
 any construct whose position cannot be recovered exactly. No range is guessed.
 
 ## Symbols
@@ -44,7 +48,7 @@ any construct whose position cannot be recovered exactly. No range is guessed.
 | top-level `final` or `var`                    | `` scip-buzz buzz . . `P`/name. ``       |
 | `object`, `protocol`, `enum`                  | `` scip-buzz buzz . . `P`/Name# ``       |
 | member of a module no workspace file provides | `scip-buzz buzz host . module/member().` |
-| locals, parameters, import bindings           | `local N`                                |
+| locals, parameters, type parameters, imports  | `local N`                                |
 
 `P` is the file's path from the workspace root. The package name and version are
 empty (`.`), so a symbol is the same string in every checkout. An `extern fun` is a
@@ -64,11 +68,22 @@ is a type (`#`) and anything else a function (`().`).
   `ns.member` through an import are resolved.
 - Parameters of top-level functions are `local` symbols, so a labeled argument
   `f(a, b: 1)` is not an occurrence of the parameter `b`.
-- A flat `as _` import of a host module binds nothing: its member names are unknown
-  without the module's declarations.
-- Not recorded as type references: generic arguments (`Foo::<Rect>`, `f::<Rect>()`),
-  an enum's backing type, fields of an anonymous `obj{...}` type, and qualifiers
-  deeper than one level (`a\b\Type`).
+- A bare identifier that is also a label gets no occurrence: an unlabeled argument
+  after the first (`f(a, b)` is `f(a, b: b)`) and a punned field (`Rect{ w }`,
+  `.{ w }`). A rename rewriting it would rename the label too, so a rename of `b`
+  or `w` leaves these uses behind.
+- A flat import (no alias, or `as _`) of a workspace file binds its exported names
+  unqualified, its basename, and its declared `namespace a\b` path. Of a host
+  module it binds only the basename: the member names are unknown without the
+  module's declarations. A namespace reached relative to the importer's own
+  (`here\x` from `namespace a` for `namespace a\here`) is not bound; gopherbuzz's
+  checker rejects it too.
+- A module the host registers natively resolves before any file in gopherbuzz. The
+  indexer cannot see that registry, so a workspace file named like one (`std.buzz`
+  beside the importer) is taken for the module.
+- Not recorded as type references: an enum's backing type, fields of an anonymous
+  `obj{...}` type, type arguments anywhere but an annotation or a call
+  (`Foo::<Rect>{}`), and qualifiers deeper than one level (`a\b\Type`).
 - `test "..." {}` blocks are walked for references but get no symbol.
 - Enclosing ranges start at the declaration's `export` or keyword, not at its doc
   comment.
@@ -84,5 +99,5 @@ comments, so every golden stays Buzz.
 
 Beside the goldens, the suite checks that the bytes under every occurrence spell
 the symbol's name (the check magus's rename runs before it edits a file), that the
-corpus is clean under the rules `scip lint` applies, and that indexing twice gives
-identical bytes.
+corpus is clean under the rules `scip lint` applies, and that indexing twice, or
+from two checkout paths, gives identical bytes.

@@ -1,0 +1,85 @@
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/Rect#
+  object Rect {
+//       ^^^^ definition scip-buzz buzz . . `main.buzz`/Rect#
+//            kind Object
+//            display_name Rect
+//            signature_documentation
+//            > object Rect
+      w: int,
+      h: int,
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/Rect#
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/area().
+  fun area(w: int, h: int) > int {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/area().
+//         kind Function
+//         display_name area
+//         signature_documentation
+//         > fun area(w: int, h: int) > int
+//         ^ definition local 0
+//           kind Parameter
+//           display_name w
+//           enclosing_symbol scip-buzz buzz . . `main.buzz`/area().
+//                 ^ definition local 1
+//                   kind Parameter
+//                   display_name h
+//                   enclosing_symbol scip-buzz buzz . . `main.buzz`/area().
+      return w * h;
+//           ^ reference local 0
+//               ^ reference local 1
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/area().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/main().
+  fun main(args: [str]) > void {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/main().
+//         kind Function
+//         display_name main
+//         signature_documentation
+//         > fun main(args: [str]) > void
+//         ^^^^ definition local 2
+//              kind Parameter
+//              display_name args
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final w = 2;
+//          ^ definition local 3
+//            kind Constant
+//            display_name w
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final h = 3;
+//          ^ definition local 4
+//            kind Constant
+//            display_name h
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final r = Rect{ w, h = h };
+//          ^ definition local 5
+//            kind Constant
+//            display_name r
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//              ^^^^ reference scip-buzz buzz . . `main.buzz`/Rect#
+//                           ^ reference local 4
+      final p = .{ w, h = h };
+//          ^ definition local 6
+//            kind Constant
+//            display_name p
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//                        ^ reference local 4
+      final a = area(w, h);
+//          ^ definition local 7
+//            kind Constant
+//            display_name a
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//              ^^^^ reference scip-buzz buzz . . `main.buzz`/area().
+//                   ^ reference local 3
+      final b = area(w, h: h);
+//          ^ definition local 8
+//            kind Constant
+//            display_name b
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//              ^^^^ reference scip-buzz buzz . . `main.buzz`/area().
+//                   ^ reference local 3
+//                         ^ reference local 4
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/main().
+  

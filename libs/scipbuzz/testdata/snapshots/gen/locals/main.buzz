@@ -52,6 +52,9 @@
 //        ^^^ reference local 3
 //              ^^^ reference local 3
 //                    ^ reference local 6
+          sum += i;
+//        ^^^ reference local 3
+//               ^ reference local 6
       }
       if (sum < 0) {
 //        ^^^ reference local 3

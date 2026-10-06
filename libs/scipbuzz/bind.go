@@ -8,10 +8,13 @@ import (
 
 // binding is what a name in scope refers to.
 type binding struct {
+	// symbol is empty for a namespace segment, which has no declaration to name.
 	symbol string
 	decl   *decl   // a top-level declaration of a workspace file
 	module *module // the namespace an import binds
-	isType bool    // the name may appear in a type annotation
+	// children are the next segments of a `namespace a\b` path an import binds.
+	children map[string]*binding
+	isType   bool // the name may appear in a type annotation
 }
 
 type occKey struct {
@@ -63,19 +66,22 @@ func (w *walker) warn(format string, args ...any) {
 	w.ix.warn("%s: "+format, append([]any{w.f.rel}, args...)...)
 }
 
-func (w *walker) occurAt(r scip.Range, symbol string, roles scip.SymbolRole) {
+// occurAt records an occurrence over r and returns it, or nil when the same one
+// is already recorded.
+func (w *walker) occurAt(r scip.Range, symbol string, roles scip.SymbolRole) *scip.Occurrence {
 	key := occKey{symbol: symbol, rng: r, roles: int32(roles)}
 	if w.seen[key] {
-		return
+		return nil
 	}
 	w.seen[key] = true
 	occ := &scip.Occurrence{Symbol: symbol, SymbolRoles: int32(roles)}
 	occ.SetSourceRange(r)
 	w.occs = append(w.occs, occ)
+	return occ
 }
 
 // occur records an occurrence over the identifier at i of the current stream.
-func (w *walker) occur(i int, symbol string, roles scip.SymbolRole) bool {
+func (w *walker) occur(i int, symbol string, roles scip.SymbolRole) {
 	r, ok := w.s.identRange(i)
 	if !ok {
 		if i >= 0 && i < len(w.s.toks) {
@@ -83,18 +89,20 @@ func (w *walker) occur(i int, symbol string, roles scip.SymbolRole) bool {
 		} else {
 			w.warn("cannot place an occurrence of %s", symbol)
 		}
-		return false
+		return
 	}
 	w.occurAt(r, symbol, roles)
-	return true
 }
 
-// reference records a use of b at the identifier at i.
+// reference records a use of b at the identifier at i. A namespace segment has
+// no symbol and records nothing.
 func (w *walker) reference(i int, b *binding, roles scip.SymbolRole) {
 	if b.decl != nil {
 		w.ix.noteDecl(b.decl)
 	}
-	w.occur(i, b.symbol, roles)
+	if b.symbol != "" {
+		w.occur(i, b.symbol, roles)
+	}
 }
 
 // newLocal mints the next local symbol of this document.
@@ -107,13 +115,14 @@ func (w *walker) newLocal(name string, kind scip.SymbolInformation_Kind) string 
 }
 
 // bindLocal declares a local named by the identifier at i and binds it in the
-// current scope.
+// current scope. It binds the name even when i does not place it, so a use still
+// resolves to the local rather than to an outer declaration of the same name.
 func (w *walker) bindLocal(i int, name string, kind scip.SymbolInformation_Kind) *binding {
 	if name == "" || name == "_" {
 		return nil
 	}
 	b := &binding{symbol: w.newLocal(name, kind)}
-	if i >= 0 && w.s.kind(i) == token.Ident && w.s.toks[i].Val == name {
+	if i >= 0 && w.s.isIdent(i, name) {
 		w.occur(i, b.symbol, scip.SymbolRole_Definition)
 	} else {
 		w.warn("cannot place the declaration of local %s", name)
@@ -122,9 +131,23 @@ func (w *walker) bindLocal(i int, name string, kind scip.SymbolInformation_Kind)
 	return b
 }
 
+// bindTypeParams binds the `::<T, U>` names of a generic function or object in
+// the current scope, at the identifiers idx when they spell them.
+func (w *walker) bindTypeParams(idx []int, names []string) {
+	for k, name := range names {
+		at := -1
+		if k < len(idx) {
+			at = idx[k]
+		}
+		if b := w.bindLocal(at, name, scip.SymbolInformation_TypeParameter); b != nil {
+			b.isType = true
+		}
+	}
+}
+
 // at returns the current stream's token index for pos, warning when there is none.
 func (w *walker) at(pos ast.Pos, what string) (int, bool) {
-	i, ok := w.s.index(pos)
+	i, ok := w.s.at[pos]
 	if !ok {
 		w.warn("%d:%d: cannot place %s", pos.Line, pos.Col, what)
 	}
@@ -165,6 +188,11 @@ func (w *walker) standaloneExports() {
 	}
 }
 
+// importStmt binds what an import makes visible, the way gopherbuzz's session
+// does. A selective import binds the names it lists. An aliased one binds the
+// alias. A flat one, with no alias or `as _`, binds the file's exported names
+// unqualified, the path's basename, and the path of a `namespace a\b` the file
+// declares.
 func (w *walker) importStmt(n *ast.ImportStmt) {
 	m := w.ix.resolve(w.f, n.Path)
 	i, placed := w.at(n.Pos, "import")
@@ -187,8 +215,7 @@ func (w *walker) importStmt(n *ast.ImportStmt) {
 			aliasTok = j + 2
 		}
 	}
-	switch {
-	case len(n.Only) > 0:
+	if len(n.Only) > 0 {
 		for k, name := range n.Only {
 			b := w.memberBinding(m, name)
 			if b == nil {
@@ -199,29 +226,64 @@ func (w *walker) importStmt(n *ast.ImportStmt) {
 			}
 			w.define(name, b)
 		}
+		return
+	}
+	flat := n.Alias == "" || n.Alias == "_"
+	if flat && m.file != nil {
+		for _, d := range m.file.order {
+			if d.exported {
+				w.define(d.name, &binding{symbol: d.symbol, decl: d, isType: d.kind.isType()})
+			}
+		}
+	}
+	name := n.Alias
+	if flat {
+		name = bindingName(n.Path)
+	}
+	b := &binding{symbol: w.newLocal(name, scip.SymbolInformation_Module), module: m}
+	switch {
 	case n.Alias == "_":
-		if m.file != nil {
-			for _, d := range m.file.order {
-				if d.exported {
-					w.define(d.name, &binding{symbol: d.symbol, decl: d, isType: d.kind.isType()})
-				}
-			}
+	case aliasTok >= 0:
+		w.occur(aliasTok, b.symbol, scip.SymbolRole_Definition)
+	case pathTok >= 0:
+		if r, ok := w.s.segmentRange(pathTok, name); ok {
+			w.occurAt(r, b.symbol, scip.SymbolRole_Definition)
 		}
-	default:
-		name := n.Alias
-		if name == "" {
-			name = bindingName(n.Path)
+	}
+	w.define(name, b)
+	if flat && m.file != nil {
+		w.bindNamespace(m.file.namespace(), m)
+	}
+}
+
+// bindNamespace binds the segments of a `namespace a\b` path to m, nesting under
+// a namespace another import already started. Like gopherbuzz it never replaces
+// any other binding of the first segment.
+func (w *walker) bindNamespace(segments []string, m *module) {
+	if len(segments) == 0 {
+		return
+	}
+	scope := w.scopes[len(w.scopes)-1]
+	head, ok := scope[segments[0]]
+	if !ok {
+		head = &binding{}
+		scope[segments[0]] = head
+	} else if head.module != nil || head.symbol != "" {
+		return
+	}
+	for _, seg := range segments[1:] {
+		if head.children == nil {
+			head.children = map[string]*binding{}
 		}
-		b := &binding{symbol: w.newLocal(name, scip.SymbolInformation_Module), module: m}
-		switch {
-		case aliasTok >= 0:
-			w.occur(aliasTok, b.symbol, scip.SymbolRole_Definition)
-		case pathTok >= 0:
-			if r, ok := w.s.segmentRange(pathTok, name); ok {
-				w.occurAt(r, b.symbol, scip.SymbolRole_Definition)
-			}
+		next, ok := head.children[seg]
+		if !ok {
+			next = &binding{}
+			head.children[seg] = next
 		}
-		w.define(name, b)
+		head = next
+	}
+	if head.module == nil {
+		head.module = m
 	}
 }
 
@@ -251,8 +313,8 @@ func (w *walker) member(m *module, i int) {
 	}
 }
 
-// types records the type names of an annotation.
-func (w *walker) types(refs []typeRef) {
+// recordTypes records the type names an annotation's typeRefs point at.
+func (w *walker) recordTypes(refs []typeRef) {
 	for _, r := range refs {
 		if r.ns < 0 {
 			if b := w.lookup(w.s.toks[r.name].Val); b != nil && b.isType {
@@ -273,7 +335,7 @@ func (w *walker) types(refs []typeRef) {
 func (w *walker) typeAt(i int) {
 	var refs []typeRef
 	w.s.skipType(i, &refs)
-	w.types(refs)
+	w.recordTypes(refs)
 }
 
 // topLevel walks a statement of the file's top level, where declarations bind
@@ -294,18 +356,25 @@ func (w *walker) topLevel(st ast.Node) {
 	}
 }
 
+// signature places the signature of the named function or method n, warning and
+// returning one that places nothing when it cannot.
+func (w *walker) signature(n *ast.FunDecl, what string) funcSig {
+	i, ok := w.at(n.Pos, what)
+	var h funcSig
+	if ok {
+		h, ok = w.s.signatureAt(i)
+	}
+	if !ok || h.name < 0 || len(h.params) != len(n.Params) {
+		w.warn("%d:%d: cannot place the signature of %s", n.Pos.Line, n.Pos.Col, what)
+		return funcSig{name: -1}
+	}
+	return h
+}
+
 // function walks a named function. d is its top-level declaration, or nil for a
 // function declared in a block, which binds a local.
 func (w *walker) function(n *ast.FunDecl, d *decl) {
-	i, ok := w.at(n.Pos, "function "+n.Name)
-	var h funHeader
-	if ok {
-		h, ok = w.s.funHeader(i, true)
-	}
-	if !ok || len(h.params) != len(n.Params) {
-		w.warn("%d:%d: cannot place the signature of %s", n.Pos.Line, n.Pos.Col, n.Name)
-		h = funHeader{name: -1}
-	}
+	h := w.signature(n, "function "+n.Name)
 	owner := w.owner
 	if d != nil {
 		role := scip.SymbolRole_Definition
@@ -317,7 +386,7 @@ func (w *walker) function(n *ast.FunDecl, d *decl) {
 	} else {
 		w.bindLocal(h.name, n.Name, scip.SymbolInformation_Function)
 	}
-	w.callable(h, n.Params, n.ParamDefaults, n.Body)
+	w.callable(h, n.TypeParams, n.Params, n.ParamDefaults, n.Body)
 	w.owner = owner
 }
 
@@ -328,25 +397,23 @@ func (w *walker) definition(d *decl, role scip.SymbolRole) {
 	if !ok {
 		return
 	}
-	key := occKey{symbol: d.symbol, rng: r, roles: int32(role)}
-	if w.seen[key] {
+	occ := w.occurAt(r, d.symbol, role)
+	if occ == nil || d.end < 0 {
 		return
 	}
-	w.seen[key] = true
-	occ := &scip.Occurrence{Symbol: d.symbol, SymbolRoles: int32(role)}
-	occ.SetSourceRange(r)
-	if d.end >= 0 {
-		if er, ok := w.f.toks.enclosing(d.start, d.end); ok {
-			occ.SetEnclosingSourceRange(er)
-		}
+	toks := w.f.toks.toks
+	if d.start < 0 || d.end < d.start || d.end >= len(toks) || toks[d.start].off < 0 || toks[d.end].off < 0 {
+		return
 	}
-	w.occs = append(w.occs, occ)
+	occ.SetEnclosingSourceRange(w.f.src.span(toks[d.start].off, toks[d.end].off+1))
 }
 
-// callable walks a function's annotations and parameter defaults in the scope
-// around it, then its parameters and body in a scope of their own.
-func (w *walker) callable(h funHeader, params []string, defaults []ast.Node, body *ast.BlockStmt) {
-	w.types(h.refs)
+// callable walks a function's type parameters and annotations, then its parameter
+// defaults, then its parameters and body in a scope of their own.
+func (w *walker) callable(h funcSig, typeParams, params []string, defaults []ast.Node, body *ast.BlockStmt) {
+	w.push()
+	w.bindTypeParams(h.typeParams, typeParams)
+	w.recordTypes(h.refs)
 	for _, def := range defaults {
 		w.visit(def)
 	}
@@ -362,6 +429,7 @@ func (w *walker) callable(h funHeader, params []string, defaults []ast.Node, bod
 		w.visit(body)
 	}
 	w.pop()
+	w.pop()
 }
 
 // declStmt walks `final|var name[: T] = value`. d is its top-level declaration,
@@ -373,7 +441,7 @@ func (w *walker) declStmt(n *ast.DeclStmt, d *decl) {
 	if ok {
 		var refs []typeRef
 		name, refs = w.s.declName(i)
-		w.types(refs)
+		w.recordTypes(refs)
 	}
 	if d != nil {
 		w.definition(d, scip.SymbolRole_Definition)
@@ -391,26 +459,28 @@ func (w *walker) declStmt(n *ast.DeclStmt, d *decl) {
 
 func (w *walker) objectDecl(n *ast.ObjectDecl, d *decl) {
 	i, ok := w.at(n.Pos, "object "+n.Name)
-	var name, brace int
-	var conforms []int
+	h := objHeader{name: -1}
 	if ok {
-		name, conforms, brace, ok = w.s.objectHeader(i)
+		h, ok = w.s.objectHeader(i)
 	}
 	if !ok {
 		w.warn("%d:%d: cannot place the header of %s", n.Pos.Line, n.Pos.Col, n.Name)
+		h = objHeader{name: -1}
 	}
 	owner := w.owner
 	if d != nil {
 		w.definition(d, scip.SymbolRole_Definition)
 		w.owner = d.symbol
-	} else if ok {
-		w.bindLocal(name, n.Name, scip.SymbolInformation_Object)
+	} else {
+		w.bindLocal(h.name, n.Name, scip.SymbolInformation_Object)
 	}
+	for _, c := range h.conforms {
+		w.recordTypes([]typeRef{{ns: -1, name: c}})
+	}
+	w.push()
+	w.bindTypeParams(h.typeParams, n.TypeParams)
 	if ok {
-		for _, c := range conforms {
-			w.types([]typeRef{{ns: -1, name: c}})
-		}
-		w.types(w.s.fieldTypes(brace))
+		w.recordTypes(w.s.fieldTypes(h.brace))
 	}
 	for _, f := range n.Fields {
 		w.visit(f.Default)
@@ -421,31 +491,28 @@ func (w *walker) objectDecl(n *ast.ObjectDecl, d *decl) {
 	for _, m := range n.Methods {
 		w.method(m)
 	}
+	w.pop()
 	w.owner = owner
 }
 
 // method walks an object's method. Members are not bound in phase 1: the method's
 // own name gets no symbol, only its signature and body are walked.
 func (w *walker) method(n *ast.FunDecl) {
-	i, ok := w.at(n.Pos, "method "+n.Name)
-	var h funHeader
-	if ok {
-		h, ok = w.s.funHeader(i, true)
-	}
-	if !ok || len(h.params) != len(n.Params) {
-		w.warn("%d:%d: cannot place the signature of method %s", n.Pos.Line, n.Pos.Col, n.Name)
-		h = funHeader{name: -1}
-	}
-	w.callable(h, n.Params, n.ParamDefaults, n.Body)
+	h := w.signature(n, "method "+n.Name)
+	w.callable(h, n.TypeParams, n.Params, n.ParamDefaults, n.Body)
 }
 
 func (w *walker) enumDecl(n *ast.EnumDecl, d *decl) {
 	if d != nil {
 		w.definition(d, scip.SymbolRole_Definition)
-	} else if i, ok := w.at(n.Pos, "enum "+n.Name); ok {
-		if name, _, ok := w.s.enumHeader(i); ok {
-			w.bindLocal(name, n.Name, scip.SymbolInformation_Enum)
+	} else {
+		name := -1
+		if i, ok := w.at(n.Pos, "enum "+n.Name); ok {
+			if at, _, ok := w.s.enumHeader(i); ok {
+				name = at
+			}
 		}
+		w.bindLocal(name, n.Name, scip.SymbolInformation_Enum)
 	}
 	for _, v := range n.Values {
 		w.visit(v)
@@ -466,7 +533,10 @@ func (w *walker) block(b *ast.BlockStmt) {
 // visit walks any statement or expression below the top level.
 func (w *walker) visit(n ast.Node) {
 	switch n := n.(type) {
-	case nil:
+	case nil, *ast.BreakStmt, *ast.ContinueStmt, *ast.ImportStmt, *ast.NamespaceStmt,
+		*ast.StringLit, *ast.IntLit, *ast.FloatLit, *ast.BoolLit, *ast.NullLit, *ast.PatLit,
+		*ast.EnumCaseExpr:
+		// Nothing in these names a binding: a case's enum comes from the checker.
 	case *ast.BlockStmt:
 		w.block(n)
 	case *ast.FunDecl:
@@ -480,12 +550,7 @@ func (w *walker) visit(n ast.Node) {
 	case *ast.TestDecl:
 		w.block(n.Body)
 	case *ast.AssignStmt:
-		if id, ok := n.Target.(*ast.IdentExpr); ok {
-			w.ident(id, scip.SymbolRole_WriteAccess)
-		} else {
-			w.visit(n.Target)
-		}
-		w.visit(n.Value)
+		w.assign(n)
 	case *ast.ReturnStmt:
 		w.visit(n.Value)
 	case *ast.ExprStmt:
@@ -527,9 +592,7 @@ func (w *walker) visit(n ast.Node) {
 		w.memberExpr(n)
 	case *ast.ObjectLit:
 		w.objectLit(n)
-		for _, v := range n.Values {
-			w.visit(v)
-		}
+		w.fieldValues(n.Values)
 	case *ast.InterpExpr:
 		w.interp(n)
 	case *ast.FunExpr:
@@ -562,9 +625,7 @@ func (w *walker) visit(n ast.Node) {
 		for _, k := range n.Keys {
 			w.visit(k)
 		}
-		for _, v := range n.Values {
-			w.visit(v)
-		}
+		w.fieldValues(n.Values)
 	case *ast.MatchExpr:
 		w.visit(n.Subject)
 		for _, br := range n.Branches {
@@ -581,10 +642,7 @@ func (w *walker) visit(n ast.Node) {
 	case *ast.TypeOfExpr:
 		w.visit(n.Operand)
 	case *ast.CallExpr:
-		w.visit(n.Callee)
-		for _, a := range n.Args {
-			w.visit(a)
-		}
+		w.call(n)
 	case *ast.IndexExpr:
 		w.visit(n.Object)
 		w.visit(n.Index)
@@ -612,7 +670,91 @@ func (w *walker) visit(n ast.Node) {
 		w.visit(n.Fiber)
 	case *ast.ResolveExpr:
 		w.visit(n.Fiber)
+	default:
+		pos := ast.NodePos(n)
+		w.warn("%d:%d: cannot walk a %T", pos.Line, pos.Col, n)
 	}
+}
+
+// assign walks `target = value`. The parser desugars `x op= v` to `x = x op v`
+// with the one target node on both sides, which is one use of x, a write.
+func (w *walker) assign(n *ast.AssignStmt) {
+	if id, ok := n.Target.(*ast.IdentExpr); ok {
+		w.ident(id, scip.SymbolRole_WriteAccess)
+	} else {
+		w.visit(n.Target)
+	}
+	if bin, ok := n.Value.(*ast.BinaryExpr); ok && bin.Left == n.Target {
+		w.visit(bin.Right)
+		return
+	}
+	w.visit(n.Value)
+}
+
+// call walks a call. An unlabeled bare identifier after the first argument is an
+// implicit label as well as a value (`f(a, b)` is `f(a, b: b)`), so it gets no
+// occurrence: a rename rewriting it would rename the label too.
+func (w *walker) call(n *ast.CallExpr) {
+	w.visit(n.Callee)
+	if n.TypeArg != "" {
+		w.callTypeArgs(n)
+	}
+	for k, a := range n.Args {
+		if _, bare := a.(*ast.IdentExpr); bare && k > 0 && (k >= len(n.ArgNames) || n.ArgNames[k] == "") {
+			continue
+		}
+		w.visit(a)
+	}
+}
+
+// callTypeArgs records the type names of `f::<T>(...)` and `ns\f::<T>(...)`.
+func (w *walker) callTypeArgs(n *ast.CallExpr) {
+	var i int
+	switch c := n.Callee.(type) {
+	case *ast.IdentExpr:
+		at, ok := w.at(c.Pos, c.Name)
+		if !ok {
+			return
+		}
+		i = at
+	case *ast.MemberExpr:
+		at, ok := w.at(c.Pos, "member "+c.Name)
+		if !ok {
+			return
+		}
+		i = at + 1
+	default:
+		return
+	}
+	if w.s.kind(i+1) != token.Colon || w.s.kind(i+2) != token.Colon || w.s.kind(i+3) != token.Lt {
+		return
+	}
+	var refs []typeRef
+	w.s.typeArgs(i+3, &refs)
+	w.recordTypes(refs)
+}
+
+// fieldValues walks the values of an object literal or a `.{...}` anonymous
+// object. A punned field, `Rect{ w }` for `Rect{ w = w }`, is a label as well as
+// a value, so it gets no occurrence: a rename rewriting it would rename the field.
+func (w *walker) fieldValues(values []ast.Node) {
+	for _, v := range values {
+		if id, ok := v.(*ast.IdentExpr); ok && w.punned(id) {
+			continue
+		}
+		w.visit(v)
+	}
+}
+
+// punned reports whether id stands alone between the separators of a field list,
+// where the parser reads it as both the field's name and its value.
+func (w *walker) punned(id *ast.IdentExpr) bool {
+	i, ok := w.s.at[id.Pos]
+	if !ok {
+		return false
+	}
+	before, after := w.s.kind(i-1), w.s.kind(i+1)
+	return (before == token.LBrace || before == token.Comma) && (after == token.Comma || after == token.RBrace)
 }
 
 func (w *walker) ident(n *ast.IdentExpr, roles scip.SymbolRole) {
@@ -631,14 +773,24 @@ func (w *walker) ident(n *ast.IdentExpr, roles scip.SymbolRole) {
 	w.reference(i, b, roles)
 }
 
-// memberExpr records ns\member and ns.member where ns names an import. Members of
-// other values need their receiver's type and are left for a later phase.
-func (w *walker) memberExpr(n *ast.MemberExpr) {
-	obj, ok := n.Object.(*ast.IdentExpr)
-	if !ok {
-		return
+// qualifier returns the binding an `a` or `a\b` qualifier names.
+func (w *walker) qualifier(n ast.Node) *binding {
+	switch n := n.(type) {
+	case *ast.IdentExpr:
+		return w.lookup(n.Name)
+	case *ast.MemberExpr:
+		if q := w.qualifier(n.Object); q != nil {
+			return q.children[n.Name]
+		}
 	}
-	b := w.lookup(obj.Name)
+	return nil
+}
+
+// memberExpr records ns\member and ns.member where ns names an import or a path
+// of a namespace one binds. Members of other values need their receiver's type and
+// are left for a later phase.
+func (w *walker) memberExpr(n *ast.MemberExpr) {
+	b := w.qualifier(n.Object)
 	if b == nil || b.module == nil {
 		return
 	}
@@ -711,15 +863,15 @@ func (w *walker) interp(n *ast.InterpExpr) {
 
 func (w *walker) funExpr(n *ast.FunExpr) {
 	i, ok := w.at(n.Pos, "function expression")
-	var h funHeader
+	var h funcSig
 	if ok {
-		h, ok = w.s.funHeader(i, false)
+		h, ok = w.s.signatureAt(i)
 	}
-	if !ok || len(h.params) != len(n.Params) {
+	if !ok || h.name >= 0 || len(h.params) != len(n.Params) {
 		w.warn("%d:%d: cannot place the signature of a function expression", n.Pos.Line, n.Pos.Col)
-		h = funHeader{name: -1}
+		h = funcSig{name: -1}
 	}
-	w.callable(h, n.Params, n.ParamDefaults, n.Body)
+	w.callable(h, n.TypeParams, n.Params, n.ParamDefaults, n.Body)
 }
 
 // asType records the type of `x as T`. Inside `if (x as name: T)` the token after
@@ -750,7 +902,7 @@ func (w *walker) mapTypes(n *ast.MapExpr) {
 	if ok && w.s.kind(j) == token.Colon {
 		w.s.skipType(j+1, &refs)
 	}
-	w.types(refs)
+	w.recordTypes(refs)
 }
 
 func (w *walker) ifStmt(n *ast.IfStmt) {
@@ -809,7 +961,7 @@ func (w *walker) forEach(n *ast.ForEachStmt) {
 				w.s.skipType(j+3, &refs)
 			}
 		}
-		w.types(refs)
+		w.recordTypes(refs)
 	}
 	if n.KeyName != "" {
 		w.bindLocal(first, n.KeyName, scip.SymbolInformation_Variable)

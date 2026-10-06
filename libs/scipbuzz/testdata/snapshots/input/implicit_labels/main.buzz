@@ -1,0 +1,17 @@
+object Rect {
+    w: int,
+    h: int,
+}
+
+fun area(w: int, h: int) > int {
+    return w * h;
+}
+
+fun main(args: [str]) > void {
+    final w = 2;
+    final h = 3;
+    final r = Rect{ w, h = h };
+    final p = .{ w, h = h };
+    final a = area(w, h);
+    final b = area(w, h: h);
+}

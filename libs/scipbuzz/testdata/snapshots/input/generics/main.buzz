@@ -1,0 +1,20 @@
+object T {
+    v: int,
+}
+
+object Box::<T> {
+    value: T,
+
+    fun get() > T {
+        return this.value;
+    }
+}
+
+fun first::<T>(items: [T]) > T {
+    return items[0];
+}
+
+fun wrap(t: T, apply: fun::<T>(x: T) > T) > Box::<T> {
+    final picked = first::<T>([t]);
+    return Box{ value = picked };
+}

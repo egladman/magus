@@ -1,6 +1,7 @@
 package scipbuzz
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -91,11 +92,6 @@ func newStream(src *source, toks []token.Token, place func(line, col int) int, d
 	return s
 }
 
-func (s *stream) index(pos ast.Pos) (int, bool) {
-	i, ok := s.at[pos]
-	return i, ok
-}
-
 func (s *stream) kind(i int) token.Kind {
 	if i < 0 || i >= len(s.toks) {
 		return token.EOF
@@ -150,14 +146,6 @@ func (s *stream) segmentRange(i int, segment string) (scip.Range, bool) {
 		return scip.Range{}, false
 	}
 	return s.src.span(start+at, end), true
-}
-
-// enclosing returns the range from the token at from through the token at to.
-func (s *stream) enclosing(from, to int) (scip.Range, bool) {
-	if from < 0 || to < from || to >= len(s.toks) || s.toks[from].off < 0 || s.toks[to].off < 0 {
-		return scip.Range{}, false
-	}
-	return s.src.span(s.toks[from].off, s.toks[to].off+1), true
 }
 
 // sub returns the streams of the interpolations in the string token at i,
@@ -235,7 +223,7 @@ func interpStarts(text string, off int) []int {
 			return starts
 		case !raw && c == '\\':
 			p++
-			if p+3 <= len(text) && allDigits(text[p:p+3]) {
+			if p+3 <= len(text) && strings.Trim(text[p:p+3], "0123456789") == "" {
 				p += 3
 				continue
 			}
@@ -251,15 +239,6 @@ func interpStarts(text string, off int) []int {
 		}
 	}
 	return starts
-}
-
-func allDigits(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] < '0' || s[i] > '9' {
-			return false
-		}
-	}
-	return true
 }
 
 // interpEnd returns the offset just past the `}` closing the interpolation whose
@@ -336,9 +315,9 @@ func (s *stream) skipType(i int, refs *[]typeRef) (int, bool) {
 			*refs = append(*refs, typeRef{ns: first, name: last})
 		}
 		if s.kind(i) == token.Colon && s.kind(i+1) == token.Colon && s.kind(i+2) == token.Lt {
-			i, ok = s.skipAngles(i + 2)
+			i, ok = s.typeArgs(i+2, refs)
 		} else if s.kind(i) == token.Lt {
-			i, ok = s.skipAngles(i)
+			i, ok = s.typeArgs(i, refs)
 		}
 		if s.kind(i) == token.Question {
 			i++
@@ -364,10 +343,15 @@ func (s *stream) skipType(i int, refs *[]typeRef) (int, bool) {
 		}
 	case token.Fun:
 		i++
+		// A generic function type's own `::<T>` names stand for its parameters, so
+		// its type names are kept apart and those are left out.
+		var params []int
+		own := refs
 		if s.kind(i) == token.Colon && s.kind(i+1) == token.Colon && s.kind(i+2) == token.Lt {
-			if i, ok = s.skipAngles(i + 2); !ok {
+			if params, i, ok = s.typeParams(i + 2); !ok {
 				return i, false
 			}
+			own = new([]typeRef)
 		}
 		if s.kind(i) != token.LParen {
 			return i, false
@@ -377,7 +361,7 @@ func (s *stream) skipType(i int, refs *[]typeRef) (int, bool) {
 			if s.kind(i) == token.Ident && s.kind(i+1) == token.Colon {
 				i += 2
 			}
-			if i, ok = s.skipType(i, refs); !ok {
+			if i, ok = s.skipType(i, own); !ok {
 				return i, false
 			}
 			if s.kind(i) != token.Comma {
@@ -390,15 +374,22 @@ func (s *stream) skipType(i int, refs *[]typeRef) (int, bool) {
 		}
 		i++
 		if s.kind(i) == token.Gt {
-			i, ok = s.skipType(i+1, refs)
+			i, ok = s.skipType(i+1, own)
 		} else if s.typeStart(i) {
-			i, ok = s.skipType(i, refs)
+			i, ok = s.skipType(i, own)
 		}
 		for ok && (s.kind(i) == token.ErrArrow || s.kind(i) == token.YieldArrow) {
-			i, ok = s.skipType(i+1, refs)
+			i, ok = s.skipType(i+1, own)
 		}
 		if s.kind(i) == token.Question {
 			i++
+		}
+		if own != refs {
+			for _, r := range *own {
+				if r.ns >= 0 || !slices.ContainsFunc(params, func(p int) bool { return s.toks[p].Val == s.toks[r.name].Val }) {
+					*refs = append(*refs, r)
+				}
+			}
 		}
 	default:
 		return i, false
@@ -435,6 +426,44 @@ func (s *stream) skipAngles(i int) (int, bool) {
 		}
 	}
 	return i, false
+}
+
+// typeArgs returns the index just past the `<...>` type argument list opening at
+// i, appending the type names of its arguments to refs. A list it cannot read as
+// types is skipped whole and adds nothing.
+func (s *stream) typeArgs(i int, refs *[]typeRef) (int, bool) {
+	var args []typeRef
+	for j := i + 1; ; j++ {
+		var ok bool
+		if j, ok = s.skipType(j, &args); !ok {
+			break
+		}
+		if s.kind(j) == token.Gt {
+			*refs = append(*refs, args...)
+			return j + 1, true
+		}
+		if s.kind(j) != token.Comma {
+			break
+		}
+	}
+	return s.skipAngles(i)
+}
+
+// typeParams reads the `<T, U>` of a declaration's `::<T, U>` clause opening at
+// i. It returns the parameters' indexes and the index just past the list. Like the
+// parser's typeParamList it takes every identifier inside the brackets as a name.
+func (s *stream) typeParams(i int) ([]int, int, bool) {
+	end, ok := s.skipAngles(i)
+	if !ok {
+		return nil, end, false
+	}
+	var params []int
+	for j := i + 1; j < end-1; j++ {
+		if s.kind(j) == token.Ident {
+			params = append(params, j)
+		}
+	}
+	return params, end, true
 }
 
 // closer returns the index of the bracket closing the one opening at i.
@@ -485,20 +514,22 @@ func (s *stream) skipExpr(i int) int {
 	return i
 }
 
-// funHeader is a function signature located in a stream.
-type funHeader struct {
-	name   int // -1 for a function expression
-	params []int
-	refs   []typeRef
+// funcSig is a function signature located in a stream.
+type funcSig struct {
+	name       int // -1 for a function expression
+	typeParams []int
+	params     []int
+	refs       []typeRef
 	// body is the index just past the signature: a `{`, a `=>`, or the `;` that
 	// ends an extern declaration.
 	body int
 }
 
-// funHeader reads the signature starting at i, the `fun` token or the `extern`
-// before it, following the parser's parseFunDecl and parseFunRest.
-func (s *stream) funHeader(i int, named bool) (funHeader, bool) {
-	h := funHeader{name: -1}
+// signatureAt reads the signature starting at i, the `fun` token or the `extern`
+// before it, following the parser's parseFunDecl and parseFunRest. A function
+// expression, whose `fun` no name follows, comes back with name -1.
+func (s *stream) signatureAt(i int) (funcSig, bool) {
+	h := funcSig{name: -1}
 	if s.isIdent(i, "extern") {
 		i++
 	}
@@ -506,16 +537,13 @@ func (s *stream) funHeader(i int, named bool) (funHeader, bool) {
 		return h, false
 	}
 	i++
-	if named {
-		if s.kind(i) != token.Ident {
-			return h, false
-		}
+	if s.kind(i) == token.Ident {
 		h.name = i
 		i++
 	}
 	ok := true
 	if s.kind(i) == token.Colon && s.kind(i+1) == token.Colon && s.kind(i+2) == token.Lt {
-		if i, ok = s.skipAngles(i + 2); !ok {
+		if h.typeParams, i, ok = s.typeParams(i + 2); !ok {
 			return h, false
 		}
 	}

@@ -1,7 +1,8 @@
-import "lib/util" as _;
+import "lib/util";
 
 fun main(args: [str]) > void {
     final p: Point = Point{ x = twice(base) };
-    final h = hidden;
     final q = util\twice(1);
+    final r = geo\shapes\twice(2);
+    final h = hidden;
 }

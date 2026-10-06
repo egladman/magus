@@ -65,11 +65,11 @@ func (d *decl) info() *scip.SymbolInformation {
 func (f *file) collectDecls() []string {
 	var problems []string
 	for _, st := range f.prog.Stmts {
-		d, ok := f.declOf(st)
+		d := f.declOf(st)
 		if d == nil {
 			continue
 		}
-		if !ok {
+		if d.nameTok < 0 {
 			problems = append(problems, fmt.Sprintf("%d:%d: cannot place the name of %s", ast.NodePos(st).Line, ast.NodePos(st).Col, d.name))
 		}
 		if _, dup := f.decls[d.name]; dup {
@@ -82,12 +82,13 @@ func (f *file) collectDecls() []string {
 	return problems
 }
 
-// declOf describes a top-level statement that declares a name, reporting false
-// when the name's token could not be found. It returns nil for anything else.
-func (f *file) declOf(st ast.Node) (*decl, bool) {
+// declOf describes the top-level statement st when it declares a name, and
+// returns nil when it does not. The decl's nameTok is -1 when the name's token
+// could not be found.
+func (f *file) declOf(st ast.Node) *decl {
 	s := f.toks
 	d := &decl{nameTok: -1, start: -1, end: -1}
-	idx, found := s.index(ast.NodePos(st))
+	idx, found := s.at[ast.NodePos(st)]
 	switch n := st.(type) {
 	case *ast.FunDecl:
 		d.name, d.exported, d.doc, d.kind = n.Name, n.IsExported, n.Doc, kindFun
@@ -95,15 +96,17 @@ func (f *file) declOf(st ast.Node) (*decl, bool) {
 			d.kind = kindExtern
 		}
 		d.signature = funSignature(n)
-		if h, ok := s.funHeader(idx, true); found && ok {
-			d.nameTok = h.name
-			if end, ok := s.bodyEnd(h.body); ok {
-				d.end = end
+		if found {
+			if h, ok := s.signatureAt(idx); ok && h.name >= 0 {
+				d.nameTok = h.name
+				if end, ok := s.bodyEnd(h.body); ok {
+					d.end = end
+				}
 			}
 		}
 	case *ast.DeclStmt:
 		if n.Name == "_" {
-			return nil, true
+			return nil
 		}
 		d.name, d.exported, d.kind = n.Name, n.IsExported, kindVar
 		if n.IsConst {
@@ -120,9 +123,9 @@ func (f *file) declOf(st ast.Node) (*decl, bool) {
 		}
 		d.signature = objectSignature(n)
 		if found {
-			if name, _, brace, ok := s.objectHeader(idx); ok {
-				d.nameTok = name
-				if end, ok := s.closer(brace); ok {
+			if h, ok := s.objectHeader(idx); ok {
+				d.nameTok = h.name
+				if end, ok := s.closer(h.brace); ok {
 					d.end = end
 				}
 			}
@@ -139,11 +142,11 @@ func (f *file) declOf(st ast.Node) (*decl, bool) {
 			}
 		}
 	default:
-		return nil, true
+		return nil
 	}
 	if d.nameTok < 0 || s.toks[d.nameTok].Val != d.name {
 		d.nameTok, d.end = -1, -1
-		return d, false
+		return d
 	}
 	d.start = idx
 	if s.kind(idx-1) == token.Export {
@@ -158,7 +161,19 @@ func (f *file) declOf(st ast.Node) (*decl, bool) {
 	if d.kind == kindFinal || d.kind == kindVar {
 		d.end = -1
 	}
-	return d, true
+	return d
+}
+
+// namespace returns the segments of the file's `namespace a\b` declaration, or
+// nil when it declares none. Like gopherbuzz it reads only the first statement.
+func (f *file) namespace() []string {
+	if f.prog == nil || len(f.prog.Stmts) == 0 {
+		return nil
+	}
+	if ns, ok := f.prog.Stmts[0].(*ast.NamespaceStmt); ok {
+		return strings.Split(ns.Name, `\`)
+	}
+	return nil
 }
 
 // declName returns the index of the name a declaration at i binds, and the type
@@ -201,14 +216,20 @@ func (s *stream) declName(i int) (int, []typeRef) {
 	return -1, nil
 }
 
-// objectHeader reads `object<P, Q> Name::<T> {` or `protocol Name {` at i and
-// returns the name's index, the conformance list's indexes and the opening brace.
-func (s *stream) objectHeader(i int) (name int, conforms []int, brace int, ok bool) {
+// objHeader is an object or protocol header located in a stream.
+type objHeader struct {
+	name, brace          int
+	conforms, typeParams []int
+}
+
+// objectHeader reads `object<P, Q> Name::<T> {` or `protocol Name {` at i.
+func (s *stream) objectHeader(i int) (objHeader, bool) {
+	var h objHeader
 	j := i + 1
 	if s.kind(i) == token.Object && s.kind(j) == token.Lt {
 		j++
 		for s.kind(j) == token.Ident {
-			conforms = append(conforms, j)
+			h.conforms = append(h.conforms, j)
 			j++
 			if s.kind(j) != token.Comma {
 				break
@@ -216,24 +237,26 @@ func (s *stream) objectHeader(i int) (name int, conforms []int, brace int, ok bo
 			j++
 		}
 		if s.kind(j) != token.Gt {
-			return -1, nil, -1, false
+			return objHeader{name: -1}, false
 		}
 		j++
 	}
 	if s.kind(j) != token.Ident {
-		return -1, nil, -1, false
+		return objHeader{name: -1}, false
 	}
-	name = j
+	h.name = j
 	j++
 	if s.kind(j) == token.Colon && s.kind(j+1) == token.Colon && s.kind(j+2) == token.Lt {
-		if j, ok = s.skipAngles(j + 2); !ok {
-			return -1, nil, -1, false
+		var ok bool
+		if h.typeParams, j, ok = s.typeParams(j + 2); !ok {
+			return objHeader{name: -1}, false
 		}
 	}
 	if s.kind(j) != token.LBrace {
-		return -1, nil, -1, false
+		return objHeader{name: -1}, false
 	}
-	return name, conforms, j, true
+	h.brace = j
+	return h, true
 }
 
 // enumHeader reads `enum<T> Name(T) {` at i and returns the name's index and the

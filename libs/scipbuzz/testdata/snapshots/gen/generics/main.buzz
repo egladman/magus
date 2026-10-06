@@ -1,0 +1,86 @@
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/T#
+  object T {
+//       ^ definition scip-buzz buzz . . `main.buzz`/T#
+//         kind Object
+//         display_name T
+//         signature_documentation
+//         > object T
+      v: int,
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/T#
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/Box#
+  object Box::<T> {
+//       ^^^ definition scip-buzz buzz . . `main.buzz`/Box#
+//           kind Object
+//           display_name Box
+//           signature_documentation
+//           > object Box
+//             ^ definition local 0
+//               kind TypeParameter
+//               display_name T
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/Box#
+      value: T,
+//           ^ reference local 0
+  
+      fun get() > T {
+//                ^ reference local 0
+          return this.value;
+      }
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/Box#
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/first().
+  fun first::<T>(items: [T]) > T {
+//    ^^^^^ definition scip-buzz buzz . . `main.buzz`/first().
+//          kind Function
+//          display_name first
+//          signature_documentation
+//          > fun first::<T>(items: [T]) > T
+//            ^ definition local 1
+//              kind TypeParameter
+//              display_name T
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/first().
+//               ^^^^^ definition local 2
+//                     kind Parameter
+//                     display_name items
+//                     enclosing_symbol scip-buzz buzz . . `main.buzz`/first().
+//                       ^ reference local 1
+//                             ^ reference local 1
+      return items[0];
+//           ^^^^^ reference local 2
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/first().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/wrap().
+  fun wrap(t: T, apply: fun::<T>(x: T) > T) > Box::<T> {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/wrap().
+//         kind Function
+//         display_name wrap
+//         signature_documentation
+//         > fun wrap(t: T, apply: fun::<T>(x:T)>T) > Box
+//         ^ definition local 3
+//           kind Parameter
+//           display_name t
+//           enclosing_symbol scip-buzz buzz . . `main.buzz`/wrap().
+//            ^ reference scip-buzz buzz . . `main.buzz`/T#
+//               ^^^^^ definition local 4
+//                     kind Parameter
+//                     display_name apply
+//                     enclosing_symbol scip-buzz buzz . . `main.buzz`/wrap().
+//                                            ^^^ reference scip-buzz buzz . . `main.buzz`/Box#
+//                                                  ^ reference scip-buzz buzz . . `main.buzz`/T#
+      final picked = first::<T>([t]);
+//          ^^^^^^ definition local 5
+//                 kind Constant
+//                 display_name picked
+//                 enclosing_symbol scip-buzz buzz . . `main.buzz`/wrap().
+//                   ^^^^^ reference scip-buzz buzz . . `main.buzz`/first().
+//                           ^ reference scip-buzz buzz . . `main.buzz`/T#
+//                               ^ reference local 3
+      return Box{ value = picked };
+//           ^^^ reference scip-buzz buzz . . `main.buzz`/Box#
+//                        ^^^^^^ reference local 5
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/wrap().
+  
