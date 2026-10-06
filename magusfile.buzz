@@ -596,6 +596,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
             + "LGPL-2.1,LGPL-2.1-only,LGPL-2.1-or-later,"
             + "LGPL-3.0,LGPL-3.0-only,LGPL-3.0-or-later",
         "--exit-code", "1",
+        // .magus is magus's own cache, which lint's graph build rewrites while this walks
+        // the tree: a shard renamed mid-walk failed the scan. .claude/worktrees holds whole
+        // other checkouts in a local clone. Neither carries a dependency's license.
+        "--skip-dirs", ".magus,.claude/worktrees",
         "."], ".", {});
 }
 
