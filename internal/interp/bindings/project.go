@@ -546,9 +546,6 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	return opts, nil
 }
 
-// parseLayers decodes magus.project's "layers" map, directory or glob to layer name,
-// checking each entry's shape. An empty map is refused: it declares nothing while
-// reading as a layering.
 // contributesNothing reports whether binding sp adds nothing to a project. A declaration
 // spell (the built-in magusfile spell registers magusfile.buzz) and an indexing spell (buzz
 // is bound for its symbol index alone) legitimately have no targets.
@@ -557,6 +554,9 @@ func contributesNothing(sp *spells.Spell) bool {
 		len(sp.DeclarationDirGlobs()) == 0 && sp.SymbolIndexOp() == ""
 }
 
+// parseLayers decodes magus.project's "layers" map, directory or glob to layer name,
+// checking each entry's shape. An empty map is refused: it declares nothing while
+// reading as a layering.
 func parseLayers(v vm.Value) (map[string]string, error) {
 	if !v.IsMap() || len(v.MapKeys()) == 0 {
 		return nil, types.DiagnosticErrorf(types.LayerDeclarationInvalid,
