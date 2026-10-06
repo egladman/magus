@@ -133,6 +133,10 @@ func TestRenameSitesRefusals(t *testing.T) {
 		{"another Buzz keyword", []types.SymbolOccurrenceFile{bz}, "final", []types.EditRefusal{{Reason: `"final" is a Buzz keyword`}}},
 		{"a Buzz reserved identifier", []types.SymbolOccurrenceFile{bz}, "str", []types.EditRefusal{{Reason: `"str" is reserved in Buzz`}}},
 		{"a dollar in Buzz", []types.SymbolOccurrenceFile{bz}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not a Buzz identifier`}}},
+		{"a raw Buzz identifier", []types.SymbolOccurrenceFile{bz}, `@"parse"`, []types.EditRefusal{{Reason: `"@\"parse\"" is not a Buzz identifier`}}},
+		{"a name gopherbuzz lexes as a letter", []types.SymbolOccurrenceFile{bz}, "größe", nil},
+		{"a non-ASCII digit after a letter", []types.SymbolOccurrenceFile{bz}, "x٣", nil},
+		{"a non-ASCII symbol", []types.SymbolOccurrenceFile{bz}, "x·y", []types.EditRefusal{{Reason: `"x·y" is not a Buzz identifier`}}},
 		{"Buzz admits test as a name", []types.SymbolOccurrenceFile{bz}, "test", nil},
 		{"an unknown language takes Buzz keywords too", []types.SymbolOccurrenceFile{other}, "fun", []types.EditRefusal{{Reason: `"fun" is a Buzz keyword`}}},
 		{"an unknown language takes the shared shape", []types.SymbolOccurrenceFile{other}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not an identifier`}}},
@@ -200,4 +204,92 @@ func TestRenameCollisions(t *testing.T) {
 		{Path: "a.go", Reason: `already defines "decode" (` + sameFile + `), which the new name would collide with`},
 		{Path: "a_other.go", Reason: `already defines "decode" (` + samePackage + `), which the new name would collide with`},
 	}, got, "a Go package is one scope; another directory or a Python sibling module is not")
+}
+
+// The Buzz index records no locals, so a parameter or local already named the new name is
+// invisible to RenameCollisions, and the renamed call would bind to it. A file that
+// imports one the rename writes is checked too, since a flat import merges the new name
+// into it; a file outside both is not read.
+func TestBuzzNameCaptures(t *testing.T) {
+	t.Parallel()
+
+	sources := map[string]string{
+		"lib/util.buzz":  "export fun foo() > int { return 1; }\n",
+		"main.buzz":      "import \"lib/util\";\nfun g(x: int) > int { return foo(); }\n",
+		"importer.buzz":  "import \"lib/util\";\nfun h() > str { return \"{x}\"; }\n",
+		"unrelated.buzz": "fun x() > void {}\n",
+		"broken.buzz":    "fun \"\n",
+	}
+	read := func(file string) ([]byte, error) { return []byte(sources[file]), nil }
+	importers := func(file string) []string {
+		if file == "lib/util.buzz" {
+			return []string{"importer.buzz", "lib/util.go"}
+		}
+		return nil
+	}
+	sites := []Site{site("lib/util.buzz", 1, 12, "foo", "x"), site("./main.buzz", 2, 30, "foo", "x"), site("a.go", 1, 1, "foo", "x")}
+
+	assert.Equal(t, []types.EditRefusal{
+		{Path: "importer.buzz", Reason: `already uses "x" as an identifier, which the symbol index does not record, so a renamed site could bind to it`},
+		{Path: "main.buzz", Reason: `already uses "x" as an identifier, which the symbol index does not record, so a renamed site could bind to it`},
+	}, BuzzNameCaptures("x", sites, importers, read), "the parameter in main.buzz, the interpolation in importer.buzz")
+
+	assert.Empty(t, BuzzNameCaptures("y", sites, importers, read), "a name no checked file uses")
+
+	got := BuzzNameCaptures("x", []Site{site("broken.buzz", 1, 1, "foo", "x")}, importers, read)
+	require.Len(t, got, 1)
+	assert.Equal(t, "broken.buzz", got[0].Path)
+	assert.Contains(t, got[0].Reason, "does not lex as Buzz")
+}
+
+// The file lexes, but an interpolation's text does not lex on its own: the check falls back
+// to the name as a whole word there rather than refusing the file.
+func TestHasIdentifierReadsAnInterpolationThatDoesNotLex(t *testing.T) {
+	t.Parallel()
+
+	// A JSON fixture in a backtick string, as hack/ci/pull-requests.buzz's tests hold.
+	uses, err := hasIdentifier("final s = `{\"body\": \"<!-- {not x -->\", \"url\": \"u\"}`;\n", "x")
+	require.NoError(t, err)
+	assert.True(t, uses, "the name as a word in the part")
+
+	uses, err = hasIdentifier("final s = `{\"body\": \"<!-- {not xy -->\", \"url\": \"u\"}`;\n", "x")
+	require.NoError(t, err)
+	assert.False(t, uses, "a longer identifier is not the name")
+}
+
+// scip-buzz records no occurrence where a value is also its label, `f(a, w)` for
+// `f(a, w: w)` or `Rect{ w }` for `Rect{ w = w }`, so a rename of w would leave those
+// uses naming nothing. The defining file, a file a site rewrites and an importer of the
+// defining file are each checked; a first argument, a labeled one and a field set from
+// another name are fine.
+func TestBuzzLabelUses(t *testing.T) {
+	t.Parallel()
+
+	sources := map[string]string{
+		"lib/util.buzz": "export final w = 1;\nobject Rect { w: int }\nfun f(a: int, w: int) > int { return a; }\nexport fun g() > Rect { return Rect{ w }; }\n",
+		"main.buzz":     "import \"lib/util\" as u;\nfun h() > int { return u\\f(w, w: u\\w); }\n",
+		"alias.buzz":    "import \"lib/util\" as _;\nfun k() > int { return f(1, w); }\n",
+		"other.buzz":    "fun m() > int { return f(1, w); }\n",
+		"broken.buzz":   "fun (\n",
+	}
+	read := func(file string) ([]byte, error) { return []byte(sources[file]), nil }
+	importers := func(file string) []string {
+		if file == "lib/util.buzz" {
+			return []string{"main.buzz", "alias.buzz"}
+		}
+		return nil
+	}
+	reason := "uses \"w\" as a label as well as a value, which the symbol index records no site for; write the label out (`w: w`, `w = w`) first"
+
+	got := BuzzLabelUses("w", []string{"lib/util.buzz"}, []Site{site("main.buzz", 2, 26, "w", "width")}, importers, read)
+	assert.Equal(t, []types.EditRefusal{
+		{Path: "alias.buzz", Line: 2, Column: 29, Reason: reason},
+		{Path: "lib/util.buzz", Line: 4, Column: 38, Reason: reason},
+	}, got, "other.buzz neither defines, imports nor holds a site; main.buzz labels its w")
+
+	assert.Empty(t, BuzzLabelUses("a", []string{"lib/util.buzz"}, nil, importers, read), "a first argument is never a label")
+
+	got = BuzzLabelUses("w", []string{"broken.buzz"}, nil, importers, read)
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0].Reason, "does not parse as Buzz")
 }
