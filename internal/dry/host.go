@@ -480,6 +480,11 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("symbolIndexDigest", shaped("magus.symbolIndexDigest", map[string]vm.Value{
 		"digest": vm.StrValue(""), "indexed": vm.BoolValue(false), "projects": empty, "gaps": empty,
 	}))
+	// No index was read, so there are no indexes to vouch for the rows and no rows: a gate
+	// reading this refuses on the missing index rather than passing on an empty list.
+	m.MapSet("precedents", shaped("magus.precedents", map[string]vm.Value{
+		"precedents": empty, "indexes": empty,
+	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or
 	// a layer against, so importsIndexed stays false and a neighborhood's verdict unknown.

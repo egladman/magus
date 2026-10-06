@@ -1684,3 +1684,12 @@ type Case struct {
 	// Imports are the directories a dep family case imports that the row counted, sorted.
 	Imports []string `json:"imports,omitempty"`
 }
+
+// PrecedentReport is magus\precedents' answer: the rows mined from the workspace's merged
+// symbol indexes, and the freshness of each declared index judged just before the read. An
+// index that is not up to date contributed nothing or something old, so a caller that gates
+// on the rows checks Indexes first.
+type PrecedentReport struct {
+	Precedents []Precedent         `json:"precedents"`
+	Indexes    []SymbolIndexStatus `json:"indexes"`
+}
