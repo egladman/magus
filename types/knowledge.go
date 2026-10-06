@@ -328,7 +328,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	// stored edges instead of refolding the symbol shard.
 	{ID: RelationImports, Description: "imports another source file, package, or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: joinEndpointShapes(
 		endpointShapes(KindFile, KindFile, KindImport), endpointShapes(KindDir, KindDir))},
-	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile)},
+	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile, KindSymbol)},
 	{ID: RelationEmits, Description: "has emitted a diagnostic in an observed run", ForwardLabel: "emits", ReverseLabel: "emitted by", Shapes: joinEndpointShapes(
 		endpointShapes(KindProject, KindDiagnostic), endpointShapes(KindTarget, KindDiagnostic))},
 	{ID: RelationOwns, Description: "declares ownership through CODEOWNERS", ForwardLabel: "owns", ReverseLabel: "owned by", Shapes: endpointShapes(KindOwner, KindProject, KindDir, KindFile)},

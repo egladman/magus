@@ -1276,6 +1276,9 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 	if n, ok := g.node(ref); ok && n.Kind == types.KindSymbol {
 		return ref, true
 	}
+	if id, ok := g.supersedingSymbol(ref); ok {
+		return id, true
+	}
 	for _, m := range g.Resolve(ref, 0) {
 		if m.Kind == types.KindSymbol {
 			return m.ID, true

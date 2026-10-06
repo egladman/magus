@@ -672,6 +672,7 @@ func (s *Store) mergeSymbolShards(ctx context.Context, g *Graph, man *manifest, 
 		}
 		exact = exact && fp == man.Shards[name].Fingerprint
 	}
+	g.supersedeBuzzFunctions()
 	exact = s.mergeOverlayShard(ctx, g, man, coverageShardName) && exact
 	exact = s.mergeOverlayShard(ctx, g, man, sessionShardName) && exact
 	return exact, nil
