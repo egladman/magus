@@ -50,7 +50,7 @@ magus graph export -o json  # the whole graph
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                        |
 | op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                   |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                   |
-| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                              |
+| charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                             |
 | module     | built in | `magus query kind=module`     |                                                                                                                   |
 | method     | built in | `magus query kind=method`     |                                                                                                                   |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3018`, `MGS1021`                                                                                   |
@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      56 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      58 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -101,7 +101,7 @@ magus graph export -o json  # the whole graph
 | `spells-generate`        | Regenerates the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls).                                                                                            |
 | `mocks-generate`         | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.                                                                                                                     |
 | `config-generate`        | Regenerates the CLI config-flag plumbing from internal/config/config.go.                                                                                                                                                       |
-| `spell-publish`          | Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged with the release version.                                                                                                                  |
+| `spell-publish`          | Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged with the release version, write-once: a spell whose repository already carries the tag is kept unless the run is mutable.                  |
 | `spell-lock`             | Owns magus.lock.                                                                                                                                                                                                               |
 | `postflight`             | Logs counts from the insight report (hotspots, ownership, affinity, volatility).                                                                                                                                               |
 | `generate`               | Regenerates every *-generate sibling, then gates on drift (scoped to cwd).                                                                                                                                                     |
@@ -111,6 +111,8 @@ magus graph export -o json  # the whole graph
 | `termshots-generate`     | Renders the still SVGs of magus's interactive terminal surfaces for the docs.                                                                                                                                                  |
 | `release-build`          | Builds one release binary for one platform.                                                                                                                                                                                    |
 | `release-sign`           | Signs dist/SHA256SUMS with the Ed25519 key in MAGUS_SIGNING_KEY, then verifies the written signature against the active release key this binary embeds, so a mis-set key fails here rather than in every client's self-update. |
+| `release-publish`        | Publishes this tag's GitHub Release, write-once.                                                                                                                                                                               |
+| `release-manifest`       | Cuts this tag's release manifest from its published release and hands it to main's signed index.                                                                                                                               |
 | `release-index`          | Builds docs/gen/public/release/index.json from releases/*.yaml, signs it, regenerates what derives from the new manifest, and under cd publishes the change as a pull request.                                                 |
 | `release`                |                                                                                                                                                                                                                                |
 | `watch`                  | Rebuilds on every debounced change until interrupted.                                                                                                                                                                          |

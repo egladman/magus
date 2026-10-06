@@ -22,6 +22,7 @@ import "encoding/json";
 import "fs";
 import "serialize";
 import "std"; // assert, for the in-file test blocks below
+import "assert";
 
 // releasableModules enumerates every independently-versioned project: one whose
 // resolved spells declare a manifest (spells.Spell.Manifests, the language's
@@ -207,39 +208,89 @@ test "a windows-joined asset path matches the upload glob" {
     std\assert(toSlash("") == "", message: "the empty path");
 }
 
-// refuseOverwrite is the write-once rule for release artifacts: with immutable set, a path
-// that already exists raises rather than being replaced.
-//
-// Pure like everything here: the caller supplies exists (fs\exists at the call site), so
-// the rule tests without a filesystem. The default stays overwrite - the publish job
-// re-uploads on a re-run by design - and immutable is the opt-in for runs where an
-// existing artifact means a published file is about to be replaced.
-export fun refuseOverwrite(path: str, immutable: bool, exists: bool) > void !> str {
-    if (!immutable or !exists) { return; }
-    throw "release: `" + path + "` already exists and this run is immutable; refusing to "
-        + "overwrite a release artifact. Delete it deliberately, or run without the "
-        + "`immutable` charm to allow replacement.";
+// Publication is write-once. A unit is created when nothing is published under its name,
+// kept when something is, and replaced only when the run carries the mutable charm. Kept
+// is not skipped: the caller still verifies what is there and reads it from then on, so a
+// rerun converges on the published bytes instead of on a rebuild of them.
+export final CREATE = "create";
+export final KEEP = "keep";
+export final REPLACE = "replace";
+
+// publishAction is what a publishing target does with a unit, given whether one is already
+// published under its name and whether the run is mutable.
+export fun publishAction(published: bool, mutable: bool) > str {
+    if (!published) { return CREATE; }
+    if (mutable) { return REPLACE; }
+    return KEEP;
 }
 
-// overwriteRaised is what refuseOverwrite raised, or "" when the write may proceed.
-fun overwriteRaised(path: str, immutable: bool, exists: bool) > str {
-    try {
-        refuseOverwrite(path, immutable: immutable, exists: exists);
-    } catch (e: str) {
-        return e;
+test "publication is write-once unless the run is mutable" {
+    std\assert(publishAction(published: false, mutable: false) == CREATE, message: "a new unit is created");
+    std\assert(publishAction(published: false, mutable: true) == CREATE, message: "mutable changes nothing new");
+    std\assert(publishAction(published: true, mutable: false) == KEEP, message: "the default keeps what is published");
+    std\assert(publishAction(published: true, mutable: true) == REPLACE, message: "only mutable replaces");
+}
+
+// sumsProblems checks a downloaded release against its SHA256SUMS: the version header names
+// tag, and every file it lists is present (have maps a file name to its sha256) with the
+// digest it lists. It returns one line per problem, [] for a release that verifies. A
+// release missing an archive was interrupted mid-upload; replacing it takes the mutable charm.
+export fun sumsProblems(tag: str, sums: str, have: {str: str}) > [str] {
+    final problems = mut [<str>];
+    var header = "";
+    var listed = 0;
+    foreach (line in sums.split("\n")) {
+        final l = line.trim();
+        if (l == "") { continue; }
+        if (l.startsWith("version:")) {
+            header = l.sub("version:".len()).trim();
+            continue;
+        }
+        final parts = l.split("  ");
+        if (parts.len() != 2) {
+            problems.append("SHA256SUMS line is not `<sha256>  <file>`: {l}");
+            continue;
+        }
+        listed = listed + 1;
+        final name = parts[1].trim();
+        final got = have[name];
+        if (got == null) {
+            problems.append("{name}: listed in SHA256SUMS, missing from the release");
+        } else if (got! != parts[0]) {
+            problems.append("{name}: sha256 {got!}, SHA256SUMS lists {parts[0]}");
+        }
     }
-    return "";
+    if (header != tag) {
+        problems.append("SHA256SUMS names version `{header}`, not {tag}");
+    }
+    if (listed == 0) {
+        problems.append("SHA256SUMS lists no archives");
+    }
+    return problems;
 }
 
-test "immutable refuses only an existing path" {
-    std\assert(overwriteRaised("dist/a.tar.gz", immutable: false, exists: true) == "",
-        message: "the default overwrites");
-    std\assert(overwriteRaised("dist/a.tar.gz", immutable: true, exists: false) == "",
-        message: "a fresh path writes");
-    final msg = overwriteRaised("dist/a.tar.gz", immutable: true, exists: true);
-    std\assert(msg != "", message: "an existing path under immutable raises");
-    std\assert(msg.indexOf("dist/a.tar.gz") != null, message: "the refusal names the path");
-    std\assert(msg.indexOf("immutable") != null, message: "the refusal names the charm");
+test "a release verifies only when every listed archive is present with its digest" {
+    final sums = "version: v1.0.0\naaa  magus_linux.tar.gz\nbbb  magus_darwin.tar.gz\n";
+    final both = {"magus_linux.tar.gz": "aaa", "magus_darwin.tar.gz": "bbb"};
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: both).len(), want: 0, message: "complete");
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: {"magus_linux.tar.gz": "aaa"}),
+        want: ["magus_darwin.tar.gz: listed in SHA256SUMS, missing from the release"], message: "interrupted upload");
+    assert\equal(sumsProblems("v1.0.0", sums: sums, have: {"magus_linux.tar.gz": "aaa", "magus_darwin.tar.gz": "ccc"}),
+        want: ["magus_darwin.tar.gz: sha256 ccc, SHA256SUMS lists bbb"], message: "replaced bytes");
+    assert\equal(sumsProblems("v2.0.0", sums: sums, have: both),
+        want: ["SHA256SUMS names version `v1.0.0`, not v2.0.0"], message: "another release's sums");
+    assert\equal(sumsProblems("v1.0.0", sums: "version: v1.0.0\n", have: {}),
+        want: ["SHA256SUMS lists no archives"], message: "empty");
+}
+
+// manifestBranch is the branch a release's manifest rides to main's index. One per tag,
+// so a rerun force-pushes the same branch instead of opening a second.
+export fun manifestBranch(tag: str) > str {
+    return "release-manifest/" + tag;
+}
+
+test "a manifest branch is named for its tag" {
+    assert\equal(manifestBranch("v1.0.0-rc.1"), want: "release-manifest/v1.0.0-rc.1", message: "branch");
 }
 
 // manifestWithVersion returns the SHA256SUMS content with the leading `version: <v>` line
@@ -475,16 +526,17 @@ test "the publish branch is derived from the commit" {
         message: "the short id names the branch");
 }
 
-// releaseIndexSubject is the commit subject and the pull request title. reason is a
-// sentence fragment naming what produced the index: "the v0.4.0 release", "a manual
-// refresh".
+// releaseIndexSubject is the commit subject and the pull request title, a conventional
+// subject so the pull request passes the title check pr-title holds every other one to.
+// reason is a sentence fragment naming what produced the index: "the v0.4.0 release",
+// "a manual refresh".
 export fun releaseIndexSubject(reason: str) > str {
-    return "Publish the release index signed for " + reason;
+    return "chore(release): sign the release index for " + reason;
 }
 
 test "the subject folds the reason in" {
     final s = releaseIndexSubject("the v0.4.0 release");
-    std\assert(s == "Publish the release index signed for the v0.4.0 release",
+    std\assert(s == "chore(release): sign the release index for the v0.4.0 release",
         message: "subject shape");
 }
 

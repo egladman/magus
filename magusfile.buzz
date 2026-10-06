@@ -156,6 +156,8 @@ magus\project({
         "release-build": {"skip_cache": "a release must never replay a cached artifact; each invocation produces the bytes that ship"},
         "release-sign": {"skip_cache": "signs the manifest per invocation; a replayed signature would cover different bytes"},
         "release-index": {"skip_cache": "signs the index per invocation and, with cd, pushes a branch; a replay would publish nothing"},
+        "release-publish": {"skip_cache": "reads whether the GitHub Release exists, which no file input carries"},
+        "release-manifest": {"skip_cache": "reads the published release and main's manifest, which no file input carries"},
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect"},
         // memory_mb: -race shadow memory in every test binary exhausts a 16GB runner.
         // Linux pipepeer tests read their children's /proc entries.
@@ -315,9 +317,25 @@ fun image_stamps() > [str] !> any {
         "--build-arg", "DATE=" + build_date()];
 }
 
+// unpublished narrows registries to the ones a release image is pushed to: all of them
+// under the mutable charm, otherwise those not yet carrying tag. A release's version tag is
+// write-once, and the floating tags beside it (latest) move only when it is pushed.
+fun unpublished(ctx: magus\Context, registries: [Registry], tag: str) > [Registry] !> any {
+    final targets = mut [<Registry>];
+    foreach (reg in registries) {
+        final tags = registry_tags(reg.repository, user: magus\secret.read(reg.user_ref),
+            token: magus\secret.read(reg.token_ref));
+        if (publish_action(ctx, unit: reg.repository + ":" + tag, published: tags.indexOf(tag) != null) != releases\KEEP) {
+            targets.append(reg);
+        }
+    }
+    return targets;
+}
+
 // --sbom and --provenance make the result an index even for one platform.
 // cosign runs per registry: a signature is stored beside the image in each repository.
 fun publish_variant(ctx: magus\Context, dockerfile: str, platforms: str, registries: [Registry], tags: [str], meta: str) > [str] !> any {
+    if (registries.len() == 0) { return []; }
     var args = mut ["-f", dockerfile];
     foreach (a in image_stamps()) { args.append(a); }
     foreach (reg in registries) {
@@ -409,9 +427,9 @@ export fun image_build(ctx: magus\Context, args: [str]) > void !> any {
                 dynamicTags = [version() + "-dynamic", "latest-dynamic"];
             }
             foreach (r in publish_variant(ctx, "Dockerfile.static", "linux/amd64,linux/arm64",
-                registries, staticTags, "static-meta.json")) { pushed.append(r); }
+                unpublished(ctx, registries: registries, tag: staticTags[0]), staticTags, "static-meta.json")) { pushed.append(r); }
             foreach (r in publish_variant(ctx, "Dockerfile", "linux/amd64",
-                registries, dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
+                unpublished(ctx, registries: registries, tag: dynamicTags[0]), dynamicTags, "dynamic-meta.json")) { pushed.append(r); }
         }
         write_image_summary(ctx, refs: pushed);
     } else if (ctx.hasCharm("dynamic")) {
@@ -902,7 +920,8 @@ fun publish_graph(ctx: magus\Context) > void !> any {
 }
 
 // Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged
-// with the release version. Without cd it only prints each pinned reference.
+// with the release version, write-once: a spell whose repository already carries the tag
+// is kept unless the run is mutable. Without cd it only prints each pinned reference.
 export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
     final listed = json\parse(magus\cmd("spell", args: ["ls", "magus/spell", "-o", "json"],
         opts: {"quiet": true}).stdout);
@@ -931,7 +950,10 @@ export fun spell_publish(ctx: magus\Context, args: [str]) > void !> any {
     final user = magus\secret.read(reg.user_ref);
     final token = magus\secret.read(reg.token_ref);
     foreach (name, _ in shipped) {
-        magus\cmd("spell", args: ["push", "magus/spell/" + name, reg.repository + "/" + name + ":" + tag,
+        final repo = reg.repository + "/" + name;
+        final published = registry_tags(repo, user: user, token: token).indexOf(tag) != null;
+        if (publish_action(ctx, unit: repo + ":" + tag, published: published) == releases\KEEP) { continue; }
+        magus\cmd("spell", args: ["push", "magus/spell/" + name, repo + ":" + tag,
             "--username", user], opts: {"stdin": token});
     }
 }
@@ -1046,10 +1068,6 @@ fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
     return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
 }
 
-fun refuse_overwrite(ctx: magus\Context, path: str) > void !> any {
-    releases\refuseOverwrite(path, immutable: ctx.hasCharm("immutable"), exists: fs\exists(path));
-}
-
 // Maps an asset arch token to its GOARM level, or "" for arches without one. ARMv7
 // traps on ARMv6, so each ships its own asset. Linux only: Go would build windows/arm.
 fun goarm_level(goos: str, goarch: str) > str {
@@ -1139,9 +1157,6 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
             + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
             + "resolves.";
     }
-
-    refuse_overwrite(ctx, asset);
-    refuse_overwrite(ctx, asset + ".sha256");
 
     fs\mkdirAll("dist");
     var binary = "magus";
@@ -1239,7 +1254,6 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
 export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     final manifest = fs\join("dist", "SHA256SUMS");
     final sigPath = manifest + ".sig";
-    refuse_overwrite(ctx, sigPath);
     // The version header selfupdate's ParseManifest requires, added last before signing.
     fs\writeFile(manifest, releases\manifestWithVersion(fs\readFile(manifest), version: version()));
     // A dry run signs nothing and returns "", leaving no .sig to check.
@@ -1248,6 +1262,173 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
     releases\verifySignature(fs\readFile(manifest), sig: fs\readFile(sigPath),
         pubHex: releases\activeReleaseKey(fs\readFile(releases\KEYRING)), sigPath: sigPath);
     magus\log.info("signed {manifest} -> {sigPath}, verified against the release key");
+}
+
+// release_tag is the release tag HEAD sits on, which every publishing target publishes
+// under.
+fun release_tag(target: str) > str !> any {
+    final tag = exact_release_tag();
+    if (tag == "") {
+        throw target + ": HEAD is not on a release tag, and a release is published under one;"
+            + " check the tag out first";
+    }
+    return tag;
+}
+
+// publish_action decides, and says, what a publishing target does with one unit; the rule
+// is releases\publishAction. unit names it the way a person would look it up.
+fun publish_action(ctx: magus\Context, unit: str, published: bool) > str {
+    final action = releases\publishAction(published: published, mutable: ctx.hasCharm("mutable"));
+    if (action == releases\KEEP) {
+        magus\log.info("{unit} is already published; keeping it (the mutable charm replaces it)");
+    } else if (action == releases\REPLACE) {
+        magus\log.warn("{unit} is already published; replacing it under the mutable charm");
+    }
+    return action;
+}
+
+// registry_tags lists the tags an OCI repository carries. `magus spell ls` reads any OCI
+// repository's tags, image or spell. A repository never pushed to carries none, which the
+// distribution spec reports as NAME_UNKNOWN. The read is authenticated because GHCR answers
+// an anonymous read of a private package and of a missing one with the same denial.
+fun registry_tags(repository: str, user: str, token: str) > [str] !> any {
+    final res = magus\cmd("spell", args: ["ls", repository, "--username", user, "-o", "json"],
+        opts: {"quiet": true, "allow_failure": true, "stdin": token});
+    if (!res.ok) {
+        if (res.stderr.indexOf("NAME_UNKNOWN") != null) { return []; }
+        throw "cannot list the tags of {repository}, so whether a release is already published"
+            + " there is unknown: {res.stderr.trim()}";
+    }
+    final tags = mut [<str>];
+    final listed = json\parse(res.stdout)["tags"];
+    if (listed == null) { return tags; }
+    foreach (t in listed) { tags.append("{t}"); }
+    return tags;
+}
+
+// release_assets names the assets tag's GitHub Release carries, or null when there is no
+// such release. A release that exists with assets missing is still published: an upload
+// was interrupted, and replacing it takes the mutable charm like any other.
+fun release_assets(tag: str) > [str]? !> any {
+    final res = proc\exec("gh", args: ["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) {
+        if (res.stderr.indexOf("release not found") != null) { return null; }
+        throw "release: cannot read the {tag} GitHub Release: {res.stderr.trim()}";
+    }
+    final names = mut [<str>];
+    foreach (line in res.stdout.split("\n")) {
+        if (line.trim() != "") { names.append(line.trim()); }
+    }
+    return names;
+}
+
+// download_release fetches tag's published release into dist/ and verifies it before
+// anything reads it: SHA256SUMS names tag, lists every archive present with its digest, and
+// carries a signature by the release key. A partial download hashes perfectly well, so an
+// unverified one is never trusted.
+fun download_release(tag: str) > void !> any {
+    fs\mkdirAll("dist");
+    proc\exec("gh", args: ["release", "download", tag, "--dir", "dist", "--clobber"], dir: ".", opts: {"quiet": true});
+    final sumsPath = fs\join("dist", "SHA256SUMS");
+    final sigPath = sumsPath + ".sig";
+    var problems = mut [<str>];
+    if (!fs\exists(sumsPath) or !fs\exists(sigPath)) {
+        problems.append("SHA256SUMS or its signature is missing");
+    } else {
+        final have = mut {<str: str>};
+        foreach (p in fs\glob(RELEASE_ASSET_GLOB)) {
+            have[fs\basename(p.value)] = crypto\sha256File(p.value);
+        }
+        problems = releases\sumsProblems(tag, sums: fs\readFile(sumsPath), have: have).cloneMutable();
+    }
+    if (problems.len() > 0) {
+        throw "release: the published {tag} release does not verify, so nothing may build on it."
+            + " Rebuild it and replace it with the mutable charm:\n  " + problems.join("\n  ");
+    }
+    releases\verifySignature(fs\readFile(sumsPath), sig: fs\readFile(sigPath),
+        pubHex: releases\activeReleaseKey(fs\readFile(releases\KEYRING)), sigPath: sigPath);
+}
+
+// Publishes this tag's GitHub Release, write-once. With no release yet it signs the
+// archives the release-build jobs left in dist/ and creates the release; with one it
+// downloads and verifies that release into dist/ instead, so every later step reads the
+// bytes people download rather than a rebuild of them. Replacing a published release takes
+// the mutable charm. Without cd it signs and stops short of GitHub.
+export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
+    final tag = release_tag("release-publish");
+    final action = publish_action(ctx, unit: "the {tag} GitHub Release", published: release_assets(tag) != null);
+    if (action == releases\KEEP) {
+        download_release(tag);
+        return;
+    }
+    final archives = mut [<str>];
+    foreach (p in fs\glob(RELEASE_ASSET_GLOB)) { archives.append(p.value); }
+    if (archives.len() == 0) {
+        throw "release-publish: nothing matches {RELEASE_ASSET_GLOB}; the release-build jobs leave the archives there";
+    }
+    archives.sort(fun (a: str, b: str) > bool => a < b);
+    final sums = mut [<str>];
+    foreach (a in archives) { sums.append(fs\readFile(a + ".sha256")); }
+    fs\writeFile(fs\join("dist", "SHA256SUMS"), content: sums.join(""));
+    release_sign(ctx, args: args);
+    if (!ctx.hasCharm("cd")) {
+        magus\log.info("release-publish: DRY RUN - signed dist/SHA256SUMS; add the cd charm to {action} the {tag} release");
+        return;
+    }
+    final files = archives + ["dist/SHA256SUMS", "dist/SHA256SUMS.sig"];
+    if (action == releases\CREATE) {
+        final create = mut ["release", "create", tag, "--generate-notes"];
+        // Never left to the default, which hands a candidate the repository's latest pointer
+        // that audit's compat job and `magus self update` follow.
+        if (!semver\isStable(tag)) { create.append("--prerelease"); }
+        proc\exec("gh", args: create + files, dir: ".", opts: {});
+    } else {
+        proc\exec("gh", args: ["release", "upload", tag, "--clobber"] + files, dir: ".", opts: {});
+    }
+}
+
+// Cuts this tag's release manifest from its published release and hands it to main's
+// signed index. Cut in the tag's tree, so its notes are the fragments the tag shipped;
+// staged on a branch off main, so the index keeps every release main already lists, which
+// an index built from an older tag's tree would drop. Main already carrying this manifest
+// is done. release-index.yaml signs the index on that branch and opens the pull request,
+// so this target never holds the signing key.
+export fun release_manifest(ctx: magus\Context, args: [str]) > void !> any {
+    final tag = release_tag("release-manifest");
+    download_release(tag);
+    final manifestPath = fs\join("releases", tag + ".yaml");
+    vcs\cmd(["fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"], {"quiet": true});
+    final onMain = vcs\cmd(["show", "origin/main:" + manifestPath], {"quiet": true, "allow_failure": true});
+    if (publish_action(ctx, unit: "main's " + manifestPath, published: onMain.ok) == releases\KEEP) {
+        // cut converges on main's copy when it names these archives, and refuses one naming others.
+        fs\writeFile(manifestPath, content: onMain.stdout);
+    }
+    proc\exec("go", args: ["run", "./cmd/magus-utils", "cut", "-version", tag, "-artifacts", "./dist",
+        "-unreleased", "./changes/unreleased", "-out", "./releases"], dir: ".", opts: {});
+    final manifest = fs\readFile(manifestPath);
+    if (onMain.ok and manifest == onMain.stdout) {
+        magus\log.info("release-manifest: main already carries {manifestPath}; the index has nothing new");
+        return;
+    }
+    if (!ctx.hasCharm("cd")) {
+        magus\log.info("release-manifest: DRY RUN - add the cd charm to stage {manifestPath} for main's index");
+        return;
+    }
+    final branch = releases\manifestBranch(tag);
+    final dir = fs\tempDir("release-manifest-");
+    vcs\cmd(["worktree", "add", "--detach", dir, "origin/main"], {"quiet": true});
+    fs\writeFile(fs\join(dir, manifestPath), content: manifest);
+    vcs\cmd(["add", "--", manifestPath], {"dir": dir, "quiet": true});
+    vcs\cmd(["-c", "user.name=github-actions[bot]",
+        "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com",
+        "commit", "-m", "chore(release): stage the {tag} release manifest"], {"dir": dir, "quiet": true});
+    // Force: a rerun stages the same manifest on the same branch, which only this target writes.
+    vcs\cmd(["push", "--force", "origin", "HEAD:refs/heads/" + branch], {"dir": dir, "quiet": true});
+    vcs\cmd(["worktree", "remove", "--force", dir], {"quiet": true});
+    proc\exec("gh", args: ["workflow", "run", "release-index.yaml", "--ref", branch,
+        "-f", "reason=the {tag} release"], dir: ".", opts: {});
+    magus\log.info("release-manifest: staged {manifestPath} on {branch}; release-index.yaml signs main's index with it and opens the pull request");
 }
 
 // Builds docs/gen/public/release/index.json from releases/*.yaml, signs it, regenerates
@@ -1349,21 +1530,15 @@ fun local_branches() > [str] !> any {
     return names;
 }
 
-// Neither constant derives from the workflow, so only this notices one side edited alone.
+// The tag trigger does not derive from RELEASE_TAG_REFSPEC, so only this notices one side
+// edited alone. The upload glob needs no such check: release-publish uploads by
+// RELEASE_ASSET_GLOB itself.
 fun verify_release_workflow() > [Verdict] !> any {
     if (!fs\exists(RELEASE_WORKFLOW)) {
-        return [failed("workflow", RELEASE_WORKFLOW + " is missing, so neither the upload glob nor the tag trigger can be confirmed")];
+        return [failed("workflow", RELEASE_WORKFLOW + " is missing, so the tag trigger cannot be confirmed")];
     }
     final body = fs\readFile(RELEASE_WORKFLOW);
     var checks = mut [<Verdict>];
-    if (body.indexOf(RELEASE_ASSET_GLOB) == null) {
-        checks.append(failed("workflow upload glob",
-            RELEASE_WORKFLOW + " no longer contains `" + RELEASE_ASSET_GLOB
-            + "`; the asset names below were checked against a pattern the upload does not use"));
-    } else {
-        checks.append(passed("workflow upload glob", "`" + RELEASE_ASSET_GLOB + "` is what "
-            + RELEASE_WORKFLOW + " uploads"));
-    }
     if (body.indexOf("- '" + RELEASE_TAG_REFSPEC + "'") == null) {
         checks.append(failed("workflow tag trigger",
             RELEASE_WORKFLOW + " no longer triggers on `" + RELEASE_TAG_REFSPEC + "`"));
