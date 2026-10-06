@@ -76,6 +76,30 @@ func TestLoadDirInto(t *testing.T) {
 	assert.Equal(t, 12, cfg.Concurrency)
 }
 
+// A magus.yaml in the working directory layers over the workspace's only when that
+// directory is inside the workspace: `--root` naming another checkout reads that
+// checkout's config, not the one the shell happens to stand in.
+func TestLoadWithRootLayersOnlyAWorkingDirectoryInsideTheWorkspace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	ws := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(ws, Filename), []byte("concurrency: 3\n"), 0o644))
+	sub := filepath.Join(ws, "sub")
+	require.NoError(t, os.Mkdir(sub, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sub, Filename), []byte("concurrency: 5\n"), 0o644))
+	other := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(other, Filename), []byte("concurrency: 7\n"), 0o644))
+
+	t.Chdir(other)
+	cfg, err := LoadWithRoot("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, 3, cfg.Concurrency, "a directory outside the workspace")
+
+	t.Chdir(sub)
+	cfg, err = LoadWithRoot("", ws)
+	require.NoError(t, err)
+	assert.Equal(t, 5, cfg.Concurrency, "a project inside the workspace")
+}
+
 func TestLoadDirIntoDotted(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
