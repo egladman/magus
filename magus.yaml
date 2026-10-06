@@ -39,6 +39,11 @@ sandbox:
       - MISE_SAFE
       - MISE_DATA_DIR
       - MISE_CONFIG_DIR
+      # magusfile.buzz picks its CI and remote-cache providers from these at its top
+      # level, which every target runs again under its own policy. Neither is a
+      # secret: one names the CI host, the other lists public keys.
+      - CI_PROVIDER
+      - MAGUS_CACHE_REMOTE_TRUSTED_KEYS
 
 cache:
   remote:
