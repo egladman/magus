@@ -1826,8 +1826,11 @@ func (r *runner) checkSpellContract() types.Check {
 // So the resolved path is reported always, not only on failure: "which binary is
 // judging me?" has no other way to be asked. The staleness test is deliberately
 // coarse (binary mtime against the newest tracked .go file).
+// guardBinaryCheck names the check that judges which magus a guard hook runs.
+const guardBinaryCheck = "guard-binary"
+
 func (r *runner) checkGuardBinary() types.Check {
-	const name = "guard-binary"
+	const name = guardBinaryCheck
 
 	bin := filepath.Join(r.ws.Root(), "magus")
 	if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode()&0o111 == 0 {
@@ -1850,7 +1853,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			}
 		}
 		if found, lookErr := exec.LookPath("magus"); lookErr == nil {
-			if skew, ok := interpreterSkew(r.runCtx(), name, found, r.ownVersion()); ok {
+			if skew, ok := interpreterSkew(r.runCtx(), found, r.ownVersion()); ok {
 				return skew
 			}
 			return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run " + found + " (from PATH; no ./magus built)"}
@@ -1880,7 +1883,7 @@ func (r *runner) checkGuardBinary() types.Check {
 			},
 		}
 	}
-	if skew, ok := interpreterSkew(r.runCtx(), name, bin, r.ownVersion()); ok {
+	if skew, ok := interpreterSkew(r.runCtx(), bin, r.ownVersion()); ok {
 		return skew
 	}
 	return types.Check{Name: name, Status: types.CheckOK, Message: "hook would run ./magus, newer than every tracked Go source"}

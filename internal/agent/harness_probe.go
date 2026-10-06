@@ -29,7 +29,10 @@ func ContextWithProbeTimeout(ctx context.Context, d time.Duration) context.Conte
 	return context.WithValue(ctx, probeTimeoutKey{}, d)
 }
 
-func probeTimeoutFrom(ctx context.Context) time.Duration {
+// ProbeTimeout is how long a probe of a wired hook command, or of the interpreter that runs
+// one, may take under ctx: the shipped hook templates' own 10s budget, or what
+// ContextWithProbeTimeout set.
+func ProbeTimeout(ctx context.Context) time.Duration {
 	if d, ok := ctx.Value(probeTimeoutKey{}).(time.Duration); ok && d > 0 {
 		return d
 	}
@@ -271,7 +274,7 @@ func probeOneCommand(ctx context.Context, root, command string) (HarnessStatus, 
 	}
 	defer func() { _ = os.RemoveAll(scratch) }()
 
-	timeout := probeTimeoutFrom(ctx)
+	timeout := ProbeTimeout(ctx)
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
