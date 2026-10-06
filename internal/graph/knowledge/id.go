@@ -389,4 +389,7 @@ func fileSizeAttrs(attrs map[string]string, lines, size int) map[string]string {
 const (
 	attrLanguage   = "language"
 	attrSymbolKind = "symbol_kind"
+	// attrMoniker is the symbol's full SCIP moniker, version included, which the node ID
+	// drops.
+	attrMoniker = "moniker"
 )
