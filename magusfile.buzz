@@ -2151,7 +2151,13 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*_test.go", "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
-                   "libs/scipbuzz/**/*_test.go");
+                   "libs/scipbuzz/**/*_test.go",
+                   "**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go",
+                   "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
+                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go");
+    // code-follows-mined-precedents reads the symbol index and fails on a stale one, so the
+    // index is brought current first; a cached index replays.
+    magus\cmd("graph", args: ["build", "--no-sessions"], opts: {"quiet": true});
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 

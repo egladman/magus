@@ -26,6 +26,7 @@ import "magus/lint";
 import "hack/lint/support" as support;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
+import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
 import "hack/lint/hack-scripts-parse-argv-with-flags" as scriptflags;
@@ -78,6 +79,7 @@ export fun rules() > [Rule] {
         Rule{ name = "figure-modules-type-check-strictly", reads = figurecheck\reads(), check = figurecheck\check },
         Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
+        Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
     ];
 }
 

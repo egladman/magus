@@ -1,0 +1,175 @@
+namespace minedprecedents;
+
+import "assert";
+import "std";
+import "magus";
+import "magus/lint";
+
+// FAMILIES are the precedents this repository holds itself to. dep-direction and dep-fanout
+// stay advice: depguard and importceiling enforce the layering by declaration.
+export final FAMILIES = ["err-sentinel-name", "test-package-name"];
+
+// LANGUAGES are the indexes the rule judges. Buzz joins once CI installs scip-buzz; until
+// then a Buzz row would hold on one machine and not another.
+export final LANGUAGES = ["go"];
+
+// SANCTIONED holds each departure kept on purpose, by the node the row names, with why. An
+// entry whose case no longer departs is a finding, so the list only shrinks.
+export final SANCTIONED = {
+    "file:libs/gopherbuzz/fiber_test.go": "its nolint names a std cycle it does not have (it imports buzz and vm); moving it to package buzz is a libs/gopherbuzz change",
+};
+
+// THIS is where a finding sends a reader to sanction a departure.
+final THIS = "hack/lint/code-follows-mined-precedents.buzz";
+
+// reads keys lint-rules on every Go source the indexes cover: a tree glob stops at a nested
+// project, so each project holding Go is named. proto's Go is all generated.
+export fun reads() > [str] {
+    return ["**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go"];
+}
+
+// check fails every departure from an established precedent in FAMILIES that SANCTIONED does
+// not name, mined from the live symbol index by magus\precedents. A missing or stale index is
+// a finding, never a pass: a rule reading nothing finds nothing.
+export fun check(files: [Path]) > [Finding] !> any {
+    return judge(magus\precedents(), sanctioned: SANCTIONED);
+}
+
+// judge is check over a magus\precedents report.
+export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final indexes: [any] = report["indexes"] ?? [<any>];
+    final rows: [any] = report["precedents"] ?? [<any>];
+    foreach (lang in LANGUAGES) {
+        var declared = false;
+        foreach (idx in indexes) {
+            if (idx["language"] != lang) {
+                continue;
+            }
+            declared = true;
+            final freshness: str = idx["freshness"] ?? "";
+            if (freshness != "up-to-date") {
+                final project: str = idx["project"]["path"] ?? ".";
+                final detail: str = idx["detail"] ?? "";
+                final rebuild = "Rebuild it with `magus graph build`, then rerun lint.";
+                final fix = if (detail != "") detail + "\n" + rebuild else rebuild;
+                found.append(Finding{ path = project,
+                    message = "the {lang} symbol index of {project} is {freshness}, so its precedents cannot be judged",
+                    fix = fix });
+            }
+        }
+        if (!declared) {
+            found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} precedent was judged",
+                fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
+        }
+    }
+    if (found.len() > 0) {
+        return found;
+    }
+
+    final departed = mut {<str: bool>};
+    foreach (lang in LANGUAGES) {
+        foreach (family in FAMILIES) {
+            var row: any = null;
+            foreach (r in rows) {
+                if (r["family"] == family and r["scope"]["language"] == lang) {
+                    row = r;
+                }
+            }
+            if (row == null or row["established"] != true) {
+                found.append(Finding{ path = ".", message = "the index establishes no {lang} {family} precedent to hold",
+                    fix = "The miner or the index changed under this rule; read `magus\\precedents()` before dropping the family." });
+                continue;
+            }
+            final follow = std\toInt(row["follow"]);
+            final cohort = std\toInt(row["cohort"]);
+            final departures: [any] = row["departures"] ?? [<any>];
+            foreach (d in departures) {
+                final node: str = d["node"] ?? "";
+                departed[node] = true;
+                if (sanctioned[node] != null) {
+                    continue;
+                }
+                final at = position(d["source"] ?? "");
+                found.append(Finding{ path = at.path, line = at.line,
+                    message = "departs from the {family} precedent that {follow} of {cohort} {lang} cases follow: {node}",
+                    fix = "Follow it, or add the node to SANCTIONED in " + THIS + " with the reason it departs." });
+            }
+        }
+    }
+    foreach (node, reason in sanctioned) {
+        if (departed[node] == null) {
+            found.append(Finding{ path = THIS, message = "sanctions {node}, which no longer departs",
+                fix = "Delete the entry: the list only shrinks." });
+        } else if (reason.trim() == "") {
+            found.append(Finding{ path = THIS, message = "sanctions {node} without a reason",
+                fix = "Say in one line why it departs." });
+        }
+    }
+    return found;
+}
+
+// Position is a case's source split into a file and a line, 0 when the index named none.
+object Position {
+    path: str,
+    line: int,
+}
+
+fun position(source: str) > Position {
+    final colon = source.indexOf(":");
+    if (colon == null) {
+        return Position{ path = source, line = 0 };
+    }
+    return Position{ path = source.sub(0, len: colon!),
+        line = std\parseInt(source.sub(colon! + 1, len: source.len() - colon! - 1)) ?? 0 };
+}
+
+fun fresh(lang: str) > {str: any} {
+    return {"project": {"path": "."}, "language": lang, "freshness": "up-to-date"};
+}
+
+fun row(family: str, departures: [any]) > {str: any} {
+    return {"family": family, "scope": {"language": "go"}, "established": true,
+        "follow": 85.0, "cohort": 86.0, "departures": departures};
+}
+
+fun report(indexes: [any], departures: [any]) > {str: any} {
+    return {"indexes": indexes,
+        "precedents": [row("err-sentinel-name", departures: departures), row("test-package-name", departures: [<any>])]};
+}
+
+test "an unsanctioned departure is reported at its line" {
+    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final got = judge(report([fresh("go")], departures: [d]), sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "one departure");
+    assert\equal(got[0].path, want: "cmd/magus/helpers.go", message: "file");
+    assert\equal(got[0].line, want: 107, message: "line");
+    assert\equal(got[0].message.indexOf("85 of 86 go cases") != null, want: true, message: got[0].message);
+}
+
+test "a sanctioned departure passes and a sanction that no longer departs fails" {
+    final d: {str: any} = {"node": "symbol:x/magusErr.", "source": "cmd/magus/helpers.go:107"};
+    final kept = judge(report([fresh("go")], departures: [d]), sanctioned: {"symbol:x/magusErr.": "a sync.Once memo slot"});
+    assert\equal(kept.len(), want: 0, message: "sanctioned");
+    final stale = judge(report([fresh("go")], departures: [<any>]), sanctioned: {"symbol:x/magusErr.": "a sync.Once memo slot"});
+    assert\equal(stale.len(), want: 1, message: "the list only shrinks");
+    assert\equal(stale[0].path, want: THIS, message: "points at the list");
+    final bare = judge(report([fresh("go")], departures: [d]), sanctioned: {"symbol:x/magusErr.": " "});
+    assert\equal(bare.len(), want: 1, message: "a sanction needs a reason");
+}
+
+test "a stale or missing index fails instead of passing on what it lacks" {
+    final stale: {str: any} = {"project": {"path": "libs/x"}, "language": "go", "freshness": "out-of-date"};
+    final got = judge(report([fresh("go"), stale], departures: [<any>]), sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "the stale index");
+    assert\equal(got[0].path, want: "libs/x", message: "names the project");
+    final none = judge(report([fresh("buzz")], departures: [<any>]), sanctioned: {<str: str>});
+    assert\equal(none.len(), want: 1, message: "no go index at all");
+}
+
+test "a family the index no longer establishes fails" {
+    final r: {str: any} = {"indexes": [fresh("go")], "precedents": [row("test-package-name", departures: [<any>])]};
+    final got = judge(r, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "err-sentinel-name is missing");
+}
