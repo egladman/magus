@@ -94,11 +94,11 @@ and reads `merge-queue:` followed by a merge method, exactly: `merge-queue: squa
 and read `queue:`, so none ever reads as intent.
 
 In this repository a `queue dashboard` job keeps one pinned issue, "Merge queue", whose
-body shows every open pull request: an alert with the queue's state and `main`'s, then a
-table per section, what needs a person first (needs the author, needs a manual merge,
-could join, in flight, queued), with each one's checks, review, age and next step, the
-reasons and a person's commands folded under it, and a link that draws the queue in the
-console. It is rewritten whole after every apply run and on every label, review or
+body shows every open pull request: a status line with `main`'s state and a count per
+section, then one leaderboard ranked by how near each row is to merging (validating,
+queued in queue order, can join), with the kicked-back rows unranked below it. Each row
+gives its state and age, checks, review and next step; the reasons and a person's
+commands fold under the table, beside a link that draws the queue in the console. It is rewritten whole after every apply run and on every label, review or
 auto-merge event, and the same page goes to the run's summary. To render it locally:
 `magus buzz hack/ci/pull-requests.buzz -- dashboard --all --preview --out dashboard.md`.
 

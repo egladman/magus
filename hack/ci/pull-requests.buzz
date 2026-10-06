@@ -1611,27 +1611,25 @@ final RFC3339 = "2006-01-02T15:04:05Z07:00";
 final VALIDATE_JOB = "queue validate #";
 // GitHub refuses an issue body past this many characters.
 final BODY_LIMIT = 65536;
-// Sections in the summary line's order, what needs a person first: key, emoji, and the
-// summary line's word for a pull request in it.
+// Sections in the status line's order, nearest to merging first: key, and the status
+// line's word for the pull requests in it.
 final SECTIONS = [
-    ["author", "🛑", "kicked back"],
-    ["manual", "🔧", "to merge by hand"],
-    ["join", "📥", "could join"],
-    ["flight", "🚀", "validating"],
-    ["queued", "⏳", "queued"],
-    ["drafts", "📝", "draft or fork"],
+    ["flight", "validating"],
+    ["queued", "queued"],
+    ["join", "can join"],
+    ["manual", "to merge by hand"],
+    ["author", "kicked back"],
+    ["drafts", "draft or fork"],
 ];
 // The sections the leaderboard ranks, nearest to merging first. The last two are kicked
-// back: they rank by their section's emoji, not a place.
+// back: they take no place.
 final RANKED = ["flight", "queued", "join", "manual", "author"];
 final BLOCKED = ["manual", "author"];
-final MEDALS = ["🥇", "🥈", "🥉"];
-// The stages a progress bar draws, one cell each, in the order a pull request passes
-// them. A merge takes it off the board, so validating is never drawn as passed.
-final STAGES = ["checks green", "approved", "queued", "first in line", "validating"];
+// UNRANKED is a kicked-back row's rank.
+final UNRANKED = "-";
 // Stages from which a green, approved pull request with no intent can join as it is.
 final JOINABLE = ["needs-queue", "behind", "conflicting"];
-final TABLE_HEAD = "| # | Pull request | Progress | CI | Review | Next |\n| :-: | --- | --- | :-: | :-: | --- |";
+final TABLE_HEAD = "| # | Pull request | State | CI | Review | Next |\n| --: | --- | --- | --- | --- | --- |";
 
 // Queued is one change `magus queue ls` lists, in queue order.
 object Queued {
@@ -1902,8 +1900,8 @@ fun isRegeneration(p: Pull) > bool {
     return p.labels.indexOf(NEEDS_REGENERATION) != null or (p.kick != null and p.kick!.code == "KICK_REGENERATION");
 }
 
-// sectionOf is the one section p shows in, the first that holds: "other" is none.
-export fun sectionOf(p: Pull, r: Record, b: Board, queued: bool) > str {
+// pullSection is the one section p shows in, the first that holds: "other" is none.
+export fun pullSection(p: Pull, r: Record, b: Board, queued: bool) > str {
     if (r.stage == "merged" or r.stage == "closed") {
         return "other";
     }
@@ -1928,8 +1926,8 @@ export fun sectionOf(p: Pull, r: Record, b: Board, queued: bool) > str {
     return "other";
 }
 
-// placementsOf classifies every open pull request the page shows, in pull request order.
-export fun placementsOf(b: Board) > [Placed] {
+// placePulls classifies every open pull request the page shows, in pull request order.
+export fun placePulls(b: Board) > [Placed] {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -1940,7 +1938,7 @@ export fun placementsOf(b: Board) > [Placed] {
         if (r.stage == "merged" or r.stage == "closed") {
             continue;
         }
-        acc.append(Placed{ pull = p, record = r, section = sectionOf(p, r: r, b: b, queued: ids.indexOf(p.number) != null) });
+        acc.append(Placed{ pull = p, record = r, section = pullSection(p, r: r, b: b, queued: ids.indexOf(p.number) != null) });
     }
     return acc;
 }
@@ -1966,7 +1964,7 @@ fun kickReason(p: Pull) > str {
     return reason;
 }
 
-fun requeueOf(p: Pull) > str {
+fun requeueCommand(p: Pull) > str {
     if (p.kick != null and p.kick!.requeue != "") {
         return p.kick!.requeue;
     }
@@ -1976,7 +1974,7 @@ fun requeueOf(p: Pull) > str {
 // kickMethod is the merge method a kick-back's requeue command names, squash when it
 // names none.
 fun kickMethod(p: Pull) > str {
-    foreach (word in requeueOf(p).split(" ")) {
+    foreach (word in requeueCommand(p).split(" ")) {
         foreach (m in METHODS) {
             if (word == "--" + m) {
                 return m;
@@ -2028,13 +2026,13 @@ fun joinCommand(p: Pull, r: Record) > str {
     return "gh pr merge {p.number} --auto --squash";
 }
 
-// boxesOf is every box the page offers, the controls first: what "start it back up"
+// offeredBoxes is every box the page offers, the controls first: what "start it back up"
 // means for each pull request's section. A kicked-back pull request is queued again, one
 // that could join is queued, and one whose checks failed has them rerun.
-export fun boxesOf(b: Board, placed: [Placed]) > [Box] {
+export fun offeredBoxes(b: Board, placed: [Placed]) > [Box] {
     final acc = mut [
-        Box{ action = "start", label = "🔁 **Run the queue now**: start a validation run on {mono(b.base)}, unless one already waits to read the queue" },
-        Box{ action = "render", label = "🖌️ **Re-render this page**" },
+        Box{ action = "start", label = "**Run the queue now** on {mono(b.base)}" },
+        Box{ action = "render", label = "**Re-render this page**" },
     ];
     foreach (x in placed) {
         final p = x.pull;
@@ -2042,14 +2040,14 @@ export fun boxesOf(b: Board, placed: [Placed]) > [Box] {
         if ((s == "author" or s == "manual") and standalone(p, open: b.open)) {
             var why = "";
             if (p.kick != null and p.kick!.code != "") {
-                why = "; it was kicked back with {mono(p.kick!.code)}";
+                why = ", kicked back with {mono(p.kick!.code)}";
             }
             acc.append(Box{ action = "requeue", pr = p.number, section = s, method = kickMethod(p),
-                label = "🔁 **Requeue #{p.number}** as it is now: auto-merge ({kickMethod(p)}){why}" });
+                label = "**Requeue #{p.number}** with auto-merge ({kickMethod(p)}){why}" });
         }
         if (s == "join" and x.record.action == "queue" and x.record.evidence.top == null) {
             acc.append(Box{ action = "queue", pr = p.number, section = s,
-                label = "📥 **Queue #{p.number}** with auto-merge (squash)" });
+                label = "**Queue #{p.number}** with auto-merge (squash)" });
         }
         final runs = failedRuns(p);
         if (s != "drafts" and s != "flight" and x.record.state == "red" and runs.len() > 0) {
@@ -2058,7 +2056,7 @@ export fun boxesOf(b: Board, placed: [Placed]) > [Box] {
                 plural = "s";
             }
             acc.append(Box{ action = "rerun", pr = p.number, section = s, runs = runs,
-                label = "🔂 **Rerun #{p.number}'s failed jobs** in {runs.len()} workflow run{plural}" });
+                label = "**Rerun #{p.number}'s failed jobs** ({runs.len()} workflow run{plural})" });
         }
     }
     return acc;
@@ -2270,28 +2268,19 @@ export fun replySummary(e: Edit, role: str, res: Response) > str {
         } else if (x.action != "render") {
             what = "{x.action} #{x.pr} with auto-merge ({x.method})";
         }
-        lines.append("- ✅ {what}");
+        lines.append("- done: {what}");
     }
     foreach (s in res.choice.skip) {
-        lines.append("- ⏭️ {s}");
+        lines.append("- skipped: {s}");
     }
     return lines.join("\n") + "\n";
 }
 
-fun emojiOf(section: str) > str {
-    foreach (s in SECTIONS) {
-        if (s[0] == section) {
-            return s[1];
-        }
-    }
-    return "";
-}
-
-// leaderboardOf ranks the rows the table shows by how near each is to merging: in
+// rankRows ranks the rows the table shows by how near each is to merging: in
 // flight, then queued, each in queue order, then could join, then the kicked back, a
 // manual merge before the author's. Queued with intent but not yet listed by `magus
 // queue ls` follows the listed, in pull request order.
-export fun leaderboardOf(b: Board, placed: [Placed]) > [Ranked] {
+export fun rankRows(b: Board, placed: [Placed]) > [Ranked] {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -2317,13 +2306,10 @@ export fun leaderboardOf(b: Board, placed: [Placed]) > [Ranked] {
     var place = 0;
     var waiting = 0;
     foreach (x in ordered) {
-        var rank = emojiOf(x.section);
+        var rank = UNRANKED;
         if (BLOCKED.indexOf(x.section) == null) {
             place = place + 1;
             rank = "{place}";
-            if (place <= MEDALS.len()) {
-                rank = MEDALS[place - 1];
-            }
         }
         var line: int? = null;
         if (x.section == "queued" and ids.indexOf(x.pull.number) != null) {
@@ -2335,48 +2321,20 @@ export fun leaderboardOf(b: Board, placed: [Placed]) > [Ranked] {
     return acc;
 }
 
-// progressOf is x's stage bar, a cell per STAGES entry, then a word for where it stands
-// and for how long. A cell is 🟩 for a stage passed, 🟨 under way, 🟥 failed and ⬜ not
-// reached; each reads its own fact, so a red check on a queued change shows as red
-// where it is. A kick-back fails the queued stage.
-export fun progressOf(x: Ranked, b: Board) > str !> any {
+// stateCell is where x stands on its way to merging, and for how long when the board knows.
+// CI and review have columns of their own.
+export fun stateCell(x: Ranked, b: Board) > str !> any {
     final p = x.placed.pull;
     final s = x.placed.section;
-    final state = x.placed.record.state;
-    var checks = "🟨";
-    if (state == "green" or state == "red-inherited") {
-        checks = "🟩";
-    } else if (state == "red") {
-        checks = "🟥";
-    }
-    var review = "⬜";
-    if (p.review == "APPROVED") {
-        review = "🟩";
-    } else if (p.review == "CHANGES_REQUESTED") {
-        review = "🟥";
-    }
-    var queued = "⬜";
-    if (s == "flight" or s == "queued") {
-        queued = "🟩";
-    } else if (BLOCKED.indexOf(s) != null) {
-        queued = "🟥";
-    }
-    var first = "⬜";
-    var validating = "⬜";
-    var label = "could join";
+    var label = "can join";
     var since = "";
     if (s == "flight") {
-        first = "🟩";
-        validating = "🟨";
         label = "validating";
         since = b.flights[p.number]!.since;
     } else if (s == "queued") {
         label = "queued";
         if (x.line != null) {
             label = "queued {ordinal(x.line!)}";
-            if (x.line! == 1) {
-                first = "🟩";
-            }
         }
         if (b.waits[p.number] != null) {
             since = b.waits[p.number]!.since;
@@ -2392,14 +2350,14 @@ export fun progressOf(x: Ranked, b: Board) > str !> any {
     }
     final held = age(since, now: b.at);
     if (held != "-") {
-        label = "{label} · {held}";
+        label = "{label}, {held}";
     }
-    return [checks, review, queued, first, validating].join("") + " " + label;
+    return label;
 }
 
-// nextOf is the one thing to do next for x. A box cannot be checked inside a table, so
-// "☐" points at the row's box in the list under it.
-fun nextOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
+// nextCell is the one thing to do next for x. A box cannot be checked inside a table, so
+// "box below" points at the row's box in the list under it.
+fun nextCell(x: Ranked, b: Board, boxes: [Box]) > str !> any {
     final p = x.placed.pull;
     final s = x.placed.section;
     final has = fun (action: str) > bool {
@@ -2411,11 +2369,11 @@ fun nextOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
         return false;
     };
     if (s == "flight") {
-        return "merging: [its run]({b.flights[p.number]!.url})";
+        return "merging: [run]({b.flights[p.number]!.url})";
     }
     if (s == "queued") {
         if (has("rerun")) {
-            return "☐ rerun";
+            return "rerun (box below)";
         }
         var said = x.placed.record.reason;
         final w = b.waits[p.number];
@@ -2429,7 +2387,7 @@ fun nextOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
     }
     if (s == "join") {
         if (has("queue")) {
-            return "☐ queue";
+            return "queue (box below)";
         }
         return "queue it (see how)";
     }
@@ -2438,14 +2396,14 @@ fun nextOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
         fix = "regenerate";
     }
     if (has("requeue")) {
-        return "{fix}, then ☐ requeue";
+        return "{fix}, then requeue (box below)";
     }
     return "{fix}, then requeue (see why)";
 }
 
-// rowOf is x's leaderboard row: rank, the pull request with its author and branch,
-// progress, CI, review, and the one thing to do next.
-fun rowOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
+// tableRow is x's leaderboard row: rank, the pull request with its author and branch,
+// state, CI, review, and the one thing to do next.
+fun tableRow(x: Ranked, b: Board, boxes: [Box]) > str !> any {
     final p = x.placed.pull;
     final r = x.placed.record;
     // A pipe in a code span still splits a table row; GitHub reads "\|" there as "|".
@@ -2454,43 +2412,43 @@ fun rowOf(x: Ranked, b: Board, boxes: [Box]) > str !> any {
         who = cell(p.author) + " · " + who;
     }
     final pr = "#{p.number} " + cell(clip(p.title, n: 60)) + "<br><sub>" + who + "</sub>";
-    var ci = "🟡";
+    var ci = "running";
     if (r.state == "green") {
-        ci = "🟢";
+        ci = "green";
     } else if (r.state == "red") {
-        ci = "🔴 {failing(p.checks).len()}";
+        ci = "red ({failing(p.checks).len()})";
     } else if (r.state == "red-inherited") {
-        ci = "🟠";
+        ci = "red on {mono(b.base)}";
     }
     var review = "-";
     if (p.review == "APPROVED") {
-        review = "✅";
+        review = "approved";
     } else if (p.review == "CHANGES_REQUESTED") {
-        review = "❌";
+        review = "changes requested";
     } else if (p.review == "REVIEW_REQUIRED") {
-        review = "👀";
+        review = "pending";
     }
-    return row([x.rank, pr, progressOf(x, b: b), ci, review, nextOf(x, b: b, boxes: boxes)]);
+    return row([x.rank, pr, stateCell(x, b: b), ci, review, nextCell(x, b: b, boxes: boxes)]);
 }
 
-// whyOf is x's line in the details under the leaderboard: the full reason, and the
+// whyLine is x's line in the details under the leaderboard: the full reason, and the
 // command a person runs instead of a box.
-fun whyOf(x: Placed, b: Board) > str {
+fun whyLine(x: Placed, b: Board) > str {
     final p = x.pull;
     if (x.section == "author") {
-        return "- **#{p.number}** {kickReason(p)}<br>by hand, once fixed: {mono(requeueOf(p))}";
+        return "- **#{p.number}** {kickReason(p)}<br>by hand, once fixed: {mono(requeueCommand(p))}";
     }
     if (x.section == "manual") {
         return "- **#{p.number}** {kickReason(p)}<br>merge {mono(b.base)} in, run {mono("magus run generate:rw")}, push, "
-            + "then {mono(requeueOf(p))}; or a person merges it past the queue: {mono("gh pr merge {p.number} --squash --admin")}";
+            + "then {mono(requeueCommand(p))}; or a person merges it past the queue: {mono("gh pr merge {p.number} --squash --admin")}";
     }
     return "- **#{p.number}** approved, checks green: {mono(joinCommand(p, r: x.record))}";
 }
 
-// queueGraphOf is the queue's graph: the base, then each queued change after the one it is
+// queueGraph is the queue's graph: the base, then each queued change after the one it is
 // stacked on. A change kicked back is a node with no edge, since it is stacked on nothing.
 // Null when nothing is queued or kicked.
-export fun queueGraphOf(b: Board, sections: {int: str}) > figurelink\FigureGraph? {
+export fun queueGraph(b: Board, sections: {int: str}) > figurelink\FigureGraph? {
     final ids = mut [<int>];
     foreach (q in b.queue) {
         ids.append(q.id);
@@ -2548,7 +2506,7 @@ fun mergedLine(b: Board) > str !> any {
     if (b.merged.len() >= MERGED_LIMIT and queue + past == b.merged.len()) {
         span = "in the newest {MERGED_LIMIT}, all from the last 7 days";
     }
-    return "📦 merged {span}: **{queue}** by the queue, **{past}** past it";
+    return "merged {span}: {queue} by the queue, {past} past it";
 }
 
 fun mainLine(b: Board) > str {
@@ -2556,126 +2514,104 @@ fun mainLine(b: Board) > str {
         return "";
     }
     final m = b.mainRun!;
-    var said = "⚪ " + m.state;
-    if (m.state == "green") {
-        said = "🟢 green";
-    } else if (m.state == "red") {
-        said = "🔴 red";
-    } else if (m.state == "running") {
-        said = "🟡 running";
-    }
+    var said = m.state;
     if (m.url != "") {
         said = "[{said}]({m.url})";
     }
     return "{mono(b.base)} {said}";
 }
 
-// dashboardOf renders the page from what the step read; it reads nothing itself.
-export fun dashboardOf(b: Board) > str !> any {
-    final placed = placementsOf(b);
-    final boxes = boxesOf(b, placed: placed);
+// renderDashboard renders the page from what the step read; it reads nothing itself.
+export fun renderDashboard(b: Board) > str !> any {
+    final placed = placePulls(b);
+    final boxes = offeredBoxes(b, placed: placed);
     final sections = mut {<int: str>};
     final counts = mut {<str: int>};
     foreach (x in placed) {
         sections[x.pull.number] = x.section;
         counts[x.section] = (counts[x.section] ?? 0) + 1;
     }
-    final ranked = leaderboardOf(b, placed: placed);
+    final ranked = rankRows(b, placed: placed);
 
-    final summary = mut [<str>];
+    final status = mut [<str>];
+    final ci = mainLine(b);
+    if (ci != "") {
+        status.append(ci);
+    }
     foreach (s in SECTIONS) {
         final n = counts[s[0]] ?? 0;
         if (n > 0) {
-            summary.append("{s[1]} **{n}** {s[2]}");
+            status.append("{n} {s[1]}");
         }
     }
-    if (summary.len() == 0) {
-        summary.append("Nothing is queued");
-    }
-    final ci = mainLine(b);
-    if (ci != "") {
-        summary.append(ci);
-    }
-    final people = (counts["author"] ?? 0) + (counts["manual"] ?? 0);
-    final red = b.mainRun != null and b.mainRun!.state == "red";
-    var alert = "NOTE";
+    // One sentence, for the one thing a reader should do; the worst condition wins.
     var hint = "";
-    if (people > 0 or red) {
-        alert = "CAUTION";
-        if (people > 0) {
-            hint = "A person is needed: the queue kicked back the rows marked 🛑 and 🔧.";
-        } else {
-            hint = "{mono(b.base)} is red, and a candidate built onto it can fail the gate for that alone.";
-        }
+    if ((counts["author"] ?? 0) + (counts["manual"] ?? 0) > 0) {
+        hint = "A person is needed for the kicked-back rows.";
+    } else if (b.mainRun != null and b.mainRun!.state == "red") {
+        hint = "{mono(b.base)} is red, so a candidate can fail the gate for that alone.";
     } else if ((counts["queued"] ?? 0) > 0 and (counts["flight"] ?? 0) == 0) {
-        alert = "WARNING";
-        hint = "Changes are queued and none is validating; if that lasts, check **Run the queue now**.";
+        hint = "Changes are queued and none is validating; if that lasts, check Run the queue now.";
     } else if ((counts["join"] ?? 0) > 0) {
-        alert = "TIP";
-        hint = "An approved, green pull request could join: check its **Queue** box under the table.";
+        hint = "An approved, green pull request can join: check its Queue box.";
     }
 
     final meta = mut ["Updated {when(b.at)} UTC"];
     if (b.runUrl != "") {
-        meta[0] = meta[0] + " by [this run]({b.runUrl})";
+        meta[0] = meta[0] + " ([run]({b.runUrl}))";
     }
     if (b.tip.len() >= 12) {
         meta.append("{mono(b.base)} at {mono(b.tip.sub(0, len: 12))}");
     }
-    final g = queueGraphOf(b, sections: sections);
+    final g = queueGraph(b, sections: sections);
     if (g != null) {
         final link = figurelink\figureLink(b.console, title: g!.title, nodes: g!.nodes, edges: g!.edges);
         if (link != "") {
-            meta.append("[🕸️ the queue as a graph]({link})");
+            meta.append("[queue graph]({link})");
         }
     }
     meta.append(mergedLine(b));
 
-    final lines = mut [
-        "## 🚦 Merge queue",
-        "",
-        "> [!{alert}]",
-        "> " + summary.join(" · "),
-    ];
+    final lines = mut ["## Merge queue", ""];
+    if (status.len() > 0) {
+        lines.append(status.join(" · "));
+        lines.append("");
+    }
     if (hint != "") {
-        lines.append(">");
-        lines.append("> " + hint);
+        lines.append(hint);
+        lines.append("");
+    }
+    if (ranked.len() == 0) {
+        lines.append("Nothing to merge right now.");
+    } else {
+        lines.append(TABLE_HEAD);
+        foreach (x in ranked) {
+            lines.append(tableRow(x, b: b, boxes: boxes));
+        }
     }
     lines.append("");
-    lines.append("<sub>" + meta.join(" · ") + "</sub>");
-    lines.append("");
+    // A row's boxes in rank order, then the queue's own.
+    foreach (x in ranked) {
+        foreach (bx in boxes) {
+            if (bx.pr == x.placed.pull.number) {
+                lines.append(boxLine(bx));
+            }
+        }
+    }
     foreach (x in boxes) {
         if (x.section == "") {
             lines.append(boxLine(x));
         }
     }
     lines.append("");
+    lines.append("<sub>" + meta.join(" · ") + "</sub>");
+    lines.append("");
 
-    if (ranked.len() == 0) {
-        lines.append("🏁 Nothing to merge right now: no pull request is validating, queued or ready to join.");
-        lines.append("");
-    } else {
-        lines.append(TABLE_HEAD);
-        foreach (x in ranked) {
-            lines.append(rowOf(x, b: b, boxes: boxes));
-        }
-        lines.append("");
-        var drawn = 0;
-        foreach (x in ranked) {
-            foreach (bx in boxes) {
-                if (bx.pr == x.placed.pull.number) {
-                    lines.append(boxLine(bx));
-                    drawn = drawn + 1;
-                }
-            }
-        }
-        if (drawn > 0) {
-            lines.append("");
-        }
+    if (ranked.len() > 0) {
         final why = mut [<str>];
         foreach (x in ranked) {
             if (x.placed.section != "flight" and x.placed.section != "queued") {
-                why.append(whyOf(x.placed, b: b));
+                why.append(whyLine(x.placed, b: b));
             }
         }
         if (why.len() > 0) {
@@ -2697,7 +2633,7 @@ export fun dashboardOf(b: Board) > str !> any {
         }
     }
     if (drafts.len() > 0) {
-        lines.append("<details><summary>{emojiOf("drafts")} <b>Drafts and forks</b> ({drafts.len()})</summary>");
+        lines.append("<details><summary>Drafts and forks ({drafts.len()})</summary>");
         lines.append("");
         foreach (x in drafts) {
             var why = "a draft";
@@ -2718,7 +2654,7 @@ export fun dashboardOf(b: Board) > str !> any {
         }
     }
     if (other.len() > 0) {
-        lines.append("<details><summary>💤 <b>{other.len()} more open</b>, with no merge intent and not both approved and green</summary>");
+        lines.append("<details><summary>{other.len()} more open, not queued and not both approved and green</summary>");
         lines.append("");
         foreach (x in other) {
             lines.append("- #{x.pull.number} " + cell(clip(x.pull.title, n: 60)) + ": " + cell(x.record.reason));
@@ -2740,18 +2676,14 @@ export fun dashboardOf(b: Board) > str !> any {
         lines.append("");
     }
 
-    lines.append("---");
+    lines.append("<details><summary>How this page works</summary>");
     lines.append("");
-    lines.append("<details><summary>ℹ️ How this page works</summary>");
-    lines.append("");
-    lines.append("- It is rendered whole from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; nothing written here survives.");
-    lines.append("- Rows rank by how near each is to merging: validating, then queued in queue order, then could join; 🔧 and 🛑 rows were kicked back and sit below.");
-    lines.append("- **Progress** has a cell per stage: {STAGES.join(", ")}. 🟩 passed, 🟨 under way, 🟥 failed (a kick-back fails *queued*), ⬜ not yet. A merge takes the row off the board.");
-    lines.append("- GitHub draws no box inside a table, so each row's boxes are listed under it, in rank order; **Next** says ☐ when the row has one.");
-    lines.append("- A box runs its action when someone with write, maintain or admin access checks it. Anyone else's check, and a bot's, is ignored, and the page is rendered again with every box clear.");
-    lines.append("- **Requeue** and **Queue** enable auto-merge as the queue app, which is merge intent; **Rerun** reruns the failed jobs; **Run the queue now** starts a validation run on {mono(b.base)} unless one already waits to read the queue. A stack is queued by a label on its top, which only a person can apply.");
-    lines.append("- *Past it* counts merges whose {mono(QUEUE_STATUS)} status was not success when they merged.");
-    lines.append("- To render it yourself: {mono("magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {b.base} --preview --out dashboard.md")}");
+    lines.append("- Rendered from GitHub and `magus queue ls` after every queue run and on every label, review or auto-merge event; edits here do not survive.");
+    lines.append("- Rows rank by how near each is to merging: validating, queued in queue order, can join. Kicked-back rows sit below, unranked.");
+    lines.append("- A box runs when someone with write access checks it; any other check is ignored and the page is rendered again.");
+    lines.append("- Queue and Requeue enable auto-merge as the queue app; Rerun reruns the failed jobs; Run the queue now starts a validation run on {mono(b.base)} unless one is waiting.");
+    lines.append("- Past it counts merges whose {mono(QUEUE_STATUS)} status was not success.");
+    lines.append("- Render it yourself: {mono("magus buzz hack/ci/pull-requests.buzz -- dashboard --all --base {b.base} --preview --out dashboard.md")}");
     lines.append("");
     lines.append("</details>");
     lines.append("");
@@ -2810,7 +2742,7 @@ fun boardOf(sel: Selector) > Board !> any {
 
 // dashboard renders the board and writes it to --out and the --issue body.
 fun dashboard(sel: Selector) > void !> any {
-    final body = dashboardOf(boardOf(sel));
+    final body = renderDashboard(boardOf(sel));
     if (body.len() > BODY_LIMIT) {
         throw "pull-requests: the dashboard is {body.len()} bytes, past the {BODY_LIMIT} characters GitHub takes in an issue body";
     }
@@ -2874,7 +2806,7 @@ fun boxes(o: BoxFlags) > void !> any {
     var offered = [<Box>];
     if (refusalOf(e, issue: o.issue, role: role) == "" and checkedNow(e.before, after: e.after).len() > 0) {
         final b = boardOf(Selector{ all = true, base = o.base });
-        offered = boxesOf(b, placed: placementsOf(b));
+        offered = offeredBoxes(b, placed: placePulls(b));
     }
     final res = respond(e, issue: o.issue, role: role, offered: offered);
     fs\writeFile(o.plan, content: planOf(res.choice.take));
@@ -3439,7 +3371,7 @@ fun lacks(page: str, want: str) > void !> any {
 
 // figureIn decodes the graph a page links, and throws when it links none.
 fun figureIn(page: str) > serialize\Boxed !> any {
-    final open = "[🕸️ the queue as a graph](";
+    final open = "[queue graph](";
     final at = page.indexOf(open);
     if (at == null) {
         throw "no graph link in:\n{page}";
@@ -3508,13 +3440,13 @@ fun fullBoard() > Board {
 }
 
 test "the page for a queue in every state matches its golden" {
-    assert\equal(dashboardOf(fullBoard()), want: fs\readFile("hack/testdata/queue-dashboard.md.golden"), message: "hack/testdata/queue-dashboard.md.golden");
+    assert\equal(renderDashboard(fullBoard()), want: fs\readFile("hack/testdata/queue-dashboard.md.golden"), message: "hack/testdata/queue-dashboard.md.golden");
 }
 
 test "the page for an empty queue matches its golden" {
     final b = Board{ base = "main", at = AT, tip = "cba6465e8617a1b2", open = [<Pull>], pulls = [<Pull>],
         mainRun = MainRun{ state = "green", url = "https://github.com/o/r/actions/runs/70" } };
-    final page = dashboardOf(b);
+    final page = renderDashboard(b);
     assert\equal(page, want: fs\readFile("hack/testdata/queue-dashboard-empty.md.golden"), message: "hack/testdata/queue-dashboard-empty.md.golden");
     lacks(page, want: "#figure=");
     lacks(page, want: "###");
@@ -3522,10 +3454,10 @@ test "the page for an empty queue matches its golden" {
 }
 
 fun rankedBoard(b: Board) > [Ranked] {
-    return leaderboardOf(b, placed: placementsOf(b));
+    return rankRows(b, placed: placePulls(b));
 }
 
-test "the leaderboard ranks validating, queued in queue order, could join, a manual merge, then the author's" {
+test "the leaderboard ranks validating, queued in queue order, can join, a manual merge, then the author's" {
     final rows = rankedBoard(fullBoard());
     final order = mut [<int>];
     final ranks = mut [<str>];
@@ -3536,7 +3468,7 @@ test "the leaderboard ranks validating, queued in queue order, could join, a man
         lines.append(x.line);
     }
     assert\equal(order, want: [1, 2, 3, 4, 5, 8, 9, 7, 6], message: "the order");
-    assert\equal(ranks, want: ["🥇", "🥈", "🥉", "4", "5", "6", "7", "🔧", "🛑"], message: "the ranks");
+    assert\equal(ranks, want: ["1", "2", "3", "4", "5", "6", "7", UNRANKED, UNRANKED], message: "the ranks");
     assert\equal(lines, want: [null, 1, 2, 3, 4, null, null, null, null], message: "places in line, validating excluded");
 
     final open = [Pull{ number = 1, autoMerge = true }, Pull{ number = 2, autoMerge = true }, Pull{ number = 3, autoMerge = true }];
@@ -3545,36 +3477,26 @@ test "the leaderboard ranks validating, queued in queue order, could join, a man
     assert\equal([listed[0].line, listed[1].line, listed[2].line], want: [1, 2, null], message: "no place for the unlisted");
 }
 
-test "each state draws its stage bar" {
+test "each row says where it stands, and for how long" {
     final b = fullBoard();
-    final bars = mut {<int: str>};
+    final states = mut {<int: str>};
     foreach (x in rankedBoard(b)) {
-        bars[x.placed.pull.number] = progressOf(x, b: b);
+        states[x.placed.pull.number] = stateCell(x, b: b);
     }
-    assert\equal(bars[1], want: "🟩🟩🟩🟩🟨 validating · 8m", message: "in flight");
-    assert\equal(bars[2], want: "🟩🟩🟩🟩⬜ queued 1st · 1h", message: "first in line");
-    assert\equal(bars[3], want: "🟥🟩🟩⬜⬜ queued 2nd · 2h", message: "queued with a red check");
-    assert\equal(bars[4], want: "🟩🟩🟩⬜⬜ queued 3rd", message: "queued");
-    assert\equal(bars[8], want: "🟩🟩⬜⬜⬜ could join", message: "could join");
-    assert\equal(bars[7], want: "🟩🟩🟥⬜⬜ needs regeneration · 1h", message: "a manual merge");
-    assert\equal(bars[6], want: "🟥⬜🟥⬜⬜ kicked back · 1h", message: "kicked back red");
-    foreach (n, bar in bars) {
-        var cells = bar.split(" ")[0];
-        foreach (c in ["🟩", "🟨", "🟥", "⬜"]) {
-            cells = cells.replace(c, with: "x");
-        }
-        assert\equal(cells, want: "xxxxx", message: "five cells on #{n}: {bar}");
-    }
+    assert\equal(states[1], want: "validating, 8m", message: "in flight");
+    assert\equal(states[2], want: "queued 1st, 1h", message: "first in line");
+    assert\equal(states[3], want: "queued 2nd, 2h", message: "queued with a red check");
+    assert\equal(states[4], want: "queued 3rd", message: "queued");
+    assert\equal(states[8], want: "can join", message: "can join");
+    assert\equal(states[7], want: "needs regeneration, 1h", message: "a manual merge");
+    assert\equal(states[6], want: "kicked back, 1h", message: "kicked back");
 
     final pending = Pull{ number = 20, autoMerge = true, review = "CHANGES_REQUESTED", checks = [Check{ name = "t", conclusion = "PENDING" }] };
     final pb = board([pending], queue: [<Queued>]);
-    assert\equal(progressOf(rankedBoard(pb)[0], b: pb), want: "🟨🟥🟩⬜⬜ queued", message: "running, changes requested, intent the queue has not listed");
-    final redHead = Pull{ number = 21, autoMerge = true, review = "APPROVED", checks = [red("lint", conclusion: "FAILURE", job: "1")] };
-    final ib = Board{ base = "main", at = AT, open = [redHead], pulls = [redHead], queue = [Queued{ id = 21 }] };
-    assert\equal(progressOf(rankedBoard(ib)[0], b: ib), want: "🟥🟩🟩🟩⬜ queued 1st", message: "red with no baseline read is red");
+    assert\equal(stateCell(rankedBoard(pb)[0], b: pb), want: "queued", message: "intent the queue has not listed");
 }
 
-test "medals go to the top three the queue can merge, and a kicked-back row ranks by its emoji" {
+test "places go to the rows the queue can merge, and a kicked-back row takes none" {
     final ranksOf = fun (b: Board) > [str] {
         final acc = mut [<str>];
         foreach (x in rankedBoard(b)) {
@@ -3583,36 +3505,36 @@ test "medals go to the top three the queue can merge, and a kicked-back row rank
         return acc;
     };
     assert\equal(ranksOf(board([kickedBy(1, code: "KICK_RED"), kickedBy(2, code: "KICK_REGENERATION")], queue: [<Queued>])),
-        want: ["🔧", "🛑"], message: "no medal for a kicked-back row");
+        want: [UNRANKED, UNRANKED], message: "no place for a kicked-back row");
     final two = [Pull{ number = 1, autoMerge = true }, kickedBy(2, code: "KICK_CONFLICT"), Pull{ number = 3, review = "APPROVED", checks = [green("t")] }];
-    assert\equal(ranksOf(board(two, queue: [Queued{ id = 1 }])), want: ["🥇", "🥈", "🛑"], message: "medals skip nothing");
-    final five = [Pull{ number = 1, autoMerge = true }, Pull{ number = 2, autoMerge = true }, Pull{ number = 3, autoMerge = true },
-        Pull{ number = 4, autoMerge = true }, Pull{ number = 5, autoMerge = true }];
-    assert\equal(ranksOf(board(five, queue: [<Queued>])), want: ["🥇", "🥈", "🥉", "4", "5"], message: "numbers after the third");
+    assert\equal(ranksOf(board(two, queue: [Queued{ id = 1 }])), want: ["1", "2", UNRANKED], message: "places skip nothing");
 }
 
 test "a board with nothing to rank says so in one line, and draws no table" {
     final drafts = board([Pull{ number = 1, draft = true }, Pull{ number = 2, review = "CHANGES_REQUESTED", checks = [green("t")] }], queue: [<Queued>]);
-    final page = dashboardOf(drafts);
-    has(page, want: "\n🏁 Nothing to merge right now: no pull request is validating, queued or ready to join.\n");
+    final page = renderDashboard(drafts);
+    has(page, want: "\nNothing to merge right now.\n");
     lacks(page, want: "| # |");
-    has(page, want: "<b>Drafts and forks</b> (1)");
-    has(page, want: "<b>1 more open</b>");
+    has(page, want: "Drafts and forks (1)");
+    has(page, want: "1 more open");
 }
 
-test "the alert is the worst thing on the page" {
-    final alertOf = fun (b: Board) > str !> any {
-        final page = dashboardOf(b);
-        final at = page.indexOf("> [!")!;
-        return page.sub(at + 4, len: page.sub(at + 4).indexOf("]")!);
-    };
-    assert\equal(alertOf(board([<Pull>], queue: [<Queued>])), want: "NOTE", message: "empty");
-    assert\equal(alertOf(board([kickedBy(1, code: "KICK_RED")], queue: [<Queued>])), want: "CAUTION", message: "kicked back");
-    final redMain = Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } };
-    assert\equal(alertOf(redMain), want: "CAUTION", message: "main red");
-    assert\equal(alertOf(board([Pull{ number = 2, autoMerge = true }], queue: [Queued{ id = 2 }])), want: "WARNING", message: "queued, none validating");
-    final joinable = Pull{ number = 3, review = "APPROVED", checks = [green("t")] };
-    assert\equal(alertOf(board([joinable], queue: [<Queued>])), want: "TIP", message: "could join");
+test "the hint names the worst thing on the page, and only it" {
+    final kicked = "A person is needed for the kicked-back rows.";
+    final red = "`main` is red, so a candidate can fail the gate for that alone.";
+    final idle = "Changes are queued and none is validating";
+    final join = "An approved, green pull request can join";
+    final empty = renderDashboard(board([<Pull>], queue: [<Queued>]));
+    foreach (h in [kicked, red, idle, join]) {
+        lacks(empty, want: h);
+    }
+    final redMain = Board{ base = "main", at = AT, open = [kickedBy(1, code: "KICK_RED")], pulls = [kickedBy(1, code: "KICK_RED")],
+        mainRun = MainRun{ state = "red" } };
+    has(renderDashboard(redMain), want: kicked);
+    lacks(renderDashboard(redMain), want: red);
+    has(renderDashboard(Board{ base = "main", at = AT, open = [<Pull>], pulls = [<Pull>], mainRun = MainRun{ state = "red" } }), want: red);
+    has(renderDashboard(board([Pull{ number = 2, autoMerge = true }], queue: [Queued{ id = 2 }])), want: idle);
+    has(renderDashboard(board([Pull{ number = 3, review = "APPROVED", checks = [green("t")] }], queue: [<Queued>])), want: join);
 }
 
 test "a partition of three links each behind the base" {
@@ -3624,16 +3546,16 @@ test "a partition of three links each behind the base" {
     final b = Board{ base = "main", at = AT, open = open, pulls = open,
         queue = [Queued{ id = 1 }, Queued{ id = 2 }, Queued{ id = 3 }],
         flights = {1: Flight{ url = "https://github.com/o/r/actions/runs/9/job/8", since = "2026-09-26T19:30:00Z" }} };
-    final page = dashboardOf(b);
-    has(page, want: "[🕸️ the queue as a graph](" + figurelink\defaultConsoleBase + "graph/#figure=");
+    final page = renderDashboard(b);
+    has(page, want: "[queue graph](" + figurelink\defaultConsoleBase + "graph/#figure=");
     final doc = figureIn(page);
     assert\equal(doc.q("kind").stringValue(), want: "deps", message: "kind");
     assert\equal(doc.q("title").stringValue(), want: "Merge queue into main", message: "title");
     assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3"], message: "the base, then each change");
     assert\equal(doc.q("nodes").listValue()[1].q("label").stringValue(), want: "#1 one", message: "a change's label");
     assert\equal(edgesOf(doc), want: ["base>pr1", "base>pr2", "base>pr3"], message: "each behind the base");
-    has(page, want: "| 🥇 | #1 one<br><sub>`a`</sub> | 🟩⬜🟩🟩🟨 validating · 30m | 🟢 | - | merging: [its run](https://github.com/o/r/actions/runs/9/job/8) |");
-    has(page, want: "| 🥉 | #3 three<br><sub>`c`</sub> | 🟨⬜🟩⬜⬜ queued 2nd | 🟡 | - | wait: queued |");
+    has(page, want: "| 1 | #1 one<br><sub>`a`</sub> | validating, 30m | green | - | merging: [run](https://github.com/o/r/actions/runs/9/job/8) |");
+    has(page, want: "| 3 | #3 three<br><sub>`c`</sub> | queued 2nd | running | - | wait: queued |");
 }
 
 test "a stack links each member behind the one it is stacked on" {
@@ -3641,20 +3563,20 @@ test "a stack links each member behind the one it is stacked on" {
         Pull{ number = 10, head = "s1", title = "bottom" },
         Pull{ number = 11, head = "s2", base = "s1", title = "top", labels = ["merge-queue: squash"] },
     ];
-    final page = dashboardOf(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
+    final page = renderDashboard(board(open, queue: [Queued{ id = 10 }, Queued{ id = 11, parent = 10 }]));
     assert\equal(edgesOf(figureIn(page)), want: ["base>pr10", "pr10>pr11"], message: "the top behind the bottom");
-    has(page, want: "| 🟨⬜🟩⬜⬜ queued 2nd | 🟡 | - | wait: stacked on #10, which has not merged |");
+    has(page, want: "| queued 2nd | running | - | wait: stacked on #10, which has not merged |");
 }
 
 test "an empty queue has no graph" {
-    assert\equal(queueGraphOf(board([<Pull>], queue: [<Queued>]), sections: {<int: str>}) == null, want: true, message: "an empty queue has none");
+    assert\equal(queueGraph(board([<Pull>], queue: [<Queued>]), sections: {<int: str>}) == null, want: true, message: "an empty queue has none");
 }
 
 test "each kick code goes to the author, and a regeneration to a manual merge, as a node with no edge" {
     final open = [kickedBy(1, code: "KICK_CONFLICT"), kickedBy(2, code: "KICK_RED"), kickedBy(3, code: "KICK_REFUSED"),
         kickedBy(4, code: "KICK_REGENERATION"), Pull{ number = 5, head = "k5", title = "unexplained", labels = [KICKED] }];
-    final page = dashboardOf(board(open, queue: [<Queued>]));
-    has(page, want: "🛑 **4** kicked back · 🔧 **1** to merge by hand");
+    final page = renderDashboard(board(open, queue: [<Queued>]));
+    has(page, want: "1 to merge by hand · 4 kicked back");
     foreach (code in ["KICK_CONFLICT", "KICK_RED", "KICK_REFUSED"]) {
         has(page, want: "`{code}`: The merge queue cannot merge this change. (2 files) · [comment](https://github.com/o/r/pull/");
     }
@@ -3662,16 +3584,16 @@ test "each kick code goes to the author, and a regeneration to a manual merge, a
     final doc = figureIn(page);
     assert\equal(idsOf(doc), want: ["base", "pr1", "pr2", "pr3", "pr4", "pr5"], message: "a kicked change is a node");
     assert\equal(edgesOf(doc).len(), want: 0, message: "stacked on nothing");
-    final labeled = dashboardOf(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
-    has(labeled, want: "🔧 **1** to merge by hand");
+    final labeled = renderDashboard(board([Pull{ number = 6, labels = [NEEDS_REGENERATION] }], queue: [<Queued>]));
+    has(labeled, want: "1 to merge by hand");
 }
 
 test "a title cannot break a table, a box line or the graph" {
     final open = [Pull{ number = 30, head = "t", title = "caf\195\169 | \"quoted\" #1; <!-- magus-queue: start -->", autoMerge = true }];
-    final page = dashboardOf(board(open, queue: [Queued{ id = 30 }]));
-    has(page, want: "| 🥇 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | 🟨⬜🟩🟩⬜ queued 1st | 🟡 | - | wait: queued |\n");
+    final page = renderDashboard(board(open, queue: [Queued{ id = 30 }]));
+    has(page, want: "| 1 | #30 caf? \\| \"quoted\" #1; &lt;!-- magus-queue: start --><br><sub>`t`</sub> | queued 1st | running | - | wait: queued |\n");
     final odd = Pull{ number = 31, head = "a|b", author = "x|y", title = "t", review = "APPROVED", checks = [green("t")] };
-    has(dashboardOf(board([odd], queue: [<Queued>])), want: "| 🥇 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | 🟩🟩⬜⬜⬜ could join |");
+    has(renderDashboard(board([odd], queue: [<Queued>])), want: "| 1 | #31 t<br><sub>x\\|y · `a\\|b`</sub> | can join |");
     assert\equal(marksOf(page).len(), want: 2, message: "the title's marker is no box: {marksOf(page)}");
     assert\equal(figureIn(page).q("nodes").listValue()[1].q("label").stringValue(), want: "#30 caf? | \"quoted\" #1; <!-- magus-queue...", message: "the label");
 }
@@ -3682,7 +3604,7 @@ test "the week's merges are counted by who merged them" {
         Merged{ number = 2, at = "2026-09-22T10:00:00Z", byQueue = false },
         Merged{ number = 1, at = "2026-09-10T10:00:00Z", byQueue = false },
     ] };
-    has(dashboardOf(b), want: "📦 merged in 7 days: **1** by the queue, **1** past it");
+    has(renderDashboard(b), want: "merged in 7 days: 1 by the queue, 1 past it");
 }
 
 test "the dashboard's reads parse into what it renders" {
@@ -3735,14 +3657,14 @@ fun keysOf(marks: [Mark]) > [str] {
 
 test "each box offered is drawn unchecked, and reads back as the box it is" {
     final b = fullBoard();
-    final offered = boxesOf(b, placed: placementsOf(b));
+    final offered = offeredBoxes(b, placed: placePulls(b));
     final want = mut [<str>];
     foreach (x in offered) {
         want.append("  {x.action} {x.pr}");
     }
     assert\equal(want, want: ["  start 0", "  render 0", "  rerun 3", "  requeue 6", "  rerun 6", "  requeue 7", "  queue 8", "  rerun 12"], message: "the boxes");
     final drawn = mut [<str>];
-    foreach (k in keysOf(marksOf(dashboardOf(b)))) {
+    foreach (k in keysOf(marksOf(renderDashboard(b)))) {
         drawn.append(k);
     }
     drawn.sort(fun (a: str, c: str) > bool => a < c);
@@ -3760,15 +3682,15 @@ test "each box offered is drawn unchecked, and reads back as the box it is" {
 
 test "a stack, a conflicting pull request and one in flight offer no box of their own" {
     final b = fullBoard();
-    foreach (x in boxesOf(b, placed: placementsOf(b))) {
+    foreach (x in offeredBoxes(b, placed: placePulls(b))) {
         assert\equal([4, 5, 9, 1, 10, 11].indexOf(x.pr) == null, want: true, message: "a box for #{x.pr}");
     }
     final bottom = Pull{ number = 40, head = "b1", labels = [KICKED], kick = Kick{ code = "KICK_RED" } };
     final top = Pull{ number = 41, head = "b2", base = "b1" };
     final kicked = board([bottom, top], queue: [<Queued>]);
-    final boxes = boxesOf(kicked, placed: placementsOf(kicked));
+    final boxes = offeredBoxes(kicked, placed: placePulls(kicked));
     assert\equal(boxes.len(), want: 2, message: "the controls alone for a kicked stack");
-    has(dashboardOf(kicked), want: "fix it, then requeue (see why)");
+    has(renderDashboard(kicked), want: "fix it, then requeue (see why)");
 }
 
 test "box markers parse only in the shape the page draws" {
@@ -3838,8 +3760,8 @@ test "a checked box the board no longer offers is skipped, and says so" {
     assert\equal(res.choice.skip, want: ["requeue #6: the queue no longer offers that box; the page shows what it does now"], message: "the requeue");
     final summary = replySummary(edit("eli", bot: false), role: "write", res: res);
     has(summary, want: "eli (write) checked 2 box(es) on #515.");
-    has(summary, want: "- ✅ rerun the failed jobs of #3 (11)");
-    has(summary, want: "- ⏭️ requeue #6:");
+    has(summary, want: "- done: rerun the failed jobs of #3 (11)");
+    has(summary, want: "- skipped: requeue #6:");
 }
 
 test "a box's commands are auto-merge and reruns; the plan carries them to act" {
