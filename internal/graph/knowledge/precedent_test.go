@@ -57,8 +57,21 @@ func (f *precedentFixture) imports(from, to string) {
 	f.edge("file:"+from+"/f0.go", precedentNamespace(to, "go"), types.RelationReferences)
 }
 
-// value declares a package-level Go var of type typ in dir's first file.
+// value declares `var name = newName()` of type typ in dir's first file. scip-go renders it
+// `var name typ` either way; the call on its line is what tells it from state.
 func (f *precedentFixture) value(dir, name, typ string) string {
+	id := f.state(dir, name, typ)
+	f.g.AddEdge(types.KnowledgeEdge{
+		Source: "file:" + dir + "/f0.go", Target: precedentNamespace(dir, "go") + "new" + name + "().",
+		Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted, Score: 1,
+		Provenance: refProvenance(types.KnowledgeSymbolRef{Count: 1, Lines: []int{f.line}}),
+	})
+	return id
+}
+
+// state declares `var name typ` in dir's first file: no initializer, so nothing else is
+// referenced on its line.
+func (f *precedentFixture) state(dir, name, typ string) string {
 	f.line++
 	ns := precedentNamespace(dir, "go")
 	id := ns + name + "."
@@ -88,8 +101,9 @@ func precedentRow(t *testing.T, rows []types.Precedent, family types.PrecedentFa
 var goScope = types.PrecedentScope{Language: "go"}
 
 // TestPrecedentsPinThisTreesMeasuredShape reproduces what the miner counted on magus's own tree
-// at 28ba1e69e: cmd -> internal 102/103, Err-named error values 85/87, in-package test files
-// 846/854, with the real departures.
+// at 28ba1e69e: cmd -> internal 102/103 with its real departure. Err-named error values hold
+// 85/85 once the two memo slots declared without an initializer leave the cohort, and
+// in-package test files 846/846 once the eight external packages an import cycle forces do.
 func TestPrecedentsPinThisTreesMeasuredShape(t *testing.T) {
 	t.Parallel()
 
@@ -110,20 +124,24 @@ func TestPrecedentsPinThisTreesMeasuredShape(t *testing.T) {
 	for i := range 85 {
 		f.value(internal[i%len(internal)], fmt.Sprintf("ErrCase%d", i), "error")
 	}
-	magusErr := f.value("cmd/magus", "magusErr", "error")
-	inspectErr := f.value("cmd/magus", "inspectErr", "error")
+	f.state("cmd/magus", "magusErr", "error")
+	f.state("cmd/magus", "inspectErr", "error")
 	f.value("cmd/magus", "ErrPattern", "*regexp.Regexp")
 
 	for i := range 846 {
 		dir := internal[i%len(internal)]
 		f.file(fmt.Sprintf("%s/t%d_test.go", dir, i), precedentNamespace(dir, "go"), path.Base(dir), "go")
 	}
+	// gopherbuzz/std imports gopherbuzz, so a test of gopherbuzz that needs std cannot be in
+	// package buzz.
 	f.pkg("libs/gopherbuzz", 2)
-	var external []types.Case
+	f.pkg("libs/gopherbuzz/std", 1)
+	f.imports("libs/gopherbuzz/std", "libs/gopherbuzz")
 	for _, name := range []string{"conformance", "example", "fiber", "marshal_fuzz", "marshal", "parity", "parser", "session"} {
 		file := "libs/gopherbuzz/" + name + "_test.go"
 		f.file(file, precedentNamespace("libs/gopherbuzz_test", "go"), "buzz_test", "go")
-		external = append(external, fileCase(file))
+		f.edge("file:"+file, precedentNamespace("libs/gopherbuzz", "go"), types.RelationReferences)
+		f.edge("file:"+file, precedentNamespace("libs/gopherbuzz/std", "go"), types.RelationReferences)
 	}
 
 	rows := f.g.Precedents(PrecedentOptions{Generated: map[string]bool{"cmd/magus/gen/f0.go": true}})
@@ -140,25 +158,20 @@ func TestPrecedentsPinThisTreesMeasuredShape(t *testing.T) {
 
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentErrSentinelName, Scope: goScope, Key: types.PrecedentKey{Prefix: "err"},
-		Follow: 85, Cohort: 87, Share: 85.0 / 87, Established: true,
+		Follow: 85, Cohort: 85, Share: 1, Established: true,
 		Cited: []types.Case{
 			{Node: precedentNamespace("internal/guard", "go") + "ErrCase0.", Source: "internal/guard/f0.go:1"},
 			{Node: precedentNamespace("internal/p0", "go") + "ErrCase1.", Source: "internal/p0/f0.go:2"},
 			{Node: precedentNamespace("internal/p10", "go") + "ErrCase11.", Source: "internal/p10/f0.go:12"},
 		},
-		Departures: []types.Case{
-			{Node: inspectErr, Source: "cmd/magus/f0.go:87"},
-			{Node: magusErr, Source: "cmd/magus/f0.go:86"},
-		},
 	}, precedentRow(t, rows, types.PrecedentErrSentinelName, goScope))
 
 	assert.Equal(t, types.Precedent{
 		Family: types.PrecedentTestPackageName, Scope: goScope,
-		Follow: 846, Cohort: 854, Share: 846.0 / 854, Established: true,
+		Follow: 846, Cohort: 846, Share: 1, Established: true,
 		Cited: []types.Case{
 			fileCase("internal/guard/t0_test.go"), fileCase("internal/guard/t102_test.go"), fileCase("internal/guard/t204_test.go"),
 		},
-		Departures: external,
 	}, precedentRow(t, rows, types.PrecedentTestPackageName, goScope))
 }
 
@@ -187,6 +200,52 @@ func TestPrecedentsAreNotEstablishedBelowEitherGate(t *testing.T) {
 		Departures: []types.Case{{Node: bad, Source: "internal/a/f0.go:6"}, {Node: missing, Source: "internal/a/f0.go:7"}},
 	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope),
 		"5 of 7 is under 80%")
+}
+
+// A reference list the index capped may hide the call on a value's line, so a value in that
+// file is judged as a sentinel rather than dropped as state.
+func TestPrecedentsJudgeAValueWhoseLineACappedReferenceListMayHide(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 1)
+	f.pkg("internal/b", 1)
+	for i := range 5 {
+		f.value("internal/a", fmt.Sprintf("ErrX%d", i), "error")
+	}
+	bare := f.state("internal/a", "lastErr", "error")
+	hidden := f.state("internal/b", "cachedErr", "error")
+	f.g.AddEdge(types.KnowledgeEdge{
+		Source: "file:internal/b/f0.go", Target: "symbol:gomod std `fmt`/Errorf().", Relation: types.RelationReferences,
+		Confidence: types.ConfidenceExtracted, Score: 1,
+		Provenance: refProvenance(types.KnowledgeSymbolRef{Count: 3, Lines: []int{40, 41}}),
+	})
+
+	row := precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope)
+	assert.Equal(t, 6, row.Cohort, "lastErr is state; cachedErr's line may hold the third Errorf")
+	assert.Equal(t, []types.Case{{Node: hidden, Source: "internal/b/f0.go:7"}}, row.Departures)
+	assert.NotContains(t, row.Departures, types.Case{Node: bare, Source: "internal/a/f0.go:6"})
+}
+
+// An external test package is forced only when a package it imports reaches back to its own;
+// importing its own package directly is what every external test does.
+func TestPrecedentsJudgeAnExternalTestPackageNoCycleForces(t *testing.T) {
+	t.Parallel()
+
+	f := newPrecedentFixture()
+	f.pkg("internal/a", 2)
+	f.pkg("internal/leaf", 1)
+	f.imports("internal/a", "internal/leaf")
+	f.file("internal/a/b_test.go", precedentNamespace("internal/a", "go"), "a", "go")
+	f.file("internal/a/a_test.go", precedentNamespace("internal/a_test", "go"), "a_test", "go")
+	f.edge("file:internal/a/a_test.go", precedentNamespace("internal/a", "go"), types.RelationReferences)
+	f.edge("file:internal/a/a_test.go", precedentNamespace("internal/leaf", "go"), types.RelationReferences)
+
+	assert.Equal(t, types.Precedent{
+		Family: types.PrecedentTestPackageName, Scope: goScope,
+		Follow: 1, Cohort: 2, Share: 0.5, Cited: []types.Case{fileCase("internal/a/b_test.go")},
+		Departures: []types.Case{fileCase("internal/a/a_test.go")},
+	}, precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentTestPackageName, goScope))
 }
 
 // TestPrecedentsMarshalByteStable: a test file defining namespaces of two languages is judged

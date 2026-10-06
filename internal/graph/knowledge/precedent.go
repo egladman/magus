@@ -5,6 +5,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -32,7 +33,7 @@ func (g *Graph) Precedents(o PrecedentOptions) []types.Precedent {
 	x := newNamingIndex(g, ConformanceChange{Generated: o.Generated})
 	m := precedentMiner{g: g, x: x, fileNS: g.fileNamespaces()}
 	pk := m.packages()
-	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName())
+	rows := slices.Concat(m.depDirection(pk), m.depFanout(pk), m.errSentinelName(), m.testPackageName(pk))
 	for i := range rows {
 		r := &rows[i]
 		if r.Cohort > 0 {
@@ -227,12 +228,14 @@ func (m precedentMiner) depFanout(pk precedentPackages) []types.Precedent {
 }
 
 // errSentinelName counts the values a language's reader types as error, by whether the
-// name's first word starts with err.
+// name's first word starts with err. A value declared with no initializer is state a function
+// assigns, a memo slot beside a sync.Once, not a sentinel, and is not counted.
 func (m precedentMiner) errSentinelName() []types.Precedent {
 	byLang := map[string]*types.Precedent{}
+	lines := map[string]fileRefLines{}
 	for _, id := range slices.Sorted(maps.Keys(m.x.byID)) {
 		d := m.x.byID[id]
-		if d.shape.Kind != declValue || d.shape.Meaning != "error" {
+		if d.shape.Kind != declValue || d.shape.Meaning != "error" || !m.initialized(d, lines) {
 			continue
 		}
 		row := byLang[d.language]
@@ -258,11 +261,53 @@ func (m precedentMiner) errSentinelName() []types.Precedent {
 	return derefPrecedents(byLang)
 }
 
+// fileRefLines is what one file's reference edges say about its lines.
+type fileRefLines struct {
+	// at holds the symbols referenced on each line.
+	at map[int][]string
+	// capped is set when some reference list stopped at the index's cap, which hides lines
+	// in no order a reader can bound.
+	capped bool
+}
+
+// initialized reports whether d's declaration line references anything but d itself: an
+// initializer's call or literal. No indexer marks a write, and scip-go renders `var x error`
+// with or without one, so the line's other references are the evidence. A capped reference
+// list in the file leaves the line unknown, and unknown counts as initialized: the value
+// stays judged.
+func (m precedentMiner) initialized(d *namingDecl, cache map[string]fileRefLines) bool {
+	file, at, ok := strings.Cut(d.source, ":")
+	line, err := strconv.Atoi(at)
+	if !ok || err != nil {
+		return true
+	}
+	refs, seen := cache[file]
+	if !seen {
+		refs = fileRefLines{at: map[int][]string{}}
+		for _, e := range m.g.out[fileID(file)] {
+			if e.Relation != types.RelationReferences {
+				continue
+			}
+			count, ls, ok := parseRefProvenance(e.Provenance)
+			if !ok {
+				continue
+			}
+			refs.capped = refs.capped || count > len(ls)
+			for _, l := range ls {
+				refs.at[l] = append(refs.at[l], e.Target)
+			}
+		}
+		cache[file] = refs
+	}
+	return refs.capped || slices.ContainsFunc(refs.at[line], func(target string) bool { return target != d.id })
+}
+
 // testPackageName counts test files by whether they declare the package their directory's
 // other sources declare. Only a language that packages by directory is judged: one whose
 // directories of several sources almost always share one namespace. A language that gives
-// every file its own module has no package for a test to agree with.
-func (m precedentMiner) testPackageName() []types.Precedent {
+// every file its own module has no package for a test to agree with. A test held out of its
+// directory's package by an import cycle has no choice, and is not counted.
+func (m precedentMiner) testPackageName(pk precedentPackages) []types.Precedent {
 	type dirLang struct{ dir, lang string }
 	sources := map[dirLang]map[string]bool{}
 	files := map[dirLang]int{}
@@ -311,6 +356,10 @@ func (m precedentMiner) testPackageName() []types.Precedent {
 		if len(siblings) != 1 {
 			continue
 		}
+		inPackage := slices.ContainsFunc(nss, func(ns string) bool { return siblings[ns] })
+		if !inPackage && m.cycleForcesOut(id, siblings, pk.deps) {
+			continue
+		}
 		row := byLang[lang]
 		if row == nil {
 			row = &types.Precedent{Family: types.PrecedentTestPackageName, Scope: types.PrecedentScope{Language: lang}}
@@ -318,7 +367,7 @@ func (m precedentMiner) testPackageName() []types.Precedent {
 		}
 		row.Cohort++
 		c := types.Case{Node: id, Source: n.Source}
-		if !slices.ContainsFunc(nss, func(ns string) bool { return siblings[ns] }) {
+		if !inPackage {
 			row.Departures = append(row.Departures, c)
 			continue
 		}
@@ -328,6 +377,24 @@ func (m precedentMiner) testPackageName() []types.Precedent {
 		}
 	}
 	return derefPrecedents(byLang)
+}
+
+// cycleForcesOut reports whether the test file id imports a package, other than its own
+// directory's, that imports that package back: in-package, the test would close the cycle,
+// so Go allows it only as an external test.
+func (m precedentMiner) cycleForcesOut(id string, own map[string]bool, deps packageGraph) bool {
+	for _, e := range m.g.out[id] {
+		if e.Relation != types.RelationReferences || own[e.Target] || !m.g.isNamespace(e.Target) {
+			continue
+		}
+		reach := deps.closure(e.Target)
+		for ns := range own {
+			if reach[ns] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func derefPrecedents(m map[string]*types.Precedent) []types.Precedent {
