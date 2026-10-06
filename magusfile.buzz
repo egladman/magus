@@ -31,6 +31,7 @@ import "magus/spell/docker";
 import "magus/spell/cosign";
 import "magus/spell/markdown";
 import "magus/spell/bash";
+import "magus/spell/buzz";
 
 import "./hack/magusfile/badges" as badges;
 import "./hack/magusfile/coverage" as cov;
@@ -103,13 +104,13 @@ magus\project({
         "internal/graph/knowledge": "repository",
         "internal/server": "composition",
     },
-    "spells": [go, markdown, bash],
+    // buzz claims **/*.buzz, which go_build keys on, and builds the Buzz symbol index
+    // (scip-buzz) beside the Go one.
+    "spells": [go, markdown, bash, buzz],
     // Tool configs no spell glob matches. Each changes what a target does, so an
     // undeclared one replays a stale verdict. Files doctor lists as undeclared stay
     // out when nothing reads them. Never add .gitattributes: magus writes it.
     "sources": [
-        // No spell claims .buzz, and go_build keys on the tree through this glob.
-        "**/*.buzz",
         ".golangci.yml",
         ".mockery.yaml",
         ".markdownlintignore",
