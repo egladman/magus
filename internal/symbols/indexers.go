@@ -1,8 +1,8 @@
 package symbols
 
 import (
+	"cmp"
 	"fmt"
-	"os/exec"
 )
 
 // Indexer describes the SCIP indexer a language's spell drives: the tool it forks and
@@ -25,18 +25,19 @@ var indexers = map[string]Indexer{
 	"rust":       {Language: "rust", Tool: "rust-analyzer", URL: "https://github.com/rust-lang/rust-analyzer"},
 }
 
-// MissingIndexerHint is InstallHint when the language's indexer is not on PATH, and empty
-// when it is or the language has no known indexer: the hint for an index that was never
-// built because nothing could build it.
-func MissingIndexerHint(language string) string {
-	i, ok := indexers[language]
-	if !ok {
+// MissingIndexerHint is the fix for an index never built because its indexer, bin as the
+// spell declares it, is not installed: it names bin, and where to get it when the
+// language has a known indexer. Empty for an empty bin. The caller decides the binary is
+// missing, against the PATH a run would use; this does no lookup of its own.
+func MissingIndexerHint(language, bin string) string {
+	if bin == "" {
 		return ""
 	}
-	if _, err := exec.LookPath(i.Tool); err == nil {
-		return ""
+	hint := fmt.Sprintf("the %s SCIP indexer (%s) is not installed", cmp.Or(language, "declared"), bin)
+	if i, ok := indexers[language]; ok {
+		hint += "; get it from " + i.URL
 	}
-	return InstallHint(language)
+	return hint
 }
 
 // InstallHint returns a one-line, actionable suffix naming the language's indexer and

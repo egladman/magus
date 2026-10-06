@@ -54,10 +54,15 @@ export fun mgs_getTools() > {str: Tool} {
 // destination and runs the op from the project dir, which scip-buzz indexes. A project
 // bound to another indexing spell too (go, typescript) keeps that index under `scip`
 // and builds this one beside it as `scip-buzz`, so a missing scip-buzz never fails the
-// other index.
+// other index. The workspace root is magus's own, so the paths in the index's symbols
+// are the ones magus resolves files by.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{
         format = SymbolFormat.scip,
-        command = Command{bin = "scip-buzz", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
+        op = "scip-buzz",
+        command = Command{
+            bin = "scip-buzz",
+            args = ["--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"],
+        },
     };
 }

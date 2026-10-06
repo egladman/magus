@@ -379,8 +379,10 @@ func ObjectProjectRef(v types.ProjectRef) vm.Value {
 func ObjectKnowledgeSymbolGap(v types.KnowledgeSymbolGap) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", ObjectProjectRef(v.Project))
+	out.MapSet("language", vm.StrValue(v.Language))
 	out.MapSet("state", vm.StrValue(string(v.State)))
 	out.MapSet("detail", vm.StrValue(v.Detail))
+	out.MapSet("hint", vm.StrValue(v.Hint))
 	return out
 }
 
@@ -1540,6 +1542,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("format", vm.StrValue(string(v.Format)))
+	out.MapSet("op", vm.StrValue(v.Op))
 	out.MapSet("command", ObjectCommand(v.Command))
 	itemsUses := make([]vm.Value, len(v.Uses))
 	for indexUses := range v.Uses {

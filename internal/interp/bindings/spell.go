@@ -511,6 +511,9 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		return nil, err
 	}
 	env := map[string]string{symbols.IndexEnvVar: indexPath}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		env[symbols.WorkspaceRootEnvVar] = ws.Root()
+	}
 	opts.env = env
 	opts.refs = env
 	if _, err := runCommand(ctx, op, opts); err != nil {

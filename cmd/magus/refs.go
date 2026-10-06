@@ -576,20 +576,20 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 // written, and false when no index for it can be found.
 type indexedAtFunc func(file string) (time.Time, bool)
 
-// symbolIndexTimes returns an indexedAtFunc over the cached index of each project, or
-// nil when the workspace cannot be read. Files under a knowledge.symbols override check as
-// unverified; see magus.SymbolIndexedAt.
+// symbolIndexTimes returns an indexedAtFunc over the cached indexes each project declares,
+// or nil when the workspace cannot be read. Files under a knowledge.symbols override check
+// as unverified; see magus.SymbolIndexTimes.
 func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return nil
 	}
-	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
+	projects, err := ws.ListProjects(ctx)
 	if err != nil {
 		return nil
 	}
-	projects, err := ws.ListProjects(ctx)
-	if err != nil {
+	times, ok := magus.SymbolIndexTimes(ctx, ws, ws.Root(), globalCfg)
+	if !ok {
 		return nil
 	}
 	return func(file string) (time.Time, bool) {
@@ -602,7 +602,8 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 		if !found {
 			return time.Time{}, false
 		}
-		return magus.SymbolIndexedAt(cacheDir, filepath.Join(ws.Root(), filepath.FromSlash(owner)))
+		at, ok := times[owner]
+		return at, ok
 	}
 }
 
@@ -863,6 +864,16 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		}
 		return files
 	}, sites)...)
+	importers := buzzImporters(g)
+	readFile := func(file string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(ws.Root(), filepath.FromSlash(file)))
+	}
+	defs := make([]string, 0, len(refs.Defs))
+	for _, d := range refs.Defs {
+		defs = append(defs, d.File)
+	}
+	refused = append(refused, edit.BuzzNameCaptures(to, sites, importers, readFile)...)
+	refused = append(refused, edit.BuzzLabelUses(out.From, defs, sites, importers, readFile)...)
 	if refused = append(blind, refused...); len(refused) > 0 {
 		return refuse(refused...)
 	}
@@ -903,6 +914,22 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		fmt.Println("nothing written (--dry-run)")
 	}
 	return nil
+}
+
+// buzzImporters answers, from g's import edges, which workspace-relative files import file.
+func buzzImporters(g *knowledge.Graph) func(file string) []string {
+	byTarget := map[string][]string{}
+	for _, e := range g.Edges() {
+		if e.Relation != types.RelationImports {
+			continue
+		}
+		from, isFile := strings.CutPrefix(e.Source, types.KindFile+":")
+		to, toFile := strings.CutPrefix(e.Target, types.KindFile+":")
+		if isFile && toFile {
+			byTarget[to] = append(byTarget[to], from)
+		}
+	}
+	return func(file string) []string { return byTarget[file] }
 }
 
 // renameGrade refuses a declared output, then asks the guard about each rewritten file

@@ -800,14 +800,37 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 		Args: []string{"-c", `printf '%s' "$1" > "$2"; printf '%s' "$1" > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
 	})
 
-	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.SymbolIndexOp, Dir: projDir})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(argvFile)
 	require.NoError(t, err)
-	want := symbols.IndexPath(c.Dir(), projDir, spells.SymbolIndexOp)
+	want := symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp)
 	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
 	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
+}
+
+// An indexer is handed magus's own workspace root, so one that writes workspace-relative
+// paths roots them where magus resolves files rather than at a root it found itself.
+func TestDispatchOpHandsTheIndexerTheWorkspaceRoot(t *testing.T) {
+	root := t.TempDir()
+	c, err := cache.Open(t.Context(), t.TempDir(), cache.WithLocalWrite(true))
+	require.NoError(t, err)
+	ctx := types.WithWorkspace(cache.NewContext(t.Context(), c), rootOnlyWS{root: root})
+
+	projDir := filepath.Join(root, "libs", "x")
+	require.NoError(t, os.MkdirAll(projDir, 0o755))
+	argvFile := filepath.Join(t.TempDir(), "argv.txt")
+	spec := symbolIndexerSpec(spells.Command{
+		Bin:  "sh",
+		Args: []string{"-c", `printf '%s' "$2" > "$3"; printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", "$MAGUS_WORKSPACE_ROOT", argvFile},
+	})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
+	require.NoError(t, err)
+
+	got, err := os.ReadFile(argvFile)
+	require.NoError(t, err)
+	assert.Equal(t, root, string(got), "the workspace root, not the project dir the op runs from")
 }
 
 // A second indexing spell on the project is handed its own destination, keyed by its op,
@@ -822,14 +845,14 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 	cmd := spells.Command{Bin: "sh", Args: []string{"-c", `printf x > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX"}}
 	spec := spells.Descriptor{
 		Name:          "buzz",
-		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: cmd},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: cmd},
 		Ops:           map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: cmd}},
 	}
 	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: "scip-buzz", Dir: projDir})
 	require.NoError(t, err)
 
 	assert.FileExists(t, symbols.IndexPath(c.Dir(), projDir, "scip-buzz"))
-	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), projDir, spells.SymbolIndexOp), "the bare scip op's index is not this one")
+	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp), "the default op's index is not this one")
 }
 
 // symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the
@@ -840,7 +863,7 @@ func symbolIndexerSpec(cmd spells.Command) spells.Descriptor {
 		Name:          "fake",
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: cmd},
 		Ops: map[string]spells.Op{
-			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: cmd},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: cmd},
 		},
 	}
 }
@@ -858,7 +881,7 @@ func TestDispatchOpRejectsAnIndexerThatWroteNothing(t *testing.T) {
 	ctx = cache.NewContext(ctx, c)
 
 	spec := symbolIndexerSpec(spells.Command{Bin: "true"})
-	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.SymbolIndexOp, Dir: t.TempDir()})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "wrote no index")
 	assert.Contains(t, err.Error(), "scip", "the error must name the format the spell declared")

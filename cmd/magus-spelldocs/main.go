@@ -266,12 +266,10 @@ func renderSpell(d spells.Descriptor) string {
 	}
 
 	opDocs := parseOpDocs(meta.dir)
-	// parseOpDocs reads the source alone, which does not say which name the indexer op
-	// takes; the descriptor does.
-	if op := spells.SymbolIndexOpFor(d.Name); op != spells.SymbolIndexOp {
-		if doc, ok := opDocs[spells.SymbolIndexOp]; ok {
+	if op := d.SymbolIndexer.OpName(); op != "" && op != spells.DefaultSymbolIndexOp {
+		if doc, ok := opDocs[spells.DefaultSymbolIndexOp]; ok {
 			opDocs[op] = doc
-			delete(opDocs, spells.SymbolIndexOp)
+			delete(opDocs, spells.DefaultSymbolIndexOp)
 		}
 	}
 	ops := d.OpNames()
@@ -412,7 +410,9 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 // bytecode strips it), so the source is the only place the handler comments
 // survive. It maps each op key to its handler via the mgs_listTargets return map,
 // then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
-// so a spell with no source-side docs renders no op descriptions.
+// so a spell with no source-side docs renders no op descriptions. The symbol indexer's
+// doc is keyed under spells.DefaultSymbolIndexOp, since an indexer that declares no op
+// runs under it; the caller moves it to the op the descriptor declares.
 func parseOpDocs(dir string) map[string]string {
 	src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.buzz"))
 	if err != nil {
@@ -447,9 +447,8 @@ func parseOpDocs(dir string) map[string]string {
 	// The symbol indexer has no entry in mgs_listTargets to walk: magus synthesizes its
 	// op from mgs_getSymbolIndexer, so that export's own comment is the prose describing
 	// it, and without this the page renders the indexer's argv with nothing said about it.
-	// Keyed under the bare op; the caller moves it to the spell's own indexer op.
 	if doc := funcDoc["mgs_getSymbolIndexer"]; doc != "" {
-		out[spells.SymbolIndexOp] = doc
+		out[spells.DefaultSymbolIndexOp] = doc
 	}
 	return out
 }

@@ -23,14 +23,19 @@ const (
 	// IndexEnvVar names the environment variable magus sets to the index's cache
 	// destination when running a declared symbol indexer, which writes its index there.
 	IndexEnvVar = "MAGUS_SYMBOL_INDEX"
-	// indexFileName is the basename of the index the bare scip op writes.
+	// WorkspaceRootEnvVar names the variable magus sets to its own workspace root when
+	// running a declared symbol indexer, so an indexer that writes workspace-relative
+	// paths (scip-buzz) roots them where magus resolves them rather than finding a root
+	// of its own.
+	WorkspaceRootEnvVar = "MAGUS_WORKSPACE_ROOT"
+	// indexFileName is the basename of the index the default indexer op writes.
 	indexFileName = "index.scip"
 )
 
 // IndexPath returns the absolute path of the SCIP index op writes for a project:
 // <cacheDir>/symbols/<hash>/<op>.scip, where <hash> is derived from the project's
-// absolute directory and op is the indexer op (spells.SymbolIndexOpFor), so each indexing
-// spell bound to one project has a file of its own. Keying on a hash of the abs dir
+// absolute directory and op is the indexer op (spells.SymbolIndexer.OpName), so each
+// indexing op bound to one project has a file of its own. Keying on a hash of the abs dir
 // (rather than the workspace path) lets the op-run side (which knows only the project
 // dir) and the ingestion side (which joins root and the project path) compute an
 // identical location without either re-deriving the other's view. projectAbsDir is
@@ -47,9 +52,11 @@ func IndexPath(cacheDir, projectAbsDir, op string) string {
 	}
 	sum := sha256.Sum256([]byte(dir))
 	name := op + ".scip"
-	if op == spells.SymbolIndexOp {
-		// compat: see spells.SymbolIndexOpFor. The bare op's index keeps its file, because
-		// the run's cache entry stamps that path and a new one would re-run the indexer.
+	if op == spells.DefaultSymbolIndexOp {
+		// compat(until: the cache key schema next changes, which re-runs every index
+		// anyway): the default op's index keeps the file it had before a project could
+		// hold two, because every cached run stamps that path and a new one would re-run
+		// the indexer.
 		name = indexFileName
 	}
 	return filepath.Join(cacheDir, "symbols", hex.EncodeToString(sum[:8]), name)

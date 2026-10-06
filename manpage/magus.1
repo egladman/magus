@@ -467,7 +467,10 @@ Set by magus for the processes it spawns: the comma\-separated invocations a nes
 Set by magus when it replaces itself with a workspace\-local ./magus, so the replacement never hops again; never set it by hand
 .TP
 \fBMAGUS_SYMBOL_INDEX\fR
-Set by magus for a spell's scip op: the path the indexer writes its SCIP index to; never set it by hand
+Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand
+.TP
+\fBMAGUS_WORKSPACE_ROOT\fR
+Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand
 .TP
 \fBMAGUS_INTERNAL_ADVICE_MODE\fR
 Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice

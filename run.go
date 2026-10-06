@@ -809,9 +809,9 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	step := m.buildStep(p, target)
 	var keyTools []string
 	if keysTools(p, target) {
-		keyTools = runKeyTools(p, target, toolVersions[p.Path])
+		keyTools = toolVersions[p.Path]
 	}
-	applyRunKeying(&step, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
+	applyRunKeying(&step, p, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -821,18 +821,6 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 // installs keys on nothing, and each install keys on its own tools (installStep).
 func keysTools(p *types.Project, target string) bool {
 	return !alwaysRuns(p, target)
-}
-
-// runKeyTools is the tool versions target's step on p keys on, from the project's probed
-// versions. A symbol indexer op keys on none: the indexer is its own binary, keyed through
-// the observation its spell declares for it, and of the spell's other tools only those the
-// indexer declares it uses (go for scip-go, never golangci-lint or tsc) key it, through
-// observationsForTarget.
-func runKeyTools(p *types.Project, target string, versions []string) []string {
-	if indexesSymbols(p, target) {
-		return nil
-	}
-	return versions
 }
 
 // alwaysRuns reports whether target's step on p is never replayed or snapshotted: an
@@ -847,8 +835,14 @@ func alwaysRuns(p *types.Project, target string) bool {
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
 //
-// The scip step takes no tool versions (see runKeyTools), so a caller keying one passes nil.
-func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
+// A symbol indexer op of p keys on no tool versions, whatever the caller passes: the
+// indexer is its own binary, keyed through the observation its spell declares for it, and
+// of the spell's other tools only those the indexer declares it uses (go for scip-go,
+// never golangci-lint or tsc) key it, through observationsForTarget.
+func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observations, charms []string) {
+	if indexesSymbols(p, step.Target) {
+		toolVersions = nil
+	}
 	step.ToolVersions = toolVersions
 	// Appended, not assigned: buildStep already put the target's ctx.observes lines
 	// here, and a probed observation is the same input class from the other source.
@@ -1832,9 +1826,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			if err != nil {
 				return cache.Step{}, err
 			}
-			toolVersions = runKeyTools(p, target, byProject[p.Path])
+			toolVersions = byProject[p.Path]
 		}
-		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
+		applyRunKeying(&step, p, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
 		return step, nil
 	}
 	newStep := func(p *types.Project, target string) (cache.Step, error) {

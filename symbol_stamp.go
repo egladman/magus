@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 )
@@ -88,7 +89,7 @@ func writeSymbolStamp(indexPath, want string) {
 // probe runs. Two processes that agree on every value reach the same verdict about the
 // same tree; ones that do not may each be right about their own environment.
 func (m *Magus) SymbolFreshnessEnv() []string {
-	capable := m.symbolCapableProjects()
+	capable := m.workspaceIndexes()
 	names := make([]string, 0, 1+len(capable))
 	names = append(names, "PATH")
 	for _, idx := range capable {
@@ -99,14 +100,14 @@ func (m *Magus) SymbolFreshnessEnv() []string {
 }
 
 // SymbolIndexStatusByStamp reports the freshness of each symbol index the workspace's
-// projects declare, one entry per (project, indexer op) told apart by Language, sorted by
-// project and then binding order, checked now: unlike SymbolIndexStatus it never answers
+// projects declare, one entry per (project, indexer op), sorted by project and then
+// binding order, checked now: unlike SymbolIndexStatus it never answers
 // from the server's watcher memo, so a graph read can state freshness as of the moment it
 // reads. An index whose stamp file matches is fresh with no probe; the rest pay the
 // tool-version and observation probes once for the sweep, as a run does, and each one the
 // probe finds fresh is stamped for the next read. Safe for concurrent use.
 func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus {
-	capable := m.symbolCapableProjects()
+	capable := m.workspaceIndexes()
 	if len(capable) == 0 {
 		return nil
 	}
@@ -116,18 +117,20 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 	out := make([]types.SymbolIndexStatus, len(capable))
 	type pending struct {
 		at    int
-		idx   capableProject
+		idx   projectIndex
 		index string
 		stamp string
 	}
 	var probe []pending
 	for i, idx := range capable {
-		out[i] = types.SymbolIndexStatus{Project: types.NewProjectRef(idx.path, idx.dir), Language: idx.language, Freshness: types.SymbolIndexNotBuilt}
-		index := symbols.IndexPath(cacheDir, idx.dir, idx.op)
+		out[i] = types.SymbolIndexStatus{Project: idx.projectRef(), Op: idx.op, Language: idx.language, Freshness: types.SymbolIndexNotBuilt}
+		index := symbols.IndexPath(cacheDir, idx.project.Dir, idx.op)
 		if _, err := os.Stat(index); err != nil {
 			// The install hint is the fix for an index that was never built because its
-			// indexer is missing; an index whose indexer is on PATH needs only a build.
-			out[i].Detail = symbols.MissingIndexerHint(idx.language)
+			// indexer is missing; an index whose indexer a run would find needs only a build.
+			if _, err := procrun.LookPath(ctx, idx.bin); err != nil {
+				out[i].Detail = symbols.MissingIndexerHint(idx.language, idx.bin)
+			}
 			continue
 		}
 		out[i].Freshness = types.SymbolIndexStale
@@ -143,7 +146,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 	}
 	if len(probe) > 0 {
 		var projects []*types.Project
-		idxs := make([]capableProject, len(probe))
+		idxs := make([]projectIndex, len(probe))
 		for i, w := range probe {
 			idxs[i] = w.idx
 			if !slices.Contains(projects, w.idx.project) {
@@ -153,7 +156,7 @@ func (m *Magus) SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolInde
 		toolVersions, unprobeable := m.toolVersionsEach(ctx, projects)
 		observations := m.probeObservations(ctx, projects, indexesDriven(idxs))
 		for _, w := range probe {
-			path := w.idx.path
+			path := w.idx.project.Path
 			if err := unprobeable[path]; err != nil {
 				out[w.at].Freshness = types.SymbolIndexUnvouched
 				out[w.at].Detail = err.Error()

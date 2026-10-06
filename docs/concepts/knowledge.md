@@ -499,13 +499,13 @@ magus run pkg/foo::scip        # forks the language's SCIP indexer
 magus run ::scip-buzz          # the Buzz index of the root project
 ```
 
-A project keeps one index per indexing spell it binds. The go, typescript, python and
-rust indexers run as `scip`, the name they have always had; every other indexing spell's
-op is `scip-<spell>`, so the root project of this repository builds its Go index with
-`scip` and its Buzz index with `scip-buzz`. Each op has its own cache entry, freshness
-verdict and failure: a missing `scip-buzz` leaves the Buzz index unbuilt and the Go
-index untouched. Two of the four bare-`scip` spells bound to one project still share
-that op and its one index.
+A project keeps one index per indexer op among the spells it binds. An indexer runs as
+`scip` unless its `SymbolIndexer` declares an `op` of its own; the buzz spell declares
+`scip-buzz`, so the root project of this repository builds its Go index with `scip` and
+its Buzz index with `scip-buzz`. Each op has its own cache entry, freshness verdict and
+failure: a missing `scip-buzz` leaves the Buzz index unbuilt and the Go index untouched.
+Two spells bound to one project under the same op share that op's one index, and the
+first one bound names its language.
 
 The index is a build artifact, so it lives under the magus cache dir, never in the
 source tree: magus hands the indexer the destination through a `MAGUS_SYMBOL_INDEX`
@@ -537,14 +537,18 @@ knowledge:
       index: build/custom.scip # a workspace-relative path magus reads as-is
     - project: pkg/foo
       index: build/buzz.scip   # a second index of the same project
+      language: buzz           # what its symbols are written in
 ```
 
 A project's entries are its whole index set: the first one replaces every index magus
-would have derived for that project, and each further entry for it adds one.
+would have derived for that project, and each further entry for it adds one. An entry
+without `language` takes the language of the project's indexing spell, so a project with
+an index per language names each one.
 
-Once a Buzz index covers a file, its top-level functions are that index's `symbol`
-nodes, and the AST walk's `function` nodes and intra-file `calls` edges for that file
-drop out when the symbols merge; the file node, its imports and its `NOTE`/`WHY`
+Once a Buzz index defines a file's top-level function, that function is the index's
+`symbol` node, and the AST walk's `function` node and its intra-file `calls` edges drop
+out when the symbols merge (a function the index does not define, such as an `extern
+fun`, keeps its node); the file node, its imports and its `NOTE`/`WHY`
 rationale stay, each rationale now explaining its function's symbol. The committed
 default graph still carries the function nodes, since it never depends on what a
 machine's cache holds, and a function id resolves to its symbol in `magus refs`.

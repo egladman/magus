@@ -2,9 +2,11 @@ package spell
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"testing"
 
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -230,7 +232,7 @@ func TestDecode_ServiceShapeRefused(t *testing.T) {
 // matches on rather than recognized by its name.
 func TestDecode_SymbolIndexer(t *testing.T) {
 	src := mapObj{
-		"name": "go",
+		"name": "myspell",
 		"symbol_indexer": map[string]any{
 			"format":  "scip",
 			"command": map[string]any{"bin": "scip-go", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
@@ -242,31 +244,52 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 	assert.Equal(t, spells.SymbolFormatSCIP, m.SymbolIndexer.Format)
 	assert.Equal(t, "scip-go", m.SymbolIndexer.Command.Bin)
 
-	op, ok := m.Ops[spells.SymbolIndexOp]
-	require.True(t, ok, "the declared indexer must reach the op table")
+	op, ok := m.Ops[spells.DefaultSymbolIndexOp]
+	require.True(t, ok, "an indexer that declares no op runs under the default, whatever the spell is named")
 	assert.Equal(t, spells.OpKindSymbolIndex, op.Kind)
 	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
+	assert.Len(t, m.Ops, 1)
 }
 
-// A spell that is not one of the four that indexed under the bare op gets an op of its
-// own, so the Buzz indexer beside scip-go on one project neither shares its cache entry
-// nor fails with it; and its name is reserved like the bare one.
-func TestDecode_SymbolIndexerOpIsPerSpell(t *testing.T) {
-	src := mapObj{
-		"name": "buzz",
-		"symbol_indexer": map[string]any{
-			"format":  "scip",
-			"command": map[string]any{"bin": "scip-buzz", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
-		},
+// An indexer that declares its op runs under that op alone, so an index riding beside
+// scip-go on one project neither shares its cache entry nor fails with it. The declared
+// name is normalized like an authored op, and an authored op of the same name collides.
+func TestDecode_SymbolIndexerDeclaresItsOp(t *testing.T) {
+	indexer := func(op string) map[string]any {
+		return map[string]any{"format": "scip", "op": op, "command": map[string]any{"bin": "scip-mine"}}
 	}
-	m, err := Decode(src)
+	m, err := Decode(mapObj{"name": "myspell", "symbol_indexer": indexer("scip_mine")})
 	require.NoError(t, err)
+	assert.Equal(t, "scip-mine", m.SymbolIndexer.OpName())
+	assert.Equal(t, []string{"scip-mine"}, m.OpNames(), "registered once, and not under the default")
+	assert.Equal(t, spells.OpKindSymbolIndex, m.Ops["scip-mine"].Kind)
 
-	require.Len(t, m.Ops, 1, "the indexer is registered once, and not under the bare scip")
-	assert.Equal(t, spells.OpKindSymbolIndex, m.Ops["scip-buzz"].Kind)
+	_, err = Decode(mapObj{
+		"name":           "myspell",
+		"symbol_indexer": indexer("scip-mine"),
+		"ops":            map[string]any{"scip-mine": map[string]any{"bin": "scip-mine"}},
+	})
+	require.ErrorContains(t, err, `declares an op named "scip-mine"`)
 
-	_, err = Decode(mapObj{"name": "buzz", "ops": map[string]any{"scip-buzz": map[string]any{"bin": "scip-buzz"}}})
-	require.ErrorContains(t, err, `declares an op named "scip-buzz"`)
+	_, err = Decode(mapObj{"name": "myspell", "symbol_indexer": indexer("scip mine")})
+	require.ErrorContains(t, err, `symbol indexer: op "scip mine"`)
+}
+
+// The shipped indexers that declare no op keep the op and the index file every cached
+// run already recorded, so binding the buzz spell beside them re-keys nothing; buzz
+// declares an op of its own.
+func TestBuiltinIndexersKeepTheirOps(t *testing.T) {
+	ops := map[string]string{}
+	for name, d := range Builtins() {
+		if d.SymbolIndexer != nil {
+			ops[name] = d.SymbolIndexer.OpName()
+			assert.Equalf(t, spells.OpKindSymbolIndex, d.Ops[ops[name]].Kind, "%s registers its indexer under the op it names", name)
+		}
+	}
+	assert.Equal(t, map[string]string{
+		"buzz": "scip-buzz", "go": "scip", "python": "scip", "rust": "scip", "typescript": "scip",
+	}, ops)
+	assert.Equal(t, "index.scip", filepath.Base(symbols.IndexPath(t.TempDir(), t.TempDir(), ops["go"])))
 }
 
 // The tools an indexer runs besides its binary decode onto the indexer, and each must be a
@@ -317,7 +340,7 @@ func TestDecode_SymbolIndexerRequiresAFormat(t *testing.T) {
 func TestDecode_ReservedSymbolIndexOpIsRefused(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
-		"ops":  map[string]any{spells.SymbolIndexOp: map[string]any{"bin": "scip-go"}},
+		"ops":  map[string]any{spells.DefaultSymbolIndexOp: map[string]any{"bin": "scip-go"}},
 	}
 	_, err := Decode(src)
 	require.Error(t, err)

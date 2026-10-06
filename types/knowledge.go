@@ -661,8 +661,12 @@ const (
 // SymbolIndexStatus is one symbol-capable project's index freshness, for status output.
 // Project carries both the machine path and the human name so the workspace-root project
 // renders as its repo name, not the bare ".".
+//
+// Project and Op identify the index: a project bound to two indexing spells has an entry
+// per indexer op.
 type SymbolIndexStatus struct {
 	Project   ProjectRef           `json:"project"`
+	Op        string               `json:"op,omitempty"`
 	Language  string               `json:"language,omitempty"`
 	Freshness SymbolIndexFreshness `json:"freshness"`
 	// Detail says why, for a freshness that needs it; empty otherwise.
@@ -737,18 +741,30 @@ const (
 // State reuses SymbolIndexFreshness so reporting staleness here later is additive rather
 // than a second enum; today only SymbolIndexNotBuilt is emitted, because a gap is an index
 // magus could not READ and staleness reaches the answer by its own route, as StaleIndexes.
+//
+// Language names which of the project's indexes is missing, empty when the declaration
+// does not say. Hint is the fix when the reason is an indexer that is not installed.
 type KnowledgeSymbolGap struct {
-	Project ProjectRef           `json:"project"          yaml:"project"`
-	State   SymbolIndexFreshness `json:"state"            yaml:"state"`
-	Detail  string               `json:"detail,omitempty" yaml:"detail,omitempty"`
+	Project  ProjectRef           `json:"project"            yaml:"project"`
+	Language string               `json:"language,omitempty" yaml:"language,omitempty"`
+	State    SymbolIndexFreshness `json:"state"              yaml:"state"`
+	Detail   string               `json:"detail,omitempty"   yaml:"detail,omitempty"`
+	Hint     string               `json:"hint,omitempty"     yaml:"hint,omitempty"`
 }
 
-// Describe renders one gap as "libs/api (not-indexed)". It lives here so the CLI, the
+// Describe renders one gap as "libs/api (not-indexed)", or "libs/api (buzz index
+// not-indexed; <hint>)" when it names a language and a fix. It lives here so the CLI, the
 // explain text, and the insight report cannot drift into three spellings of one fact.
 func (g KnowledgeSymbolGap) Describe() string {
 	detail := g.Detail
 	if detail == "" {
 		detail = string(g.State)
+	}
+	if g.Language != "" {
+		detail = g.Language + " index " + detail
+	}
+	if g.Hint != "" {
+		detail += "; " + g.Hint
 	}
 	return g.Project.Display() + " (" + detail + ")"
 }

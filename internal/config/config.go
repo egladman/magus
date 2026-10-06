@@ -606,13 +606,14 @@ type Knowledge struct {
 	// mainly bounds transient bloat.
 	MaxSizeMB int `json:"max_size_mb" yaml:"max_size_mb" validate:"gte=0"`
 	// Symbols overrides symbol ingestion for specific projects. Ingestion is normally
-	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust; any
-	// spell exposing the reserved `scip` op) is ingested from its cached index with no
-	// config here. Each entry below instead points a named project at a
+	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust, buzz;
+	// any spell declaring mgs_getSymbolIndexer) is ingested from its cached indexes with
+	// no config here. Each entry below instead points a named project at a
 	// workspace-relative .scip path your own build emits, for a project whose index does
-	// not come from a magus `scip` op. A declared (or derived) index that does not exist
-	// yet (the scip target has not run) is simply skipped, so the shard appears once the
-	// index is built.
+	// not come from a magus indexer op. A project's entries replace every index magus
+	// derives for it, one entry per index, each naming its language when the project
+	// holds more than one. A declared (or derived) index that does not exist yet is
+	// simply skipped, so the shard appears once the index is built.
 	Symbols []SymbolIndex `json:"symbols" yaml:"symbols"`
 	// VCS enables folding git history metadata (last-commit SHA and time, commit
 	// count) onto file nodes as a @vcs shard. Opt-in and best-effort: disabled by
@@ -787,6 +788,10 @@ type SessionAdapter struct {
 type SymbolIndex struct {
 	Project string `json:"project" yaml:"project"` // workspace-relative project path the symbols belong to
 	Index   string `json:"index" yaml:"index"`     // workspace-relative path to the .scip index file
+	// Language is the language the index's symbols are written in, for an index that
+	// does not say. Empty takes the language of the project's indexing spell, which
+	// mislabels all but one index of a project that lists one per language.
+	Language string `json:"language,omitempty" yaml:"language,omitempty"`
 }
 
 // Telemetry holds OpenTelemetry exporter settings. OFF by default; no magus-operated backend exists.
@@ -934,7 +939,8 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_LEVEL", "", "", "Set by magus for the processes it spawns: the magus recursion depth, like make's MAKELEVEL; never set it by hand"},
 		{"MAGUS_INVOCATION_ANCESTORS", "", "", "Set by magus for the processes it spawns: the comma-separated invocations a nested magus runs underneath; never set it by hand"},
 		{"MAGUS_BOOTSTRAP_EXEC_DONE", "", "", "Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand"},
-		{"MAGUS_SYMBOL_INDEX", "", "", "Set by magus for a spell's scip op: the path the indexer writes its SCIP index to; never set it by hand"},
+		{"MAGUS_SYMBOL_INDEX", "", "", "Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand"},
+		{"MAGUS_WORKSPACE_ROOT", "", "", "Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand"},
 		{"MAGUS_INTERNAL_ADVICE_MODE", "", "", "Set by `magus diff` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice"},
 		{"MAGUS_INTERNAL_ADVICE_BASE_BRANCH", "", "", "Set by `magus diff` alongside MAGUS_INTERNAL_ADVICE_MODE; not a setting"},
 	}

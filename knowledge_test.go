@@ -96,7 +96,7 @@ func ingest(cfg config.Config, root, cacheDir string, projects types.ProjectsOut
 // goIndexPath is where the go spell's (or any bare scip op's) index for the project at dir
 // lives under cacheDir. A helper because most tests here bind a local named spells.
 func goIndexPath(cacheDir, dir string) string {
-	return symbols.IndexPath(cacheDir, dir, spellpkg.SymbolIndexOp)
+	return symbols.IndexPath(cacheDir, dir, spellpkg.DefaultSymbolIndexOp)
 }
 
 // writeSCIP writes a minimal one-definition index to path (creating parent dirs).
@@ -320,6 +320,115 @@ func TestSymbolIndexDeclarationsRejectsPathEscape(t *testing.T) {
 	}}}
 	decls := symbolIndexDeclarations(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), types.ProjectsOutput{}, nil))
 	assert.Empty(t, decls, "an override path that escapes the workspace is rejected")
+}
+
+// registerIndexer registers a spell declaring a symbol indexer under op ("" for the
+// default) for the test's life, and returns how ListSpells would describe it.
+func registerIndexer(t *testing.T, name, language, op, bin string) types.Spell {
+	t.Helper()
+	sp := spellpkg.NewSpell(name, spellpkg.WithLanguage(language),
+		spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Op: op, Command: spellpkg.Command{Bin: bin}}))
+	project.DefaultSpellRegistry().RegisterSpell(sp)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+	return types.Spell{Name: name, Language: language, SymbolFormat: "scip"}
+}
+
+// Ingestion reads the index the run writes: the op the spell declares, and the default
+// for one that declares none, whatever the spell is called. A third-party indexer was
+// read from scip-<name>.scip while its run wrote index.scip, so its symbols never arrived.
+// Two spells under one op share its index, and the first bound names its language.
+func TestSymbolIndexDeclarationsReadTheOpTheSpellDeclares(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	spells := []types.Spell{
+		registerIndexer(t, "zzz-third-party", "kotlin", "", "scip-kotlin"),
+		registerIndexer(t, "zzz-also-default", "java", "", "scip-java"),
+		registerIndexer(t, "zzz-own-op", "buzz", "scip-own", "scip-own"),
+	}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
+		{Path: ".", Spells: []string{"zzz-third-party", "zzz-also-default", "zzz-own-op"}},
+	}}
+
+	decls := symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
+
+	assert.Equal(t, []resolvedSymbolIndex{
+		{project: ".", op: "scip", bin: "scip-kotlin", path: symbols.IndexPath(cacheDir, root, "scip"), language: "kotlin"},
+		{project: ".", op: "scip-own", bin: "scip-own", path: symbols.IndexPath(cacheDir, root, "scip-own"), language: "buzz"},
+	}, decls)
+}
+
+// An index's verdict is keyed by its project and op, so two indexes of one project in one
+// language keep their own; keying on the language gave both the verdict of whichever
+// status came last. An override, whose index magus never builds, gets none.
+func TestSymbolIndexDeclarationRecordsKeyVerdictsByOp(t *testing.T) {
+	root := t.TempDir()
+	spells := []types.Spell{
+		registerIndexer(t, "zzz-go-a", "go", "", "scip-go"),
+		registerIndexer(t, "zzz-go-b", "go", "scip-alt", "scip-alt"),
+	}
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: ".", Spells: []string{"zzz-go-a", "zzz-go-b"}}}}
+	freshness := map[indexRef]types.SymbolIndexStatus{
+		{project: ".", op: "scip"}:     {Op: "scip", Language: "go", Freshness: types.SymbolIndexFresh},
+		{project: ".", op: "scip-alt"}: {Op: "scip-alt", Language: "go", Freshness: types.SymbolIndexStale},
+	}
+
+	recs := symbolIndexDeclarationRecords(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), freshness)
+
+	require.Len(t, recs, 2)
+	assert.Equal(t, []string{"scip", "scip-alt"}, []string{recs[0].Op, recs[1].Op})
+	assert.Equal(t, []string{string(types.SymbolIndexFresh), string(types.SymbolIndexStale)}, []string{recs[0].Freshness, recs[1].Freshness})
+
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{{Project: ".", Index: "build/go.scip"}}}}
+	recs = symbolIndexDeclarationRecords(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells), freshness)
+	require.Len(t, recs, 1)
+	assert.Empty(t, recs[0].Op)
+	assert.Empty(t, recs[0].Freshness, "an override is judged by nothing magus built")
+}
+
+// A project's override entries are one per index, each in its own language: taking the
+// project's for every entry labeled a Go and a Buzz index alike.
+func TestSymbolIndexDeclarationsOverrideEntriesCarryTheirLanguage(t *testing.T) {
+	root := t.TempDir()
+	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{{Path: "pkg/a", Spells: []string{"go"}}}}
+	spells := []types.Spell{{Name: "go", Language: "go", SymbolFormat: "scip"}}
+	cfg := config.Config{Knowledge: config.Knowledge{Symbols: []config.SymbolIndex{
+		{Project: "pkg/a", Index: "build/go.scip"},
+		{Project: "pkg/a", Index: "build/buzz.scip", Language: "buzz"},
+	}}}
+
+	decls := symbolIndexDeclarations(t.Context(), ingest(cfg, root, filepath.Join(root, ".magus"), projects, spells))
+
+	require.Len(t, decls, 2)
+	assert.Equal(t, []string{"go", "buzz"}, []string{decls[0].language, decls[1].language})
+}
+
+// The time a project's index was written is read from the indexes it declares and nothing
+// else: an index an unbound spell left in the same cache dir is not one that covers it.
+func TestSymbolIndexTimesReadsOnlyDeclaredIndexes(t *testing.T) {
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	dir := filepath.Join(root, "pkg/a")
+	projects, spells := goWorkspace("pkg/a")
+	write := func(path string, at time.Time) {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, nil, 0o644))
+		require.NoError(t, os.Chtimes(path, at, at))
+	}
+	built := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	write(goIndexPath(cacheDir, dir), built)
+	write(symbols.IndexPath(cacheDir, dir, "scip-unbound"), built.Add(-time.Hour))
+
+	times := symbolIndexTimes(symbolIndexDeclarations(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells)))
+
+	assert.Equal(t, map[string]time.Time{"pkg/a": built}, normalizeTimes(times))
+}
+
+func normalizeTimes(in map[string]time.Time) map[string]time.Time {
+	out := make(map[string]time.Time, len(in))
+	for k, v := range in {
+		out[k] = v.UTC()
+	}
+	return out
 }
 
 // gitRun runs one git command in dir, fataling on error. Skips the test if git is
@@ -1119,10 +1228,13 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 	cfg := config.Config{Cache: config.Cache{Dir: cacheDir}}
 	reads := readlog.Reads{}
 	decls := []knowledge.SymbolIndexDeclaration{
-		{Project: "pkg/a", Dir: filepath.Join(root, "pkg/a"), Language: "go", Path: index,
+		{Project: "pkg/a", Dir: filepath.Join(root, "pkg/a"), Op: "scip", Language: "go", Path: index,
 			Freshness: string(types.SymbolIndexStale), Size: info.Size(), ModTime: info.ModTime().UnixNano()},
-		{Project: "pkg/b", Dir: filepath.Join(root, "pkg/b"), Language: "go", Path: filepath.Join(cacheDir, "symbols", "b", "index.scip"),
+		{Project: "pkg/b", Dir: filepath.Join(root, "pkg/b"), Op: "scip", Language: "go", Path: filepath.Join(cacheDir, "symbols", "b", "index.scip"),
 			Freshness: string(types.SymbolIndexNotBuilt)},
+		// An override no evaluation judges: it neither counts as stale nor sends a read
+		// back to the workspace for want of a verdict.
+		{Project: "pkg/c", Dir: filepath.Join(root, "pkg/c"), Language: "go", Path: filepath.Join(root, "build", "c.scip")},
 	}
 	// The sync an evaluating read performs, with what it records: the declarations with
 	// their verdicts, the reads, and fast stamps over them.
@@ -1227,7 +1339,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		spellpkg.NewSpell(goSpell, spellpkg.WithLanguage("go"), spellpkg.WithSources("**/*.go"),
 			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-go"}})),
 		spellpkg.NewSpell("buzz", spellpkg.WithLanguage("buzz"), spellpkg.WithSources("**/*.buzz"),
-			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Command: spellpkg.Command{Bin: "scip-buzz"}}),
+			spellpkg.WithSymbolIndexer(&spellpkg.SymbolIndexer{Format: spellpkg.SymbolFormatSCIP, Op: "scip-buzz", Command: spellpkg.Command{Bin: "scip-buzz"}}),
 			spellpkg.WithOps(map[string]spellpkg.Op{"scip-buzz": {Kind: spellpkg.OpKindSymbolIndex, Command: spellpkg.Command{Bin: "scip-buzz"}}})),
 	} {
 		project.DefaultSpellRegistry().RegisterSpell(sp)
@@ -1254,7 +1366,7 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 		run       = "scip-buzz buzz . . `hack/ci/run.buzz`/run()."
 		goMain    = "scip-go gomod example.com/m v1 `example.com/m`/Main()."
 	)
-	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, spellpkg.SymbolIndexOpFor(goSpell)), "go", map[string][]fixtureOccurrence{
+	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, spellpkg.DefaultSymbolIndexOp), "go", map[string][]fixtureOccurrence{
 		"main.go": {{goMain, 2, true}},
 	})
 	writeIndexOf(t, root, symbols.IndexPath(cacheDir, root, "scip-buzz"), "buzz", map[string][]fixtureOccurrence{
@@ -1317,4 +1429,15 @@ func TestBuzzIndexBesideGoIndexOnOneProject(t *testing.T) {
 	sites, refusals := edit.RenameSites(read.Files, "parsePull", "pullOf")
 	assert.Empty(t, refusals)
 	assert.Len(t, sites, 2, "the definition and the call in run.buzz")
+
+	// The index holds no locals, so the parameter raw is seen only by reading the files the
+	// rename writes.
+	readFile := func(file string) ([]byte, error) { return os.ReadFile(filepath.Join(root, file)) }
+	noImporters := func(string) []string { return nil }
+	assert.Empty(t, edit.BuzzNameCaptures("pullOf", sites, noImporters, readFile))
+	assert.Empty(t, edit.BuzzLabelUses("parsePull", []string{"hack/ci/pull-requests.buzz"}, sites, noImporters, readFile))
+	captured, _ := edit.RenameSites(read.Files, "parsePull", "raw")
+	assert.Equal(t, []types.EditRefusal{{Path: "hack/ci/pull-requests.buzz",
+		Reason: `already uses "raw" as an identifier, which the symbol index does not record, so a renamed site could bind to it`}},
+		edit.BuzzNameCaptures("raw", captured, noImporters, readFile))
 }
