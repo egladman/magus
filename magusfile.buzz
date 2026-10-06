@@ -1725,7 +1725,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "benchmarks/agent/internal/bench/testdata/*",
                    "internal/selfupdate/release-keys.json");
     ctx.readsFiles("benchmarks/agent/internal/pricing/rates.json");
-    ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install", ".github/workflows/*.yaml");
+    // Go tests inspect the CI and queue workflows; lint checks every workflow.
+    ctx.readsFiles(".github/actions/setup-magus/action.yml", "docs/gen/install",
+                   ".github/workflows/ci.yaml", ".github/workflows/queue.yaml");
     ctx.readsFiles("docs/guides/integrations/agents/*.buzz",
                    "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
