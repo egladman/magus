@@ -50,6 +50,8 @@ export fun diagramPipelineFigure() > figure\Figure !> any {
         .except([magus\dir("libs/diagnostics")],
             why: "the diagnostic-code framework; a figure's findings are plain strings")
         .except([magus\dir("libs/testkit")], why: "fixtures for magus's Go tests")
+        .except([magus\dir("libs/scipbuzz")],
+            why: "the Buzz symbol indexer; it feeds the knowledge graph, not a figure")
         .except([
             magus\dir("std/encoding"),
             magus\dir("std/encoding/base64"),
