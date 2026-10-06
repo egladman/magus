@@ -143,7 +143,7 @@ The practical rule this leads to: **when two steps need to agree on structured d
 
 ## Keep structured data in the magusfile, not in the shell
 
-A CI job that publishes images has to log in to exactly the registries it is about to push to. The tempting shape is a target that prints the list and a shell loop that reads it back:
+Several steps of an image publish need the same registry list: what to report, what to push to, what to log in to. The tempting shape is a target that prints the list and a shell loop that reads it back:
 
 ```sh
 # Don't. Every consumer re-parses, and the field order is now a contract.
@@ -152,45 +152,35 @@ magus run image-registries:cd --silent | while read -r host user token; do
 done
 ```
 
-That crosses the boundary in the worst direction: structured data leaves the type system, becomes whitespace, and gets rebuilt by `read`. Declare the table once and export a verb per action instead:
+That crosses the boundary in the worst direction: structured data leaves the type system, becomes whitespace, and gets rebuilt by `read`. Declare the table once and export a verb per thing you want done with it instead:
 
 ```buzz
 import "magus";
 
 object Registry {
-    host: str = "",         // the registry: what `docker login` authenticates against
+    host: str = "",         // the registry: what a login authenticates against
     repository: str = "",   // the repository reference, never carrying a tag
     user_ref: str = "",     // a SECRET REFERENCE, never the value
     token_ref: str = "",
 }
 
-// Look: what will this push to, and am I set up for it?
+// Look: what will this push to, and are its credentials set?
 export fun image_registries(ctx: magus\Context, args: [str]) > void { ... }
 
-// Act: log in to exactly those.
-export fun image_login(ctx: magus\Context, args: [str]) > void {
-    foreach (reg in publish_registries(ctx)) {
-        proc\exec("docker", args: ["login", reg.host, "-u", magus\secret.read(reg.user_ref),
-            "--password-stdin"], dir: ".", opts: {"stdin": magus\secret.read(reg.token_ref)});
-    }
-}
+// Act: build and push to exactly those.
+export fun image_build(ctx: magus\Context, args: [str]) > void { ... }
 ```
 
 Why `host` and `repository` are separate fields, and why `user_ref` names a credential instead of holding one, are covered below and in [Secrets](../concepts/secrets.md).
 
-The CI step collapses to one line, and it is the same line you run on a laptop:
+Two properties fall out of this that the shell version does not have:
 
-```sh
-magus run image-login:cd
-```
+- **The verbs cannot drift.** `image-registries` and `image-build` read the same function, so the set reported is by construction the set pushed to. Adding a registry is one entry in one list.
+- **Selection is by name, not position.** `magus run image-registries:cd docker.io` picks one; an unknown host is an error listing the valid ones. Positional indexing would have been worse than it looks - charms change the list length, so index `1` is a registry under one charm and out of range under another.
 
-Three properties fall out of this that the shell version does not have:
+Logging docker in is not one of the verbs. docker owns its credential store, so it is authenticated the way the environment authenticates every tool it provides: a login action on a CI runner, a credential helper or one `docker login` on a laptop. A target that runs `docker login` would mutate state outside the workspace, could never be cached, and would only order a step the runner already takes. The table still says what to log in to: `magus run image-registries:cd` prints it.
 
-- **The two halves cannot drift.** `image-login` and `image-build` read the same function, so the set logged into is by construction the set pushed to. Adding a registry is one entry in one list.
-- **Selection is by name, not position.** `magus run image-login:cd docker.io` picks one; an unknown host is an error listing the valid ones. Positional indexing would have been worse than it looks - charms change the list length, so index `1` is a registry under one charm and out of range under another.
-- **The secret never becomes an argument.** magus captures a command's argv into the run log and output store. Passing `-p <token>` would persist it in both; `opts.stdin` is not captured. The magusfile holds _references_, a [secret provider](../concepts/secrets.md) resolves them, and nothing in between sees a token.
-
-That last point is the boundary worth stating explicitly: **declare the shape in the magusfile, keep the secrets in the environment.** A CI workflow then supplies values for names it did not have to know, and a registry can be added without touching it.
+Where magus is the client itself - `magus spell push`, `magus graph push` - it reads the credential through a reference and takes the token on stdin, because magus captures a command's argv into the run log and output store and `opts.stdin` is not captured. That is the boundary worth stating explicitly: **declare the shape in the magusfile, keep the secrets in the environment, and leave logging a tool in to the environment that provides the tool.**
 
 ## The auth realm is not the push path
 

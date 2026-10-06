@@ -80,9 +80,10 @@ magus recognizes on the way out, so it never reaches a run log, a terminal, or t
 [output store](cache/output-refs.md) in the clear.
 
 ```buzz
+final user = magus\secret.read("DOCKERHUB_USERNAME");
 final token = magus\secret.read("DOCKERHUB_TOKEN");
-proc\exec("docker", args: ["login", "docker.io", "-u", user, "--password-stdin"],
-    dir: ".", opts: {"stdin": token});
+magus\cmd("spell", args: ["push", "spells/lint", "docker.io/acme/lint:v1", "--username", user],
+    opts: {"stdin": token});
 ```
 
 If the command prints that token back - and plenty of tools do, in a debug dump or a
@@ -166,9 +167,8 @@ Three rules, and each exists because the alternative is infuriating.
 calls `magus\secret.read`, never at magusfile evaluation. This matters more than it
 sounds: a magusfile that read a secret at the top level would prompt on `magus ls`, on
 `magus describe`, on every command in the workspace. Keep reads inside target bodies, and
-keep the _act of authenticating_ out of a build target's side effects - see
-[Authenticating](#authenticating-and-the--login-convention) below for when that means a
-separate target and when it just means logging in after the push tells you to.
+keep the _act of authenticating_ a tool out of targets altogether - see
+[Authenticating the tools a build drives](#authenticating-the-tools-a-build-drives) below.
 
 The same rule applies to reporting. `magus run image-registries` lists what a publish
 needs and resolves nothing; only `image-registries:cd,verify` - a user explicitly asking
@@ -250,13 +250,13 @@ The real need behind the question ("my vault is locked and I just want this buil
 has a better answer that already works, is explicit, and leaves no prompt surface:
 
 ```sh
-GHCR_TOKEN=... magus run image-login:cd
+GHCR_TOKEN=... magus run spell-publish:cd
 ```
 
 Scoped to one invocation, no provider selected so the built-in environment provider
 serves it, and nothing persists after the process exits.
 
-### Authenticating, and the `-login` convention
+### Authenticating the tools a build drives
 
 Most workspaces should not need a login step at all. Authenticate when the tool tells you
 to: run the build, let the push fail, log in, run it again. The re-run is cheap because
@@ -291,36 +291,22 @@ Matching is a plain substring against the tail of the failed command's output, a
 first declared match wins - so order specific before general. See
 [Writing a spell](../guides/authoring-spells.md).
 
-Where that is not enough, give authentication its own target named `<area>-login`:
+An unattended runner authenticates the same tools ahead of time, and the runner does it,
+not magus: the CI provider's login step (`docker/login-action` on GitHub Actions) logs
+docker in before magus runs, the way the checkout token authenticates git. Do not wrap a
+tool's login in a target. It would have no inputs and no output, could never be cached,
+and would mutate ambient state outside your repo - a mode switch magus runs rather than a
+unit of work - to order a step the runner already takes.
 
-```sh
-magus run image-login:cd     # authenticates, and does nothing else
-magus run image-build:cd     # builds and pushes, assuming you already did
-```
-
-Two situations earn it. **Several registries at once**, where one target authenticates to
-all of them and you would otherwise discover them one failure at a time. And an
-**unattended runner**, where there is no human to read a hint and you want authentication
-as an explicit, ordered step that fails early rather than at the push.
-
-Be clear-eyed about what such a target is. It has no inputs, produces no output, can never
-be cached, and mutates ambient state on the machine rather than in your repo - it is a
-mode switch that magus runs, not a unit of work. That is a reasonable thing to keep in a
-magusfile, and it is not a pattern to reach for by default. If you do keep one, it MUST
-declare `skip_cache` with a reason, for the reason the section above gives:
-
-```buzz
-"image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
-```
-
-[MGS1026](../reference/codes/magusfile/MGS1026.md) reports a target that reads a
-credential and is still cacheable, so forgetting this is caught rather than discovered as
-a login that reports success without authenticating.
+The line is who the client is. When magus itself talks to a registry - `magus spell push`,
+`magus graph push`, a [remote cache](cache/remote.md) - it reads the credential through a
+reference as above and takes the token on stdin. When magus drives a tool that keeps its
+own credential store, logging that tool in belongs to the environment that provides it.
 
 ### A target that reads a secret must not be cacheable
 
 This is the one limit on this page that can produce a wrong build rather than a leaked
-log line, and the `-login` convention above is what makes it dangerous.
+log line.
 
 **A resolved credential contributes nothing to the cache key.** The key is a function of
 the [hashed `Step` fields](cache.md#the-cache-key) - sources, charms, args, allow-listed
@@ -329,11 +315,10 @@ env, dependencies, spell version, tool versions - and a value returned by
 write it into cache metadata and partition your cache per rotation. But it has a
 consequence you have to handle yourself.
 
-Rotating or revoking a credential invalidates nothing. And an authentication target is
-the worst possible shape for that, precisely because the split above made it a good one:
-its sources almost never change, so it becomes a permanent cache hit that never contacts
-the provider, never authenticates, and **reports success**. The push that follows fails
-with the registry's own 401, far from the cause, on a pipeline whose login step is green.
+Rotating or revoking a credential invalidates nothing. And a publishing target is the
+sharpest case: its sources rarely change between runs, so it becomes a cache hit that
+never contacts the provider, never pushes, and **reports success** - a release whose
+spells were never published, on a pipeline whose publish step is green.
 
 So declare it, with the reason:
 
@@ -342,17 +327,20 @@ import "magus";
 
 magus\project({
     "targets": {
-        "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
+        "spell-publish": {"skip_cache": "pushes to a registry per invocation; a replay would publish nothing"},
     },
 })
 ```
 
-That is magus's own declaration, verbatim. `skip_cache` takes a reason string rather than
+That is magus's own declaration, verbatim.
+[MGS1026](../reference/codes/magusfile/MGS1026.md) reports a target that reads a credential
+and is still cacheable, so forgetting it is caught rather than discovered as a green publish
+that pushed nothing. `skip_cache` takes a reason string rather than
 a boolean on purpose - see [Cache](cache.md) - and this is the case the requirement was
 written for.
 
 The same applies to any target whose output is a function of a credential, not only a
-login: a signed artifact, a fetch from a private registry, a deploy. If revoking the
+push: a signed artifact, a fetch from a private registry, a deploy. If revoking the
 credential should change what the target produces, the target cannot be replayable.
 
 > A cached artifact built with a credential that was revoked an hour later stays valid
@@ -426,11 +414,12 @@ the way out.
 
   ```text
   inv:     invmsm5rgk21
-  command: magus run image-login:cd .
+  command: magus run spell-publish:cd .
   status:  pass
 
-  secrets: 1 credential read(s)
-    14:50:50  . image-login              read secret "GHCR_TOKEN" via onepassword
+  secrets: 2 credential read(s)
+    14:50:50  . spell-publish            read secret "GHCR_USERNAME" via onepassword
+    14:50:50  . spell-publish            read secret "GHCR_TOKEN" via onepassword
   ```
 
   Drop `--secrets` for the whole event stream, or add `-o json` for a record. Run logs are
