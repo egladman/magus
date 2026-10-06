@@ -142,7 +142,7 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
 async function hooks() {
   const plugin = MagusGuard as unknown as () => Promise<{
     "tool.execute.before": (
-      input: { tool: string; callID: string },
+      input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
@@ -161,15 +161,13 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
 
 // go test ./... now has an exact magus equivalent (magus run go::go-test) and is
 // DENIED, not advised - the plan this test was written from predates that rule.
-// A push cannot be the advise case: the plugin reports no session, and push-authority
-// (hack/policy/branches.buzz) refuses a caller with none. ci-batch-poll advises once per
-// state directory, and this file's is fresh.
+// ci-batch-poll advises once per state directory, and this file's is fresh.
 test("live: bash arm advises on gh pr checks and appends non-empty context", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
     await h["tool.execute.before"](
-      { tool: "bash", callID: "c1" },
+      { tool: "bash", callID: "c1", sessionID: "s1" },
       { args: { command: "gh pr checks 5" } },
     );
   });

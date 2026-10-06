@@ -81,7 +81,7 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
 async function hooks() {
   const plugin = MagusGuard as unknown as () => Promise<{
     "tool.execute.before": (
-      input: { tool: string; callID: string },
+      input: { tool: string; callID: string; sessionID?: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
@@ -136,6 +136,27 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
     "`magus agent hook` was removed; hook lives under session",
   );
   assert.ok(!calls[0].argv.includes("--"), "the command goes on stdin; hook takes no positionals");
+});
+
+test("a call carries OpenCode's session, so push authority can tell the root from a subagent", async () => {
+  const calls = stubBun(() => pass);
+  const h = await hooks();
+
+  await h["tool.execute.before"](
+    { tool: "bash", callID: "c1", sessionID: "s1" },
+    { args: { command: "git push" } },
+  );
+
+  assert.deepEqual(calls[0].argv, [
+    "shell",
+    "--agent-name",
+    "opencode",
+    "--renders-ask",
+    "-o",
+    "json",
+    "--session",
+    "s1",
+  ]);
 });
 
 test("a file write is judged on the path surface, also over stdin", async () => {
