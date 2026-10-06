@@ -155,9 +155,10 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 		cfg = loaded
 	}
 
-	// Tier 4: cwd project-local (skip when cwd equals workspace root)
+	// Tier 4: cwd project-local, below the workspace root. A cwd outside the workspace is
+	// another tree, such as the checkout a `--root` run was started from.
 	cwd, err := os.Getwd()
-	if err == nil && cwd != wsRoot {
+	if err == nil && (wsRoot == "" || below(wsRoot, cwd)) {
 		loaded, err := loadDirInto(cfg, cwd)
 		if err != nil {
 			return Config{}, err
@@ -170,6 +171,19 @@ func LoadWithRoot(explicitPath, knownRoot string) (Config, error) {
 	}
 	warnIfConcurrencyHigh(cfg.Concurrency, runtime.NumCPU())
 	return cfg, nil
+}
+
+// below reports whether dir lies strictly beneath root, comparing the paths with their
+// symlinks resolved.
+func below(root, dir string) bool {
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	if d, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = d
+	}
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // warnIfConcurrencyHigh emits a single warning when the configured concurrency
