@@ -20,24 +20,35 @@ func bindingName(importPath string) string {
 	return path.Base(strings.TrimPrefix(importPath, "buzz:"))
 }
 
-// resolve maps an import in from to a module. Like gopherbuzz's findIncludeFile it
-// tries the importing file's directory first; where gopherbuzz then walks the
-// directories of the files that imported this one, a static reader has no import
-// chain, so it tries the project root and then the workspace root, which is where
-// the chains in a magus workspace start. Only a file inside the workspace counts:
-// its path is what names its symbols.
+// searchTemplates are the layouts magus gives a magusfile's gopherbuzz session
+// (internal/interp magusSearchPaths), tried at each root with `?` replaced by the
+// import path: upstream Buzz's project-relative layouts, then magusfiles/.
+var searchTemplates = []string{"?.buzz", "?/main.buzz", "?/src/main.buzz", "?/src/?.buzz", "magusfiles/?.buzz"}
+
+// resolve maps an import in from to a module the way gopherbuzz's findIncludeFile
+// does under magus. The directory of the importing file comes first. gopherbuzz
+// then walks the directories of the files that imported this one, a chain a static
+// reader does not have; in a magus workspace those chains start at a magusfile,
+// which the project root's templates cover. Then come the templates at the
+// project root and at the workspace root. Only a file inside the workspace
+// counts: its path is what names its symbols.
+//
+// It does not see a module the host registers natively, which gopherbuzz resolves
+// before any file: a workspace file named like one (std.buzz beside the importer)
+// is taken for it.
 func (ix *indexer) resolve(from *file, importPath string) *module {
 	trimmed := strings.TrimPrefix(importPath, "buzz:")
 	m := &module{path: trimmed}
-	if trimmed == "" || filepath.IsAbs(trimmed) {
+	if trimmed == "" {
 		return m
 	}
-	name := trimmed
-	if filepath.Ext(name) != ".buzz" {
-		name += ".buzz"
+	candidates := []string{filepath.Join(filepath.Dir(from.abs), filepath.FromSlash(trimmed)+".buzz")}
+	for _, root := range []string{ix.project, ix.workspace} {
+		for _, tmpl := range searchTemplates {
+			candidates = append(candidates, filepath.Join(root, filepath.FromSlash(strings.ReplaceAll(tmpl, "?", trimmed))))
+		}
 	}
-	for _, dir := range []string{filepath.Dir(from.abs), ix.project, ix.workspace} {
-		candidate := filepath.Join(dir, filepath.FromSlash(name))
+	for _, candidate := range candidates {
 		if _, ok := ix.workspaceRel(candidate); !ok {
 			continue
 		}

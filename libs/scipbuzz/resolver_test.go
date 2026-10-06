@@ -48,6 +48,50 @@ func TestResolveOrder(t *testing.T) {
 	require.Equal(t, "io", ix.resolve(from, "buzz:io").path)
 }
 
+// TestResolveFollowsMagusSearchPaths pins the templates magus gives a magusfile's
+// session (internal/interp magusSearchPaths), tried at the project root and then
+// at the workspace root, after the importing file's own directory. Like
+// gopherbuzz, `.buzz` is always appended, so `x.buzz` names x.buzz.buzz.
+func TestResolveFollowsMagusSearchPaths(t *testing.T) {
+	ws := t.TempDir()
+	writeFiles(t, ws,
+		"magus.yaml",
+		"docs/magusfile.buzz",
+		"docs/widgets/main.buzz",
+		"docs/kit/src/main.buzz",
+		"docs/tool/src/tool.buzz",
+		"docs/magusfiles/helpers.buzz",
+		"magusfiles/rootonly.buzz",
+		"docs/both.buzz",
+		"docs/both/main.buzz",
+		"docs/magusfiles/order.buzz",
+		"order.buzz",
+		"docs/named.buzz.buzz",
+		"docs/plain.buzz",
+	)
+	project := filepath.Join(ws, "docs")
+	ix := &indexer{project: project, workspace: ws, files: map[string]*file{}}
+	from := ix.load(filepath.Join(project, "magusfile.buzz"))
+	require.NotNil(t, from)
+
+	cases := map[string]string{
+		"widgets":    "docs/widgets/main.buzz",
+		"kit":        "docs/kit/src/main.buzz",
+		"tool":       "docs/tool/src/tool.buzz",
+		"helpers":    "docs/magusfiles/helpers.buzz",
+		"rootonly":   "magusfiles/rootonly.buzz",
+		"both":       "docs/both.buzz",
+		"order":      "docs/magusfiles/order.buzz",
+		"named.buzz": "docs/named.buzz.buzz",
+	}
+	for importPath, want := range cases {
+		m := ix.resolve(from, importPath)
+		require.NotNil(t, m.file, importPath)
+		require.Equal(t, want, m.file.rel, importPath)
+	}
+	require.Nil(t, ix.resolve(from, "plain.buzz").file, "plain.buzz.buzz does not exist")
+}
+
 func TestBindingName(t *testing.T) {
 	require.Equal(t, "go", bindingName("magus/spell/go"))
 	require.Equal(t, "helpers", bindingName("./hack/policy/helpers"))
