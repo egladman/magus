@@ -155,18 +155,21 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 const maxProbeTail = 240
 
 // causeLine picks the line of a failed probe's output that names why: the first one
-// that mentions an error, else the last. mise ends on a "run with --verbose" footer and
-// pnpm opens with a stray "undefined", so neither end alone is the cause.
+// that mentions an error and is not a warning, else the first that mentions an error,
+// else the last. mise ends on a "run with --verbose" footer and pnpm opens with a stray
+// "undefined", so neither end alone is the cause; and a mise warning can quote an HTTP
+// "client error" ahead of the ERROR line that failed the probe.
 func causeLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
-	line := lines[len(lines)-1]
-	for _, l := range lines {
-		if strings.Contains(strings.ToLower(l), "err") {
-			line = l
-			break
-		}
+	mentions := func(l, word string) bool { return strings.Contains(strings.ToLower(l), word) }
+	i := slices.IndexFunc(lines, func(l string) bool { return mentions(l, "err") && !mentions(l, "warn") })
+	if i < 0 {
+		i = slices.IndexFunc(lines, func(l string) bool { return mentions(l, "err") })
 	}
-	line = strings.Join(strings.Fields(line), " ")
+	if i < 0 {
+		i = len(lines) - 1
+	}
+	line := strings.Join(strings.Fields(lines[i]), " ")
 	if len(line) > maxProbeTail {
 		line = strings.ToValidUTF8(line[:maxProbeTail], "")
 	}
