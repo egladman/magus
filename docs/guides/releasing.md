@@ -126,7 +126,6 @@ magus run release -- magus@0.5.0
 ```
 
 ```text
-release: OK   workflow upload glob - `dist/magus_*.tar.gz` is what .github/workflows/release.yaml uploads
 release: OK   workflow tag trigger - `v*` is what .github/workflows/release.yaml triggers on
 release: OK   branch collision - no branch is named `v0.5.0`
 release: OK   asset names - version `v0.5.0` names assets `dist/magus_*.tar.gz` matches on every platform release.yaml builds
@@ -198,11 +197,11 @@ refuses on two things the release checks can see now:
 
 ### The workflow contract
 
-`release.yaml`'s upload glob and tag trigger are stated in `magusfile.buzz` as
-`RELEASE_ASSET_GLOB` and `RELEASE_TAG_REFSPEC`, and the release checks confirm the
-workflow still contains both. Edit one side alone and the rehearsal names it. They
-also confirm the root tag matches the trigger and that no module tag
-does, so a library bump cannot start a release run.
+`release.yaml`'s tag trigger is stated in `magusfile.buzz` as `RELEASE_TAG_REFSPEC`, and
+the release checks confirm the workflow still contains it. Edit one side alone and the
+rehearsal names it. They also confirm the root tag matches the trigger and that no module
+tag does, so a library bump cannot start a release run. The upload needs no such check:
+`release-publish` uploads what `RELEASE_ASSET_GLOB` matches itself.
 
 ## Pushing
 
@@ -212,21 +211,35 @@ Nothing above pushes. Review the tags, then push when you mean it:
 git push origin v0.4.0
 ```
 
-### Resume after the archives are published
+### Rerunning a release
 
-If the release workflow fails after creating the GitHub Release, run its resume mode
-from main with the published tag:
+Every unit a release publishes is write-once: the GitHub Release and its signed
+archives, the manifest in main's index, each spell and each container image. A target
+that finds its unit already published keeps it and reads it from then on, so a rerun
+finishes what is missing and changes nothing else. To rerun a tag under the workflow main
+carries now, dispatch it from main:
 
 ```bash
-gh workflow run release.yaml --ref main -f resume_tag=v0.5.0-rc.2
+gh workflow run release.yaml --ref main -f tag=v0.5.0-rc.2
 ```
 
-The workflow checks out that tag, downloads the existing archives and signed
-checksums, and verifies each archive against the checksum manifest. It then cuts
-the release manifest, publishes the signed update index, spells, and container
-images. It skips the artifact builds and does not replace the published archives.
-The index target reuses its branch and pull request when rerun, and is skipped
-once the release is present in the index on main.
+The archives are built only when the GitHub Release does not exist yet. Otherwise the
+publish job downloads the release and verifies every archive against the signed
+`SHA256SUMS` before anything reads it. A release interrupted mid-upload fails that check
+and names the missing archive.
+
+The manifest is cut in the tag's tree, so its notes are the fragments that tag shipped.
+`release-manifest` then stages it on `release-manifest/<tag>`, a branch off main, and
+dispatches `release-index.yaml` there, so the signed index is main's releases plus this
+one. An index built from an older tag's tree would drop every release since.
+
+Replacing what is published is a separate, deliberate act. Uncheck `immutable` when
+dispatching, or pass the `mutable` charm to a publishing target:
+
+```bash
+gh workflow run release.yaml --ref main -f tag=v0.5.0-rc.2 -f immutable=false
+magus run spell-publish:cd,mutable
+```
 
 ### Prereleases and the image channel
 
@@ -239,8 +252,8 @@ magus run image-build:cd,tagged
 
 `tagged` reads the channel off the release tag HEAD sits on. A stable semver takes
 `latest`; `v0.5.0-rc.1` gets its version tag alone. The derivation lives in the
-magusfile's `channel()`, not in YAML, so the image step and the prerelease flag on
-the GitHub release cannot disagree about what is shipping.
+magusfile's `channel()`, not in YAML, beside the prerelease flag `release-publish`
+sets on the GitHub Release, so the two cannot disagree about what is shipping.
 
 Cutting a release candidate is therefore a tag and nothing else. You can still name
 `stable` or `unstable` directly for a local build, but not beside `tagged`, which

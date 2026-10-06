@@ -1,13 +1,15 @@
 name: Release index
 
 # Rebuilds public/release/index.json from releases/*.yaml, signs it, and opens a pull
-# request with the pair. release.yaml runs the same magusfile target at the end of a
-# tag build; this file is the entry point for the cases that are not a release - a
-# manifest corrected, a release yanked, a key rotated - where the served index has to
-# change without a version being cut.
+# request with the pair. A release reaches it through release.yaml's release-manifest,
+# which stages the release's manifest on a branch off main and dispatches this workflow
+# there, so the index is always main's releases plus the new one. Dispatched by hand, it
+# covers the cases that are not a release - a manifest corrected, a release yanked, a key
+# rotated - where the served index has to change without a version being cut.
 #
-# Manual only, and that is the whole risk budget: this is the one workflow outside
-# release.yaml that reads MAGUS_SIGNING_KEY, so it is reachable by nothing automatic.
+# Dispatch only, and that is the whole risk budget: this is the one workflow outside
+# release.yaml that reads MAGUS_SIGNING_KEY, and nothing starts it but a person or
+# release.yaml's publish job, which holds that key already.
 #
 # The whole flow (build, sign, regenerate the manifests' derived files, branch, push,
 # open the pull request) is the magusfile's release-index target; see release_index()
@@ -17,11 +19,10 @@ name: Release index
 on:
   workflow_dispatch:
     inputs:
-      tag:
+      reason:
         description: >-
-          Recover a release whose publish job failed after building: cut its manifest from
-          the assets ALREADY PUBLISHED under this tag (e.g. v0.4.3). Leave empty to re-sign
-          the index from the manifests already committed, which is the ordinary case.
+          What produced this index, as a sentence fragment that names the commit and the
+          pull request, e.g. "the v0.5.0 release". Empty reads "a manual refresh".
         required: false
         default: ''
 
@@ -84,37 +85,11 @@ jobs:
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
-      # release.yaml cuts the manifest one step before publishing the index, so a failure
-      # in between leaves a tag built and published with no manifest - the cut ran on the
-      # runner and went with it. Rerunning the release job cannot recover that: a rerun
-      # executes the workflow file from the TAG's tree, which lacks whatever fix was just
-      # merged. Cutting here instead, from the assets the release ALREADY published, keeps
-      # the digests describing what people can download rather than a rebuild.
-      #
-      # The tag rides the environment rather than being interpolated, as in release.yaml.
-      - name: Cut the manifest from a published release
-        if: inputs.tag != ''
-        env:
-          TAG: ${{ inputs.tag }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh release download "$TAG" --dir dist --clobber
-          # Verify before hashing anything into a manifest. A partial download hashes
-          # perfectly well and would pin digests that match nothing, in the one file whose
-          # job is telling a client what it may fetch. SHA256SUMS carries a `version:`
-          # header that is not a checksum line, so it is stripped rather than passed to a
-          # checker that would reject the file for it.
-          grep -v '^version:' dist/SHA256SUMS > "$RUNNER_TEMP/sums"
-          (cd dist && sha256sum -c "$RUNNER_TEMP/sums")
-          go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
-          rm -rf dist
-
       - name: Publish the release index
         env:
           MAGUS_SIGNING_KEY: *index_signing_key
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USERNAME: *index_ghcr_username
           GHCR_TOKEN: *index_ghcr_token
-          REASON: ${{ inputs.tag != '' && format('recovering the {0} release', inputs.tag) || 'a manual refresh' }}
+          REASON: ${{ inputs.reason || 'a manual refresh' }}
         run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"

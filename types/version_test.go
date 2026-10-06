@@ -33,8 +33,8 @@ func TestIsDevMagusVersion(t *testing.T) {
 	}
 }
 
-// The cases are .github/actions/magus/prerelease.buzz's, so the GitHub Release flag,
-// the release index and self update agree on every tag shape.
+// The cases are the tag shapes release-publish flags with semver\isStable, so the GitHub
+// Release flag, the release index and self update agree on every one.
 func TestParseVersionIsOkOnlyForAStableRelease(t *testing.T) {
 	t.Parallel()
 	cases := map[string]bool{

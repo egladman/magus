@@ -29,16 +29,22 @@ on:
   push:
     tags:
       - 'v*'
-  # Select a tag to rerun the full release. For a release whose archives are already
-  # published, dispatch on main with resume_tag to finish its index, spells, and images
-  # without rebuilding or replacing the signed archives.
+  # Dispatch on main with a tag to rerun its release under the workflow main carries.
+  # Every unit is write-once (release-publish, release-manifest, spell-publish and
+  # image-build in magusfile.buzz): a rerun publishes what is missing and keeps what is
+  # already published, so finishing an interrupted release and rerunning a finished one
+  # are the same command.
   workflow_dispatch:
     inputs:
-      resume_tag:
-        description: 'Existing published tag to resume after artifact publication'
+      tag:
+        description: 'Release tag to (re)run; empty runs the tag this was dispatched on'
         type: string
         required: false
         default: ''
+      immutable:
+        description: 'Keep what is already published; uncheck to replace it'
+        type: boolean
+        default: true
       include_dynamic_builds:
         description: 'Include dynamically linked prebuilt binaries'
         type: boolean
@@ -49,7 +55,7 @@ on:
 # for runners or the publish step. Keyed on the ref, so different tags still run
 # independently.
 concurrency:
-  group: cd-${{ inputs.resume_tag || github.ref_name }}
+  group: cd-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -66,9 +72,15 @@ env:
 
 jobs:
   preflight:
-    name: Check release credentials
+    name: Resolve the release
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read  # read the tag and its GitHub Release
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      commit: ${{ steps.release.outputs.commit }}
+      build: ${{ steps.release.outputs.build }}
+      charms: ${{ steps.release.outputs.charms }}
     steps:
       # Keep these values linked to the steps that use them. A check with different
       # wiring could pass while publication still lacks a credential.
@@ -85,6 +97,42 @@ jobs:
             fi
           done
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      # The one decision this file makes: whether the archives need building. A published
+      # release spends no runner minutes being rebuilt. It is a shortcut, never the guard:
+      # every publishing target checks what is published for itself.
+      #
+      # mutable only on a dispatch that unchecked immutable. On a tag push inputs are empty,
+      # and an empty input compared to false would read as unchecked.
+      - id: release
+        name: Resolve the tag, its commit and what is published
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          MUTABLE: ${{ github.event_name == 'workflow_dispatch' && !inputs.immutable }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          # A release ships reviewed code: its tag must be on main.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
+          charms="cd"
+          build=false
+          if [ "$MUTABLE" = true ]; then charms="cd,mutable"; fi
+          if [ "$MUTABLE" = true ] || ! gh release view "$TAG" >/dev/null 2>&1; then build=true; fi
+          {
+            echo "tag=$TAG"
+            echo "commit=$(git rev-parse HEAD)"
+            echo "build=$build"
+            echo "charms=$charms"
+          } >> "$GITHUB_OUTPUT"
+
   # One job per native runner. Each builds its own platform's static binary, and the
   # dynamically-linked one too when include_dynamic_builds is set. Static cross-compiles
   # trivially (no C toolchain needed), so there's no reason to farm it out to a separate
@@ -93,7 +141,7 @@ jobs:
   # contents: read only; none of these see MAGUS_SIGNING_KEY.
   release-linux-amd64:
     name: Build release artifacts (linux/amd64)
-    if: ${{ !inputs.resume_tag }}
+    if: ${{ needs.preflight.outputs.build == 'true' }}
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
@@ -104,6 +152,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           # Full history + tags so the release-build target's version() (git describe
           # --tags) resolves the tag and build_date() reads the commit date. Both walk the
           # commit graph only, so blob:none keeps them working on a fraction of the fetch.
@@ -119,7 +168,7 @@ jobs:
           # older tag - magusfile.buzz can legitimately need host-module code
           # newer than the last release.
           installation-strategy: source
-          git-ref: ${{ github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
           publish-artifact: release-magus-${{ github.run_attempt }}
       - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
@@ -154,7 +203,7 @@ jobs:
 
   release-linux-arm64:
     name: Build release artifacts (linux/arm64)
-    if: ${{ !inputs.resume_tag }}
+    if: ${{ needs.preflight.outputs.build == 'true' }}
     needs: preflight
     runs-on: ubuntu-24.04-arm
     permissions:
@@ -162,13 +211,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
       - uses: ./.github/actions/codec-deps
         if: ${{ inputs.include_dynamic_builds }}
       - name: Build release artifacts (static)
@@ -194,7 +244,7 @@ jobs:
   # cross-compiles the amd64 static binary the way the windows job still does.
   release-darwin-arm64:
     name: Build release artifacts (darwin/arm64)
-    if: ${{ !inputs.resume_tag }}
+    if: ${{ needs.preflight.outputs.build == 'true' }}
     needs: preflight
     runs-on: macos-15
     permissions:
@@ -202,13 +252,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
       - name: Install codec build dependencies
         if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
@@ -245,7 +296,7 @@ jobs:
   # above plus dropping the dynamic asset again.
   release-darwin-amd64:
     name: Build release artifacts (darwin/amd64)
-    if: ${{ !inputs.resume_tag }}
+    if: ${{ needs.preflight.outputs.build == 'true' }}
     needs: preflight
     runs-on: macos-15-intel
     permissions:
@@ -253,13 +304,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
           filter: blob:none
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
       - name: Install codec build dependencies
         if: ${{ inputs.include_dynamic_builds }}
         run: brew install zstd xz
@@ -292,7 +344,7 @@ jobs:
   # change that added this job dropped that exclusion, so the arm64 backend runs here.)
   release-windows:
     name: Build release artifacts (windows amd64 + arm64-static)
-    if: ${{ !inputs.resume_tag }}
+    if: ${{ needs.preflight.outputs.build == 'true' }}
     needs: preflight
     runs-on: windows-latest
     permissions:
@@ -300,6 +352,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           # Full history + tags for git describe; blob:none because none of it is read.
           fetch-depth: 0
           filter: blob:none
@@ -331,7 +384,7 @@ jobs:
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: source
-          git-ref: ${{ github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
 
       # shell: bash, not msys2 - the static builds must not depend on a toolchain that is
       # only installed when `include_dynamic_builds` is set. bash rather than the default pwsh because
@@ -365,38 +418,26 @@ jobs:
       - release-darwin-arm64
       - release-darwin-amd64
       - release-windows
-    if: ${{ always() && needs.preflight.result == 'success' && (inputs.resume_tag != '' || success()) }}
+    # Skipped build jobs mean the release is already published; a failed one stops here.
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     # Job-scoped because only this job runs a bare `go run`; the release-build jobs above
     # reach the toolchain through magusfile.buzz, which sets this on every Go target.
     env:
       GOEXPERIMENT: jsonv2
     permissions:
-      contents: write        # create the GitHub Release, upload assets, push the index branch
-      pull-requests: write   # open the pull request carrying the signed release index
-      packages: write        # graph-generate:cd publishes the knowledge graph to GHCR
+      contents: write  # create the GitHub Release, push the manifest branch
+      actions: write   # dispatch release-index.yaml on that branch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.resume_tag || github.ref_name }}
+          ref: ${{ needs.preflight.outputs.tag }}
           fetch-depth: 0
           filter: blob:none
 
-      - name: Check resume tag
-        if: ${{ inputs.resume_tag != '' }}
-        env:
-          TAG: ${{ inputs.resume_tag }}
-        run: |
-          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$TAG^{commit}")"
-          git fetch --no-tags origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor HEAD origin/main
-
-      # Node and pnpm, for the same reason every other job that regenerates docs
-      # installs them: the `release-index` step below runs `generate:rw docs`, whose
-      # preflight execs pnpm. Without this the whole publish reaches the last step and
-      # dies on `[MGS3003] "pnpm" is not on PATH` - which is how v0.4.3 shipped six
-      # signed binaries and no index. It must stay AHEAD of setup-magus so that job's
-      # actions/setup-go keeps outranking mise's Go, exactly as in ci.yaml.
+      # Go for release-manifest's `go run ./cmd/magus-utils cut`. It must stay AHEAD of
+      # setup-magus so that job's actions/setup-go keeps outranking mise's Go, exactly as in
+      # ci.yaml.
       #
       # cache: false: a tag run restores main's cache scope, which any main-scoped run can
       # write, the merge queue's validation of pull-request code included, and this job
@@ -407,145 +448,45 @@ jobs:
           env: false
           cache: false
 
-      # Before a new Release exists, use the binary the linux build job made from
-      # this tag. On resume the published, signed binary for this exact tag exists.
-      - uses: ./.github/actions/setup-magus  # provides the Go toolchain for the magus-utils calls below
-        if: ${{ !inputs.resume_tag }}
+      # The binary the linux build job made from this tag when this run built the archives,
+      # otherwise the published, signed binary for the tag.
+      - uses: ./.github/actions/setup-magus
         with:
-          installation-strategy: artifact
+          installation-strategy: ${{ needs.preflight.outputs.build == 'true' && 'artifact' || 'prebuilt' }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
           artifact: ${{ needs.release-linux-amd64.outputs.magus_artifact }}
           artifact-sha256: ${{ needs.release-linux-amd64.outputs.magus_sha256 }}
-          artifact-commit: ${{ github.sha }}
+          artifact-commit: ${{ needs.preflight.outputs.commit }}
 
-      - uses: ./.github/actions/setup-magus
-        if: ${{ inputs.resume_tag != '' }}
-        with:
-          installation-strategy: prebuilt
-          git-ref: ${{ inputs.resume_tag }}
-
-      # The bare magus-utils calls below need mise's pinned Go even when magus came
-      # from an artifact or release and setup-magus did not install a Go toolchain.
+      # The bare magus-utils call needs mise's pinned Go even when magus came from an
+      # artifact or release and setup-magus did not install a Go toolchain.
       - name: Restore the mise-pinned Go toolchain
         run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: ${{ !inputs.resume_tag }}
+        if: ${{ needs.preflight.outputs.build == 'true' }}
         with:
           path: dist
           merge-multiple: true
 
-      - name: Download and verify published assets
-        if: ${{ inputs.resume_tag != '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ inputs.resume_tag }}
-        run: |
-          mkdir -p dist
-          gh release download "$TAG" --dir dist
-          cd dist
-          test "$(sed -n '1p' SHA256SUMS)" = "version: $TAG"
-          tail -n +2 SHA256SUMS | sha256sum -c -
-
-      # Every release-<platform> job wrote its own <asset>.sha256 checksum file
-      # (sha256sum-compatible, one line) alongside each tarball, so no
-      # cross-job aggregation is needed: just concatenate what's on disk.
-      - name: Build combined manifest
-        if: ${{ !inputs.resume_tag }}
-        run: cat dist/*.sha256 > dist/SHA256SUMS
-
-      # Signs dist/SHA256SUMS, then self-verifies against the embedded release pubkey
-      # before the release goes out (safe here, unlike setup-magus, since this job has
-      # the magus source checked out). See release_sign() in magusfile.buzz.
-      - name: Sign and verify SHA256SUMS
-        if: ${{ !inputs.resume_tag }}
-        env:
-          MAGUS_SIGNING_KEY: *release_signing_key
-        run: magus run release-sign --no-default-charms
-
-      # Whether this tag is a prerelease, decided by .github/actions/magus/prerelease.buzz
-      # rather than by a workflow expression. `contains(github.ref_name, '-')` would call
-      # v1.2.3+build-1 a prerelease - the hyphen is build metadata, which semver says is not
-      # one. The script parses instead, using the same semver module the magusfile's
-      # channel() uses for the image's floating tag, and its cases are covered by tests that
-      # `magus run test` runs (via advice-test) - which a one-line shell expression here
-      # could never be.
-      #
-      # The tag arrives through the environment, never interpolated into the command: a ref
-      # name is attacker-influenceable on some triggers.
-      - id: release
-        name: Resolve prerelease from the tag
-        if: ${{ !inputs.resume_tag }}
-        env:
-          TAG: ${{ github.ref_name }}
-        run: echo "prerelease=$(magus buzz .github/actions/magus/prerelease.buzz)" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        if: ${{ !inputs.resume_tag }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          # Not inferred from the tag name: left to the default, v0.5.0-rc.1 would take the
-          # repo's `latest` pointer, which audit's compat job and `magus self update` follow.
-          PRERELEASE: ${{ steps.release.outputs.prerelease }}
-        run: |
-          set -euo pipefail
-          ASSETS=(dist/magus_*.tar.gz dist/SHA256SUMS dist/SHA256SUMS.sig)
-          # A full rerun can replace assets; resume_tag preserves the already signed
-          # archives and skips this step entirely.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "release $TAG already exists; re-uploading assets"
-            gh release upload "$TAG" --clobber "${ASSETS[@]}"
-          else
-            FLAGS=(--generate-notes)
-            if [ "$PRERELEASE" = "true" ]; then FLAGS+=(--prerelease); fi
-            gh release create "$TAG" "${FLAGS[@]}" "${ASSETS[@]}"
-          fi
-
-      # The two steps below are what `magus self update` needs and the GitHub Release
-      # does not supply. Neither ran until now: `cut` and `release-index` were written,
-      # tested, and called by nothing, so v0.3.0 shipped with no releases/v0.3.0.yaml
-      # and the site served an index.json whose signature 404ed - self update exited 1
-      # on every platform for every user.
-      #
-      # They run AFTER the release is created on purpose. The binaries are what a tag
-      # is for; a failure to publish the update index must not withhold them.
-      #
-      # cut folds the changes/unreleased/ fragments into the manifest and deletes them;
-      # the docs changelog page renders both at build time. A prerelease tag records the
-      # same notes and deletes nothing, so the final release's cut still folds them all,
-      # and release-index lists it under `prereleases`, which self update never picks alone.
-      - name: Cut the release manifest
-        env:
-          TAG: ${{ inputs.resume_tag || github.ref_name }}
-        run: go run ./cmd/magus-utils cut -version "$TAG" -artifacts ./dist -unreleased ./changes/unreleased -out ./releases
-
-      - name: Check published index
-        id: index_state
-        if: ${{ inputs.resume_tag != '' }}
-        env:
-          TAG: ${{ inputs.resume_tag }}
-        run: |
-          if git cat-file -e "origin/main:releases/$TAG.yaml" &&
-             git show origin/main:docs/gen/public/release/index.json |
-               jq -e --arg tag "$TAG" 'any(.releases[]?; .version == $tag) or any(.prereleases[]?; .version == $tag)' >/dev/null; then
-            echo 'published=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'published=false' >> "$GITHUB_OUTPUT"
-          fi
-
-      # The whole build-sign-regenerate-branch-PR flow lives in the magusfile's
-      # release-index target (see release_index() in magusfile.buzz); cd is what lets
-      # it push the branch and open the pull request. The tag rides the environment,
-      # never interpolated into the command, like TAG above.
-      - name: Publish the release index
-        if: ${{ inputs.resume_tag == '' || steps.index_state.outputs.published != 'true' }}
+      # Write-once: creates the GitHub Release from the archives above, or downloads and
+      # verifies the published one into dist/. See release_publish() in magusfile.buzz.
+      - name: Publish the GitHub Release
         env:
           MAGUS_SIGNING_KEY: *release_signing_key
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USERNAME: *release_ghcr_username
-          GHCR_TOKEN: *release_ghcr_token
-          REASON: the ${{ inputs.resume_tag || github.ref_name }} release
-        run: magus run release-index:cd --no-default-charms --concurrency-profile aggressive -- "$REASON"
+          CHARMS: ${{ needs.preflight.outputs.charms }}
+        run: magus run "release-publish:$CHARMS" --no-default-charms
+
+      # After the release, on purpose: the binaries are what a tag is for, and a failure to
+      # publish the update index must not withhold them. Cuts the manifest in this tag's
+      # tree and stages it on a branch off main, where release-index.yaml signs main's index
+      # with it. See release_manifest() in magusfile.buzz.
+      - name: Stage the release manifest for the index
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHARMS: ${{ needs.preflight.outputs.charms }}
+        run: magus run "release-manifest:$CHARMS" --no-default-charms
 
   # Every spell the binary ships, one GHCR repository each, tagged with the release version.
   # After publish, so a spell never names a release that failed to go out. The artifacts are
@@ -554,10 +495,10 @@ jobs:
   # makes it public in the package settings; magus cannot do that for you.
   spells:
     name: Publish spells
-    needs: publish
-    # always(): publish can succeed after skipped build jobs (resume_tag); without
-    # this, GitHub skips every job that needs publish whenever an ancestor was skipped.
-    if: ${{ always() && needs.publish.result == 'success' }}
+    needs: [preflight, publish]
+    # !cancelled(): publish succeeds after skipped build jobs, and without it GitHub skips
+    # every job downstream of a skipped one.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -566,29 +507,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Tags, so spell-publish reads the release version off the tag HEAD sits on.
-          ref: ${{ inputs.resume_tag || github.ref_name }}
+          ref: ${{ needs.preflight.outputs.tag }}
           fetch-depth: 0
           filter: blob:none
 
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: prebuilt
-          git-ref: ${{ inputs.resume_tag || github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
 
       # The credentials image-login uses, under the names GHCR_SPELLS declares. Each token
-      # reaches `magus spell push` on stdin, never an argv.
+      # reaches `magus spell ls` and `magus spell push` on stdin, never an argv.
       - name: Publish spells
         env:
           GHCR_USERNAME: *release_ghcr_username
           GHCR_TOKEN: *release_ghcr_token
-        run: magus run spell-publish:cd --no-default-charms
+          CHARMS: ${{ needs.preflight.outputs.charms }}
+        run: magus run "spell-publish:$CHARMS" --no-default-charms
 
   image:
     name: Publish container images
-    needs: publish
-    # always(): same as spells - resume skips the platform builds, so a bare
-    # `needs: publish` would skip this job even when publish succeeded.
-    if: ${{ always() && needs.publish.result == 'success' }}
+    needs: [preflight, publish]
+    # !cancelled(): same as spells.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -610,14 +551,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history + tags so version()/commit()/build_date() resolve.
-          ref: ${{ inputs.resume_tag || github.ref_name }}
+          ref: ${{ needs.preflight.outputs.tag }}
           fetch-depth: 0
           filter: blob:none
 
       - uses: ./.github/actions/setup-magus
         with:
           installation-strategy: prebuilt
-          git-ref: ${{ inputs.resume_tag || github.ref_name }}
+          git-ref: ${{ needs.preflight.outputs.tag }}
 
       - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
         with:
@@ -682,6 +623,12 @@ jobs:
         # :cd,tagged reads the channel off the tag itself: a stable semver takes `latest`,
         # a v0.5.0-rc.1 goes to the version tag alone, and an UNTAGGED commit is refused
         # outright rather than guessed at. The derivation lives in the magusfile's channel(),
-        # not in YAML, so this step and the prerelease flag on the release below cannot
-        # disagree about what is being shipped. gha adds the job summary of what was pushed.
-        run: magus run image-build:cd,tagged,gha --no-default-charms --concurrency-profile aggressive
+        # not in YAML, beside release-publish's prerelease flag, so the two cannot disagree
+        # about what is being shipped. gha adds the job summary of what was pushed.
+        # The registry credentials list each repository's tags: a version tag already
+        # published is kept, so a rerun pushes nothing unless the run is mutable.
+        env:
+          GHCR_USERNAME: *release_ghcr_username
+          GHCR_TOKEN: *release_ghcr_token
+          CHARMS: ${{ needs.preflight.outputs.charms }}
+        run: magus run "image-build:$CHARMS,tagged,gha" --no-default-charms --concurrency-profile aggressive

@@ -104,7 +104,10 @@ export fun workflowFindings(workflows: {str: str}) > [Finding] !> any {
                         }
                     }
                 }
-                if (support\scalar(step.q(["with", "installation-strategy"])) != "artifact") {
+                // An expression that can choose artifact is a consumer like the literal: the
+                // run that picks it installs a published binary all the same.
+                final strategy = support\scalar(step.q(["with", "installation-strategy"]));
+                if (strategy != "artifact" and strategy.indexOf("'artifact'") == null) {
                     continue;
                 }
                 final m = jobOutput.match(support\scalar(step.q(["with", "artifact-sha256"])));
@@ -142,8 +145,13 @@ export fun workflowFindings(workflows: {str: str}) > [Finding] !> any {
                 if (got != want) {
                     flag("{publisher}'s output {output} is \"{got}\"", fix: "Set it to \"{want}\".");
                 }
-                if (support\scalar(step.q(["with", "artifact-commit"])) != "$\{\{ github.sha }}") {
-                    flag("artifact-commit is not $\{\{ github.sha }}", fix: "Install the binary built from this run's commit.");
+                // The run's own commit, or one a needed job resolved: a release dispatched from
+                // main builds the tag it names, which github.sha is not.
+                final commit = support\scalar(step.q(["with", "artifact-commit"]));
+                final resolved = jobOutput.match(commit);
+                if (commit != "$\{\{ github.sha }}" and (resolved == null or needs.indexOf(resolved![1]) == null)) {
+                    flag("artifact-commit is neither $\{\{ github.sha }} nor a needed job's output",
+                        fix: "Install the binary built from the commit this run builds.");
                 }
             }
         }
@@ -187,6 +195,23 @@ test "an unverified or unneeded consumer is reported at its step" {
     assert\equal(got[0].line, want: 14, message: "line");
     assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + consumer("lint", sha: "$\{\{ needs.plan.outputs.magus_sha256 }}")})),
         want: ["ci.yaml/test: reads plan's output but does not need plan"], message: "needs");
+}
+
+test "a strategy expression that can choose artifact is checked like the literal" {
+    final chosen = consumer("lint", sha: "abc").replace("installation-strategy: artifact",
+        with: "installation-strategy: $\{\{ needs.plan.outputs.build == 'true' && 'artifact' || 'prebuilt' }}");
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + chosen})),
+        want: ["ci.yaml/test: artifact-sha256 is not a job output of the publisher"], message: "expression");
+}
+
+test "artifact-commit may come from a needed job, never an unneeded one" {
+    final sha = "$\{\{ needs.plan.outputs.magus_sha256 }}";
+    final resolved = consumer("[plan]", sha: sha).replace("$\{\{ github.sha }}", with: "$\{\{ needs.plan.outputs.commit }}");
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + resolved})),
+        want: [<str>], message: "a needed job's commit");
+    final stray = consumer("[plan]", sha: sha).replace("$\{\{ github.sha }}", with: "$\{\{ needs.other.outputs.commit }}");
+    assert\equal(support\messages(workflowFindings({".github/workflows/ci.yaml": publisher + stray})),
+        want: ["ci.yaml/test: artifact-commit is neither $\{\{ github.sha }} nor a needed job's output"], message: "unneeded");
 }
 
 test "a publisher building after another step, or none at all, is reported" {
