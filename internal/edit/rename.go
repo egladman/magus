@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	buzztoken "github.com/egladman/magus/libs/gopherbuzz/token"
 	"github.com/egladman/magus/types"
 )
 
@@ -116,6 +118,7 @@ func RenameCollisions(to string, matches []types.KnowledgeMatch, definedIn func(
 
 // The languages the symbol indexes cover, by the name a refusal prints.
 const (
+	langBuzz       = "Buzz"
 	langGo         = "Go"
 	langPython     = "Python"
 	langRust       = "Rust"
@@ -124,6 +127,8 @@ const (
 
 func languageOf(file string) string {
 	switch path.Ext(file) {
+	case ".buzz":
+		return langBuzz
 	case ".go":
 		return langGo
 	case ".py", ".pyi":
@@ -137,7 +142,7 @@ func languageOf(file string) string {
 }
 
 var (
-	// identifierRe is the identifier shape all four languages accept; TypeScript also
+	// identifierRe is the identifier shape every language here accepts; TypeScript also
 	// admits `$`. Decimal digits only, since Go rejects the other numeric categories.
 	identifierRe   = regexp.MustCompile(`^[\p{L}_][\p{L}\p{Nd}_]*$`)
 	tsIdentifierRe = regexp.MustCompile(`^[\p{L}_$][\p{L}\p{Nd}_$]*$`)
@@ -192,12 +197,20 @@ func notIdentifier(lang, name string) string {
 			return fmt.Sprintf("%q is not a Go identifier", name)
 		}
 		return ""
+	case langBuzz:
+		if !identifierRe.MatchString(name) {
+			return fmt.Sprintf("%q is not a Buzz identifier", name)
+		}
+		return buzzKeyword(name)
 	case "":
 		if !identifierRe.MatchString(name) || name == "_" {
 			return fmt.Sprintf("%q is not an identifier", name)
 		}
 		if token.IsKeyword(name) {
 			return fmt.Sprintf("%q is a Go keyword", name)
+		}
+		if reason := buzzKeyword(name); reason != "" {
+			return reason
 		}
 		for _, l := range []string{langPython, langRust, langTypeScript} {
 			if slices.Contains(keywords[l], name) {
@@ -215,6 +228,19 @@ func notIdentifier(lang, name string) string {
 		return fmt.Sprintf("%q is not a %s identifier", name, lang)
 	case slices.Contains(keywords[lang], name):
 		return fmt.Sprintf("%q is a %s keyword", name, lang)
+	}
+	return ""
+}
+
+// buzzKeyword asks gopherbuzz rather than keeping a list here, so a word the parser starts
+// reserving is refused without a second edit. A reserved identifier (`str`, `type`) lexes
+// as a name but upstream Buzz will not bind it.
+func buzzKeyword(name string) string {
+	switch {
+	case buzztoken.IsKeyword(name):
+		return fmt.Sprintf("%q is a Buzz keyword", name)
+	case buzz.IsReservedIdent(name):
+		return fmt.Sprintf("%q is reserved in Buzz", name)
 	}
 	return ""
 }

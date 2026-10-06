@@ -109,6 +109,7 @@ func TestRenameSitesRefusals(t *testing.T) {
 	ts := types.SymbolOccurrenceFile{File: "web/a.ts", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
 	py := types.SymbolOccurrenceFile{File: "tools/a.py", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
 	rs := types.SymbolOccurrenceFile{File: "src/a.rs", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
+	bz := types.SymbolOccurrenceFile{File: "hack/a.buzz", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
 	other := types.SymbolOccurrenceFile{File: "a.kt", Occurrences: []types.SymbolOccurrence{occurrence(1, 1, "parse", verified)}}
 
 	for _, tc := range []struct {
@@ -128,6 +129,12 @@ func TestRenameSitesRefusals(t *testing.T) {
 		}},
 		{"a keyword of the other only", []types.SymbolOccurrenceFile{py}, "type", nil},
 		{"a Rust keyword", []types.SymbolOccurrenceFile{rs}, "fn", []types.EditRefusal{{Reason: `"fn" is a Rust keyword`}}},
+		{"a Buzz keyword", []types.SymbolOccurrenceFile{bz}, "fun", []types.EditRefusal{{Reason: `"fun" is a Buzz keyword`}}},
+		{"another Buzz keyword", []types.SymbolOccurrenceFile{bz}, "final", []types.EditRefusal{{Reason: `"final" is a Buzz keyword`}}},
+		{"a Buzz reserved identifier", []types.SymbolOccurrenceFile{bz}, "str", []types.EditRefusal{{Reason: `"str" is reserved in Buzz`}}},
+		{"a dollar in Buzz", []types.SymbolOccurrenceFile{bz}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not a Buzz identifier`}}},
+		{"Buzz admits test as a name", []types.SymbolOccurrenceFile{bz}, "test", nil},
+		{"an unknown language takes Buzz keywords too", []types.SymbolOccurrenceFile{other}, "fun", []types.EditRefusal{{Reason: `"fun" is a Buzz keyword`}}},
 		{"an unknown language takes the shared shape", []types.SymbolOccurrenceFile{other}, "$parse", []types.EditRefusal{{Reason: `"$parse" is not an identifier`}}},
 		{"an unknown language takes every keyword", []types.SymbolOccurrenceFile{other}, "def", []types.EditRefusal{{Reason: `"def" is a Python keyword`}}},
 		{"the same name", []types.SymbolOccurrenceFile{good}, "parse", []types.EditRefusal{{Reason: `the symbol is already named "parse"`}}},
