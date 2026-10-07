@@ -33,6 +33,11 @@ development/projects/libs-testsprawl/
 # the project page is derived from the directory name.
 development/libs-commentdash/
 
+# libs/coldread folded into libs/conventions when its doc-comment checks moved to the
+# prose package over the symbol index. Retired rather than aliased: the project page
+# is derived from the directory name, and the directory is gone.
+development/libs-coldread/
+
 # retired when libs/diag was renamed libs/diagnostics. Retired rather than
 # redirected, matching the development/gopherbuzz precedent above: a project page
 # under /development/ is derived from the project's directory name, so the old
