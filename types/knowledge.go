@@ -871,7 +871,7 @@ type KnowledgeAnswer struct {
 	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Off the Buzz boundary until KnowledgeStaleIndex is declared a boundary object in
 	// cmd/magus-utils; a script reads StaleIndexes.
-	StaleIndexDetails []KnowledgeStaleIndex `json:"stale_index_details,omitempty" yaml:"stale_index_details,omitempty" buzz:"-"`
+	StaleIndexDetails []KnowledgeStaleIndex  `json:"stale_index_details,omitempty" yaml:"stale_index_details,omitempty" buzz:"-"`
 	Text              *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
 	// IndexCause is why Gaps or StaleIndexes exist, as far as magus can observe, and what
 	// clears it. Nil when the answer has neither, or when the lookup did not diagnose them.
