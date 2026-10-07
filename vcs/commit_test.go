@@ -3,6 +3,7 @@ package vcs
 import (
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,8 +16,7 @@ func TestParseCommit(t *testing.T) {
 	c := parseCommit(raw)
 	assert.Equal(t, "abc123def", c.ID)
 	assert.Equal(t, "abc123d", c.Short)
-	assert.Equal(t, "Alice", c.Author.Name)
-	assert.Equal(t, "alice@example.com", c.Author.Email)
+	assert.Equal(t, types.Person{Name: "Alice", Email: "alice@example.com"}, c.Author)
 	assert.Equal(t, "subject line", c.Subject)
 	assert.Equal(t, "body text", c.Body)
 	assert.Equal(t, []string{"p1", "p2"}, c.Parents)

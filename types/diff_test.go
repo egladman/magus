@@ -128,13 +128,7 @@ func TestAttachChurnDoesNotInventHotspotCountsFromATrend(t *testing.T) {
 	assert.Zero(t, quiet.Score)
 	assert.Zero(t, quiet.Rank)
 
-	hot := byPath["hot.go"]
-	require.NotNil(t, hot)
-	assert.Equal(t, 12, hot.Commits)
-	assert.Equal(t, 3, hot.Authors)
-	assert.Equal(t, 60, hot.Score)
-	assert.Equal(t, 1, hot.Rank)
-	assert.Equal(t, 7, hot.ProjectTrend)
+	assert.Equal(t, &DiffChurn{Commits: 12, Authors: 3, Score: 60, Rank: 1, ProjectTrend: 7}, byPath["hot.go"])
 }
 
 // A trend entry that did not move is evidence of nothing, so it must not manufacture an
