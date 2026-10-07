@@ -727,6 +727,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Syntax != nil {
 		opts = append(opts, spells.WithSyntax(m.Syntax))
 	}
+	if m.SymbolIndexer != nil {
+		opts = append(opts, spells.WithSymbolIndexer(m.SymbolIndexer))
+	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))
 	}
