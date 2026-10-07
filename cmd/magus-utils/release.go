@@ -63,6 +63,15 @@ var changelogSections = []string{"Added", "Changed", "Deprecated", "Removed", "F
 // cares; the reasoning behind it belongs in the diff, the PR or an ADR.
 const changelogEntryWordCap = 60
 
+// breakingForm is false for a headline that starts with "Breaking" in any form but the two
+// the changelog README allows, so a reader can match on the prefix.
+func breakingForm(headline string) bool {
+	if !strings.HasPrefix(strings.ToLower(headline), "breaking") {
+		return true
+	}
+	return strings.HasPrefix(headline, "Breaking:") || strings.HasPrefix(headline, "Breaking for SDK callers:")
+}
+
 // lintUnreleased reports every way an Unreleased body departs from the changelog formula,
 // one line per violation, empty when it conforms.
 //
@@ -85,6 +94,9 @@ func lintUnreleased(body string) []string {
 		text := strings.TrimSpace(entry.String())
 		if !strings.HasPrefix(text, "**") || strings.Count(text, "**") < 2 {
 			problems = append(problems, fmt.Sprintf("line %d: an entry opens with a **bold headline**", entryLine))
+		}
+		if strings.HasPrefix(text, "**") && !breakingForm(text[2:]) {
+			problems = append(problems, fmt.Sprintf("line %d: a headline that starts with Breaking opens with \"Breaking:\" or \"Breaking for SDK callers:\"", entryLine))
 		}
 		// A headline-only entry closes its sentence inside the bold.
 		if !strings.HasSuffix(text, ".") && !strings.HasSuffix(text, ".**") {
