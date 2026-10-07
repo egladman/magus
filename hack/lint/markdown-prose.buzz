@@ -1,0 +1,352 @@
+// markdown-prose holds this repository's hand-written Markdown to two rules no
+// off-the-shelf linter checks, each an error:
+//
+//   - No typographic punctuation outside code: no em or en dash, curly quote or ellipsis
+//     character. Each has a plain ASCII spelling everyone can type and grep for, and a
+//     page that mixes the two is searched with two patterns or not at all. Arrows and
+//     box-drawing characters stay: they have no plain spelling.
+//   - Headings in sentence case: after the first word, a word is lowercase unless it is a
+//     proper noun or an identifier in ALLOW. Title Case and SHOUTING read as emphasis the
+//     heading does not mean, and sentence case is what the docs already write.
+//
+// .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
+// enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
+// touches only the lines that changed; ATX headings (MD003), the one form grep and the
+// docs' heading anchors agree on; inline links only (MD054), so a link reads whole on
+// its line; `_em_` and `**strong**` (MD049, MD050), one spelling of each.
+//
+// Generated Markdown is skipped: its generator owns the fix. It is what .gitattributes
+// marks linguist-generated, what .markdownlintignore lists, and every MAGUS.md.
+namespace markdownprose;
+
+import "assert";
+import "path";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+export fun reads() > [str] {
+    return ["**/*.md", "console/**/*.md", "docs/**/*.md", ".gitattributes", ".markdownlintignore"];
+}
+
+// HAND_WRITTEN are .markdownlintignore entries that are not generated: the changelog
+// fragments and the AGENTS.md section open below an H1, and .claude/ is listed for the
+// other checkouts under it, which the runner already prunes.
+final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md", ".claude/"];
+
+// TYPOGRAPHY are the characters refused outside code, each with its plain spelling.
+final TYPOGRAPHY = {
+    "—": "an em dash; write ` - ` or a colon",
+    "–": "an en dash; write `-`, or `to` in a range",
+    "‘": "a curly quote; write `'`",
+    "’": "a curly quote; write `'`",
+    "“": "a curly quote; write `\"`",
+    "”": "a curly quote; write `\"`",
+    "…": "an ellipsis character; write `...`",
+};
+
+// ALLOW are the capitalized words a heading may carry after its first: proper nouns and
+// acronyms, each mined from the headings already in the tree. A word with a digit, a dot,
+// a slash or an underscore, or one that starts lowercase (camelCase, macOS), is an
+// identifier and needs no entry; so does a single letter, which is a label or `I`.
+final ALLOW = [
+    // Products, languages, projects and companies.
+    "Backblaze", "Buildkite", "Buzz", "Chrome", "CircleCI", "Claude", "Cloudflare", "Cursor",
+    "GitHub", "Go", "Jenkins", "Linux", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
+    "Swift", "TypeScript", "Unix", "Windows",
+    // Acronyms and initialisms.
+    "ADR", "AI", "API", "CI", "CLI", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",
+    "LLM", "MCP", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
+    "VCS", "YAML",
+];
+
+// ALLOW_PHRASES are names whose second word is capitalized only as part of the name.
+final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitHub Enterprise",
+    "Goblin Tools", "JSON Patch", "SWE-bench Verified", "VS Code"];
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final generated = mut [<str>];
+    final attrs = support\named(files, p: ".gitattributes");
+    if (attrs != null) {
+        foreach (g in attributeGlobs(support\read(attrs!))) { generated.append(g); }
+    }
+    final ignore = support\named(files, p: ".markdownlintignore");
+    if (ignore != null) {
+        foreach (g in ignoreGlobs(support\read(ignore!))) { generated.append(g); }
+    }
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (!f.value.endsWith(".md") or isGenerated(f.value, globs: generated)) {
+            continue;
+        }
+        foreach (finding in proseFindings(f.value, md: support\read(f))) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+// attributeGlobs are the patterns .gitattributes marks linguist-generated, as globs
+// rooted at the workspace.
+export fun attributeGlobs(src: str) > [str] {
+    final globs = mut [<str>];
+    foreach (line in src.split("\n")) {
+        final fields = line.trim().split(" ");
+        if (fields.len() < 2 or fields[0].startsWith("#") or fields.indexOf("linguist-generated") == null) {
+            continue;
+        }
+        globs.append(rooted(fields[0]));
+    }
+    return globs;
+}
+
+// ignoreGlobs are .markdownlintignore's entries as globs, less HAND_WRITTEN.
+export fun ignoreGlobs(src: str) > [str] {
+    final globs = mut [<str>];
+    foreach (line in src.split("\n")) {
+        final t = line.trim();
+        if (t == "" or t.startsWith("#") or HAND_WRITTEN.indexOf(t) != null) {
+            continue;
+        }
+        if (t.endsWith("/")) {
+            globs.append(rooted(t) + "**");
+        } else {
+            globs.append(rooted(t));
+        }
+    }
+    return globs;
+}
+
+// rooted turns a gitignore-style pattern into a workspace glob: a leading slash, or a
+// slash inside the pattern, anchors it at the root; otherwise it matches at any depth.
+fun rooted(p: str) > str {
+    if (p.startsWith("/")) {
+        return p.sub(1);
+    }
+    final inner = if (p.endsWith("/")) p.sub(0, len: p.len() - 1) else p;
+    if (inner.indexOf("/") != null) {
+        return p;
+    }
+    return "**/" + p;
+}
+
+fun isGenerated(rel: str, globs: [str]) > bool !> any {
+    if (rel == "MAGUS.md" or rel.endsWith("/MAGUS.md")) {
+        return true;
+    }
+    return path\matchesAny(globs, path: rel);
+}
+
+// fenceRun is the fence a line opens or closes, or "".
+fun fenceRun(t: str) > str {
+    if (!t.startsWith("```") and !t.startsWith("~~~")) {
+        return "";
+    }
+    final ch = t.byte(0);
+    var n = 0;
+    while (n < t.len() and t.byte(n) == ch) {
+        n = n + 1;
+    }
+    return t.sub(0, len: n);
+}
+
+// prose is line with its inline code spans blanked to spaces, so columns still line up.
+export fun prose(line: str) > str {
+    final parts = mut [<str>];
+    var i = 0;
+    var start = 0;
+    while (i < line.len()) {
+        if (line.byte(i) != 96) {   // 96 = backtick
+            i = i + 1;
+            continue;
+        }
+        var run = 0;
+        while (i + run < line.len() and line.byte(i + run) == 96) {
+            run = run + 1;
+        }
+        final ticks = line.sub(i, len: run);
+        final close = line.indexOf(ticks, from: i + run);
+        if (close == null) {
+            i = i + run;
+            continue;
+        }
+        parts.append(line.sub(start, len: i - start));
+        parts.append(" ".repeat(close! + run - i));
+        i = close! + run;
+        start = i;
+    }
+    parts.append(line.sub(start));
+    return parts.join("");
+}
+
+// proseFindings checks one file's lines outside fenced blocks.
+export fun proseFindings(file: str, md: str) > [Finding] !> any {
+    final found = mut [<Finding>];
+    var fence = "";
+    var n = 0;
+    foreach (line in md.split("\n")) {
+        n = n + 1;
+        final t = line.trim();
+        final run = fenceRun(t);
+        if (fence != "") {
+            if (run != "" and run.byte(0) == fence.byte(0) and run.len() >= fence.len() and run == t) {
+                fence = "";
+            }
+            continue;
+        }
+        if (run != "") {
+            fence = run;
+            continue;
+        }
+        final text = prose(line);
+        foreach (ch, what in TYPOGRAPHY) {
+            final at = text.indexOf(ch);
+            if (at != null) {
+                found.append(Finding{ path = file, line = n, col = at! + 1,
+                    message = what.split(";")[0] + " outside code",
+                    fix = "Use the plain spelling:" + what.sub(what.indexOf(";")! + 1) + "." });
+            }
+        }
+        if (text.startsWith("#")) {
+            final word = headingWord(text);
+            if (word != "") {
+                found.append(Finding{ path = file, line = n,
+                    message = "heading word `{word}` is capitalized; headings are sentence case",
+                    fix = "Lowercase it. A proper noun or identifier goes in ALLOW in hack/lint/markdown-prose.buzz." });
+            }
+        }
+    }
+    return found;
+}
+
+// headingWord returns the first word of an ATX heading that breaks sentence case, or "".
+export fun headingWord(line: str) > str {
+    var h = prose(line);
+    while (h.startsWith("#")) {
+        h = h.sub(1);
+    }
+    if (!h.startsWith(" ")) {
+        return "";
+    }
+    foreach (phrase in ALLOW_PHRASES) {
+        h = h.replace(phrase, with: "x");
+    }
+    h = h.replace("](", with: "] (");
+    final words = mut [<str>];
+    foreach (w in h.split(" ")) {
+        if (w.trim() != "") {
+            words.append(w.trim());
+        }
+    }
+    // A leading label - `3b.`, `A.`, `S4:` - numbers the heading and is not its first word.
+    if (words.len() > 0 and std\pattern(`^([0-9]+[a-z]?|[A-Z]'?|[A-Z][0-9]+)[.:]$`).match(words[0]) != null) {
+        words.remove(0);
+    }
+    var first = true;
+    foreach (raw in words) {
+        final w = bare(raw);
+        if (first) {
+            if (w.len() > 1 and w.upper() == w and w.lower() != w and ALLOW.indexOf(w) == null and !isIdentifier(w)) {
+                return w;
+            }
+        } else {
+            foreach (part in w.split("-")) {
+                if (!lowerOrAllowed(part)) {
+                    return w;
+                }
+            }
+        }
+        first = raw.endsWith(".") or raw.endsWith("?") or raw.endsWith("!");
+    }
+    return "";
+}
+
+// bare strips the markup and punctuation around a word, and a possessive. An underscore
+// goes only in pairs, as `_em_`: `MAGUS_*` keeps its, which marks it an identifier.
+fun bare(raw: str) > str {
+    final edge = `[](){}<>"'*,.:;!?`;
+    var w = raw;
+    while (w.len() > 0 and edge.indexOf(w.sub(0, len: 1)) != null) {
+        w = w.sub(1);
+    }
+    while (w.len() > 0 and edge.indexOf(w.sub(w.len() - 1)) != null) {
+        w = w.sub(0, len: w.len() - 1);
+    }
+    if (w.len() > 1 and w.startsWith("_") and w.endsWith("_")) {
+        w = bare(w.sub(1, len: w.len() - 2));
+    }
+    if (w.endsWith("'s")) {
+        w = w.sub(0, len: w.len() - 2);
+    }
+    return w;
+}
+
+fun isIdentifier(w: str) > bool {
+    return std\pattern(`[0-9./\\_=@$<>]`).match(w) != null;
+}
+
+fun lowerOrAllowed(w: str) > bool {
+    if (w.len() <= 1 or w.lower() == w or ALLOW.indexOf(w) != null or isIdentifier(w)) {
+        return true;
+    }
+    final b = w.byte(0);
+    return b >= 97 and b <= 122;   // a-z: camelCase or a lowercase brand
+}
+
+test "typographic punctuation outside code is reported at its column" {
+    final got = proseFindings("a.md", md: "One — two.\nIt’s `a — b` fine.\n```\n“quoted”\n```\nWait…\n");
+    assert\equal(support\messages(got), want: ["an em dash outside code", "a curly quote outside code",
+        "an ellipsis character outside code"], message: "prose only");
+    assert\equal(got[0].line, want: 1, message: "line");
+    assert\equal(got[0].col, want: 5, message: "column");
+    assert\equal(got[2].line, want: 6, message: "after the fence");
+}
+
+test "arrows and box drawing stay" {
+    assert\equal(proseFindings("a.md", md: "a → b\n├── c\n").len(), want: 0, message: "clean");
+}
+
+test "headings are sentence case, with proper nouns, acronyms and identifiers allowed" {
+    assert\equal(headingWord("## Charm vs Target: the boundary"), want: "Target", message: "title case");
+    assert\equal(headingWord("## What this is NOT"), want: "NOT", message: "shouting");
+    assert\equal(headingWord("## FAST PATH: start here"), want: "FAST", message: "a shouted first word");
+    assert\equal(headingWord("### The Graph's Figures mode"), want: "Graph", message: "possessive");
+    assert\equal(headingWord("## Using Buzz with GitHub Actions and the MCP server"), want: "", message: "allowed");
+    assert\equal(headingWord("## Why `Target` stays `pkg.Name` in code"), want: "", message: "code span");
+    assert\equal(headingWord("## Calls createLogger from macOS, see MGS1001, MAGUS_* and BENCHMARKS.md"), want: "", message: "identifiers");
+    assert\equal(headingWord("## Keep _Emphasis_ lowercase"), want: "Emphasis", message: "emphasis is stripped");
+    assert\equal(headingWord("### 3b. Two forms from one body"), want: "", message: "numbered");
+    assert\equal(headingWord("### S4: Cold build, parallel"), want: "", message: "labelled");
+    assert\equal(headingWord("## Why is it read-only? How do I fix it"), want: "", message: "a second sentence");
+    assert\equal(headingWord("## The PATH-shim and CWD-relative paths"), want: "", message: "hyphenated");
+    assert\equal(headingWord("## Tier A vs Tier B"), want: "Tier", message: "single letters pass, words do not");
+    assert\equal(headingWord("## See [the Guide](guide.md)"), want: "Guide", message: "link text counts");
+}
+
+test "headings are read from prose only" {
+    final got = proseFindings("a.md", md: "# Title\n\n```md\n## Not A Heading\n```\n\n## A Real One\n");
+    assert\equal(support\messages(got), want: ["heading word `Real` is capitalized; headings are sentence case"],
+        message: "fenced heading skipped");
+    assert\equal(got[0].line, want: 7, message: "line");
+}
+
+test "generated Markdown is skipped by .gitattributes, .markdownlintignore and MAGUS.md" {
+    final got = check(support\fixture({
+        ".gitattributes": "*.md diff=markdown\ndocs/reference/rules/*.md merge=magus linguist-generated\n/MAGUS.md merge=magus linguist-generated\n",
+        ".markdownlintignore": "# comment\n**/gen/\ndocs/concepts/spells/\nCHANGELOG.md\nchanges/unreleased/\n",
+        "docs/reference/rules/x.md": "## Bad Heading\n",
+        "docs/concepts/spells/go.md": "## Bad Heading\n",
+        "CHANGELOG.md": "## Bad Heading\n",
+        "libs/x/MAGUS.md": "## Bad Heading\n",
+        "changes/unreleased/frag.md": "### Added\n\n- One — two.\n",
+        "docs/page.md": "## Bad Heading\n",
+    }));
+    final paths = mut [<str>];
+    foreach (f in got) { paths.append(f.path); }
+    assert\equal(paths, want: ["changes/unreleased/frag.md", "docs/page.md"], message: "hand-written only");
+}
+
+test "ignore globs anchor a slashed entry and float a bare one" {
+    assert\equal(ignoreGlobs("node_modules/\n**/gen/\ndocs/reference/buzz/\nCHANGELOG.md\n.claude/\n"),
+        want: ["**/node_modules/**", "**/gen/**", "docs/reference/buzz/**", "**/CHANGELOG.md"], message: "globs");
+}
