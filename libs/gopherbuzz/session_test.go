@@ -303,7 +303,7 @@ func TestPromoteSession_DefaultOffKeepsGlobals(t *testing.T) {
 	_, ok := s.Globals()["scratch"]
 	assert.True(t, ok, "without promotion, 'scratch' must remain a visible Env global for later chunks")
 	// A later chunk referencing the earlier scratch var compiles and runs.
-	assert.NoError(t, s.Exec(ctx, `scratch = scratch + 1;`), "later chunk referencing earlier top-level var failed")
+	require.NoError(t, s.Exec(ctx, `scratch = scratch + 1;`), "later chunk referencing earlier top-level var failed")
 }
 
 // TestFlatImportBindsNamespaceObject verifies that a flat `import "<mod>"`

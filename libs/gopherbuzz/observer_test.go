@@ -66,7 +66,7 @@ func TestPoolObserverFiresPerTarget(t *testing.T) {
 
 	got := obs.snapshot()
 	require.Len(t, got, 2, "observer should see both targets")
-	assert.NoError(t, got["ok"], "successful target reports nil error")
+	require.NoError(t, got["ok"], "successful target reports nil error")
 	require.Error(t, got["boom"], "failed target reports its error")
 	assert.Contains(t, got["boom"].Error(), "kaboom")
 }

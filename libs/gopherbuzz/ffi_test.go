@@ -175,10 +175,10 @@ func TestZigDeclSniffing(t *testing.T) {
 		// parse through both entries to ensure each dialect accepts its own
 		if isZig {
 			_, err := ParseZigDecls(src)
-			assert.NoErrorf(t, err, "zig dialect rejected %q", src)
+			require.NoErrorf(t, err, "zig dialect rejected %q", src)
 		} else {
 			_, err := ParseCDecls(src)
-			assert.NoErrorf(t, err, "c dialect rejected %q", src)
+			require.NoErrorf(t, err, "c dialect rejected %q", src)
 		}
 	}
 }

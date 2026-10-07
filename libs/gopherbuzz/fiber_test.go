@@ -96,7 +96,7 @@ func TestHostDrivenFiberFinalizationIsIdempotent(t *testing.T) {
 	assert.Equal(t, vm.FiberDone, fib.Status(), "a resolved fiber reports done")
 
 	_, err = s.ResolveFiber(t.Context(), fiber)
-	assert.NoError(t, err, "finalizing a completed fiber is a no-op")
+	require.NoError(t, err, "finalizing a completed fiber is a no-op")
 }
 
 // A region that is never entered must still be safe to finalize: the host takes the
