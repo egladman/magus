@@ -47,7 +47,7 @@ const BREAKPOINTS: Record<string, string> = {
   "2xl": "90.625rem",
 };
 
-function breakpointOf(group: HTMLElement): string {
+function readBreakpoint(group: HTMLElement): string {
   for (const cls of Array.from(group.classList)) {
     const m = /^pf-m-show-on-(sm|md|lg|xl|2xl)$/.exec(cls);
     if (m) return BREAKPOINTS[m[1]];
@@ -76,7 +76,7 @@ function setupOne(group: HTMLElement): void {
     toggle.setAttribute("aria-expanded", v ? "true" : "false");
   };
 
-  const mq = window.matchMedia(`(min-width: ${breakpointOf(group)})`);
+  const mq = window.matchMedia(`(min-width: ${readBreakpoint(group)})`);
   let wasWide: boolean | null = null;
   const apply = (): void => {
     const wide = mq.matches;
@@ -129,7 +129,7 @@ function setupFollower(group: HTMLElement): void {
   const home = document.createComment("overflow-follower");
   group.before(home);
 
-  const mq = window.matchMedia(`(min-width: ${breakpointOf(group)})`);
+  const mq = window.matchMedia(`(min-width: ${readBreakpoint(group)})`);
   let wasWide: boolean | null = null;
   const apply = (): void => {
     const wide = mq.matches;

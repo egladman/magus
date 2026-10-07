@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildIdOf, watchServedBuild } from "./sw";
+import { parseBuildId, watchServedBuild } from "./sw";
 
-test("buildIdOf reads a stamped worker and ignores an unstamped one", () => {
-  assert.equal(buildIdOf('const BUILD_ID = "abc123def456";\n'), "abc123def456");
-  assert.equal(buildIdOf('const BUILD_ID = "unstamped";\n'), null);
-  assert.equal(buildIdOf("self.addEventListener('fetch', () => {});"), null);
+test("parseBuildId reads a stamped worker and ignores an unstamped one", () => {
+  assert.equal(parseBuildId('const BUILD_ID = "abc123def456";\n'), "abc123def456");
+  assert.equal(parseBuildId('const BUILD_ID = "unstamped";\n'), null);
+  assert.equal(parseBuildId("self.addEventListener('fetch', () => {});"), null);
 });
 
 // A server restarted onto a rebuilt console serves a new sw.js while this page keeps running the

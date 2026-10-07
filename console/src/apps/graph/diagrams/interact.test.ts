@@ -16,7 +16,7 @@ import {
   parseEdge,
   parseViewBox,
   readingOrder,
-  scaleOf,
+  zoomScale,
   wheelFactor,
   zoomAbout,
   type ViewBox,
@@ -55,9 +55,9 @@ test("zooming about a point keeps that point where it was on screen", () => {
 test("zoom clamps to the scale range in both directions", () => {
   let v = NATURAL;
   for (let i = 0; i < 40; i++) v = zoomAbout(NATURAL, v, 2, { x: 200, y: 100 });
-  assert.ok(Math.abs(scaleOf(NATURAL, v) - MAX_SCALE) < 1e-9);
+  assert.ok(Math.abs(zoomScale(NATURAL, v) - MAX_SCALE) < 1e-9);
   for (let i = 0; i < 40; i++) v = zoomAbout(NATURAL, v, 0.5, { x: 200, y: 100 });
-  assert.ok(Math.abs(scaleOf(NATURAL, v) - MIN_SCALE) < 1e-9);
+  assert.ok(Math.abs(zoomScale(NATURAL, v) - MIN_SCALE) < 1e-9);
 });
 
 test("fit frames the whole figure with the pad around it", () => {

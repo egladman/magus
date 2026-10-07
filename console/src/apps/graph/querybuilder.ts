@@ -428,7 +428,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     exWrap,
   );
 
-  function valueListFor(field: Field): string[] {
+  function fieldValues(field: Field): string[] {
     if (field === "kind") return deps.kinds();
     if (field === "relation") return deps.relations();
     if (field === "project") return deps.projects();
@@ -487,7 +487,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       input.setAttribute("aria-label", "Value");
       input.spellcheck = false;
       input.autocomplete = "off";
-      const list = valueListFor(t.field);
+      const list = fieldValues(t.field);
       if (list.length) {
         const dl = h("datalist");
         dl.id = "qb-values-" + idx;

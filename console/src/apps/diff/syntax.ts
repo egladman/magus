@@ -121,8 +121,8 @@ const BY_EXTENSION: Record<string, Language> = {
   md: "markdown",
 };
 
-// languageFor maps a path to a tokenizer, or "none" when magus has no business guessing.
-export function languageFor(path: string): Language {
+// detectLanguage maps a path to a tokenizer, or "none" when magus has no business guessing.
+export function detectLanguage(path: string): Language {
   const base = path.slice(path.lastIndexOf("/") + 1);
   if (base === "magusfile.buzz" || base.endsWith(".buzz")) return "buzz";
   if (base === "Dockerfile" || base.startsWith("Dockerfile.")) return "none";

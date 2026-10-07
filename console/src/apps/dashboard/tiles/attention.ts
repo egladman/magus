@@ -116,7 +116,7 @@ export interface Verdict {
   sub: string;
 }
 
-// verdictFor derives the headline from the ATTENTION QUEUE, and from nothing else.
+// attentionVerdict derives the headline from the ATTENTION QUEUE, and from nothing else.
 //
 // The queue is the only source here on purpose. Every other signal on this board - failing
 // targets, server health, pool depth - is something magus observed; a request is something a
@@ -128,7 +128,7 @@ export interface Verdict {
 // calm one: a server with no attention route, and a server that could not be read, both mean
 // the queue is UNKNOWN. Rendering unknown as "no open requests" is the single worst thing this
 // tile could do, because it is indistinguishable from the good state.
-export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Verdict {
+export function attentionVerdict(read: AttentionRead, nowMs: number = Date.now()): Verdict {
   if (read.kind === "absent") {
     return {
       state: "warn",
@@ -697,7 +697,7 @@ export function attentionTile(): Tile {
   }
 
   // renderQueue paints the headline and the rows from one read. Every non-ok read gets its own
-  // words - see verdictFor - so an unknown queue never renders as a calm one.
+  // words - see attentionVerdict - so an unknown queue never renders as a calm one.
   function renderQueue(read: AttentionRead): void {
     const openedIDs = new Set(
       Array.from(
@@ -706,7 +706,7 @@ export function attentionTile(): Tile {
         .map((row) => row.dataset.requestId)
         .filter((id): id is string => id !== undefined),
     );
-    const v = verdictFor(read);
+    const v = attentionVerdict(read);
     root.dataset.state = v.state;
     verdict.textContent = v.line;
     setProse(detail, v.sub);

@@ -14,7 +14,7 @@ import {
   failingTargets,
   inspectCommand,
   reproduceCommand,
-  verdictFor,
+  attentionVerdict,
 } from "./attention";
 import type { AttentionRequest } from "./attentionQueue";
 import type { StatusView } from "../state";
@@ -122,12 +122,12 @@ test("the verdict comes from the queue, never from failing targets", () => {
   const broken = statusWith([{ label: "svc/api:test", state: "failed" }]);
   assert.equal(failingTargets(broken).length, 1, "the run really is failing");
   // A failing target is not a request. Nobody has been asked for anything, so nobody is waiting.
-  assert.equal(verdictFor({ kind: "ok", requests: [], store: "/s" }).state, "clear");
+  assert.equal(attentionVerdict({ kind: "ok", requests: [], store: "/s" }).state, "clear");
 
   // ...and a request waiting is attention even with a perfectly green board.
   const clear = statusWith([{ label: "svc/api:test", state: "passed" }]);
   assert.equal(countFailing(clear), 0);
-  const waiting = verdictFor({ kind: "ok", requests: [request(0)], store: "/s" });
+  const waiting = attentionVerdict({ kind: "ok", requests: [request(0)], store: "/s" });
   assert.equal(waiting.state, "attention");
   assert.equal(waiting.line, "1 request waiting");
 });
@@ -136,16 +136,19 @@ test("the verdict comes from the queue, never from failing targets", () => {
 // where the tile does not KNOW whether anyone is blocked, and showing the good state for either is
 // indistinguishable from nobody waiting - which is the one thing this tile must not say by mistake.
 test("a queue that could not be read does not read as an empty one", () => {
-  assert.equal(verdictFor({ kind: "absent" }).state, "warn");
-  assert.equal(verdictFor({ kind: "unreadable", detail: "boom" }).state, "warn");
+  assert.equal(attentionVerdict({ kind: "absent" }).state, "warn");
+  assert.equal(attentionVerdict({ kind: "unreadable", detail: "boom" }).state, "warn");
   assert.notEqual(
-    verdictFor({ kind: "absent" }).line,
-    verdictFor({ kind: "ok", requests: [], store: "/s" }).line,
+    attentionVerdict({ kind: "absent" }).line,
+    attentionVerdict({ kind: "ok", requests: [], store: "/s" }).line,
   );
 });
 
 test("the verdict names how long the oldest request has waited", () => {
   const now = 10 * 60 * 1000;
-  const v = verdictFor({ kind: "ok", requests: [request(now - 5 * 60 * 1000)], store: "/s" }, now);
+  const v = attentionVerdict(
+    { kind: "ok", requests: [request(now - 5 * 60 * 1000)], store: "/s" },
+    now,
+  );
   assert.match(v.sub, /waiting 5m/);
 });

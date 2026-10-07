@@ -351,8 +351,8 @@ export function fileOfRow(rows: readonly Row[]): number[] {
 export const ROW_HEIGHT = 24;
 export const FILE_ROW_HEIGHT = 40;
 
-// heightOf is the single source of truth for a row's height; rowOffsets is derived from it.
-export function heightOf(row: Row): number {
+// rowHeight is the single source of truth for a row's height; rowOffsets is derived from it.
+export function rowHeight(row: Row): number {
   return row.kind === "file" ? FILE_ROW_HEIGHT : ROW_HEIGHT;
 }
 
@@ -364,7 +364,7 @@ export function rowOffsets(rows: readonly Row[]): number[] {
   let y = 0;
   for (let i = 0; i < rows.length; i++) {
     offs[i] = y;
-    y += heightOf(rows[i] as Row);
+    y += rowHeight(rows[i] as Row);
   }
   offs[rows.length] = y;
   return offs;

@@ -1090,7 +1090,7 @@ export function startConsole(
     launcher.hidden = active != null;
     // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
     // before this keymap was read.
-    if (!launcher.hidden) syncLauncherChord(launcher, chordFor("console.actionBar.open"));
+    if (!launcher.hidden) syncLauncherChord(launcher, commandChord("console.actionBar.open"));
     // Delegated once, on the launcher: syncLauncherChord rebuilds the keycap on every reveal, so a
     // listener bound to the button itself would be rebound each time.
     if (!launcherChordWired) {
@@ -1605,11 +1605,11 @@ export function startConsole(
   // dropdown covered, plus move and focus-parent, which a two-item menu never could. ONE shared element
   // (appended to document.body, reused by whichever tab's tray button opened it) rather than one per
   // tab. Built AFTER the pane
-  // commands above so every id it dispatches exists. chordFor mirrors the commandBarBtn tooltip's
+  // commands above so every id it dispatches exists. commandChord mirrors the commandBarBtn tooltip's
   // chord lookup, stamped into each control's title so the tray also teaches its keyboard equivalent.
   // A declaration, not a const arrow: show() stamps the launcher's palette hint with it, and show()
   // can run from a tab restore well before this point in the composition root.
-  function chordFor(id: string): string {
+  function commandChord(id: string): string {
     return formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
   }
 
@@ -1743,7 +1743,7 @@ export function startConsole(
       b.setAttribute("aria-label", label);
       const commandId =
         dir === "row" ? "console.pane.splitHorizontal" : "console.pane.splitVertical";
-      const chord = chordFor(commandId);
+      const chord = commandChord(commandId);
       b.title = chord ? label + " (" + chord + ")" : label;
       b.addEventListener("pointerdown", (ev) => ev.stopPropagation());
       b.addEventListener("pointerup", (ev) => ev.stopPropagation());
@@ -1840,7 +1840,7 @@ export function startConsole(
     const hint = document.createElement("div");
     hint.className = "console-shell-panesmap__hint";
     const groups: { label: string; chord: string }[] = [];
-    const splitChord = chordFor("console.pane.split");
+    const splitChord = commandChord("console.pane.split");
     if (splitChord) groups.push({ label: "Split", chord: splitChord });
     const focusMods = chordModifiers("console.pane.focusLeft");
     if (focusMods) groups.push({ label: "Focus", chord: focusMods + "+hjkl" });
@@ -1863,7 +1863,7 @@ export function startConsole(
   closePaneBtn.type = "button";
   closePaneBtn.className = "pf-v6-c-button pf-m-secondary console-shell-panespopup__closebtn";
   closePaneBtn.textContent = "Close pane";
-  const closeChord = chordFor("console.tab.close");
+  const closeChord = commandChord("console.tab.close");
   closePaneBtn.title = closeChord ? "Close pane (" + closeChord + ")" : "Close pane";
   // Deliberately does not close the popup on a plain pane-close - Close, like the map's tap/drag/split
   // gestures, is meant for repeated use (closing several panes in one popup session) without reopening the

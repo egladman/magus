@@ -65,7 +65,7 @@ import {
   type OrderedChangeset,
 } from "./order";
 import { reportFailure } from "../../lib/notifications";
-import { languageFor, tokenize, type Language } from "./syntax";
+import { detectLanguage, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
   fetchContext,
@@ -316,7 +316,7 @@ function scopeLabel(base: string): string {
 // The marker is the NON-COLOR channel for add and delete. Color alone fails WCAG 1.4.1 and
 // fails anyone with a color vision deficiency, and a diff is exactly the case where the two
 // states must be told apart to be read at all.
-function markerFor(kind: string): string {
+function lineMarker(kind: string): string {
   return kind === "add" ? "+" : kind === "del" ? "-" : " ";
 }
 
@@ -766,7 +766,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- rendering ------------------------------------------------------------
 
-  const annotationFor = (path: string): DiffAnnotation | undefined => {
+  const findAnnotation = (path: string): DiffAnnotation | undefined => {
     for (const o of state.changeset.primary) if (o.file.path === path) return o.annotation;
     for (const o of state.changeset.generated) if (o.file.path === path) return o.annotation;
     return undefined;
@@ -838,7 +838,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // most-important first (public surface, then reach, then churn), so shedding from the END
     // gives up the least, and "public surface" is the last thing to go.
     const risks = h("span", "console-diff-row__risks");
-    for (const c of riskChips(annotationFor(file.path))) {
+    for (const c of riskChips(findAnnotation(file.path))) {
       risks.append(label(c.text, TONE_CLASS[c.tone], c.title));
     }
     el.append(risks);
@@ -946,16 +946,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (row.kind === "line") {
       const el = h("div", "console-diff-row");
       el.dataset.kind = row.line.kind;
-      const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
+      const marker = h("span", "console-diff-row__marker", lineMarker(row.line.kind));
       // The glyph is for eyes; the label is for ears. Announcing "plus" would be noise.
       marker.setAttribute("aria-hidden", "true");
-      const text = lineText(row.line, languageFor(row.file.path));
+      const text = lineText(row.line, detectLanguage(row.file.path));
       text.setAttribute("aria-label", `${kindLabel(row.line.kind)}: ${row.line.text}`);
       el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
     }
     const el = h("div", "console-diff-row console-diff-row--pair");
-    const lang = languageFor(row.file.path);
+    const lang = detectLanguage(row.file.path);
     el.append(side(row.left, "left", lang), side(row.right, "right", lang));
     return el;
   };
@@ -969,7 +969,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return cell;
     }
     cell.dataset.kind = line.kind;
-    const marker = h("span", "console-diff-row__marker", markerFor(line.kind));
+    const marker = h("span", "console-diff-row__marker", lineMarker(line.kind));
     marker.setAttribute("aria-hidden", "true");
     const text = lineText(line, lang);
     text.setAttribute("aria-label", `${kindLabel(line.kind)}: ${line.text}`);
@@ -2321,7 +2321,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       for (const i of state.fileRows) {
         const row = state.rows[i];
         if (row?.kind !== "file") continue;
-        if (annotationFor(row.file.path)?.read_state === want) {
+        if (findAnnotation(row.file.path)?.read_state === want) {
           scrollToRow(i);
           return;
         }

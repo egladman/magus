@@ -1,6 +1,6 @@
 // target-adapter.ts - converts the CLI's target-graph shape into the { nodes, links }
 // shape the explorer's knowledge-graph path already consumes. Pure functions extracted
-// from the monolith; no module state. main.ts calls flavorOf on the raw payload and,
+// from the monolith; no module state. main.ts calls detectFlavor on the raw payload and,
 // for the targets flavor, runs targetGraphToNodeLink before handing off to prepareGraph.
 //
 // The CLI emits two graph shapes:
@@ -28,10 +28,10 @@ export function isTargetGraph(raw: GraphPayload | TargetGraphOutput): raw is Tar
   return Array.isArray(raw.projects);
 }
 
-// flavorOf names what isTargetGraph found, for the call sites that store or compare the
+// detectFlavor names what isTargetGraph found, for the call sites that store or compare the
 // flavor rather than narrowing a type. "flavor" is not a console coinage - it is the
 // wire term, the ?flavor= query param on GET /api/v1/graph.
-export function flavorOf(raw: GraphPayload | TargetGraphOutput): GraphFlavor {
+export function detectFlavor(raw: GraphPayload | TargetGraphOutput): GraphFlavor {
   return isTargetGraph(raw) ? "targets" : "knowledge";
 }
 

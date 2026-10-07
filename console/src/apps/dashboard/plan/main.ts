@@ -817,7 +817,7 @@ export function activate(host: HTMLElement): JobsInstance {
   let painted = ""; // the signature of what is currently on screen
   let paintedDetail = ""; // and of the detail sheet beside it
 
-  const clientFor = (serverHost: string): JobClient => {
+  const ensureClient = (serverHost: string): JobClient => {
     if (!client || clientHost !== serverHost) {
       clientHost = serverHost;
       client = jobClient(serverHost);
@@ -1009,7 +1009,7 @@ export function activate(host: HTMLElement): JobsInstance {
     if (!serverHost) return;
     btn.disabled = true;
     state.textContent = "starting...";
-    const outcome = await submitJob(clientFor(serverHost), node.runName, controller.signal);
+    const outcome = await submitJob(ensureClient(serverHost), node.runName, controller.signal);
     if (disposed) return;
     if (outcome.kind === "refused") {
       // Only a real refusal lands here - an unknown name, no socket to submit to, a rejected token.
@@ -1545,7 +1545,7 @@ export function activate(host: HTMLElement): JobsInstance {
   const refreshJobs = async (serverHost: string): Promise<void> => {
     const token = beginRead("jobs");
     const [read, feeds] = await Promise.all([
-      listJobs(clientFor(serverHost), deadline(token.signal)),
+      listJobs(ensureClient(serverHost), deadline(token.signal)),
       activityRows(serverHost, token.signal),
     ]);
     if (!fresh(token)) return;

@@ -358,7 +358,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const noteResourceName = (n: Note): string =>
     (n.scope === Scope.PRIVATE ? "private/" : "shared/") + n.name;
 
-  function noteFor(name: string): Note | undefined {
+  function findNote(name: string): Note | undefined {
     return notes.find((n) => n.name === name);
   }
 
@@ -686,7 +686,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     void loadBody(n).then((body) => {
       // A second click before the first body lands must not overwrite the note now open.
       if (stale || selected !== n.name) return;
-      const current = noteFor(n.name) ?? n;
+      const current = findNote(n.name) ?? n;
       renderNote(current, body);
     });
   }
