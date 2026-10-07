@@ -7,7 +7,6 @@ package builtin
 
 import (
 	"errors"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -118,6 +117,7 @@ var defaults = map[string]Decision{
 	"regen-source":       Advise,
 	"revert-classify":    Advise,
 	"scope-drift":        Advise,
+	"shared-checkout":    Advise,
 	"skill-source":       Advise,
 	"source-read":        Advise,
 	"split-run":          Advise,
