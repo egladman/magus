@@ -1,6 +1,6 @@
 ### Added
 
-- **Vale judges prose that magus extracts.** `spells/vale` runs Vale on documents built
-  from comment spans the spells' comment syntax finds, function names from the symbol
-  indexes, commit messages and pull request text. Each finding maps back to its file and
-  line. The `commit-msg` hook now holds every branch to a short subject with no body.
+- **Vale judges prose that magus extracts.** The built-in `vale` spell and the `comments`
+  host module back `prose`, `commit-messages` and `pr-description` targets; `pr-title`
+  runs Vale's title rules too. Each finding maps back to its file and line. Every commit
+  subject check shares one cap of 100 characters.
