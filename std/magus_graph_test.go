@@ -352,11 +352,11 @@ func documentedFunc(g *knowledge.Graph, file, name, doc string) string {
 	return id
 }
 
-func TestProseReportFindingsBesideIndexFreshness(t *testing.T) {
+func TestSymbolsBesideIndexFreshness(t *testing.T) {
 	t.Parallel()
 	g := knowledge.NewGraph()
-	open := documentedFunc(g, "internal/a/open.go", "Open", "Open basically reads the file.")
-	documentedFunc(g, "internal/a/gen.go", "Generated", "Generated simply exists.")
+	open := documentedFunc(g, "internal/a/open.go", "Open", "Open reads the file.")
+	documentedFunc(g, "internal/a/gen.go", "Generated", "Generated exists.")
 	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "console"}, Op: "scip", Language: "typescript", Freshness: types.SymbolIndexStale}
 	ws := &precedentGraphs{
 		fakeGraphWorkspace: &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()},
@@ -364,32 +364,30 @@ func TestProseReportFindingsBesideIndexFreshness(t *testing.T) {
 		outputs:            map[string]bool{"internal/a/gen.go": true},
 	}
 
-	got, err := MagusProse(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []string{"findings", "indexes", "judged"}, slices.Sorted(maps.Keys(got)), "keyed as the JSON is")
+	assert.Equal(t, []string{"indexes", "symbols"}, slices.Sorted(maps.Keys(got)), "keyed as the JSON is")
 	b, err := json.Marshal(got)
 	require.NoError(t, err)
-	var report types.ProseReport
+	var report types.SymbolReport
 	require.NoError(t, json.Unmarshal(b, &report))
-	assert.Equal(t, types.ProseReport{
-		Findings: []types.ProseFinding{{
-			Node: open, Source: "internal/a/open.go:3", Language: "go", Rule: "filler",
-			Message: "Drop 'basically': state the fact.", Match: "basically",
+	assert.Equal(t, types.SymbolReport{
+		Symbols: []types.SymbolDecl{{
+			Node: open, Source: "internal/a/open.go:3", Language: "go", Name: "Open",
+			Kind: "function", Doc: "Open reads the file.",
 		}},
-		Judged:  map[string]int{"go": 1},
 		Indexes: []types.SymbolIndexStatus{stale},
-	}, report, "a declared output is not judged, and the index verdict rides beside the findings")
+	}, report, "a declared output is not listed, and the index verdict rides beside the symbols")
 
-	_, err = MagusProse(graphContext(t))
-	assert.ErrorContains(t, err, "magus\\prose: this workspace cannot judge its symbol indexes")
+	_, err = MagusSymbols(graphContext(t))
+	assert.ErrorContains(t, err, "magus\\symbols: this workspace cannot judge its symbol indexes")
 }
 
-func TestProseReportsNoFindingsAsAnEmptyList(t *testing.T) {
+func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 	t.Parallel()
 	ws := &precedentGraphs{fakeGraphWorkspace: &fakeGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
 
-	got, err := MagusProse(types.WithWorkspace(t.Context(), ws))
+	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)
-	assert.Equal(t, []any{}, got["findings"], "a clean tree reads as an empty list, never null")
-	assert.Equal(t, map[string]any{}, got["judged"], "no language was read")
+	assert.Equal(t, []any{}, got["symbols"], "an empty workspace reads as an empty list, never null")
 }

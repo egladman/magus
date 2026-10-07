@@ -267,7 +267,7 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	return kg.ImportGraph(), nil
 }
 
-// precedentWorkspace is the part of *magus.Magus magus\precedents and magus\prose read beside
+// precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
 // the graph: a freshen of every index, the freshness verdict `magus status` prints, and which
 // files are declared outputs.
 type precedentWorkspace interface {
@@ -362,21 +362,20 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	})
 }
 
-// MagusProse backs magus\prose: the prose findings over the merged symbol indexes' doc
-// comments and callable names, the symbols judged per language, and each declared index's
-// freshness, judged as judgedGraph describes. Test and generated files are never judged. The
-// answer is a ProseReport as a map.
-func MagusProse(ctx context.Context) (map[string]any, error) {
-	ig, err := judgedGraph(ctx, "prose")
+// MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
+// doc comment, and each declared index's freshness, judged as judgedGraph describes. Test and
+// generated files are never listed. The answer is a SymbolReport as a map.
+func MagusSymbols(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "symbols")
 	if err != nil {
 		return nil, err
 	}
-	findings, judged := ig.kg.Prose(knowledge.ProseOptions{Generated: ig.generated})
-	if findings == nil {
-		// A clean tree reads as an empty list, never null.
-		findings = []types.ProseFinding{}
+	decls := ig.kg.SymbolDecls(knowledge.SymbolDeclOptions{Generated: ig.generated})
+	if decls == nil {
+		// No symbols reads as an empty list, never null.
+		decls = []types.SymbolDecl{}
 	}
-	return reportMap(types.ProseReport{Findings: findings, Judged: judged, Indexes: ig.indexes})
+	return reportMap(types.SymbolReport{Symbols: decls, Indexes: ig.indexes})
 }
 
 // MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages

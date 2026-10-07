@@ -1476,7 +1476,6 @@ export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > P
 export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
-export extern fun prose() > {str: any} !> any;
 export extern fun pry() > void;
 export extern fun query(query: str, opts: {str: any} = {<str: any>}) > QueryResult !> any;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
@@ -1485,6 +1484,7 @@ export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
+export extern fun symbols() > {str: any} !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
 export object log {

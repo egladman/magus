@@ -1715,27 +1715,30 @@ type PrecedentReport struct {
 	Indexes    []SymbolIndexStatus `json:"indexes"`
 }
 
-// ProseFinding is one prose rule's verdict on a symbol's doc comment or name.
-type ProseFinding struct {
-	// Node is the symbol node the doc was read from.
+// SymbolDecl is one declaration a symbol index holds, with its doc comment as written. It is
+// data: nothing in magus judges the doc, so a magusfile rule reads it and decides.
+type SymbolDecl struct {
+	// Node is the symbol node the declaration was read from.
 	Node string `json:"node"`
 	// Source is the declaration's workspace-relative path and line. An index records no
-	// position inside a doc, so a finding points at the declaration and Match says where.
+	// position inside a doc, so the declaration locates it.
 	Source   string `json:"source"`
 	Language string `json:"language"`
-	// Rule is one of the rule names libs/conventions/prose reports.
-	Rule    string `json:"rule"`
-	Message string `json:"message"`
-	// Match is the text the rule matched.
-	Match string `json:"match"`
+	Name     string `json:"name"`
+	// Kind is the shape the naming index read: function, method, type, interface, struct or
+	// value. It is empty when the index read none.
+	Kind string `json:"kind"`
+	// Owner is the enclosing type of a member, empty for a top-level declaration.
+	Owner string `json:"owner"`
+	// Doc is the whole doc comment, its lines kept.
+	Doc string `json:"doc"`
 }
 
-// ProseReport is magus\prose's answer: the findings over the doc comments and callable names
-// in the workspace's merged symbol indexes, how many symbols each language contributed, and
-// the freshness of each declared index judged just before the read. A language missing from
-// Judged was never read, which is silence rather than a pass.
-type ProseReport struct {
-	Findings []ProseFinding      `json:"findings"`
-	Judged   map[string]int      `json:"judged"`
-	Indexes  []SymbolIndexStatus `json:"indexes"`
+// SymbolReport is magus\symbols' answer: every declaration in the workspace's merged symbol
+// indexes, and the freshness of each declared index judged just before the read. An index
+// that is not up to date contributed nothing or something old, so a caller that gates on the
+// declarations checks Indexes first.
+type SymbolReport struct {
+	Symbols []SymbolDecl        `json:"symbols"`
+	Indexes []SymbolIndexStatus `json:"indexes"`
 }

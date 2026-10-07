@@ -485,9 +485,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("precedents", shaped("magus.precedents", map[string]vm.Value{
 		"precedents": empty, "indexes": empty,
 	}))
-	// Empty for the reason precedents is; judged is empty too, so no language reads as passed.
-	m.MapSet("prose", shaped("magus.prose", map[string]vm.Value{
-		"findings": empty, "judged": vm.NewMap(), "indexes": empty,
+	// Empty for the reason precedents is.
+	m.MapSet("symbols", shaped("magus.symbols", map[string]vm.Value{
+		"symbols": empty, "indexes": empty,
 	}))
 	// The typed records come from the generated encoders, so a dry run exposes exactly the
 	// fields a figure reads. Nothing is raised: the preview has no graph to hold a path or

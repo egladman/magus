@@ -232,12 +232,12 @@ var Magus = Module{
 			Impl:    MagusPrecedents,
 		},
 		{
-			Name:    "prose",
-			Doc:     "The prose rules of libs/conventions/prose run over every doc comment and function or method name in the workspace's merged symbol indexes, whatever language indexed them: {findings, judged, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each finding is {node, source, language, rule, message, match}: source is the declaration's path and line, since an index records no position inside a doc, and match is the text the rule fired on. judged maps each language to the symbols read for it; a language missing from it was never read, which is silence rather than a pass. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it. Test files and declared outputs are never judged. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Name:    "symbols",
+			Doc:     "Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap}},
 			Raises:  true,
-			Impl:    MagusProse,
+			Impl:    MagusSymbols,
 		},
 		{
 			Name: "dir",

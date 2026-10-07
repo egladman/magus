@@ -70,7 +70,6 @@ path
 precedents
 project
 projectGraph
-prose
 pry
 query
 raise
@@ -88,6 +87,7 @@ service.release
 skills
 stats
 symbolIndexDigest
+symbols
 trail
 trail.mark
 trail.marks

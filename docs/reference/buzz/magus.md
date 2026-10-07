@@ -189,11 +189,11 @@ The precedents the workspace's merged symbol indexes establish, the rows `Graph.
 
 **Returns:** map[string]any
 
-### prose
+### symbols
 
-The prose rules of libs/conventions/prose run over every doc comment and function or method name in the workspace's merged symbol indexes, whatever language indexed them: {findings, judged, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each finding is {node, source, language, rule, message, match}: source is the declaration's path and line, since an index records no position inside a doc, and match is the text the rule fired on. judged maps each language to the symbols read for it; a language missing from it was never read, which is silence rather than a pass. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\precedents reports it. Test files and declared outputs are never judged. Read in-process from the workspace on the context; raises MGS1022 outside one.
+Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\prose() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L369)
+**Signature:** `magus\symbols() -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L368)
 
 **Returns:** map[string]any
 
@@ -201,7 +201,7 @@ The prose rules of libs/conventions/prose run over every doc comment and functio
 
 One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\project's "layers" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\dir(path) -> Dir` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L385)
+**Signature:** `magus\dir(path) -> Dir` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L384)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -213,7 +213,7 @@ One workspace directory as the knowledge graph holds it: {path, id, layer, langu
 
 Every directory whose workspace path matches glob, as Dir records sorted by path. Annotate the result `> [Dir]`. glob is a doublestar pattern (internal/**). opts is a DirsOptions: layer keeps one declared layer, and a layer nothing declares raises MGS7006 rather than matching nothing; language keeps one package language; depth bounds how many segments below the glob's literal prefix a match may sit (0 is unbounded). An unknown option raises. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\dirs(glob, [opts]) -> [Dir]` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L407)
+**Signature:** `magus\dirs(glob, [opts]) -> [Dir]` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L406)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -226,7 +226,7 @@ Every directory whose workspace path matches glob, as Dir records sorted by path
 
 One layer magus\project's "layers" key declares: {name, declared, dirs}. Annotate the result `> Layer`. declared are the directories and globs declared for it; dirs are the Dir records it covers. Raises MGS7006 on a name no declaration uses, listing the declared ones. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\layer(name) -> Layer` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L443)
+**Signature:** `magus\layer(name) -> Layer` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L442)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -238,7 +238,7 @@ One layer magus\project's "layers" key declares: {name, declared, dirs}. Annotat
 
 The knowledge subgraph around one focus node: {definition, schemaVersion, focus, resolution, options, nodes, links, folds, answer}. Annotate the result `> NeighborhoodResult`. focus is a node ID, a workspace path, or a name; resolution says how it was reached. opts is a NeighborhoodOptions: depth is the most hops (0 means 1); relations are the only relations walked; direction is out, in, or empty for both; collapse folds every source node under each workspace path prefix into that prefix's dir node, longest prefix winning, and folds lists what each absorbed. Read answer.verdict before trusting a thin result: an imports walk with no symbol index is unknown, not absent. An unknown option, relation or direction raises, as does a focus that resolves to nothing. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\neighborhood(focus, [opts]) -> NeighborhoodResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L465)
+**Signature:** `magus\neighborhood(focus, [opts]) -> NeighborhoodResult` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L464)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |
@@ -251,7 +251,7 @@ The knowledge subgraph around one focus node: {definition, schemaVersion, focus,
 
 One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.
 
-**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L628)
+**Signature:** `magus\output(ref) -> OutputRecord` - [source](https://github.com/egladman/magus/blob/main/std/magus_graph.go#L627)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
