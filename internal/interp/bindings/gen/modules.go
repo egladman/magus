@@ -16,7 +16,6 @@ var Modules = ffi.Set{
 	"archive":  {Register: RegisterArchive},
 	"base64":   {Register: RegisterBase64, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/base64"},
 	"charm":    {Register: RegisterCharm, Capabilities: ffi.Capabilities(ffi.WASM)},
-	"comments": {Register: RegisterComments},
 	"crypto":   {Register: RegisterCrypto, Capabilities: ffi.Capabilities(ffi.WASM)},
 	"csv":      {Register: RegisterCsv, Capabilities: ffi.Capabilities(ffi.WASM), Path: "encoding/csv"},
 	"diff":     {Register: RegisterDiff, Capabilities: ffi.Capabilities(ffi.WASM)},

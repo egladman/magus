@@ -1,8 +1,0 @@
-- name: "a non-ASCII letter"
-  format: commit
-  input: "# add a na\u00efve vale spell\n"
-  contains: "Magus.ASCII"
-- name: "plain ASCII"
-  format: commit
-  input: "# add a vale spell\n"
-  absent: ["Magus.ASCII"]

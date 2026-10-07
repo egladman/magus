@@ -11,7 +11,7 @@ import (
 // TestShippedMatchesTrackedFiles holds the two to the same file set. experimental/ stays
 // out: nothing there ships.
 //
-//go:embed aws bash buf buzz cosign docker endoflife-date github gitlab golang harness markdown onepassword podman python rust system-keychain typescript vale
+//go:embed aws bash buf buzz cosign docker endoflife-date github gitlab golang harness markdown onepassword podman python rust system-keychain typescript
 var shipped embed.FS
 
 // Shipped returns the source of every spell magus carries, each a directory holding a

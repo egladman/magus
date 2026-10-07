@@ -1,8 +1,0 @@
-extends: existence
-message: "Drop the attribution '%s': history records who wrote the change."
-level: error
-scope: raw
-ignorecase: true
-tokens:
-  - co-authored-by
-  - generated with

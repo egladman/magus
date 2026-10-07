@@ -1,9 +1,0 @@
-# One cap for every subject: commits\maxLength in hack/magusfile/commits.buzz, which
-# pr-title, the commit-msg hook and the guard's commit rule read.
-extends: existence
-message: "Keep the subject within 100 characters."
-level: error
-scope: raw
-nonword: true
-raw:
-  - '\A# [^\n]{101,}'

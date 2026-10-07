@@ -26,7 +26,6 @@ export final CONFIGS = {
     "magus.yaml": "every run, through the charm/cache/sandbox policy it resolves",
     "Dockerfile": "image-build's amd64 variant",
     "Dockerfile.static": "image-build's static multi-arch variant",
-    ".vale.ini": "Vale, through the vale spell in prose, pr-title, pr-description and commit-messages",
 };
 
 export fun reads() > [str] {

@@ -521,12 +521,7 @@ Your branch's own commits are squashed away, so they keep the lowercase
 imperative style with no prefix. `magus run git-hooks-install .` installs this
 repository's git hooks from `hack/git-hooks/`; its `commit-msg` hook applies the
 title rule only to commits made directly on `main`. `magus run git-hooks-remove .`
-takes them out again.
-
-[Vale](https://vale.sh) judges prose magus extracts: comment blocks (`magus run prose .`),
-commit messages on every branch (the `commit-msg` hook and `magus run commit-messages .`)
-and pull request titles and descriptions. The rules and their test cases live in
-`.vale/styles/Magus/`, and every subject check shares one cap of 100 characters. To add a hook, see
+takes them out again. To add a hook, see
 [Your own hooks, in Buzz](https://eli.gladman.cc/magus/guides/integrations/git/#your-own-hooks-in-buzz).
 
 ## Workflow targets, not inline logic
