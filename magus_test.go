@@ -1745,3 +1745,46 @@ func TestPublicThroughCrossesPackagesAndProjects(t *testing.T) {
 		{ID: public, Qualified: "Public", Boundary: types.DiffBoundaryPackage},
 	}, impact.PublicThrough(cg, helper))
 }
+
+// The ci warning that root lint reads **/*.go while libs/gopherbuzz format writes its own
+// Go files is a real race. Only an output glob stops at a nested project
+// (types.GlobClaims); a read glob keys the nested project's files, so the pair stands
+// until a ctx.needs ahead of the readers orders the nested format first.
+func TestMGS4008RootTreeReadMeetsANestedProjectsFormat(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "vm"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "vm", "vm.go"), []byte("package vm\n"), 0o644))
+
+	keyed, err := cache.ExpandSources([]string{"**/*.go"}, root, nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"libs/vm/vm.go", "main.go"}, keyed, "the root's tree glob keys the nested project's file")
+
+	lib := &types.Project{
+		Path: "libs/vm", Name: "libs/vm",
+		TargetChains:  map[string][]types.ChainStep{"build": types.Needs("format")},
+		TargetUpdates: map[string][]types.UpdateRef{"format": {{Project: "libs/vm", Glob: "**/*.go"}}},
+	}
+	lookup := func(path string) *types.Project {
+		if path == lib.Path {
+			return lib
+		}
+		return nil
+	}
+	conflicts := func(ci types.Chain) cache.SameStepConflicts {
+		p := &types.Project{
+			Path: ".", Name: "root",
+			TargetChains: map[string][]types.ChainStep{"ci": ci, "build": types.Needs("libs/vm:build")},
+			TargetInputs: map[string][]types.InputRef{"lint": {{Project: ".", Glob: "**/*.go"}}},
+		}
+		return cache.FindSameStepConflicts(cache.DeclaredNodes(p, "ci", lookup), cache.WorkspaceOverlapWitness(root))
+	}
+
+	unordered := conflicts(types.Needs("lint", "build"))
+	require.Len(t, unordered, 1)
+	assert.Equal(t, types.TargetRef{Project: ".", Target: "lint"}, unordered[0].Reader)
+	assert.Equal(t, types.TargetRef{Project: "libs/vm", Target: "format"}, unordered[0].Writer)
+
+	assert.Empty(t, conflicts(types.Needs("libs/vm:format").Needs("lint", "build")),
+		"ci formatting the nested project first orders the pair")
+}
