@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7304
-skill_short_bytes: 5647
+skill_full_bytes: 7306
+skill_short_bytes: 5649
 ---
 
 # magus-change-summary
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `cb6d63b836a9` |
+| `skill-content` | `dca2cfee2b3f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -98,13 +98,13 @@ brief.
 
 ## Write the brief
 
-Lead with three to seven grouped changes, not every commit. For each item state:
+Lead with three to seven grouped changes, not every commit. For each item:
 
-- **What landed**: a plain-language feature or behavioral change.
-- **Where**: projects and graph entities affected.
-- **Evidence**: merge commit(s), source files, and the relevant graph relation.
-- **Why it matters**: user impact, dependency impact, or an explicit uncertainty.
-- **Follow-up**: a concrete next command when more detail is useful.
+- Say what landed, as a plain-language feature or behavioral change.
+- Name the projects and graph entities affected.
+- Give the evidence: merge commit(s), source files, and the relevant graph relation.
+- Say why it matters: user impact, dependency impact, or an explicit uncertainty.
+- Add a follow-up: a concrete next command when more detail is useful.
 
 Use this shape:
 
@@ -259,13 +259,13 @@ brief. The output is a decision aid, not a chronological commit dump.
 
 ## Write the brief
 
-Lead with three to seven grouped changes, not every commit. For each item state:
+Lead with three to seven grouped changes, not every commit. For each item:
 
-- **What landed**: a plain-language feature or behavioral change.
-- **Where**: projects and graph entities affected.
-- **Evidence**: merge commit(s), source files, and the relevant graph relation.
-- **Why it matters**: user impact, dependency impact, or an explicit uncertainty.
-- **Follow-up**: a concrete next command when more detail is useful.
+- Say what landed, as a plain-language feature or behavioral change.
+- Name the projects and graph entities affected.
+- Give the evidence: merge commit(s), source files, and the relevant graph relation.
+- Say why it matters: user impact, dependency impact, or an explicit uncertainty.
+- Add a follow-up: a concrete next command when more detail is useful.
 
 Use this shape:
 

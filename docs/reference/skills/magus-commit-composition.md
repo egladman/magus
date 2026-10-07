@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4360
-skill_short_bytes: 3755
+skill_full_bytes: 4362
+skill_short_bytes: 3757
 ---
 
 # magus-commit-composition
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `a1fee706a772` |
+| `skill-content` | `99d2a3d7b160` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -156,7 +156,7 @@ harness's own memory, not the branch.
 
 ## See also
 
-- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
+- magus-vcs-hygiene covers classifying paths and staging one commit safely.
 ````
 
 
@@ -279,7 +279,7 @@ often the single largest reduction available.
 
 ## See also
 
-- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
+- magus-vcs-hygiene covers classifying paths and staging one commit safely.
 ````
 
 

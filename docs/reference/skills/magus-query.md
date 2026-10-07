@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15050
-skill_short_bytes: 12288
+skill_full_bytes: 15043
+skill_short_bytes: 12281
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `ab43442133d5` |
+| `skill-content` | `7016ae8d6568` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -120,7 +120,7 @@ end line/column, and each range checked against the file on disk.
 magus refs <symbol> --occurrences -o json
 ```
 
-magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
+magus reports the sites; YOU apply the edits. It does not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
@@ -144,7 +144,7 @@ rewrite corrupts a file:
 - **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
   magus read that exact range and found the symbol there. `mismatch` means it found
   something else (the index predates an edit), and `unreadable` means the range is no
-  longer inside the file. The `text` field shows what is really there, and `names` is every
+  longer inside the file. The `text` field shows what is there, and `names` is every
   spelling that would have verified, so you can check the verdict rather than trust it.
 - **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
   verified sites ONLY, so a wholly stale index prints nothing, which on its own is
@@ -365,7 +365,7 @@ end line/column, and each range checked against the file on disk.
 magus refs <symbol> --occurrences -o json
 ```
 
-magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
+magus reports the sites; YOU apply the edits. It does not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
@@ -389,7 +389,7 @@ rewrite corrupts a file:
 - **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
   magus read that exact range and found the symbol there. `mismatch` means it found
   something else (the index predates an edit), and `unreadable` means the range is no
-  longer inside the file. The `text` field shows what is really there, and `names` is every
+  longer inside the file. The `text` field shows what is there, and `names` is every
   spelling that would have verified, so you can check the verdict rather than trust it.
 - **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
   verified sites ONLY, so a wholly stale index prints nothing, which on its own is

@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20712
-skill_short_bytes: 15372
+skill_full_bytes: 20665
+skill_short_bytes: 15350
 ---
 
 # magus-buzz-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `e1a6040a7943` |
+| `skill-content` | `d12ab658afc0` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -71,10 +71,10 @@ Every finding in every lens carries one of three labels, because "this is
 wrong" means a different thing in Buzz depending on which authority backs
 it:
 
-- **UPSTREAM**: true of Buzz itself, wherever it runs.
-- **GOPHERBUZZ**: true only of gopherbuzz, the implementation magus embeds;
+- `UPSTREAM`: true of Buzz itself, wherever it runs.
+- `GOPHERBUZZ`: true only of gopherbuzz, the implementation magus embeds;
   upstream Buzz may not have the construct, or may resolve it differently.
-- **PORTABILITY**: runs fine here, under gopherbuzz, but will not parse or
+- `PORTABILITY`: runs fine here, under gopherbuzz, but does not parse or
   behave the same against upstream Buzz.
 
 Label every finding from Lens 2 and Lens 3. Do not invent a fourth category,
@@ -99,7 +99,7 @@ top-level `foreach`, an unlabeled second argument: all fine, all idiomatic,
 in that file. Applying strict-mode rules to a magusfile is not a strict
 reading, it is a wrong one.
 
-A standalone script has to be judged by how it is actually invoked:
+A standalone script has to be judged by how it is invoked:
 
 - Runs via a bare `magus buzz <file>` (no `--embedded`): strict rules apply
   for real; a top-level `if` there is a genuine defect.
@@ -181,7 +181,7 @@ That is the fixture doing its job.
 
 - **A force-unwrap (`!`) on a value the type says can be null.** Buzz's
   version of a nil deref: `maybeUser!.name` panics at runtime the moment
-  `maybeUser` really is null, same as an unchecked pointer deref. Prefer
+  `maybeUser` is null, same as an unchecked pointer deref. Prefer
   `?.`/`??` unless the caller has just proven non-null a line above. Authority:
   UPSTREAM (the operators and the risk are the same wherever Buzz runs).
 - **A `catch` that discards `e` without inspecting `code` or `message`,
@@ -231,7 +231,7 @@ That is the fixture doing its job.
 - **Compound assignment double-evaluates its target in gopherbuzz; upstream
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2: flagged there as a
   correctness bug when the target has a side effect, flagged here as the
-  reason it will not misbehave the same way upstream.
+  reason it does not misbehave the same way upstream.
 - **A declared `!>` error set enforces PRESENCE but not TYPE.**
   Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
   gopherbuzz checks only that a raising call is propagated or caught, never what
@@ -251,7 +251,7 @@ That is the fixture doing its job.
   GOPHERBUZZ. A typo inside an interpolation placeholder fails loudly
   upstream and fails silently (renders the literal braces) here; review a
   backtick string's interpolated parts as carefully as you would review
-  regular code, since gopherbuzz will not catch a malformed one for you.
+  regular code, since gopherbuzz does not catch a malformed one for you.
 - **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
   Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored:
   it exists for the static checker's benefit, not the VM's. Code that
@@ -350,10 +350,10 @@ Every finding in every lens carries one of three labels, because "this is
 wrong" means a different thing in Buzz depending on which authority backs
 it, and a reader cannot act on an unlabeled finding, only argue about it:
 
-- **UPSTREAM**: true of Buzz itself, wherever it runs.
-- **GOPHERBUZZ**: true only of gopherbuzz, the implementation magus embeds;
+- `UPSTREAM`: true of Buzz itself, wherever it runs.
+- `GOPHERBUZZ`: true only of gopherbuzz, the implementation magus embeds;
   upstream Buzz may not have the construct, or may resolve it differently.
-- **PORTABILITY**: runs fine here, under gopherbuzz, but will not parse or
+- `PORTABILITY`: runs fine here, under gopherbuzz, but does not parse or
   behave the same against upstream Buzz.
 
 Label every finding from Lens 2 and Lens 3. Do not invent a fourth category,
@@ -362,7 +362,7 @@ and do not leave one unlabeled because the answer felt obvious.
 ## Establish the surface before applying anything
 
 This is the single most important step in the whole skill: getting it wrong
-produces confident, fluent false positives, because the "violation" really did
+produces confident, fluent false positives, because the "violation" did
 compile and run. Buzz parses in one of two modes, and most of what Lens 2 and
 Lens 3 check for only applies to one of them:
 
@@ -381,7 +381,7 @@ top-level `foreach`, an unlabeled second argument: all fine, all idiomatic,
 in that file. Applying strict-mode rules to a magusfile is not a strict
 reading, it is a wrong one.
 
-A standalone script has to be judged by how it is actually invoked, not by
+A standalone script has to be judged by how it is invoked, not by
 guessing from its shape:
 
 - Runs via a bare `magus buzz <file>` (no `--embedded`): strict rules apply
@@ -441,7 +441,7 @@ What reads as Buzz house style versus what merely parses.
   what enters the scope, which is the part `as _` throws away.
   Note the flat and selective forms are BOTH excluded from
   unused-import tracking (BZZ3001): a flat import has no bound name to mark
-  unused, so an `as _` that has stopped being needed will never be reported.
+  unused, so an `as _` that has stopped being needed is never reported.
   Weigh the finding by blast radius, not by count: a leaf module flat-importing
   one helper is a nit, while a tree where every file flat-imports every other is
   a single structural finding, not one per line.
@@ -503,7 +503,7 @@ Bugs and silent failures, not style. Read every function assuming it has one.
   shape.
 - **A force-unwrap (`!`) on a value the type says can be null.** Buzz's
   version of a nil deref: `maybeUser!.name` panics at runtime the moment
-  `maybeUser` really is null, same as an unchecked pointer deref. Prefer
+  `maybeUser` is null, same as an unchecked pointer deref. Prefer
   `?.`/`??` unless the caller has just proven non-null a line above. Authority:
   UPSTREAM (the operators and the risk are the same wherever Buzz runs).
 - **A `catch` that discards `e` without inspecting `code` or `message`,
@@ -535,7 +535,7 @@ Bugs and silent failures, not style. Read every function assuming it has one.
 
 Named divergences between gopherbuzz and upstream Buzz. Each is a real,
 observed behavior difference, not a hypothetical; use them to judge whether
-code an author believes is "just Buzz" will actually survive contact with
+code an author believes is "just Buzz" survives contact with
 upstream, and to stop a gopherbuzz-only behavior from being taught as if it
 were the language.
 
@@ -552,7 +552,7 @@ were the language.
   codepoint-counting member. So `"h\u00e9llo".len()` is 6, not 5.
   This is worth knowing because gopherbuzz USED to index runes, and
   code written against that reads plausibly either way. A loop slicing with
-  `sub()` and bounding with `len()` was consistent under both models, so it will
+  `sub()` and bounding with `len()` was consistent under both models, so it does
   not announce the change; what moves is any index arithmetic that assumed one
   character was one position. Reach for `utf8Len()` only when the question is
   genuinely "how many characters", which is rarer than it looks; a byte count
@@ -565,7 +565,7 @@ were the language.
 - **Compound assignment double-evaluates its target in gopherbuzz; upstream
   evaluates it once.** Authority: GOPHERBUZZ. See Lens 2: flagged there as a
   correctness bug when the target has a side effect, flagged here as the
-  reason it will not misbehave the same way upstream.
+  reason it does not misbehave the same way upstream.
 - **A declared `!>` error set enforces PRESENCE but not TYPE.**
   Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
   gopherbuzz checks only that a raising call is propagated or caught, never what
@@ -590,7 +590,7 @@ were the language.
   GOPHERBUZZ. A typo inside an interpolation placeholder fails loudly
   upstream and fails silently (renders the literal braces) here; review a
   backtick string's interpolated parts as carefully as you would review
-  regular code, since gopherbuzz will not catch a malformed one for you.
+  regular code, since gopherbuzz does not catch a malformed one for you.
 - **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
   Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored:
   it exists for the static checker's benefit, not the VM's. Code that

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40909
-skill_short_bytes: 31645
+skill_full_bytes: 40870
+skill_short_bytes: 31610
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `02be9565cbb9` |
+| `skill-content` | `72468b304de6` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -85,7 +85,7 @@ to no row is graded as you are, which no lease bounds. "Fork the job, then spawn
 worker" below has the commands to copy.
 
 Fan-out is not inherently expensive. Say what a
-round will cost when the user is deciding, and prefer the smallest fan-out that
+round costs when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; write
@@ -124,7 +124,7 @@ the top-level goal is complete.
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface (a module several call sites will use, a type,
+When a change adds a shared surface (a module several call sites use, a type,
 an event, an exported function), the ROOT names it before any edit: the path, every
 exported name with its signature, and the EXISTING symbols it must reuse rather than
 restate. Workers implement names they were handed and never coin a public one. A
@@ -279,7 +279,7 @@ Two jobs may run together only when:
 
 - The combined classification reports no overlaps: source write sets and
   declared outputs disjoint.
-- Neither consumes an API or generated artifact the other will change.
+- Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
 - Dependency and temporal-affinity evidence does not indicate that they should
@@ -347,7 +347,7 @@ live row binds its child to nothing.
    (`feat`, `fix`, `review`); a workspace spawn rule may restrict it, and its
    refusal names the list.
 
-Write paths name FILES: a file, a file the job will create, or a file glob
+Write paths name FILES: a file, a file the job creates, or a file glob
 (`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob
 that matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/).
 
@@ -405,7 +405,7 @@ write is the orchestrator's, and a refused worker reports it as an unresolved ri
 and stops.
 
 The checkpoint you recorded is what you HANDED the job; the base it
-actually LANDED ON is a separate fact, because hosts that isolate workers in
+LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned. A worker whose
 spawn title names its job (`<parent>/<role> <job>`) is bound already and records
@@ -598,7 +598,7 @@ itself: the orchestrator, or any human, disposes it with `magus session dispose
 <id> --reason "<why>"`. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
-`magus session` is how the root audits what a job actually RAN, as opposed
+`magus session` is how the root audits what a job RAN, as opposed
 to what it reported. Each invocation carries the job it was launched under
 (the same `magus.lease` channel), along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
@@ -691,7 +691,7 @@ Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, jobs with no acceptance criteria
 so nobody can say when to stop, and a principal model assigned to mechanical edits.
 Each of those is a choice made below, not a property of fanning out. Say what a
-round will cost when the user is deciding, and prefer the smallest fan-out that
+round costs when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; write
@@ -759,7 +759,7 @@ decides whether the top-level goal is complete.
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface (a module several call sites will use, a type,
+When a change adds a shared surface (a module several call sites use, a type,
 an event, an exported function), the ROOT names it before any edit: the path, every
 exported name with its signature, and the EXISTING symbols it must reuse rather than
 restate. Workers implement names they were handed and never coin a public one. A
@@ -938,7 +938,7 @@ Two jobs may run together only when:
 
 - The combined classification reports no overlaps: source write sets and
   declared outputs disjoint.
-- Neither consumes an API or generated artifact the other will change.
+- Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
 - Dependency and temporal-affinity evidence does not indicate that they should
@@ -1009,7 +1009,7 @@ an editor magus cannot attribute.
    (`feat`, `fix`, `review`); a workspace spawn rule may restrict it, and its
    refusal names the list.
 
-Write paths name FILES: a file, a file the job will create, or a file glob
+Write paths name FILES: a file, a file the job creates, or a file glob
 (`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob
 that matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/), because it
 claims every file under it and so overlaps every job editing anything there.
@@ -1088,7 +1088,7 @@ write is the orchestrator's, and a refused worker reports it as an unresolved ri
 and stops.
 
 The checkpoint you recorded is what you HANDED the job; the base it
-actually LANDED ON is a separate fact, because hosts that isolate workers in
+LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned, and every diff-since-checkpoint in Integrate and verify
 silently lies when the recorded base is not the real one. A worker whose
@@ -1110,7 +1110,7 @@ revision, or have the worker materialize the files it builds on from the intende
 one (`git show <rev>:<path> > <path>`, verifying each blob against
 `git rev-parse <rev>:<path>`) and re-fork the job with the right checkpoint. A worker
 that edits stale content without noticing reports clean validation against a tree
-nobody will ever merge.
+nobody ever merges.
 Also name any fact that will READ as drift to the worker's snapshot (a project
 deleted this session, a rename, an index regenerated underneath it), never a
 generic "expect drift" line, which only primes the worker to dismiss real
@@ -1315,7 +1315,7 @@ itself: the orchestrator, or any human, disposes it with `magus session dispose
 request magus could answer on its own would not have needed a person. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
-`magus session` is how the root audits what a job actually RAN, as opposed
+`magus session` is how the root audits what a job RAN, as opposed
 to what it reported. Each invocation carries the job it was launched under
 (the same `magus.lease` channel), along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by

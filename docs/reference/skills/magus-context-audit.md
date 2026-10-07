@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5820
-skill_short_bytes: 4162
+skill_full_bytes: 5831
+skill_short_bytes: 4176
 ---
 
 # magus-context-audit
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `35fdf06e3190` |
+| `skill-content` | `2063f8784853` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -108,17 +108,17 @@ document.
 
 Report findings in this order.
 
-1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
+1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall.
-2. **Stale instruction**: a named command no longer exists, no longer works, or
+2. A stale instruction names a command that no longer exists, no longer works, or
    is now denied.
-3. **Split authority**: two surfaces describe the same decision differently
+3. Split authority is two surfaces describing the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    A local rule contradicting a shipped skill is always this. Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement**: a denial or deprecation names a tool that no
+4. An orphaned replacement is a denial or deprecation that names a tool no
    instruction anywhere documents.
-5. **Silent duplication**: the same rule restated in several places.
+5. Silent duplication is the same rule restated in several places.
 
 ## Do not report these
 
@@ -226,20 +226,20 @@ argued with instead of fixed.
 Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
 
-1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
+1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall. Nothing else on this list is worth
    reporting before one of these.
-2. **Stale instruction**: a named command no longer exists, no longer works, or
-   is now denied. Indistinguishable from a dead end until the agent tries it.
-3. **Split authority**: two surfaces describe the same decision differently
+2. A stale instruction names a command that no longer exists, no longer works, or
+   is now denied. It is indistinguishable from a dead end until the agent tries it.
+3. Split authority is two surfaces describing the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    A workspace-local rule contradicting a shipped skill is always this finding:
-   local text overrides nothing, so the two are simply in conflict. Check each
+   local text overrides nothing, so the two are in conflict. Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement**: a denial or deprecation names a tool that no
+4. An orphaned replacement is a denial or deprecation that names a tool no
    instruction anywhere documents.
-5. **Silent duplication**: the same rule restated in several places. Not yet a
-   contradiction; it is where the next one is born, because an edit will update
+5. Silent duplication is the same rule restated in several places. It is not yet a
+   contradiction; it is where the next one is born, because an edit updates
    some of them.
 
 ## Do not report these
@@ -257,7 +257,7 @@ A lens that cries wolf gets switched off, taking the real findings with it.
 ## Recommend, then verify the fix landed
 
 Fix at the SOURCE and let generation propagate; editing an installed copy is
-drift a verify step will flag anyway. For magus's own skills that means
+drift a verify step flags anyway. For magus's own skills that means
 `internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content

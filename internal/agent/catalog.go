@@ -332,7 +332,9 @@ import (
 // now require.
 // 110: prose across the skills writes a colon, semicolon, comma or parentheses where it
 // had a spaced hyphen for a dash.
-const SkillVersion = 110
+// 111: skill prose keeps to the writing rules: present tense, no filler, and list items
+// written as sentences or code-span names instead of bold labels.
+const SkillVersion = 111
 
 const skillLicense = "GPL-3.0-or-later"
 

@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13260
-skill_short_bytes: 12823
+skill_full_bytes: 13255
+skill_short_bytes: 12818
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `cfb98056e6af` |
+| `skill-content` | `b1d990042c37` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -115,8 +115,8 @@ AffectedComputer + Inspector`, embedded, not one flat interface. `*Magus`
 (from `Open`) and the value `Inspect` returns both satisfy the whole thing,
 but a function that only reads project facts should take
 `types.WorkspaceReader`, not `types.WorkspaceRepository`;
-`types/repository.go` says this outright: "Prefer the narrowest embedded role
-a consumer actually uses."
+`types/repository.go` says this outright:
+"Prefer the narrowest embedded role a consumer actually uses."
 
 | Role | Methods | Answers |
 |---|---|---|
@@ -204,12 +204,12 @@ RULE, not vocabulary: `Entry` is added to a type name only when the bare name
 would collide with an existing type (`ProjectEntry` because `types.Project`
 exists; `Charm` has no suffix because nothing else claims that name).
 `Output` means "the `Inspector` method itself returns this shape"
-(`ProjectsOutput`, `TargetGraphOutput`). `Report` means "rebuilt at the render
-edge from a plain slice the method actually returned" (`FileReport`,
-`CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
+(`ProjectsOutput`, `TargetGraphOutput`). `Report` means
+"rebuilt at the render edge from a plain slice the method actually returned"
+(`FileReport`, `CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
 exceptions, still returning their `*Output` type directly because they carry
 a real `Workspace` field a `{definition, count, items}` envelope cannot
-derive. Guess at this pattern instead of reading the comment and you will
+derive. Guess at this pattern instead of reading the comment and you
 misname a type you add.
 
 **Buzz magusfile evaluation is not reachable from outside this module.**
@@ -353,8 +353,8 @@ AffectedComputer + Inspector`, embedded, not one flat interface. `*Magus`
 (from `Open`) and the value `Inspect` returns both satisfy the whole thing,
 but a function that only reads project facts should take
 `types.WorkspaceReader`, not `types.WorkspaceRepository`;
-`types/repository.go` says this outright: "Prefer the narrowest embedded role
-a consumer actually uses."
+`types/repository.go` says this outright:
+"Prefer the narrowest embedded role a consumer actually uses."
 
 | Role | Methods | Answers |
 |---|---|---|
@@ -444,12 +444,12 @@ RULE, not vocabulary: `Entry` is added to a type name only when the bare name
 would collide with an existing type (`ProjectEntry` because `types.Project`
 exists; `Charm` has no suffix because nothing else claims that name).
 `Output` means "the `Inspector` method itself returns this shape"
-(`ProjectsOutput`, `TargetGraphOutput`). `Report` means "rebuilt at the render
-edge from a plain slice the method actually returned" (`FileReport`,
-`CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
+(`ProjectsOutput`, `TargetGraphOutput`). `Report` means
+"rebuilt at the render edge from a plain slice the method actually returned"
+(`FileReport`, `CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
 exceptions, still returning their `*Output` type directly because they carry
 a real `Workspace` field a `{definition, count, items}` envelope cannot
-derive. Guess at this pattern instead of reading the comment and you will
+derive. Guess at this pattern instead of reading the comment and you
 misname a type you add.
 
 **Buzz magusfile evaluation is not reachable from outside this module.**

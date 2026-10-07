@@ -3,8 +3,8 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12669
-skill_short_bytes: 10464
+skill_full_bytes: 12663
+skill_short_bytes: 10458
 ---
 
 # magus-buzz-lang
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `908993f1210f` |
+| `skill-content` | `dd57c845891f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -166,7 +166,7 @@ twice.
 
 ## Coming from TypeScript, Go, Python or Swift
 
-Each row is a mistake observed in practice, with what Buzz wants and what you will
+Each row is a mistake observed in practice, with what Buzz wants and what you
 see if you make it. "nothing" means the checker accepts it and the result is wrong.
 
 | you write | Buzz | you see |
@@ -281,10 +281,10 @@ embedded, not strict.
 
 ## Where Buzz code belongs
 
-- **A one-off**: a standalone `.buzz` file run with `magus buzz`.
-- **Work the workspace repeats**: a target in `magusfile.buzz`.
+- A one-off is a standalone `.buzz` file run with `magus buzz`.
+- Work the workspace repeats goes in a target in `magusfile.buzz`.
   Targets take `(ctx: magus\Context, args: [str])`.
-- **A tool adapter**: a spell, so every project of that type gets its ops.
+- A tool adapter is a spell, so every project of that type gets its ops.
 
 Reviewing Buzz rather than writing it: magus-buzz-review.
 ````
@@ -416,7 +416,7 @@ belong inside a function.
 
 ## Coming from TypeScript, Go, Python or Swift
 
-Each row is a mistake observed in practice, with what Buzz wants and what you will
+Each row is a mistake observed in practice, with what Buzz wants and what you
 see if you make it. "nothing" means the checker accepts it and the result is wrong.
 
 | you write | Buzz | you see |
@@ -561,13 +561,13 @@ the module by a mode it never runs in.
 
 ## Where Buzz code belongs
 
-- **A one-off**: a standalone `.buzz` file run with `magus buzz`. Before
+- A one-off is a standalone `.buzz` file run with `magus buzz`. Before
   writing one from nothing, look for a script the workspace keeps to copy; magus's own
   repository indexes its tested scripts in `hack/README.md`.
-- **Work the workspace repeats**: a target in `magusfile.buzz`, so it is
+- Work the workspace repeats goes in a target in `magusfile.buzz`, so it is
   cached, sandboxed and affected-tracked; a script re-runs from scratch every time.
   Targets take `(ctx: magus\Context, args: [str])`.
-- **A tool adapter**: a spell, so every project of that type gets its ops.
+- A tool adapter is a spell, so every project of that type gets its ops.
 
 Reviewing Buzz rather than writing it: magus-buzz-review.
 ````

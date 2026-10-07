@@ -3,7 +3,7 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6896
+skill_full_bytes: 6887
 skill_short_bytes: 5600
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `63acca31c5a7` |
+| `skill-content` | `eaebd3726d08` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -263,7 +263,7 @@ and nothing it exports would need to be exported once merged.
    `absent` is verified, `unknown` names the projects with no symbol index; build
    them with `magus graph build` before trusting it.
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain;
-   use it to test whether a proposed boundary actually separates them.
+   use it to test whether a proposed boundary separates them.
 4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 
