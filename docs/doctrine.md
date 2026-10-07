@@ -30,11 +30,11 @@ because a pipe replaces the exit status and a failing gate then reads as 0). A
 non-zero exit means what it has meant for fifty years. Every surface degrades
 to plain text when there is no terminal to draw on, and the pinned band never
 takes the screen, the alternate buffer, or your scrollback. Composition
-happens where a monorepo needs it - in the graph, through `ctx.needs` - not by
+happens where a monorepo needs it (in the graph, through `ctx.needs`), not by
 pretending the binary can be smaller than the problem.
 
-The scope test governs what a verb may be, and the one-vocabulary rule -
-target, spell, charm, op, each named once and reused everywhere - keeps the
+The scope test governs what a verb may be, and the one-vocabulary rule
+(target, spell, charm, op, each named once and reused everywhere) keeps the
 surface predictable. That prevents the failure in both directions: claiming a
 minimalism the tool cannot carry, and the house dialect with no rule you can
 hold in your head, the one that makes users look things up forever and then
@@ -52,8 +52,8 @@ window needed four dead designs before one passed that bar; the
 
 The mechanism is the [scope test](scope.md#the-test), applied in review by
 reading the diff for what the tool had to learn. It prevents the accretion
-this project was a reaction to - each addition defending itself, nobody
-removing anything - now accelerated, because writing the unnecessary thing
+this project was a reaction to (each addition defending itself, nobody
+removing anything), now accelerated, because writing the unnecessary thing
 costs nearly nothing while maintaining it costs what it always did.
 
 ### Optimize the loop that verifies, never the loop that generates
@@ -69,7 +69,7 @@ not a gap.
 The test for a proposed feature is whose loop it accelerates. A pitch of
 "produce more, faster" fails by construction; "know sooner, trust cheaper" is
 at least aimed at the right loop. This prevents magus from becoming a tool
-whose product is throughput - volume is the one metric that gets easier to
+whose product is throughput: volume is the one metric that gets easier to
 move every year and proves less every year, and a build tool that helps ship
 more unverified work faster has joined the problem it was built against.
 
@@ -78,13 +78,13 @@ compounds dependence: what its operator can ship drifts past what they can
 judge, and the gap is the crutch. A tool that verifies compounds judgment,
 one answered question at a time.
 [Automation you can interrogate](#automation-you-can-interrogate) holds the
-enforcement half - helpful, never so helpful that the operator stops
+enforcement half: helpful, never so helpful that the operator stops
 learning.
 
 ### A cache is an accelerator, never a dependency
 
-Every cache magus has - the local one, the remote one shared through CI, a
-published knowledge graph pulled as an OCI artifact - skips work that the
+Every cache magus has (the local one, the remote one shared through CI, a
+published knowledge graph pulled as an OCI artifact) skips work that the
 machine in front of you could do itself. That is the whole contract. Delete
 the cache directory, revoke the registry credential, unplug the network, and
 a clean clone still builds, still gates, still answers. It is slower. It is
@@ -117,8 +117,8 @@ magus was built for humans, and agents drive it well anyway, because an
 interface legible to a person is legible to anything. That ordering is the
 design, and the reason underneath it is structural: models learned to use
 tools from decades of humans using tools, so a tool that honors the
-conventions humans settled - exit codes, a working directory that means what
-it means everywhere, a path as a project's name, plain text - inherits agent
+conventions humans settled (exit codes, a working directory that means what
+it means everywhere, a path as a project's name, plain text) inherits agent
 competence for free. A tool that invents its own dialect fails both
 audiences, then watches the models learn its workarounds forever. Buzz is the
 evidence we have: a language with close to no training data produces better
@@ -128,7 +128,7 @@ still the strongest evidence on this page.
 
 The mechanism is an ordering rule with one worked example: no surface is
 designed for an agent first. The `agents` key in `affected ci --plan` is the
-one agent-specific field in an otherwise human-first surface - the
+one agent-specific field in an otherwise human-first surface; the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
 deliberate exception is the job store, an agent-to-agent declaration
@@ -153,20 +153,20 @@ speed.
 
 ### Verdicts are provenance-blind; disposition is not
 
-A verdict - the cache saying a replay is honest, the drift gate saying
-generated output matches source, a diagnostic, a CI result - judges the work.
+A verdict (the cache saying a replay is honest, the drift gate saying
+generated output matches source, a diagnostic, a CI result) judges the work.
 No verdict conditions on who or what produced the change: cache keys hash
 content, the drift gate compares bytes, diagnostics read the tree. Whether a
 change was typed by hand or generated is invisible to every gate, on purpose,
 because good software is the only defensible standard at the tool layer, and
-a bar that moves with the byline is theater in both directions - extra
+a bar that moves with the byline is theater in both directions: extra
 suspicion for one author, unearned trust for another.
 
 Disposition is the opposite case. Accepting a proposal, sending a review,
 landing a change: these are accountability, and accountability needs a true
 name. That is why authorship is stamped from the transport a write arrived
-on, never from what the writer claims about itself - the mechanism described
-under [Agents propose, humans dispose](#agents-propose-humans-dispose). The
+on, never from what the writer claims about itself (the mechanism described
+under [Agents propose, humans dispose](#agents-propose-humans-dispose)). The
 blindness half is structural today and stated here so that a proposal to
 break it, a gate keyed on how code was written, has to argue with this page
 first.
@@ -174,10 +174,10 @@ first.
 Exactly one code path grades a write by who is acting, and naming it is what
 keeps the rule checkable. `gradeLeasedWrite` reads the lease ledger to
 decide whether a worker is editing outside the paths its lease declared.
-That is a concurrency-ownership question on the guard surface - who owns this
-file right now - rather than a judgment about the work, and it reaches no cache
-key, no drift comparison, and no diagnostic. Its uncertainties - no ledger, no
-live lease, a file that will not parse - fail open with at most an
+That is a concurrency-ownership question on the guard surface (who owns this
+file right now) rather than a judgment about the work, and it reaches no cache
+key, no drift comparison, and no diagnostic. Its uncertainties (no ledger, no
+live lease, a file that will not parse) fail open with at most an
 advisory.
 
 ### Friction that carries meaning
@@ -261,7 +261,7 @@ it left them able to do.
 Adapted from Wendell Berry's nine standards for adopting a new tool ("Why I
 Am Not Going to Buy a Computer", 1987). His subject was a farm; the criteria
 survive the distance because they are about what a tool owes the person who
-takes it up. Held against magus in both directions - what magus asks of
+takes it up. Held against magus in both directions: what magus asks of
 itself before adding anything, and what you should ask of magus before
 adopting it:
 
@@ -334,8 +334,8 @@ If magus applied them itself, they would ship unexamined.
 
 magus owns the guard rules and the verdict. It does not own an integration with
 your agent host. The rules come from one binary and are identical everywhere;
-the part that knows your host - which event field carries the command, which
-reply channel reaches the model, what happens when the binary cannot be found -
+the part that knows your host (which event field carries the command, which
+reply channel reaches the model, what happens when the binary cannot be found)
 is a template you copy and edit. Adding a host is your change, not a magus
 release.
 
@@ -348,8 +348,8 @@ appears in code anywhere but a path on disk, and the `magus-guard-coverage:`
 line each template carries feeds a parity gate that fails when a host was never
 asked about a decision the contract grew.
 
-A branch keyed on a host's tool vocabulary rather than its name - a switch over
-`Read` and `Bash` - is a per-host branch in everything but spelling, and the
+A branch keyed on a host's tool vocabulary rather than its name (a switch over
+`Read` and `Bash`) is a per-host branch in everything but spelling, and the
 name check cannot see it. The `hostvocab` linter is the
 second layer: it fails the build when a host's word for a tool appears as a
 string literal in guard code at all, so a lookup table is no cheaper than a
@@ -465,8 +465,8 @@ after the caller chose them, and the failure says to take a flag instead.
 ### Provider I/O is Buzz
 
 A CI or VCS provider (GitHub, GitLab, ...) is reached only by a Buzz op magus
-invokes - a provider spell, the queue's own provider script, a `hack/` driver
-script, or a workflow action step - which names the act and reports host and
+invokes (a provider spell, the queue's own provider script, a `hack/` driver
+script, or a workflow action step), which names the act and reports host and
 elapsed on the line. Go opens no provider socket of its own; it calls the Buzz
 op through bindings and reads the record back, the shape `review_spell.go` and
 the queue's own Buzz host module already take. The console reaches nothing but
@@ -512,9 +512,9 @@ magus could automate each row below, and does not.
 
 All four would be cheap to build, and cheap is not the test. The test for any
 future row: does automating the step remove a repetition, or remove a rep? A
-repetition - the same build run again for no new information - is the tool's
-to eat, and the cache exists to eat it. A rep - reading the failure, deciding
-what it means, choosing what lands - is where judgment forms, and a workflow
+repetition (the same build run again for no new information) is the tool's
+to eat, and the cache exists to eat it. A rep (reading the failure, deciding
+what it means, choosing what lands) is where judgment forms, and a workflow
 optimized until its operator no longer forms the judgment it depends on has
 automated the wrong half. Each row above removes the person at the point
 where the mechanism needs their judgment, so each stays out.
@@ -610,10 +610,10 @@ records, so each passes the scope test; none is built:
 - **The surface ledger** (criterion 2): a generated, committed inventory of
   verbs, flags, config keys, and diagnostic codes, regenerated by `generate`
   so the drift gate lands any growth in the diff of the change that caused
-  it, where the person who can say no is already looking. Not a cap - a
+  it, where the person who can say no is already looking. Not a cap: a
   number nobody can fail to notice.
 - **The savings lens** (criterion 4): what the cache and the affected set
-  actually bought - runs replayed against runs executed, wall time avoided -
+  actually bought (runs replayed against runs executed, wall time avoided)
   as arithmetic over run records that already exist, interrogable like any
   other verdict. Until it exists, "the cache is worth its complexity" is
   taken on trust, which is the one way this tool asks not to be taken.
@@ -623,8 +623,8 @@ records, so each passes the scope test; none is built:
   strips those artifacts in a throwaway worktree and builds would make the
   exit guarantee self-verifying instead of asserted.
 - **When it breaks** (criterion 6): the diagnostics reference covers coded
-  refusals; the failures that never raise a code - a server that did not
-  bind, a watcher gone stale, a cache entry that will not replay - are
+  refusals; the failures that never raise a code (a server that did not
+  bind, a watcher gone stale, a cache entry that will not replay) are
   documented where someone thought to write them down and absent where
   nobody did. The systematic version is a failure-modes section per concept
   page, enforced the way this repository already enforces document shape.
@@ -643,7 +643,7 @@ removed, with what decided each and where to check it.
 | what                                                                                                                          | what was decided                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | where                                                                                                                |
 | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | an advisory when an agent edits a file it never looked up                                                                     | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                                                                                                                                                                                                                                                                                                                                                                   | transcript measurement, 2026-09-02                                                                                   |
-| denying a recursive grep of a bare identifier, to force `refs`                                                                | measured and partly reversed: the original count (45 such greps, denominator unstated) undercounted the sample - a 2026-09-15 remeasurement over 1,116 transcripts found 699 matching the guard's own shape (about 2,700 individual greps), the same roughly-60%-answered-by-`refs` ratio holding on the larger sample; an advisory still ships for raw text the graph cannot vouch for, but since `a05b4c414` a recursive grep of a DEFINITIVELY-indexed symbol is DENIED outright (`denyRuleSymbolSearch`), not merely advised | `f963a9f1b`, measured with `9519797b3`, remeasured 2026-09-15; denied since `a05b4c414` (`internal/guard/search.go`) |
+| denying a recursive grep of a bare identifier, to force `refs`                                                                | measured and partly reversed: the original count (45 such greps, denominator unstated) undercounted the sample: a 2026-09-15 remeasurement over 1,116 transcripts found 699 matching the guard's own shape (about 2,700 individual greps), the same roughly-60%-answered-by-`refs` ratio holding on the larger sample; an advisory still ships for raw text the graph cannot vouch for, but since `a05b4c414` a recursive grep of a DEFINITIVELY-indexed symbol is DENIED outright (`denyRuleSymbolSearch`), not merely advised  | `f963a9f1b`, measured with `9519797b3`, remeasured 2026-09-15; denied since `a05b4c414` (`internal/guard/search.go`) |
 | sending every recursive literal grep to `magus refs --text`                                                                   | not built: measured 2026-09-29 over the read/discovery audit's Claude, Codex and Cursor transcripts, 3,498 recursive greps of literal text ran. `refs --text` is the same substring scan with no graph behind it, so a deny would cost a turn and return what grep returns, and a regex search has no equivalent at all. A search the graph answers better is already refused where it can be proven: symbol-search, search-translation and grep-reader                                                                          | the read/discovery audit, 2026-09-29; `internal/guard/search.go`                                                     |
 | wiring Claude Code's Grep and Glob tools to the guard                                                                         | not built: measured 2026-09-29, the same transcripts held 2 Grep or Glob tool calls against thousands of shell searches, so a restatement like Cursor's would judge almost nothing. Cursor keeps its restatement, where those tools are how it searches. Revisit if a host's own search tool becomes the common path                                                                                                                                                                                                             | the read/discovery audit, 2026-09-29; `docs/guides/integrations/agents/cursor-hook.buzz`                             |
 | an `ask` verdict, so a denial could be waved through in the moment                                                            | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                                                                                                                                                                                                                                                                                                                                                                             | `internal/agent/guard.go:25`, still three decisions                                                                  |

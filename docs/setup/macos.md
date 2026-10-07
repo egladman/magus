@@ -13,7 +13,7 @@ tags: [download, install, macos, apple silicon, quarantine, path]
 >
 > See [platform support](../setup.md#platform-support) for the full matrix.
 
-magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own - no root, no `sudo` - then [verify it](verify.md) before first run.
+magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own (no root, no `sudo`), then [verify it](verify.md) before first run.
 
 ## Quick install
 
@@ -49,7 +49,7 @@ curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256
 curl -fLO "https://github.com/egladman/magus/releases/download/${VERSION}/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](verify.md).
+Then verify the Ed25519 signature _first_, and only then the checksum: checking a hash against an unverified manifest proves nothing. The exact commands (macOS uses `shasum -a 256`) are in [Verify a release](verify.md).
 
 ## OpenSSL 3
 

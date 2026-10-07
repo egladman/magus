@@ -1,6 +1,6 @@
 ---
 title: Breaking changes
-description: How magus makes backward-incompatible changes visible in review before they reach users - buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
+description: How magus makes backward-incompatible changes visible in review before they reach users: buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface.
 tags:
   [
     breaking-changes,
@@ -77,7 +77,7 @@ keys), so it never drifts from the real CLI.
 A magusfile is the third surface magus publishes, and it fails differently from the
 other two. Buzz reads a missing member as `null` rather than erroring, so deleting a
 binding breaks nothing at load: a magusfile still calling it parses, loads, and passes
-`magus ls`, then fails at run time with `buzz: null is not callable` - a message that
+`magus ls`, then fails at run time with `buzz: null is not callable`, a message that
 names neither the call nor its replacement. Worse, magus builds the target dependency
 graph by reading `ctx.needs` statically, so a magusfile calling a removed `needs` form
 reports no dependency edge at all and simply stops running its prerequisites.

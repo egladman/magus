@@ -34,7 +34,7 @@ magus init
 
 This writes `magus.yaml`, stubs a starter `magusfile.buzz`, and wires the VCS merge driver.
 
-**3. Declare targets and run them.** Targets are exported functions in `magusfile.buzz` - no registration call needed. Each one composes operations from the spells you bind.
+**3. Declare targets and run them.** Targets are exported functions in `magusfile.buzz`, with no registration call needed. Each one composes operations from the spells you bind.
 
 ```buzz
 import "magus";
@@ -62,64 +62,64 @@ magus affected ci   # run ci only for the projects your changes touched
 
 Start here to understand the model magus is built on.
 
-- [Workspace and projects](concepts/workspace.md) - how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
-- [Targets](concepts/targets.md) - the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
-- [Dependencies](concepts/dependencies.md) - `magus\needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
-- [Spells](concepts/spells.md) - language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](concepts/spells.md#spells-vs-targets) for where the line falls.
-- [Charms](concepts/charms.md) - execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
-- [Operations and the work hierarchy](concepts/operations.md) - how a run is scheduled and parallelized across projects.
-- [Cache model](concepts/cache.md) - needs/provides, the content-addressed cache key, invalidation, and replay.
-- [Sandbox model](concepts/sandbox.md) - the threat model and allowlist semantics that confine spell execution.
-- [Services](concepts/services.md) - long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
-- [Providers](concepts/providers.md) - the spells a magusfile hands a job to (projects, the remote cache, CI, secrets, review, harnesses, toolchain end-of-life dates), and the contract each one exports.
-- [Wards](concepts/wards.md) - coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
-- [Knowledge graph](concepts/knowledge.md) - the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
-- [Diagnostics](reference/diagnostics.md) - every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.
-- [Engines](concepts/engines.md) - how magus loads and evaluates a magusfile.
-- [How gopherbuzz runs Buzz](concepts/buzz.md) - the pipeline from source to bytecode, the VM, and the baseline JIT, package by package.
+- [Workspace and projects](concepts/workspace.md): how magus discovers projects, the magusfile layout, `depends_on`, and monorepo patterns.
+- [Targets](concepts/targets.md): the named operations you run (`build`, `test`, `lint`), declared as exported functions in a magusfile.
+- [Dependencies](concepts/dependencies.md): `magus\needs` versus `depends_on`, the cross-project fold between them, and how they interact with the cache and the affected set.
+- [Spells](concepts/spells.md): language/toolchain adapters that provide tool-native operations (`go-build`, `go-test`, ...) for your targets to compose. See [Spells vs Targets](concepts/spells.md#spells-vs-targets) for where the line falls.
+- [Charms](concepts/charms.md): execution modifiers attached with `:` (for example `lint:rw` to let a read-only target write).
+- [Operations and the work hierarchy](concepts/operations.md): how a run is scheduled and parallelized across projects.
+- [Cache model](concepts/cache.md): needs/provides, the content-addressed cache key, invalidation, and replay.
+- [Sandbox model](concepts/sandbox.md): the threat model and allowlist semantics that confine spell execution.
+- [Services](concepts/services.md): long-running service ops, shared one instance across dependents and invocations, with sprawl and misuse guards.
+- [Providers](concepts/providers.md): the spells a magusfile hands a job to (projects, the remote cache, CI, secrets, review, harnesses, toolchain end-of-life dates), and the contract each one exports.
+- [Wards](concepts/wards.md): coded guardrails that reject a resolved op whose argv contradicts its kind (a detached service, a watching command).
+- [Knowledge graph](concepts/knowledge.md): the deterministic, cache-backed graph of the magus domain that `magus query`/`explain`/`path` and agents read instead of grepping.
+- [Diagnostics](reference/diagnostics.md): every error is a pointable coded diagnostic (`MGSxxxx`) with a handwritten resolution page and a queryable graph node, written for a human to act on rather than parse.
+- [Engines](concepts/engines.md): how magus loads and evaluates a magusfile.
+- [How gopherbuzz runs Buzz](concepts/buzz.md): the pipeline from source to bytecode, the VM, and the baseline JIT, package by package.
 
 ## Going further
 
 Once the basics click, these cover running magus at scale and in CI.
 
-- [CI](concepts/targets/ci.md) - compose a `ci` target with `magus\needs`, and the shared-cache trust model.
-- [Server and concurrency](guides/integrations/server.md) - one persistent process, one shared pool across every client.
-- [Concurrency](concepts/concurrency.md) - the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations, which never waits.
-- [Remote caching](concepts/cache/remote.md) - share the build cache across machines and CI, with a signing-based trust model.
-- [Editor setup](guides/integrations/editor.md) - wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
-- [Git integration](guides/integrations/git.md) - the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
-- [Debugging](guides/debugging.md) - the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
-- [Profiling](guides/profiling.md) - find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
-- [Jobs](guides/jobs.md) - coordinate work by hand: one person across worktrees, teammates sharing a file, CI checking merged work, and splitting other work.
-- [Tips and tricks](guides/tips.md) - non-obvious ways to combine subcommands.
-- [MCP](guides/integrations/mcp.md) - drive magus from agents over the Model Context Protocol.
-- [Merge queue](concepts/merge-queue.md) - `magus queue`: queue a pull request by enabling auto-merge, validate stages speculatively, merge each as its own commit; magus supplies the version control and the affected sets.
-- [Review](concepts/review.md) - read a change, draft remarks as you go, and send them to the pull request they belong to, with the review's own conversation rendered beside the code.
-- [Telemetry](concepts/telemetry.md) - OpenTelemetry traces and metrics.
+- [CI](concepts/targets/ci.md): compose a `ci` target with `magus\needs`, and the shared-cache trust model.
+- [Server and concurrency](guides/integrations/server.md): one persistent process, one shared pool across every client.
+- [Concurrency](concepts/concurrency.md): the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations, which never waits.
+- [Remote caching](concepts/cache/remote.md): share the build cache across machines and CI, with a signing-based trust model.
+- [Editor setup](guides/integrations/editor.md): wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
+- [Git integration](guides/integrations/git.md): the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
+- [Debugging](guides/debugging.md): the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
+- [Profiling](guides/profiling.md): find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
+- [Jobs](guides/jobs.md): coordinate work by hand: one person across worktrees, teammates sharing a file, CI checking merged work, and splitting other work.
+- [Tips and tricks](guides/tips.md): non-obvious ways to combine subcommands.
+- [MCP](guides/integrations/mcp.md): drive magus from agents over the Model Context Protocol.
+- [Merge queue](concepts/merge-queue.md): `magus queue`: queue a pull request by enabling auto-merge, validate stages speculatively, merge each as its own commit; magus supplies the version control and the affected sets.
+- [Review](concepts/review.md): read a change, draft remarks as you go, and send them to the pull request they belong to, with the review's own conversation rendered beside the code.
+- [Telemetry](concepts/telemetry.md): OpenTelemetry traces and metrics.
 
 ## Coming from other tools
 
-- [Coming from Nx](migrating/from-nx.md) - a terminology map and porting sketch for teams migrating a workspace from Nx.
-- [Nx integration](guides/integrations/nx.md) - **experimental**: map an existing Nx workspace into magus with a [workspace provider](concepts/workspace/providers.md), keeping Nx as the thing that runs the work. Ships in no release; you copy a spell in by hand.
+- [Coming from Nx](migrating/from-nx.md): a terminology map and porting sketch for teams migrating a workspace from Nx.
+- [Nx integration](guides/integrations/nx.md): **experimental**: map an existing Nx workspace into magus with a [workspace provider](concepts/workspace/providers.md), keeping Nx as the thing that runs the work. Ships in no release; you copy a spell in by hand.
 
 ## Reference
 
 Generated man pages for every command:
 
-- [`magus`](reference/manpage/magus.md) - the umbrella page: global flags, environment variables, and the full subcommand list.
-- [`magus run`](reference/manpage/magus-run.md) - run a target; the everyday command.
-- [`magus affected`](reference/manpage/magus-affected.md) - run targets only for projects a change touched, with sharding and bisection for CI.
-- [`magus ls`](reference/manpage/magus-ls.md) and [`magus describe`](reference/manpage/magus-describe.md) - inspect projects, targets, and the dependency graph.
-- [`magus watch`](reference/manpage/magus-watch.md) and [`magus x`](reference/manpage/magus-x.md) - re-run on change, and the interactive target picker.
+- [`magus`](reference/manpage/magus.md): the umbrella page: global flags, environment variables, and the full subcommand list.
+- [`magus run`](reference/manpage/magus-run.md): run a target; the everyday command.
+- [`magus affected`](reference/manpage/magus-affected.md): run targets only for projects a change touched, with sharding and bisection for CI.
+- [`magus ls`](reference/manpage/magus-ls.md) and [`magus describe`](reference/manpage/magus-describe.md): inspect projects, targets, and the dependency graph.
+- [`magus watch`](reference/manpage/magus-watch.md) and [`magus x`](reference/manpage/magus-x.md): re-run on change, and the interactive target picker.
 
 The magusfile API and diagnostics:
 
-- [Configuration](reference/config.md) - every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
-- [Standard library modules](reference/buzz/index.md) - `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
-- [Server API](reference/api/index.md) - the Connect, gRPC, and gRPC-Web contract the server serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or frontend against it.
-- [Spells reference](concepts/spells.md#built-in-spells) - the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
-- Diagnostics and wards - every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](concepts/wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](reference/codes/services/MGS5002.md)). Browse by family: [magusfile](reference/codes/magusfile/README.md), [race](reference/codes/race/README.md), [sandbox](reference/codes/sandbox/README.md), [services](reference/codes/services/README.md), and [knowledge graph](reference/codes/knowledge/README.md).
-- [Conventions](conventions.md) - how placeholders, shell commands, runnable examples, and admonitions are written across these docs.
-- [Glossary](glossary.md) - the core magus vocabulary (workspace, project, magusfile, target, spell, operation, charm, ward, module, engine) defined in one place.
-- [Changelog](changelog/) - every change, newest first, starting with what is unreleased. Pages that call out a behavior change name the release it landed in; this is where that release is written up.
-- [Tags](tags/) - every topic, with the pages carrying it. The one route through these docs that ignores the section tree, so it finds pages a directory walk would not put next to each other.
+- [Configuration](reference/config.md): every `magus.yaml` key with its `MAGUS_*` environment variable, CLI flag, and type.
+- [Standard library modules](reference/buzz/index.md): `fs`, `os`, `http`, `json`, `crypto`, and the rest of the magusfile API.
+- [Server API](reference/api/index.md): the Connect, gRPC, and gRPC-Web contract the server serves, generated from the `.proto` schema. Every service, method, message, and enum, so you can build your own client or frontend against it.
+- [Spells reference](concepts/spells.md#built-in-spells): the built-in spells (`go`, `rust`, `typescript`, `python`, `docker`, `buf`, `cosign`, `buzz`, `markdown`, `bash`), their ops, and paste-ready examples you can dry-run in place.
+- Diagnostics and wards: every problem magus reports carries a stable `MGSxxxx` code with a dedicated explainer. Some are hard errors; others are [_wards_](concepts/wards.md), guardrails that flag a risky op before it runs (for example a detached service op, [MGS5002](reference/codes/services/MGS5002.md)). Browse by family: [magusfile](reference/codes/magusfile/README.md), [race](reference/codes/race/README.md), [sandbox](reference/codes/sandbox/README.md), [services](reference/codes/services/README.md), and [knowledge graph](reference/codes/knowledge/README.md).
+- [Conventions](conventions.md): how placeholders, shell commands, runnable examples, and admonitions are written across these docs.
+- [Glossary](glossary.md): the core magus vocabulary (workspace, project, magusfile, target, spell, operation, charm, ward, module, engine) defined in one place.
+- [Changelog](changelog/): every change, newest first, starting with what is unreleased. Pages that call out a behavior change name the release it landed in; this is where that release is written up.
+- [Tags](tags/): every topic, with the pages carrying it. The one route through these docs that ignores the section tree, so it finds pages a directory walk would not put next to each other.
