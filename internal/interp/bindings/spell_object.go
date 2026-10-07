@@ -26,6 +26,11 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))
+	// The indexer's uses must name a probed tool, so a handle without its tools would
+	// refuse to decode the moment it carried uses.
+	if len(m.Tools) > 0 {
+		h.MapSet("tools", toolsToMap(m.Tools))
+	}
 	// The symbol indexer round-trips as the DECLARATION it was decoded from, not as the op
 	// magus synthesized out of it. targetsToMap cannot carry it: the synthesized op lands
 	// in m.Ops under the reserved name, and re-decoding that reads as a spell declaring
@@ -36,6 +41,23 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 		rec := vm.NewMap()
 		rec.MapSet("format", vm.StrValue(string(si.Format)))
 		rec.MapSet("command", commandToMap(si.Command))
+		if si.Op != "" {
+			rec.MapSet("op", vm.StrValue(si.Op))
+		}
+		if len(si.Uses) > 0 {
+			rec.MapSet("uses", strSliceToBuzzList(si.Uses))
+		}
+		if len(si.Envs) > 0 {
+			envs := make([]vm.Value, len(si.Envs))
+			for i, env := range si.Envs {
+				m := vm.NewMap()
+				for k, v := range env {
+					m.MapSet(k, vm.StrValue(v))
+				}
+				envs[i] = m
+			}
+			rec.MapSet("envs", vm.ListValue(envs))
+		}
 		h.MapSet("symbol_indexer", rec)
 	}
 	if m.Sandbox != nil {
@@ -253,6 +275,40 @@ func commandToMap(t spells.Command) vm.Value {
 		op.MapSet("envKeys", strSliceToBuzzList(t.EnvKeys))
 	}
 	return op
+}
+
+// toolsToMap marshals the spell's tools back to the shape decodeTools reads, writing
+// only the parts each tool declares.
+func toolsToMap(tools map[string]spells.Tool) vm.Value {
+	out := vm.NewMap()
+	for name, t := range tools {
+		rec := vm.NewMap()
+		for field, cmd := range map[string]spells.Command{"probe": t.Probe, "ready": t.Ready, "observe": t.Observe} {
+			if cmd.Bin != "" {
+				rec.MapSet(field, commandToMap(cmd))
+			}
+		}
+		if !t.Key.IsZero() {
+			key := vm.NewMap()
+			key.MapSet("const", vm.StrValue(t.Key.Const))
+			key.MapSet("upTo", vm.StrValue(string(t.Key.UpTo)))
+			rec.MapSet("key", key)
+		}
+		if !t.Supported.IsZero() {
+			bounds := vm.NewMap()
+			bounds.MapSet("min", vm.StrValue(t.Supported.Min))
+			bounds.MapSet("below", vm.StrValue(t.Supported.Below))
+			rec.MapSet("supported", bounds)
+		}
+		if t.Diagnostics != spells.DiagnosticNone {
+			rec.MapSet("diagnostics", vm.StrValue(string(t.Diagnostics)))
+		}
+		if t.Lifecycle != "" {
+			rec.MapSet("lifecycle", vm.StrValue(t.Lifecycle))
+		}
+		out.MapSet(name, rec)
+	}
+	return out
 }
 
 // patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records

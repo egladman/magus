@@ -86,6 +86,30 @@ func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
 	assert.Equal(t, declared, op, "defaultArgs must survive the bind-time handle round trip")
 }
 
+// A workspace-local spell's symbol indexer survives the by-value handle round trip whole:
+// its op, the tools it uses (which must arrive with their probes, or the decode refuses
+// them) and its envs.
+func TestSpellHandleRoundTripKeepsTheSymbolIndexer(t *testing.T) {
+	indexer := &spells.SymbolIndexer{
+		Format:  spells.SymbolFormatSCIP,
+		Op:      "scip-mine",
+		Command: spells.Command{Bin: "scip-mine", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+		Uses:    []string{"go"},
+		Envs:    []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows"}},
+	}
+	tools := map[string]spells.Tool{"go": {
+		Probe:     spells.Command{Bin: "go", Args: []string{"version"}},
+		Key:       spells.VersionKey{UpTo: spells.VersionMinor},
+		Supported: spells.VersionBounds{Min: "1.22"},
+	}}
+	h := spellHandleFromMeta(spells.Descriptor{Name: "myspell", SymbolIndexer: indexer, Tools: tools})
+
+	got, err := spell.DecodeHandle(h)
+	require.NoError(t, err)
+	assert.Equal(t, indexer, got.SymbolIndexer)
+	assert.Equal(t, tools, got.Tools)
+}
+
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
 // execution overrides.
 func execCtxValue(env map[string]string, cwd string) vm.Value {
