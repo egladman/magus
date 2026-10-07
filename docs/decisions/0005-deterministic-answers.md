@@ -3,14 +3,15 @@ title: "ADR 0005: deterministic answers"
 order: 5
 description: The v0.5.0 finishing pass, recorded in full. A stalled multi-agent change showed where agents improvise and where magus stays silent. The person drives; magus answers from the graph, the job store and typed APIs, and prints what to run. Every idea and use case raised during the pass is listed here with its state, so this page is also the plan.
 tags: [adr, decision, agents, guard, mcp, jobs, vcs, buzz, hack, scope]
+status: accepted (partly implemented)
+date: 2026-09-29
 ---
 
 # ADR 0005: deterministic answers
 
-- **Status:** Accepted, partly implemented. Each item below carries its own state.
-- **Date:** 2026-09-29
-- **States:** _done_ is in the tree; _in progress_ has a worker on it; _planned_ is decided
-  and queued; _proposed_ is an idea not yet decided; _not built_ was weighed and declined.
+Each item below carries its own state. _done_ is in the tree; _in progress_ has a worker
+on it; _planned_ is decided and queued; _proposed_ is an idea not yet decided; _not built_
+was weighed and declined.
 
 ## Context
 

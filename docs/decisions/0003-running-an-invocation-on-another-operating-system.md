@@ -3,14 +3,12 @@ title: "ADR 0003: running an invocation on another operating system"
 order: 3
 description: Whether magus should learn to run an invocation on a kernel other than the host's, so a macOS checkout can reproduce a Linux-only failure (landlock, /proc, the unix socket path limit) before CI does. Decides one Engine-API client reached through one user fact, a top-level --platform flag that relays the whole invocation, and symbol indexers that always run from their spell's image; records the prefix script and the provider-spell flag as considered; lists what the reviewers found and how each finding is answered.
 tags: [adr, decision, platform, linux, macos, containers, podman, docker, sandbox, knowledge, scope]
+status: proposed
+date: 2026-09-26
+supersedes: "the two earlier drafts of this page, which decided a repository-local prefix script (B') and recorded a flag relayed through a provider spell (D) as considered."
 ---
 
 # ADR 0003: running an invocation on another operating system
-
-- **Status:** Proposed
-- **Date:** 2026-09-26
-- **Supersedes:** the two earlier drafts of this page, which decided a repository-local
-  prefix script (B') and recorded a flag relayed through a provider spell (D) as considered.
 
 ## Context
 

@@ -318,9 +318,12 @@ export fun isAuthoredPage(file: str) > bool {
 // FRONT_MATTER_KEYS are the keys a page may carry, each with its rank: the order the site
 // reads them in, and the order every page writes them in so a reader finds the description
 // in the same place. order and page_type share a slot; aliases trail because only a moved
-// page has any.
-final FRONT_MATTER_KEYS = {"title": 0, "order": 1, "page_type": 2, "description": 3, "tags": 4, "aliases": 5};
-final FRONT_MATTER_ORDER = "title, optional order or page_type, description, tags, optional aliases";
+// page has any. status, date and supersedes follow tags and belong to ADR pages alone.
+final FRONT_MATTER_KEYS = {"title": 0, "order": 1, "page_type": 2, "description": 3, "tags": 4,
+    "status": 5, "date": 6, "supersedes": 7, "aliases": 8};
+final ADR_KEYS = ["status", "date", "supersedes"];
+final FRONT_MATTER_ORDER = "title, optional order or page_type, description, tags, optional aliases "
+    + "(an ADR puts status, date and optional supersedes between tags and aliases)";
 
 // SITE_URL is where the docs are published. A docs page linked by it skips the build's link
 // check and the local preview, and breaks for a reader of any other version.
@@ -392,7 +395,11 @@ fun frontMatterFindings(file: str, lines: [str], close: int, found: mut [Convent
         final key = line.sub(0, len: colon!);
         final value = line.sub(colon! + 1).trim();
         final rank = FRONT_MATTER_KEYS[key];
-        if (rank == null) {
+        var adrOnly = false;
+        foreach (k in ADR_KEYS) {
+            if (k == key and adrNumber(file) == "") { adrOnly = true; }
+        }
+        if (rank == null or adrOnly) {
             found.append(ConventionFinding{ file = file, line = n, rule = "front-matter",
                 message = "front matter carries `{key}`, which no page reads; drop it, or keep to " + FRONT_MATTER_ORDER });
         } else {
@@ -745,6 +752,20 @@ test "order and page_type share the slot after title, in that order" {
     assert\equal(rulesOf(lintMarkdown("docs/s.md", both)), "", "both, in order");
     final swapped = "---\ntitle: S\npage_type: overview\norder: 4\ndescription: S.\ntags: [s]\n---\n\n# S\n";
     assert\equal(rulesOf(lintMarkdown("docs/s.md", swapped)), "front-matter", "order after page_type");
+}
+
+test "status, date and supersedes follow tags on an ADR and are refused on any other page" {
+    final fm = "---\ntitle: \"ADR 0009: x\"\norder: 9\ndescription: X.\ntags: [adr]\nstatus: proposed\ndate: 2026-10-07\n---\n\n";
+    final adr = fm + "# ADR 0009: x\n";
+    assert\equal(rulesOf(lintMarkdown("docs/decisions/0009-x.md", adr)).indexOf("front-matter"), null, "an ADR may carry them");
+    final other = "---\ntitle: X\ndescription: X.\ntags: [x]\nstatus: proposed\n---\n\n# X\n";
+    assert\equal(rulesOf(lintMarkdown("docs/x.md", other)), "front-matter", "another page may not");
+    final early = "---\ntitle: \"ADR 0009: x\"\norder: 9\nstatus: proposed\ndescription: X.\ntags: [adr]\ndate: 2026-10-07\n---\n\n# ADR 0009: x\n";
+    var named = false;
+    foreach (f in lintMarkdown("docs/decisions/0009-x.md", early)) {
+        if (f.message.indexOf("`description` follows `status`") != null) { named = true; }
+    }
+    assert\equal(named, true, "status before description");
 }
 
 test "a description must end with a period, however it is quoted or wrapped" {

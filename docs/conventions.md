@@ -334,12 +334,12 @@ title: "ADR NNNN: <lowercase title>"
 order: <NNNN as a number>
 description: <one paragraph>
 tags: [adr, decision, <topics>]
+status: <proposed, accepted, rejected, superseded or deprecated>
+date: <YYYY-MM-DD>
+supersedes: <what this replaces, optional>
 ---
 
 # ADR NNNN: <lowercase title>
-
-- **Status:** <Proposed, Accepted, ...>
-- **Date:** <YYYY-MM-DD>
 
 ## Context
 
@@ -358,8 +358,13 @@ tags: [adr, decision, <topics>]
 
 - The front matter's `title` carries the file's number and a title that starts lowercase;
   `order` is that number, so the pages sort as they were written; `tags` include `adr`.
-- The H1 repeats the title. The bullet block under it has at least **Status:** and
-  **Date:** (`YYYY-MM-DD`); other lines, such as **Supersedes:**, may follow.
+- The H1 repeats the title.
+- `status`, `date` and `supersedes` follow `tags`, before `aliases`. `status` is one of
+  _proposed_, _accepted_, _rejected_, _superseded_ and _deprecated_, optionally followed by
+  a parenthetical, such as `accepted (partly implemented)`. `date` is the day the ADR was
+  written, as a real `YYYY-MM-DD`. `supersedes` is there only when the ADR replaces
+  something, and names it the way a sentence would. The site prints all three under the
+  title, so the page body carries no Status, Date or Supersedes bullet.
 - The H2 sections are exactly Context, Decision, Alternatives and Consequences, in that
   order, then Open questions if any remain, then Amendments last. Any further structure is
   an H3 under one of them (numbered parts of a decision, each option weighed, when to
