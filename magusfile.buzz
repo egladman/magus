@@ -5,6 +5,7 @@ import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
 import "./hack/magusfile/commits" as commits;
+import "./hack/policy/commits" as wording;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
 import "spells/git/hooks" as githooks;
@@ -638,12 +639,21 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
     return event?.q("title").stringValue() ?? "";
 }
 
-// Fails a pull request title that is not a conventional commit subject.
+// Fails a pull request title that is not a conventional commit subject, or whose
+// description opens in the past tense or sells instead of saying what changed.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
+    final problems = mut [<str>];
     final problem = commits\problem(title);
     if (problem != "") {
-        throw "pr-title: \"{title}\": {problem}";
+        problems.append(problem);
+    } else {
+        foreach (wordy in wording\wordingProblems(title, conventional: true)) {
+            problems.append(wordy);
+        }
+    }
+    if (problems.len() > 0) {
+        throw "pr-title: \"{title}\": {problems.join("; ")}";
     }
     magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
 }
@@ -2158,10 +2168,13 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/scipbuzz/**/*_test.go",
                    "**/*.go", "libs/conventions/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
-                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go");
-    // code-follows-mined-precedents fails on a stale symbol index. magus\precedents freshens
-    // every index here, under this run's lock, so the rule run below finds them current; read
-    // from that child process instead, a rebuild would be refused the lock (MGS3007).
+                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
+                   "console/**/*.ts", "docs/**/*.ts",
+                   "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts");
+    // code-follows-mined-precedents and symbol-docs-follow-prose-rules fail on a stale symbol
+    // index. magus\precedents freshens every index here, under this run's lock, so the rules
+    // run below find them current; read from that child process instead, a rebuild would be
+    // refused the lock (MGS3007).
     _ = magus\precedents();
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
