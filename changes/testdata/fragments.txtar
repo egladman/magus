@@ -8,6 +8,11 @@ problems contains the text of the .want file beside it.
 - **Breaking: the `exclusive` option.** Delete
   the key.
 
+-- valid/breaking-sdk-callers.md --
+### Changed
+
+- **Breaking for SDK callers: `types.Charm` is `types.CharmEntry`.** Rename the use.
+
 -- valid/headline-only.md --
 ### Security
 
@@ -83,3 +88,21 @@ line 4: not a heading, an entry, or an entry's two-space continuation
   nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen end.
 -- invalid/sixty-one-words.want --
 line 3: entry is 61 words; the cap is 60
+-- invalid/breaking-parenthesized.md --
+### Changed
+
+- **Breaking (Go API): the cache's tiers share one shape.** Rename the use.
+-- invalid/breaking-parenthesized.want --
+opens with "Breaking:" or "Breaking for SDK callers:"
+-- invalid/breaking-other-callers.md --
+### Changed
+
+- **Breaking for SDK implementers: a method is required.** Implement it.
+-- invalid/breaking-other-callers.want --
+opens with "Breaking:" or "Breaking for SDK callers:"
+-- invalid/breaking-lowercase.md --
+### Changed
+
+- **breaking: a thing.** Fix the use.
+-- invalid/breaking-lowercase.want --
+opens with "Breaking:" or "Breaking for SDK callers:"
