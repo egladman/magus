@@ -79,7 +79,9 @@ func markdownProse(raw []string, frontMatter bool) []string {
 	return lines
 }
 
-// blankFrontMatter blanks a YAML block opening the file.
+// blankFrontMatter blanks a YAML block opening the file, all but the value of
+// its description: search results and link previews show that sentence before
+// anything on the page, so it is held to the same rules.
 func blankFrontMatter(lines []string) {
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
 		return
@@ -88,12 +90,29 @@ func blankFrontMatter(lines []string) {
 	for i := 1; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) == "---" {
 			for j := 0; j <= i; j++ {
-				lines[j] = ""
+				lines[j] = descriptionValue(lines[j])
 			}
 
 			return
 		}
 	}
+}
+
+// descriptionValue is the value of a one-line `description:` key without its
+// YAML quotes, which would otherwise read as a quoted mention, or "" for any
+// other front matter line.
+func descriptionValue(line string) string {
+	v, ok := strings.CutPrefix(line, "description:")
+	if !ok {
+		return ""
+	}
+
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		v = v[1 : len(v)-1]
+	}
+
+	return v
 }
 
 // blankComments blanks every HTML comment, across lines, and keeps the text

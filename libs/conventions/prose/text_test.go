@@ -49,6 +49,16 @@ func TestJudgeTextSkipsWhatIsNotProse(t *testing.T) {
 	assertFindings(t, JudgeText(markdownPage, SurfaceMarkdown), want)
 }
 
+// A page's description is the sentence a search result shows, so it is prose; every
+// other front matter key, and the YAML quotes around the value, are not.
+func TestJudgeTextJudgesTheFrontMatterDescription(t *testing.T) {
+	page := "---\ntitle: Simply a page\ndescription: \"How the cache simply stores blobs: by key.\"\n" +
+		"tags: [simply]\n---\n\n# Cache\n"
+
+	assertFindings(t, JudgeText(page, SurfaceMarkdown),
+		[]Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3}})
+}
+
 func TestJudgeTextReadsAPullRequestTitleAsItsFirstLine(t *testing.T) {
 	got := JudgeText("fix: simply pin the key\nPinning the key keeps two racing workers from writing "+
 		"different blobs, so the cache now sorts its inputs.", SurfacePullRequest)
