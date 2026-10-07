@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
@@ -32,9 +36,9 @@ func describeRules(args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe rule[s] [<name>] [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The guard rules this workspace enforces: what each one catches, and")
-			fmt.Fprintln(os.Stderr, "which tier it lands on. A verdict names its rule in brackets; pass that")
-			fmt.Fprintln(os.Stderr, "name to detail one.")
+			fmt.Fprintln(os.Stderr, "The guard rules this workspace enforces: what each one catches, the")
+			fmt.Fprintln(os.Stderr, "tier magus compiles in, and what magus\\guard.builtins sets instead. A")
+			fmt.Fprintln(os.Stderr, "verdict names its rule in brackets; pass that name to detail one.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -48,25 +52,69 @@ func describeRules(args []string) error {
 		return err
 	}
 
-	switch len(names) {
-	case 0:
-		return emitRuleList(opts, guard.Rules())
-	case 1:
-		doc, ok := guard.Rule(names[0])
-		if !ok {
-			// Names the nearest instead of only refusing: a reader typing this has a rule
-			// name off a verdict, and the ways to get it wrong are a typo and a plural.
-			fmt.Fprintf(os.Stderr, "magus describe rule: no rule named %q\n", names[0])
-			if near := hint.Nearest(names[0], ruleNames()); near != "" {
-				fmt.Fprintf(os.Stderr, "did you mean %q?\n", near)
-			}
-			fmt.Fprintf(os.Stderr, "`%s` lists every rule this workspace enforces\n", hint.DescribeRules)
-			return errSilent{exitCode: 2}
-		}
-		return emitRuleDetail(opts, doc)
-	default:
+	if len(names) > 1 {
 		return usagef("magus describe rule: names one rule (got %d); the bare noun lists them all", len(names))
 	}
+	declared, loadErr := declaredBuiltins()
+	if len(names) == 0 {
+		rules := guard.Rules()
+		for i := range rules {
+			rules[i].Workspace = workspaceSetting(declared, rules[i].Name)
+		}
+		return errors.Join(emitRuleList(opts, rules), loadErr)
+	}
+	doc, ok := guard.Rule(names[0])
+	if !ok {
+		// Names the nearest instead of only refusing: a reader typing this has a rule
+		// name off a verdict, and the ways to get it wrong are a typo and a plural.
+		fmt.Fprintf(os.Stderr, "magus describe rule: no rule named %q\n", names[0])
+		if near := hint.Nearest(names[0], ruleNames()); near != "" {
+			fmt.Fprintf(os.Stderr, "did you mean %q?\n", near)
+		}
+		fmt.Fprintf(os.Stderr, "`%s` lists every rule this workspace enforces\n", hint.DescribeRules)
+		return errSilent{exitCode: 2}
+	}
+	doc.Workspace = workspaceSetting(declared, doc.Name)
+	return errors.Join(emitRuleDetail(opts, doc), loadErr)
+}
+
+// declaredBuiltins is what the cwd workspace's root magusfile sets through
+// magus\guard.builtins, nil outside a workspace or when it sets nothing. A magusfile whose
+// guard declarations do not load is an error, returned for the caller to report after
+// the catalog: the defaults are still worth printing, and a WORKSPACE column left empty
+// without saying why would read as "this workspace sets nothing".
+func declaredBuiltins() (map[string]builtin.Setting, error) {
+	rules, err := loadGuardRules(context.Background(), "")
+	if err != nil {
+		return nil, fmt.Errorf("magus describe rules: the root magusfile's guard declarations do not load, so no workspace setting is shown: %w", err)
+	}
+	if rules == nil {
+		return nil, nil
+	}
+	return rules.Builtins(), nil
+}
+
+// workspaceSetting renders the setting declared for name for RuleDoc.Workspace.
+func workspaceSetting(declared map[string]builtin.Setting, name string) string {
+	s, ok := declared[name]
+	switch {
+	case !ok:
+		return ""
+	case s.Lines != 0:
+		return fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
+	default:
+		return string(s.Decision)
+	}
+}
+
+// appliedDecision is the decision the working tree gives r: its workspace setting's, or
+// the compiled one when it sets none.
+func appliedDecision(r types.RuleDoc) string {
+	if r.Workspace == "" {
+		return r.Decision
+	}
+	decision, _, _ := strings.Cut(r.Workspace, ",")
+	return decision
 }
 
 // emitRuleList renders the catalog as a table, denies first.
@@ -83,19 +131,22 @@ func emitRuleList(opts OutputOptions, rules []types.RuleDoc) error {
 		return writeFormatted(os.Stdout, opts, rules)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DECISION\tRULE\tCATCHES")
-	denies := 0
+	fmt.Fprintln(w, "DEFAULT\tWORKSPACE\tRULE\tCATCHES")
+	counts := map[string]int{}
 	for _, r := range rules {
-		if r.Decision == "deny" {
-			denies++
+		counts[appliedDecision(r)]++
+		workspace := r.Workspace
+		if workspace == "" {
+			workspace = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", r.Decision, r.Name, r.Catches)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.Decision, workspace, r.Name, r.Catches)
 	}
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	fmt.Printf("\n%d refuse, %d explain. One rule: `%s`\n",
-		denies, len(rules)-denies, hint.DescribeRule.With("<rule>"))
+	fmt.Printf("\n%d refuse, %d explain, %d off. One rule: `%s`\n",
+		counts[string(builtin.Deny)], counts[string(builtin.Advise)], counts[string(builtin.Off)],
+		hint.DescribeRule.With("<rule>"))
 	return nil
 }
 
@@ -112,7 +163,11 @@ func emitRuleDetail(opts OutputOptions, doc types.RuleDoc) error {
 	if opts.Format != FormatText {
 		return writeFormatted(os.Stdout, opts, doc)
 	}
-	fmt.Printf("%s (%s)\n\n", doc.Name, doc.Decision)
+	if doc.Workspace == "" {
+		fmt.Printf("%s (%s)\n\n", doc.Name, doc.Decision)
+	} else {
+		fmt.Printf("%s (%s; default %s)\n\n", doc.Name, doc.Workspace, doc.Decision)
+	}
 	fmt.Println("catches")
 	fmt.Println("  " + doc.Catches)
 	fmt.Println()
@@ -121,7 +176,11 @@ func emitRuleDetail(opts OutputOptions, doc types.RuleDoc) error {
 		tty.Prose(os.Stdout, tty.SystemProbe, doc.Why)
 		fmt.Println()
 	}
-	if doc.Decision == "deny" {
+	switch appliedDecision(doc) {
+	case string(builtin.Off):
+		fmt.Println("This workspace turns the rule off, so it says nothing.")
+		return nil
+	case string(builtin.Deny):
 		fmt.Println("A deny blocks the call and names what to run instead. Nothing magus")
 		fmt.Println("refuses is a capability it removes: every one has a covered equivalent.")
 		return nil

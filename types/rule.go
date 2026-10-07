@@ -8,9 +8,12 @@ package types
 type RuleDoc struct {
 	// Name is the slug a verdict reports and a reader looks up.
 	Name string `json:"name"`
-	// Decision is the tier: "deny" or "advise". A rule never moves between them without
+	// Decision is the tier magus compiles in: "deny" or "advise". A rule never moves between them without
 	// the move being the point of the change, so it is recorded rather than derived.
 	Decision string `json:"decision"`
+	// Workspace is what the root magusfile's magus\guard.builtins sets for the rule, "" when
+	// it sets nothing and Decision applies: the decision, with ", lines N" when it sets lines.
+	Workspace string `json:"workspace,omitempty"`
 	// Catches says what the rule fires on, in one line, in the reader's terms.
 	Catches string `json:"catches"`
 	// Why is the reasoning behind the rule, for a reader who wants to disagree with it
