@@ -20,9 +20,11 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -37,7 +39,7 @@ import (
 // their own checkout.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	saved := guardRoot
-	guardRoot = func() (string, error) { return "", errors.New("no workspace rules in this test") }
+	guardRoot = func(string) (string, error) { return "", errors.New("no workspace rules in this test") }
 	defer func() { guardRoot = saved }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
@@ -1555,6 +1557,53 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 	}
 }
 
+// A command loaded with --root from inside another checkout looks symbols and graph ids up
+// in the guard index of the workspace it loaded, not the cwd's.
+func TestGuardIndexAnswersFromTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	cacheDir, err := magus.ResolveCacheDir(loaded, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{
+		{ID: "symbol:x loadedOnly().", Kind: types.KindSymbol, Label: "loadedOnly"},
+		{ID: "target:.:build", Kind: types.KindTarget, Label: "build"},
+	}, nil)
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, loaded, g, true, knowledge.GuardCheckout{}))
+
+	deps := guardDependencies(t.Context(), loaded)
+	defined, _ := deps.SymbolDefined("loadedOnly")
+	assert.True(t, defined)
+	ids, ok := deps.IndexedIDs(t.Context(), types.KindTarget)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"target:.:build"}, ids)
+}
+
+// The stale-graph advice inspects the loaded workspace. Inspecting the cwd's after loading
+// another panics.
+func TestGuardDependenciesStaleAdviceInspectsTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	_, err := inspectWorkspace(t.Context(), loaded)
+	require.NoError(t, err)
+
+	deps := guardDependencies(t.Context(), loaded)
+	require.NotPanics(t, func() { _ = deps.GraphStaleAdvice(t.Context()) })
+}
+
+// The index cause is diagnosed from the loaded checkout's sync record. Eventually, because
+// the lookup runs under the guard's budget and a cold git can overrun it once.
+func TestIndexCauseNamesTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	dir, err := knowledgeStoreDir(loaded)
+	require.NoError(t, err)
+	require.NoError(t, maintenance.RecordSyncRequest(dir, maintenance.SyncRequest{
+		At: time.Now(), Outcome: maintenance.SyncRefused, Detail: "refused in the loaded checkout",
+	}))
+
+	deps := guardDependencies(t.Context(), loaded)
+	assert.Eventually(t, func() bool { return strings.Contains(deps.IndexCause(), "refused in the loaded checkout") },
+		5*time.Second, 50*time.Millisecond)
+}
+
 // spawnEnvelope is a Claude Code spawn as its hook wiring hands it to `magus shell`.
 const spawnEnvelope = `{"session_id":"8f2c6a1e","hook_event_name":"PreToolUse","tool_name":"Agent",` +
 	`"tool_input":{"description":"implement adr 0002","prompt":"Implement ADR 0002.","subagent_type":"general-purpose"}}`
@@ -1566,7 +1615,7 @@ func judgeSpawnAt(t *testing.T, root string) guard.Verdict {
 	testkit.Isolate(t)
 	t.Chdir(root)
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
-	return guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: spawnEnvelope, Host: "claude-code"})
+	return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: spawnEnvelope, Host: "claude-code"})
 }
 
 // resetWorkspaceMemo gives a test its own memoized workspace load and restores the
@@ -1621,7 +1670,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	resetWorkspaceMemo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
-	_, err := loadGuardRules(t.Context())
+	_, err := loadGuardRules(t.Context(), "")
 	require.Error(t, err)
 
 	v := judgeSpawnAt(t, root)
@@ -1630,7 +1679,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	assert.Contains(t, v.Reason, "The working tree's magus\\guard.spawn rule judged nothing: the magusfile failed to load")
 
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
-	v = guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: "ls -la", Host: "claude-code"})
+	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, "workspace:command", v.Rule)
@@ -1665,7 +1714,7 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 
-	rules, err := loadGuardRules(t.Context())
+	rules, err := loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	approved, err := rules.ApprovedCommandRule(t.Context())
 	require.NoError(t, err)
@@ -1684,7 +1733,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "other", "spell.buzz"), []byte("// untracked\n"), 0o644))
 
-	rules, err := loadGuardRules(t.Context())
+	rules, err := loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	approved, err := rules.ApprovedCommandRule(t.Context())
 	require.NoError(t, err)
@@ -1692,7 +1741,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 
 	// Loosen the rule in the working tree: now the committed deny must still answer.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
-	rules, err = loadGuardRules(t.Context())
+	rules, err = loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	assert.Nil(t, rules.CommandRule())
 	approved, err = rules.ApprovedCommandRule(t.Context())
@@ -1738,7 +1787,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
 	judge := func() guard.Verdict {
 		ctx := t.Context()
-		return guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: envelope, Host: "claude-code"})
+		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
 	first := judge()
 	require.Equal(t, "deny", first.Decision, first.Reason)

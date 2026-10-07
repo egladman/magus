@@ -59,9 +59,10 @@ func gradeScopeDrift(ctx context.Context, deps Dependencies, markers hint.Gate, 
 		return scopeDrift{}
 	}
 	// The memoized load, which adviseGeneratedWrite already pays on this same call, so
-	// the graph costs this rule nothing on the write path. It resolves from the process
-	// cwd, so a hook running outside the checkout the host reported would classify the
-	// path against the wrong tree: that case goes silent rather than guessing.
+	// the graph costs this rule nothing on the write path. The hook resolves it from the
+	// process cwd, and a command loaded with --root resolves its loaded root. Either can
+	// differ from the checkout the call names, and classifying the path against the wrong
+	// tree is worse than saying nothing, so that case goes silent.
 	ws, err := deps.inspect(ctx, "")
 	if err != nil || ws == nil || ws.Root() != location.workspace {
 		return scopeDrift{}

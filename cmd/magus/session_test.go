@@ -502,12 +502,31 @@ func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
 	long := `{"event":"command","host":"claude-code","session":"s1","cwd":"/nowhere","command":"` +
 		strings.Repeat("x", loadMaxLineBytes+1) + `"}`
 
-	summary, err := readLoadStream(strings.NewReader(long+"\n\n"+long+"\n"), t.TempDir())
+	summary, err := readLoadStream(strings.NewReader(long+"\n\n"+long+"\n"), t.TempDir(), newRejudge(t.Context(), ""))
 
 	require.NoError(t, err)
 	require.Len(t, summary.Rejects, 2)
 	assert.Contains(t, summary.Rejects[0], "line 1: longer than any event")
 	assert.Contains(t, summary.Rejects[1], "line 3: longer than any event")
+}
+
+// `magus --root A session load` run from inside checkout B rejudges each command by A's
+// shell rules, the workspace whose store it writes.
+func TestRejudgeReadsTheLoadedRootsShellRules(t *testing.T) {
+	loaded := rootElsewhere(t)
+	global = globalFlags{}
+	require.NoError(t, os.WriteFile(filepath.Join(loaded, "magusfile.buzz"), []byte(`import "magus";
+
+magus\guard.shell({"name": "no-frobnicate", "decision": "deny", "program": "frobnicate", "reason": "Not here."});
+`), 0o644))
+
+	_, err := loadStream(t, loaded,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"frobnicate --now"}`)
+	require.NoError(t, err)
+
+	ev := loadedEvent(t, loaded, "s1", 0)
+	assert.Equal(t, "deny", ev.Verdict)
+	assert.Equal(t, "workspace:no-frobnicate", ev.Rule)
 }
 
 func TestCommandProgramReadsThroughAWrapper(t *testing.T) {

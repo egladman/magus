@@ -38,11 +38,12 @@ import (
 // A nil member is a caller that cannot answer, and every rule that needs it falls silent
 // rather than guessing.
 type Dependencies struct {
-	// Inspect opens the workspace at root. An empty root means the one the hook process
-	// runs in, which the caller may answer from a memoized load.
+	// Inspect opens the workspace at root. An empty root means the caller's own: the one
+	// the hook process runs in, or the one a verb loaded with --root, which the caller may
+	// answer from a memoized load.
 	Inspect func(ctx context.Context, root string) (types.WorkspaceRepository, error)
-	// CacheDir resolves a workspace's cache directory. An empty root means the process
-	// cwd's workspace, whose config the caller has already loaded; a named root reads its
+	// CacheDir resolves a workspace's cache directory. An empty root means the caller's
+	// own workspace, whose config the caller has already loaded; a named root reads its
 	// own magus.yaml, because a cache dir configured in the orchestrator's tree says
 	// nothing about where a worker's cache lives.
 	CacheDir func(root string) (string, error)

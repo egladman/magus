@@ -165,18 +165,18 @@ func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeS
 
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index
 // older than the tree, or "" when every built index is current.
-func staleGraphAdvice(ctx context.Context) string {
+func (l guardLookups) staleGraphAdvice(ctx context.Context) string {
 	reason, _ := withinBudget(guardLookupBudget, func() string {
-		if idx := guardIndex(); idx != nil {
+		if idx := l.index(); idx != nil {
 			return idx.Stale()
 		}
 		return ""
 	})
-	advice := renderStaleGraphAdvice(reason, staleIndexes(ctx, ""))
+	advice := renderStaleGraphAdvice(reason, staleIndexes(ctx, l.rootOverride))
 	if advice == "" {
 		return ""
 	}
-	if cause := indexCauseForGuard(); cause != "" {
+	if cause := l.indexCause(); cause != "" {
 		advice += "\n" + cause
 	}
 	return advice
@@ -287,10 +287,10 @@ func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
 	}
 }
 
-// indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
-// within the guard's lookup budget.
-func indexCauseForGuard() string {
-	root, err := guardRoot()
+// indexCause is why the workspace's index is missing or behind, as advisory sentences, or
+// "" when it does not answer within the guard's lookup budget.
+func (l guardLookups) indexCause() string {
+	root, err := guardRoot(l.rootOverride)
 	if err != nil {
 		return ""
 	}

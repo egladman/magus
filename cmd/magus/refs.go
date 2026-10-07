@@ -874,7 +874,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		return refuse(refused...)
 	}
 
-	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws, dryRun)))
+	plan := edit.Resolve(ws.Root(), sites, edit.WithGrade(renameGrade(ctx, ws, root, dryRun)))
 	if refused := plan.Refused(); len(refused) > 0 {
 		return refuse(refused...)
 	}
@@ -953,8 +953,12 @@ func buzzImporters(g *knowledge.Graph) func(file string) []string {
 // lease and claimed-declaration verdicts cannot differ between the two. The edit replaces
 // the whole file, which is what lets the guard place every changed line in its declaration.
 // Under a dry run the guard records nothing, so a preview leaves no trace.
-func renameGrade(ctx context.Context, ws types.WorkspaceRepository, dryRun bool) func(string, []byte, []byte) (string, string) {
-	deps := guardDependencies(ctx)
+//
+// rootOverride is the --root ws was loaded with, as typed: ws.Root() can be another
+// spelling of the same workspace (symlinks resolved), which the memoized load would read
+// as a second one.
+func renameGrade(ctx context.Context, ws types.WorkspaceRepository, rootOverride string, dryRun bool) func(string, []byte, []byte) (string, string) {
+	deps := guardDependencies(ctx, rootOverride)
 	ctx = trail.ContextWithEntryPoint(ctx, types.EntryPointCLI)
 	return func(rel string, before, after []byte) (string, string) {
 		if reason := declaredOutputRefusal(ctx, ws, rel); reason != "" {
