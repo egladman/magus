@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6904
-skill_short_bytes: 5603
+skill_full_bytes: 6896
+skill_short_bytes: 5600
 ---
 
 # magus-architecture-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `93ac63e10aec` |
+| `skill-content` | `63acca31c5a7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -100,7 +100,7 @@ The shapes worth flagging, in rough order of how clearly they are wrong:
 | Single file, single exported symbol | The package name is a second name for one function |
 
 Note the third column that is NOT there: size. Small is not the same as needless.
-Check what a package HIDES before proposing a merge - one exported function over
+Check what a package HIDES before proposing a merge: one exported function over
 four unexported helpers is real encapsulation at any line count, and two importers
 in different trees means merging makes one depend on the other.
 
@@ -145,12 +145,12 @@ magus explain "<node>"               # compare a kind's edges against a neighbor
 
 Confirm each smell against the source before acting on it:
 
-- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+- A SINGLETON kind (one member) is often over-modeled; does it earn a distinct
   kind, or fold into an attr on an existing one?
 - Two kinds with near-identical population AND edge shape may be one concept
   under two names. Keep them distinct only if their PROVENANCE differs (the kind
   doctrine in `types/knowledge.go`).
-- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+- An ORPHAN (nothing links to it) is dead weight or a missing edge; decide
   which.
 - A NODE LABEL that varies by checkout (a worktree name where a stable module
   name belongs) is an identity smell.
@@ -216,7 +216,7 @@ magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(ar
 ```
 
  Affinity deserves special weight: two projects that keep changing
-together WITHOUT a declared dependency edge are coupled through the back door -
+together WITHOUT a declared dependency edge are coupled through the back door:
 either declare the dependency or move the shared concern.
 
 ## Then survey the opposite: what is too thin to justify a boundary
@@ -241,7 +241,7 @@ The shapes worth flagging, in rough order of how clearly they are wrong:
 | Single file, single exported symbol | The package name is a second name for one function |
 
 Note the third column that is NOT there: size. Small is not the same as needless.
-Check what a package HIDES before proposing a merge - one exported function over
+Check what a package HIDES before proposing a merge: one exported function over
 four unexported helpers is real encapsulation at any line count, and two importers
 in different trees means merging makes one depend on the other.
 
@@ -260,9 +260,9 @@ and nothing it exports would need to be exported once merged.
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
    any exported symbol. An empty result states which kind of empty it is:
-   `absent` is verified, `unknown` names the projects with no symbol index - build
+   `absent` is verified, `unknown` names the projects with no symbol index; build
    them with `magus graph build` before trusting it.
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain -
+3. How two things relate: `magus path <a> <b>` gives the shortest edge chain;
    use it to test whether a proposed boundary actually separates them.
 4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
@@ -278,7 +278,7 @@ that shows it.
 
 ## Audit the domain model itself
 
-The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+The graph is also a lens on its OWN abstractions: use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
 stats for smells (see the magus-query skill for the query syntax):
 
@@ -293,13 +293,13 @@ magus explain "<node>"               # compare a kind's edges against a neighbor
 
 Confirm each smell against the source before acting on it:
 
-- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+- A SINGLETON kind (one member) is often over-modeled; does it earn a distinct
   kind, or fold into an attr on an existing one?
 - Two kinds with near-identical population AND edge shape may be one concept
   under two names. Keep them distinct only if their PROVENANCE differs (the kind
   doctrine in `types/knowledge.go`): a kind whose every instance is derivable
   from another kind's attr fails that test and should fold.
-- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+- An ORPHAN (nothing links to it) is dead weight or a missing edge; decide
   which; an undeclared-but-available builtin is neither.
 - A NODE LABEL that varies by checkout (a worktree name where a stable module
   name belongs) is an identity smell, even when the ID is stable.
@@ -322,14 +322,14 @@ wolf teaches people to route around it, taking the real findings with it.
 
 After restructuring, show the impact in graph terms: `magus graph diff --rev
 <base> -o markdown` lists the nodes and edges the change added, removed, or
-altered - blast radius as data, suitable for a PR description. Then run
+altered (blast radius as data, suitable for a PR description). Then run
 `magus affected ci` to prove the affected projects still pass.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool - do not hand-draw diagrams of what the graph already knows.
+browser graph tool; do not hand-draw diagrams of what the graph already knows.
 ````
 
 

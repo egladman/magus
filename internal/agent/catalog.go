@@ -274,7 +274,9 @@ import (
 // magus-buzz-lang points at its built-in methods table in prose rather than an anchor.
 // 109: headings across the skills read in sentence case, as the repo's Markdown rules
 // now require.
-const SkillVersion = 109
+// 110: prose across the skills writes a colon, semicolon, comma or parentheses where it
+// had a spaced hyphen for a dash.
+const SkillVersion = 110
 
 const skillLicense = "GPL-3.0-or-later"
 

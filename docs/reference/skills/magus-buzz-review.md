@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20765
-skill_short_bytes: 15410
+skill_full_bytes: 20712
+skill_short_bytes: 15372
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6a2f773fe75b` |
+| `skill-content` | `e1a6040a7943` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,8 +56,8 @@ magus agent install --tar | tar -xO -f - magus-buzz-review/SKILL.md
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
-spell, or a standalone `.buzz` script - across three lenses run in parallel.
+magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it (a magusfile, a
+spell, or a standalone `.buzz` script) across three lenses run in parallel.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
@@ -71,10 +71,10 @@ Every finding in every lens carries one of three labels, because "this is
 wrong" means a different thing in Buzz depending on which authority backs
 it:
 
-- **UPSTREAM** - true of Buzz itself, wherever it runs.
-- **GOPHERBUZZ** - true only of gopherbuzz, the implementation magus embeds;
+- **UPSTREAM**: true of Buzz itself, wherever it runs.
+- **GOPHERBUZZ**: true only of gopherbuzz, the implementation magus embeds;
   upstream Buzz may not have the construct, or may resolve it differently.
-- **PORTABILITY** - runs fine here, under gopherbuzz, but will not parse or
+- **PORTABILITY**: runs fine here, under gopherbuzz, but will not parse or
   behave the same against upstream Buzz.
 
 Label every finding from Lens 2 and Lens 3. Do not invent a fourth category,
@@ -85,45 +85,45 @@ and do not leave one unlabeled because the answer felt obvious.
  Buzz parses in one of two modes, and most of what Lens 2 and
 Lens 3 check for only applies to one of them:
 
-- **Strict** (upstream parity) - rejects top-level control flow
+- **Strict** (upstream parity): rejects top-level control flow
   (`if`/`while`/`for`/`foreach`/`do-until`/`try`/`throw`/`return`/`break`/`continue`/
   a bare block) outside a function, and requires every call argument after the
   first to be labeled (`name: value`) unless it is a bare identifier. This is
   `magus buzz <file>`'s default.
-- **Embedded** (relaxed) - neither restriction applies. `magus buzz --embedded`
+- **Embedded** (relaxed): neither restriction applies. `magus buzz --embedded`
   opts a script in; a magusfile and a spell are embedded UNCONDITIONALLY, with
   no opt-out.
 
 So: **a magusfile or a spell file is always embedded.** A top-level `if`, a
-top-level `foreach`, an unlabeled second argument - all fine, all idiomatic,
+top-level `foreach`, an unlabeled second argument: all fine, all idiomatic,
 in that file. Applying strict-mode rules to a magusfile is not a strict
 reading, it is a wrong one.
 
 A standalone script has to be judged by how it is actually invoked:
 
-- Runs via a bare `magus buzz <file>` (no `--embedded`) - strict rules apply
+- Runs via a bare `magus buzz <file>` (no `--embedded`): strict rules apply
   for real; a top-level `if` there is a genuine defect.
 - Runs via `magus buzz --embedded <file>`, is invoked from inside another Buzz
   program (`magus\cmd("buzz", ...)`), or its own header comment says which
-  surface it targets - strict rules do not apply.
+  surface it targets: strict rules do not apply.
 Once you have the mode, PROVE the file parses under it rather than reading for
 it: `magus buzz --check <file>` for strict, `--check --embedded` for the other.
 It runs nothing, takes several paths, and reports every diagnostic instead of
 stopping at the first.
 
-- Unclear how it runs - check the CI workflow or wrapper that calls it before
+- Unclear how it runs: check the CI workflow or wrapper that calls it before
   flagging a strict-mode violation.
 
-A conformance-suite fixture - a file whose whole purpose is exercising one
+A conformance-suite fixture, a file whose whole purpose is exercising one
 upstream-vs-gopherbuzz difference (generics, `match`, a bare `as` cast,
-`::<T>`, ...) - is not a defect for using the construct it exists to test.
+`::<T>`, ...), is not a defect for using the construct it exists to test.
 That is the fixture doing its job.
 
 ## Lens: idiom and style
 
 - **Namespace access on an imported module should be a backslash, not a
   dot.** `fs\readFile(...)`, not `fs.readFile(...)`. Authority: PORTABILITY
-  (see Lens 3 for the parse-level reason) and also a plain readability call -
+  (see Lens 3 for the parse-level reason) and also a plain readability call:
   `path\join(a, b)` and `record.join(a, b)` parse to visually identical
   postfix chains, and only the token distinguishes "call into an imported
   module" from "call a method on this value". A stray dot on an import target
@@ -146,7 +146,7 @@ That is the fixture doing its job.
 
 - **`export fun test(...)` is not a naming smell.** `test` is a contextual
   soft keyword rather than a reserved one, specifically so magus's canonical
-  test-target name stays usable. Authority: GOPHERBUZZ - it is the one
+  test-target name stays usable. Authority: GOPHERBUZZ; it is the one
   deliberate place gopherbuzz is a superset of upstream's reserved-word list.
   Do not flag it, and do not suggest renaming it.
 - **A name that fails to parse with a name-shaped error might be a reserved
@@ -154,10 +154,10 @@ That is the fixture doing its job.
   function, or enum case to: `out`, `from`, `match`, `pat`, `fib`, `rg`,
   `obj`, `ud`, `zdef`, `typeof`, `type`, `protocol`, `static`, `extern`,
   `double`, `any`, `Function`, `int`, `str`, `bool`, `void`. Authority:
-  GOPHERBUZZ - this is gopherbuzz's own enforced list, kept for strict parity
+  GOPHERBUZZ; this is gopherbuzz's own enforced list, kept for strict parity
   with upstream's reservations; it is not guaranteed identical to whatever
   upstream itself reserves. They remain fine in non-binding position (a map
-  key, a member name, a type name) - only binding a NAME to one of them fails.
+  key, a member name, a type name); only binding a NAME to one of them fails.
 - **Object literal vs map literal is a common transcription slip from
   JSON-familiar authors.** `Point{ x = 1 }` (object literal, `=`) and
   `{"key": value}` (map literal, `:`) look alike and are not interchangeable.
@@ -165,17 +165,17 @@ That is the fixture doing its job.
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
 - **A magusfile carrying logic that wants a test is a finding.** The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz-lang's "Test what you write".
+  spell or a sibling module; see magus-buzz-lang's "Test what you write".
 
 ## Lens: skeptic and correctness
 
 - **A `magus\Context.needs`-adjacent branch on a diagnostic code that names no
   real code.** The documented idiom for handling a magus failure in Buzz is
-  to catch, then branch on `e["code"]` rather than matching `e["message"]` -
+  to catch, then branch on `e["code"]` rather than matching `e["message"]`:
   a transposed code (`"MSG3003"` for `"MGS3003"`) or a stale one silently
   never matches, and the `catch` block still reads as live error handling
   while being dead code. A code cited only in a comment rots the same way,
-  slower. Authority: GOPHERBUZZ/MAGUS, not upstream - `MGSxxxx` and `BZZxxxx`
+  slower. Authority: GOPHERBUZZ/MAGUS, not upstream: `MGSxxxx` and `BZZxxxx`
   are magus's and gopherbuzz's own diagnostic codes, not a Buzz language
   concept.
 
@@ -186,18 +186,18 @@ That is the fixture doing its job.
   UPSTREAM (the operators and the risk are the same wherever Buzz runs).
 - **A `catch` that discards `e` without inspecting `code` or `message`,
   where the failure can mean more than one thing.** Swallowing every error
-  the same way is how a gate stops being a gate - the same failure mode
+  the same way is how a gate stops being a gate; the same failure mode
   go-review-skeptic flags for a Go `default` case that silently no-ops.
   Authority: UPSTREAM.
 - **A compound assignment (`x op= v`) whose target has a side effect**, e.g.
-  `f().count += 1`. Authority: GOPHERBUZZ - upstream evaluates the target
+  `f().count += 1`. Authority: GOPHERBUZZ; upstream evaluates the target
   ONCE; gopherbuzz evaluates it TWICE, so `f()` runs twice and any side
   effect in it (a mutation, a log line, a counter) happens twice too. This is
-  a real bug under gopherbuzz specifically, not just a portability note - flag
+  a real bug under gopherbuzz specifically, not just a portability note; flag
   it as a defect whenever the target expression is not a bare variable.
 - **A `match` treated as exhaustive, or an `obj{...}`/protocol annotation
   treated as enforced.** gopherbuzz's checker does not enforce match
-  exhaustiveness, protocol conformance, or `obj{...}` shape annotations - they
+  exhaustiveness, protocol conformance, or `obj{...}` shape annotations; they
   are accepted syntax, not verified ones. Authority: GOPHERBUZZ. Manually
   check that a `match` covers every case the matched type admits, the way
   go-review-skeptic manually checks a Go type switch for a missing `default`;
@@ -206,7 +206,7 @@ That is the fixture doing its job.
   "it failed to compile" as proof it is not.** Authority: GOPHERBUZZ.
   gopherbuzz implements a SUBSET of upstream Buzz, so passing today does not
   mean upstream would accept it, and a chunk of upstream's own compile-error
-  fixtures compile clean under gopherbuzz anyway - a clean gopherbuzz compile
+  fixtures compile clean under gopherbuzz anyway; a clean gopherbuzz compile
   is evidence, not verification, in either direction.
 
 ## Lens: upstream conformance
@@ -214,7 +214,7 @@ That is the fixture doing its job.
 - **Namespace access: `\` is the only form upstream recognizes for an
   imported module; `.` is not.** Authority: PORTABILITY. Upstream's own
   parser gives backslash a dedicated production for resolving a name against
-  an import and gives the bare dot no such role at all - it is the general
+  an import and gives the bare dot no such role at all; it is the general
   postfix member operator on VALUES. gopherbuzz's parser accepts both forms
   identically for a module reference, which is a superset, not a mirror:
   `fs\readFile(...)` parses in both; `fs.readFile(...)` parses only here.
@@ -226,39 +226,39 @@ That is the fixture doing its job.
 - **A bare `as` cast coerces in gopherbuzz; upstream statically checks it.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold statically. `as?` is the real type test in
-  both and does not have this gap - prefer it when the intent is "test", not
+  both and does not have this gap; prefer it when the intent is "test", not
   "coerce and hope".
 - **Compound assignment double-evaluates its target in gopherbuzz; upstream
-  evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
+  evaluates it once.** Authority: GOPHERBUZZ. See Lens 2: flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
 - **A declared `!>` error set enforces PRESENCE but not TYPE.**
   Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
   gopherbuzz checks only that a raising call is propagated or caught, never what
   it raises. Calling a `!> str` function from one declaring no raise at all is
-  BZZ1006, "call may raise but is neither declared with !> nor caught" - a real
+  BZZ1006, "call may raise but is neither declared with !> nor caught", a real
   gate, and a common one. But a function declaring `!> int` may throw a `str` through it and
   nothing objects.
   So: do not treat a missing `!>` as proof a call cannot raise, and do not trust
   the NAMED type. Both were measured against gopherbuzz.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
-  built with one, not the builtin `.map()` transform - the field wins. A
+  built with one, not the builtin `.map()` transform; the field wins. A
   field named after a common builtin method name (`map`, `len`, ...) is worth
   a second look for exactly this reason.
 - **A malformed `{...}` inside a backtick-interpolated string is a parse
   error upstream; gopherbuzz leaves it as literal text.** Authority:
   GOPHERBUZZ. A typo inside an interpolation placeholder fails loudly
-  upstream and fails silently (renders the literal braces) here - review a
+  upstream and fails silently (renders the literal braces) here; review a
   backtick string's interpolated parts as carefully as you would review
   regular code, since gopherbuzz will not catch a malformed one for you.
 - **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
-  Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored -
+  Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored:
   it exists for the static checker's benefit, not the VM's. Code that
   branches on a generic type argument at runtime cannot work here regardless
   of what upstream would do with it.
 - **`pat.replace` replaces only the first match; `pat.replaceAll` replaces
-  every match.** Authority: UPSTREAM - gopherbuzz mirrors this faithfully.
+  every match.** Authority: UPSTREAM; gopherbuzz mirrors this faithfully.
   Do not flag it as a bug and do not propose "fixing" `.replace` to replace
   everything; that would be the divergence, not the correction.
 - **`str.replace` replaces every occurrence, matching upstream.** Authority:
@@ -266,11 +266,11 @@ That is the fixture doing its job.
   that was a bug, and it is fixed. Do not teach or flag the old first-only
   behavior as current.
 - **`test "..." {}` is genuine upstream syntax**, present in upstream's own
-  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
+  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention; contrast
   with `test` staying bindable as a name (Lens 1), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream
   counterpart.** Authority: PORTABILITY. They are gopherbuzz's own test
-  surface, not a reimplementation of an upstream module - code that leans on
+  surface, not a reimplementation of an upstream module; code that leans on
   their exact API or semantics has no upstream equivalent to fall back to,
   by design, not by omission.
 
@@ -288,7 +288,7 @@ section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-revi
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode-derived rule.
-Return findings only - file:line, the authority label, what's wrong, severity.
+Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```
 
@@ -298,12 +298,12 @@ scope open-ended.
 
 ## Merging the findings
 
-- **Group by lens.** Keep the three sections separate - they are different
+- **Group by lens.** Keep the three sections separate; they are different
   angles and collapsing them loses which authority backed which finding.
 - **Dedupe by `file:line` within a section only.** The same line flagged by
   two lenses for different reasons (idiom's readability angle and
   conformance's portability angle on the same namespace-access mistake, say)
-  stays as two findings - that is two lenses agreeing, not one lens repeating
+  stays as two findings; that is two lenses agreeing, not one lens repeating
   itself.
 - **Combined severity table** at the end, drawn from all three sections.
   A Lens 2 finding with a real side effect (the compound-assignment
@@ -313,8 +313,8 @@ scope open-ended.
 
 ## What this skill does not do
 
-- Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz-lang.
+- Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what
+  makes an op a service). Use magus-buzz-lang.
 - Write code or apply fixes. Output is a merged findings report.
 - Teach Buzz syntax from scratch. Use magus-buzz-lang for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
@@ -333,8 +333,8 @@ magus agent install --tar | tar -xO -f - magus-buzz-review-full/SKILL.md
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
-spell, or a standalone `.buzz` script - across three lenses run in parallel,
+magus-buzz-lang teaches how to WRITE Buzz. This is for REVIEWING it (a magusfile, a
+spell, or a standalone `.buzz` script) across three lenses run in parallel,
 the same fan-out-and-merge shape go-review-ultra uses for Go.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
@@ -348,12 +348,12 @@ thinks it runs.
 
 Every finding in every lens carries one of three labels, because "this is
 wrong" means a different thing in Buzz depending on which authority backs
-it - and a reader cannot act on an unlabeled finding, only argue about it:
+it, and a reader cannot act on an unlabeled finding, only argue about it:
 
-- **UPSTREAM** - true of Buzz itself, wherever it runs.
-- **GOPHERBUZZ** - true only of gopherbuzz, the implementation magus embeds;
+- **UPSTREAM**: true of Buzz itself, wherever it runs.
+- **GOPHERBUZZ**: true only of gopherbuzz, the implementation magus embeds;
   upstream Buzz may not have the construct, or may resolve it differently.
-- **PORTABILITY** - runs fine here, under gopherbuzz, but will not parse or
+- **PORTABILITY**: runs fine here, under gopherbuzz, but will not parse or
   behave the same against upstream Buzz.
 
 Label every finding from Lens 2 and Lens 3. Do not invent a fourth category,
@@ -366,29 +366,29 @@ produces confident, fluent false positives, because the "violation" really did
 compile and run. Buzz parses in one of two modes, and most of what Lens 2 and
 Lens 3 check for only applies to one of them:
 
-- **Strict** (upstream parity) - rejects top-level control flow
+- **Strict** (upstream parity): rejects top-level control flow
   (`if`/`while`/`for`/`foreach`/`do-until`/`try`/`throw`/`return`/`break`/`continue`/
   a bare block) outside a function, and requires every call argument after the
   first to be labeled (`name: value`) unless it is a bare identifier. This is
   `magus buzz <file>`'s default.
-- **Embedded** (relaxed) - neither restriction applies. `magus buzz --embedded`
+- **Embedded** (relaxed): neither restriction applies. `magus buzz --embedded`
   opts a script in; a magusfile and a spell are embedded UNCONDITIONALLY, with
-  no opt-out - every code path that loads one passes the embedded option before
+  no opt-out; every code path that loads one passes the embedded option before
   the author's own code runs, so there is no author-visible switch to get wrong.
 
 So: **a magusfile or a spell file is always embedded.** A top-level `if`, a
-top-level `foreach`, an unlabeled second argument - all fine, all idiomatic,
+top-level `foreach`, an unlabeled second argument: all fine, all idiomatic,
 in that file. Applying strict-mode rules to a magusfile is not a strict
 reading, it is a wrong one.
 
 A standalone script has to be judged by how it is actually invoked, not by
 guessing from its shape:
 
-- Runs via a bare `magus buzz <file>` (no `--embedded`) - strict rules apply
+- Runs via a bare `magus buzz <file>` (no `--embedded`): strict rules apply
   for real; a top-level `if` there is a genuine defect.
 - Runs via `magus buzz --embedded <file>`, is invoked from inside another Buzz
   program (`magus\cmd("buzz", ...)`), or its own header comment says which
-  surface it targets - strict rules do not apply.
+  surface it targets: strict rules do not apply.
 Once you have the mode, PROVE the file parses under it rather than reading for
 it: `magus buzz --check <file>` for strict, `--check --embedded` for the other.
 It runs nothing, takes several paths, and reports every diagnostic instead of
@@ -397,15 +397,15 @@ diagnostic naming the line or was never there. A file whose job is a side effect
 cannot be checked any other way, since running it exercises one path and says
 nothing about the rest.
 
-- Unclear how it runs - check the CI workflow or wrapper that calls it before
+- Unclear how it runs: check the CI workflow or wrapper that calls it before
   flagging a strict-mode violation. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid
   embedded Buzz, so its contents alone never prove which mode the author
-  wrote it for - only the invocation does.
+  wrote it for; only the invocation does.
 
-A conformance-suite fixture - a file whose whole purpose is exercising one
+A conformance-suite fixture, a file whose whole purpose is exercising one
 upstream-vs-gopherbuzz difference (generics, `match`, a bare `as` cast,
-`::<T>`, ...) - is not a defect for using the construct it exists to test.
+`::<T>`, ...), is not a defect for using the construct it exists to test.
 That is the fixture doing its job.
 
 ## Lens: idiom and style
@@ -414,14 +414,14 @@ What reads as Buzz house style versus what merely parses.
 
 - **Namespace access on an imported module should be a backslash, not a
   dot.** `fs\readFile(...)`, not `fs.readFile(...)`. Authority: PORTABILITY
-  (see Lens 3 for the parse-level reason) and also a plain readability call -
+  (see Lens 3 for the parse-level reason) and also a plain readability call:
   `path\join(a, b)` and `record.join(a, b)` parse to visually identical
   postfix chains, and only the token distinguishes "call into an imported
   module" from "call a method on this value". A stray dot on an import target
   reads as a value method call to anyone who has not memorized which name is
   a module.
   FALSE-POSITIVE GUARD: a local variable, field, or ctx member that happens
-  to share a module's bare name - `path`, `env`, `os` are common ones - uses a
+  to share a module's bare name (`path`, `env`, `os` are common ones) uses a
   dot correctly. `path.endsWith(".buzz")` where `path` is a local `str` is
   ordinary member access, not a namespace-access mistake, even though `path`
   is also an importable module name. Only flag the dot when the receiver is
@@ -440,14 +440,14 @@ What reads as Buzz house style versus what merely parses.
   the selective form `import escapeAttr, slugify from "lib/text";` states exactly
   what enters the scope, which is the part `as _` throws away.
   Note the flat and selective forms are BOTH excluded from
-  unused-import tracking (BZZ3001) - a flat import has no bound name to mark
-  unused - so an `as _` that has stopped being needed will never be reported.
+  unused-import tracking (BZZ3001): a flat import has no bound name to mark
+  unused, so an `as _` that has stopped being needed will never be reported.
   Weigh the finding by blast radius, not by count: a leaf module flat-importing
   one helper is a nit, while a tree where every file flat-imports every other is
   a single structural finding, not one per line.
 - **`export fun test(...)` is not a naming smell.** `test` is a contextual
   soft keyword rather than a reserved one, specifically so magus's canonical
-  test-target name stays usable. Authority: GOPHERBUZZ - it is the one
+  test-target name stays usable. Authority: GOPHERBUZZ; it is the one
   deliberate place gopherbuzz is a superset of upstream's reserved-word list.
   Do not flag it, and do not suggest renaming it.
 - **A name that fails to parse with a name-shaped error might be a reserved
@@ -455,10 +455,10 @@ What reads as Buzz house style versus what merely parses.
   function, or enum case to: `out`, `from`, `match`, `pat`, `fib`, `rg`,
   `obj`, `ud`, `zdef`, `typeof`, `type`, `protocol`, `static`, `extern`,
   `double`, `any`, `Function`, `int`, `str`, `bool`, `void`. Authority:
-  GOPHERBUZZ - this is gopherbuzz's own enforced list, kept for strict parity
+  GOPHERBUZZ; this is gopherbuzz's own enforced list, kept for strict parity
   with upstream's reservations; it is not guaranteed identical to whatever
   upstream itself reserves. They remain fine in non-binding position (a map
-  key, a member name, a type name) - only binding a NAME to one of them fails.
+  key, a member name, a type name); only binding a NAME to one of them fails.
 - **Object literal vs map literal is a common transcription slip from
   JSON-familiar authors.** `Point{ x = 1 }` (object literal, `=`) and
   `{"key": value}` (map literal, `:`) look alike and are not interchangeable.
@@ -468,7 +468,7 @@ What reads as Buzz house style versus what merely parses.
 - **A magusfile carrying logic that wants a test is a finding.** A
   magusfile is declarative configuration; a test of it tests your
   configuration, not your logic. The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz-lang's "Test what you write".
+  spell or a sibling module; see magus-buzz-lang's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -476,28 +476,28 @@ Bugs and silent failures, not style. Read every function assuming it has one.
 
 - **A `magus\Context.needs`-adjacent branch on a diagnostic code that names no
   real code.** The documented idiom for handling a magus failure in Buzz is
-  to catch, then branch on `e["code"]` rather than matching `e["message"]` -
+  to catch, then branch on `e["code"]` rather than matching `e["message"]`:
   a transposed code (`"MSG3003"` for `"MGS3003"`) or a stale one silently
   never matches, and the `catch` block still reads as live error handling
   while being dead code. A code cited only in a comment rots the same way,
-  slower. Authority: GOPHERBUZZ/MAGUS, not upstream - `MGSxxxx` and `BZZxxxx`
+  slower. Authority: GOPHERBUZZ/MAGUS, not upstream: `MGSxxxx` and `BZZxxxx`
   are magus's and gopherbuzz's own diagnostic codes, not a Buzz language
   concept.
   CHECK: any string matching `MGS[0-9]{4}` or `BZZ[0-9]{4}` in a `.buzz`
   file, in code or in a comment, against the documented set: `docs/reference/codes/`
-  (organized by family - auth, charms, knowledge, magusfile, outputref, race,
-  sandbox, services - one page per `MGSxxxx` code) for magus's own codes, and
+  (organized by family: auth, charms, knowledge, magusfile, outputref, race,
+  sandbox, services; one page per `MGSxxxx` code) for magus's own codes, and
   `libs/gopherbuzz/docs/codes/` (flat, one page per `BZZxxxx` code) for
   gopherbuzz's. A code that names no file in either tree is the finding.
-  A code cited as DATA - a fixture or table row that names a real code as an
-  example, rather than comparing against a caught error - is not a defect
+  A code cited as DATA, a fixture or table row that names a real code as an
+  example, rather than comparing against a caught error, is not a defect
   just because it is not itself a comparison; check whether the code exists,
   not whether the surrounding line is a comparison.
   Do not turn this into "type diagnostic codes as an enum": `Arg.Enum` scopes
   itself to a parameter whose values are a closed set, this set is not closed
   (it grows every release across two independently-versioned namespaces), the
   real read site is a map key off a caught error rather than a function
-  parameter, and an enum case an older magus release lacks fails to LOAD -
+  parameter, and an enum case an older magus release lacks fails to LOAD;
   worse than a string that silently never matches. A closed set like a sign
   algorithm name is what `Arg.Enum` is for; a diagnostic code is not that
   shape.
@@ -508,18 +508,18 @@ Bugs and silent failures, not style. Read every function assuming it has one.
   UPSTREAM (the operators and the risk are the same wherever Buzz runs).
 - **A `catch` that discards `e` without inspecting `code` or `message`,
   where the failure can mean more than one thing.** Swallowing every error
-  the same way is how a gate stops being a gate - the same failure mode
+  the same way is how a gate stops being a gate; the same failure mode
   go-review-skeptic flags for a Go `default` case that silently no-ops.
   Authority: UPSTREAM.
 - **A compound assignment (`x op= v`) whose target has a side effect**, e.g.
-  `f().count += 1`. Authority: GOPHERBUZZ - upstream evaluates the target
+  `f().count += 1`. Authority: GOPHERBUZZ; upstream evaluates the target
   ONCE; gopherbuzz evaluates it TWICE, so `f()` runs twice and any side
   effect in it (a mutation, a log line, a counter) happens twice too. This is
-  a real bug under gopherbuzz specifically, not just a portability note - flag
+  a real bug under gopherbuzz specifically, not just a portability note; flag
   it as a defect whenever the target expression is not a bare variable.
 - **A `match` treated as exhaustive, or an `obj{...}`/protocol annotation
   treated as enforced.** gopherbuzz's checker does not enforce match
-  exhaustiveness, protocol conformance, or `obj{...}` shape annotations - they
+  exhaustiveness, protocol conformance, or `obj{...}` shape annotations; they
   are accepted syntax, not verified ones. Authority: GOPHERBUZZ. Manually
   check that a `match` covers every case the matched type admits, the way
   go-review-skeptic manually checks a Go type switch for a missing `default`;
@@ -528,13 +528,13 @@ Bugs and silent failures, not style. Read every function assuming it has one.
   "it failed to compile" as proof it is not.** Authority: GOPHERBUZZ.
   gopherbuzz implements a SUBSET of upstream Buzz, so passing today does not
   mean upstream would accept it, and a chunk of upstream's own compile-error
-  fixtures compile clean under gopherbuzz anyway - a clean gopherbuzz compile
+  fixtures compile clean under gopherbuzz anyway; a clean gopherbuzz compile
   is evidence, not verification, in either direction.
 
 ## Lens: upstream conformance
 
 Named divergences between gopherbuzz and upstream Buzz. Each is a real,
-observed behavior difference, not a hypothetical - use them to judge whether
+observed behavior difference, not a hypothetical; use them to judge whether
 code an author believes is "just Buzz" will actually survive contact with
 upstream, and to stop a gopherbuzz-only behavior from being taught as if it
 were the language.
@@ -542,7 +542,7 @@ were the language.
 - **Namespace access: `\` is the only form upstream recognizes for an
   imported module; `.` is not.** Authority: PORTABILITY. Upstream's own
   parser gives backslash a dedicated production for resolving a name against
-  an import and gives the bare dot no such role at all - it is the general
+  an import and gives the bare dot no such role at all; it is the general
   postfix member operator on VALUES. gopherbuzz's parser accepts both forms
   identically for a module reference, which is a superset, not a mirror:
   `fs\readFile(...)` parses in both; `fs.readFile(...)` parses only here.
@@ -555,22 +555,22 @@ were the language.
   `sub()` and bounding with `len()` was consistent under both models, so it will
   not announce the change; what moves is any index arithmetic that assumed one
   character was one position. Reach for `utf8Len()` only when the question is
-  genuinely "how many characters", which is rarer than it looks - a byte count
+  genuinely "how many characters", which is rarer than it looks; a byte count
   is what a digest, an encoding, or a wire format wants.
 - **A bare `as` cast coerces in gopherbuzz; upstream statically checks it.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
   rejects a cast that cannot hold statically. `as?` is the real type test in
-  both and does not have this gap - prefer it when the intent is "test", not
+  both and does not have this gap; prefer it when the intent is "test", not
   "coerce and hope".
 - **Compound assignment double-evaluates its target in gopherbuzz; upstream
-  evaluates it once.** Authority: GOPHERBUZZ. See Lens 2 - flagged there as a
+  evaluates it once.** Authority: GOPHERBUZZ. See Lens 2: flagged there as a
   correctness bug when the target has a side effect, flagged here as the
   reason it will not misbehave the same way upstream.
 - **A declared `!>` error set enforces PRESENCE but not TYPE.**
   Authority: GOPHERBUZZ. Upstream Buzz treats `!> ErrType` as a real error set;
   gopherbuzz checks only that a raising call is propagated or caught, never what
   it raises. Calling a `!> str` function from one declaring no raise at all is
-  BZZ1006, "call may raise but is neither declared with !> nor caught" - a real
+  BZZ1006, "call may raise but is neither declared with !> nor caught", a real
   gate, and a common one: it is what a script invoked by `magus buzz`
   trips on when it calls something like `fs\listDir` without declaring
   `!>`. But a function declaring `!> int` may throw a `str` through it and
@@ -582,22 +582,22 @@ were the language.
   enforces it", which sent reviewers straight past every BZZ1006-class defect.
 - **An anonymous object field shadows a same-named builtin method.**
   Authority: GOPHERBUZZ. `rec.map` reads the FIELD `map` if the object was
-  built with one, not the builtin `.map()` transform - the field wins. A
+  built with one, not the builtin `.map()` transform; the field wins. A
   field named after a common builtin method name (`map`, `len`, ...) is worth
   a second look for exactly this reason.
 - **A malformed `{...}` inside a backtick-interpolated string is a parse
   error upstream; gopherbuzz leaves it as literal text.** Authority:
   GOPHERBUZZ. A typo inside an interpolation placeholder fails loudly
-  upstream and fails silently (renders the literal braces) here - review a
+  upstream and fails silently (renders the literal braces) here; review a
   backtick string's interpolated parts as carefully as you would review
   regular code, since gopherbuzz will not catch a malformed one for you.
 - **Generics are erased at runtime in gopherbuzz; upstream reifies them.**
-  Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored -
+  Authority: GOPHERBUZZ. A `::<T>` type argument is parsed and then ignored:
   it exists for the static checker's benefit, not the VM's. Code that
   branches on a generic type argument at runtime cannot work here regardless
   of what upstream would do with it.
 - **`pat.replace` replaces only the first match; `pat.replaceAll` replaces
-  every match.** Authority: UPSTREAM - gopherbuzz mirrors this faithfully.
+  every match.** Authority: UPSTREAM; gopherbuzz mirrors this faithfully.
   Do not flag it as a bug and do not propose "fixing" `.replace` to replace
   everything; that would be the divergence, not the correction.
 - **`str.replace` replaces every occurrence, matching upstream.** Authority:
@@ -605,11 +605,11 @@ were the language.
   that was a bug, and it is fixed. Do not teach or flag the old first-only
   behavior as current.
 - **`test "..." {}` is genuine upstream syntax**, present in upstream's own
-  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
+  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention; contrast
   with `test` staying bindable as a name (Lens 1), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream
   counterpart.** Authority: PORTABILITY. They are gopherbuzz's own test
-  surface, not a reimplementation of an upstream module - code that leans on
+  surface, not a reimplementation of an upstream module; code that leans on
   their exact API or semantics has no upstream equivalent to fall back to,
   by design, not by omission.
 
@@ -617,7 +617,7 @@ were the language.
 
 The above applies to reviewing a workspace's magusfile or spells; skip this
 if that is all you are doing. If the change under review touches gopherbuzz
-itself, do not quote a conformance score from a code comment - a comment has
+itself, do not quote a conformance score from a code comment; a comment has
 carried a wrong number before, and a second stale number lived in the test
 file at the same time. The one authoritative count is the line count of the
 checked-in upstream-behavior allowlist the conformance test enforces in both
@@ -639,7 +639,7 @@ section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-revi
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode-derived rule.
-Return findings only - file:line, the authority label, what's wrong, severity.
+Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```
 
@@ -650,12 +650,12 @@ times instead of once.
 
 ## Merging the findings
 
-- **Group by lens.** Keep the three sections separate - they are different
+- **Group by lens.** Keep the three sections separate; they are different
   angles and collapsing them loses which authority backed which finding.
 - **Dedupe by `file:line` within a section only.** The same line flagged by
   two lenses for different reasons (idiom's readability angle and
   conformance's portability angle on the same namespace-access mistake, say)
-  stays as two findings - that is two lenses agreeing, not one lens repeating
+  stays as two findings; that is two lenses agreeing, not one lens repeating
   itself.
 - **Combined severity table** at the end, drawn from all three sections.
   A Lens 2 finding with a real side effect (the compound-assignment
@@ -665,8 +665,8 @@ times instead of once.
 
 ## What this skill does not do
 
-- Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz-lang.
+- Magusfile/target/spell contracts (caching, `ctx.needs`, wards, charms, what
+  makes an op a service). Use magus-buzz-lang.
 - Write code or apply fixes. Output is a merged findings report.
 - Teach Buzz syntax from scratch. Use magus-buzz-lang for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
