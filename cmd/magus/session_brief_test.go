@@ -191,18 +191,38 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 
 	brief := gatherSessionBrief(ctx, root, ws)
 
-	assert.Equal(t, root, brief.Workspace)
-	require.Len(t, brief.Leases, 1)
-	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
-	assert.Equal(t, "hold the boundary", brief.Leases[0].Criteria, "a lease's goal reads as one line here; the rest is `magus describe job`")
-	assert.Equal(t, hint.JobExec.With("f2-guard"), brief.Leases[0].Exec)
-
-	require.Len(t, brief.Failures, 1)
-	assert.Equal(t, "ref-1", brief.Failures[0].Ref)
-	assert.Equal(t, "magus query output ref-1", brief.Failures[0].Inspect)
-
-	assert.Equal(t, []string{filepath.Join("host", "hooks.json")}, brief.GuardWiring)
 	assert.Contains(t, brief.Rules, "AGENTS.md")
+	require.Len(t, brief.Failures, 1)
+	assert.Equal(t, sessionBrief{
+		Workspace: root,
+		// The checkout's own VCS, console, trail and transcript state is not what this test sets up.
+		Branch:        brief.Branch,
+		Revision:      brief.Revision,
+		Unpushed:      brief.Unpushed,
+		Tree:          brief.Tree,
+		Console:       brief.Console,
+		PromptCache:   brief.PromptCache,
+		Feedback:      brief.Feedback,
+		Recent:        brief.Recent,
+		LeasesOmitted: 0,
+		Rules:         brief.Rules, // asserted by name above
+		// A lease's goal reads as one line here; the rest is `magus describe job`.
+		Leases: []briefLease{{
+			ID:         "f2-guard",
+			State:      string(types.StateRunning),
+			Exec:       hint.JobExec.With("f2-guard"),
+			Criteria:   "hold the boundary",
+			Validation: "magus run test internal/ledger",
+		}},
+		Failures: []briefFailure{{
+			Target:  "test",
+			Project: "internal/ledger",
+			Ref:     "ref-1",
+			Inspect: "magus query output ref-1",
+			At:      brief.Failures[0].At,
+		}},
+		GuardWiring: []string{filepath.Join("host", "hooks.json")},
+	}, brief)
 
 	text := brief.Text()
 	assert.Contains(t, text, "magus query output ref-1")

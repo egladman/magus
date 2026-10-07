@@ -482,10 +482,17 @@ func TestAnExchangeCodeRedeemsOnceForItsToken(t *testing.T) {
 
 	secret, tok, err := store.Redeem(code)
 	require.NoError(t, err)
-	assert.Equal(t, types.KindStored, tok.Kind)
-	assert.Equal(t, types.GrantConsole, tok.Grant)
-	assert.Equal(t, rec.Name, tok.Name)
 	assert.WithinDuration(t, time.Now().Add(12*time.Hour), tok.Expires, time.Second)
+	sum := digest(secret)
+	assert.Equal(t, Token{
+		ID:      sum[:8],
+		Name:    rec.Name,
+		Kind:    types.KindStored,
+		SHA256:  sum,
+		Grant:   types.GrantConsole,
+		Created: tok.Created, // the clock at redemption
+		Expires: tok.Expires, // within a second of 12 hours, above
+	}, tok)
 	got, ok := store.Lookup(secret)
 	require.True(t, ok)
 	assert.Equal(t, tok.ID, got.ID)

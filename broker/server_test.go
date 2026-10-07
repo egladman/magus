@@ -109,9 +109,16 @@ func TestClaimGrantReleaseAndStatus(t *testing.T) {
 
 	st, err := c.Status(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, os.Getpid(), st.PID)
-	assert.Equal(t, ProtocolVersion, st.Protocol)
-	assert.Equal(t, "v-test", st.Version)
+	assert.Equal(t, types.StatusBroker{
+		PID:             os.Getpid(),
+		Version:         "v-test",
+		Protocol:        ProtocolVersion,
+		Socket:          st.Socket,
+		Executable:      st.Executable,
+		StartTime:       st.StartTime,
+		Capacity:        st.Capacity, // its holders are asserted below
+		IdleExitSeconds: int(DefaultIdleExit.Seconds()),
+	}, st)
 	require.Len(t, st.Capacity.Holders, 1)
 	h := st.Capacity.Holders[0]
 	assert.Equal(t, os.Getpid(), h.PID, "a claim that names no pid is attributed to the connection")

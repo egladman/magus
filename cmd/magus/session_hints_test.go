@@ -52,17 +52,13 @@ func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
 	}
 
 	explain := rows["query-explain"]
-	assert.Equal(t, 1, explain.Served)
-	assert.Equal(t, 1, explain.Followed)
-	assert.Equal(t, 0, explain.Rejected)
 	assert.InDelta(t, 1.0, explain.Rate, 0.001)
+	assert.Equal(t, hintUptakeRow{ID: "query-explain", Served: 1, Followed: 1, Rate: explain.Rate}, explain)
 
+	// A magus verb that was not the hinted one is a rejection, and the same command ran again
+	// inside the window.
 	path := rows["query-path"]
-	assert.Equal(t, 1, path.Served)
-	assert.Equal(t, 0, path.Followed)
-	assert.Equal(t, 1, path.Rejected, "a magus verb that was not the hinted one is a rejection")
-	assert.Equal(t, 1, path.Reflex, "the same command ran again inside the window")
-	assert.Zero(t, path.Rate)
+	assert.Equal(t, hintUptakeRow{ID: "query-path", Served: 1, Rejected: 1, Reflex: 1}, path)
 }
 
 // The table leads with the best-converting hint, and hintUptake is where that order is

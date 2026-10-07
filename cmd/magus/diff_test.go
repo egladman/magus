@@ -190,15 +190,19 @@ func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 
 	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
 	require.Len(t, files, 2)
-	assert.Equal(t, "core.go", files[0].Path)
-	assert.False(t, files[0].Generated)
-	assert.Equal(t, []string{"12 files reference its widest changed symbol", "in root"}, files[0].Facts)
 	require.Len(t, files[0].Hunks, 2)
-	assert.Equal(t, "@@ -3 +3 @@", files[0].Hunks[0].Header)
-	assert.NotEmpty(t, files[0].Hunks[0].Digest, "the viewed set is keyed by this")
-	// The patch coordinate a comment is anchored by, carried rather than re-derived: dropping
-	// it here would hand the viewer a second hunk numbered zero.
-	assert.Equal(t, 1, files[0].Hunks[1].Index)
+	hunks := files[0].Hunks
+	assert.NotEmpty(t, hunks[0].Digest, "the viewed set is keyed by this")
+	// Index is the patch coordinate a comment is anchored by, carried rather than re-derived:
+	// dropping it here would hand the viewer a second hunk numbered zero.
+	assert.Equal(t, difftui.File{
+		Path:  "core.go",
+		Facts: []string{"12 files reference its widest changed symbol", "in root"},
+		Hunks: []difftui.Hunk{
+			{Index: 0, Header: "@@ -3 +3 @@", Lines: []string{"+func F() {}"}, NewStart: 3, Digest: hunks[0].Digest, Emph: hunks[0].Emph},
+			{Index: 1, Header: "@@ -9 +9 @@", Lines: []string{"+func G() {}"}, NewStart: 9, Digest: hunks[1].Digest, Emph: hunks[1].Emph},
+		},
+	}, files[0])
 
 	assert.Equal(t, "gen/out.json", files[1].Path)
 	assert.True(t, files[1].Generated)
@@ -529,10 +533,10 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 		c := estimateImpactCost(h, affected)
 		require.NotNil(t, c)
 		require.Len(t, c.Projects, 1, "docs declares no ci or test target the history has timed")
-		assert.Equal(t, "root", c.Projects[0].Project)
-		assert.Equal(t, "ci", c.Projects[0].Target)
-		assert.Equal(t, int64(90_000), c.TotalMs)
-		assert.Equal(t, 12, c.Projects[0].Samples)
+		assert.Equal(t, &impactCost{
+			TotalMs:  90_000,
+			Projects: []impactCostProject{{Project: "root", Target: "ci", Ms: 90_000, Samples: 12}},
+		}, c)
 	})
 
 	t.Run("ci outranks test as the estimate of a whole rebuild", func(t *testing.T) {
@@ -560,9 +564,7 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 	affected := []types.ImpactProject{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
 	got := listImpactOwners(own, affected)
-	require.Len(t, got, 1)
-	assert.Equal(t, "root", got[0].Project)
-	assert.Equal(t, "alice", got[0].Primary)
+	assert.Equal(t, []impactOwner{{Project: "root", Primary: "alice", PrimaryShare: 72, Authors: 4}}, got)
 }
 
 // TestImpactReachRendersWhatTheDiffAlreadyKnew guards against the reach section growing its
@@ -1247,18 +1249,16 @@ func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 		t.Fatalf("sections = %+v, want exactly one", sections)
 	}
 	got := sections[0]
-	if got.Name != "echo" {
-		t.Errorf("Name = %q, want %q", got.Name, "echo")
-	}
-	// The driver's base reaches the advisor as the pull request's base, which is the whole
-	// point of advice.buzz's local mode.
-	if got.Body != "main" {
-		t.Errorf("Body = %q, want the base %q", got.Body, "main")
-	}
 	// headSha is supplied rather than left empty; an empty one makes every advisor read
 	// the run as "not a pull request" and say nothing at all.
 	if got.Title == "" {
 		t.Error("Title is empty: the head sha was not supplied to the advisor")
+	}
+	// The driver's base reaches the advisor as the pull request's base, which is the whole
+	// point of advice.buzz's local mode.
+	want := adviceSection{Name: "echo", Title: got.Title, Body: "main"}
+	if got != want {
+		t.Errorf("section = %+v, want %+v", got, want)
 	}
 }
 
@@ -1269,8 +1269,8 @@ func TestCollectAdviceKeepsARetraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
 	}
-	if len(sections) != 1 || sections[0].Name != "quiet" || sections[0].Body != "" {
-		t.Fatalf("sections = %+v, want one empty-bodied \"quiet\" section", sections)
+	if want := []adviceSection{{Name: "quiet", Title: "Nothing to report"}}; !slices.Equal(sections, want) {
+		t.Fatalf("sections = %+v, want one empty-bodied \"quiet\" section %+v", sections, want)
 	}
 }
 
@@ -1607,9 +1607,8 @@ func TestCollectReview(t *testing.T) {
 
 		got := collectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
-		assert.Equal(t, 2, got.Files)
-		assert.Equal(t, 0, got.Read)
-		assert.Len(t, got.Unread, 2)
+		assert.ElementsMatch(t, []string{"a.go", "b.go"}, got.Unread, "the fixture writes its files in map order")
+		assert.Equal(t, &impactReview{Files: 2, Unread: got.Unread}, got)
 	})
 
 	t.Run("acknowledging then re-reading reports it read", func(t *testing.T) {
@@ -1636,11 +1635,9 @@ func TestCollectReview(t *testing.T) {
 
 		got := collectReview(attach(t, root, cache, rev), nil, nil)
 		require.NotNil(t, got)
-		assert.Equal(t, 0, got.Read)
 		// Stale is its own list, not an annotated entry in the unopened one: it is a
 		// different finding and it leads the section.
-		assert.Equal(t, []string{"a.go"}, got.Stale)
-		assert.Empty(t, got.Unread)
+		assert.Equal(t, &impactReview{Files: 1, Stale: []string{"a.go"}}, got)
 	})
 
 	// Reading a machine's restatement of an edit made elsewhere is not the review, which is
@@ -2052,30 +2049,25 @@ func TestDiffSourceFromFlags(t *testing.T) {
 	t.Run("nothing named reads the working tree", func(t *testing.T) {
 		in, err := diffSourceFromFlags(&gen.DiffFlags{})
 		require.NoError(t, err)
-		assert.Equal(t, inputWorkingTree, in.kind)
-		assert.Equal(t, "the working tree", in.label)
+		assert.Equal(t, diffInput{kind: inputWorkingTree, label: "the working tree"}, in)
 	})
 
 	t.Run("--patch - reads stdin", func(t *testing.T) {
 		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "-"})
 		require.NoError(t, err)
-		assert.Equal(t, inputStdin, in.kind)
+		assert.Equal(t, diffInput{kind: inputStdin, label: "a patch on stdin"}, in)
 	})
 
 	t.Run("--patch names a file", func(t *testing.T) {
 		in, err := diffSourceFromFlags(&gen.DiffFlags{Patch: "change.patch"})
 		require.NoError(t, err)
-		assert.Equal(t, inputFile, in.kind)
-		assert.Equal(t, "change.patch", in.path)
-		assert.Contains(t, in.label, "change.patch")
+		assert.Equal(t, diffInput{kind: inputFile, path: "change.patch", label: "the patch in change.patch"}, in)
 	})
 
 	t.Run("--rev reads a range", func(t *testing.T) {
 		in, err := diffSourceFromFlags(&gen.DiffFlags{Rev: "main...topic"})
 		require.NoError(t, err)
-		assert.Equal(t, inputRevRange, in.kind)
-		assert.Equal(t, "main", in.base)
-		assert.Equal(t, "topic", in.head)
+		assert.Equal(t, diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}, in)
 	})
 
 	t.Run("two sources are refused rather than ranked", func(t *testing.T) {
@@ -2407,8 +2399,13 @@ func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
 
 	hits := notes.AnchorHits(res, nil, []string{changed})
 
-	require.Len(t, hits, 1)
-	assert.Equal(t, notes.MatchSymbol, hits[0].Match)
-	assert.Equal(t, changed, hits[0].Matched)
-	assert.Equal(t, key, hits[0].Target, "the rendered anchor stays the one the author wrote")
+	// Target stays the one the author wrote, not the graph's spelling.
+	assert.Equal(t, []notes.AnchorHit{{
+		Note:    "put-is-not-idempotent",
+		Pos:     0,
+		Kind:    notes.AnchorSymbol,
+		Target:  key,
+		Matched: changed,
+		Match:   notes.MatchSymbol,
+	}}, hits)
 }

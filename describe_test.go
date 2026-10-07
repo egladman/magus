@@ -205,21 +205,23 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 		}
 	}
 	require.NotNil(t, got, "registered spell missing from inventory")
-	assert.Equal(t, "magus/spell/"+name, got.BuzzImport)
-	assert.Equal(t, []string{"**/*.demo"}, got.Sources)
-	assert.Equal(t, []string{"out/**"}, got.Outputs)
-	assert.Equal(t, []string{"build", "check", "dynamic"}, got.Targets)
-	assert.Equal(t, "demo", got.Language)
-	assert.True(t, got.Opaque)
-	assert.True(t, got.VersionProbe)
-	assert.Equal(t, map[string]string{"build": "Build the demo."}, got.TargetDocs)
-	assert.Equal(t, map[string][]string{
-		"build": {"democ", "build"},
-		"check": {"democ", "check"},
-	}, got.OpCommands, "dynamic operations must not pretend to have static argv")
-	assert.Equal(t, []types.SpellToolchain{
-		{Command: "democ", Operations: []string{"build", "check"}},
-	}, got.Toolchains)
+	// The dynamic operation must not pretend to have a static argv, and the language record's file
+	// extensions and syntax are not something this test sets.
+	assert.Equal(t, types.Spell{
+		Name:         name,
+		BuzzImport:   "magus/spell/" + name,
+		Sources:      []string{"**/*.demo"},
+		Outputs:      []string{"out/**"},
+		Targets:      []string{"build", "check", "dynamic"},
+		Opaque:       true,
+		Language:     "demo",
+		Extensions:   got.Extensions,
+		Syntax:       got.Syntax,
+		VersionProbe: true,
+		TargetDocs:   map[string]string{"build": "Build the demo."},
+		OpCommands:   map[string][]string{"build": {"democ", "build"}, "check": {"democ", "check"}},
+		Toolchains:   []types.SpellToolchain{{Command: "democ", Operations: []string{"build", "check"}}},
+	}, *got)
 }
 
 func TestListTargets_CanonicalCIFirst(t *testing.T) {
@@ -237,8 +239,8 @@ func TestListTargets_CanonicalCIFirst(t *testing.T) {
 	require.NoError(t, err, "ListTargets")
 
 	require.NotEmpty(t, out, "ListTargets: no targets")
-	assert.Equal(t, "ci", out[0].Name, "ListTargets: first entry")
-	assert.Equal(t, "canonical", out[0].Kind, "ListTargets: ci.Kind")
+	assert.Equal(t, types.TargetEntry{Name: "ci", Kind: "canonical", Spells: out[0].Spells, Projects: out[0].Projects},
+		out[0], "ListTargets: ci leads, as the canonical target")
 
 	byName := make(map[string]types.TargetEntry, len(out))
 	for _, e := range out {
@@ -313,9 +315,10 @@ func TestListCharms_InverseIndex(t *testing.T) {
 		assert.Falsef(t, e.Builtin, "ListCharms: %q.Builtin should be false", name)
 		require.Lenf(t, e.Declarations, 1, "ListCharms: %q declarations", name)
 		d := e.Declarations[0]
-		assert.Equal(t, ".", d.Project, "declaration project")
-		assert.Equal(t, "lint", d.Target, "declaration target")
-		assert.Equal(t, spellName, d.Spell, "declaration spell")
+		assert.Equal(t, types.CharmDeclaration{
+			Project: ".", Target: "lint", Spell: spellName,
+			Before: d.Before, After: d.After, // the argv the charm patches, which this spell does not declare
+		}, d, "declaration")
 	}
 
 	// The workspace default is flagged; a non-default charm is not.
@@ -365,8 +368,12 @@ func TestListProjects_Inventory(t *testing.T) {
 
 	assert.NotEmpty(t, out.Definition, "ListProjects: Definition is empty")
 	wantPaths := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Equal(t, len(wantPaths), out.Count, "ListProjects: Count")
-	assert.Equal(t, ws.Root(), out.Workspace, "ListProjects: Workspace")
+	assert.Equal(t, types.ProjectsOutput{
+		Definition: out.Definition,
+		Workspace:  ws.Root(),
+		Count:      len(wantPaths),
+		Projects:   out.Projects, // each wanted path is checked below
+	}, out, "ListProjects: Count and Workspace")
 	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
 	for _, e := range out.Projects {
 		byPath[e.Path] = e
@@ -473,10 +480,22 @@ func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 		byPath[e.Path] = e
 	}
 
-	assert.Equal(t, []string{"package.json"}, byPath["apps/member"].Manifests,
-		"the manifest is still the bare name beside the project")
-	assert.Equal(t, []string{"pnpm-lock.yaml"}, byPath["apps/member"].Lockfiles,
-		"a hoisted lockfile must be found by walking up, and reported workspace-relative")
+	// The manifest is still the bare name beside the project, and a hoisted lockfile must be found
+	// by walking up, and reported workspace-relative.
+	member := byPath["apps/member"]
+	assert.Equal(t, types.ProjectEntry{
+		Path:      "apps/member",
+		Name:      member.Name,
+		Origin:    member.Origin,
+		Dir:       member.Dir,
+		Spell:     member.Spell,
+		Spells:    member.Spells,
+		Sources:   member.Sources,
+		Outputs:   member.Outputs,
+		DependsOn: member.DependsOn,
+		Manifests: []string{"package.json"},
+		Lockfiles: []string{"pnpm-lock.yaml"},
+	}, member)
 	assert.Equal(t, []string{"solo/yarn.lock"}, byPath["solo"].Lockfiles,
 		"the nearest lockfile wins over a root one, whatever the candidate order says")
 }
@@ -553,8 +572,12 @@ func TestEvaluateTarget_SingleProject(t *testing.T) {
 	require.NoError(t, err, "EvaluateTarget")
 	require.Len(t, out, 1, "EvaluateTarget: one entry")
 	e := out[0]
-	assert.Equal(t, "api", e.Project, "EvaluateTarget: Project")
-	assert.Equal(t, "test", e.Target, "EvaluateTarget: Target")
+	assert.Equal(t, types.EvaluatedTarget{
+		Project: "api", Target: "test",
+		// What the target resolves to is the fixture's own: only the project and target are the request's.
+		Dir: e.Dir, Sources: e.Sources, Outputs: e.Outputs, Chain: e.Chain, BeforeKey: e.BeforeKey,
+		DependsOn: e.DependsOn, Charms: e.Charms, Spells: e.Spells, Policy: e.Policy,
+	}, e, "EvaluateTarget: Project and Target")
 }
 
 func TestEvaluateTarget_UnknownProject(t *testing.T) {
@@ -605,8 +628,12 @@ func TestEvaluateProjects_Shape(t *testing.T) {
 
 	assert.NotEmpty(t, out.Definition, "EvaluateProjects: Definition is empty")
 	wantPaths := []string{".", "api", "extensions/drape", "extensions/lattice", "web/studio"}
-	assert.Equal(t, len(wantPaths), out.Count, "EvaluateProjects: Count")
-	assert.Equal(t, ws.Root(), out.Workspace, "EvaluateProjects: Workspace")
+	assert.Equal(t, types.EvaluatedProjectsOutput{
+		Definition: out.Definition,
+		Workspace:  ws.Root(),
+		Count:      len(wantPaths),
+		Projects:   out.Projects, // each wanted path is checked below
+	}, out, "EvaluateProjects: Count and Workspace")
 	byPath := make(map[string]types.EvaluatedProject, len(out.Projects))
 	for _, e := range out.Projects {
 		byPath[e.Path] = e
@@ -705,36 +732,37 @@ func TestClassifyFiles_Classification(t *testing.T) {
 		byPath[f.Path] = f
 	}
 
+	// The claims, the hint's wording and the rest of an entry's facts are the classifier's own;
+	// each entry below states the path, owner, role and the projects that claim it.
+	entry := func(path, project, role string, outputOf, sourceOf []string) types.FileEntry {
+		got := byPath[path]
+		return types.FileEntry{
+			Path: path, Project: project, Role: role, OutputOf: outputOf, SourceOf: sourceOf,
+			Claims: got.Claims, DependsOn: got.DependsOn, Focus: got.Focus, Hint: got.Hint, Exists: got.Exists,
+		}
+	}
+
 	gen := byPath["GEN.md"]
-	assert.Equal(t, ".", gen.Project)
-	assert.Equal(t, "output", gen.Role)
-	assert.Equal(t, []string{"."}, gen.OutputOf)
+	assert.Equal(t, entry("GEN.md", ".", "output", []string{"."}, nil), gen)
 	assert.Contains(t, gen.Hint, "generated")
 
-	assert.Equal(t, "source", byPath["docs/guide.md"].Role)
-	assert.Equal(t, []string{"."}, byPath["docs/guide.md"].SourceOf)
+	assert.Equal(t, entry("docs/guide.md", ".", "source", nil, []string{"."}), byPath["docs/guide.md"])
 
 	// Nested project claims ownership and the output role.
-	dist := byPath["web/dist/app.js"]
-	assert.Equal(t, "web", dist.Project)
-	assert.Equal(t, "output", dist.Role)
-	assert.Equal(t, []string{"web"}, dist.OutputOf)
+	assert.Equal(t, entry("web/dist/app.js", "web", "output", []string{"web"}, nil), byPath["web/dist/app.js"])
 
-	assert.Equal(t, "source", byPath["web/app.ts"].Role)
-	assert.Equal(t, []string{"web"}, byPath["web/app.ts"].SourceOf)
+	assert.Equal(t, entry("web/app.ts", "web", "source", nil, []string{"web"}), byPath["web/app.ts"])
 
 	unclaimed := byPath["scratch.tmp"]
-	assert.Equal(t, "unclaimed", unclaimed.Role)
-	assert.Empty(t, unclaimed.OutputOf)
+	assert.Equal(t, entry("scratch.tmp", ".", "unclaimed", nil, nil), unclaimed)
 	assert.Contains(t, unclaimed.Hint, "no project declares")
 
 	// magus maintains .gitattributes outside every target's globs, so it matches no
 	// declared glob and would otherwise land in unclaimed beside scratch.tmp, with a
-	// hint telling you to consider ignoring a file magus wrote and needs tracked.
+	// hint telling you to consider ignoring a file magus wrote and needs tracked. It is
+	// not a declared output and it keys nothing.
 	maintained := byPath[".gitattributes"]
-	assert.Equal(t, "maintained", maintained.Role)
-	assert.Empty(t, maintained.OutputOf, "maintained is not a declared output")
-	assert.Empty(t, maintained.SourceOf, "maintained keys nothing")
+	assert.Equal(t, entry(".gitattributes", ".", "maintained", nil, nil), maintained)
 	assert.Contains(t, maintained.Hint, "expects it committed")
 	assert.NotContains(t, maintained.Hint, "ignore rules",
 		"the unclaimed hint's ignore-rules advice must not reach a file magus maintains")
@@ -856,8 +884,10 @@ func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 	out, err := ws.ClassifyFiles(context.Background(), []string{".gitattributes"})
 	require.NoError(t, err, "ClassifyFiles")
 	require.Len(t, out, 1)
-	assert.Equal(t, "source", out[0].Role)
-	assert.Equal(t, []string{"."}, out[0].SourceOf)
+	assert.Equal(t, types.FileEntry{
+		Path: ".gitattributes", Project: ".", Role: "source", SourceOf: []string{"."},
+		Claims: out[0].Claims, DependsOn: out[0].DependsOn, Focus: out[0].Focus, Hint: out[0].Hint, Exists: out[0].Exists,
+	}, out[0])
 }
 
 // TestInspectorMethods_HonorCancelledContext pins that a context cancelled BEFORE
@@ -1458,12 +1488,14 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := byPath[tc.path]
-			assert.Equal(t, tc.claims, got.Claims, "claims")
-			assert.Equal(t, tc.dependsOn, got.DependsOn, "depends_on")
-			assert.Equal(t, tc.role, got.Role, "role")
 			if tc.hint != "" {
 				assert.Contains(t, got.Hint, tc.hint, "hint")
 			}
+			// The owner, the project-level summaries and the file's presence are not what a case pins.
+			assert.Equal(t, types.FileEntry{
+				Path: tc.path, Project: got.Project, Role: tc.role, OutputOf: got.OutputOf, SourceOf: got.SourceOf,
+				Claims: tc.claims, DependsOn: tc.dependsOn, Focus: got.Focus, Hint: got.Hint, Exists: got.Exists,
+			}, got, "claims, depends_on and role")
 		})
 	}
 
@@ -1622,13 +1654,17 @@ func TestResolveNodeRefs(t *testing.T) {
 
 	resolveNodeRefs(nodes, "web")
 
-	assert.Equal(t, []types.CrossTargetRef{{Project: "lib", Target: "build"}}, nodes[0].CrossDependencies)
-	assert.Equal(t, []types.ChainStep{{Project: "lib", Target: "build"}}, nodes[0].Chain)
-	assert.Equal(t, []types.InputRef{
-		{Project: "web", Glob: "src/**"},
-		{Project: "lib", Glob: "gen/**"},
-	}, nodes[0].ReadsFiles,
-		"a same-project input takes the declaring project's path so a consumer can join Project and Glob")
+	assert.Equal(t, []types.TargetGraphNode{{
+		Name:              "build",
+		CrossDependencies: []types.CrossTargetRef{{Project: "lib", Target: "build"}},
+		Chain:             []types.ChainStep{{Project: "lib", Target: "build"}},
+		// A same-project input takes the declaring project's path so a consumer can join Project
+		// and Glob.
+		ReadsFiles: []types.InputRef{
+			{Project: "web", Glob: "src/**"},
+			{Project: "lib", Glob: "gen/**"},
+		},
+	}}, nodes)
 }
 
 func TestResolveNodeRefsLeavesAnEmptyNodeAlone(t *testing.T) {

@@ -582,8 +582,12 @@ func TestQueueApplyFromARunThatPlannedNothingMergesNothing(t *testing.T) {
 	require.NoError(t, err)
 	evs := queueEvents(t, out)
 	require.Len(t, evs, 1)
-	assert.Equal(t, queue.EventNotice, evs[0].Kind)
-	assert.Equal(t, "run acme/widgets/runs/7 completed without a plan; nothing to apply", evs[0].Reason)
+	assert.Equal(t, queue.Event{
+		Schema: queue.SchemaEvent,
+		Time:   evs[0].Time, // stamped when emitted
+		Kind:   queue.EventNotice,
+		Reason: "run acme/widgets/runs/7 completed without a plan; nothing to apply",
+	}, evs[0])
 }
 
 // A provider that cannot list artifacts is refused before anything is read, rather than

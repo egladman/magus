@@ -471,12 +471,23 @@ func TestAttentionSourceLabelsTheProducer(t *testing.T) {
 	queue := sessions.AttentionQueue(fold)
 	require.Len(t, queue, 1)
 
-	assert.Equal(t, "agent/claude", queue[0].Source)
-	assert.Equal(t, sessions.RequestID(ev.Source.ID, sessions.AttentionOpen{
-		Source:  sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
-		Where:   attentionWhere(ev.Where),
-		Message: ev.Message,
-	}), queue[0].ID)
+	got := queue[0]
+	assert.Equal(t, sessions.AttentionRequest{
+		ID: sessions.RequestID(ev.Source.ID, sessions.AttentionOpen{
+			Source:  sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
+			Where:   attentionWhere(ev.Where),
+			Message: ev.Message,
+		}),
+		Invocation: got.Invocation, // minted by the hook invocation and its clock
+		OpenedMs:   got.OpenedMs,
+		Outcome:    string(ev.Outcome),
+		Severity:   string(ev.Severity),
+		Source:     "agent/claude",
+		Where:      attentionWhere(ev.Where),
+		Lease:      got.Lease, // answered by the checkout and the environment
+		LeaseFrom:  got.LeaseFrom,
+		Message:    ev.Message,
+	}, got)
 }
 
 // -q asks a question rather than printing an answer, so the exit status IS the answer:

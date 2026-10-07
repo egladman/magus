@@ -27,8 +27,7 @@ func TestLimiterSnapshot(t *testing.T) {
 	_ = l.Acquire(context.Background())
 	_ = l.Acquire(context.Background())
 	snap := l.Snapshot()
-	assert.Equal(t, 3, snap.Capacity)
-	assert.Equal(t, 2, snap.Running, "after 2 acquires")
+	assert.Equal(t, LimiterStats{Capacity: 3, Running: 2}, snap, "after 2 acquires")
 
 	l.Release()
 	assert.Equal(t, 1, l.Snapshot().Running, "after release")
@@ -41,8 +40,7 @@ func TestLimiterUnlimited(t *testing.T) {
 		require.NoError(t, l.Acquire(context.Background()))
 	}
 	snap := l.Snapshot()
-	assert.Equal(t, 0, snap.Capacity, "unlimited capacity")
-	assert.Equal(t, 0, snap.Running, "unlimited running")
+	assert.Equal(t, LimiterStats{}, snap, "an unlimited limiter reports no capacity and counts nothing running")
 }
 
 func TestLimiterCancelledAcquire(t *testing.T) {

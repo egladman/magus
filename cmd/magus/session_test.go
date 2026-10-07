@@ -398,11 +398,18 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	denied := loadedEvent(t, root, "s1", 0)
-	assert.Equal(t, "deny", denied.Verdict)
 	// "raw-tool" is the wire value the guard reports; denyRuleRawTool is unexported to
 	// internal/guard now, so this package asserts the string.
-	assert.Equal(t, "raw-tool", denied.Rule)
-	assert.Equal(t, "go", denied.Program)
+	assert.Equal(t, sessions.AgentEvent{
+		Host:    "h1",
+		Kind:    sessions.EventShellCommand,
+		Ref:     "r1",
+		AtMs:    1,
+		Program: "go",
+		Verdict: "deny",
+		Rule:    "raw-tool",
+		Digest:  denied.Digest, // pinned as a 64-character hash by the test above
+	}, denied)
 
 	plain := loadedEvent(t, root, "s1", 1)
 	assert.Equal(t, "pass", plain.Verdict)
@@ -525,8 +532,16 @@ magus\guard.shell({"name": "no-frobnicate", "decision": "deny", "program": "frob
 	require.NoError(t, err)
 
 	ev := loadedEvent(t, loaded, "s1", 0)
-	assert.Equal(t, "deny", ev.Verdict)
-	assert.Equal(t, "workspace:no-frobnicate", ev.Rule)
+	assert.Equal(t, sessions.AgentEvent{
+		Host:    "h1",
+		Kind:    sessions.EventShellCommand,
+		Ref:     "r1",
+		AtMs:    1,
+		Program: "frobnicate",
+		Verdict: "deny",
+		Rule:    "workspace:no-frobnicate",
+		Digest:  ev.Digest, // the hash of a command nobody may read
+	}, ev)
 }
 
 func TestCommandProgramReadsThroughAWrapper(t *testing.T) {

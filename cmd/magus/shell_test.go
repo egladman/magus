@@ -331,6 +331,28 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 	assert.Equal(t, "pass\n", out.String())
 }
 
+// hookCommandEvent is the trail event a shell hook is expected to append for one command or
+// path: everything the hook sets, with the clock, the content-addressed blobs and the verdict's
+// provenance, which other tests pin, taken from got so a new field still has to match.
+func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin, action, preview string) trail.Event {
+	return trail.Event{
+		Ts:            got.Ts,
+		Kind:          trail.KindAgentCommand,
+		Origin:        trail.StampOrigin(ctx, origin),
+		Workspace:     "/repo/magus",
+		Action:        action,
+		Outcome:       trail.OutcomeOK,
+		RequestRef:    got.RequestRef,
+		ResponseRef:   got.ResponseRef,
+		RequestBytes:  got.RequestBytes,
+		ResponseBytes: got.ResponseBytes,
+		Preview:       preview,
+		VerdictRef:    got.VerdictRef,
+		PolicyDigest:  got.PolicyDigest,
+		DecidedBy:     got.DecidedBy,
+	}
+}
+
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
@@ -348,11 +370,8 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, types.EntryPointHook, got.EntryPoint, "a piped call is the hook's")
-	assert.Equal(t, "/repo/magus", got.Workspace)
-	assert.Equal(t, "shell.command", got.Action)
-	assert.Equal(t, "guard: deny", got.Preview)
+	// A piped call is the hook's.
+	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "shell.command", "guard: deny"), got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
@@ -377,10 +396,7 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Equal(t, trail.KindAgentCommand, got.Kind)
-	assert.Equal(t, types.EntryPointHook, got.EntryPoint)
-	assert.Equal(t, "file.write", got.Action)
-	assert.Equal(t, "guard: advise", got.Preview)
+	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.write", "guard: advise"), got)
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"path":"AGENTS.md","tool":"file.write"}`, string(body))
@@ -480,12 +496,11 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Equal(t, "file.read", got.Action, "a reach is recorded under its own label, not as a write")
-
-	// "observed", not "guard: pass". The trail already distinguishes the two, and recording
-	// a verdict here would have every read claim the guard ran and cleared it: the exact
-	// conflation --observe exists to remove. The wire verdict the host reads is still pass.
-	assert.Equal(t, "observed", got.Preview)
+	// A reach is recorded under its own label, not as a write. Its preview is "observed", not
+	// "guard: pass". The trail already distinguishes the two, and recording a verdict here
+	// would have every read claim the guard ran and cleared it: the exact conflation --observe
+	// exists to remove. The wire verdict the host reads is still pass.
+	assert.Equal(t, hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook}, "file.read", "observed"), got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
@@ -556,8 +571,9 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Equal(t, "file.read", got.Action)
-	assert.Equal(t, "s9", got.Session)
+	assert.Equal(t,
+		hookCommandEvent(ctx, got, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "s9"}, "file.read", "observed"),
+		got)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
@@ -652,9 +668,17 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	events, err := trail.ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
-	assert.Equal(t, "agent.spawn", events[0].Action)
-	assert.Empty(t, events[0].Lease)
+	// No marker, so the spawn is uncorrelated: no lease.
+	assert.Equal(t, trail.Event{
+		Ts:           events[0].Ts,
+		Kind:         trail.KindAgentSpawn,
+		Origin:       trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook}),
+		Workspace:    "/repo/magus",
+		Action:       "agent.spawn",
+		Outcome:      trail.OutcomeOK,
+		RequestRef:   events[0].RequestRef,
+		RequestBytes: events[0].RequestBytes,
+	}, events[0])
 
 	body, err := trail.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)
@@ -1659,8 +1683,16 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	globalCfg.RequiredVersion = ">= 99.0.0"
 
 	v := judgeSpawnAt(t, root)
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, "Name a model.", v.Reason)
+	assert.Equal(t, guard.Verdict{
+		SchemaVersion:  v.SchemaVersion,
+		Decision:       "deny",
+		Reason:         "Name a model.",
+		Rule:           v.Rule, // the rule's catalogued name is pinned by the guard's own tests
+		Lease:          v.Lease,
+		LeaseFrom:      v.LeaseFrom,
+		Next:           v.Next,
+		UpdatedCommand: v.UpdatedCommand,
+	}, v)
 }
 
 // A root magusfile that does not load is a load failure, not a workspace with no rules,
@@ -1680,9 +1712,17 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
 	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "Not in this repository.")
-	assert.Equal(t, "workspace:command", v.Rule)
+	assert.Equal(t, guard.Verdict{
+		SchemaVersion:  v.SchemaVersion,
+		Decision:       "deny",
+		Reason:         v.Reason, // checked above
+		Rule:           "workspace:command",
+		Lease:          v.Lease,
+		LeaseFrom:      v.LeaseFrom,
+		Next:           v.Next,
+		UpdatedCommand: v.UpdatedCommand,
+	}, v)
 }
 
 // The working tree may point its magusfile at another policy file and loosen the one the

@@ -41,13 +41,22 @@ func TestBenchFixtureExtraction(t *testing.T) {
 		}
 	})
 	t.Run("tool and read accounting", func(t *testing.T) {
-		if fullA1.Turns != 4 || fullA1.ToolCalls != 8 || fullA1.FileReads != 4 || fullA1.DistinctFilesRead != 4 ||
-			fullA1.ReReadRate != 0.0 || fullA1.ToolResultBytes != 4000 ||
-			!reflect.DeepEqual(fullA1.ToolCallsByName, map[string]int64{"Bash": 4, "Read": 4}) {
-			t.Errorf("got %+v", *fullA1)
+		want := *fullA1 // identity, pricing, guard and timing fields are pinned by the subtests around this one
+		want.Turns, want.ToolCalls = 4, 8
+		want.FileReads, want.DistinctFilesRead = 4, 4
+		want.ReReadRate, want.ToolResultBytes = 0.0, 4000
+		want.ToolCallsByName = map[string]int64{"Bash": 4, "Read": 4}
+		if !reflect.DeepEqual(*fullA1, want) {
+			t.Errorf("got %+v, want %+v", *fullA1, want)
 		}
-		if rampantA1.FileReads != 7 || rampantA1.DistinctFilesRead != 3 || !almost(rampantA1.ReReadRate, 4.0/7.0, 7) {
-			t.Errorf("re-read: %+v", *rampantA1)
+		wantRampant := *rampantA1
+		wantRampant.FileReads, wantRampant.DistinctFilesRead = 7, 3
+		if !almost(rampantA1.ReReadRate, 4.0/7.0, 7) {
+			t.Errorf("re-read rate = %v, want %v", rampantA1.ReReadRate, 4.0/7.0)
+		}
+		wantRampant.ReReadRate = rampantA1.ReReadRate // compared within a tolerance above
+		if !reflect.DeepEqual(*rampantA1, wantRampant) {
+			t.Errorf("re-read: got %+v, want %+v", *rampantA1, wantRampant)
 		}
 	})
 	t.Run("guard events present and zero differ from absent", func(t *testing.T) {
@@ -83,8 +92,11 @@ func TestBenchFixtureExtraction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if r.Scored.Success != nil || r.Scored.CheckExit != nil {
-			t.Errorf("got success=%v check=%v", r.Scored.Success, r.Scored.CheckExit)
+		// The same run with its verdict removed: only Success and CheckExit may differ.
+		want := *scoredRecord(t, byID, "full", "task-a", 2)
+		want.Success, want.CheckExit = nil, nil
+		if !reflect.DeepEqual(*r.Scored, want) {
+			t.Errorf("got %+v, want %+v", *r.Scored, want)
 		}
 	})
 	t.Run("deleted test file is an invariant violation", func(t *testing.T) {
@@ -240,8 +252,9 @@ func TestBenchTranscriptDefects(t *testing.T) {
 			map[string]any{"type": "assistant", "message": map[string]any{"id": "m2", "usage": usage, "content": []any{}}},
 			map[string]any{"type": "result", "subtype": "success", "usage": map[string]any{"input_tokens": 20, "output_tokens": 900, "cache_read_input_tokens": 200}})
 		r := d.mustScore()
-		if r.Tokens.Output != 900 || r.Tokens.Input != 20 || r.Tokens.CacheRead != 200 {
-			t.Errorf("tokens = %+v; input and cache still come from the turns", r.Tokens)
+		want := TokenCounts{Input: 20, Output: 900, CacheRead: 200, TotalBilled: 1120}
+		if r.Tokens != want {
+			t.Errorf("tokens = %+v, want %+v; input and cache still come from the turns", r.Tokens, want)
 		}
 	})
 	// The host's total_cost_usd is its own client-side estimate, priced from a

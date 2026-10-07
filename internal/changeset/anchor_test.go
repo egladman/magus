@@ -25,10 +25,12 @@ func TestCaptureAnchorRemembersTheLineAndItsContext(t *testing.T) {
 
 	got := CaptureAnchor([]Hunk{h}, 12)
 
-	assert.Equal(t, "\treturn x", got.Quote)
-	assert.Equal(t, []string{"func F() {", "\tx := 1"}, got.Before)
-	assert.Equal(t, []string{"}"}, got.After)
-	assert.Equal(t, "d", got.Digest)
+	assert.Equal(t, types.CommentAnchor{
+		Digest: "d",
+		Quote:  "\treturn x",
+		Before: []string{"func F() {", "\tx := 1"},
+		After:  []string{"}"},
+	}, got)
 }
 
 // A remark with no line under it (a file heading, or a line no hunk covers) has no text to

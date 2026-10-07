@@ -40,9 +40,10 @@ func TestStalledTargetsFlagsNeverCached(t *testing.T) {
 
 	got := StalledTargets(dir, nil)
 
-	require.Len(t, got, 1)
-	require.Equal(t, "docs", got[0].Project)
-	require.Equal(t, MinRunsForYield, got[0].Runs)
+	require.Equal(t, []Stalled{{
+		Project: "docs", ProjectPath: "docs", Target: "generate",
+		Runs: MinRunsForYield, TotalMs: 80_000 * int64(MinRunsForYield),
+	}}, got)
 	require.Equal(t, int64(80_000), got[0].AvgMs())
 }
 

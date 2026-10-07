@@ -38,8 +38,12 @@ func TestDeriveTargetOrderWriterBeforeReader(t *testing.T) {
 			Reads: types.MustParseGlobs("a/out/*.md"), DeclaredReads: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
-	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
-	assert.Equal(t, map[types.TargetRef][]types.TargetRef{stepRef(steps[1]): {stepRef(steps[0])}}, d.RunAfter)
+	assert.Equal(t, &DerivedOrder{
+		Nodes:    nodes,
+		Edges:    []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}},
+		RunAfter: map[types.TargetRef][]types.TargetRef{stepRef(steps[1]): {stepRef(steps[0])}},
+		SameStep: d.SameStep, // the two targets run in different steps
+	}, d)
 }
 
 func TestDeriveTargetOrderNoSelfEdge(t *testing.T) {
@@ -82,9 +86,13 @@ func TestDeriveTargetOrderMutualDeclarationsSettle(t *testing.T) {
 	d := DeriveTargetOrder(steps, nodes, nil)
 	// "docs content" sorts after ". changelog", so the docs-writes-root-reads
 	// direction is the one that yields.
-	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
-	require.Equal(t, []DroppedEdge{{DerivedEdge: DerivedEdge{Writer: 1, Reader: 0}, Reason: "cycle"}}, d.Dropped)
-	assert.Equal(t, map[types.TargetRef][]types.TargetRef{docs: {root}}, d.RunAfter)
+	require.Equal(t, &DerivedOrder{
+		Nodes:    nodes,
+		Edges:    []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}},
+		Dropped:  []DroppedEdge{{DerivedEdge: DerivedEdge{Writer: 1, Reader: 0}, Reason: "cycle"}},
+		RunAfter: map[types.TargetRef][]types.TargetRef{docs: {root}},
+		SameStep: d.SameStep, // the two targets run in different steps
+	}, d)
 }
 
 // TestDeriveTargetOrderMutualTrioTieBreak is the workspace's own sibling-index
@@ -160,14 +168,19 @@ func TestDeriveTargetOrderEntangledUnordered(t *testing.T) {
 			Writes: types.MustParseGlobs("gen/*.json"), DeclaredWrites: true},
 	}
 	d := DeriveTargetOrder(steps, nodes, nil)
-	require.Equal(t, []DerivedEdge{
-		// Writer's step already precedes the reader's via the coarse edge.
-		{Writer: 0, Reader: 1, Ordered: true},
-		// The reader's step ran first and nothing can reorder it: settle after.
-		{Writer: 1, Reader: 2, weak: true, Ordered: false},
-	}, d.Edges)
-	assert.Equal(t, map[types.TargetRef][]types.TargetRef{docs: {root}}, d.RunAfter,
-		"only the with-the-grain direction is admitted; the against-the-grain edge induces nothing")
+	// Only the with-the-grain direction is admitted to RunAfter; the against-the-grain edge
+	// induces nothing.
+	assert.Equal(t, &DerivedOrder{
+		Nodes: nodes,
+		Edges: []DerivedEdge{
+			// Writer's step already precedes the reader's via the coarse edge.
+			{Writer: 0, Reader: 1, Ordered: true},
+			// The reader's step ran first and nothing can reorder it: settle after.
+			{Writer: 1, Reader: 2, weak: true, Ordered: false},
+		},
+		RunAfter: map[types.TargetRef][]types.TargetRef{docs: {root}},
+		SameStep: d.SameStep, // two of the three targets share a step, which this test is not about
+	}, d)
 }
 
 func TestDeriveTargetOrderIgnoredDirInvisibleToFallbackReader(t *testing.T) {
@@ -448,8 +461,13 @@ func TestCallOrderReachesUnderTheLaterComposer(t *testing.T) {
 	p.TargetChains["ci"] = types.Needs("generate", "lint", "build")
 	got := FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil)
 	require.Len(t, got, 1)
-	assert.Equal(t, ref("docs", "site-generate"), got[0].Reader)
-	assert.Equal(t, ref("docs", "format"), got[0].Writer)
+	assert.Equal(t, SameStepConflict{
+		Step:      got[0].Step, // the step and the glob pair are not what this test pins
+		Writer:    ref("docs", "format"),
+		Reader:    ref("docs", "site-generate"),
+		WriteGlob: got[0].WriteGlob,
+		ReadGlob:  got[0].ReadGlob,
+	}, got[0])
 }
 
 // TestAComposersOwnNeedsDoNotOrderItsMembers pins the hop the upward walk must not
@@ -630,8 +648,13 @@ func TestDeclaredNodesFeedsTheSamePredicate(t *testing.T) {
 	t.Parallel()
 	unordered := FindSameStepConflicts(DeclaredNodes(ciFixtureProject(false), "ci", nil), nil)
 	require.Len(t, unordered, 1)
-	assert.Equal(t, ref(".", "coverage-badge"), unordered[0].Reader)
-	assert.Equal(t, ref(".", "mocks-generate"), unordered[0].Writer)
+	assert.Equal(t, SameStepConflict{
+		Step:      unordered[0].Step, // the step and the glob pair are not what this test pins
+		Writer:    ref(".", "mocks-generate"),
+		Reader:    ref(".", "coverage-badge"),
+		WriteGlob: unordered[0].WriteGlob,
+		ReadGlob:  unordered[0].ReadGlob,
+	}, unordered[0])
 
 	assert.Empty(t, FindSameStepConflicts(DeclaredNodes(ciFixtureProject(true), "ci", nil), nil),
 		"the ctx.needs edge that fixed the workspace has to silence this too")
@@ -652,10 +675,19 @@ func TestDeclaredNodesRootsGlobsAtTheWorkspace(t *testing.T) {
 			pages = n
 		}
 	}
-	assert.Equal(t, []types.Glob{{Pattern: "MAGUS.md"}, {Pattern: "docs/src/**/*.md"}}, pages.Reads,
-		"every ref carries its owner from resolution; an update is read AND written")
-	assert.Equal(t, []types.Glob{{Pattern: "MAGUS.md"}}, pages.Writes)
-	assert.True(t, pages.DeclaredWrites, "ctx.modifiesExistingFiles is a declared write")
+	// Every ref carries its owner from resolution, an update is read AND written, and
+	// ctx.modifiesExistingFiles is a declared write.
+	assert.Equal(t, TargetNode{
+		Project:        "docs",
+		Target:         "pages",
+		Steps:          pages.Steps,
+		Reads:          []types.Glob{{Pattern: "MAGUS.md"}, {Pattern: "docs/src/**/*.md"}},
+		Writes:         []types.Glob{{Pattern: "MAGUS.md"}},
+		DeclaredReads:  pages.DeclaredReads,
+		DeclaredWrites: true,
+		IgnoreDirs:     pages.IgnoreDirs,
+		Needs:          pages.Needs,
+	}, pages)
 }
 
 func TestDeclaredNodesSkipsAnUnresolvableCrossProjectStep(t *testing.T) {

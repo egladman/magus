@@ -34,8 +34,11 @@ func TestParseNumbersLinesOnBothSides(t *testing.T) {
 	assert.Equal(t, 11, num(h.Rows[2].NewLine))
 	assert.Equal(t, 12, num(h.Rows[3].NewLine))
 
-	assert.Equal(t, 2, files[0].Additions)
-	assert.Equal(t, 1, files[0].Deletions)
+	assert.Equal(t, File{
+		Path: "a.go", OldPath: "a.go", Status: StatusModified,
+		Additions: 2, Deletions: 1,
+		Hunks: files[0].Hunks, // numbered above
+	}, files[0])
 }
 
 // `@@ -1 +1 @@` means one line per side. Reading the absent count as 0 rather than 1 silently
@@ -44,29 +47,35 @@ func TestAHunkHeaderWithoutCountsMeansOneLinePerSide(t *testing.T) {
 	files := Parse("diff --git a/a.go b/a.go\n@@ -1 +1 @@\n-x\n+y\n")
 	require.Len(t, files, 1)
 	h := files[0].Hunks[0]
-	assert.Equal(t, 1, h.OldCount)
-	assert.Equal(t, 1, h.NewCount)
+	assert.Equal(t, Hunk{
+		Header: "@@ -1 +1 @@", Lines: []string{"-x", "+y"}, Digest: h.Digest,
+		OldStart: 1, OldCount: 1, NewStart: 1, NewCount: 1,
+		Rows: h.Rows,
+	}, h)
 }
 
 func TestStatusIsReadFromTheExtendedHeaders(t *testing.T) {
 	added := Parse("diff --git a/new.go b/new.go\nnew file mode 100644\n--- /dev/null\n+++ b/new.go\n@@ -0,0 +1 @@\n+hello\n")
 	require.Len(t, added, 1)
-	assert.Equal(t, StatusAdded, added[0].Status)
-	assert.Equal(t, "new.go", added[0].Path)
-	assert.Equal(t, "100644", added[0].NewMode)
+	assert.Equal(t, File{
+		Path: "new.go", OldPath: "new.go", Status: StatusAdded,
+		Additions: 1, NewMode: "100644",
+		Hunks: added[0].Hunks,
+	}, added[0])
 
 	// A deletion is identified by the OLD path. "/dev/null" must never reach a sidebar.
 	deleted := Parse("diff --git a/gone.go b/gone.go\ndeleted file mode 100644\n--- a/gone.go\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n")
 	require.Len(t, deleted, 1)
-	assert.Equal(t, StatusDeleted, deleted[0].Status)
-	assert.Equal(t, "gone.go", deleted[0].Path)
+	assert.Equal(t, File{
+		Path: "gone.go", OldPath: "gone.go", Status: StatusDeleted,
+		Deletions: 1, OldMode: "100644",
+		Hunks: deleted[0].Hunks,
+	}, deleted[0])
 	assert.NotEqual(t, "/dev/null", deleted[0].Path)
 
 	renamed := Parse("diff --git a/old.go b/new.go\nrename from old.go\nrename to new.go\n")
 	require.Len(t, renamed, 1)
-	assert.Equal(t, StatusRenamed, renamed[0].Status)
-	assert.Equal(t, "old.go", renamed[0].OldPath)
-	assert.Equal(t, "new.go", renamed[0].Path)
+	assert.Equal(t, File{Path: "new.go", OldPath: "old.go", Status: StatusRenamed}, renamed[0])
 }
 
 // A pure mode change produces no hunks at all, so without the modes it renders as an empty
@@ -74,9 +83,10 @@ func TestStatusIsReadFromTheExtendedHeaders(t *testing.T) {
 func TestAPureModeChangeIsCapturedWithNoHunks(t *testing.T) {
 	files := Parse("diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\n")
 	require.Len(t, files, 1)
-	assert.Empty(t, files[0].Hunks)
-	assert.Equal(t, "100644", files[0].OldMode)
-	assert.Equal(t, "100755", files[0].NewMode)
+	assert.Equal(t, File{
+		Path: "run.sh", OldPath: "run.sh", Status: StatusModified,
+		OldMode: "100644", NewMode: "100755",
+	}, files[0])
 }
 
 // A binary file carries no hunks either, and rendering it as an empty diff reads as "nothing
@@ -110,8 +120,7 @@ func TestAFullyBlankLineInsideAHunkStaysContext(t *testing.T) {
 	require.Len(t, files, 1)
 	rows := files[0].Hunks[0].Rows
 	require.Len(t, rows, 3)
-	assert.Equal(t, KindContext, rows[1].Kind)
-	assert.Equal(t, "", rows[1].Text)
+	assert.Equal(t, Row{Kind: KindContext, Text: "", OldLine: rows[1].OldLine, NewLine: rows[1].NewLine}, rows[1])
 }
 
 // A path may contain spaces, so the header is split on " b/" rather than on whitespace.
@@ -160,11 +169,18 @@ func TestParseHunksSplitsFilesAndHunks(t *testing.T) {
 
 	assert.Equal(t, "a.go", files[0].Path)
 	require.Len(t, files[0].Hunks, 2)
-	assert.Equal(t, 0, files[0].Hunks[0].Index)
-	assert.Equal(t, 1, files[0].Hunks[1].Index)
 	// The body excludes the @@ header and every pre-hunk header line.
-	assert.Equal(t, []string{" ctx", "-old", "+new", " tail"}, files[0].Hunks[0].Lines)
-	assert.Equal(t, []string{" keep", "+added"}, files[0].Hunks[1].Lines)
+	first, second := files[0].Hunks[0], files[0].Hunks[1]
+	assert.Equal(t, Hunk{
+		Index: 0, Header: "@@ -1,3 +1,3 @@ func A()", Declaration: "func A()",
+		Lines: []string{" ctx", "-old", "+new", " tail"}, Digest: first.Digest, Rows: first.Rows,
+		OldStart: 1, OldCount: 3, NewStart: 1, NewCount: 3,
+	}, first)
+	assert.Equal(t, Hunk{
+		Index: 1, Header: "@@ -20,2 +20,3 @@ func B()", Declaration: "func B()",
+		Lines: []string{" keep", "+added"}, Digest: second.Digest, Rows: second.Rows,
+		OldStart: 20, OldCount: 2, NewStart: 20, NewCount: 3,
+	}, second)
 
 	assert.Equal(t, "b.md", files[1].Path)
 	require.Len(t, files[1].Hunks, 1)
@@ -272,8 +288,10 @@ func TestHeaderPathsSurviveSpacesAndTimestamps(t *testing.T) {
 func TestADeletionIsNamedByItsOldPath(t *testing.T) {
 	files := Parse("--- a/gone.go\t2026-01-01\n+++ /dev/null\t2026-01-01\n@@ -1 +0,0 @@\n-bye\n")
 	require.Len(t, files, 1)
-	assert.Equal(t, "gone.go", files[0].Path)
-	assert.Equal(t, StatusDeleted, files[0].Status)
+	assert.Equal(t, File{
+		Path: "gone.go", OldPath: "gone.go", Status: StatusDeleted,
+		Deletions: 1, Hunks: files[0].Hunks,
+	}, files[0])
 }
 
 // A `-- x` removed line inside a hunk starts with "--- " when the removed text itself begins

@@ -403,8 +403,12 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	var record types.KnowledgeRefsOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
 	assert.Equal(t, "Foo", record.Symbol)
-	assert.Equal(t, types.VerdictUnknown, record.Answer.Verdict)
-	assert.Equal(t, ans.IndexCause, record.Answer.IndexCause)
+	assert.Equal(t, types.KnowledgeAnswer{
+		Verdict:    types.VerdictUnknown,
+		Reason:     types.ReasonSymbolIndexMissing,
+		Gaps:       record.Answer.Gaps, // the gap's own wire form is pinned by the stderr block below
+		IndexCause: ans.IndexCause,
+	}, record.Answer)
 	assert.Contains(t, stdout, `"index_cause"`)
 	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
 	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")
