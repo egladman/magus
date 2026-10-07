@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -713,14 +714,73 @@ func TestMain(m *testing.M) {
 	})
 }
 
+// scriptCoverage returns the directory TestScripts makes each script's GOCOVERDIR in,
+// or "" when the test binary collects no coverage. At the end of t, after every
+// parallel script, it merges them into the shared GOCOVERDIR the coverage report reads.
+func scriptCoverage(t *testing.T) string {
+	shared := os.Getenv("GOCOVERDIR")
+	if shared == "" {
+		return ""
+	}
+	stage := t.TempDir()
+	t.Cleanup(func() {
+		if err := mergeScriptCoverage(stage, shared); err != nil {
+			t.Errorf("coverage: the scripts' coverage is missing from the report: %v", err)
+		}
+	})
+	return stage
+}
+
+// mergeScriptCoverage combines the coverage in every directory under stage into shared
+// with one `go tool covdata merge`. It writes into shared directly: its counter file
+// carries pid 0, which no process has, and its meta-data file holds the same bytes the
+// test binary writes under that name, so no file already there is lost.
+func mergeScriptCoverage(stage, shared string) error {
+	entries, err := os.ReadDir(stage)
+	if err != nil {
+		return err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, filepath.Join(stage, e.Name()))
+		}
+	}
+	if len(dirs) == 0 {
+		return nil
+	}
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		goBin = filepath.Join(os.Getenv("GOROOT"), "bin", "go")
+	}
+	cmd := exec.Command(goBin, "tool", "covdata", "merge", "-i="+strings.Join(dirs, ","), "-o="+shared)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go tool covdata merge: %w: %s", err, out)
+	}
+	return nil
+}
+
 // TestScripts replays every testdata/script/*.txtar as a black-box CLI behavior
 // test: readable command-plus-expected-output scenarios that catch any observable
 // change to the CLI. Each script runs in its own temp dir with the server off, so
 // tests are hermetic and never touch a real workspace or socket.
 func TestScripts(t *testing.T) {
+	coverStage := scriptCoverage(t)
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/script",
 		Setup: func(e *testscript.Env) error {
+			// Go's coverage runtime writes meta-data at exit through a temp file it names
+			// by the wall clock alone (openMetaFile's os.Create in
+			// internal/coverage/cfile/emit.go), so processes exiting in the same
+			// microsecond into one GOCOVERDIR collide and print an error a script asserts
+			// on. A dir per script exists only to avoid that.
+			if coverStage != "" {
+				dir := filepath.Join(coverStage, filepath.Base(e.WorkDir))
+				if err := os.Mkdir(dir, 0o755); err != nil {
+					return err
+				}
+				e.Setenv("GOCOVERDIR", dir)
+			}
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			// A run starts a broker otherwise, and a script must leave nothing running.
 			e.Setenv("MAGUS_BROKER", "off")
