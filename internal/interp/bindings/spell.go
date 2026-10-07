@@ -510,14 +510,55 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	if err != nil {
 		return nil, err
 	}
-	env := map[string]string{symbols.IndexEnvVar: indexPath}
+	base := map[string]string{}
 	if ws := types.WorkspaceFromContext(ctx); ws != nil {
-		env[symbols.WorkspaceRootEnvVar] = ws.Root()
+		base[symbols.WorkspaceRootEnvVar] = ws.Root()
 	}
+	var envs []map[string]string
+	if spec.SymbolIndexer != nil {
+		envs = spec.SymbolIndexer.Envs
+	}
+	if len(envs) == 0 {
+		return nil, runSymbolIndexer(ctx, spec.Name, op, opts, base, nil, indexPath)
+	}
+	// Each run writes its own index beside the merged one, so a failed run never leaves
+	// a half-merged index where ingestion reads.
+	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), "."+filepath.Base(indexPath)+"-envs-")
+	if err != nil {
+		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+	dests := make([]string, len(envs))
+	for i, overlay := range envs {
+		dests[i] = filepath.Join(tmp, fmt.Sprintf("%d.scip", i))
+		if err := runSymbolIndexer(ctx, spec.Name, op, opts, base, overlay, dests[i]); err != nil {
+			return nil, err
+		}
+	}
+	if err := symbols.MergeIndexes(indexPath, dests); err != nil {
+		return nil, fmt.Errorf("spell %q symbol indexer: %w", spec.Name, err)
+	}
+	return noResult()
+}
+
+// runSymbolIndexer runs op once with overlay over its environment, handing it dest as
+// MAGUS_SYMBOL_INDEX. base is the rest of what magus sets for the run; overlay never
+// reaches opts.refs, which holds only values magus computes.
+func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts commandOpts, base, overlay map[string]string, dest string) error {
+	refs := maps.Clone(base)
+	refs[symbols.IndexEnvVar] = dest
+	env := maps.Clone(overlay)
+	if env == nil {
+		env = map[string]string{}
+	}
+	maps.Copy(env, refs)
 	opts.env = env
-	opts.refs = env
+	opts.refs = refs
 	if _, err := runCommand(ctx, op, opts); err != nil {
-		return nil, err
+		if len(overlay) > 0 {
+			return fmt.Errorf("symbol index under %s: %w", formatEnv(overlay), err)
+		}
+		return err
 	}
 	// Checked HERE because this is the site that made the promise: it handed the
 	// indexer a destination, so it is the one place that knows what was supposed to
@@ -532,14 +573,24 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	// that worked. The format is deliberately not named here: op.Bin and the path are the
 	// diagnosis, and reading it off spec would mean trusting that the caller kept
 	// spec.SymbolIndexer in step with op.Kind, which only Decode guarantees.
-	switch _, err := os.Stat(indexPath); {
+	switch _, err := os.Stat(dest); {
 	case errors.Is(err, fs.ErrNotExist):
-		return nil, fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
-			spec.Name, op.Bin, indexPath, symbols.IndexEnvVar)
+		return fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
+			spellName, op.Bin, dest, symbols.IndexEnvVar)
 	case err != nil:
-		return nil, fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spec.Name, op.Bin, err)
+		return fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spellName, op.Bin, err)
 	}
-	return noResult()
+	return nil
+}
+
+// formatEnv renders an env overlay as sorted NAME=value pairs, for naming which run of
+// an indexer failed.
+func formatEnv(env map[string]string) string {
+	pairs := make([]string, 0, len(env))
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		pairs = append(pairs, k+"="+env[k])
+	}
+	return strings.Join(pairs, " ")
 }
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider

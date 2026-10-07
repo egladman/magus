@@ -311,11 +311,15 @@ fun goVulncheck(target: Target) > Command {
 // in the tree; scip-go writes there via --output. The runner resolves the bare
 // $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.
 // scip-go loads packages through `go`, so the toolchain's version keys the index too.
+// One run per GOOS a file suffix names, merged by magus: a single run indexes only what
+// the host compiles, so a Mac never saw *_linux.go and nobody saw *_windows.go. GOARCH
+// stays the host's; amd64 and arm64 pair with all three.
 export fun mgs_getSymbolIndexer() > SymbolIndexer {
     return SymbolIndexer{
         format = SymbolFormat.scip,
         command = Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]},
         uses = ["go"],
+        envs = [{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}],
     };
 }
 

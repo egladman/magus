@@ -1549,6 +1549,15 @@ func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 		itemsUses[indexUses] = vm.StrValue(v.Uses[indexUses])
 	}
 	out.MapSet("uses", vm.ListValue(itemsUses))
+	itemsEnvs := make([]vm.Value, len(v.Envs))
+	for indexEnvs := range v.Envs {
+		mappedEnvsItem := vm.NewMap()
+		for keyEnvsItem, itemEnvsItem := range v.Envs[indexEnvs] {
+			mappedEnvsItem.MapSet(keyEnvsItem, vm.StrValue(itemEnvsItem))
+		}
+		itemsEnvs[indexEnvs] = mappedEnvsItem
+	}
+	out.MapSet("envs", vm.ListValue(itemsEnvs))
 	return out
 }
 

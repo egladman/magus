@@ -15,4 +15,5 @@ export object SymbolIndexer {
     op: str = "",
     command: Command = Command{},
     uses: [str] = [],
+    envs: [{str: str}] = [],
 }

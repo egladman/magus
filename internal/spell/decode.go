@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/sandbox"
+	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -803,7 +804,37 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if err != nil {
 		return nil, fmt.Errorf("symbol indexer: uses: %w", err)
 	}
-	return &spells.SymbolIndexer{Format: f, Op: op, Command: cmd, Uses: uses}, nil
+	envs, err := decodeIndexerEnvs(rec)
+	if err != nil {
+		return nil, err
+	}
+	return &spells.SymbolIndexer{Format: f, Op: op, Command: cmd, Uses: uses, Envs: envs}, nil
+}
+
+// decodeIndexerEnvs reads a symbol indexer's envs, one overlay per run. An empty overlay
+// would index the host twice, and an overlay naming a variable magus sets for the run
+// would aim the indexer somewhere the merge never reads, so both are refused here.
+func decodeIndexerEnvs(rec obj) ([]map[string]string, error) {
+	var envs []map[string]string
+	for i, o := range rec.Objs("envs") {
+		keys := o.Keys()
+		if len(keys) == 0 {
+			return nil, fmt.Errorf("symbol indexer: envs[%d] is empty", i)
+		}
+		env := make(map[string]string, len(keys))
+		for _, k := range keys {
+			if k == symbols.IndexEnvVar || k == symbols.WorkspaceRootEnvVar {
+				return nil, fmt.Errorf("symbol indexer: envs[%d] sets %s, which magus sets for each run", i, k)
+			}
+			v, ok := o.Str(k)
+			if !ok {
+				return nil, fmt.Errorf("symbol indexer: envs[%d].%s is not a string", i, k)
+			}
+			env[k] = v
+		}
+		envs = append(envs, env)
+	}
+	return envs, nil
 }
 
 // decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.
