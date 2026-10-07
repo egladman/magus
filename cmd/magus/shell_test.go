@@ -37,7 +37,7 @@ import (
 // their own checkout.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	saved := guardRoot
-	guardRoot = func() (string, error) { return "", errors.New("no workspace rules in this test") }
+	guardRoot = func(string) (string, error) { return "", errors.New("no workspace rules in this test") }
 	defer func() { guardRoot = saved }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
 }
@@ -1566,7 +1566,7 @@ func judgeSpawnAt(t *testing.T, root string) guard.Verdict {
 	testkit.Isolate(t)
 	t.Chdir(root)
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
-	return guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: spawnEnvelope, Host: "claude-code"})
+	return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: spawnEnvelope, Host: "claude-code"})
 }
 
 // resetWorkspaceMemo gives a test its own memoized workspace load and restores the
@@ -1621,7 +1621,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	resetWorkspaceMemo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
-	_, err := loadGuardRules(t.Context())
+	_, err := loadGuardRules(t.Context(), "")
 	require.Error(t, err)
 
 	v := judgeSpawnAt(t, root)
@@ -1630,7 +1630,7 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 	assert.Contains(t, v.Reason, "The working tree's magus\\guard.spawn rule judged nothing: the magusfile failed to load")
 
 	ctx := guard.WithLocation(t.Context(), t.TempDir(), root, root)
-	v = guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: "ls -la", Host: "claude-code"})
+	v = guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: "ls -la", Host: "claude-code"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Contains(t, v.Reason, "Not in this repository.")
 	assert.Equal(t, "workspace:command", v.Rule)
@@ -1665,7 +1665,7 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 
-	rules, err := loadGuardRules(t.Context())
+	rules, err := loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	approved, err := rules.ApprovedCommandRule(t.Context())
 	require.NoError(t, err)
@@ -1684,7 +1684,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "other", "spell.buzz"), []byte("// untracked\n"), 0o644))
 
-	rules, err := loadGuardRules(t.Context())
+	rules, err := loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	approved, err := rules.ApprovedCommandRule(t.Context())
 	require.NoError(t, err)
@@ -1692,7 +1692,7 @@ func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
 
 	// Loosen the rule in the working tree: now the committed deny must still answer.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
-	rules, err = loadGuardRules(t.Context())
+	rules, err = loadGuardRules(t.Context(), "")
 	require.NoError(t, err)
 	assert.Nil(t, rules.CommandRule())
 	approved, err = rules.ApprovedCommandRule(t.Context())
@@ -1738,7 +1738,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 		`"tool_name":"Bash","tool_input":{"command":"magus run build > build.log"}}`, worktree)
 	judge := func() guard.Verdict {
 		ctx := t.Context()
-		return guard.Judge(ctx, guardDependencies(ctx), guard.Request{Input: envelope, Host: "claude-code"})
+		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{Input: envelope, Host: "claude-code"})
 	}
 	first := judge()
 	require.Equal(t, "deny", first.Decision, first.Reason)

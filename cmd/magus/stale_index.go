@@ -290,7 +290,7 @@ func printIndexCause(w io.Writer, ans types.KnowledgeAnswer) {
 // indexCauseForGuard is indexCause as advisory sentences, or "" when it does not answer
 // within the guard's lookup budget.
 func indexCauseForGuard() string {
-	root, err := guardRoot()
+	root, err := guardRoot("")
 	if err != nil {
 		return ""
 	}

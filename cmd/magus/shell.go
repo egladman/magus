@@ -195,7 +195,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	if window != "" {
 		entry = types.EntryPointCLI
 	}
-	deps := guardDependencies(ctx)
+	// The hook ignores --root and loads no workspace up front: the one it judges in is
+	// wherever the host runs it.
+	deps := guardDependencies(ctx, "")
 	stopJudge := traceFromContext(ctx).phase("guard.judge")
 	verdict := guard.Judge(trail.ContextWithEntryPoint(ctx, entry), deps, guard.Request{
 		Input:      input,
@@ -266,15 +268,19 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 // themselves: inspect, the cache dir, the loaded config, the spell catalog, graph and
 // symbol index lookups, VCS reads, and the loaded rules. All of them live in the CLI
 // rather than in the rules.
-func guardDependencies(ctx context.Context) guard.Dependencies {
+//
+// rootOverride is the --root the command loaded its workspace with, "" for the cwd. A rule
+// asking for "the workspace" gets that one: resolving the cwd instead names a second
+// workspace whenever the command ran with --root from inside another checkout.
+func guardDependencies(ctx context.Context, rootOverride string) guard.Dependencies {
 	stop := traceFromContext(ctx).phase("guard.load_rules")
-	rules, loadErr := loadGuardRules(ctx)
+	rules, loadErr := loadGuardRules(ctx, rootOverride)
 	stop()
 	shellRules, shellDialect := workspaceShellRules(rules)
 	deps := guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
-				return inspectWorkspace(ctx, "")
+				return inspectWorkspace(ctx, rootOverride)
 			}
 			return magus.Inspect(ctx, root,
 				magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
@@ -283,7 +289,7 @@ func guardDependencies(ctx context.Context) guard.Dependencies {
 			if root != "" {
 				return magus.ResolveCacheDir(root)
 			}
-			found, err := magus.FindRoot("")
+			found, err := magus.FindRoot(rootOverride)
 			if err != nil {
 				return "", err
 			}
@@ -321,7 +327,7 @@ func guardDependencies(ctx context.Context) guard.Dependencies {
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
 		return deps
 	}
-	root, err := guardRoot()
+	root, err := guardRoot(rootOverride)
 	if err != nil {
 		return deps
 	}
@@ -340,10 +346,10 @@ func guardDependencies(ctx context.Context) guard.Dependencies {
 	return deps
 }
 
-// guardRoot finds the workspace whose rules the guard enforces. A variable so the hook's
-// own tests judge by the built-in rules alone rather than by the policy of whichever
-// checkout they happen to run in.
-var guardRoot = func() (string, error) { return magus.FindRoot("") }
+// guardRoot finds the workspace whose rules the guard enforces, searching from override,
+// or from the cwd when it is "". A variable so the hook's own tests judge by the built-in
+// rules alone rather than by the policy of whichever checkout they happen to run in.
+var guardRoot = magus.FindRoot
 
 // loadGuardRules loads the guard rules of the workspace this process runs in from its
 // root magusfile alone, nil with the reason when that file does not load, and nil with no
@@ -353,8 +359,8 @@ var guardRoot = func() (string, error) { return magus.FindRoot("") }
 // Not the full workspace load: that opens every project and costs an order of magnitude
 // more, on every agent tool call, for facts no guard rule reads. The rules that do need
 // the workspace open it through Dependencies.Inspect, and only when they apply.
-func loadGuardRules(ctx context.Context) (*magus.GuardRules, error) {
-	root, err := guardRoot()
+func loadGuardRules(ctx context.Context, rootOverride string) (*magus.GuardRules, error) {
+	root, err := guardRoot(rootOverride)
 	if err != nil {
 		return nil, nil //nolint:nilnil,nilerr // outside a workspace there are no rules and nothing failed
 	}
@@ -481,7 +487,7 @@ func withinBudget[T any](budget time.Duration, lookup func() T) (T, bool) {
 // process, or nil when there is none. The graph itself is never loaded here: that costs
 // seconds, and the index answers the guard's questions from one file.
 var guardIndex = sync.OnceValue(func() *knowledge.GuardIndex {
-	root, err := guardRoot()
+	root, err := guardRoot("")
 	if err != nil {
 		return nil
 	}
@@ -586,7 +592,7 @@ func trackedFilesForGuard(ctx context.Context, root string) ([]string, bool) {
 // Missing or unloadable is empty so a magusfile typo cannot take down every
 // shell hook (built-ins still apply).
 func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
-	rules, _ := loadGuardRules(ctx)
+	rules, _ := loadGuardRules(ctx, "")
 	return workspaceShellRules(rules)
 }
 

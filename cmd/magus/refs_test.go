@@ -104,6 +104,28 @@ func TestRenameBlindSpotsCountOnlyTheSymbolsLanguage(t *testing.T) {
 	}
 }
 
+// `magus --root A refs x --rename y` run from inside checkout B grades its edits against A,
+// the workspace it loaded. Grading through the cwd asked inspectWorkspace for B after it
+// had loaded A, which panics.
+func TestRenameGradeInspectsTheLoadedRoot(t *testing.T) {
+	testkit.Isolate(t)
+	resetWorkspaceMemo(t)
+	checkout := func() string {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
+		return dir
+	}
+	loaded := checkout()
+	t.Chdir(checkout())
+	ws, err := inspectWorkspace(t.Context(), loaded)
+	require.NoError(t, err)
+
+	grade := renameGrade(t.Context(), ws, loaded, true)
+	var rule, reason string
+	require.NotPanics(t, func() { rule, reason = grade("a.go", []byte("package a\n"), []byte("package b\n")) })
+	assert.Empty(t, rule, reason)
+}
+
 // checkDefinitions is what stands between a recorded range and a wrong edit. A file older
 // than its index verifies; a newer one keeps the range only as unverified; a start line
 // that no longer names the symbol is changed; a range past the end of the file is
