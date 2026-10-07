@@ -67,10 +67,10 @@ func ReadToken(addr string) string {
 	return strings.TrimSpace(string(raw))
 }
 
-// tokenFor is the token to present to ep: [TokenEnv] when ep is the socket this process
+// readExchangeToken is the token to present to ep: [TokenEnv] when ep is the socket this process
 // inherited, else the file beside the socket. The environment wins because a nested
 // magus under the sandbox may not be granted the socket directory at all.
-func tokenFor(ep endpoint.Endpoint) string {
+func readExchangeToken(ep endpoint.Endpoint) string {
 	if token := os.Getenv(TokenEnv); token != "" {
 		if inherited, err := endpoint.Parse(os.Getenv(SocketEnv)); err == nil && inherited.Addr == ep.Addr {
 			return token
@@ -110,7 +110,7 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 	if req != nil {
 		hreq.Header.Set("Content-Type", "application/json")
 	}
-	if token := tokenFor(ep); token != "" {
+	if token := readExchangeToken(ep); token != "" {
 		hreq.Header.Set(tokenHeader, token)
 	}
 	resp, err := socketClient(ep).Do(hreq)

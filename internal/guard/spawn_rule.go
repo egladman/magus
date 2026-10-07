@@ -69,7 +69,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// which is what lets that child's own later calls name their parent and their job.
 	if env.AfterCall {
 		if env.SpawnedAgent != "" {
-			spawner, _ := actingLeaseFor(who, at, req.Lease)
+			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
@@ -175,7 +175,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	}
 	// The same resolution every lease-scoped rule uses, so the rule and the guard cannot
 	// disagree about who is acting.
-	lease, _ := actingLeaseFor(who, at, explicitLease)
+	lease, _ := resolveActingLease(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
 	return req
 }
@@ -359,8 +359,8 @@ func boundJob(who hookAttribution, at location) job.Binding {
 	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Binding(who.caller())
 }
 
-// actingLeaseFor is the lease a call acts under. See [resolveLease].
-func actingLeaseFor(who hookAttribution, at location, explicit string) (string, types.LeaseSource) {
+// resolveActingLease is the lease a call acts under. See [resolveLease].
+func resolveActingLease(who hookAttribution, at location, explicit string) (string, types.LeaseSource) {
 	return resolveLease(who, explicit, boundJob(who, at).Job)
 }
 

@@ -175,7 +175,7 @@ func placeCycle(key, version string, a lifecycleAnswer, now time.Time) (cycle, e
 	if i < 0 || version == "" {
 		return "", "", toolv1.Support_SUPPORT_UNKNOWN
 	}
-	c, s := a.lifecycles[i].SupportOf(version, now)
+	c, s := a.lifecycles[i].PlaceVersion(version, now)
 	switch s {
 	case spells.SupportSupported:
 		return c.Cycle, c.EOL, toolv1.Support_SUPPORT_SUPPORTED

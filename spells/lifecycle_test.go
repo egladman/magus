@@ -31,7 +31,7 @@ func TestLifecycleCycleOf(t *testing.T) {
 		{"an empty version matches nothing", golang, "", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := tc.l.CycleOf(tc.version)
+			got, ok := tc.l.FindCycle(tc.version)
 			assert.Equal(t, tc.found, ok)
 			assert.Equal(t, tc.want, got.Cycle)
 		})
@@ -45,15 +45,15 @@ func TestLifecycleSupportOf(t *testing.T) {
 		{Cycle: "1.26", EOL: "2027-02-10"},
 	}}
 
-	c, s := golang.SupportOf("v1.25.3", day)
+	c, s := golang.PlaceVersion("v1.25.3", day)
 	assert.Equal(t, "1.25", c.Cycle)
 	assert.Equal(t, SupportEOL, s)
 
-	c, s = golang.SupportOf("v1.26.5", day)
+	c, s = golang.PlaceVersion("v1.26.5", day)
 	assert.Equal(t, "1.26", c.Cycle)
 	assert.Equal(t, SupportSupported, s)
 
-	c, s = golang.SupportOf("v1.99.0", day)
+	c, s = golang.PlaceVersion("v1.99.0", day)
 	assert.Equal(t, ReleaseCycle{}, c)
 	assert.Equal(t, SupportUnknown, s, "a version no cycle carries is unknown, never supported")
 }

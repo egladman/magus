@@ -34,7 +34,7 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		return ffi.BoolVal(ret0), nil
 	}))
 	m.MapSet("size", vm.DirectValue("term.size", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		ret0, err := std.TermSizeOf(ctx)
+		ret0, err := std.TermSize(ctx)
 		if err != nil {
 			return vm.Null, ffi.Error(err)
 		}

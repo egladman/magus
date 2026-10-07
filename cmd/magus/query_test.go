@@ -440,9 +440,9 @@ func (f graphReadFixture) localAnswer(tb testing.TB, verb string, read graphRead
 		res, err = explainNode(ctx, f.local, f.cfg, read, false, false)
 	case readRefs:
 		var g *knowledge.Graph
-		g, err = knowledgeGraphForRefsOf(ctx, f.local, f.cfg, false, read.Input)
+		g, err = loadRefsGraph(ctx, f.local, f.cfg, false, read.Input)
 		if err == nil {
-			res = refsOf(ctx, f.local, f.cfg, g, read)
+			res = lookupRefs(ctx, f.local, f.cfg, g, read)
 		}
 	}
 	require.NoError(tb, err)
@@ -475,10 +475,10 @@ func (f graphReadFixture) servedAnswer(tb testing.TB, verb string, read graphRea
 func mergedSearch(tb testing.TB, ws types.WorkspaceRepository, cfg config.Config, read graphRead) string {
 	tb.Helper()
 	ctx := context.Background()
-	g, err := knowledgeGraphOf(ctx, ws, cfg, false, false, true)
+	g, err := loadWorkspaceGraph(ctx, ws, cfg, false, false, true)
 	require.NoError(tb, err)
 	out := g.Query(read.Input, read.Budget)
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, symbolCoverageOf(ctx, ws, cfg, read.Input, true))
+	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, measureSymbolCoverage(ctx, ws, cfg, read.Input, true))
 	res := queryResult{Out: out}
 	if out.MatchCount == 0 && read.Nearest {
 		res.Nearest = g.NearestNode(read.Input)

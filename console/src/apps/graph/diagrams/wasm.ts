@@ -165,7 +165,7 @@ function hasFunction<K extends string>(
   );
 }
 
-function diagOf(v: unknown): BuzzDiag | null {
+function parseDiag(v: unknown): BuzzDiag | null {
   if (typeof v !== "object" || v === null) return null;
   const d = v as { msg?: unknown; line?: unknown; col?: unknown };
   return typeof d.msg === "string"
@@ -195,7 +195,7 @@ export function runtimeFrom(g: unknown): BuzzRuntime | null {
         ok: r.ok === true,
         svg: typeof r.svg === "string" ? r.svg : "",
         findings: typeof r.findings === "string" ? r.findings : "",
-        diag: diagOf(r.diag),
+        diag: parseDiag(r.diag),
       };
     },
   };
@@ -319,7 +319,7 @@ export function drawnNodes(nodes: readonly DeclaredNode[], claim: string): Decla
 export interface FigureMeta {
   readonly id: string;
   readonly title: string;
-  // IMPORTS for the import figure; any other claim draws actors, as the handler's figureOf does.
+  // IMPORTS for the import figure; any other claim draws actors, as the handler's buildFigure does.
   readonly claim: string;
   // The node link template, {path} filled per node, or "" for no links.
   readonly anchorHref: string;
@@ -356,9 +356,9 @@ const EMPTY_BOX: Box = {
   look: null,
 };
 
-// figureFor is the handler's figureOf over decl, whose node ids are drawnNodes ids: the same
+// buildFigure is the handler's buildFigure over decl, whose node ids are drawnNodes ids: the same
 // Figure record, built from the same rows.
-export function figureFor(decl: Declaration, meta: FigureMeta, desc: string): Figure {
+export function buildFigure(decl: Declaration, meta: FigureMeta, desc: string): Figure {
   const base: Figure = {
     ...EMPTY_FIGURE,
     id: figureId(meta.id),
@@ -479,7 +479,7 @@ export type Relayout =
   | { readonly kind: "bad-lens"; readonly detail: string }
   | { readonly kind: "failed"; readonly detail: string };
 
-export function relayoutOf(r: DrawResult): Relayout {
+export function toRelayout(r: DrawResult): Relayout {
   if (r.ok) return { kind: "ok", svg: r.svg };
   if (r.findings) return { kind: "refused", detail: r.findings };
   const d = r.diag;
@@ -503,9 +503,9 @@ export function relayout(input: RelayoutInput): Relayout {
   if (!cut.ok) return { kind: "bad-lens", detail: cut.error };
   let figure: Figure;
   try {
-    figure = figureFor(cut.decl, input.meta, describeLens(input.lens));
+    figure = buildFigure(cut.decl, input.meta, describeLens(input.lens));
   } catch (e) {
     return { kind: "failed", detail: e instanceof Error ? e.message : String(e) };
   }
-  return relayoutOf(input.runtime.drawFigure(figure, input.meta.anchorHref));
+  return toRelayout(input.runtime.drawFigure(figure, input.meta.anchorHref));
 }

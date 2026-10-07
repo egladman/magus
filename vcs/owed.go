@@ -49,10 +49,10 @@ type owedPaths struct {
 	commonDir string
 }
 
-// owedPathsOf resolves root's owedPaths. ok is false when root is not in a git
+// resolveOwedPaths resolves root's owedPaths. ok is false when root is not in a git
 // repository: git is the one backend with hooks that settle the record, so no other
 // backend records one.
-func owedPathsOf(ctx context.Context, root string) (owedPaths, bool, error) {
+func resolveOwedPaths(ctx context.Context, root string) (owedPaths, bool, error) {
 	cmd := gitExec(ctx, root, gitOpts{Env: []string{"LC_ALL=C"}}, "rev-parse", "--absolute-git-dir", "--git-common-dir")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -80,7 +80,7 @@ func owedPathsOf(ctx context.Context, root string) (owedPaths, bool, error) {
 // OwedRegenerationPath is the file holding root's record, or "" outside a git
 // repository. Its presence alone means a regeneration is outstanding.
 func OwedRegenerationPath(ctx context.Context, root string) (string, error) {
-	p, ok, err := owedPathsOf(ctx, root)
+	p, ok, err := resolveOwedPaths(ctx, root)
 	if err != nil || !ok {
 		return "", err
 	}
@@ -91,7 +91,7 @@ func OwedRegenerationPath(ctx context.Context, root string) (string, error) {
 // nothing is owed or root is not in a git repository. A record written under an unknown
 // schema version is an error rather than a guess.
 func OwedRegenerations(ctx context.Context, root string) ([]OwedRegeneration, error) {
-	p, ok, err := owedPathsOf(ctx, root)
+	p, ok, err := resolveOwedPaths(ctx, root)
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ func OwedRegenerations(ctx context.Context, root string) ([]OwedRegeneration, er
 // It reports false, writing nothing, when root is not in a git repository. Writers from
 // any worktree of the repository are serialized.
 func RecordOwedRegeneration(ctx context.Context, root string, o OwedRegeneration) (bool, error) {
-	p, ok, err := owedPathsOf(ctx, root)
+	p, ok, err := resolveOwedPaths(ctx, root)
 	if err != nil || !ok {
 		return false, err
 	}
@@ -128,7 +128,7 @@ func RecordOwedRegeneration(ctx context.Context, root string, o OwedRegeneration
 // left with none. It re-reads under the lock, so a path recorded after the caller read
 // the record survives for the next run.
 func DropOwedRegenerations(ctx context.Context, root string, settled []OwedRegeneration) error {
-	p, ok, err := owedPathsOf(ctx, root)
+	p, ok, err := resolveOwedPaths(ctx, root)
 	if err != nil || !ok {
 		return err
 	}

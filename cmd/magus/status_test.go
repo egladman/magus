@@ -1233,8 +1233,8 @@ func TestCompactRunningPartsCollapsesTheTail(t *testing.T) {
 
 func TestDurationOfTreatsAnUnsetStartAsZero(t *testing.T) {
 	now := time.Now()
-	assert.Zero(t, durationOf(types.StatusRunningTarget{}, now))
-	assert.Equal(t, time.Minute, durationOf(types.StatusRunningTarget{StartedAt: now.Add(-time.Minute)}, now))
+	assert.Zero(t, runningDuration(types.StatusRunningTarget{}, now))
+	assert.Equal(t, time.Minute, runningDuration(types.StatusRunningTarget{StartedAt: now.Add(-time.Minute)}, now))
 }
 
 func TestFormatCompactRunningTargetNamesTheUnparseable(t *testing.T) {

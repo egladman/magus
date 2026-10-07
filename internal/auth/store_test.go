@@ -275,7 +275,7 @@ func TestMintedTokenLooksUpAsItsCredential(t *testing.T) {
 	store := isolatedStore(t)
 	secret, rec, err := store.Mint(types.GrantOperator, MintRequest{Name: "laptop", Grant: types.GrantConnector, TTL: time.Hour})
 	require.NoError(t, err)
-	kind, ok := kindOf(secret)
+	kind, ok := credentialKind(secret)
 	require.True(t, ok)
 	assert.Equal(t, types.KindStored, kind)
 	assert.Len(t, secret, tokenLen)

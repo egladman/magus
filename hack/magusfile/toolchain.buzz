@@ -50,7 +50,7 @@ final remotes = {
     "node": {"url": "https://github.com/nodejs/node", "prefix": "v"},
 };
 
-// tagsOf lists the release tags a remote carries, as bare versions.
+// fetchReleaseTags lists the release tags a remote carries, as bare versions.
 //
 // ONE fork per remote, and the caller holds the result. A remote is a distinct network
 // endpoint so two of them cannot share an invocation, but nothing should ever ask the
@@ -64,7 +64,7 @@ final remotes = {
 // Prerelease and historical tags are dropped. Go's repo still carries `weekly.2012-03-04`
 // and `release.r60`, and both projects tag `beta`/`rc`. A tag that is not a plain release
 // is not something to report as "you are behind".
-fun tagsOf(bin: str) > [str] !> any {
+fun fetchReleaseTags(bin: str) > [str] !> any {
     final remote = remotes[bin];
     if (remote == null) {
         return [<str>];
@@ -141,13 +141,13 @@ fun observe(name: str, bin: str, args: [str]) > void {
         std\print("toolchain " + name + ": not installed, or its version is unreadable");
         return;
     }
-    final tags = tagsOf(bin) catch [<str>];
+    final tags = fetchReleaseTags(bin) catch [<str>];
     if (tags.len() == 0) {
         std\print("toolchain " + name + " " + current + ": upstream unreachable, currency unknown");
         return;
     }
 
-    // semver comparisons over tags/current that tagsOf and probe already validated with
+    // semver comparisons over tags/current that fetchReleaseTags and probe already validated with
     // isValid; wrapped rather than propagated to keep this function's "never throws"
     // contract (see the comment above) even if one somehow slips through unparsable.
     try {

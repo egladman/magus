@@ -948,8 +948,8 @@ func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []s
 	sorted := make([]types.StatusRunningTarget, len(targets))
 	copy(sorted, targets)
 	sort.SliceStable(sorted, func(i, j int) bool {
-		di := durationOf(sorted[i], now)
-		dj := durationOf(sorted[j], now)
+		di := runningDuration(sorted[i], now)
+		dj := runningDuration(sorted[j], now)
 		switch {
 		case di > 0 && dj == 0:
 			return true
@@ -974,7 +974,7 @@ func compactRunningParts(targets []types.StatusRunningTarget, now time.Time) []s
 	return out
 }
 
-func durationOf(c types.StatusRunningTarget, now time.Time) time.Duration {
+func runningDuration(c types.StatusRunningTarget, now time.Time) time.Duration {
 	if c.StartedAt.IsZero() {
 		return 0
 	}
@@ -991,7 +991,7 @@ func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now ti
 	if showWS {
 		label = workspaceLabel(c.Workspace) + "/" + label
 	}
-	if d := formatDur(durationOf(c, now)); d != "" {
+	if d := formatDur(runningDuration(c, now)); d != "" {
 		label += "(" + d + ")"
 	}
 	return truncate(label, compactRunningBudget)

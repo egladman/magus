@@ -101,7 +101,7 @@ func RenameCollisions(to string, matches []types.KnowledgeMatch, definedIn func(
 	for _, s := range sites {
 		file := path.Clean(s.Path)
 		files[file] = true
-		if languageOf(file) == langGo {
+		if fileLanguage(file) == langGo {
 			goPackages[path.Dir(file)] = true
 		}
 	}
@@ -112,7 +112,7 @@ func RenameCollisions(to string, matches []types.KnowledgeMatch, definedIn func(
 		}
 		for _, file := range definedIn(m.ID) {
 			file = path.Clean(file)
-			if files[file] || (languageOf(file) == langGo && goPackages[path.Dir(file)]) {
+			if files[file] || (fileLanguage(file) == langGo && goPackages[path.Dir(file)]) {
 				refused = append(refused, types.EditRefusal{Path: file, Reason: fmt.Sprintf("already defines %q (%s), which the new name would collide with", to, m.ID)})
 			}
 		}
@@ -129,7 +129,7 @@ const (
 	langTypeScript = "TypeScript"
 )
 
-func languageOf(file string) string {
+func fileLanguage(file string) string {
 	switch path.Ext(file) {
 	case ".buzz":
 		return langBuzz
@@ -175,7 +175,7 @@ var (
 func identifierRefusals(to string, files []types.SymbolOccurrenceFile) []types.EditRefusal {
 	langs := map[string]bool{}
 	for _, f := range files {
-		langs[languageOf(f.File)] = true
+		langs[fileLanguage(f.File)] = true
 	}
 	if len(langs) == 0 {
 		langs[""] = true
@@ -268,12 +268,12 @@ func BuzzNameCaptures(to string, sites []Site, importers func(file string) []str
 	files := map[string]bool{}
 	for _, s := range sites {
 		file := path.Clean(s.Path)
-		if languageOf(file) != langBuzz {
+		if fileLanguage(file) != langBuzz {
 			continue
 		}
 		files[file] = true
 		for _, imp := range importers(file) {
-			if imp = path.Clean(imp); languageOf(imp) == langBuzz {
+			if imp = path.Clean(imp); fileLanguage(imp) == langBuzz {
 				files[imp] = true
 			}
 		}
@@ -310,18 +310,18 @@ func BuzzLabelUses(from string, defs []string, sites []Site, importers func(file
 	files := map[string]bool{}
 	for _, def := range defs {
 		def = path.Clean(def)
-		if languageOf(def) != langBuzz {
+		if fileLanguage(def) != langBuzz {
 			continue
 		}
 		files[def] = true
 		for _, imp := range importers(def) {
-			if imp = path.Clean(imp); languageOf(imp) == langBuzz {
+			if imp = path.Clean(imp); fileLanguage(imp) == langBuzz {
 				files[imp] = true
 			}
 		}
 	}
 	for _, s := range sites {
-		if file := path.Clean(s.Path); languageOf(file) == langBuzz {
+		if file := path.Clean(s.Path); fileLanguage(file) == langBuzz {
 			files[file] = true
 		}
 	}

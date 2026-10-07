@@ -8,9 +8,9 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { runInThisContext } from "node:vm";
 import {
-  figureFor,
+  buildFigure,
   figureForLink,
-  relayoutOf,
+  toRelayout,
   startGo,
   type Figure,
   type GoConstructor,
@@ -45,7 +45,7 @@ async function relay(): Promise<void> {
     assert.deepEqual([imported.ok, imported.result], [true, "served"], JSON.stringify(imported));
 
     const meta = { id: "projects", title: "Projects", claim: "flow", anchorHref: "/code/{path}" };
-    const actors = figureFor(
+    const actors = buildFigure(
       {
         nodes: [
           { id: "external:app", anchor: "app", label: "app" },
@@ -56,7 +56,7 @@ async function relay(): Promise<void> {
       meta,
       "",
     );
-    const drawn = relayoutOf(rt.drawFigure(actors, meta.anchorHref));
+    const drawn = toRelayout(rt.drawFigure(actors, meta.anchorHref));
     assert.equal(drawn.kind, "ok", JSON.stringify(drawn));
     const svg = drawn.kind === "ok" ? drawn.svg : "";
     assert.ok(svg.startsWith("<svg"), svg.slice(0, 200));
@@ -67,7 +67,7 @@ async function relay(): Promise<void> {
 
     // A shared link's graph: actors only, the edited node accented and tagged, an optional edge
     // dashed and labelled while a plain one stays solid.
-    const linkDrawn = relayoutOf(
+    const linkDrawn = toRelayout(
       rt.drawFigure(
         figureForLink({
           title: "How far this change reaches",
@@ -94,7 +94,7 @@ async function relay(): Promise<void> {
     assert.match(linkSvg, />AFTER</);
 
     const importsMeta = { id: "imports", title: "Imports", claim: "imports", anchorHref: "" };
-    const imports = figureFor(
+    const imports = buildFigure(
       {
         nodes: [
           { id: "internal/a", anchor: "internal/a", label: "a" },
@@ -105,11 +105,11 @@ async function relay(): Promise<void> {
       importsMeta,
       "",
     );
-    const graphed = relayoutOf(rt.drawFigure(imports, ""));
+    const graphed = toRelayout(rt.drawFigure(imports, ""));
     assert.equal(graphed.kind, "ok", JSON.stringify(graphed));
     assert.match(graphed.kind === "ok" ? graphed.svg : "", /data-edge="internal\/a->internal\/b"/);
 
-    const refused = relayoutOf(rt.drawFigure({ ...actors, unscopedWhy: "" }, ""));
+    const refused = toRelayout(rt.drawFigure({ ...actors, unscopedWhy: "" }, ""));
     assert.deepEqual(refused, {
       kind: "refused",
       detail:
@@ -117,10 +117,10 @@ async function relay(): Promise<void> {
     });
 
     // Enums cross as case names: a real one is decoded into its case, an unknown one refused.
-    const down = relayoutOf(rt.drawFigure({ ...actors, direction: "down" }, ""));
+    const down = toRelayout(rt.drawFigure({ ...actors, direction: "down" }, ""));
     assert.equal(down.kind, "ok", JSON.stringify(down));
     const legend = { look: "shiny", label: "x" } as unknown as Legend;
-    const shiny = relayoutOf(rt.drawFigure({ ...actors, legends: [legend] }, ""));
+    const shiny = toRelayout(rt.drawFigure({ ...actors, legends: [legend] }, ""));
     assert.deepEqual(shiny, {
       kind: "refused",
       detail: 'figure "projects": legends[0].look is "shiny", which names no Look case',
@@ -128,7 +128,7 @@ async function relay(): Promise<void> {
 
     // A member the record does not declare is refused before any Buzz runs.
     const drifted = { ...actors, titleText: "old" } as Figure;
-    const strict = relayoutOf(rt.drawFigure(drifted, ""));
+    const strict = toRelayout(rt.drawFigure(drifted, ""));
     assert.equal(strict.kind, "failed");
     assert.match(strict.kind === "failed" ? strict.detail : "", /^figure record: .*titleText/);
   } finally {

@@ -72,4 +72,4 @@ func (e *Events) Emit(ev Event) {
 	_, _ = e.w.Write(append(line, '\n'))
 }
 
-func partitionOf(i int) *int { return &i }
+func partitionPtr(i int) *int { return &i }

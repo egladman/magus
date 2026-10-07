@@ -54,12 +54,12 @@ func printSessionContact(w io.Writer, root string, node types.KnowledgeNode) {
 		return
 	}
 	c := *contact
-	fmt.Fprintf(w, "\nagent sessions: %s over %s\n", countedContact(c), countOf(c.Sessions, "session"))
+	fmt.Fprintf(w, "\nagent sessions: %s over %s\n", countedContact(c), countNoun(c.Sessions, "session"))
 	fmt.Fprintf(w, "  last touched %s; `magus session show <id>` reads what one did\n", humanAge(c.Last))
 	if c.Denials > 0 {
 		// "operations", not "writes": Denials counts refused reads too, and naming them
 		// writes would report an edit that was never attempted.
-		fmt.Fprintf(w, "  %s the host refused\n", countOf(c.Denials, "operation"))
+		fmt.Fprintf(w, "  %s the host refused\n", countNoun(c.Denials, "operation"))
 	}
 }
 
@@ -87,18 +87,18 @@ func nodeSourcePath(node types.KnowledgeNode) string {
 func countedContact(c sessions.PathContact) string {
 	var parts []string
 	if c.Writes > 0 {
-		parts = append(parts, countOf(c.Writes, "write"))
+		parts = append(parts, countNoun(c.Writes, "write"))
 	}
 	if c.Reads > 0 {
-		parts = append(parts, countOf(c.Reads, "read"))
+		parts = append(parts, countNoun(c.Reads, "read"))
 	}
 	return strings.Join(parts, ", ")
 }
 
-// countOf renders "1 write" / "4 writes". Distinct from this package's plural, which
+// countNoun renders "1 write" / "4 writes". Distinct from this package's plural, which
 // picks between two words a caller supplies; this one owns the count as well, because
 // every use here is a number followed by a regular noun.
-func countOf(n int, noun string) string {
+func countNoun(n int, noun string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, noun)
 	}
@@ -115,8 +115,8 @@ func humanAge(t time.Time) string {
 	case d < time.Hour:
 		return "within the hour"
 	case d < 24*time.Hour:
-		return countOf(int(d/time.Hour), "hour") + " ago"
+		return countNoun(int(d/time.Hour), "hour") + " ago"
 	default:
-		return countOf(int(d/(24*time.Hour)), "day") + " ago"
+		return countNoun(int(d/(24*time.Hour)), "day") + " ago"
 	}
 }

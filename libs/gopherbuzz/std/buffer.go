@@ -409,7 +409,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		if len(args) < 2 || !args[1].IsList() {
 			return vm.Null, fmt.Errorf("Buffer.writeStruct: requires (Type, [Type] values)")
 		}
-		types, offsets, size, err := foreignLayoutOf(args[0])
+		types, offsets, size, err := resolveForeignLayout(args[0])
 		if err != nil {
 			return vm.Null, err
 		}
@@ -435,7 +435,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 		if st.freed {
 			return vm.Null, fmt.Errorf("Buffer.readStruct: use after collect()")
 		}
-		types, offsets, size, err := foreignLayoutOf(args[0])
+		types, offsets, size, err := resolveForeignLayout(args[0])
 		if err != nil {
 			return vm.Null, err
 		}
@@ -619,9 +619,9 @@ func decodeLE(b []byte, zigType string) int64 {
 	return int64(u)
 }
 
-// foreignLayoutOf resolves a zdef struct TYPE value to its field C types, byte
+// resolveForeignLayout resolves a zdef struct TYPE value to its field C types, byte
 // offsets and total size.
-func foreignLayoutOf(v vm.Value) (types []string, offsets []int, size int, err error) {
+func resolveForeignLayout(v vm.Value) (types []string, offsets []int, size int, err error) {
 	name := v.ObjectTypeName()
 	if name == "" {
 		return nil, nil, 0, fmt.Errorf("expected a struct type, got %s", v.Kind())

@@ -746,9 +746,9 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 	return out
 }
 
-// diagnosticOf is err as a Diagnostic: its MGS code, message and docs link when err carries a
+// toDiagnostic is err as a Diagnostic: its MGS code, message and docs link when err carries a
 // code, and the bare message otherwise.
-func diagnosticOf(err error) types.Diagnostic {
+func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()

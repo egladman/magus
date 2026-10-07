@@ -187,7 +187,7 @@ fun generatorSources(c: Change, changes: [Change]) > [str] {
     return sort\strings(found);
 }
 
-fun generatorOf(c: Change) > str {
+fun changeGenerator(c: Change) > str {
     foreach (cl in c.claims) {
         if (cl.role == "output" and cl.target != "") { return "{cl.project}:{cl.target}"; }
     }
@@ -252,7 +252,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
         count[key] = (count[key] ?? 0) + 1;
         projects[key] = [key];
         if (c.role == "output") {
-            notes.append(Note{ key = key, text = "kept {c.path} with {key}: output of {generatorOf(c)}, and none of its generator's sources changed" });
+            notes.append(Note{ key = key, text = "kept {c.path} with {key}: output of {changeGenerator(c)}, and none of its generator's sources changed" });
         }
     }
 
@@ -317,7 +317,7 @@ export fun plan(changes: [Change], deps: {str: [str]}, minFiles: int, prefix: st
         if (holders.len() > 1) {
             where = "in {holders.join(", ")}; the highest holds it";
         }
-        notes.append(Note{ key = key, text = "attached {c.path}: output of {generatorOf(c)}, whose {plural(srcs.len(), word: "changed source")} {verb} {where}" });
+        notes.append(Note{ key = key, text = "attached {c.path}: output of {changeGenerator(c)}, whose {plural(srcs.len(), word: "changed source")} {verb} {where}" });
     }
 
     final files = mut {<str: [str]>};
@@ -699,10 +699,10 @@ fun symbolKind(id: str) > str {
 
 fun span(r: Region) > int { return r.hi - r.lo + 1; }
 
-// hunksOf rebuilds a file's hunks from its regions alone. The lines no region covers are the
+// rebuildHunks rebuilds a file's hunks from its regions alone. The lines no region covers are the
 // ones the diff kept, and they pair up in order between the two sides, so each gap between
 // kept lines is one hunk: its old run replaced by its new run.
-fun hunksOf(path: str, regions: [Region]) > [Hunk] {
+fun rebuildHunks(path: str, regions: [Region]) > [Hunk] {
     final olds = mut [<Region>];
     final news = mut [<Region>];
     foreach (r in regions) {
@@ -773,7 +773,7 @@ export fun settleRegions(regions: [Region], oldLines: [str], newLines: [str]) > 
     final result =mut [<Region>];
     if (regions.len() == 0) { return result; }
     final path = regions[0].path;
-    foreach (h in hunksOf(path, regions: regions)) {
+    foreach (h in rebuildHunks(path, regions: regions)) {
         final sides = ["old", "new"];
         foreach (side in sides) {
             var lines = newLines;
@@ -803,9 +803,9 @@ export fun settleRegions(regions: [Region], oldLines: [str], newLines: [str]) > 
     return result;
 }
 
-// stemOf is the source file a test file tests, by the same-stem pairing this repository
+// testedFile is the source file a test file tests, by the same-stem pairing this repository
 // enforces, or "" for a path that is not a test file.
-export fun stemOf(path: str) > str {
+export fun testedFile(path: str) > str {
     if (path.endsWith("_test.go")) { return path.sub(0, len: path.len() - 8) + ".go"; }
     foreach (ext in [".ts", ".tsx", ".js"]) {
         if (path.endsWith(".test{ext}")) { return path.sub(0, len: path.len() - 5 - ext.len()) + ext; }
@@ -939,11 +939,11 @@ object Units {
     deps: {str: [str]},
 }
 
-// unitsOf names the unit of every region: the changed symbol whose definition is the last
+// nameUnits names the unit of every region: the changed symbol whose definition is the last
 // one above the region's end and whose name its declaration line carries, else the
 // declaration line itself, else the file where the index does not reach or no driver names
 // declarations. A path that changed with no region (a binary file) is a unit of its own.
-fun unitsOf(change: SymbolChange) > Units {
+fun nameUnits(change: SymbolChange) > Units {
     final units = mut {<str: mut Unit>};
     final regionKey = mut [<str>];
     final byPath = mut {<str: [Sym]>};
@@ -1112,7 +1112,7 @@ fun strongComponents(nodes: [str], edges: {str: [str]}) > [[str]] {
     return t.comps;
 }
 
-fun dirOf(path: str) > str {
+fun parentDir(path: str) > str {
     final d = fs\dirname(path);
     if (d == "") { return "."; }
     return d;
@@ -1146,7 +1146,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
     final inserted = mut {<str: [Region]>};
     final placedElse = mut {<str: bool>};
     foreach (path in sort\strings(byPath.keys())) {
-        foreach (h in hunksOf(path, regions: byPath[path]!)) {
+        foreach (h in rebuildHunks(path, regions: byPath[path]!)) {
             final keys = mut [<str>];
             var even = true;
             final insertion = h.oldHi < h.oldLo;
@@ -1189,7 +1189,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
     foreach (k in sort\strings(units.keys())) {
         final un = units[k]!;
         if (un.change == "removed" or un.change == "file" or un.label == "(preamble)") { continue; }
-        final at = "{dirOf(un.path)}#{un.label}";
+        final at = "{parentDir(un.path)}#{un.label}";
         final acc = mut [<str>];
         foreach (x in standing[at] ?? [<str>]) { acc.append(x); }
         acc.append(k);
@@ -1198,7 +1198,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
     foreach (k in sort\strings(units.keys())) {
         final gone = units[k]!;
         if (gone.change != "removed") { continue; }
-        foreach (k2 in standing["{dirOf(gone.path)}#{gone.label}"] ?? [<str>]) {
+        foreach (k2 in standing["{parentDir(gone.path)}#{gone.label}"] ?? [<str>]) {
             if (units[k2]!.path != gone.path) {
                 unite(g, a: k, b: k2, why: "{gone.id} moved to {units[k2]!.id}");
             }
@@ -1220,7 +1220,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
                 unite(g, a: keys[0], b: k, why: "{p}'s preamble (package clause and imports) changed, and which of its declarations need that is not known");
             }
         }
-        final stem = stemOf(p);
+        final stem = testedFile(p);
         if (stem != "" and perPath[stem] != null) {
             foreach (k in perPath[stem]!) {
                 unite(g, a: keys[0], b: k, why: "{p} travels with {stem}, the code it tests");
@@ -1256,7 +1256,7 @@ fun groupUnits(u: Units, change: SymbolChange, budget: int) > Groups {
         final un = units[k]!;
         final t = change.texts[un.path];
         if (placedElse[k] != null or inserted[k]!.len() != 1 or un.kind != "func" or un.change != "added" or t == null or t!.oldAbsent) { continue; }
-        if (stubLines(linesOf(t!.new), region: inserted[k]![0], un: un, lang: change.languages[un.driver], lands: "x") != null) {
+        if (stubLines(splitLines(t!.new), region: inserted[k]![0], un: un, lang: change.languages[un.driver], lands: "x") != null) {
             g.stubbable[k] = inserted[k]![0];
         }
     }
@@ -1394,23 +1394,23 @@ export fun stemOfBranch(branch: str) > str {
 
 fun layerTitle(units: [Unit]) > str {
     final byDir = mut {<str: int>};
-    foreach (un in units) { byDir[dirOf(un.path)] = (byDir[dirOf(un.path)] ?? 0) + un.lines + 1; }
+    foreach (un in units) { byDir[parentDir(un.path)] = (byDir[parentDir(un.path)] ?? 0) + un.lines + 1; }
     var dir = "";
     foreach (d in sort\strings(byDir.keys())) {
         if (dir == "" or byDir[d]! > byDir[dir]!) { dir = d; }
     }
     var tested = false;
     foreach (un in units) {
-        if (stemOf(un.path) == "" and un.label != un.path and un.label != "(preamble)") { tested = true; }
+        if (testedFile(un.path) == "" and un.label != un.path and un.label != "(preamble)") { tested = true; }
     }
     var live = false;
     foreach (un in units) {
-        if (dirOf(un.path) == dir and un.change != "removed" and un.label != un.path and un.label != "(preamble)") { live = true; }
+        if (parentDir(un.path) == dir and un.change != "removed" and un.label != un.path and un.label != "(preamble)") { live = true; }
     }
     var top: Unit? = null;
     foreach (un in units) {
-        if (un.label == un.path or un.label == "(preamble)" or un.label.len() < 3 or (tested and stemOf(un.path) != "")) { continue; }
-        if (dirOf(un.path) != dir or (live and un.change == "removed")) { continue; }
+        if (un.label == un.path or un.label == "(preamble)" or un.label.len() < 3 or (tested and testedFile(un.path) != "")) { continue; }
+        if (parentDir(un.path) != dir or (live and un.change == "removed")) { continue; }
         if (top == null or un.lines > top!.lines or (un.lines == top!.lines and un.id < top!.id)) { top = un; }
     }
     var where = "root";
@@ -1440,7 +1440,7 @@ fun groupLines(members: [str], units: {str: Unit}) > int {
 // becomes an edge, so the symbol lands at or below the layer that needs it; one that would
 // overflow is stubbed where it can be; any other marks the layer needs-stub.
 export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, failures: [Failure], pulls: [str]) > SymPlan {
-    final found = unitsOf(change);
+    final found = nameUnits(change);
     final units = found.units;
     final deps = mut {<str: [str]>};
     foreach (k, v in found.deps) { deps[k] = v; }
@@ -1525,7 +1525,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
     fun dominant(r: str) > str {
         final byDir = mut {<str: int>};
         foreach (k in members[r]!) {
-            final d = dirOf(units[k]!.path);
+            final d = parentDir(units[k]!.path);
             byDir[d] = (byDir[d] ?? 0) + units[k]!.lines + 1;
         }
         var best = "";
@@ -1719,7 +1719,7 @@ export fun planSymbols(change: SymbolChange, budget: int, stem: str, base: str, 
         foreach (k in sort\strings(stubbed[n])) {
             final un = units[k]!;
             final lands = branches[layerOf[findIn(g, k: k)] ?? 0];
-            final text = stubLines(linesOf(change.texts[un.path]!.new), region: g.stubbable[k]!, un: un,
+            final text = stubLines(splitLines(change.texts[un.path]!.new), region: g.stubbable[k]!, un: un,
                 lang: change.languages[un.driver], lands: lands);
             stubs.append(Stub{ key = k, id = un.id, path = un.path, lands = lands, lines = text! });
             said.append("stubs {un.id} until {lands}");
@@ -1784,7 +1784,7 @@ export fun parseFailures(output: str, branch: str) > [Failure] {
     return found;
 }
 
-fun linesOf(text: str) > [str] {
+fun splitLines(text: str) > [str] {
     if (text == "") { return [<str>]; }
     final parts = text.split("\n");
     if (text.endsWith("\n")) {
@@ -1799,14 +1799,14 @@ fun linesOf(text: str) > [str] {
 // applied. A hunk cut between units writes each unit's own lines, and a stubbed unit's stub
 // in place of its own; a hunk that groupUnits kept whole is either applied or not.
 export fun contentAt(oldText: str, newText: str, regions: [Region], keys: [str], selected: {str: bool}, stubs: {str: [str]}) > str {
-    final oldLines = linesOf(oldText);
-    final newLines = linesOf(newText);
+    final oldLines = splitLines(oldText);
+    final newLines = splitLines(newText);
     final keyOf = mut {<str: str>};
     foreach (n, r in regions) { keyOf["{r.side}:{r.lo}"] = keys[n]; }
     final result = mut [<str>];
     var cursor = 1;
     final path = regions[0].path;
-    foreach (h in hunksOf(path, regions: regions)) {
+    foreach (h in rebuildHunks(path, regions: regions)) {
         foreach (l in slice(oldLines, lo: cursor, hi: h.oldLo - 1)) { result.append(l); }
         final hk = mut [<str>];
         foreach (r in h.regions) {
@@ -1860,7 +1860,7 @@ export object FileText {
 // or below, and that holds no stub, is written whole from the working tree; any other path
 // this layer touches or stubs in is written as contentAt builds it.
 export fun layerWrites(p: SymPlan, change: SymbolChange, stem: str) > [LayerWrite] {
-    final u = unitsOf(change);
+    final u = nameUnits(change);
     final byPath = mut {<str: [Region]>};
     final keysByPath = mut {<str: [str]>};
     foreach (n, r in change.regions) {
@@ -1939,7 +1939,7 @@ fun settledRegions(root: str, base: str, texts: {str: FileText}) > [Region] !> a
     final result =mut [<Region>];
     foreach (p in sort\strings(byPath.keys())) {
         final t = texts[p] ?? FileText{ old = "", new = "", oldAbsent = true, newAbsent = true };
-        foreach (r in settleRegions(byPath[p]!, oldLines: linesOf(t.old), newLines: linesOf(t.new))) { result.append(r); }
+        foreach (r in settleRegions(byPath[p]!, oldLines: splitLines(t.old), newLines: splitLines(t.new))) { result.append(r); }
     }
     return result;
 }
@@ -2000,28 +2000,28 @@ fun collectSymbols(base: str, mergeBase: str, root: str, files: [Change]) > Symb
     final regions = settledRegions(root, base: base, texts: texts);
     final syms = changedSymbols(base);
     return SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexedPaths(regions, syms: syms, files: files),
-        texts = texts, languages = languagesOf(regions) };
+        texts = texts, languages = regionLanguages(regions) };
 }
 
 // The spell each diff driver's language belongs to.
 final DRIVER_SPELLS = {"golang": "go", "typescript": "typescript", "python": "python", "rust": "rust", "buzz": "buzz"};
 
-// languageOf is the stub and comment syntax a spell declares. A spell that declares no stub
+// spellLanguage is the stub and comment syntax a spell declares. A spell that declares no stub
 // body comes back with no stubs, so nothing in its language is stubbed.
-export fun languageOf(syntax: magus\Syntax?) > Lang {
+export fun spellLanguage(syntax: magus\Syntax?) > Lang {
     final comments = syntax?.comments ?? magus\CommentSyntax{};
     final stubs = syntax?.stubs;
     if (stubs == null or stubs!.body == "") { return Lang{ stubs = null, comments = comments }; }
     return Lang{ stubs = stubs, comments = comments };
 }
 
-fun languagesOf(regions: [Region]) > {str: Lang} !> any {
+fun regionLanguages(regions: [Region]) > {str: Lang} !> any {
     final langs = mut {<str: Lang>};
     foreach (r in regions) {
         final spell = DRIVER_SPELLS[r.driver];
         if (spell == null or langs[r.driver] != null) { continue; }
         foreach (sp in magus\describe.spell(spell!)) {
-            langs[r.driver] = languageOf(sp.syntax);
+            langs[r.driver] = spellLanguage(sp.syntax);
         }
     }
     return langs;
@@ -2186,7 +2186,7 @@ fun fixturePlan() > [Group] !> any {
     return plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 3, prefix: "topic", base: "main");
 }
 
-fun groupOf(groups: [Group], path: str) > str {
+fun findGroup(groups: [Group], path: str) > str {
     foreach (g in groups) {
         if (g.files.indexOf(path) != null) { return g.branch; }
     }
@@ -2206,8 +2206,8 @@ test "every path lands in its owning project's group, and root-level config name
     final groups = fixturePlan();
     assert\equal(groups[0].files, want: [".gitattributes", "go.mod", "magus.yaml"], message: "workspace");
     assert\equal(groups[1].files, want: ["libs/core/a.go", "libs/core/b.go", "libs/core/c.go"], message: "libs/core");
-    assert\equal(groupOf(groups, path: "README.md"), want: "topic-3-root", message: "a wildcard-claimed root file is root project content");
-    assert\equal(groupOf(groups, path: "CONTRIBUTING.md"), want: "topic-3-root", message: "a root file only lint names exactly is root project content");
+    assert\equal(findGroup(groups, path: "README.md"), want: "topic-3-root", message: "a wildcard-claimed root file is root project content");
+    assert\equal(findGroup(groups, path: "CONTRIBUTING.md"), want: "topic-3-root", message: "a root file only lint names exactly is root project content");
     var total = 0;
     foreach (g in groups) { total = total + g.files.len(); }
     assert\equal(total, want: 24, message: "every fixture path is placed once");
@@ -2215,10 +2215,10 @@ test "every path lands in its owning project's group, and root-level config name
 
 test "an output travels with its generator's changed sources, the highest group when they span several" {
     final groups = fixturePlan();
-    assert\equal(groupOf(groups, path: "internal/gen/x.go"), want: "topic-3-root", message: "same-project generator");
-    assert\equal(groupOf(groups, path: "docs/reference/cli.md"), want: "topic-3-root", message: "docs output generated from root sources");
-    assert\equal(groupOf(groups, path: "docs/reference/api.md"), want: "topic-4-docs", message: "sources in root and docs");
-    assert\equal(groupOf(groups, path: "docs/reference/old.md"), want: "topic-4-docs", message: "no changed source keeps it with its project");
+    assert\equal(findGroup(groups, path: "internal/gen/x.go"), want: "topic-3-root", message: "same-project generator");
+    assert\equal(findGroup(groups, path: "docs/reference/cli.md"), want: "topic-3-root", message: "docs output generated from root sources");
+    assert\equal(findGroup(groups, path: "docs/reference/api.md"), want: "topic-4-docs", message: "sources in root and docs");
+    assert\equal(findGroup(groups, path: "docs/reference/old.md"), want: "topic-4-docs", message: "no changed source keeps it with its project");
     assert\equal(groups[4].files, want: ["console/src/gen/x_pb.ts", "proto/a.proto", "proto/b.proto", "proto/gen/x.pb.go"],
         message: "a generator declaring no sources of its own reads its project's, and its outputs in other projects follow them");
     assert\equal(groups[3].notes.indexOf("attached docs/reference/api.md: output of docs:ref-generate, whose 2 changed sources are in ., docs; the highest holds it") != null,
@@ -2234,7 +2234,7 @@ test "a group under --min-files folds into the first group above that depends on
         "attached docs/reference/cli.md: output of docs:cli-generate, whose 1 changed source is here",
         "attached internal/gen/x.go: output of .:x-generate, whose 2 changed sources are here",
     ], message: "root's notes");
-    assert\equal(groupOf(groups, path: "console/src/app.ts"), want: "topic-4-docs", message: "console has no dependent, so it joins docs above it");
+    assert\equal(findGroup(groups, path: "console/src/app.ts"), want: "topic-4-docs", message: "console has no dependent, so it joins docs above it");
     assert\equal(groups[4].projects, want: ["proto"], message: "the top group has nothing above to fold into, so it stands at 2 files");
     final doc = fixture();
     final strict = plan(fixtureChanges(doc, reversed: false), deps: fixtureDeps(doc), minFiles: 5, prefix: "topic", base: "main");
@@ -2327,7 +2327,7 @@ fun symbolRepo() > Repo !> any {
         stubs = magus\StubSyntax{ kinds = ["Function", "Method"], bodyStyle = "brace",
             body = "\{\n\tpanic(\"unimplemented: \{\{&Name\}\} lands in \{\{&Branch\}\}\")\n\}" },
     };
-    final languages = {"golang": languageOf(golang)};
+    final languages = {"golang": spellLanguage(golang)};
     return Repo{ root = root, change = SymbolChange{ regions = regions, symbols = syms, files = files, indexed = indexed,
         texts = texts, languages = languages }, texts = texts, paths = paths };
 }
@@ -2425,7 +2425,7 @@ test "--apply writes each layer's part of a file through a temporary index, and 
         final stubbedIn = gitIn(repo.root, args: ["show", "topic-2-calc-mid:calc/calc.go"]);
         assert\equal(stubbedIn.indexOf("panic(\"unimplemented: Helper lands in topic-3-calc-helper\")") != null, want: true,
             message: "layer 2 builds against Helper's stub: {stubbedIn}");
-        assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: linesOf(repo.texts["calc/calc.go"]!.new).join("\n"),
+        assert\equal(gitIn(repo.root, args: ["show", "topic-3-calc-helper:calc/calc.go"]), want: splitLines(repo.texts["calc/calc.go"]!.new).join("\n"),
             message: "layer 3 writes the real Helper over the stub");
         final top = readTexts(repo.root, mergeBase: "topic-4-calc-top", paths: repo.paths);
         foreach (path in repo.paths) {

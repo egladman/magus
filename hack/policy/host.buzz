@@ -47,7 +47,7 @@ export fun writePath(path: str) > str {
 
 fun readsCapture(p: helpers\Program) > bool {
     final recursive = p.name == "rg" or p.name == "grep" or p.name == "find";
-    foreach (file in filesOf(p)) {
+    foreach (file in readerPaths(p)) {
         if (isCapture(file)) { return true; }
         if (recursive and isLogDir(file)) { return true; }
     }
@@ -61,15 +61,15 @@ fun touchesTerminals(p: helpers\Program) > bool {
         }
         return false;
     }
-    foreach (file in filesOf(p)) {
+    foreach (file in readerPaths(p)) {
         if (hasComponent(file, name: "terminals")) { return true; }
     }
     return false;
 }
 
-// filesOf are the paths a reader is aimed at. A filter's pattern and a sed
+// readerPaths are the paths a reader is aimed at. A filter's pattern and a sed
 // script are not paths: `rg terminals internal/` searches for the word.
-fun filesOf(p: helpers\Program) > [str] {
+fun readerPaths(p: helpers\Program) > [str] {
     final pos = positionals(p.name, args: p.args);
     if (p.name == "find") {
         return pos;

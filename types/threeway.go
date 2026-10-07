@@ -127,7 +127,7 @@ type mergeAlignment struct {
 }
 
 func alignMerge(path string, base, ours, theirs []byte) (mergeAlignment, bool) {
-	driver, _ := DiffDriverFor(path)
+	driver, _ := MatchDiffDriver(path)
 	hunksA, ok := Hunks(path, base, ours, driver)
 	if !ok {
 		return mergeAlignment{}, false

@@ -24,7 +24,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-session.buzz: {message}\n") catch void;
 }
 
-fun envFileOf(args: [str]) > str {
+fun envFilePath(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [ENV_FILE_FLAG]) catch null;
     if (parsed == null) {
         warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
@@ -38,7 +38,7 @@ fun envFileOf(args: [str]) > str {
 }
 
 fun main(args: [str]) > void {
-    final envFile = envFileOf(args);
+    final envFile = envFilePath(args);
     if (envFile == "") { return; }
     final root = path\abs(".") catch "";
     if (root == "") { return; }

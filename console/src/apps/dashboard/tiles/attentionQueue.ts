@@ -61,7 +61,7 @@ function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
-function filesOf(v: unknown): AttentionFile[] {
+function parseFiles(v: unknown): AttentionFile[] {
   if (!Array.isArray(v)) return [];
   const out: AttentionFile[] = [];
   for (const item of v) {
@@ -111,7 +111,7 @@ export function parseRequests(body: unknown): AttentionRequest[] {
       source: str(r.source),
       where: str(r.where),
       lease: str(r.lease),
-      files: filesOf(r.files),
+      files: parseFiles(r.files),
       message: str(r.message),
     });
   }

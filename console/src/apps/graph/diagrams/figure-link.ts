@@ -45,9 +45,9 @@ function record(v: unknown): Record<string, unknown> | null {
     : null;
 }
 
-// bytesOf undoes the unpadded base64url. The alphabet is checked first because atob skips
+// decodeBase64url undoes the unpadded base64url. The alphabet is checked first because atob skips
 // whitespace and accepts what a link never carries.
-function bytesOf(raw: string): Uint8Array | string {
+function decodeBase64url(raw: string): Uint8Array | string {
   const payload = raw.replace(/=+$/, "");
   if (payload === "") return "the link carries no figure";
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) return "the link is not base64url";
@@ -60,7 +60,7 @@ function bytesOf(raw: string): Uint8Array | string {
 // decodeFigureLink reads the payload after "#figure=". Every failure names what was wrong
 // with the link; none throws.
 export function decodeFigureLink(payload: string): FigureLinkRead {
-  const bytes = bytesOf(payload);
+  const bytes = decodeBase64url(payload);
   if (typeof bytes === "string") return fail(bytes);
   let text: string;
   try {

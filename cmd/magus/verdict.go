@@ -42,18 +42,18 @@ func symbolCoverage(ctx context.Context, root, input string, seeded bool) knowle
 		// as verified coverage and would assert the very fact it failed to establish.
 		return knowledge.Coverage{Seeded: seeded}
 	}
-	return symbolCoverageOf(ctx, ws, globalCfg, input, seeded)
+	return measureSymbolCoverage(ctx, ws, globalCfg, input, seeded)
 }
 
-// symbolCoverageOf is symbolCoverage over a workspace the caller already holds, read under
+// measureSymbolCoverage is symbolCoverage over a workspace the caller already holds, read under
 // cfg: the form a server answering for one of many workspaces calls.
-func symbolCoverageOf(ctx context.Context, ws graphWorkspace, cfg config.Config, input string, seeded bool) knowledge.Coverage {
+func measureSymbolCoverage(ctx context.Context, ws graphWorkspace, cfg config.Config, input string, seeded bool) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
 	if !knowledge.CouldMatchLazyLayer(input) {
 		return cov
 	}
 	cov.Gaps, cov.Probed = magus.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
-	cov.Stale = staleIndexesOf(ctx, ws)
+	cov.Stale = findStaleIndexes(ctx, ws)
 	return cov
 }
 

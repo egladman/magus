@@ -69,7 +69,7 @@ var shapeReaders = map[string]shapeReader{
 	"typescript": colonShapes{},
 }
 
-func readerFor(language string) shapeReader {
+func pickShapeReader(language string) shapeReader {
 	if r, ok := shapeReaders[language]; ok {
 		return r
 	}

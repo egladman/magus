@@ -46,22 +46,22 @@ export function formatViewBox(v: ViewBox): string {
   return [r(v.x), r(v.y), r(v.w), r(v.h)].join(" ");
 }
 
-// scaleOf is how far v is zoomed relative to the figure's natural box: 2 is twice as close.
-export function scaleOf(natural: ViewBox, v: ViewBox): number {
+// zoomScale is how far v is zoomed relative to the figure's natural box: 2 is twice as close.
+export function zoomScale(natural: ViewBox, v: ViewBox): number {
   return natural.w / v.w;
 }
 
 // zoomAbout zooms by factor (above 1 is closer) keeping the figure point p where it is on
 // screen, clamped to [MIN_SCALE, MAX_SCALE] of the natural box.
 export function zoomAbout(natural: ViewBox, v: ViewBox, factor: number, p: Point): ViewBox {
-  const target = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scaleOf(natural, v) * factor));
-  const f = target / scaleOf(natural, v);
+  const target = Math.min(MAX_SCALE, Math.max(MIN_SCALE, zoomScale(natural, v) * factor));
+  const f = target / zoomScale(natural, v);
   const w = v.w / f;
   const h = v.h / f;
   return { x: p.x - (p.x - v.x) / f, y: p.y - (p.y - v.y) / f, w, h };
 }
 
-export function centerOf(v: ViewBox): Point {
+export function boxCenter(v: ViewBox): Point {
   return { x: v.x + v.w / 2, y: v.y + v.h / 2 };
 }
 
@@ -217,7 +217,7 @@ export interface FigureController {
 // The natural box is read once, before anything rewrites the viewBox.
 const NATURAL = "data-natural-viewbox";
 
-function naturalOf(svg: SVGSVGElement): ViewBox {
+function readNaturalBox(svg: SVGSVGElement): ViewBox {
   const stored = parseViewBox(svg.getAttribute(NATURAL));
   if (stored) return stored;
   const vb = parseViewBox(svg.getAttribute("viewBox")) ?? {
@@ -238,7 +238,7 @@ function edgeElements(svg: SVGSVGElement): Element[] {
   return [...svg.querySelectorAll("[data-edge]")];
 }
 
-export function edgesOf(svg: SVGSVGElement): (readonly [string, string])[] {
+export function readEdges(svg: SVGSVGElement): (readonly [string, string])[] {
   const out: (readonly [string, string])[] = [];
   for (const e of edgeElements(svg)) {
     const pair = parseEdge(e.getAttribute("data-edge"));
@@ -247,9 +247,9 @@ export function edgesOf(svg: SVGSVGElement): (readonly [string, string])[] {
   return out;
 }
 
-// positionOf reads a node's top-left from its first placed shape. Attributes rather than
+// readPosition reads a node's top-left from its first placed shape. Attributes rather than
 // getBBox, which needs layout and is absent from a DOM without one.
-function positionOf(el: Element): Point {
+function readPosition(el: Element): Point {
   const shape = el.querySelector("rect, polygon, path, text");
   if (!shape) return { x: 0, y: 0 };
   const x = Number(shape.getAttribute("x"));
@@ -272,7 +272,7 @@ function setRoving(nodes: readonly Element[], current: Element | null): void {
 export function attachFigure(opts: FigureOptions): FigureController {
   const { frame } = opts;
   let svg = opts.svg;
-  let natural = naturalOf(svg);
+  let natural = readNaturalBox(svg);
   let current = fitBox(natural);
   let focusedId: string | null = null;
   let glide = 0;
@@ -307,7 +307,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
     const nodes = nodeElements(svg);
     const byId = new Map(nodes.map((n) => [n.getAttribute("data-node") ?? "", n]));
     order = readingOrder(
-      nodes.map((n) => ({ id: n.getAttribute("data-node") ?? "", ...positionOf(n) })),
+      nodes.map((n) => ({ id: n.getAttribute("data-node") ?? "", ...readPosition(n) })),
     ).flatMap((id) => {
       const el = byId.get(id);
       return el ? [el] : [];
@@ -316,7 +316,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
   };
 
   const paintFocus = (): void => {
-    const edges = edgesOf(svg);
+    const edges = readEdges(svg);
     if (focusedId === null) {
       svg.removeAttribute("data-focused");
       for (const el of [...nodeElements(svg), ...edgeElements(svg)]) {
@@ -350,12 +350,12 @@ export function attachFigure(opts: FigureOptions): FigureController {
     }
   };
 
-  const nodeOf = (t: EventTarget | null): Element | null =>
+  const closestNode = (t: EventTarget | null): Element | null =>
     t instanceof Element ? t.closest("[data-node]") : null;
 
   const controller: FigureController = {
     fit: () => moveTo(fitBox(natural)),
-    zoom: (factor) => moveTo(zoomAbout(natural, current, factor, centerOf(current))),
+    zoom: (factor) => moveTo(zoomAbout(natural, current, factor, boxCenter(current))),
     actual: () => moveTo(natural),
     focusNode: (id) => {
       focusedId = id;
@@ -366,7 +366,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
     replace: (next) => {
       const kept = current;
       svg = next;
-      natural = naturalOf(svg);
+      natural = readNaturalBox(svg);
       apply(kept);
       indexNodes();
       const still = nodeElements(svg).some((n) => n.getAttribute("data-node") === focusedId);
@@ -420,7 +420,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
         apply(panBy(current, rect(), dx, dy));
         return;
       }
-      setHot(nodeOf(e.target)?.getAttribute("data-node") ?? null);
+      setHot(closestNode(e.target)?.getAttribute("data-node") ?? null);
     },
     on,
   );
@@ -441,7 +441,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
   frame.addEventListener(
     "dblclick",
     (e) => {
-      const n = nodeOf(e.target);
+      const n = closestNode(e.target);
       if (!n) return;
       e.preventDefault();
       controller.focusNode(n.getAttribute("data-node"));
@@ -452,7 +452,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
   frame.addEventListener(
     "focusin",
     (e) => {
-      const n = nodeOf(e.target);
+      const n = closestNode(e.target);
       if (n) {
         setRoving(order, n);
         setHot(n.getAttribute("data-node"));
@@ -464,7 +464,7 @@ export function attachFigure(opts: FigureOptions): FigureController {
   frame.addEventListener(
     "keydown",
     (e) => {
-      const n = nodeOf(e.target);
+      const n = closestNode(e.target);
       if (e.key === "Tab" && n && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const i = order.indexOf(n);
         const next = order[i + (e.shiftKey ? -1 : 1)];

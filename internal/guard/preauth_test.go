@@ -389,7 +389,7 @@ func scriptNexts(t *testing.T, root string) (read, write hint.Next) {
 			entry("hack/dev/merge-job-branches.buzz", hint.ScriptEffectWrite),
 		},
 	}}))
-	next, err := hint.ScriptsFor(cacheDir, "next:run-output", map[string]string{"ref": "out84fea3b6ae30"})
+	next, err := hint.MatchScripts(cacheDir, "next:run-output", map[string]string{"ref": "out84fea3b6ae30"})
 	require.NoError(t, err)
 	require.Len(t, next, 2)
 	require.True(t, next[0].Reads)

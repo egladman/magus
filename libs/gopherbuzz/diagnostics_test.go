@@ -45,19 +45,19 @@ func TestDiagnosticOf(t *testing.T) {
 		return fmt.Errorf("magusfile: exec magusfile.buzz: %w", err)
 	}
 
-	got, ok := DiagnosticOf(exec("fun f() > void {\n  final x: int = \"s\";\n}"))
+	got, ok := DiagnosticFromError(exec("fun f() > void {\n  final x: int = \"s\";\n}"))
 	require.True(t, ok)
 	assert.Equal(t, Diagnostic{Line: 2, Col: 3, Code: "BZZ1005", Msg: `cannot assign str to int variable "x"`}, got)
 
-	got, ok = DiagnosticOf(exec("var x: int = ;"))
+	got, ok = DiagnosticFromError(exec("var x: int = ;"))
 	require.True(t, ok, "a parse error is located from its rendered position")
 	assert.Equal(t, 1, got.Line)
 	assert.Positive(t, got.Col)
 	assert.Empty(t, got.Code)
 
-	_, ok = DiagnosticOf(errors.New("magus.yaml: unknown key"))
+	_, ok = DiagnosticFromError(errors.New("magus.yaml: unknown key"))
 	assert.False(t, ok)
-	_, ok = DiagnosticOf(nil)
+	_, ok = DiagnosticFromError(nil)
 	assert.False(t, ok)
 }
 

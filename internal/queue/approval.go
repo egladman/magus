@@ -286,7 +286,7 @@ func carryBase(f carryFacts) (string, bool) {
 			return "", false
 		}
 	} else {
-		base = forkOf(f.old, f.commits)
+		base = ownForkPoint(f.old, f.commits)
 	}
 	for _, r := range f.refs {
 		if r.unqueued || r.id == nearest.id || own[r.head] {

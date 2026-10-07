@@ -369,8 +369,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			// guarded per link by the share token and held to the same Needs as here. It is a
 			// subset of the loopback surface: NO /api/v1/graph, NO /mcp, NO JobService.
 			shareGuarded := map[string]share.Route{
-				"/api/v1/events":  {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: apiNeedsFor("/api/v1/events")},
-				"/api/v1/insight": {Handler: insightH, Format: rpcerr.FormatJSON, Needs: apiNeedsFor("/api/v1/insight")},
+				"/api/v1/events":  {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
+				"/api/v1/insight": {Handler: insightH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/insight")},
 			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
@@ -724,7 +724,7 @@ var mcpCORS = httpx.CORSPolicy{
 
 // api mounts a JSON console route at path behind the Need apiNeeds names for it.
 func (f *frame) api(path string, h http.Handler) {
-	needs, err := apiNeedsOf(path)
+	needs, err := lookupAPINeeds(path)
 	if err != nil {
 		f.errs = append(f.errs, err)
 		return

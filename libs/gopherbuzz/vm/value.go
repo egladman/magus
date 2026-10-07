@@ -760,7 +760,7 @@ func newMapObj() *mapObj { return &mapObj{} }
 // It uses M when built (large maps) and otherwise linear-scans Keys (small maps).
 // indexOfVal is the general form; this one stays because a record field read
 // (getMember, setMember, MapGet) already has the name as a Go string.
-func (m *mapObj) indexOf(key string) int {
+func (m *mapObj) keyIndex(key string) int {
 	if m.objKeyed {
 		// Keys is only a display string here, so "1" would match the int key 1.
 		// Scan keyVals for a str of the same content instead.
@@ -823,7 +823,7 @@ func mapKeyEqual(a, b Value) bool {
 func (m *mapObj) indexOfVal(key Value) int {
 	if !m.objKeyed {
 		if key.tag() == tagStr {
-			return m.indexOf(key.asStr().V)
+			return m.keyIndex(key.asStr().V)
 		}
 		// A non-str key cannot be present in a str-keyed map.
 		return -1
@@ -837,7 +837,7 @@ func (m *mapObj) indexOfVal(key Value) int {
 }
 
 func (m *mapObj) set(key string, v Value) {
-	if i := m.indexOf(key); i >= 0 {
+	if i := m.keyIndex(key); i >= 0 {
 		m.Vals[i] = v
 		return
 	}
@@ -904,7 +904,7 @@ func (m *mapObj) removeAt(i int) Value {
 }
 
 func (m *mapObj) get(key string) (Value, bool) {
-	if i := m.indexOf(key); i >= 0 {
+	if i := m.keyIndex(key); i >= 0 {
 		return m.Vals[i], true
 	}
 	return Null, false

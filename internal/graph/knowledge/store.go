@@ -635,7 +635,7 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 	}
 	key := mergedKey(g, man)
 	if key != "" {
-		if cached := readCache.mergedFor(s.dir, key); cached != nil {
+		if cached := readCache.cachedMerge(s.dir, key); cached != nil {
 			g.adopt(cached)
 			return nil
 		}
@@ -1237,7 +1237,7 @@ func isPathID(id string) bool {
 	return strings.HasPrefix(id, types.KindFile+":") || strings.HasPrefix(id, types.KindDir+":")
 }
 
-func pathIDsOf(nodes []types.KnowledgeNode) []string {
+func collectPathIDs(nodes []types.KnowledgeNode) []string {
 	var ids []string
 	for _, n := range nodes {
 		if isPathID(n.ID) {
@@ -1280,7 +1280,7 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 		if e, ok := next[sh.Name]; ok && e.Fingerprint == fp {
 			continue
 		}
-		next[sh.Name] = pathIDEntry{Fingerprint: fp, IDs: pathIDsOf(sh.Nodes)}
+		next[sh.Name] = pathIDEntry{Fingerprint: fp, IDs: collectPathIDs(sh.Nodes)}
 	}
 	if maps.EqualFunc(old, next, func(a, b pathIDEntry) bool {
 		return a.Fingerprint == b.Fingerprint && slices.Equal(a.IDs, b.IDs)
@@ -1319,7 +1319,7 @@ func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardCl
 		if err != nil {
 			return nil, fmt.Errorf("knowledge: read shard %q for the overlay's node set: %w", name, err)
 		}
-		for _, id := range pathIDsOf(sf.Nodes) {
+		for _, id := range collectPathIDs(sf.Nodes) {
 			out[id] = true
 		}
 	}

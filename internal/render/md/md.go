@@ -33,9 +33,9 @@ const (
 	Center              // :-:
 )
 
-// delimiterOf returns the GFM delimiter-row cell for the alignment, filling a
+// delimiterCell returns the GFM delimiter-row cell for the alignment, filling a
 // column of the given width.
-func (a Align) delimiterOf(width int) string {
+func (a Align) delimiterCell(width int) string {
 	switch a {
 	case Right:
 		return strings.Repeat("-", width-1) + ":"
@@ -189,7 +189,7 @@ func TableLines(header []string, align []Align, rows [][]string) []string {
 	}
 	delimiters := make([]string, len(header))
 	for i, w := range widths {
-		delimiters[i] = alignAt(align, i).delimiterOf(w)
+		delimiters[i] = alignAt(align, i).delimiterCell(w)
 	}
 	lines := make([]string, 0, 2+len(rows))
 	lines = append(lines, line(header), line(delimiters))

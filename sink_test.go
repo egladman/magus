@@ -98,7 +98,7 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 					Type string `json:"type"`
 				}
 				require.NoError(t, json.Unmarshal([]byte(lines[0]), &head))
-				assert.Equal(t, report.TypeOf(e), head.Type)
+				assert.Equal(t, report.RecordType(e), head.Type)
 				if onStderr {
 					assert.Empty(t, stdout.String())
 				} else {

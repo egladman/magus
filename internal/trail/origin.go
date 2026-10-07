@@ -13,14 +13,14 @@ import (
 // osAccount is read once: a process cannot change the account it runs as, and the
 // lookup can cost a directory-service round trip.
 var osAccount = sync.OnceValues(func() (name, uid string) {
-	return accountOf(os.Getuid(), user.LookupId, user.Current)
+	return lookupAccount(os.Getuid(), user.LookupId, user.Current)
 })
 
-// accountOf names the account uid, looked up by id. user.Current is not used on Unix: its
+// lookupAccount names the account uid, looked up by id. user.Current is not used on Unix: its
 // pure-Go fallback reads $USER when the passwd lookup fails, and any process can set that.
 // A failed lookup records the uid alone. A uid below zero is Windows, where the account
 // comes from the process token rather than the environment.
-func accountOf(uid int, lookupID func(string) (*user.User, error), current func() (*user.User, error)) (name, id string) {
+func lookupAccount(uid int, lookupID func(string) (*user.User, error), current func() (*user.User, error)) (name, id string) {
 	if uid < 0 {
 		if u, err := current(); err == nil {
 			return u.Username, u.Uid

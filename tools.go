@@ -130,6 +130,6 @@ func joinLifecycle(row *types.ToolRow, state string, lifecycles []spells.Lifecyc
 	if i < 0 || row.InstalledVersion == "" {
 		return
 	}
-	c, support := lifecycles[i].SupportOf(row.InstalledVersion, now)
+	c, support := lifecycles[i].PlaceVersion(row.InstalledVersion, now)
 	row.Cycle, row.EOL, row.Support = c.Cycle, c.EOL, string(support)
 }

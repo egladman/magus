@@ -132,7 +132,7 @@ func (p *Planner) Run(ctx context.Context, in types.Changes) (types.Plan, error)
 		for i, c := range g {
 			ids[i] = c.ID
 		}
-		p.Events.Emit(Event{Kind: EventPartition, Partition: partitionOf(gi), Changes: ids})
+		p.Events.Emit(Event{Kind: EventPartition, Partition: partitionPtr(gi), Changes: ids})
 		for _, c := range g {
 			if plan.CommitDate, err = newestDate(ctx, p.vcs, p.clone.Root, plan.CommitDate, c.Head); err != nil {
 				return types.Plan{}, err

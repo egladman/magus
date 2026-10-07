@@ -78,7 +78,7 @@ export function parseAnsi(line: string): AnsiSeg[] {
   CSI_RE.lastIndex = 0;
   const push = (text: string): void => {
     if (!text) return;
-    out.push({ text, cls: classesFor(state) });
+    out.push({ text, cls: sgrClasses(state) });
   };
   while ((m = CSI_RE.exec(line)) !== null) {
     push(line.slice(last, m.index));
@@ -113,7 +113,7 @@ function applySGR(state: SgrState, params: string): void {
   }
 }
 
-function classesFor(state: SgrState): string[] {
+function sgrClasses(state: SgrState): string[] {
   const cls: string[] = [];
   if (state.bold) cls.push("console-render-ansi--bold");
   if (state.dim) cls.push("console-render-ansi--dim");

@@ -40,7 +40,7 @@ func openSink(ctx context.Context, opts OutputOptions) (*magus.Sink, func() erro
 		stdout = io.MultiWriter(os.Stdout, tee)
 	}
 	sinkOpts := []magus.SinkOption{magus.WithSinkLevel(globalCfg.Log.SlogLevel()), magus.WithSinkFilter(globalCfg.Report.Filter)}
-	if opts.Format == outputText && pipeStageOf(ctx).writesRecords() {
+	if opts.Format == outputText && pipeStageFromContext(ctx).writesRecords() {
 		sinkOpts = append(sinkOpts, magus.WithSinkRecords(stdout))
 	}
 	sink, err := magus.NewSink(magus.Format(opts.Format), stdout, os.Stderr, sinkOpts...)
@@ -120,13 +120,13 @@ func emitNames(names []string) error {
 	return nil
 }
 
-// emitNamesOf is emitNames over a slice of records, projecting each to its identity.
+// emitItemNames is emitNames over a slice of records, projecting each to its identity.
 //
 // It exists because the shape it replaces was four lines at every call site -- allocate,
 // loop, append, emit -- and most `-o name` arms skipped it and wrote fmt.Println instead.
 // That silently bypassed --tee: the flag was accepted, no file was written, and nothing
 // said so. A helper only prevents that when using it is shorter than not using it.
-func emitNamesOf[T any](items []T, name func(T) string) error {
+func emitItemNames[T any](items []T, name func(T) string) error {
 	names := make([]string, 0, len(items))
 	for _, item := range items {
 		names = append(names, name(item))

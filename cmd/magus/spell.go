@@ -503,7 +503,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 		res.Spells = append(res.Spells, spellLockEntry{Path: path, Tag: e.Tag, Digest: e.Digest})
 	}
 	if opts.Format == FormatText || opts.Format == FormatName {
-		return emitNamesOf(res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
+		return emitItemNames(res.Spells, func(e spellLockEntry) string { return e.Path + "@" + e.Digest.String() })
 	}
 	return emitFormatted(opts, res)
 }
@@ -619,7 +619,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 			return fmt.Errorf("spell ls: %w", err)
 		}
 		if opts.Format == FormatText || opts.Format == FormatName {
-			return emitNamesOf(shipped, func(s shippedSpell) string { return s.Reference })
+			return emitItemNames(shipped, func(s shippedSpell) string { return s.Reference })
 		}
 		return emitFormatted(opts, shippedSpellsResult{Spells: shipped})
 	}

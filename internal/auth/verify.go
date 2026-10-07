@@ -28,7 +28,7 @@ import (
 // load (a retired connectors.d, say) refuses stored tokens only: the operator token never
 // opens it.
 func Verify(presented string) (types.Credential, bool) {
-	kind, ok := kindOf(presented)
+	kind, ok := credentialKind(presented)
 	if !ok {
 		return types.Credential{}, false
 	}

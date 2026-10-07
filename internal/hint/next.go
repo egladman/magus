@@ -34,7 +34,7 @@ import (
 // paste and Argv for a caller to exec, so the two differ wherever an argument needs
 // shell quotes.
 //
-// Reads marks a workspace script that declares it changes nothing (see ScriptsFor).
+// Reads marks a workspace script that declares it changes nothing (see MatchScripts).
 // ServableTo honors it for a single `buzz` invocation only, so it cannot clear any
 // other command for a reviewer.
 type Next struct {

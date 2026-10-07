@@ -36,7 +36,7 @@ fun stampFiles(root: str) > [str] !> any {
     return files;
 }
 
-fun digestOf(file: str) > str !> any {
+fun shortDigest(file: str) > str !> any {
     return crypto\sha256File(file).sub(0, len: 12);
 }
 
@@ -49,7 +49,7 @@ final commitKey = "@commit";
 export fun buildStamp(root: str) > str !> any {
     final entries = mut [<str>];
     foreach (rel in stampFiles(root)) {
-        final digest = digestOf("{root}/{rel}");
+        final digest = shortDigest("{root}/{rel}");
         entries.append("{rel}={digest}");
     }
     final head = vcs\commit() catch null;
@@ -90,7 +90,7 @@ export fun movedSince(root: str, stamp: str, builtAt: double) > [str] !> any {
         final was = recorded[rel];
         if (was == null) {
             moved.append(rel);
-        } else if (fs\stat("{root}/{rel}").mtime > builtAt and digestOf("{root}/{rel}") != was!) {
+        } else if (fs\stat("{root}/{rel}").mtime > builtAt and shortDigest("{root}/{rel}") != was!) {
             moved.append(rel);
         }
     }

@@ -46,7 +46,7 @@ final preambleRule = "The owner's Go house style keeps nothing above the package
     + "tooling reads: //go:build, a //go: directive, a generated-code header. A package comment lives in "
     + "doc.go alone.";
 
-fun extensionOf(path: str) > str {
+fun fileExtension(path: str) > str {
     final slash = path.split("/");
     final name = slash[slash.len() - 1];
     final parts = name.split(".");
@@ -252,9 +252,9 @@ export fun goComments(text: str, before: str) > [GoComment] {
     return blocks;
 }
 
-// budgetOf is the lines a block of this kind earns. A doc.go preamble is the package
+// lineBudget is the lines a block of this kind earns. A doc.go preamble is the package
 // comment, budgeted like an exported declaration's.
-fun budgetOf(kind: str) > int {
+fun lineBudget(kind: str) > int {
     if (kind == "exported" or kind == "preamble") {
         return exportedBudget;
     }
@@ -292,7 +292,7 @@ export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
             denied.append("{path}:{b.line}: {b.added} comment lines above the package clause. " + preambleRule + " Delete them.");
             continue;
         }
-        final budget = budgetOf(b.kind);
+        final budget = lineBudget(b.kind);
         if (b.added <= budget) {
             continue;
         }
@@ -316,10 +316,10 @@ export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
 // decideComments grades a Go write against the comment budget, then advises once per
 // session when a write to any code file adds comment lines.
 export fun decideComments(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
-    if (proseExtensions.indexOf(extensionOf(path)) != null) {
+    if (proseExtensions.indexOf(fileExtension(path)) != null) {
         return magus\guard.allow();
     }
-    if (extensionOf(path) == ".go") {
+    if (fileExtension(path) == ".go") {
         final verdict = decideGo(path, before: before, after: after);
         if (verdict.decision != "allow") {
             return verdict;

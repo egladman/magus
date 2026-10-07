@@ -233,7 +233,7 @@ func (p *parser) openHunk(line string, m []string) {
 	p.hunk = &Hunk{
 		Index:       len(p.cur.Hunks),
 		Header:      line,
-		Declaration: DeclarationOf(line),
+		Declaration: HunkDeclaration(line),
 		OldStart:    oldStart,
 		OldCount:    atoi(m[2], 1),
 		NewStart:    newStart,

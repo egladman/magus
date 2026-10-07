@@ -49,14 +49,14 @@ func describeTools(ctx context.Context, root string, args []string) error {
 	var paths []string
 	if len(pos) > 0 {
 		projects := ws.All()
-		names := namesOf(projects, func(p *types.Project) string { return p.Path })
+		names := collectNames(projects, func(p *types.Project) string { return p.Path })
 		projects = filterByName(projects, pos[0], func(p *types.Project) string { return p.Path })
 		if len(projects) == 0 {
 			// The entity is the PROJECT being filtered, not the tool: naming the noun the
 			// command is called after would send the reader looking for a missing binary.
 			return unknownEntity("project", pos[0], names)
 		}
-		paths = namesOf(projects, func(p *types.Project) string { return p.Path })
+		paths = collectNames(projects, func(p *types.Project) string { return p.Path })
 	}
 
 	report, err := m.Tools(ctx, paths...)

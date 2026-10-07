@@ -119,10 +119,10 @@ func TestModesOfListsTheBaseFirst(t *testing.T) {
 		{Name: "detail", Kind: cli.FlagBool, Modes: []string{"plan"}},
 		{Name: "base", Kind: cli.FlagString, Modes: []string{"plan", "impact"}},
 	}
-	assert.Equal(t, []string{"", "plan", "impact"}, modesOf(flags))
+	assert.Equal(t, []string{"", "plan", "impact"}, flagModes(flags))
 
 	// A command declaring no modes keeps a single binder.
-	assert.Equal(t, []string{""}, modesOf([]cli.Flag{{Name: "x", Kind: cli.FlagBool}}))
+	assert.Equal(t, []string{""}, flagModes([]cli.Flag{{Name: "x", Kind: cli.FlagBool}}))
 }
 
 func TestFlagsForMode(t *testing.T) {

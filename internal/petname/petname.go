@@ -20,10 +20,10 @@ const (
 
 const suffixAlphabet = "abcdefghijklmnopqrstuvwxyz"
 
-// Of deterministically maps seed to a name of the form "adjective-noun".
+// Generate deterministically maps seed to a name of the form "adjective-noun".
 // The same seed always yields the same name, on any machine, with no
 // randomness or process state.
-func Of(seed string) string {
+func Generate(seed string) string {
 	adj := adjectives[hash(adjTag+seed)%uint64(len(adjectives))]
 	noun := nouns[hash(nounTag+seed)%uint64(len(nouns))]
 	return adj + "-" + noun
@@ -39,7 +39,7 @@ func OfWithSuffix(seed string, n int) string {
 	const base = uint64(len(suffixAlphabet))
 	c1 := suffixAlphabet[h%base]
 	c2 := suffixAlphabet[(h/base)%base]
-	return fmt.Sprintf("%s-%c%c", Of(seed), c1, c2)
+	return fmt.Sprintf("%s-%c%c", Generate(seed), c1, c2)
 }
 
 // hash picks fnv-1a 64-bit: a stdlib, allocation-free, non-cryptographic

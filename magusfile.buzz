@@ -1678,7 +1678,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     final branches = local_branches();
     foreach (m in modules) {
         final cur = releases\currentVersion(m["prefix"]);
-        final n = releases\nextFor(cur);
+        final n = releases\nextVersions(cur);
         var at = "at " + cur;
         if (cur == "") { at = "unreleased"; }
         magus\log.info("release: {m["key"]} - {at}"
@@ -1717,7 +1717,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (v == null) { continue; }
         final cur = releases\currentVersion(m["prefix"]);
         if (!releases\isCandidate(v, cur)) {
-            final n = releases\nextFor(cur);
+            final n = releases\nextVersions(cur);
             throw "release: {m["key"]} v{v} is not a legal next version from {cur}"
                 + " - choose {n.patch}, {n.minor} or {n.major}"
                 + " (a prerelease or +metadata build of one of those is fine)";
@@ -1996,7 +1996,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
          "libs/coldread/coverage.out", "libs/conventions/coverage.out",
          "libs/testlayout/coverage.out", "libs/scipbuzz/coverage.out"]));
-    final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
+    final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
 
@@ -2019,7 +2019,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
-    fun cover_for(mod: str, extra: [str], opts: {str: any}) > void !> any {
+    fun cover_module(mod: str, extra: [str], opts: {str: any}) > void !> any {
         final profile = "coverage/buzz/" + mod.replace("/", "_") + ".lcov";
         final argv = mut [<str>];
         argv.append("-t");
@@ -2034,20 +2034,20 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 
     foreach (mod in fs\glob("std/lib/*.buzz")) {
-        cover_for(mod.value, ["--embedded"], {});
+        cover_module(mod.value, ["--embedded"], {});
     }
     // The mode follows the caller: a script a person or workflow runs is run bare, so it is
     // gated strict, and a magusfile import parses embedded, where strict would reject legal
     // constructs.
     foreach (dir in ["hack/dev", "hack/remote", "hack/bench", "hack/ci"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_for(mod.value, [], {});
+            cover_module(mod.value, [], {});
         }
     }
-    cover_for("hack/lint/run.buzz", [], {});
+    cover_module("hack/lint/run.buzz", [], {});
     foreach (dir in ["hack/magusfile", "hack/policy"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
-            cover_for(mod.value, ["--embedded"], {});
+            cover_module(mod.value, ["--embedded"], {});
         }
     }
     // Globbed so a new spell is covered: a spell no magusfile imports reaches no other gate.
@@ -2056,7 +2056,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // spells/examples/**.
     foreach (spell in fs\glob("spells/**/*.buzz")) {
         if (spell.value.startsWith("spells/examples/")) { continue; }
-        cover_for(spell.value, ["--embedded"], {});
+        cover_module(spell.value, ["--embedded"], {});
     }
     foreach (lib in ["lib/text.buzz", "lib/dom.buzz", "lib/feed.buzz", "lib/html.buzz",
                      "lib/csp.buzz", "lib/url.buzz", "lib/date.buzz", "lib/glossary.buzz",

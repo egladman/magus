@@ -69,7 +69,7 @@ func (r *refResolver) resolve(input string, limit int) []types.KnowledgeMatch {
 }
 
 func (r *refResolver) projectOf(n types.KnowledgeNode, id string) (string, bool) {
-	if p, ok := projectPathOf(id); ok {
+	if p, ok := nodeProjectPath(id); ok {
 		return p, true
 	}
 	src := n.Source

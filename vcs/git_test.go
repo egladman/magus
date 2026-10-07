@@ -288,7 +288,7 @@ func TestGitRepoPathsOfLinkedWorktree(t *testing.T) {
 	linked := filepath.Join(t.TempDir(), "linked")
 	gitRun(t, dir, "worktree", "add", "-q", linked)
 
-	paths, ok, err := gitRepoPathsOf(t.Context(), linked)
+	paths, ok, err := resolveGitRepoPaths(t.Context(), linked)
 	require.NoError(t, err)
 	require.True(t, ok)
 	common, err := filepath.EvalSymlinks(paths.commonDir)

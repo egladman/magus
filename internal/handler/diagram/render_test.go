@@ -35,9 +35,9 @@ func TestDiagramCutWalksBothDirections(t *testing.T) {
 
 func TestDiagramIDsStayUnique(t *testing.T) {
 	taken := ids{}
-	assert.Equal(t, "libs-lib", taken.of("libs/lib"))
-	assert.Equal(t, "libs-lib-2", taken.of("libs-lib"))
-	assert.Equal(t, "root", taken.of("."))
+	assert.Equal(t, "libs-lib", taken.unique("libs/lib"))
+	assert.Equal(t, "libs-lib-2", taken.unique("libs-lib"))
+	assert.Equal(t, "root", taken.unique("."))
 }
 
 func TestDiagramActorNamesStayApart(t *testing.T) {

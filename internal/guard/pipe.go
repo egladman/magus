@@ -36,11 +36,11 @@ var pipeRecords = map[string]pipeRecord{
 	"query":            {list: "matches", id: "id", count: "match_count"},
 }
 
-// pipeRecordFor resolves the record a magus argv renders. ok is false when the guard holds
+// parsePipeRecord resolves the record a magus argv renders. ok is false when the guard holds
 // none for the verb, or a flag or noun changes the shape: `describe target <ref>` renders
 // one target's graph, refs' --occurrences, --definition and --source their own records, and
 // refs --text prints grep lines that ignore -o template.
-func pipeRecordFor(args []string) (rec pipeRecord, ok bool) {
+func parsePipeRecord(args []string) (rec pipeRecord, ok bool) {
 	words := magusSubcommandWords(args)
 	if len(words) == 0 {
 		return pipeRecord{}, false
@@ -85,7 +85,7 @@ func registryCommand(words []string) bool {
 // only, which the registry cannot say.
 func pipeRewrite(p pipedMagus) (string, bool) {
 	words := magusSubcommandWords(p.args)
-	rec, known := pipeRecordFor(p.args)
+	rec, known := parsePipeRecord(p.args)
 	switch p.filter {
 	case "head":
 		n, counted := headCount(p.filterArgs)

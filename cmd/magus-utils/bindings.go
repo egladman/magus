@@ -110,7 +110,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	// one Impl package under one qualifier. That was always true when every
 	// Impl lived in std; std/encoding's leaf packages don't change it, they
 	// just mean the qualifier is no longer always "std".
-	implPath, implPkg, err := implPackageOf(m)
+	implPath, implPkg, err := resolveImplPackage(m)
 	if err != nil {
 		return nil, err
 	}
@@ -205,13 +205,13 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	return out, nil
 }
 
-// implPackageOf returns the Go import path and local package identifier every
+// resolveImplPackage returns the Go import path and local package identifier every
 // one of m's Method.Impl and Field.Resolver funcs share; "share" because one
 // generated file makes one Register<Module> call under one import, so a
 // module whose Impls span two packages cannot be emitted as written. Errors
 // if m declares no Impl/Resolver at all (nothing to import) or if they
 // disagree on package.
-func implPackageOf(m std.Module) (importPath, pkgIdent string, err error) {
+func resolveImplPackage(m std.Module) (importPath, pkgIdent string, err error) {
 	check := func(path, pkg, where string) error {
 		if importPath == "" && pkgIdent == "" {
 			importPath, pkgIdent = path, pkg
@@ -264,7 +264,7 @@ func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 // stays the runtime label so errors still read e.g. "fs.readFile"). implPkg is
 // the local identifier meth.Impl's package is imported under: "std" for a
 // module still living in std's flat root, or e.g. "json" for one implemented
-// in a std/encoding leaf package (see implPackageOf).
+// in a std/encoding leaf package (see resolveImplPackage).
 func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, implPkg string) error {
 	name := std.CamelCase(meth.Name)
 	if meth.BuzzName != "" {

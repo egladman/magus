@@ -65,7 +65,7 @@ func (d *decl) info() *scip.SymbolInformation {
 func (f *file) collectDecls() []string {
 	var problems []string
 	for _, st := range f.prog.Stmts {
-		d := f.declOf(st)
+		d := f.findDecl(st)
 		if d == nil {
 			continue
 		}
@@ -82,10 +82,10 @@ func (f *file) collectDecls() []string {
 	return problems
 }
 
-// declOf describes the top-level statement st when it declares a name, and
+// findDecl describes the top-level statement st when it declares a name, and
 // returns nil when it does not. The decl's nameTok is -1 when the name's token
 // could not be found.
-func (f *file) declOf(st ast.Node) *decl {
+func (f *file) findDecl(st ast.Node) *decl {
 	s := f.toks
 	d := &decl{nameTok: -1, start: -1, end: -1}
 	idx, found := s.at[ast.NodePos(st)]

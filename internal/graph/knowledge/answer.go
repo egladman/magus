@@ -28,16 +28,16 @@ type Coverage struct {
 	Stale []types.KnowledgeStaleIndex
 }
 
-// For narrows c to the indexes that could hold a symbol of language: a Go symbol's sites
+// Narrow narrows c to the indexes that could hold a symbol of language: a Go symbol's sites
 // are in no Buzz index, so a missing or stale Buzz index beside a current Go one says
 // nothing about them. An empty language narrows nothing, which is the coverage of a lookup
 // that did not resolve to one symbol.
-func (c Coverage) For(language string) Coverage {
+func (c Coverage) Narrow(language string) Coverage {
 	if language == "" {
 		return c
 	}
 	out := c
-	out.Gaps, out.Stale = GapsFor(c.Gaps, language), nil
+	out.Gaps, out.Stale = NarrowGaps(c.Gaps, language), nil
 	for _, s := range c.Stale {
 		if s.CouldHold(language) {
 			out.Stale = append(out.Stale, s)
@@ -46,9 +46,9 @@ func (c Coverage) For(language string) Coverage {
 	return out
 }
 
-// GapsFor is the gaps that could hold a symbol of language, in Coverage.For's terms, for a
+// NarrowGaps is the gaps that could hold a symbol of language, in Coverage.Narrow's terms, for a
 // read that gathered its gaps apart from a Coverage.
-func GapsFor(gaps []types.KnowledgeSymbolGap, language string) []types.KnowledgeSymbolGap {
+func NarrowGaps(gaps []types.KnowledgeSymbolGap, language string) []types.KnowledgeSymbolGap {
 	var out []types.KnowledgeSymbolGap
 	for _, g := range gaps {
 		if g.CouldHold(language) {

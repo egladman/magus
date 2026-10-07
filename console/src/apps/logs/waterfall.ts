@@ -206,7 +206,7 @@ export function renderWaterfall(): void {
   // dom is the visible time domain: the focus window (clamped to the run) when set, else the
   // full span across all invocations. drawWfAxis/drawWfRow scale to dom, so a focus window
   // zooms; the shared axis is what makes the time range meaningful across invocations.
-  const dom = focusFor(multi);
+  const dom = clampFocus(multi);
   const q = state.filterParsed;
   const filtering = !q.empty;
   const outOfWin = (s: number, e: number): boolean =>
@@ -293,8 +293,8 @@ function drawWfGroupHead(root: SVGSVGElement, label: string, y: number): void {
   root.appendChild(t);
 }
 
-// focusFor clamps the active focus window to the run's span, or returns the full domain.
-function focusFor(spans: Domain): Domain {
+// clampFocus clamps the active focus window to the run's span, or returns the full domain.
+function clampFocus(spans: Domain): Domain {
   if (!state.focusWin) return { t0: spans.t0, t1: spans.t1 };
   const t0 = Math.max(spans.t0, Math.min(state.focusWin.a, state.focusWin.b));
   const t1 = Math.min(spans.t1, Math.max(state.focusWin.a, state.focusWin.b));
@@ -313,7 +313,7 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
     const frac = (svgX - WF_LABEL_W) / WF_PLOT_W;
     return dom.t0 + Math.min(1, Math.max(0, frac)) * (dom.t1 - dom.t0);
   };
-  const svgXOf = (clientX: number): number => {
+  const toSvgX = (clientX: number): number => {
     const r = root.getBoundingClientRect();
     return Math.min(WF_VIEW_W, Math.max(WF_LABEL_W, (clientX - r.left) * (WF_VIEW_W / r.width)));
   };
@@ -324,7 +324,7 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
     rect.setAttribute("class", "console-log-waterfall__brush");
     rect.setAttribute("y", "0");
     rect.setAttribute("height", String(h));
-    const x = svgXOf(sx);
+    const x = toSvgX(sx);
     rect.setAttribute("x", String(x));
     rect.setAttribute("width", "0");
     root.appendChild(rect);
@@ -332,8 +332,8 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
   });
   root.addEventListener("pointermove", (ev) => {
     if (sx === null || !rect) return;
-    const a = svgXOf(sx),
-      b = svgXOf(ev.clientX);
+    const a = toSvgX(sx),
+      b = toSvgX(ev.clientX);
     rect.setAttribute("x", String(Math.min(a, b)));
     rect.setAttribute("width", String(Math.abs(b - a)));
   });
@@ -372,7 +372,7 @@ export function updateFocusUI(spans: SpanMulti | null): void {
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
     if (state.focusWin && active) {
-      const d = focusFor(must(spans));
+      const d = clampFocus(must(spans));
       win.textContent = durMsText(d.t1 - d.t0) + " window";
       win.hidden = false;
     } else win.hidden = true;

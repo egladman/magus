@@ -429,7 +429,7 @@ func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
 	require.NoError(t, err)
 	const a, after = "func A() {", "var after = 1"
 	assert.Equal(t, []string{"", "", a, a, a, a, a, a, a, a, a, a, a, a, after}, got)
-	golang, _ := types.DiffDriverFor("a.go")
+	golang, _ := types.MatchDiffDriver("a.go")
 	assert.Equal(t, got, golang.Declarations(types.SplitLines([]byte(body))))
 }
 

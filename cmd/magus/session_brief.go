@@ -520,7 +520,7 @@ func (b sessionBrief) writeRecent(s *strings.Builder) {
 			host = "unknown host"
 		}
 		briefLine(s, "  %s  %s, %s, last active %s",
-			r.Session, host, countOf(r.Events, "event"), humanAge(time.UnixMilli(r.LastMs)))
+			r.Session, host, countNoun(r.Events, "event"), humanAge(time.UnixMilli(r.LastMs)))
 	}
 }
 

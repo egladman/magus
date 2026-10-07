@@ -128,16 +128,16 @@ func parseCoverageLine(line string) (path string, blk CoverageBlock, ok bool) {
 	if !found {
 		return "", CoverageBlock{}, false
 	}
-	startLine, ok1 := lineOf(startPart)
-	endLine, ok2 := lineOf(endPart)
+	startLine, ok1 := parseLine(startPart)
+	endLine, ok2 := parseLine(endPart)
 	if !ok1 || !ok2 {
 		return "", CoverageBlock{}, false
 	}
 	return path, CoverageBlock{StartLine: startLine, EndLine: endLine, NumStmt: numStmt, Hits: hits}, true
 }
 
-// lineOf pulls the line number out of a "line.col" half of a coverage range.
-func lineOf(part string) (int, bool) {
+// parseLine pulls the line number out of a "line.col" half of a coverage range.
+func parseLine(part string) (int, bool) {
 	lineStr, _, _ := strings.Cut(part, ".")
 	n, err := strconv.Atoi(lineStr)
 	if err != nil {

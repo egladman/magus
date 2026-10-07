@@ -345,7 +345,7 @@ fun ms(stamp: str) > int {
     return std\toInt(parsed);
 }
 
-fun kindOf(name: str) > str? {
+fun toolKind(name: str) > str? {
     if (name == "Bash") { return "shell.command"; }
     if (name == "Read" or name == "NotebookRead") { return "file.read"; }
     if (name == "Edit" or name == "Write" or name == "MultiEdit" or name == "NotebookEdit") { return "file.write"; }
@@ -355,7 +355,7 @@ fun kindOf(name: str) > str? {
     return null;
 }
 
-fun textOf(name: str, input: any?) > str {
+fun toolText(name: str, input: any?) > str {
     if (name == "Bash") { return hook\field(input, dotPath: "command"); }
     if (name == "Skill") {
         final skill = hook\field(input, dotPath: "skill");
@@ -367,7 +367,7 @@ fun textOf(name: str, input: any?) > str {
     return hook\field(input, dotPath: "file_path");
 }
 
-fun eventOf(r: any?, kind: str, ref: str, text: str) > Event {
+fun newEvent(r: any?, kind: str, ref: str, text: str) > Event {
     return Event{
         session = hook\field(r, dotPath: "sessionId"),
         ts = ms(hook\field(r, dotPath: "timestamp")),
@@ -411,11 +411,11 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
             foreach (item in listAt(r, dotPath: "message.content")) {
                 if (hook\field(item, dotPath: "type") != "tool_use") { continue; }
                 final name = hook\field(item, dotPath: "name");
-                final eventKind = kindOf(name);
+                final eventKind = toolKind(name);
                 if (eventKind == null) { continue; }
                 final id = hook\field(item, dotPath: "id");
                 if (parked[id] == null) { order.append(id); }
-                parked[id] = eventOf(r, kind: eventKind!, ref: id, text: textOf(name, input: hook\dig(item, dotPath: "input")));
+                parked[id] = newEvent(r, kind: eventKind!, ref: id, text: toolText(name, input: hook\dig(item, dotPath: "input")));
             }
         } else if (kind == "user") {
             foreach (item in listAt(r, dotPath: "message.content")) {
@@ -437,7 +437,7 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
             if (ref == "") { ref = hook\field(r, dotPath: "uuid"); }
             var text = hook\field(r, dotPath: "attachment.content");
             if (text == "") { text = hook\field(r, dotPath: "attachment.stdout"); }
-            emitted.append(render(eventOf(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
+            emitted.append(render(newEvent(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
         }
     }
     foreach (id in order) {
@@ -460,7 +460,7 @@ fun wholeLines(chunk: str) > str {
     return chunk.sub(0, len: end);
 }
 
-fun offsetOf(mark: str) > int {
+fun parseOffset(mark: str) > int {
     final text = (fs\readFile(mark) catch "").trim();
     if (text == "") { return 0; }
     return std\parseInt(text) ?? 0;
@@ -541,7 +541,7 @@ fun main(args: [str]) > int {
             final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
             final content = fs\readFile(transcript) catch null;
             if (content == null) { continue; }
-            var offset = offsetOf(mark);
+            var offset = parseOffset(mark);
             // A file smaller than its checkpoint was rotated or replaced, so the offset
             // describes bytes that no longer exist and reading from it would land mid-record.
             if (content!.len() < offset) { offset = 0; }
@@ -703,7 +703,7 @@ fun wholeLines(chunk: str) > str {
     return chunk.sub(0, len: end);
 }
 
-fun offsetOf(mark: str) > int {
+fun parseOffset(mark: str) > int {
     final text = (fs\readFile(mark) catch "").trim();
     if (text == "") { return 0; }
     return std\parseInt(text) ?? 0;
@@ -754,7 +754,7 @@ fun main(args: [str]) > int {
         final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
         final content = fs\readFile(transcript) catch null;
         if (content == null) { continue; }
-        var offset = offsetOf(mark);
+        var offset = parseOffset(mark);
         if (content!.len() < offset) { offset = 0; }
         if (content!.len() <= offset) { continue; }
 
@@ -859,7 +859,7 @@ fun inScope(cwd: str, root: str) > bool {
     return cwd == root or cwd.startsWith(root + "/");
 }
 
-fun firstOf(node: any?, dotPaths: [str]) > str {
+fun firstValue(node: any?, dotPaths: [str]) > str {
     foreach (dotPath in dotPaths) {
         final value = hook\field(node, dotPath: dotPath);
         if (value != "") { return value; }
@@ -867,7 +867,7 @@ fun firstOf(node: any?, dotPaths: [str]) > str {
     return "";
 }
 
-fun kindOf(tool: str) > str? {
+fun toolKind(tool: str) > str? {
     if (tool == "bash") { return "shell.command"; }
     if (tool == "skill") { return "skill.load"; }
     if (tool == "read") { return "file.read"; }
@@ -875,10 +875,10 @@ fun kindOf(tool: str) > str? {
     return null;
 }
 
-fun textOf(tool: str, part: any?) > str {
+fun toolText(tool: str, part: any?) > str {
     if (tool == "bash") { return hook\field(part, dotPath: "state.input.command"); }
     if (tool == "skill") { return hook\field(part, dotPath: "state.input.name"); }
-    return firstOf(part, dotPaths: ["state.input.filePath", "state.input.path"]);
+    return firstValue(part, dotPaths: ["state.input.filePath", "state.input.path"]);
 }
 
 // toolParts is every part that records a tool call, in export order: the top-level
@@ -901,8 +901,8 @@ fun toolParts(doc: any?) > [any] {
     return calls;
 }
 
-// startOf is the part's start time in Unix milliseconds, floored, 0 when absent.
-fun startOf(part: any?) > int {
+// startMillis is the part's start time in Unix milliseconds, floored, 0 when absent.
+fun startMillis(part: any?) > int {
     final start = (hook\dig(part, dotPath: "state.time.start") as? double)
         ?? (hook\dig(part, dotPath: "time.start") as? double)
         ?? 0.0;
@@ -912,9 +912,9 @@ fun startOf(part: any?) > int {
 // render writes the contract's fields in the contract's order, which a map would not.
 fun render(session: str, cwd: str, part: any?, kind: str, transcript: str) > str {
     fun s(v: any?) > str { return json\stringify(v) catch "null"; }
-    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{startOf(part)},\"cwd\":{s(cwd)},"
+    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{startMillis(part)},\"cwd\":{s(cwd)},"
         + "\"kind\":{s(kind)},\"ref\":{s(hook\field(part, dotPath: "callID"))},"
-        + "\"text\":{s(textOf(hook\field(part, dotPath: "tool"), part: part))},\"transcript\":{s(transcript)},"
+        + "\"text\":{s(toolText(hook\field(part, dotPath: "tool"), part: part))},\"transcript\":{s(transcript)},"
         + "\"outcome\":\{\"exit\":{s(hook\dig(part, dotPath: "state.metadata.exit"))},"
         + "\"denied\":{hook\field(part, dotPath: "state.status") == "error"},\"interrupted\":false}}";
 }
@@ -922,19 +922,19 @@ fun render(session: str, cwd: str, part: any?, kind: str, transcript: str) > str
 // extract returns the contract lines for the tool parts past the first skip.
 fun extract(doc: any?, parts: [any], skip: int, transcript: str, root: str) > [str] {
     final emitted = mut [<str>];
-    final cwd = firstOf(doc, dotPaths: ["session.directory", "directory"]);
+    final cwd = firstValue(doc, dotPaths: ["session.directory", "directory"]);
     if (!inScope(cwd, root: root)) { return emitted; }
-    final session = firstOf(doc, dotPaths: ["session.id", "id"]);
+    final session = firstValue(doc, dotPaths: ["session.id", "id"]);
     foreach (i, part in parts) {
         if (i < skip) { continue; }
-        final kind = kindOf(hook\field(part, dotPath: "tool"));
+        final kind = toolKind(hook\field(part, dotPath: "tool"));
         if (kind == null) { continue; }
         emitted.append(render(session, cwd: cwd, part: part, kind: kind!, transcript: transcript));
     }
     return emitted;
 }
 
-fun skipOf(mark: str) > int {
+fun parseSkip(mark: str) > int {
     final text = (fs\readFile(mark) catch "").trim();
     if (text == "") { return 0; }
     return std\parseInt(text) ?? 0;
@@ -999,7 +999,7 @@ fun main(args: [str]) > int {
         final doc = json\parse(exported!.stdout) catch null;
         if (doc == null) { continue; }
         final parts = toolParts(doc);
-        final skip = skipOf(mark);
+        final skip = parseSkip(mark);
         if (parts.len() <= skip) { continue; }
         foreach (line in extract(doc, parts: parts, skip: skip, transcript: "opencode://{id}", root: root)) {
             events.append(line);

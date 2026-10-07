@@ -48,7 +48,7 @@ func TestAReadKickIsWordedByTheQueue(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, kickOf("main", tc.v))
+			assert.Equal(t, tc.want, newKick("main", tc.v))
 		})
 	}
 }

@@ -67,7 +67,7 @@ func TestTermColorizeIsPassThroughWithoutATerminal(t *testing.T) {
 func TestTermSizeIsZeroWithoutATerminal(t *testing.T) {
 	// Zero rather than an error: "there is no size" is an ordinary answer for a
 	// pipe, and a caller laying out a line should not need a try/catch to ask.
-	got, err := TermSizeOf(context.Background())
+	got, err := TermSize(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, types.TermSize{}, got)
 }

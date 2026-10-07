@@ -76,7 +76,7 @@ func startPipeStage(ctx context.Context, args []string) *pipeStage {
 	return s
 }
 
-func pipeStageOf(ctx context.Context) *pipeStage {
+func pipeStageFromContext(ctx context.Context) *pipeStage {
 	s, _ := ctx.Value(pipeStageKey{}).(*pipeStage)
 	return s
 }
@@ -185,7 +185,7 @@ func outputFlagGiven(args []string) bool {
 			return false
 		}
 		for _, name := range []string{"o", "output"} {
-			if isFlagNamed(a, name) || flagValueOf(a, name) != "" {
+			if isFlagNamed(a, name) || parseFlagValue(a, name) != "" {
 				return true
 			}
 		}

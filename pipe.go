@@ -133,7 +133,7 @@ func (s *ProcessStdio) SettlePipeline(ctx context.Context, root string, cfg conf
 		// The record reader drains it; closing it under that reader is what exiting does.
 		stdin = nil
 	}
-	return s.pipeline.settle(ctx, stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
+	return s.pipeline.settle(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), os.Stderr)
 }
 
 // AwaitUpstream holds back a stage whose output another stage acts on, such as a shard
@@ -150,7 +150,7 @@ func (s *ProcessStdio) AwaitUpstream(ctx context.Context, root string, cfg confi
 	if s.readsRecords() {
 		stdin = nil
 	}
-	red, ok, err := s.pipeline.wait(ctx, stdin, pipeDirOf(resolveCacheDir(root, cfg), root), os.Stderr)
+	red, ok, err := s.pipeline.wait(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), os.Stderr)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func RecordPipeExit(root string, cfg config.Config, status int, signal string) {
 	if _, err := os.Stat(cacheDir); err != nil {
 		return
 	}
-	writeExitRecord(pipeDirOf(cacheDir, root), exitRecord{
+	writeExitRecord(resolvePipeDir(cacheDir, root), exitRecord{
 		PID: os.Getpid(), Command: strings.Join(os.Args, " "), Status: status, Signal: signal, Ended: time.Now(),
 	})
 }
@@ -403,7 +403,7 @@ func GatePipe(root string, cfg config.Config) {
 	if pipeGate != nil || !isPipe(os.Stdout) {
 		return
 	}
-	dir := pipeDirOf(resolveCacheDir(root, cfg), root)
+	dir := resolvePipeDir(resolveCacheDir(root, cfg), root)
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
@@ -893,13 +893,13 @@ func (m *Magus) PipeWaits() []types.StatusPipeWait {
 	return pipeWaits(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root)
 }
 
-// pipeDirOf is projectLocker.pipeDir for a process that holds no locker.
-func pipeDirOf(cacheDir, workspaceRoot string) string {
+// resolvePipeDir is projectLocker.pipeDir for a process that holds no locker.
+func resolvePipeDir(cacheDir, workspaceRoot string) string {
 	return filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot), pipeDirName)
 }
 
 func pipeWaits(cacheDir, workspaceRoot string) []types.StatusPipeWait {
-	matches, _ := filepath.Glob(filepath.Join(pipeDirOf(cacheDir, workspaceRoot), "*"+pipeWaitSuffix))
+	matches, _ := filepath.Glob(filepath.Join(resolvePipeDir(cacheDir, workspaceRoot), "*"+pipeWaitSuffix))
 	var out []types.StatusPipeWait
 	for _, path := range matches {
 		var rec pipeWaitRecord

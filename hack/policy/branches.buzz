@@ -123,9 +123,9 @@ export object Push {
 final gitValueFlags = ["-o", "--push-option", "--repo", "--receive-pack", "--exec"];
 final gitSkipFlags = ["--delete", "-d", "--tags", "--all", "--mirror", "--help", "-h", "--dry-run", "-n"];
 
-// pushesOf are the branches the line's programs publish. current is the checkout's branch
+// findPushes are the branches the line's programs publish. current is the checkout's branch
 // or bookmark, "" when it is on none.
-export fun pushesOf(programs: [helpers\Program], current: str) > [Push] {
+export fun findPushes(programs: [helpers\Program], current: str) > [Push] {
     final pushes = mut [<Push>];
     foreach (p in programs) {
         if (p.name == "gh") {
@@ -142,11 +142,11 @@ export fun pushesOf(programs: [helpers\Program], current: str) > [Push] {
         if (call.tool == "git" and call.subcommand == "push") {
             foreach (push in gitPushes(call.args, current: current)) { pushes.append(push); }
         } else if ((call.tool == "hg" or call.tool == "sl") and call.subcommand == "push") {
-            foreach (name in valuesOf(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
+            foreach (name in flagValues(call.args, longs: ["--bookmark", "--to"], shorts: ["-B"])) {
                 pushes.append(Push{ tool = call.tool, remote = "default", name = name });
             }
         } else if (call.tool == "jj" and call.subcommand == "git") {
-            final ops = helpers\operandsOf(call.args, valueFlags: [<str>]);
+            final ops = helpers\stripFlags(call.args, valueFlags: [<str>]);
             if (ops.len() > 0 and ops[0] == "push") {
                 foreach (push in jjPushes(call.args, current: current)) { pushes.append(push); }
             }
@@ -162,7 +162,7 @@ fun gitPushes(args: [str], current: str) > [Push] {
             return pushes;
         }
     }
-    final ops = helpers\operandsOf(args, valueFlags: gitValueFlags);
+    final ops = helpers\stripFlags(args, valueFlags: gitValueFlags);
     var remote = "origin";
     if (ops.len() > 0) {
         remote = ops[0];
@@ -205,19 +205,19 @@ fun jjPushes(args: [str], current: str) > [Push] {
         }
     }
     var remote = "origin";
-    final remotes = valuesOf(args, longs: ["--remote"], shorts: [<str>]);
+    final remotes = flagValues(args, longs: ["--remote"], shorts: [<str>]);
     if (remotes.len() > 0) {
         remote = remotes[0];
     }
-    foreach (name in valuesOf(args, longs: ["--bookmark"], shorts: ["-b"])) {
+    foreach (name in flagValues(args, longs: ["--bookmark"], shorts: ["-b"])) {
         if (name.indexOf(":") == null) {
             pushes.append(Push{ tool = "jj", remote = remote, name = name });
         }
     }
-    foreach (named in valuesOf(args, longs: ["--named"], shorts: [<str>])) {
+    foreach (named in flagValues(args, longs: ["--named"], shorts: [<str>])) {
         pushes.append(Push{ tool = "jj", remote = remote, name = named.split("=")[0] });
     }
-    if (valuesOf(args, longs: ["--change"], shorts: ["-c"]).len() > 0) {
+    if (flagValues(args, longs: ["--change"], shorts: ["-c"]).len() > 0) {
         pushes.append(Push{ tool = "jj", remote = remote, name = "push-<change id>", generated = true });
     }
     if (pushes.len() == 0) {
@@ -229,7 +229,7 @@ fun jjPushes(args: [str], current: str) > [Push] {
 // prHead is the branch `gh pr create` opens from: its --head without an `owner:` part, else
 // current. null for any other gh call.
 fun prHead(args: [str], current: str) > str? {
-    final ops = helpers\operandsOf(args, valueFlags: ["-R", "--repo", "-H", "--head", "-B", "--base",
+    final ops = helpers\stripFlags(args, valueFlags: ["-R", "--repo", "-H", "--head", "-B", "--base",
         "-t", "--title", "-b", "--body", "-F", "--body-file"]);
     if (ops.len() < 2 or ops[0] != "pr" or ops[1] != "create" or args.indexOf("--help") != null) {
         return null;
@@ -242,8 +242,8 @@ fun prHead(args: [str], current: str) > str? {
     return parts[parts.len() - 1];
 }
 
-// valuesOf are every value given to a repeatable flag, attached (`--to=x`, `-Bx`) or next.
-fun valuesOf(args: [str], longs: [str], shorts: [str]) > [str] {
+// flagValues are every value given to a repeatable flag, attached (`--to=x`, `-Bx`) or next.
+fun flagValues(args: [str], longs: [str], shorts: [str]) > [str] {
     final found = mut [<str>];
     foreach (i, arg in args) {
         var matched = false;
@@ -282,9 +282,9 @@ export fun unknownTopic() > Topic {
     return Topic{ known = false, words = [<str>], counts = {<str: int>}, depths = {<str: int>} };
 }
 
-// topicOf reads the words of paths, extensions, numbers and stop words left out. A changelog
+// readTopic reads the words of paths, extensions, numbers and stop words left out. A changelog
 // fragment is left out too: it is named after the branch, so it would vouch for any name.
-export fun topicOf(paths: [str]) > Topic {
+export fun readTopic(paths: [str]) > Topic {
     final words = mut [<str>];
     final counts = mut {<str: int>};
     final depths = mut {<str: int>};
@@ -627,7 +627,7 @@ final release = $"^v[0-9]";
 // mechanical failure denies; a topic miss alone advises. A name the remote already has, and
 // every `gh pr create` (which opens from a pushed branch), is judged once per session.
 export fun decideNames(programs: [helpers\Program], current: str, remote: Remote, topic: fun () > Topic, once: fun (key: str) > bool) > GuardVerdict {
-    final pushes = pushesOf(programs, current: current);
+    final pushes = findPushes(programs, current: current);
     if (pushes.len() == 0) {
         return magus\guard.allow();
     }
@@ -714,7 +714,7 @@ fun publishes(programs: [helpers\Program]) > bool {
             return true;
         }
         if (call.tool == "jj" and call.subcommand == "git") {
-            final ops = helpers\operandsOf(call.args, valueFlags: [<str>]);
+            final ops = helpers\stripFlags(call.args, valueFlags: [<str>]);
             if (ops.len() > 0 and ops[0] == "push") {
                 return true;
             }
@@ -732,7 +732,7 @@ object Case {
     served: str,
 }
 
-fun rulesOf(v: Verdict) > [str] {
+fun verdictRules(v: Verdict) > [str] {
     final rules = mut [<str>];
     foreach (f in v.failures) {
         rules.append(f.rule);
@@ -778,10 +778,10 @@ test "real branch names get the verdicts and served names in the table" {
     foreach (c in cases) {
         var topic = unknownTopic();
         if (c.paths.len() > 0) {
-            topic = topicOf(c.paths);
+            topic = readTopic(c.paths);
         }
         final v = judgeName(c.name, topic: topic);
-        std\assert(rulesOf(v).join(",") == c.rules.join(","), message: "{c.name}: rules {rulesOf(v)}");
+        std\assert(verdictRules(v).join(",") == c.rules.join(","), message: "{c.name}: rules {verdictRules(v)}");
         std\assert(v.served == c.served, message: "{c.name}: served {v.served}");
     }
 }
@@ -815,7 +815,7 @@ test "every push spelling names the branch it publishes" {
         } else if (words[0] == "jj") {
             programs = helpers\vcsRequest([["jj", "git"] + words.sub(2)]);
         }
-        final pushes = pushesOf(programs, current: "feat/current");
+        final pushes = findPushes(programs, current: "feat/current");
         std\assert(pushes.len() == 1, message: "{line}: {pushes.len()} pushes");
         std\assert(pushes[0].name == want, message: "{line}: {pushes[0].name}");
     }
@@ -830,9 +830,9 @@ test "a push that publishes no branch name is not judged" {
         ["hg", "push"],
         ["git", "stash", "push"],
     ]) {
-        std\assert(pushesOf(helpers\vcsRequest([argv]), current: "feat/current").len() == 0, message: argv.join(" "));
+        std\assert(findPushes(helpers\vcsRequest([argv]), current: "feat/current").len() == 0, message: argv.join(" "));
     }
-    std\assert(pushesOf(helpers\request([["gh", "pr", "view", "12"]]), current: "x").len() == 0, message: "gh pr view");
+    std\assert(findPushes(helpers\request([["gh", "pr", "view", "12"]]), current: "x").len() == 0, message: "gh pr view");
 }
 
 fun remote(branches: [str]) > Remote {
@@ -840,7 +840,7 @@ fun remote(branches: [str]) > Remote {
 }
 
 fun practical() > Topic {
-    return topicOf(practicalPaths);
+    return readTopic(practicalPaths);
 }
 
 test "a bad name is denied with every rule, the served name and the commands to use it" {

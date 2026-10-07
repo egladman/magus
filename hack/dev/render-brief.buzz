@@ -149,10 +149,10 @@ export fun withNeighbours(t: Terms, states: {str: str}, overlaps: [Overlap]) > T
     };
 }
 
-// overlapsOf reads `magus ls jobs -o json`'s overlap rows naming job, seen from job. Read
+// parseOverlaps reads `magus ls jobs -o json`'s overlap rows naming job, seen from job. Read
 // off the CLI rather than magus\job\list, which leaves every footprint unmeasured, and the
 // footprint is what says whether the two jobs have collided or only their patterns have.
-export fun overlapsOf(job: str, listed: any) > [Overlap] {
+export fun parseOverlaps(job: str, listed: any) > [Overlap] {
     final found = mut [<Overlap>];
     foreach (o in listed["overlaps"] ?? []) {
         final verdict = o["footprint"]?["verdict"] ?? "";
@@ -170,8 +170,8 @@ export fun overlapsOf(job: str, listed: any) > [Overlap] {
     return found;
 }
 
-// statesOf is every listed job's state, by id.
-export fun statesOf(listed: any) > {str: str} {
+// jobStates is every listed job's state, by id.
+export fun jobStates(listed: any) > {str: str} {
     final states = mut {<str: str>};
     foreach (j in listed["jobs"] ?? []) {
         states[j["id"] ?? ""] = j["state"] ?? "";
@@ -385,15 +385,15 @@ export fun brief(t: Terms, extra: str) > str !> str {
     return text.join("\n") + "\n";
 }
 
-// termsFor reads job's terms and neighbours through the magus module.
-export fun termsFor(job: str) > Terms !> any {
+// fetchTerms reads job's terms and neighbours through the magus module.
+export fun fetchTerms(job: str) > Terms !> any {
     final described = magus\cmd("describe", args: ["job", job, "-o", "json"], opts: {"quiet": true}).stdout;
     final terms = parseDescribed(described);
     if (terms.id != job) {
         throw "render-brief: `magus describe job {job}` returned no row for it";
     }
     final listed = json\parse(magus\cmd("ls", args: ["jobs", "-o", "json"], opts: {"quiet": true}).stdout);
-    return withNeighbours(terms, states: statesOf(listed), overlaps: overlapsOf(job, listed: listed));
+    return withNeighbours(terms, states: jobStates(listed), overlaps: parseOverlaps(job, listed: listed));
 }
 
 export fun main(args: [str]) > void !> any {
@@ -411,14 +411,14 @@ export fun main(args: [str]) > void !> any {
     }
     final extraPath = parsed.values["--extra"] ?? "";
     final extra = if (extraPath == "") "" else fs\readFile(extraPath);
-    std\print(brief(termsFor(job), extra: extra).trim());
+    std\print(brief(fetchTerms(job), extra: extra).trim());
 }
 
 fun golden() > Terms !> any {
     final described = fs\readFile("hack/testdata/render-brief-row.json");
     final listed = json\parse(fs\readFile("hack/testdata/render-brief-jobs.json"));
     final terms = parseDescribed(described);
-    return withNeighbours(terms, states: statesOf(listed), overlaps: overlapsOf(terms.id, listed: listed));
+    return withNeighbours(terms, states: jobStates(listed), overlaps: parseOverlaps(terms.id, listed: listed));
 }
 
 test "the fixture row renders the golden brief" {

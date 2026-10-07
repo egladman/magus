@@ -266,7 +266,7 @@ func (s *Console) ls() []Line {
 	var out []Line
 	for _, t := range s.parsed.Targets {
 		tail := ""
-		if deps := s.depsOf(t.Key); len(deps) > 0 {
+		if deps := s.directDeps(t.Key); len(deps) > 0 {
 			tail = `  <span class="muted">→ ` + esc(strings.Join(deps, ", ")) + `</span>`
 		}
 		out = append(out, Line{HTML: "  <b>" + esc(t.Key) + "</b>" + tail})
@@ -297,7 +297,7 @@ func (s *Console) graph() []Line {
 			name = ` <span class="muted">(` + esc(t.Name) + `)</span>`
 		}
 		tail := ""
-		if deps := s.depsOf(t.Key); len(deps) > 0 {
+		if deps := s.directDeps(t.Key); len(deps) > 0 {
 			tail = `  <span class="muted">→ ` + esc(strings.Join(deps, ", ")) + `</span>`
 		}
 		out = append(out, Line{HTML: "  " + esc(t.Key) + name + tail})
@@ -402,7 +402,7 @@ func (s *Console) eval(ctx context.Context, src string) []Line {
 	return out
 }
 
-func (s *Console) depsOf(key string) []string {
+func (s *Console) directDeps(key string) []string {
 	var out []string
 	for _, e := range s.parsed.Edges {
 		if e.From == key {

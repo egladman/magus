@@ -354,13 +354,13 @@ func runCLIQuietly(t *testing.T, argv ...string) {
 func TestFlagValueOfAndIsFlagNamedAgreeOnTheSameFlag(t *testing.T) {
 	// The two halves must not disagree about what counts as the flag: `--explain` is the
 	// bare form and only isFlagNamed sees it, `--explain=web` carries a value and only
-	// flagValueOf sees it. A scanner that accepted both from one helper would read the
+	// parseFlagValue sees it. A scanner that accepted both from one helper would read the
 	// next positional as the value.
 	require.True(t, isFlagNamed("--explain", "explain"))
-	require.Empty(t, flagValueOf("--explain", "explain"))
+	require.Empty(t, parseFlagValue("--explain", "explain"))
 
 	require.False(t, isFlagNamed("--explain=web", "explain"))
-	require.Equal(t, "web", flagValueOf("--explain=web", "explain"))
+	require.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
 }
 
 // -o is bound into every subcommand's FlagSet, so a verb that renders nothing structured
@@ -376,7 +376,7 @@ func TestOutputRefusedByCommandsThatRenderNothing(t *testing.T) {
 	err := checkOutputSupported("buzz", parsed("-o", "json"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus buzz: -o is not supported by this command")
-	assert.Equal(t, exitUsage, exitCodeOf(err), "a flag that could never act is misuse, not a failed run")
+	assert.Equal(t, exitUsage, mapExitCode(err), "a flag that could never act is misuse, not a failed run")
 
 	assert.NoError(t, checkOutputSupported("ls", parsed("-o", "json")), "a verb that consults -o is untouched")
 	assert.NoError(t, checkOutputSupported("clean", parsed("-o", "json")), "clean returns a report")

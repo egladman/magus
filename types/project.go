@@ -715,12 +715,12 @@ func CheckLayer(dir, name string) error {
 	return nil
 }
 
-// LayerFor reports the layer layers declares for the workspace-relative directory dir.
+// ResolveLayer reports the layer layers declares for the workspace-relative directory dir.
 // An exact path names that one directory; a glob names every directory it matches
 // ("internal/handler/**" includes internal/handler itself). Where several entries match,
 // an exact path wins, then the longest pattern, then the lexically first, so every
 // reader of one declaration agrees.
-func LayerFor(layers map[string]string, dir string) (string, bool) {
+func ResolveLayer(layers map[string]string, dir string) (string, bool) {
 	best, found := "", false
 	for pattern := range layers {
 		exact := pattern == dir

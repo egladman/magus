@@ -39,10 +39,10 @@ export interface FeedRow {
   readonly bad: boolean; // a deny, an ask, or a failed run: the rows somebody is scanning for
 }
 
-// rowOf projects one wire event onto a line. An event whose kind this console does not know
+// feedRow projects one wire event onto a line. An event whose kind this console does not know
 // still renders, as "other" with its action: a feed that silently dropped what it could not
 // classify would go quiet exactly when the server grew something new to say.
-export function rowOf(e: ActivityEvent): FeedRow {
+export function feedRow(e: ActivityEvent): FeedRow {
   const at = e.time ? Number(e.time.seconds) * 1000 + Math.floor(e.time.nanos / 1e6) : 0;
   const failed = e.outcome === Outcome.ERROR;
   switch (e.kind) {
@@ -136,7 +136,7 @@ export class JobFeed {
       );
       for await (const e of stream) {
         if (this.job !== job) return; // the selection moved while this was in flight
-        this.push(rowOf(e));
+        this.push(feedRow(e));
       }
       // The stream ended without an error: the server closed it, or the page is going away.
       // Said plainly rather than left looking live, because a feed that stopped and still
@@ -180,7 +180,7 @@ export class JobFeed {
       ul.setAttribute("role", "list");
       // Newest last, and the container scrolls: this reads like a terminal, which is what a
       // person watching work happen already knows how to read.
-      for (const row of this.rows) ul.append(lineOf(row));
+      for (const row of this.rows) ul.append(renderRow(row));
       box.append(ul);
     }
     this.el.replaceChildren(box);
@@ -191,7 +191,7 @@ export class JobFeed {
   }
 }
 
-function lineOf(row: FeedRow): HTMLElement {
+function renderRow(row: FeedRow): HTMLElement {
   const li = h("li", "console-plan-feed__row");
   li.dataset.kind = row.kind;
   if (row.bad) li.dataset.bad = "";

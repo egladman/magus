@@ -50,10 +50,10 @@ final jjSyntax = Syntax{
     paragraphs = true,
 };
 
-// syntaxOf is the option syntax of p's commit command, or null when p records no commit
+// commitSyntax is the option syntax of p's commit command, or null when p records no commit
 // message: another subcommand, a request for help, or a program that is no version control.
 // hg and sl also spell commit `ci`; jj spells describe `desc`.
-fun syntaxOf(p: helpers\Program) > Syntax? {
+fun commitSyntax(p: helpers\Program) > Syntax? {
     if (p.vcs == null) {
         return null;
     }
@@ -81,7 +81,7 @@ object Message {
     slot: int?,
 }
 
-fun messagesOf(args: [str], syntax: Syntax) > [Message] {
+fun parseMessages(args: [str], syntax: Syntax) > [Message] {
     final found = mut [<Message>];
     var i = 0;
     while (i < args.len()) {
@@ -138,11 +138,11 @@ fun messagesOf(args: [str], syntax: Syntax) > [Message] {
 // rendered empty, a substitution such as `-m "$(cat <<'EOF' ...)"`.
 export fun messageSlots(p: helpers\Program) > [int] {
     final slots = mut [<int>];
-    final syntax = syntaxOf(p);
+    final syntax = commitSyntax(p);
     if (syntax == null) {
         return slots;
     }
-    foreach (m in messagesOf(p.vcs!.args, syntax: syntax!)) {
+    foreach (m in parseMessages(p.vcs!.args, syntax: syntax!)) {
         if (m.text == "" and m.slot != null) {
             slots.append(m.slot!);
         }
@@ -159,7 +159,7 @@ fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str) > [s
     if (attribution.match(call.args.join("\n")) != null) {
         problems.append("an attribution (Co-Authored-By, Generated with): credit nobody in a commit");
     }
-    final messages = messagesOf(call.args, syntax: syntax);
+    final messages = parseMessages(call.args, syntax: syntax);
     if (messages.len() > 1 and syntax.paragraphs) {
         problems.append("more than one -m: {call.tool} makes each after the first a body paragraph");
     } else if (messages.len() > 1) {
@@ -239,7 +239,7 @@ fun baseFix(baseBranch: str) > str {
 export fun decideCommit(programs: [helpers\Program], baseBranch: str) > GuardVerdict {
     final problems = mut [<str>];
     foreach (p in programs) {
-        final syntax = syntaxOf(p);
+        final syntax = commitSyntax(p);
         if (syntax != null) {
             foreach (problem in subjectProblems(p.vcs!, syntax: syntax!, baseBranch: baseBranch)) {
                 if (problems.indexOf(problem) == null) {
@@ -262,7 +262,7 @@ fun ask(call: [str]) > GuardVerdict {
     return decideCommit(helpers\vcsRequest([call]), baseBranch: "");
 }
 
-fun problemsOf(call: [str]) > str {
+fun askReason(call: [str]) > str {
     return ask(call).reason;
 }
 
@@ -296,7 +296,7 @@ test "a broken subject is denied in every tool" {
         ["jj", "commit", "-m", "Fix the port."],
         ["jj", "describe", "-m", "Fix the port."],
     ]) {
-        final reason = problemsOf(call);
+        final reason = askReason(call);
         std\assert(reason.indexOf("capitalized first word") != null and reason.indexOf("trailing period") != null, message: "{call.join(" ")}: {reason}");
         std\assert(reason.indexOf("Write one subject line, lowercase and imperative") != null, message: "states the fix");
     }
@@ -321,17 +321,17 @@ test "each subject rule is named when broken" {
         std\assert(v.decision == "deny", message: subject);
         std\assert(v.reason.indexOf(want) != null, message: "{subject}: {v.reason}");
     }
-    std\assert(problemsOf(["git", "commit", "-m", "x".repeat(151)]).indexOf("151 characters, past 150") != null, message: "too long");
+    std\assert(askReason(["git", "commit", "-m", "x".repeat(151)]).indexOf("151 characters, past 150") != null, message: "too long");
     std\assert(ask(["git", "commit", "-m", "x".repeat(150)]).decision == "allow", message: "150 is the cap");
 }
 
 test "a body, a second -m and an attribution are denied" {
-    std\assert(problemsOf(["git", "commit", "-m", "trim a fragment", "-m", "why it matters"]).indexOf("git makes each after the first a body paragraph") != null, message: "two -m in git");
-    std\assert(problemsOf(["jj", "describe", "-m", "trim a fragment", "-m", "why"]).indexOf("jj makes each after the first a body paragraph") != null, message: "two -m in jj");
-    std\assert(problemsOf(["hg", "commit", "-m", "trim a fragment", "-m", "why"]).indexOf("hg keeps only the last") != null, message: "two -m in hg");
-    std\assert(problemsOf(["hg", "commit", "-m", "trim a fragment", "-m", "Why."]).indexOf("trailing period") != null, message: "hg records the last");
-    std\assert(problemsOf(["git", "commit", "-m", "trim a fragment", "--trailer", "Co-Authored-By: a <b@c>"]).indexOf("an attribution") != null, message: "a trailer");
-    std\assert(problemsOf(["jj", "commit", "-m", "trim a fragment\n\nGenerated with a tool"]).indexOf("an attribution") != null, message: "in the message");
+    std\assert(askReason(["git", "commit", "-m", "trim a fragment", "-m", "why it matters"]).indexOf("git makes each after the first a body paragraph") != null, message: "two -m in git");
+    std\assert(askReason(["jj", "describe", "-m", "trim a fragment", "-m", "why"]).indexOf("jj makes each after the first a body paragraph") != null, message: "two -m in jj");
+    std\assert(askReason(["hg", "commit", "-m", "trim a fragment", "-m", "why"]).indexOf("hg keeps only the last") != null, message: "two -m in hg");
+    std\assert(askReason(["hg", "commit", "-m", "trim a fragment", "-m", "Why."]).indexOf("trailing period") != null, message: "hg records the last");
+    std\assert(askReason(["git", "commit", "-m", "trim a fragment", "--trailer", "Co-Authored-By: a <b@c>"]).indexOf("an attribution") != null, message: "a trailer");
+    std\assert(askReason(["jj", "commit", "-m", "trim a fragment\n\nGenerated with a tool"]).indexOf("an attribution") != null, message: "in the message");
 }
 
 test "a commit on the base branch takes the conventional subject the commit-msg hook requires" {
@@ -405,7 +405,7 @@ test "a message written through a heredoc substitution is judged from its body" 
 
 test "no message sends the reader to a skill" {
     foreach (reason in [
-        problemsOf(["git", "commit", "-m", "Fix the port."]),
+        askReason(["git", "commit", "-m", "Fix the port."]),
         decideCommit(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment"]]), baseBranch: "main").reason,
     ]) {
         std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);

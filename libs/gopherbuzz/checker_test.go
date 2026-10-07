@@ -1679,7 +1679,7 @@ func TestUnimportedNamespace(t *testing.T) {
 			sess.DeclareModuleTypes("demo", "export object Thing { n: int = 0 }\nexport final answer: int = 0;")
 
 			err := sess.Exec(ctx, tc.src)
-			d, ok := DiagnosticOf(err)
+			d, ok := DiagnosticFromError(err)
 			require.True(t, ok, "want a positioned diagnostic, got %v", err)
 			assert.Equal(t, tc.code, d.Code)
 			assert.Equal(t, tc.msg, d.Msg)
@@ -1696,7 +1696,7 @@ func TestUnimportedNamespace_AmbiguousPathNamesNoLine(t *testing.T) {
 	sess.SetNativeModule("a/demo", vmpackage.NewMap())
 	sess.SetNativeModule("b/demo", vmpackage.NewMap())
 
-	d, ok := DiagnosticOf(sess.Exec(ctx, `final n = demo\answer;`))
+	d, ok := DiagnosticFromError(sess.Exec(ctx, `final n = demo\answer;`))
 	require.True(t, ok)
 	assert.Equal(t, UnimportedNamespace, d.Code)
 	assert.Equal(t, `undefined: demo\answer: no import binds demo in this module`, d.Msg)

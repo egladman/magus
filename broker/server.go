@@ -153,7 +153,7 @@ loop:
 				slog.Int("holding", s.held()), slog.Duration("grace", o.drainGrace))
 			break loop
 		case now := <-tick:
-			if idle := s.idleFor(now); idle >= o.idleExit {
+			if idle := s.idleDuration(now); idle >= o.idleExit {
 				o.log.InfoContext(ctx, "broker: exiting; it has held nothing", slog.Duration("idle", idle.Round(time.Second)))
 				break loop
 			}
@@ -234,10 +234,10 @@ func (s *server) touch() {
 	s.mu.Unlock()
 }
 
-// idleFor is how long the broker has held nothing: no claim, no service reference, no
+// idleDuration is how long the broker has held nothing: no claim, no service reference, no
 // request in flight. A connection that holds none of those (a server that only says
 // hello, a status query) does not keep it up.
-func (s *server) idleFor(now time.Time) time.Duration {
+func (s *server) idleDuration(now time.Time) time.Duration {
 	holding := s.held() > 0
 	s.mu.Lock()
 	defer s.mu.Unlock()

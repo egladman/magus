@@ -568,7 +568,7 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 	if err != nil {
 		return nil, err
 	}
-	return knowledgeGraphOf(ctx, ws, globalCfg, refresh, global, includeSymbols)
+	return loadWorkspaceGraph(ctx, ws, globalCfg, refresh, global, includeSymbols)
 }
 
 // inspectForRead is inspectWorkspace for a graph read: the handle startup already opened
@@ -591,9 +591,9 @@ func inspectForRead(_ context.Context, root string) (graphWorkspace, error) {
 	}), nil
 }
 
-// knowledgeGraphOf is loadKnowledgeGraph over a workspace the caller already holds, read
+// loadWorkspaceGraph is loadKnowledgeGraph over a workspace the caller already holds, read
 // under cfg: the form a server answering for one of many workspaces calls.
-func knowledgeGraphOf(ctx context.Context, ws graphWorkspace, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
+func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, refresh, global, includeSymbols bool) (*knowledge.Graph, error) {
 	if global {
 		// Cross-workspace symbol federation is a later phase; --global stays domain-only.
 		// Warn rather than silently drop a symbol-seeded selection, so an empty result
@@ -635,10 +635,10 @@ func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, r
 	if err != nil {
 		return nil, err
 	}
-	return knowledgeGraphForRefsOf(ctx, ws, globalCfg, refresh, ref)
+	return loadRefsGraph(ctx, ws, globalCfg, refresh, ref)
 }
 
-func knowledgeGraphForRefsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error) {
+func loadRefsGraph(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, refresh bool, ref string) (*knowledge.Graph, error) {
 	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
 		return nil, err

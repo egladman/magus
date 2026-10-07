@@ -121,10 +121,10 @@ func staleIndexes(ctx context.Context, root string) []types.KnowledgeStaleIndex 
 	if err != nil || ws == nil {
 		return nil
 	}
-	return staleIndexesOf(ctx, ws)
+	return findStaleIndexes(ctx, ws)
 }
 
-func staleIndexesOf(ctx context.Context, ws graphWorkspace) []types.KnowledgeStaleIndex {
+func findStaleIndexes(ctx context.Context, ws graphWorkspace) []types.KnowledgeStaleIndex {
 	var m *magus.Magus
 	switch w := ws.(type) {
 	case *magus.Magus:
@@ -172,7 +172,7 @@ func staleGraphAdvice(ctx context.Context) string {
 		}
 		return ""
 	})
-	advice := staleGraphAdviceFor(reason, staleIndexes(ctx, ""))
+	advice := renderStaleGraphAdvice(reason, staleIndexes(ctx, ""))
 	if advice == "" {
 		return ""
 	}
@@ -182,9 +182,9 @@ func staleGraphAdvice(ctx context.Context) string {
 	return advice
 }
 
-// staleGraphAdviceFor renders the advice for a stale guard index (reason) and stale
+// renderStaleGraphAdvice renders the advice for a stale guard index (reason) and stale
 // symbol indexes, "" when neither is stale.
-func staleGraphAdviceFor(reason string, stale []types.KnowledgeStaleIndex) string {
+func renderStaleGraphAdvice(reason string, stale []types.KnowledgeStaleIndex) string {
 	var b strings.Builder
 	switch {
 	case reason != "":

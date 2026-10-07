@@ -1370,7 +1370,7 @@ fun labelPlacement(d: Diagram, e: Edge) > [int] {
 // labels after it; an unlabelled edge, or one with no clear spot, gets an empty entry.
 fun labelSpots(d: Diagram) > [[int]] {
     final obstacles: mut [[int]] = mut [<[int]>];
-    foreach (s in strokesOf(d)) { obstacles.append(s); }
+    foreach (s in connectorObstacles(d)) { obstacles.append(s); }
     final spots: mut [[int]] = mut [<[int]>];
     foreach (e in d.edges) {
         var at: [int] = [<int>];
@@ -1383,9 +1383,9 @@ fun labelSpots(d: Diagram) > [[int]] {
     return spots;
 }
 
-// strokesOf is every leg of every connector, plus the square each bridge's hop can reach, as
+// connectorObstacles is every leg of every connector, plus the square each bridge's hop can reach, as
 // the obstacles a label keeps clear of: [x1, y1, x2, y2], a leg or a box's corners.
-fun strokesOf(d: Diagram) > [[int]] {
+fun connectorObstacles(d: Diagram) > [[int]] {
     final all: mut [[int]] = mut [<[int]>];
     foreach (e in d.edges) {
         foreach (seg in edgeSegments(d, e: e)) { all.append(seg); }
@@ -3032,7 +3032,7 @@ object Groups {
     }
 }
 
-fun groupsOf(n: int, sets: [[str]], idx: {str: int}) > Groups {
+fun newGroups(n: int, sets: [[str]], idx: {str: int}) > Groups {
     final g = Groups{ parent = zeros(n) };
     var i = 0;
     while (i < n) {
@@ -3090,7 +3090,7 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
         }
         z = z + 1;
     }
-    final ranked = groupsOf(nn, sets: f.ranks, idx: idx);
+    final ranked = newGroups(nn, sets: f.ranks, idx: idx);
     final sameRank = fun (a: int, b: int) > bool {
         return ranked.find(a) == ranked.find(b) or pl.rankOf[a] == pl.rankOf[b];
     };
@@ -3306,7 +3306,7 @@ fun constraintFindings(f: Sketch, pl: Plan) > [str] {
         errs.append("order puts {cycle.join(", ")} each before the other; drop the order([...]) that reverses them");
     }
 
-    final lined = groupsOf(nn, sets: f.rows, idx: idx);
+    final lined = newGroups(nn, sets: f.rows, idx: idx);
     final seenRow: mut {int: bool} = mut {<int: bool>};
     i = 0;
     while (i < nn) {
@@ -3382,9 +3382,9 @@ fun plan(f: Sketch) > Plan {
 
     // An edge between two members of one rank() lies flat: it runs across the rank from the
     // earlier member to the later and adds no rank.
-    final ranked = groupsOf(nn, sets: f.ranks, idx: idx);
+    final ranked = newGroups(nn, sets: f.ranks, idx: idx);
     final flat: mut [bool] = mut [<bool>];
-    final flatJoined = groupsOf(nn, sets: [<[str]>], idx: idx);
+    final flatJoined = newGroups(nn, sets: [<[str]>], idx: idx);
     var li = 0;
     while (li < ne) {
         flat.append(ranked.find(fromItem[li]) == ranked.find(toItem[li]));
@@ -3866,9 +3866,9 @@ fun fanRoom(n: int) > int {
     return roundUp8(2 * (Pitch * (n / 2) + Pitch));
 }
 
-// gapFor is the width a column gap needs for k channels a Pitch apart, each FaceClear off
+// columnGap is the width a column gap needs for k channels a Pitch apart, each FaceClear off
 // both faces; never under the house gap.
-fun gapFor(k: int) > int {
+fun columnGap(k: int) > int {
     if (k == 0) { return LayerColGap; }
     return imax(LayerColGap, b: roundUp8(2 * (iabs(latticeOffset(1, slots: k, pitch: Pitch)) + FaceClear)));
 }
@@ -3947,9 +3947,9 @@ fun settle(seg: [int], pos: mut [int], want: [int], key: [int], gaps: [int], hug
     }
 }
 
-// runsOf splits a rank into what settle places as one: a band's share of it, or the whole
+// splitRuns splits a rank into what settle places as one: a band's share of it, or the whole
 // rank once bands no longer matter.
-fun runsOf(row: [int], bandOf: [int], whole: bool) > [[int]] {
+fun splitRuns(row: [int], bandOf: [int], whole: bool) > [[int]] {
     final runs: mut [[int]] = mut [<[int]>];
     var run: mut [int] = mut [<int>];
     foreach (item in row) {
@@ -3963,10 +3963,10 @@ fun runsOf(row: [int], bandOf: [int], whole: bool) > [[int]] {
     return runs;
 }
 
-// gapsOf is the least midline distance between neighbours in a run: two boxes keep a row
+// neighbourGaps is the least midline distance between neighbours in a run: two boxes keep a row
 // gap, and so does a diamond, whose side exits step into it; a lane beside anything keeps
 // a Pitch; a flat edge keeps the gap its connector and label need.
-fun gapsOf(run: [int], pc: Placer, nodeCount: int) > [int] {
+fun neighbourGaps(run: [int], pc: Placer, nodeCount: int) > [int] {
     final gaps: mut [int] = mut [<int>];
     var k = 0;
     while (k + 1 < run.len()) {
@@ -3983,8 +3983,8 @@ fun gapsOf(run: [int], pc: Placer, nodeCount: int) > [int] {
 
 // pack lines a rank's runs up at their least distances from start, each run afresh.
 fun pack(row: [int], pos: mut [int], pl: Plan, pc: Placer, whole: bool, start: int) > void {
-    foreach (run in runsOf(row, bandOf: pl.bandOf, whole: whole)) {
-        final gaps = gapsOf(run, pc: pc, nodeCount: pl.nodeCount);
+    foreach (run in splitRuns(row, bandOf: pl.bandOf, whole: whole)) {
+        final gaps = neighbourGaps(run, pc: pc, nodeCount: pl.nodeCount);
         pos[run[0]] = start;
         var k = 1;
         while (k < run.len()) {
@@ -4009,7 +4009,7 @@ fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: boo
             var r = step;
             if (goingDown == false) { r = pl.maxRank - step; }
             if (free[r] == phaseTwo) {
-                foreach (run in runsOf(pl.orders[r], bandOf: pl.bandOf, whole: phaseTwo)) {
+                foreach (run in splitRuns(pl.orders[r], bandOf: pl.bandOf, whole: phaseTwo)) {
                     final want: mut [int] = mut [<int>];
                     final key: mut [int] = mut [<int>];
                     final hug: mut [bool] = mut [<bool>];
@@ -4048,7 +4048,7 @@ fun alignRanks(pl: Plan, pos: mut [int], pc: Placer, free: [bool], phaseTwo: boo
                         want.append(w);
                         key.append(cls * 10000000 + (9 - imin(degree, b: 9)) * 1000000 + imin(iabs(w - pos[item]), b: 999999));
                     }
-                    settle(run, pos: pos, want: want, key: key, gaps: gapsOf(run, pc: pc, nodeCount: pl.nodeCount), hug: hug);
+                    settle(run, pos: pos, want: want, key: key, gaps: neighbourGaps(run, pc: pc, nodeCount: pl.nodeCount), hug: hug);
                 }
             }
             step = step + 1;
@@ -4097,8 +4097,8 @@ fun straightenLanes(pl: Plan, pos: mut [int], pc: Placer, free: [bool], bandLo: 
                 final d = chain[k];
                 final row = pl.orders[pl.rankOf[d]];
                 final i = at[d];
-                if (i > 0 and v < pos[row[i - 1]] + gapsOf([row[i - 1], d], pc: pc, nodeCount: pl.nodeCount)[0]) { fits = false; }
-                if (i + 1 < row.len() and v > pos[row[i + 1]] - gapsOf([d, row[i + 1]], pc: pc, nodeCount: pl.nodeCount)[0]) { fits = false; }
+                if (i > 0 and v < pos[row[i - 1]] + neighbourGaps([row[i - 1], d], pc: pc, nodeCount: pl.nodeCount)[0]) { fits = false; }
+                if (i + 1 < row.len() and v > pos[row[i + 1]] - neighbourGaps([d, row[i + 1]], pc: pc, nodeCount: pl.nodeCount)[0]) { fits = false; }
                 final b = pl.bandOf[d];
                 if (free[pl.rankOf[d]] == false and (v < bandLo[b] + bandOffset[b] or v > bandHi[b] + bandOffset[b])) { fits = false; }
                 k = k + 1;
@@ -4382,7 +4382,7 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
         item = item + 1;
     }
     // A row() group's leader is its member in the earliest rank; the rest follow its midline.
-    final lined = groupsOf(nn, sets: f.rows, idx: idx);
+    final lined = newGroups(nn, sets: f.rows, idx: idx);
     final rowIds: mut {int: mut [str]} = mut {<int: mut [str]>};
     ni = 0;
     while (ni < nn) {
@@ -5010,13 +5010,13 @@ fun place(f: Sketch, pl: Plan, found: mut [str], widen: [int]) > Diagram {
     rankMain[0] = mainStart;
     gap = 0;
     while (gap < pl.maxRank) {
-        rankMain[gap + 1] = rankMain[gap] + mainSize + gapFor(chanCount[gap]) + widen[gap];
+        rankMain[gap + 1] = rankMain[gap] + mainSize + columnGap(chanCount[gap]) + widen[gap];
         gap = gap + 1;
     }
     var h = 0;
     while (h < hopGap.len()) {
         final g = hopGap[h];
-        final centre = rankMain[g] + mainSize + (gapFor(chanCount[g]) + widen[g]) / 2;
+        final centre = rankMain[g] + mainSize + (columnGap(chanCount[g]) + widen[g]) / 2;
         if (hopIn[h] != hopOut[h]) { hopMain[h] = centre + latticeOffset(hopChan[h] + 1, slots: chanCount[g], pitch: Pitch); }
         h = h + 1;
     }
@@ -5257,7 +5257,7 @@ fun layoutFlow(declared: Sketch) > Diagram !> str {
     return Diagram{};
 }
 
-fun nodeOf(d: Diagram, id: str) > Node {
+fun lookupNode(d: Diagram, id: str) > Node {
     foreach (n in d.nodes) {
         if (n.id == id) { return n; }
     }
@@ -5277,8 +5277,8 @@ fun sidePoint(n: Node, side: str, slot: int, slots: int) > [int] {
 // edgeLegs rebuilds a connector's legs from its public fields the way the renderer draws
 // them, so a test reasons about geometry without the renderer's private helpers.
 fun edgeLegs(d: Diagram, e: Edge) > [[int]] {
-    final s = sidePoint(nodeOf(d, id: e.src), side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots);
-    final t = sidePoint(nodeOf(d, id: e.dst), side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots);
+    final s = sidePoint(lookupNode(d, id: e.src), side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots);
+    final t = sidePoint(lookupNode(d, id: e.dst), side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots);
     final pts: mut [int] = mut [s[0], s[1]];
     foreach (v in e.via) { pts.append(v); }
     if (e.via.len() == 0 and e.bend != 0) {
@@ -5406,15 +5406,15 @@ fun observedServerScope() > mut Sketch {
 test "a chain ranks into one column per step" {
     final d = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("b", dst: "c").diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "the layout is sound");
-    std\assert(nodeOf(d, id: "a").x < nodeOf(d, id: "b").x, message: "b sits right of a");
-    std\assert(nodeOf(d, id: "b").x < nodeOf(d, id: "c").x, message: "c sits right of b");
-    std\assert(nodeOf(d, id: "a").y == nodeOf(d, id: "c").y, message: "a chain runs straight");
+    std\assert(lookupNode(d, id: "a").x < lookupNode(d, id: "b").x, message: "b sits right of a");
+    std\assert(lookupNode(d, id: "b").x < lookupNode(d, id: "c").x, message: "c sits right of b");
+    std\assert(lookupNode(d, id: "a").y == lookupNode(d, id: "c").y, message: "a chain runs straight");
 }
 
 test "a diamond lays out without a crossing" {
     final d = diamond().diagram() catch Diagram{};
     std\assert(d.nodes.len() == 4, message: "laid out");
-    std\assert(nodeOf(d, id: "b").x == nodeOf(d, id: "c").x, message: "b and c share a rank");
+    std\assert(lookupNode(d, id: "b").x == lookupNode(d, id: "c").x, message: "b and c share a rank");
     std\assert(crossings(d).len() == 0, message: "no two connectors cross");
 }
 
@@ -5454,9 +5454,9 @@ test "a zone keeps its members contiguous" {
         .edge("a", dst: "b").edge("a", dst: "c").edge("a", dst: "d")
         .zone("pair", members: ["b", "d"])
         .diagram() catch Diagram{};
-    final b = nodeOf(d, id: "b");
-    final c = nodeOf(d, id: "c");
-    final dd = nodeOf(d, id: "d");
+    final b = lookupNode(d, id: "b");
+    final c = lookupNode(d, id: "c");
+    final dd = lookupNode(d, id: "d");
     std\assert(c.y > b.y and c.y > dd.y, message: "the unzoned node sits after the band");
     std\assert(d.zones.len() == 1, message: "one band drawn");
     final z = d.zones[0];
@@ -5482,10 +5482,10 @@ test "down() transposes the layout" {
     final across = diamond().diagram() catch Diagram{};
     final down = diamond().down().diagram() catch Diagram{};
     std\assert(validate(down).len() == 0, message: "the transposed layout is sound");
-    std\assert(nodeOf(down, id: "b").y == nodeOf(down, id: "c").y, message: "a rank is a row");
-    std\assert(nodeOf(down, id: "b").x < nodeOf(down, id: "c").x, message: "ordered across it");
-    std\assert(nodeOf(down, id: "a").y < nodeOf(down, id: "b").y, message: "ranks run down");
-    std\assert(nodeOf(across, id: "b").y < nodeOf(across, id: "c").y, message: "where across they stack");
+    std\assert(lookupNode(down, id: "b").y == lookupNode(down, id: "c").y, message: "a rank is a row");
+    std\assert(lookupNode(down, id: "b").x < lookupNode(down, id: "c").x, message: "ordered across it");
+    std\assert(lookupNode(down, id: "a").y < lookupNode(down, id: "b").y, message: "ranks run down");
+    std\assert(lookupNode(across, id: "b").y < lookupNode(across, id: "c").y, message: "where across they stack");
     std\assert(down.edges[0].srcSide == "bottom" and down.edges[0].dstSide == "top", message: "connectors leave downward");
     std\assert(crossings(down).len() == 0, message: "and still cross nothing");
 }
@@ -5513,8 +5513,8 @@ fun midY(n: Node) > int {
     return n.y + n.h / 2;
 }
 
-// channelsOf is every distinct x a connector turns on between two columns, sorted.
-fun channelsOf(d: Diagram) > [int] {
+// turnChannels is every distinct x a connector turns on between two columns, sorted.
+fun turnChannels(d: Diagram) > [int] {
     final seen: mut {int: bool} = mut {<int: bool>};
     final xs: mut [int] = mut [<int>];
     foreach (e in d.edges) {
@@ -5562,9 +5562,9 @@ fun fanIn(n: int) > mut Sketch {
 test "a fan past a gap's channels widens the gap and the fanning box alone" {
     final d = fanIn(20).generated().diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "twenty connectors, twenty lines");
-    final root = nodeOf(d, id: "root");
-    std\assert(root.h == 264 and nodeOf(d, id: "c0").h == LayerNodeH, message: "a Pitch per slot: {root.h}");
-    final xs = channelsOf(d);
+    final root = lookupNode(d, id: "root");
+    std\assert(root.h == 264 and lookupNode(d, id: "c0").h == LayerNodeH, message: "a Pitch per slot: {root.h}");
+    final xs = turnChannels(d);
     std\assert(xs.len() == 10, message: "a rising and a falling connector share each channel: {xs}");
     var k = 1;
     while (k < xs.len()) {
@@ -5577,8 +5577,8 @@ test "every channel sits >= 16px from both faces" {
     foreach (f in [fanIn(20).generated(), fanIn(5), serverHttpTwin()]) {
         final d = f.diagram() catch Diagram{};
         foreach (e in d.edges) {
-            final a = nodeOf(d, id: e.src);
-            final b = nodeOf(d, id: e.dst);
+            final a = lookupNode(d, id: e.src);
+            final b = lookupNode(d, id: e.dst);
             foreach (leg in edgeLegs(d, e: e)) {
                 if (leg[0] == leg[2] and leg[1] != leg[3] and e.srcSide == "right") {
                     std\assert(leg[0] - a.x - a.w >= FaceClear and b.x - leg[0] >= FaceClear, message: "{d.id} {e.src}->{e.dst} turns at {leg[0]}");
@@ -5590,16 +5590,16 @@ test "every channel sits >= 16px from both faces" {
 
 test "edges in one gap whose vertical spans do not overlap share a channel; a lone channel sits at the gap's centre x" {
     final d = fanIn(3).diagram() catch Diagram{};
-    final c0 = nodeOf(d, id: "c0");
-    final centre = (c0.x + c0.w + nodeOf(d, id: "root").x) / 2;
+    final c0 = lookupNode(d, id: "c0");
+    final centre = (c0.x + c0.w + lookupNode(d, id: "root").x) / 2;
     std\assert(d.edges[0].bend == centre and d.edges[2].bend == centre, message: "one channel for both: {d.edges[0].bend}, {d.edges[2].bend}, centre {centre}");
     std\assert(edgeLegs(d, e: d.edges[1]).len() == 1, message: "the middle one runs straight");
 }
 
 test "k channels sit at centre + (i-(k-1)/2)*12, rounded to nearest; the k-th rising edge mirrors the k-th falling one" {
     final d = fanIn(5).diagram() catch Diagram{};
-    final c0 = nodeOf(d, id: "c0");
-    final centre = (c0.x + c0.w + nodeOf(d, id: "root").x) / 2;
+    final c0 = lookupNode(d, id: "c0");
+    final centre = (c0.x + c0.w + lookupNode(d, id: "root").x) / 2;
     final bends: mut [int] = mut [<int>];
     foreach (e in d.edges) { bends.append(e.bend); }
     std\assert(bends[1] == centre - 8 and bends[3] == centre - 8, message: "the inner pair turns nearest the sources: {bends}");
@@ -5609,17 +5609,17 @@ test "k channels sit at centre + (i-(k-1)/2)*12, rounded to nearest; the k-th ri
 
 test "an odd fan puts its middle slot on the midline; an edge to a same-row neighbour takes the midline at both ends" {
     final d = fan(3).diagram() catch Diagram{};
-    final root = nodeOf(d, id: "root");
+    final root = lookupNode(d, id: "root");
     final mid = d.edges[1];
     std\assert(sidePoint(root, side: mid.srcSide, slot: mid.srcSlot, slots: mid.srcSlots)[1] == midY(root), message: "the middle slot on the midline");
-    std\assert(midY(nodeOf(d, id: "c1")) == midY(root), message: "and its target shares the row");
+    std\assert(midY(lookupNode(d, id: "c1")) == midY(root), message: "and its target shares the row");
     // Four routes: the Guard's even fan anchors the route on its own row at the midline and
     // steps the rest out from it, rather than straddling the midline and jogging all four.
     final http = serverHttpTwin().diagram() catch Diagram{};
-    final guard = nodeOf(http, id: "guard");
+    final guard = lookupNode(http, id: "guard");
     var anchored = 0;
     foreach (e in http.edges) {
-        final b = nodeOf(http, id: e.dst);
+        final b = lookupNode(http, id: e.dst);
         if (e.src == "guard" and midY(b) == midY(guard)) {
             std\assert(sidePoint(guard, side: e.srcSide, slot: e.srcSlot, slots: e.srcSlots)[1] == midY(guard)
                 and sidePoint(b, side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots)[1] == midY(b), message: "guard->{e.dst} off the midline");
@@ -5635,7 +5635,7 @@ test "a fan whose 12px pitch overflows the box is a finding, never a 4px pack" {
     std\assert(thrown(fan(8)) == "flow \"t\": node \"root\" fans 8 connectors on one side; split the figure or add order([...])",
         message: "refused: {thrown(fan(8))}");
     final d = fanIn(7).diagram() catch Diagram{};
-    final root = nodeOf(d, id: "root");
+    final root = lookupNode(d, id: "root");
     final ys: mut [int] = mut [<int>];
     foreach (e in d.edges) { ys.append(sidePoint(root, side: e.dstSide, slot: e.dstSlot, slots: e.dstSlots)[1]); }
     var k = 1;
@@ -5654,7 +5654,7 @@ test "slots follow their targets' rows, so no fan crosses itself at its source" 
         final d = f.diagram() catch Diagram{};
         foreach (a in d.edges) {
             foreach (b in d.edges) {
-                if (a.src == b.src and a.srcSide == b.srcSide and midY(nodeOf(d, id: a.dst)) < midY(nodeOf(d, id: b.dst))) {
+                if (a.src == b.src and a.srcSide == b.srcSide and midY(lookupNode(d, id: a.dst)) < midY(lookupNode(d, id: b.dst))) {
                     if (a.srcSide == "bottom") {
                         std\assert(a.srcSlot > b.srcSlot, message: "{d.id}: {a.src}->{a.dst} leaves outside {b.dst}");
                     } else {
@@ -5675,11 +5675,11 @@ test "a node with one neighbour in the adjacent rank shares its midline whenever
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
     foreach (id in ["b", "c", "d"]) {
-        std\assert(midY(nodeOf(d, id: id)) == midY(nodeOf(d, id: "a")), message: "{id} on a's row");
+        std\assert(midY(lookupNode(d, id: id)) == midY(lookupNode(d, id: "a")), message: "{id} on a's row");
     }
-    final long = edgeOf(d, src: "s", dst: "t");
+    final long = findEdge(d, src: "s", dst: "t");
     std\assert(long != null and edgeLegs(d, e: long!).len() == 1, message: "s -> t runs straight across three gaps");
-    std\assert(midY(nodeOf(d, id: "t")) == midY(nodeOf(d, id: "s")), message: "t on s's row");
+    std\assert(midY(lookupNode(d, id: "t")) == midY(lookupNode(d, id: "s")), message: "t on s's row");
 }
 
 test "a fan keeps its slots and channels a Pitch apart, so every leg seats the bend floor" {
@@ -5688,7 +5688,7 @@ test "a fan keeps its slots and channels a Pitch apart, so every leg seats the b
     final msg = thrown(f);
     std\assert(msg == "", message: "an authored fan of five passes the bend floor: {msg}");
     final d = f.diagram() catch Diagram{};
-    final root = nodeOf(d, id: "root");
+    final root = lookupNode(d, id: "root");
     foreach (side in ["top", "right", "bottom"]) {
         final along: mut [int] = mut [<int>];
         foreach (e in d.edges) {
@@ -5710,8 +5710,8 @@ test "neighbouring ranks on one row connect straight" {
     final d = serverHttpTwin().diagram() catch Diagram{};
     var straight = 0;
     foreach (e in d.edges) {
-        final a = nodeOf(d, id: e.src);
-        final b = nodeOf(d, id: e.dst);
+        final a = lookupNode(d, id: e.src);
+        final b = lookupNode(d, id: e.dst);
         if (midY(a) == midY(b) and b.x - a.x == LayerNodeW + LayerColGap) {
             std\assert(edgeLegs(d, e: e).len() == 1, message: "{e.src}->{e.dst} detours");
             straight = straight + 1;
@@ -5726,11 +5726,11 @@ test "a band's sole parent sits beside it" {
         .edge("u", dst: "b").edge("u", dst: "c").edge("v", dst: "w")
         .zone("pair", members: ["b", "c"])
         .diagram() catch Diagram{};
-    final u = nodeOf(d, id: "u");
+    final u = lookupNode(d, id: "u");
     final z = d.zones[0];
     std\assert(u.y >= z.y and u.y + u.h <= z.y + z.h, message: "u sits within the band's rows");
     std\assert(u.x + u.w <= z.x, message: "and outside its box");
-    std\assert(nodeOf(d, id: "v").y >= z.y + z.h, message: "an unrelated node still sits after the band");
+    std\assert(lookupNode(d, id: "v").y >= z.y + z.h, message: "an unrelated node still sits after the band");
 }
 
 test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap row between them" {
@@ -5740,12 +5740,12 @@ test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap
         .zone("top", members: ["p", "l"]).zone("bottom", members: ["k", "r"])
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final s = nodeOf(d, id: "s");
+    final s = lookupNode(d, id: "s");
     final top = d.zones[0];
     final bottom = d.zones[1];
     std\assert(s.y >= top.y + top.h and s.y + s.h <= bottom.y, message: "s sits between the bands at y {s.y}");
-    std\assert(nodeOf(d, id: "k").x < s.x and s.x < nodeOf(d, id: "p").x, message: "and keeps its rank");
-    std\assert(nodeOf(d, id: "v").y >= bottom.y + bottom.h, message: "a node with no edges still sits after the last band");
+    std\assert(lookupNode(d, id: "k").x < s.x and s.x < lookupNode(d, id: "p").x, message: "and keeps its rank");
+    std\assert(lookupNode(d, id: "v").y >= bottom.y + bottom.h, message: "a node with no edges still sits after the last band");
 
     final apart = fig()
         .node("x0").node("x1").node("x2").node("y0").node("y1").node("z2").node("s")
@@ -5753,7 +5753,7 @@ test "an unzoned node whose neighbours lie in two adjacent bands sits in the gap
         .zone("one", members: ["x0", "x1", "x2"]).zone("two", members: ["y0", "y1"]).zone("three", members: ["z2"])
         .diagram() catch Diagram{};
     std\assert(apart.zones.len() == 3, message: "laid out");
-    final far = nodeOf(apart, id: "s");
+    final far = lookupNode(apart, id: "s");
     foreach (z in apart.zones) {
         std\assert(far.y >= z.y + z.h, message: "bands that are not adjacent leave s after the last band");
     }
@@ -5777,7 +5777,7 @@ fun thrown(f: Sketch) > str {
     return msg;
 }
 
-fun edgeOf(d: Diagram, src: str, dst: str) > Edge? {
+fun findEdge(d: Diagram, src: str, dst: str) > Edge? {
     foreach (e in d.edges) {
         if (e.src == src and e.dst == dst) { return e; }
     }
@@ -5886,8 +5886,8 @@ test "a declared anchor takes over the observed box it depicts" {
             anchors[n.anchor] = true;
         }
     }
-    std\assert(nodeOf(d, id: "guard").label == "Guard", message: "the declared label wins");
-    final kept = edgeOf(d, src: "health", dst: "guard");
+    std\assert(lookupNode(d, id: "guard").label == "Guard", message: "the declared label wins");
+    final kept = findEdge(d, src: "health", dst: "guard");
     std\assert(kept != null and kept?.claim == "imports", message: "the observed import runs between declared ids");
     foreach (e in d.edges) {
         std\assert(declared[e.src] != null and declared[e.dst] != null, message: "{e.src} -> {e.dst} names a declared id");
@@ -5905,8 +5905,8 @@ test "observed nodes and edges render" {
     final f = fig(observed: pair());
     final d = f.diagram() catch Diagram{};
     std\assert(d.nodes.len() == 2 and d.edges.len() == 1, message: "both boxes and the import placed");
-    std\assert(nodeOf(d, id: "a").label == "pkg/a" and nodeOf(d, id: "b").label == "b", message: "an empty label shows the id");
-    std\assert(nodeOf(d, id: "b").anchor == "pkg/b", message: "the observed anchor kept");
+    std\assert(lookupNode(d, id: "a").label == "pkg/a" and lookupNode(d, id: "b").label == "b", message: "an empty label shows the id");
+    std\assert(lookupNode(d, id: "b").anchor == "pkg/b", message: "the observed anchor kept");
     std\assert(d.edges[0].claim == "imports", message: "an observed edge claims imports");
     final svg = f.svg(lightPalette()) catch "threw";
     std\assert(svg.startsWith("<svg"), message: "and it renders: {svg}");
@@ -5915,11 +5915,11 @@ test "observed nodes and edges render" {
 test "a declared node overrides an observed label and keeps its anchor" {
     final d = fig(observed: pair()).node("a", label: "Alpha", sub: "the source", role: Role.focal).diagram() catch Diagram{};
     std\assert(d.nodes.len() == 2, message: "merged, not duplicated");
-    final a = nodeOf(d, id: "a");
+    final a = lookupNode(d, id: "a");
     std\assert(a.label == "Alpha" and a.sub == "the source" and a.role == "focal", message: "the declaration wins");
     std\assert(a.anchor == "pkg/a", message: "an empty declared anchor keeps the observed one");
     final plain = fig(observed: pair()).node("a", sub: "only a sub").diagram() catch Diagram{};
-    std\assert(nodeOf(plain, id: "a").label == "pkg/a", message: "an empty declared label keeps the observed one");
+    std\assert(lookupNode(plain, id: "a").label == "pkg/a", message: "an empty declared label keeps the observed one");
 }
 
 test "a node anchored apart from its observation is a finding" {
@@ -5950,7 +5950,7 @@ test "omitEdge hides an observed edge and is reported when stale" {
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }],
     };
     final d = fig(observed: o).omitEdge("a", dst: "b", why: "a test seam").diagram() catch Diagram{};
-    std\assert(d.edges.len() == 1 and edgeOf(d, src: "a", dst: "b") == null, message: "hidden");
+    std\assert(d.edges.len() == 1 and findEdge(d, src: "a", dst: "b") == null, message: "hidden");
     final stale = thrown(fig(observed: o).omitEdge("a", dst: "c", why: "gone"));
     std\assert(stale == "flow \"t\": omitEdge \"a\" -> \"c\" names no observed edge; drop the omitEdge", message: "stale: {stale}");
     final bare = thrown(fig(observed: o).omitEdge("a", dst: "b", why: ""));
@@ -5977,8 +5977,8 @@ test "the server-http twin composed from an observation lays out clean" {
     std\assert(msg == "", message: "composed: {msg}");
     final d = serverHttpComposed().diagram() catch Diagram{};
     std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "every box and connector placed");
-    std\assert(nodeOf(d, id: "pkg-internal-httpx").label == "Guard", message: "relabelled");
-    std\assert(nodeOf(d, id: "pkg-internal-httpx").anchor == "internal/httpx", message: "anchored by observation");
+    std\assert(lookupNode(d, id: "pkg-internal-httpx").label == "Guard", message: "relabelled");
+    std\assert(lookupNode(d, id: "pkg-internal-httpx").anchor == "internal/httpx", message: "anchored by observation");
     std\assert(d.stamp == "sha256:0929", message: "stamped");
     std\assert(crossings(d).len() == 0, message: "no crossings");
 }
@@ -5989,8 +5989,8 @@ test "an omit drops the observed box it names and every connector touching it" {
         edges = [ObservedEdge{ src = "a", dst = "b" }, ObservedEdge{ src = "b", dst = "c" }, ObservedEdge{ src = "a", dst = "c" }],
     };
     final d = fig(observed: o).omit("pkg/b", why: "folded into a").diagram() catch Diagram{};
-    std\assert(d.nodes.len() == 2 and nodeOf(d, id: "b").id == "", message: "b is gone: {d.nodes.len()}");
-    std\assert(d.edges.len() == 1 and edgeOf(d, src: "a", dst: "c") != null, message: "only a -> c remains: {d.edges.len()}");
+    std\assert(d.nodes.len() == 2 and lookupNode(d, id: "b").id == "", message: "b is gone: {d.nodes.len()}");
+    std\assert(d.edges.len() == 1 and findEdge(d, src: "a", dst: "c") != null, message: "only a -> c remains: {d.edges.len()}");
     std\assert(d.omits["pkg/b"] == "folded into a", message: "the omit reaches the Diagram");
 }
 
@@ -6091,7 +6091,7 @@ test "the server-http twin over its whole scope lays out clean once it omits the
     final d = serverHttpOmitting().diagram() catch Diagram{};
     std\assert(d.generated == false, message: "authored budgets apply");
     std\assert(d.nodes.len() == 9 and d.edges.len() == 7, message: "nine boxes, seven connectors: {d.nodes.len()}, {d.edges.len()}");
-    std\assert(nodeOf(d, id: "guard").anchor == "internal/httpx", message: "the declared id kept");
+    std\assert(lookupNode(d, id: "guard").anchor == "internal/httpx", message: "the declared id kept");
     std\assert(d.omits.size() == 12, message: "every omit kept");
     std\assert(validate(d).len() == 0 and crossings(d).len() == 0, message: "clean");
 }
@@ -6169,7 +6169,7 @@ test "a rank no zone reaches centers between the bands" {
         .zone("one", members: ["a1", "a2"]).zone("two", members: ["b1", "b2"])
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final s = nodeOf(d, id: "s");
+    final s = lookupNode(d, id: "s");
     final mid = s.y + s.h / 2;
     std\assert(mid > d.zones[0].y + d.zones[0].h and mid < d.zones[1].y, message: "s sits between the bands at {mid}");
 }
@@ -6180,7 +6180,7 @@ test "a zone's box never takes in a rank it spans without a member there" {
         .edge("p", dst: "m").edge("m", dst: "q")
         .zone("pair", members: ["p", "q"])
         .diagram() catch Diagram{};
-    final m = nodeOf(d, id: "m");
+    final m = lookupNode(d, id: "m");
     final z = d.zones[0];
     std\assert(m.y >= z.y + z.h or m.y + m.h <= z.y, message: "m sits outside the band's box");
 }
@@ -6212,7 +6212,7 @@ test "a string where a Role, EdgeRole or Claim belongs is a finding" {
 
 test "a node links outside the repo or anchors inside it, never both" {
     final d = fig().node("stripe", label: "Stripe", role: Role.external, link: "https://stripe.com/docs").diagram() catch Diagram{};
-    std\assert(nodeOf(d, id: "stripe").link == "https://stripe.com/docs", message: "the link reaches the node");
+    std\assert(lookupNode(d, id: "stripe").link == "https://stripe.com/docs", message: "the link reaches the node");
     final both = thrown(fig().node("a", anchor: "pkg/a", link: "https://example.com"));
     std\assert(both == "flow \"t\": node \"a\" sets both anchor and link; keep anchor for a path in this repo, link for anything outside it",
         message: "both: {both}");
@@ -6313,10 +6313,10 @@ test "a reversed edge runs outside the outermost row of the ranks it spans, take
     final d = f.diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {thrown(f)}");
     final spine = ["cp", "part", "decl", "work", "verify", "integrate"];
-    final x = midX(nodeOf(d, id: "cp"));
-    foreach (id in spine) { std\assert(midX(nodeOf(d, id: id)) == x, message: "{id} off the spine"); }
-    final left = nodeOf(d, id: "cp").x;
-    foreach (back in [edgeOf(d, src: "integrate", dst: "cp"), edgeOf(d, src: "work", dst: "decl")]) {
+    final x = midX(lookupNode(d, id: "cp"));
+    foreach (id in spine) { std\assert(midX(lookupNode(d, id: id)) == x, message: "{id} off the spine"); }
+    final left = lookupNode(d, id: "cp").x;
+    foreach (back in [findEdge(d, src: "integrate", dst: "cp"), findEdge(d, src: "work", dst: "decl")]) {
         std\assert(back != null and back!.dashed and back!.srcSide == "left" and back!.dstSide == "left", message: "leaves and lands across the flow");
         var k = 0;
         while (k < back!.via.len()) {
@@ -6325,8 +6325,8 @@ test "a reversed edge runs outside the outermost row of the ranks it spans, take
         }
     }
     final loop = d.zones[0];
-    std\assert(edgeOf(d, src: "integrate", dst: "cp")!.via[0] > loop.x, message: "the loop's lanes stay inside its zone");
-    std\assert(edgeOf(d, src: "integrate", dst: "cp")!.via[0] < edgeOf(d, src: "work", dst: "decl")!.via[0], message: "the longer lane runs outside the shorter");
+    std\assert(findEdge(d, src: "integrate", dst: "cp")!.via[0] > loop.x, message: "the loop's lanes stay inside its zone");
+    std\assert(findEdge(d, src: "integrate", dst: "cp")!.via[0] < findEdge(d, src: "work", dst: "decl")!.via[0], message: "the longer lane runs outside the shorter");
     final pl = plan(compose(f));
     var li = 0;
     while (li < pl.chains.len()) {
@@ -6342,10 +6342,10 @@ test "row lines its members up on one midline across ranks" {
             .edge("x", dst: "y").edge("x", dst: "z").edge("z", dst: "w");
     };
     final free = shape().diagram() catch Diagram{};
-    std\assert(midY(nodeOf(free, id: "w")) != midY(nodeOf(free, id: "x")), message: "left alone, w follows z");
+    std\assert(midY(lookupNode(free, id: "w")) != midY(lookupNode(free, id: "x")), message: "left alone, w follows z");
     final lined = shape().row(["x", "w"]).diagram() catch Diagram{};
     std\assert(validate(lined).len() == 0, message: "sound: {thrown(shape().row(["x", "w"]))}");
-    std\assert(midY(nodeOf(lined, id: "w")) == midY(nodeOf(lined, id: "x")), message: "row puts w on x's midline");
+    std\assert(midY(lookupNode(lined, id: "w")) == midY(lookupNode(lined, id: "x")), message: "row puts w on x's midline");
     final crossed = thrown(fig().node("a").node("p").node("b").node("q")
         .edge("a", dst: "b").edge("p", dst: "q").row(["a", "q"]).row(["p", "b"]));
     std\assert(crossed.indexOf("row([") != null and crossed.indexOf("cannot line") != null, message: "two rows that cross are refused by name: {crossed}");
@@ -6353,9 +6353,9 @@ test "row lines its members up on one midline across ranks" {
 
 test "order fixes the cross order within a rank before the barycentre sweep" {
     final plain = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").diagram() catch Diagram{};
-    std\assert(nodeOf(plain, id: "b").y < nodeOf(plain, id: "c").y, message: "declaration order by default");
+    std\assert(lookupNode(plain, id: "b").y < lookupNode(plain, id: "c").y, message: "declaration order by default");
     final ordered = fig().node("a").node("b").node("c").edge("a", dst: "b").edge("a", dst: "c").order(["c", "b"]).diagram() catch Diagram{};
-    std\assert(nodeOf(ordered, id: "c").y < nodeOf(ordered, id: "b").y, message: "order puts c first");
+    std\assert(lookupNode(ordered, id: "c").y < lookupNode(ordered, id: "b").y, message: "order puts c first");
     std\assert(crossings(ordered).len() == 0, message: "and the slots follow");
     final banded = thrown(diamond().zone("one", members: ["c"]).order(["b", "c"]));
     std\assert(banded == "flow \"t\": order([\"b\", \"c\"]) puts \"b\" first, but it stacks in a later band than \"c\"; put both in one zone or drop the order",
@@ -6368,8 +6368,8 @@ test "rank puts its members in one column" {
         .rank(["c", "y"])
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound");
-    std\assert(nodeOf(d, id: "y").x == nodeOf(d, id: "c").x, message: "y joins c's column");
-    std\assert(nodeOf(d, id: "x").x == nodeOf(d, id: "a").x, message: "x keeps its own");
+    std\assert(lookupNode(d, id: "y").x == lookupNode(d, id: "c").x, message: "y joins c's column");
+    std\assert(lookupNode(d, id: "x").x == lookupNode(d, id: "a").x, message: "x keeps its own");
 }
 
 test "a chain declared in one rank lies flat, each connector straight across it" {
@@ -6378,16 +6378,16 @@ test "a chain declared in one rank lies flat, each connector straight across it"
         .rank(["a", "b", "c"]).down()
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final a = nodeOf(d, id: "a");
-    final b = nodeOf(d, id: "b");
-    final c = nodeOf(d, id: "c");
+    final a = lookupNode(d, id: "a");
+    final b = lookupNode(d, id: "b");
+    final c = lookupNode(d, id: "c");
     std\assert(a.y == b.y and b.y == c.y, message: "one row");
     std\assert(a.x < b.x and b.x < c.x, message: "in edge order");
-    final ab = edgeOf(d, src: "a", dst: "b")!;
+    final ab = findEdge(d, src: "a", dst: "b")!;
     std\assert(ab.srcSide == "right" and ab.dstSide == "left" and ab.via.len() == 0, message: "straight across: {ab.srcSide} {ab.dstSide} {ab.via}");
     std\assert(edgePoints(edgeGeometry(d, e: ab), e: ab)[1] == a.y + a.h / 2, message: "on the midline");
     std\assert(b.x - a.x - a.w >= snap("runs magus".len() * 5 + 12) + 2 * LabelClear, message: "the gap seats the label");
-    std\assert(nodeOf(d, id: "d").y > c.y, message: "the next rank still runs down");
+    std\assert(lookupNode(d, id: "d").y > c.y, message: "the next rank still runs down");
 }
 
 test "a flat edge leaving the unzoned rest for a zone stacks the rest first" {
@@ -6396,7 +6396,7 @@ test "a flat edge leaving the unzoned rest for a zone stacks the rest first" {
         .zone("z", members: ["q"]).rank(["p", "q"]).down()
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    std\assert(nodeOf(d, id: "p").x + nodeOf(d, id: "p").w < d.zones[0].x, message: "p sits before the zone it feeds");
+    std\assert(lookupNode(d, id: "p").x + lookupNode(d, id: "p").w < d.zones[0].x, message: "p sits before the zone it feeds");
 }
 
 test "rank() refuses flat edges that loop, a box between a flat edge's ends, and a zone crossed both ways" {
@@ -6418,8 +6418,8 @@ test "server-share's box with no connector closes up on its rank instead of keep
         .edge("phone", dst: "lan")
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final phone = nodeOf(d, id: "phone");
-    std\assert(nodeOf(d, id: "never").y == phone.y + phone.h + LayerRowGap, message: "a row gap below phone, at {nodeOf(d, id: "never").y}");
+    final phone = lookupNode(d, id: "phone");
+    std\assert(lookupNode(d, id: "never").y == phone.y + phone.h + LayerRowGap, message: "a row gap below phone, at {lookupNode(d, id: "never").y}");
 }
 
 test "zones whose ranks do not overlap share a track along the flow" {
@@ -6451,9 +6451,9 @@ test "commit-generated's decision spine runs down one column" {
         .edge("read", dst: "commit").edge("churn", dst: "commit")
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final x = midX(nodeOf(d, id: "start"));
-    foreach (id in ["pure", "needed", "read", "churn"]) { std\assert(midX(nodeOf(d, id: id)) == x, message: "{id} off the spine"); }
-    final noDetour = edgeOf(d, src: "pure", dst: "skip");
+    final x = midX(lookupNode(d, id: "start"));
+    foreach (id in ["pure", "needed", "read", "churn"]) { std\assert(midX(lookupNode(d, id: id)) == x, message: "{id} off the spine"); }
+    final noDetour = findEdge(d, src: "pure", dst: "skip");
     std\assert(noDetour != null and edgeLegs(d, e: noDetour!).len() <= 5, message: "pure -> skip turns at most four times: {edgeLegs(d, e: noDetour!).len()} legs");
 }
 
@@ -6466,9 +6466,9 @@ test "volatility's questions line up rather than zigzag" {
         .edge("pass", dst: "volatile").edge("pass", dst: "regress")
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final x = midX(nodeOf(d, id: "hist"));
-    foreach (id in ["rate", "retry", "pass"]) { std\assert(midX(nodeOf(d, id: id)) == x, message: "{id} off hist's column"); }
-    std\assert(midX(nodeOf(d, id: "fail")) == midX(nodeOf(d, id: "det")), message: "fail over det");
+    final x = midX(lookupNode(d, id: "hist"));
+    foreach (id in ["rate", "retry", "pass"]) { std\assert(midX(lookupNode(d, id: id)) == x, message: "{id} off hist's column"); }
+    std\assert(midX(lookupNode(d, id: "fail")) == midX(lookupNode(d, id: "det")), message: "fail over det");
 }
 
 test "image-build's channel diamond shares a row with the middle of its fan, not the gap between two rows" {
@@ -6479,8 +6479,8 @@ test "image-build's channel diamond shares a row with the middle of its fan, not
         .edge("channel", dst: "commit").edge("channel", dst: "unstable").edge("channel", dst: "stable")
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    std\assert(midY(nodeOf(d, id: "run")) == midY(nodeOf(d, id: "cd")), message: "run and cd on one row");
-    std\assert(midY(nodeOf(d, id: "channel")) == midY(nodeOf(d, id: "unstable")), message: "channel on its middle exit's row");
+    std\assert(midY(lookupNode(d, id: "run")) == midY(lookupNode(d, id: "cd")), message: "run and cd on one row");
+    std\assert(midY(lookupNode(d, id: "channel")) == midY(lookupNode(d, id: "unstable")), message: "channel on its middle exit's row");
 }
 
 test "server-jobs' and server-share's one-child chains run straight" {
@@ -6490,14 +6490,14 @@ test "server-jobs' and server-share's one-child chains run straight" {
         .edge("watch", dst: "ws").edge("idx", dst: "ws").edge("job", dst: "ws")
         .diagram() catch Diagram{};
     std\assert(validate(jobs).len() == 0, message: "jobs sound: {validate(jobs)}");
-    std\assert(midY(nodeOf(jobs, id: "cli")) == midY(nodeOf(jobs, id: "job")), message: "magus run level with its only child");
+    std\assert(midY(lookupNode(jobs, id: "cli")) == midY(lookupNode(jobs, id: "job")), message: "magus run level with its only child");
     final share = fig()
         .node("dash").node("sharep").node("lan").node("phone").node("served").node("connectreads").node("withheld")
         .edge("dash", dst: "sharep").edge("sharep", dst: "lan").edge("phone", dst: "lan")
         .edge("lan", dst: "served").edge("lan", dst: "connectreads")
         .diagram() catch Diagram{};
     std\assert(validate(share).len() == 0, message: "share sound: {validate(share)}");
-    std\assert(midY(nodeOf(share, id: "dash")) == midY(nodeOf(share, id: "sharep")) and midY(nodeOf(share, id: "sharep")) == midY(nodeOf(share, id: "lan")),
+    std\assert(midY(lookupNode(share, id: "dash")) == midY(lookupNode(share, id: "sharep")) and midY(lookupNode(share, id: "sharep")) == midY(lookupNode(share, id: "lan")),
         message: "Console, share and LAN on one row");
 }
 
@@ -6509,7 +6509,7 @@ test "ci-providers' long edge leaves its row once, with no hump" {
         .zone("binary", members: ["run", "contract", "quote"]).zone("spell", members: ["ops", "prefixes"])
         .diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    final long = edgeOf(d, src: "quote", dst: "vendor");
+    final long = findEdge(d, src: "quote", dst: "vendor");
     std\assert(long != null and edgeLegs(d, e: long!).len() <= 3, message: "one jog at most: {edgeLegs(d, e: long!)}");
 }
 
@@ -6529,28 +6529,28 @@ fun portTurn(d: Diagram, e: Edge) > [int] {
 
 test "an edge whose target lies wholly beyond the source's cross span, with the source column clear, leaves top or bottom at the source midline and bends once, at the target midline" {
     final http = serverHttpTwin().rank(["mcp", "reads", "review", "connect", "health"]).diagram() catch Diagram{};
-    final guard = nodeOf(http, id: "guard");
-    final mcp = edgeOf(http, src: "guard", dst: "mcp")!;
+    final guard = lookupNode(http, id: "guard");
+    final mcp = findEdge(http, src: "guard", dst: "mcp")!;
     final up = portTurn(http, e: mcp);
     std\assert(mcp.srcSide == "top" and up[4] == 2, message: "guard->mcp leaves the top and turns once: {mcp.srcSide}, {edgeLegs(http, e: mcp)}");
-    std\assert(up[0] == midX(guard) and up[3] == midY(nodeOf(http, id: "mcp")), message: "at the Guard's midline, turning on /mcp's: {up}");
-    final connect = edgeOf(http, src: "guard", dst: "connect")!;
+    std\assert(up[0] == midX(guard) and up[3] == midY(lookupNode(http, id: "mcp")), message: "at the Guard's midline, turning on /mcp's: {up}");
+    final connect = findEdge(http, src: "guard", dst: "connect")!;
     std\assert(connect.srcSide == "bottom" and portTurn(http, e: connect)[0] == midX(guard), message: "the farthest route below takes the bottom midline");
-    std\assert(edgeOf(http, src: "guard", dst: "reads")!.srcSide == "right", message: "the route on the Guard's row stays on the forward face");
+    std\assert(findEdge(http, src: "guard", dst: "reads")!.srcSide == "right", message: "the route on the Guard's row stays on the forward face");
     std\assert(validate(http).len() == 0 and crossings(http).len() == 0, message: "clean: {validate(http)}");
 
     final ci = ciPipelineTwin().diagram() catch Diagram{};
-    final cmd = nodeOf(ci, id: "cmd");
-    final gen = edgeOf(ci, src: "cmd", dst: "generate")!;
+    final cmd = lookupNode(ci, id: "cmd");
+    final gen = findEdge(ci, src: "cmd", dst: "generate")!;
     final climb = portTurn(ci, e: gen);
-    std\assert(gen.srcSide == "top" and climb[4] == 2 and climb[0] == midX(cmd) and climb[3] == midY(nodeOf(ci, id: "generate")),
+    std\assert(gen.srcSide == "top" and climb[4] == 2 and climb[0] == midX(cmd) and climb[3] == midY(lookupNode(ci, id: "generate")),
         message: "cmd->generate leaves the top at the midline and turns once: {edgeLegs(ci, e: gen)}");
     std\assert(validate(ci).len() == 0 and crossings(ci).len() == 0, message: "the whole fan clean: {validate(ci)}");
 
     final across = fig().down().node("s").node("a").node("b").edge("s", dst: "a").edge("s", dst: "b").diagram() catch Diagram{};
-    final sb = edgeOf(across, src: "s", dst: "b")!;
+    final sb = findEdge(across, src: "s", dst: "b")!;
     final side = portTurn(across, e: sb);
-    std\assert(sb.srcSide == "right" and side[4] == 2 and side[1] == midY(nodeOf(across, id: "s")) and side[2] == midX(nodeOf(across, id: "b")),
+    std\assert(sb.srcSide == "right" and side[4] == 2 and side[1] == midY(lookupNode(across, id: "s")) and side[2] == midX(lookupNode(across, id: "b")),
         message: "transposed, the port leaves the side and turns down into b: {sb.srcSide}, {edgeLegs(across, e: sb)}");
 
     // server-socket: the optional spawn sits in the socket's column below it, so the routes
@@ -6560,8 +6560,8 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
         .edge("cli", dst: "sock").edge("sock", dst: "pool").edge("sock", dst: "ws").edge("sock", dst: "runs").edge("sock", dst: "svc")
         .edge("cli", dst: "serve", role: EdgeRole.optional)
         .diagram() catch Diagram{};
-    std\assert(edgeOf(socket, src: "sock", dst: "svc")!.srcSide == "right", message: "a box in the column keeps the side port");
-    std\assert(edgeOf(socket, src: "sock", dst: "pool")!.srcSide == "top", message: "while the clear side takes the port");
+    std\assert(findEdge(socket, src: "sock", dst: "svc")!.srcSide == "right", message: "a box in the column keeps the side port");
+    std\assert(findEdge(socket, src: "sock", dst: "pool")!.srcSide == "top", message: "while the clear side takes the port");
 
     // ci-providers: quote_prefixes sits in the spell band below the binary band it feeds; a
     // port would climb out through both borders.
@@ -6571,7 +6571,7 @@ test "an edge whose target lies wholly beyond the source's cross span, with the 
         .edge("prefixes", dst: "quote", role: EdgeRole.optional).edge("quote", dst: "vendor")
         .zone("binary", members: ["run", "contract", "quote"]).zone("spell", members: ["ops", "prefixes"])
         .diagram() catch Diagram{};
-    std\assert(edgeOf(bands, src: "prefixes", dst: "quote")!.srcSide == "right", message: "a zone border in the column keeps the side port");
+    std\assert(findEdge(bands, src: "prefixes", dst: "quote")!.srcSide == "right", message: "a zone border in the column keeps the side port");
 }
 
 fun volatilityTwin() > mut Sketch {
@@ -6587,18 +6587,18 @@ fun volatilityTwin() > mut Sketch {
 test "a decision's out-edge to a target on its own midline takes the outbound vertex" {
     final d = volatilityTwin().diagram() catch Diagram{};
     std\assert(validate(d).len() == 0, message: "sound: {validate(d)}");
-    std\assert(edgeOf(d, src: "hist", dst: "rate")!.srcSide == "bottom", message: "rate, straight below, takes the outbound vertex");
-    std\assert(edgeOf(d, src: "det", dst: "report")!.srcSide == "bottom", message: "report, straight below, takes the outbound vertex");
-    final retry = edgeOf(d, src: "hist", dst: "retry")!;
+    std\assert(findEdge(d, src: "hist", dst: "rate")!.srcSide == "bottom", message: "rate, straight below, takes the outbound vertex");
+    std\assert(findEdge(d, src: "det", dst: "report")!.srcSide == "bottom", message: "report, straight below, takes the outbound vertex");
+    final retry = findEdge(d, src: "hist", dst: "retry")!;
     std\assert(retry.srcSide == "right" and edgeLegs(d, e: retry).len() == 4, message: "hist->retry bends three times: {edgeLegs(d, e: retry)}");
-    std\assert(edgeLegs(d, e: edgeOf(d, src: "det", dst: "hist")!).len() == 2, message: "det->hist turns once");
-    std\assert(edgeLegs(d, e: edgeOf(d, src: "rate", dst: "regress")!).len() == 2, message: "rate->regress turns once onto its lane");
+    std\assert(edgeLegs(d, e: findEdge(d, src: "det", dst: "hist")!).len() == 2, message: "det->hist turns once");
+    std\assert(edgeLegs(d, e: findEdge(d, src: "rate", dst: "regress")!).len() == 2, message: "rate->regress turns once onto its lane");
     foreach (first in [true, false]) {
         final f = fig().node("q", role: Role.decision).node("m").node("b").edge("q", dst: "m").edge("q", dst: "b");
         if (first == false) { f.order(["b", "m"]); }
         final two = f.row(["q", "m"]).diagram() catch Diagram{};
-        std\assert(edgeOf(two, src: "q", dst: "m")!.srcSide == "right", message: "the midline exit sorted first={first} still leaves the outbound vertex");
-        std\assert(edgeLegs(two, e: edgeOf(two, src: "q", dst: "m")!).len() == 1, message: "and runs straight");
+        std\assert(findEdge(two, src: "q", dst: "m")!.srcSide == "right", message: "the midline exit sorted first={first} still leaves the outbound vertex");
+        std\assert(edgeLegs(two, e: findEdge(two, src: "q", dst: "m")!).len() == 1, message: "and runs straight");
     }
 }
 
@@ -6670,7 +6670,7 @@ test "a bent-route label never touches a stroke" {
     final wide = fig().node("a").node("b").edge("a", dst: "b", label: "abcdefghijklmn");
     std\assert(thrown(wide) == "", message: "the gap widens for the label: {thrown(wide)}");
     final pair = wide.diagram() catch Diagram{};
-    std\assert(nodeOf(pair, id: "b").x - nodeOf(pair, id: "a").x - nodeOf(pair, id: "a").w > LayerColGap, message: "wider than the house gap");
+    std\assert(lookupNode(pair, id: "b").x - lookupNode(pair, id: "a").x - lookupNode(pair, id: "a").w > LayerColGap, message: "wider than the house gap");
     std\assert(layoutFindings([Fault{ rule = "label", subjects = ["a", "b"] }])[0]
         == "edge \"a\" -> \"b\" label has no spot clear of every stroke, box and label; shorten it or split the figure",
         message: "past the widening rounds it is a finding naming the edge");
@@ -7148,9 +7148,9 @@ fun setName(paths: [str]) > str {
     return quote(common.join("/") + "/**");
 }
 
-// roleOf is the role a box paints with, and a finding when its look is not a Look or
+// resolveRole is the role a box paints with, and a finding when its look is not a Look or
 // contradicts focal.
-fun roleOf(call: str, focal: bool, look: str?, found: mut [str]) > str {
+fun resolveRole(call: str, focal: bool, look: str?, found: mut [str]) > str {
     if (look != null and look! == "") {
         found.append("{call} takes look: Look.<case>, not a string");
         return "default";
@@ -7176,9 +7176,9 @@ fun edgeStyle(call: str, stroke: Stroke?, found: mut [str]) > DrawnMark {
     return DrawnMark{ kind = kind, dashed = named! == "optional" };
 }
 
-// partOf resolves one Box, recording the directories it draws and the actor it names, or
+// resolvePart resolves one Box, recording the directories it draws and the actor it names, or
 // is null when the box cannot be drawn.
-fun partOf(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, found: mut [str]) > Part? {
+fun resolvePart(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, found: mut [str]) > Part? {
     if (b.dir != null) {
         final dir = b.dir!;
         if (recordPath(dir) == "") {
@@ -7187,7 +7187,7 @@ fun partOf(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, foun
         }
         final call = "box({quote(dir.path)})";
         records[dir.path] = dir;
-        final role = roleOf(call, focal: b.focal, look: lookName(b.look), found: found);
+        final role = resolveRole(call, focal: b.focal, look: lookName(b.look), found: found);
         if (role == "decision") {
             found.append("{call} is a Look.decision; a directory is never a diamond, so draw the decision with external()");
         }
@@ -7229,7 +7229,7 @@ fun partOf(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, foun
         foreach (d in dirs) {
             if (recordPath(d) != "") { records[d.path] = d; }
         }
-        final role = roleOf(call, focal: b.focal, look: lookName(b.look), found: found);
+        final role = resolveRole(call, focal: b.focal, look: lookName(b.look), found: found);
         if (role == "decision") {
             found.append("{call} is a Look.decision; a group of directories is never a diamond");
         }
@@ -7264,8 +7264,8 @@ fun partOf(b: Box, records: mut {str: magus\Dir}, actors: mut {str: Actor}, foun
     return null;
 }
 
-// flowOf resolves one Flow to the ends the layout joins.
-fun flowOf(f: Flow, found: mut [str]) > DrawnFlow? {
+// resolveFlow resolves one Flow to the ends the layout joins.
+fun resolveFlow(f: Flow, found: mut [str]) > DrawnFlow? {
     final src = f.src;
     final dst = f.dst;
     var call = "";
@@ -7315,9 +7315,9 @@ fun inside(file: str, dir: str) > bool {
     return file.startsWith(dir + "/");
 }
 
-// bandOf resolves a zone or an alignment's members to paths and actor names; verb is the
+// resolveBand resolves a zone or an alignment's members to paths and actor names; verb is the
 // builder that declares it.
-fun bandOf(verb: str, label: str, dirs: [magus\Dir], actors: [Actor], boundary: bool, found: mut [str]) > DrawnBand {
+fun resolveBand(verb: str, label: str, dirs: [magus\Dir], actors: [Actor], boundary: bool, found: mut [str]) > DrawnBand {
     final paths = dirPaths(dirs, call: verb, found: found);
     var named = "";
     if (paths.len() > 0) { named = setName(paths); }
@@ -7348,7 +7348,7 @@ fun lowered(fig: Figure) > Sketch !> str {
     final actorRecords: mut {str: Actor} = mut {<str: Actor>};
     final parts: mut [Part] = mut [<Part>];
     foreach (b in fig.boxes) {
-        final p = partOf(b, records: records, actors: actorRecords, found: found);
+        final p = resolvePart(b, records: records, actors: actorRecords, found: found);
         if (p != null) { parts.append(p!); }
     }
     final scopes: mut [[str]] = mut [<[str]>];
@@ -7386,14 +7386,14 @@ fun lowered(fig: Figure) > Sketch !> str {
     }
     final hand: mut [DrawnFlow] = mut [<DrawnFlow>];
     foreach (fl in fig.flows) {
-        final d = flowOf(fl, found: found);
+        final d = resolveFlow(fl, found: found);
         if (d != null) { hand.append(d!); }
     }
     final bands: mut [DrawnBand] = mut [<DrawnBand>];
     foreach (z in fig.zones) {
         var verb = "zone";
         if (z.boundary) { verb = "boundary"; }
-        bands.append(bandOf(verb, label: z.label, dirs: z.dirs, actors: z.actors, boundary: z.boundary, found: found));
+        bands.append(resolveBand(verb, label: z.label, dirs: z.dirs, actors: z.actors, boundary: z.boundary, found: found));
     }
     foreach (a in fig.alignments) {
         final axis: str? = a.axis.value;
@@ -7401,7 +7401,7 @@ fun lowered(fig: Figure) > Sketch !> str {
             found.append("an alignment takes axis: Axis.<case>, not a string");
             continue;
         }
-        bands.append(bandOf(axis!, label: "", dirs: a.dirs, actors: a.actors, boundary: false, found: found));
+        bands.append(resolveBand(axis!, label: "", dirs: a.dirs, actors: a.actors, boundary: false, found: found));
     }
     final direction: str? = fig.direction.value;
     if (direction == null) { found.append("of() takes direction: Direction.<case>, not a string"); }
@@ -7690,7 +7690,7 @@ fun callTo(dir: str, transport: str) > magus\DirCall {
     return asRecord::<magus\DirCall>({ "dir": dir, "transport": transport, "marker": "marker:" + dir, "source": dir + "/x.go:1" });
 }
 
-fun layerOf(name: str, dirs: [magus\Dir]) > magus\Layer {
+fun newLayer(name: str, dirs: [magus\Dir]) > magus\Layer {
     final declared: mut [str] = mut [<str>];
     foreach (d in dirs) { declared.append(d.path); }
     return asRecord::<magus\Layer>({ "name": name, "declared": declared, "dirs": dirs });
@@ -7712,7 +7712,7 @@ fun serverDir() > magus\Dir {
     return dirAt("internal/server", imports: ["internal/handler/graph", "internal/handler/job", "internal/handler/mcp", "internal/httpx"]);
 }
 
-fun handlers() > magus\Layer { return layerOf("handler", dirs: [mcpDir(), graphDir(), jobDir()]); }
+fun handlers() > magus\Layer { return newLayer("handler", dirs: [mcpDir(), graphDir(), jobDir()]); }
 
 // serverHttp is the decided shape of the server-http figure.
 fun serverHttp(layer: magus\Layer) > mut Figure !> str {
@@ -7746,8 +7746,8 @@ test "the server-http figure lays out from its records" {
     final d = serverHttp(handlers()).diagram() catch Diagram{};
     assert\equal(d.id, want: "server-http", message: "the figure lays out");
     assert\equal(d.nodes.len(), want: 3, message: "guard, /mcp and the group");
-    assert\equal(nodeOf(d, id: "internal/httpx").role, want: "focal", message: "focal: true is the accent");
-    assert\equal(nodeOf(d, id: "internal/handler/mcp").anchor, want: "internal/handler/mcp", message: "a box anchors its directory");
+    assert\equal(lookupNode(d, id: "internal/httpx").role, want: "focal", message: "focal: true is the accent");
+    assert\equal(lookupNode(d, id: "internal/handler/mcp").anchor, want: "internal/handler/mcp", message: "a box anchors its directory");
     assert\equal(d.edges.len(), want: 2, message: "one import into the guard from each side; job -> graph stays inside the group");
     final mcp = edgeBetween(d, src: "internal/handler/mcp", dst: "internal/httpx");
     std\assert(mcp != null and mcp!.claim == "imports", message: "/mcp -> guard claims imports");
@@ -7758,7 +7758,7 @@ test "the server-http figure lays out from its records" {
 
 test "a package added to a layer joins its group" {
     final notes = dirAt("internal/handler/notes", layer: "handler", imports: ["internal/httpx"]);
-    final grown = layerOf("handler", dirs: [mcpDir(), graphDir(), jobDir(), notes]);
+    final grown = newLayer("handler", dirs: [mcpDir(), graphDir(), jobDir(), notes]);
     final before = serverHttp(handlers()).diagram() catch Diagram{};
     final after = serverHttp(grown).diagram() catch Diagram{};
     assert\equal(after.nodes.len(), want: before.nodes.len(), message: "no new box");
@@ -7818,7 +7818,7 @@ test "without refuses a stale drop" {
 
 test "a dir named twice draws once" {
     final d = of("t").box(mcpDir()).group([guardDir(), guardDir()], label: "Guard").edgesFromGraph().diagram() catch Diagram{};
-    assert\equal(nodeOf(d, id: "group:Guard").label, want: "Guard", message: "the group lays out");
+    assert\equal(lookupNode(d, id: "group:Guard").label, want: "Guard", message: "the group lays out");
     assert\equal(d.scope.join(","), want: "internal/handler/mcp,internal/httpx", message: "and holds the directory once");
 }
 
@@ -7867,8 +7867,8 @@ test "a hand edge has an actor at one end and a drawn box at the other" {
     std\assert(into != null and into!.claim == "flow" and into!.label == "tools", message: "flowIn draws a flow edge");
     final leaving = edgeBetween(d, src: "internal/httpx", dst: "external:GitHub");
     std\assert(leaving != null and leaving!.kind == "link", message: "flowOut takes its stroke");
-    assert\equal(nodeOf(d, id: "external:Author").role, want: "input", message: "an actor keeps its look");
-    assert\equal(nodeOf(d, id: "external:GitHub").link, want: "https://github.com", message: "and its link");
+    assert\equal(lookupNode(d, id: "external:Author").role, want: "input", message: "an actor keeps its look");
+    assert\equal(lookupNode(d, id: "external:GitHub").link, want: "https://github.com", message: "and its link");
     final undrawn = (serverHttp(handlers()) catch of("x")).flowIn(person, dst: serverDir());
     assert\equal(failure(undrawn), want: "figure \"server-http\": flowIn(\"Author\", dst: \"internal/server\") names a directory no box or group draws; draw it first", message: "an undrawn end");
 }
@@ -7884,8 +7884,8 @@ test "markEdge labels a graph edge, and one the graph lacks is a finding" {
 test "a symbol anchors its box at the definition" {
     final ok = of("t").box(guardDir(), symbol: refsAt("httpx.Guard", files: ["internal/httpx/guard.go"], line: 12)).box(mcpDir()).edgesFromGraph();
     final d = ok.diagram() catch Diagram{};
-    assert\equal(nodeOf(d, id: "internal/httpx").anchor, want: "internal/httpx/guard.go", message: "the anchor is the defining file");
-    assert\equal(nodeOf(d, id: "internal/httpx").line, want: 12, message: "and its line");
+    assert\equal(lookupNode(d, id: "internal/httpx").anchor, want: "internal/httpx/guard.go", message: "the anchor is the defining file");
+    assert\equal(lookupNode(d, id: "internal/httpx").line, want: 12, message: "and its line");
     final svg = draw(ok, theme: Theme.light, anchorHref: "/code/\{path\}#L\{line\}") catch "threw";
     std\assert(svg.indexOf("<a href=\"/code/internal/httpx/guard.go#L12\" data-node=\"internal/httpx\" data-anchor=\"internal/httpx/guard.go\" data-line=\"12\">") != null, message: "the link carries the line: {svg}");
     final committed = draw(ok, theme: Theme.light) catch "threw";

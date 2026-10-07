@@ -93,7 +93,7 @@ func projectGraph(tg types.TargetGraphOutput) graph {
 	taken := ids{}
 	byPath := map[string]string{}
 	for _, p := range tg.Projects {
-		id := taken.of(p.Path)
+		id := taken.unique(p.Path)
 		byPath[p.Path] = id
 		g.nodes = append(g.nodes, Node{ID: id, Anchor: p.Path, Label: p.Label()})
 	}
@@ -119,7 +119,7 @@ func targetGraph(tg types.TargetGraphOutput, project string) (graph, bool) {
 	taken := ids{}
 	byName := map[string]string{}
 	for _, n := range p.Nodes {
-		id := taken.of(n.Name)
+		id := taken.unique(n.Name)
 		byName[n.Name] = id
 		g.nodes = append(g.nodes, Node{ID: id, Anchor: p.Path, Label: n.Name})
 	}
@@ -146,7 +146,7 @@ func importGraph(ig types.ImportGraph) graph {
 	taken := ids{}
 	byDir := map[string]string{}
 	for _, d := range dirs {
-		byDir[d] = taken.of(d)
+		byDir[d] = taken.unique(d)
 		g.nodes = append(g.nodes, Node{ID: byDir[d], Anchor: d, Label: d})
 	}
 	for _, from := range slices.Sorted(maps.Keys(ig.Packages)) {
@@ -318,7 +318,7 @@ func cloneFigure(f Figure) Figure {
 // ids turns paths and names into figure ids that stay unique after sanitizing.
 type ids map[string]bool
 
-func (s ids) of(name string) string {
+func (s ids) unique(name string) string {
 	var b strings.Builder
 	for _, r := range name {
 		switch {
@@ -440,7 +440,7 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	bindings.RegisterMagusRecordTypes(sess)
 	sess.SetModuleDecls("magus/figure", figure.Source)
 
-	svg, err := figure.Draw(ctx, sess, figureOf(g, desc, anchorHref), anchorHref)
+	svg, err := figure.Draw(ctx, sess, buildFigure(g, desc, anchorHref), anchorHref)
 	var refused *figure.Findings
 	if errors.As(err, &refused) {
 		return Figure{}, &FindingsError{Findings: refused.Text}
@@ -462,13 +462,13 @@ func render(ctx context.Context, g graph, desc, anchorHref string) (Figure, erro
 	return Figure{Title: g.title, SVG: svg, Nodes: nodes}, nil
 }
 
-// figureOf is g as a figure\Figure record.
+// buildFigure is g as a figure\Figure record.
 //
 // An imports figure draws each package as a Dir box and derives edges from its imports.
 // Projects and targets are not directories, so they are actors joined by explicit flows
 // in an unscoped figure. A non-empty anchorHref links every actor to its anchor.
-func figureOf(g graph, desc, anchorHref string) figure.Figure {
-	f := figure.Figure{ID: ids{}.of(g.id), Title: g.title, Desc: desc}
+func buildFigure(g graph, desc, anchorHref string) figure.Figure {
+	f := figure.Figure{ID: ids{}.unique(g.id), Title: g.title, Desc: desc}
 	if g.claim == KindImports {
 		anchor := make(map[string]string, len(g.nodes))
 		for _, n := range g.nodes {

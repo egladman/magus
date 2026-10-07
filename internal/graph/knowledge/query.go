@@ -890,11 +890,11 @@ func relationSet(rels []types.RelationID) map[types.RelationID]bool {
 	return set
 }
 
-// NeighborhoodOf walks outward from focus up to opts.Depth hops (0 means 1) along
+// FocusNeighborhood walks outward from focus up to opts.Depth hops (0 means 1) along
 // opts.Relations only and in opts.Direction only, then folds every source-level node
 // under an opts.Collapse prefix into that prefix's dir node. ok is false when focus
 // resolves to nothing. Answer is left for the caller, which knows what it loaded.
-func (g *Graph) NeighborhoodOf(focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, bool) {
+func (g *Graph) FocusNeighborhood(focus string, opts types.KnowledgeNeighborhoodOptions) (types.KnowledgeNeighborhoodOutput, bool) {
 	id, how, ok := g.resolve(focus)
 	if !ok {
 		return types.KnowledgeNeighborhoodOutput{}, false
@@ -1046,7 +1046,7 @@ func (g *Graph) Dirs(glob string, opts types.DirsOptions, layers map[string]stri
 	if !doublestar.ValidatePattern(glob) {
 		return nil, fmt.Errorf("%q is not a valid glob", glob)
 	}
-	if opts.Layer != "" && len(declaredFor(opts.Layer, layers)) == 0 {
+	if opts.Layer != "" && len(layerDeclarations(opts.Layer, layers)) == 0 {
 		return nil, errLayerNotDeclared(opts.Layer, layers)
 	}
 	g.ensureAdj()
@@ -1077,7 +1077,7 @@ func (g *Graph) Dirs(glob string, opts types.DirsOptions, layers map[string]stri
 // Layer returns the layer name declares and every dir it covers. A name no entry of
 // layers declares fails with LayerNotDeclared.
 func (g *Graph) Layer(name string, layers map[string]string) (types.Layer, error) {
-	declared := declaredFor(name, layers)
+	declared := layerDeclarations(name, layers)
 	if len(declared) == 0 {
 		return types.Layer{}, errLayerNotDeclared(name, layers)
 	}
@@ -1088,8 +1088,8 @@ func (g *Graph) Layer(name string, layers map[string]string) (types.Layer, error
 	return types.Layer{Name: name, Declared: declared, Dirs: dirs}, nil
 }
 
-// declaredFor returns the sorted directories and globs layers maps to name.
-func declaredFor(name string, layers map[string]string) []string {
+// layerDeclarations returns the sorted directories and globs layers maps to name.
+func layerDeclarations(name string, layers map[string]string) []string {
 	var out []string
 	for dir, layer := range layers {
 		if layer == name {
@@ -1160,7 +1160,7 @@ func (g *Graph) dirRecord(n types.KnowledgeNode, tree dirTree, layers map[string
 		Files:      tree.files[p],
 	}
 	if d.Layer == "" {
-		d.Layer, _ = types.LayerFor(layers, p)
+		d.Layer, _ = types.ResolveLayer(layers, p)
 	}
 	// The language attr is folded from the same indexed package the imports are, so a
 	// dir without one was never read for imports.
@@ -1491,9 +1491,9 @@ func matchesKind(kind string, vals []string) bool {
 	return false
 }
 
-// projectPathOf returns the workspace-relative project path a node ID belongs to: the
+// nodeProjectPath returns the workspace-relative project path a node ID belongs to: the
 // path itself for a project node, or the owning project for a target node.
-func projectPathOf(id string) (string, bool) {
+func nodeProjectPath(id string) (string, bool) {
 	if p, ok := strings.CutPrefix(id, types.KindProject+":"); ok {
 		return p, true
 	}

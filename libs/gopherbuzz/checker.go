@@ -1264,11 +1264,11 @@ func (c *checker) wantType() types.Type {
 	return c.expected[len(c.expected)-1]
 }
 
-// objectOf unwraps want to the object type it ultimately expects, so an
+// expectedObject unwraps want to the object type it ultimately expects, so an
 // anonymous object literal resolves the same whether the annotation is Foo,
 // Foo?, or [Foo]. A namespace object is not one: its fields are module
 // exports, not a shape a literal can fill.
-func objectOf(want types.Type) *types.ObjectType {
+func expectedObject(want types.Type) *types.ObjectType {
 	switch t := want.(type) {
 	case *types.ObjectType:
 		if t.IsNamespace {
@@ -1276,19 +1276,19 @@ func objectOf(want types.Type) *types.ObjectType {
 		}
 		return t
 	case *types.ListType:
-		return objectOf(t.Elem)
+		return expectedObject(t.Elem)
 	}
 	return nil
 }
 
-// enumOf unwraps want to the enum it ultimately expects, so `.one` resolves the
+// expectedEnum unwraps want to the enum it ultimately expects, so `.one` resolves the
 // same whether the annotation is Suit, Suit?, or [Suit].
-func enumOf(want types.Type) *types.EnumType {
+func expectedEnum(want types.Type) *types.EnumType {
 	switch t := want.(type) {
 	case *types.EnumType:
 		return t
 	case *types.ListType:
-		return enumOf(t.Elem)
+		return expectedEnum(t.Elem)
 	}
 	return nil
 }
@@ -1444,7 +1444,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		}
 		return result
 	case *ast.EnumCaseExpr:
-		et := enumOf(c.wantType())
+		et := expectedEnum(c.wantType())
 		if et == nil {
 			c.errorf(v.Pos, "cannot infer which enum .%s belongs to here; name it explicitly (Enum.%s)", v.Name, v.Name)
 			return types.Unknown
@@ -2254,7 +2254,7 @@ func (c *checker) inferMapExpr(v *ast.MapExpr) types.Type {
 	// the field names, so when the expected type is an object, each value is
 	// inferred against that field's type. Without this a `.{ kind = .two }`
 	// assigned to an annotated field has nothing to tell `.two` its enum.
-	if ot := objectOf(c.wantType()); v.Anon && ot != nil {
+	if ot := expectedObject(c.wantType()); v.Anon && ot != nil {
 		for i, k := range v.Keys {
 			name, isField := k.(*ast.StringLit)
 			ft, known := types.Unknown, false
@@ -2528,8 +2528,8 @@ func foldConstNumber(n ast.Node) (float64, bool) {
 	return 0, false
 }
 
-// matchCondOf reduces one condition to its comparable shape.
-func (c *checker) matchCondOf(n ast.Node) matchCondShape {
+// reduceMatchCond reduces one condition to its comparable shape.
+func (c *checker) reduceMatchCond(n ast.Node) matchCondShape {
 	pos := ast.NodePos(n)
 	if v, ok := foldConstNumber(n); ok {
 		return matchCondShape{kind: matchCondNumber, num: v, pos: pos}
@@ -2584,7 +2584,7 @@ func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type) {
 			continue
 		}
 		for _, cond := range br.Conds {
-			s := c.matchCondOf(cond)
+			s := c.reduceMatchCond(cond)
 			c.checkMatchCondType(s, subjTyp)
 			if s.kind == matchCondEnumCase || s.kind == matchCondBool {
 				covered[s.text] = true
@@ -2600,7 +2600,7 @@ func (c *checker) checkMatchArms(v *ast.MatchExpr, subjTyp types.Type) {
 	if hasElse {
 		return
 	}
-	if et := enumOf(subjTyp); et != nil {
+	if et := expectedEnum(subjTyp); et != nil {
 		var missing []string
 		for _, name := range et.Cases {
 			if !covered[name] {

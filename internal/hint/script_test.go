@@ -41,7 +41,7 @@ func TestScriptsForServesTheIndexedScripts(t *testing.T) {
 		EventDiskLow:          {prune},
 	})
 
-	next, err := ScriptsFor(cacheDir, "doctor:guard-wiring", nil)
+	next, err := MatchScripts(cacheDir, "doctor:guard-wiring", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []Next{
 		{
@@ -56,7 +56,7 @@ func TestScriptsForServesTheIndexedScripts(t *testing.T) {
 		},
 	}, next)
 
-	next, err = ScriptsFor(cacheDir, EventSessionEnd, nil)
+	next, err = MatchScripts(cacheDir, EventSessionEnd, nil)
 	require.NoError(t, err)
 	assert.Nil(t, next, "a situation no script serves")
 }
@@ -68,12 +68,12 @@ func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 	unknown := scriptFixture(t, root, "hack/dev/show-feedback.buzz", ScriptEffectRead, "{session}")
 	cacheDir := writeScriptsIndex(t, root, map[string][]ScriptServe{"next:run-output": {failures, scoped, unknown}})
 
-	next, err := ScriptsFor(cacheDir, "next:run-output", map[string]string{"ref": "out84fea3b6ae30", "session": "s1"})
+	next, err := MatchScripts(cacheDir, "next:run-output", map[string]string{"ref": "out84fea3b6ae30", "session": "s1"})
 	require.NoError(t, err)
 	require.Len(t, next, 1, "an unbound {rule}/{project} and a placeholder outside the set both withhold their script")
 	assert.Equal(t, "magus buzz hack/dev/ls-test-failures.buzz -- --ref out84fea3b6ae30", next[0].Run)
 
-	next, err = ScriptsFor(cacheDir, "next:run-output", map[string]string{
+	next, err = MatchScripts(cacheDir, "next:run-output", map[string]string{
 		"ref": "out1", "rule": "stage-all", "project": "docs site",
 	})
 	require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 		assert.NotRegexp(t, placeholderRe, n.Run, "Run never carries a placeholder")
 	}
 
-	next, err = ScriptsFor(cacheDir, "next:run-output", map[string]string{"ref": ""})
+	next, err = MatchScripts(cacheDir, "next:run-output", map[string]string{"ref": ""})
 	require.NoError(t, err)
 	assert.Nil(t, next, "an empty fact binds nothing")
 }
@@ -100,7 +100,7 @@ func TestScriptsForGrantsReadsOnlyToAnUnchangedReadScript(t *testing.T) {
 	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.Chtimes(filepath.Join(root, edited.Path), later, later))
 
-	next, err := ScriptsFor(cacheDir, "mgs:MGS3009", nil)
+	next, err := MatchScripts(cacheDir, "mgs:MGS3009", nil)
 	require.NoError(t, err)
 	reads := map[string]bool{}
 	for _, n := range next {
@@ -128,7 +128,7 @@ func TestScriptsForSkipsWhatItCannotServe(t *testing.T) {
 		"rule:spawn-without-job-row": {gone, escape, notBuzz, kept, twin},
 	})
 
-	next, err := ScriptsFor(cacheDir, "rule:spawn-without-job-row", nil)
+	next, err := MatchScripts(cacheDir, "rule:spawn-without-job-row", nil)
 	require.NoError(t, err)
 	require.Len(t, next, 1, "a missing file, a path leaving the root, a non-Buzz path and a second script- id are all skipped")
 	assert.Equal(t, "magus buzz hack/dev/render-brief.buzz", next[0].Run)
@@ -138,7 +138,7 @@ func TestScriptsForSkipsWhatItCannotServe(t *testing.T) {
 		"no index":       t.TempDir(),
 		"foreign format": foreignScriptsIndex(t, root),
 	} {
-		next, err := ScriptsFor(cacheDir, "rule:spawn-without-job-row", nil)
+		next, err := MatchScripts(cacheDir, "rule:spawn-without-job-row", nil)
 		require.NoError(t, err, name)
 		assert.Nil(t, next, name)
 	}
@@ -161,7 +161,7 @@ func TestScriptsForRejectsUnknownSituations(t *testing.T) {
 		assert.NoError(t, ValidateSituation(s), s)
 	}
 	for _, s := range []string{"event:disk-full", "event:", "rule:", "stage-all", "", "Event:pre-pr"} {
-		_, err := ScriptsFor(t.TempDir(), s, nil)
+		_, err := MatchScripts(t.TempDir(), s, nil)
 		assert.Error(t, err, "%q", s)
 	}
 }

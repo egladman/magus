@@ -82,7 +82,7 @@ export fun writesText(p: helpers\Program) > bool {
     if (p.name != "gh") {
         return false;
     }
-    final ops = helpers\operandsOf(p.args, valueFlags: ["-R", "--repo"]);
+    final ops = helpers\stripFlags(p.args, valueFlags: ["-R", "--repo"]);
     if (ops.len() < 2 or ops[0] != "pr" or (ops[1] != "create" and ops[1] != "edit")) {
         return false;
     }
@@ -102,8 +102,8 @@ object Value {
     slot: int?,
 }
 
-// valuesOf are the values given to any of flags, in order.
-fun valuesOf(args: [str], flags: [str]) > [Value] {
+// flagValues are the values given to any of flags, in order.
+fun flagValues(args: [str], flags: [str]) > [Value] {
     final found = mut [<Value>];
     foreach (i, arg in args) {
         foreach (flag in flags) {
@@ -124,7 +124,7 @@ export fun textSlots(p: helpers\Program) > [int] {
     if (!writesText(p)) {
         return slots;
     }
-    foreach (v in valuesOf(p.args, flags: titleFlags + bodyFlags)) {
+    foreach (v in flagValues(p.args, flags: titleFlags + bodyFlags)) {
         if (v.text == "" and v.slot != null) {
             slots.append(v.slot!);
         }
@@ -137,7 +137,7 @@ export fun bodyFiles(programs: [helpers\Program]) > [str] {
     final paths = mut [<str>];
     foreach (p in programs) {
         if (writesText(p)) {
-            foreach (v in valuesOf(p.args, flags: bodyFileFlags)) {
+            foreach (v in flagValues(p.args, flags: bodyFileFlags)) {
                 if (v.text != "" and v.text != "-") {
                     paths.append(v.text);
                 }
@@ -179,10 +179,10 @@ fun generated(path: str) > bool {
     return ["MAGUS.md", "go.sum", "magus.lock", "pnpm-lock.yaml"].indexOf(parts[parts.len() - 1]) != null;
 }
 
-// factsOf reads `git diff --numstat --no-renames` output. A fragment counts only when lines
+// parseNumstat reads `git diff --numstat --no-renames` output. A fragment counts only when lines
 // were added to it, so one a release folds and deletes does not; a binary file is a path
 // with no lines. An empty diff is unknown, since a pull request always changes something.
-export fun factsOf(numstat: str) > Facts {
+export fun parseNumstat(numstat: str) > Facts {
     var paths = 0;
     var fragments = 0;
     var shipped = 0;
@@ -227,7 +227,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
         if (res == null or res!.code != 0) {
             return unknownFacts();
         }
-        return factsOf(res!.stdout);
+        return parseNumstat(res!.stdout);
     };
 }
 
@@ -253,9 +253,9 @@ fun floorLog2(n: int) > int {
     return k;
 }
 
-// unitsOf counts the changes a pull request titled title proves. An unknown diff's terms
+// countUnits counts the changes a pull request titled title proves. An unknown diff's terms
 // count as 1.
-export fun unitsOf(title: str, facts: Facts) > Units {
+export fun countUnits(title: str, facts: Facts) > Units {
     final breaking = conventional\isBreaking(title);
     var fragments = facts.fragments;
     if (breaking) {
@@ -274,7 +274,7 @@ export fun unitsOf(title: str, facts: Facts) > Units {
     return Units{ count = count, breaking = breaking, clauses = clauses, files = files, lines = lines, facts = facts };
 }
 
-export fun budgetOf(units: Units) > int {
+export fun wordBudget(units: Units) > int {
     return leadWords + wordsPerChange * units.count;
 }
 
@@ -305,7 +305,7 @@ fun overBudget(words: int, units: Units) > str {
     if (!f.known) {
         read = "; the branch's diff against its base could not be read, so it counts as 1 and this is advice, not a denial";
     }
-    return "{words} words, past this pull request's budget of {budgetOf(units)} "
+    return "{words} words, past this pull request's budget of {wordBudget(units)} "
         + "({leadWords} + {wordsPerChange} for each of {plural(u, noun: "change")}, "
         + "the most of {terms}){read}. Cut it to what a reviewer needs to review it, or split the "
         + "pull request if it carries more changes than that";
@@ -318,10 +318,10 @@ object Block {
     lines: [str],
 }
 
-// blocksOf splits body into blocks. A heading is its own block, a list may follow a
+// splitBlocks splits body into blocks. A heading is its own block, a list may follow a
 // paragraph line directly (`Inside the box:` then `- ...`), and a line after a bullet
 // continues it until a blank line.
-fun blocksOf(body: str) > [Block] {
+fun splitBlocks(body: str) > [Block] {
     final blocks = mut [<Block>];
     var current = mut [<str>];
     var kind = "";
@@ -366,8 +366,8 @@ fun wordsIn(text: str) > int {
     return (word.matchAll(text) ?? [<[str]>]).len();
 }
 
-// itemsOf are a list block's bullets, each with its continuation lines, marker left out.
-fun itemsOf(list: Block) > [str] {
+// listItems are a list block's bullets, each with its continuation lines, marker left out.
+fun listItems(list: Block) > [str] {
     final items = mut [<str>];
     foreach (line in list.lines) {
         if (bullet.match(line) != null or items.len() == 0) {
@@ -399,12 +399,12 @@ export object Findings {
     advice: [str],
 }
 
-// shapeOf judges body's shape: a lead paragraph, bullets, at most one closing sentence
+// judgeShape judges body's shape: a lead paragraph, bullets, at most one closing sentence
 // after them, and no headings. A fenced code block may sit anywhere after the lead.
-export fun shapeOf(body: str) > Findings {
+export fun judgeShape(body: str) > Findings {
     final denies = mut [<str>];
     final advice = mut [<str>];
-    final blocks = blocksOf(body);
+    final blocks = splitBlocks(body);
     if (blocks.len() == 0) {
         return Findings{ denies = denies, advice = advice };
     }
@@ -426,7 +426,7 @@ export fun shapeOf(body: str) > Findings {
     foreach (i, b in blocks) {
         if (b.kind == "list") {
             lastList = i;
-            foreach (item in itemsOf(b)) {
+            foreach (item in listItems(b)) {
                 final n = wordsIn(item);
                 if (n > blockWords) {
                     advice.append("a bullet of {n} words, past {blockWords}: a bullet that long carries two changes, so split it");
@@ -457,7 +457,7 @@ export fun shapeOf(body: str) > Findings {
 // whose diff the rule can read: `gh pr create` without --head, or `gh pr edit` naming no
 // pull request.
 fun describesBranch(p: helpers\Program) > bool {
-    return helpers\operandsOf(p.args, valueFlags: valueFlags).len() == 2 and valuesOf(p.args, flags: headFlags).len() == 0;
+    return helpers\stripFlags(p.args, valueFlags: valueFlags).len() == 2 and flagValues(p.args, flags: headFlags).len() == 0;
 }
 
 // textProblems names what is wrong with one call's title and description. files holds the
@@ -468,9 +468,9 @@ fun describesBranch(p: helpers\Program) > bool {
 export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts) > Findings {
     final problems = mut [<str>];
     final advice = mut [<str>];
-    final title = last(valuesOf(p.args, flags: titleFlags));
-    var body = last(valuesOf(p.args, flags: bodyFlags));
-    final file = last(valuesOf(p.args, flags: bodyFileFlags));
+    final title = last(flagValues(p.args, flags: titleFlags));
+    var body = last(flagValues(p.args, flags: bodyFlags));
+    final file = last(flagValues(p.args, flags: bodyFileFlags));
     var known = title != "" and body != "";
     if (file != null) {
         final content = files[file!];
@@ -500,7 +500,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         problems.append("a spaced hyphen used as a dash: restructure the sentence");
     }
     if (known and body != null) {
-        final shape = shapeOf(body!);
+        final shape = judgeShape(body!);
         foreach (problem in shape.denies) {
             problems.append(problem);
         }
@@ -508,19 +508,19 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             advice.append(note);
         }
         final prose = mut [<str>];
-        foreach (b in blocksOf(body!)) {
+        foreach (b in splitBlocks(body!)) {
             if (b.kind == "list") {
-                prose.append(itemsOf(b).join(" "));
+                prose.append(listItems(b).join(" "));
             } else if (b.kind != "code") {
                 prose.append(b.lines.join(" "));
             }
         }
         final words = wordsIn(prose.join(" "));
-        var units = unitsOf(title ?? "", facts: unknownFacts());
-        if (words > budgetOf(units) and describesBranch(p)) {
-            units = unitsOf(title ?? "", facts: diff(last(valuesOf(p.args, flags: baseFlags)) ?? ""));
+        var units = countUnits(title ?? "", facts: unknownFacts());
+        if (words > wordBudget(units) and describesBranch(p)) {
+            units = countUnits(title ?? "", facts: diff(last(flagValues(p.args, flags: baseFlags)) ?? ""));
         }
-        if (words > budgetOf(units)) {
+        if (words > wordBudget(units)) {
             if (units.facts.known) {
                 problems.append(overBudget(words, units: units));
             } else {
@@ -542,11 +542,11 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
 // adviceKey names the pull request p writes, so its advice is given once: the one it names,
 // else its title, else the checkout's branch's.
 fun adviceKey(p: helpers\Program) > str {
-    final ops = helpers\operandsOf(p.args, valueFlags: valueFlags);
+    final ops = helpers\stripFlags(p.args, valueFlags: valueFlags);
     if (ops.len() > 2) {
         return "pull-request-text:" + ops[2];
     }
-    return "pull-request-text:" + (last(valuesOf(p.args, flags: titleFlags)) ?? "branch");
+    return "pull-request-text:" + (last(flagValues(p.args, flags: titleFlags)) ?? "branch");
 }
 
 // decidePullRequest denies any pull request title or description that breaks the rules, and
@@ -599,7 +599,7 @@ fun judged(programs: [helpers\Program], line: str, files: {str: str}) > GuardVer
     return decidePullRequest(programs, line: line, files: files, diff: facts(unknownFacts()), once: helpers\counter());
 }
 
-fun reasonFor(title: str, body: str) > str {
+fun judgedReason(title: str, body: str) > str {
     return judged(create(title, body: body), line: "", files: {<str: str>}).reason;
 }
 
@@ -653,25 +653,25 @@ test "each description rule is named when broken" {
         "```\nkey = digest\n```\n\nPins the key.": "no lead",
     };
     foreach (body, want in cases) {
-        final reason = reasonFor(goodTitle, body: body);
+        final reason = judgedReason(goodTitle, body: body);
         std\assert(reason.indexOf(want) != null, message: "{body}: {reason}");
         std\assert(reason.indexOf("leads with the problem and the change") != null, message: "states the fix");
     }
 }
 
 test "the budget counts the changes the diff proves" {
-    final one = unitsOf(goodTitle, facts: shipping(1, lines: 40));
-    std\assert(one.count == 2 and budgetOf(one) == 140, message: "one shipped file earns a second change: {one.count}");
-    std\assert(unitsOf(goodTitle, facts: shipping(0, lines: 0)).count == 1, message: "nothing proven is still one change");
-    std\assert(unitsOf("fix: a; b; c", facts: shipping(0, lines: 0)).count == 3, message: "each title clause");
-    std\assert(unitsOf("feat!: drop x", facts: Facts{ known = true, fragments = 1, shipped = 0, lines = 0 }).count == 2, message: "a breaking title adds to the fragments");
+    final one = countUnits(goodTitle, facts: shipping(1, lines: 40));
+    std\assert(one.count == 2 and wordBudget(one) == 140, message: "one shipped file earns a second change: {one.count}");
+    std\assert(countUnits(goodTitle, facts: shipping(0, lines: 0)).count == 1, message: "nothing proven is still one change");
+    std\assert(countUnits("fix: a; b; c", facts: shipping(0, lines: 0)).count == 3, message: "each title clause");
+    std\assert(countUnits("feat!: drop x", facts: Facts{ known = true, fragments = 1, shipped = 0, lines = 0 }).count == 2, message: "a breaking title adds to the fragments");
     foreach (shipped, want in {1: 2, 3: 3, 6: 3, 7: 4, 15: 5, 31: 6}) {
-        std\assert(unitsOf(goodTitle, facts: shipping(shipped, lines: 0)).files == want, message: "{shipped} files");
+        std\assert(countUnits(goodTitle, facts: shipping(shipped, lines: 0)).files == want, message: "{shipped} files");
     }
     foreach (lines, want in {99: 1, 100: 2, 300: 3, 700: 4, 1500: 5}) {
-        std\assert(unitsOf(goodTitle, facts: shipping(0, lines: lines)).lines == want, message: "{lines} lines");
+        std\assert(countUnits(goodTitle, facts: shipping(0, lines: lines)).lines == want, message: "{lines} lines");
     }
-    std\assert(budgetOf(unitsOf(goodTitle, facts: unknownFacts())) == 90, message: "the title alone earns 90 words");
+    std\assert(wordBudget(countUnits(goodTitle, facts: unknownFacts())) == 90, message: "the title alone earns 90 words");
 }
 
 test "a description past its budget is denied with the budget and why" {
@@ -714,15 +714,15 @@ test "the diff is read only for a description its title does not cover" {
     std\assert(reads.len() == 1, message: "another branch's diff is not this checkout's");
 }
 
-test "factsOf counts fragments, shipped files and lines, generated files aside" {
-    final f = factsOf("6\t0\tchanges/unreleased/a.md\n0\t6\tchanges/unreleased/folded.md\n"
+test "parseNumstat counts fragments, shipped files and lines, generated files aside" {
+    final f = parseNumstat("6\t0\tchanges/unreleased/a.md\n0\t6\tchanges/unreleased/folded.md\n"
         + "10\t2\tinternal/cache/key.go\n30\t0\tinternal/cache/key_test.go\n5\t5\tdocs/guide.md\n"
         + "400\t400\tinternal/spell/gen/go.bo\n1\t1\tMAGUS.md\n-\t-\tassets/logo.png\n");
     std\assert(f.known, message: "a diff was read");
     std\assert(f.fragments == 1, message: "a folded fragment is not a change: {f.fragments}");
     std\assert(f.shipped == 2, message: "key.go and the logo ship: {f.shipped}");
     std\assert(f.lines == 64, message: "every line outside generated files: {f.lines}");
-    std\assert(!factsOf("").known, message: "an empty diff is unknown");
+    std\assert(!parseNumstat("").known, message: "an empty diff is unknown");
 }
 
 test "the shape is a lead, bullets, and at most one closing sentence" {
@@ -789,7 +789,7 @@ test "other gh calls and a line that only mentions gh pr create stay silent" {
 }
 
 test "no message sends the reader to a skill" {
-    final reason = reasonFor("Pin the key", body: "Claude pinned the key.");
+    final reason = judgedReason("Pin the key", body: "Claude pinned the key.");
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
 }
 
@@ -814,7 +814,7 @@ test "the ten pull requests the budget was calibrated on keep their verdicts" {
 }
 
 // calibration holds #422 through #431 as they were opened, with the Facts of each diff:
-// fragments added, shipped source files and lines outside generated files, per factsOf.
+// fragments added, shipped source files and lines outside generated files, per parseNumstat.
 fun calibration() > [Fixture] {
     return [
         Fixture{

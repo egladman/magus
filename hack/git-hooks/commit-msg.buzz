@@ -18,7 +18,7 @@ import "vcs";
 import "hack/magusfile/commits" as commits;
 
 // git runs commit-msg before it strips comment lines, so they are skipped here.
-fun subjectOf(message: str) > str {
+fun parseSubject(message: str) > str {
     foreach (line in message.split("\n")) {
         if (line.startsWith("#") or line.trim() == "") { continue; }
         return line.trim();
@@ -40,8 +40,8 @@ fun main(args: [str]) > void !> any {
     }
     final base = vcs\base();
     if (!commits\onBase(currentBranch(), base: base)) { return; }
-    final branch = commits\branchOf(base);
-    final subject = subjectOf(fs\readFile(args[0]));
+    final branch = commits\branchName(base);
+    final subject = parseSubject(fs\readFile(args[0]));
     final problem = commits\baseProblem(subject);
     if (problem == "") { return; }
     io\stderr.write("commit-msg: commits on {branch} land as written, so the subject must be a "

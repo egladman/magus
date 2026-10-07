@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { languageFor, tokenize } from "./syntax";
+import { detectLanguage, tokenize } from "./syntax";
 
 const slice = (s: string, t: { start: number; end: number }): string => s.slice(t.start, t.end);
 
@@ -15,14 +15,14 @@ const only = (text: string, toks: ReturnType<typeof tokenize>, cls: string): str
 const classes = (s: string, lang: Parameters<typeof tokenize>[1]): string[] =>
   tokenize(s, lang).map((t) => `${t.cls}:${slice(s, t)}`);
 
-test("languageFor maps by extension, and magusfile.buzz by name", () => {
-  assert.equal(languageFor("magus.go"), "go");
-  assert.equal(languageFor("console/src/a.ts"), "ts");
-  assert.equal(languageFor("magusfile.buzz"), "buzz");
-  assert.equal(languageFor("spells/go/spell.buzz"), "buzz");
-  assert.equal(languageFor("README"), "none");
-  assert.equal(languageFor("Dockerfile"), "none");
-  assert.equal(languageFor("weird.unknownext"), "none");
+test("detectLanguage maps by extension, and magusfile.buzz by name", () => {
+  assert.equal(detectLanguage("magus.go"), "go");
+  assert.equal(detectLanguage("console/src/a.ts"), "ts");
+  assert.equal(detectLanguage("magusfile.buzz"), "buzz");
+  assert.equal(detectLanguage("spells/go/spell.buzz"), "buzz");
+  assert.equal(detectLanguage("README"), "none");
+  assert.equal(detectLanguage("Dockerfile"), "none");
+  assert.equal(detectLanguage("weird.unknownext"), "none");
 });
 
 test("keywords, strings and numbers are classed", () => {

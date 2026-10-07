@@ -8,7 +8,7 @@
 //   - THE RUNTIME IS EXPLICIT. Nothing loads it but its control; once loaded, a lens change lays
 //     out in the page from the declaration the server served, with no second render request.
 //   - THE RECORD IS THE HANDLER'S. The page hands figure\draw the Figure record
-//     internal/handler/diagram's figureOf builds: Dir boxes for the import figure, actors for
+//     internal/handler/diagram's buildFigure builds: Dir boxes for the import figure, actors for
 //     the rest. No Buzz source is written.
 
 import assert from "node:assert/strict";
@@ -18,10 +18,10 @@ import { activate } from "./main";
 import {
   anchorTemplate,
   drawnNodes,
-  figureFor,
+  buildFigure,
   figureId,
   linkTo,
-  relayoutOf,
+  toRelayout,
   runtimeFrom,
   IMPORTS,
   type DrawResult,
@@ -500,7 +500,7 @@ test("server rows take the ids the figure draws", () => {
 });
 
 test("the actor record carries every value as data, however it is spelled", () => {
-  const f = figureFor(
+  const f = buildFigure(
     {
       nodes: [
         { id: "external:a", anchor: "x/y", label: 'say "{hi}"' },
@@ -521,7 +521,7 @@ test("the actor record carries every value as data, however it is spelled", () =
   );
   assert.throws(
     () =>
-      figureFor(
+      buildFigure(
         { nodes: [{ id: "external:a", anchor: "a", label: "a" }], edges: [["external:a", "gone"]] },
         { id: "projects", title: "P", claim: "flow", anchorHref: "" },
         "",
@@ -531,16 +531,16 @@ test("the actor record carries every value as data, however it is spelled", () =
 });
 
 test("a draw result is a figure, a refusal or a failure", () => {
-  assert.deepEqual(relayoutOf(drew("<svg/>")), { kind: "ok", svg: "<svg/>" });
-  assert.deepEqual(relayoutOf({ ok: false, svg: "", findings: "over", diag: null }), {
+  assert.deepEqual(toRelayout(drew("<svg/>")), { kind: "ok", svg: "<svg/>" });
+  assert.deepEqual(toRelayout({ ok: false, svg: "", findings: "over", diag: null }), {
     kind: "refused",
     detail: "over",
   });
   assert.deepEqual(
-    relayoutOf({ ok: false, svg: "", findings: "", diag: { msg: "boom", line: 3, col: 1 } }),
+    toRelayout({ ok: false, svg: "", findings: "", diag: { msg: "boom", line: 3, col: 1 } }),
     { kind: "failed", detail: "boom (line 3)" },
   );
-  assert.deepEqual(relayoutOf({ ok: false, svg: "", findings: "", diag: null }), {
+  assert.deepEqual(toRelayout({ ok: false, svg: "", findings: "", diag: null }), {
     kind: "failed",
     detail: "the runtime drew nothing",
   });
@@ -559,7 +559,7 @@ test("the runtime is globalThis.buzz with drawFigure, and the record crosses as 
   });
   assert.ok(rt);
   const meta = { id: "p", title: "P", claim: "flow", anchorHref: "" };
-  const f = figureFor({ nodes: [], edges: [] }, meta, "");
+  const f = buildFigure({ nodes: [], edges: [] }, meta, "");
   assert.deepEqual(rt.drawFigure(f, ""), drew("<svg/>"));
   assert.deepEqual(JSON.parse(sent), f);
   const odd = runtimeFrom({ buzz: { drawFigure: () => 7 } });

@@ -131,7 +131,7 @@ func (ix *searchIndex) owners() []projectOwner {
 		ix.owner = make([]projectOwner, len(ix.entries))
 		for i := range ix.entries {
 			n := &ix.entries[i].node
-			if p, ok := projectPathOf(n.ID); ok {
+			if p, ok := nodeProjectPath(n.ID); ok {
 				ix.owner[i] = projectOwner{p, true}
 				continue
 			}

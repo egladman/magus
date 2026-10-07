@@ -24,10 +24,10 @@ export fun maxLength() > int {
     return 100;
 }
 
-// typeOf returns subject's type with the scope and `!` stripped, or "" when it has no
+// commitType returns subject's type with the scope and `!` stripped, or "" when it has no
 // `<type>: ` prefix. It does not check the type is known; problem does.
-export fun typeOf(subject: str) > str {
-    var head = headerOf(subject) ?? "";
+export fun commitType(subject: str) > str {
+    var head = subjectHeader(subject) ?? "";
     if (head.endsWith("!")) {
         head = head.sub(0, len: head.len() - 1);
     }
@@ -40,10 +40,10 @@ export fun typeOf(subject: str) > str {
 
 // isBreaking reports whether subject marks a breaking change with `!` before its colon.
 export fun isBreaking(subject: str) > bool {
-    return (headerOf(subject) ?? "").endsWith("!");
+    return (subjectHeader(subject) ?? "").endsWith("!");
 }
 
-fun headerOf(subject: str) > str? {
+fun subjectHeader(subject: str) > str? {
     final colon = subject.indexOf(": ");
     if (colon == null) { return null; }
     return subject.sub(0, len: colon);
@@ -60,7 +60,7 @@ export fun problem(subject: str) > str {
     if (subject.len() > maxLength()) {
         return "{subject.len()} bytes, over the {maxLength()} a subject may run";
     }
-    final header = headerOf(subject);
+    final header = subjectHeader(subject);
     if (header == null) {
         return "no `<type>: ` prefix; " + form;
     }
@@ -79,7 +79,7 @@ export fun problem(subject: str) > str {
             return "scope `{scope}` must be lowercase with no spaces";
         }
     }
-    final kind = typeOf(subject);
+    final kind = commitType(subject);
     if (types().indexOf(kind) == null) {
         return "unknown type `{kind}`; want one of " + types().join(", ");
     }
@@ -100,9 +100,9 @@ export fun problem(subject: str) > str {
     return "";
 }
 
-// branchOf is the branch a base ref names: vcs\base is remote-qualified (`origin/main`),
+// branchName is the branch a base ref names: vcs\base is remote-qualified (`origin/main`),
 // a checkout's branch is bare (`main`).
-export fun branchOf(base: str) > str {
+export fun branchName(base: str) > str {
     final slash = base.indexOf("/");
     if (slash != null) { return base.sub(slash + 1); }
     return base;
@@ -110,7 +110,7 @@ export fun branchOf(base: str) > str {
 
 // onBase reports whether branch is the one base names, where a commit lands as written.
 export fun onBase(branch: str, base: str) > bool {
-    return branch != "" and branch == branchOf(base);
+    return branch != "" and branch == branchName(base);
 }
 
 // baseProblem is problem for a commit made on the base branch, "" for a subject git
@@ -133,9 +133,9 @@ test "a conventional subject in the repository's style passes" {
 }
 
 test "the type and breaking marker are read past the scope" {
-    std\assert(typeOf("feat(cache)!: drop the v1 key") == "feat", message: "scoped and breaking");
-    std\assert(typeOf("chore: bump go") == "chore", message: "bare type");
-    std\assert(typeOf("add a hook") == "", message: "no prefix");
+    std\assert(commitType("feat(cache)!: drop the v1 key") == "feat", message: "scoped and breaking");
+    std\assert(commitType("chore: bump go") == "chore", message: "bare type");
+    std\assert(commitType("add a hook") == "", message: "no prefix");
     std\assert(isBreaking("chore!: drop go 1.24"), message: "breaking without a scope");
     std\assert(isBreaking("feat(cache)!: drop the v1 key"), message: "breaking after a scope");
     std\assert(!isBreaking("feat(cache): add a key"), message: "not breaking");
@@ -155,8 +155,8 @@ test "a subject outside the form names what is wrong" {
 }
 
 test "the base branch is read off a remote-qualified base ref" {
-    std\assert(branchOf("origin/main") == "main", message: "remote-qualified");
-    std\assert(branchOf("main") == "main", message: "bare");
+    std\assert(branchName("origin/main") == "main", message: "remote-qualified");
+    std\assert(branchName("main") == "main", message: "bare");
     std\assert(onBase("main", base: "origin/main"), message: "on it");
     std\assert(!onBase("trim-key", base: "origin/main"), message: "another branch");
     std\assert(!onBase("", base: ""), message: "a detached checkout with no base is on neither");

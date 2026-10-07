@@ -509,9 +509,9 @@ type HookEnv struct {
 	Cache string
 }
 
-// of is every assignment a gate or a regeneration in the box at home and tmp takes:
+// assignments is every assignment a gate or a regeneration in the box at home and tmp takes:
 // e.Fixed, then [boxEnv] and the spells' caches under e.Cache, which nothing overrides.
-func (e HookEnv) of(home, tmp string) ([]string, error) {
+func (e HookEnv) assignments(home, tmp string) ([]string, error) {
 	switch {
 	case home == "" || tmp == "":
 		return nil, errors.New("the candidate has no box to run its hooks in")
@@ -579,7 +579,7 @@ func (e HookEnv) Pass(names []string) (HookEnv, error) {
 // stdout and stderr: the one way a candidate is gated, whoever gates it. A
 // changeFailure is the checkout's red; any other error is the machine's.
 func (e HookEnv) gate(ctx context.Context, cmd Command, args []string, cand types.Candidate, stdout, stderr io.Writer) error {
-	env, err := e.of(cand.Home, cand.TempDir)
+	env, err := e.assignments(cand.Home, cand.TempDir)
 	if err != nil {
 		return err
 	}
@@ -648,7 +648,7 @@ func (g commandGate) Validate(ctx context.Context, cand types.Candidate, units [
 // holding a line break, which the hook is never run for.
 func CommandRegenerate(cmd Command, hookEnv HookEnv, log *HookLog) types.RegenerateFunc {
 	return func(ctx context.Context, r types.Regeneration) error {
-		env, err := hookEnv.of(r.Home, r.TempDir)
+		env, err := hookEnv.assignments(r.Home, r.TempDir)
 		if err != nil {
 			return fmt.Errorf("regenerate %s: %w", r.Change.Label(), err)
 		}

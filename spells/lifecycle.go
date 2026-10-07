@@ -25,7 +25,7 @@ const ListLifecyclesContract = "list_lifecycles"
 // it as `object Lifecycle` in magus/spell; a provider constructs and returns it.
 //
 // It reports facts, not verdicts. Which cycle a probed version belongs to, and whether that
-// cycle is past its end of life, is decided in Go ([Lifecycle.CycleOf],
+// cycle is past its end of life, is decided in Go ([Lifecycle.FindCycle],
 // [ReleaseCycle.SupportOn]), so "past EOL" has one definition however many providers exist.
 //
 // The json tags are the provider cache's wire form. A rename is a wire change: regenerate
@@ -67,10 +67,10 @@ const (
 	SupportUnknown     Support = "unknown"     // no data, or no cycle matched the version
 )
 
-// CycleOf returns the longest cycle that prefixes version at a component boundary: 1.25.3
+// FindCycle returns the longest cycle that prefixes version at a component boundary: 1.25.3
 // belongs to "1.25", never to "1.2". A leading "v" is ignored, so a probed "v22.3.0" and a
 // window's "22" both match nodejs "22". Reports false when no cycle matches.
-func (l Lifecycle) CycleOf(version string) (ReleaseCycle, bool) {
+func (l Lifecycle) FindCycle(version string) (ReleaseCycle, bool) {
 	v := strings.TrimPrefix(version, "v")
 	var best ReleaseCycle
 	found := false
@@ -85,10 +85,10 @@ func (l Lifecycle) CycleOf(version string) (ReleaseCycle, bool) {
 	return best, found
 }
 
-// SupportOf places version in its cycle and reports where that cycle stands on day. A
+// PlaceVersion places version in its cycle and reports where that cycle stands on day. A
 // version no cycle carries is SupportUnknown, with a zero cycle.
-func (l Lifecycle) SupportOf(version string, day time.Time) (ReleaseCycle, Support) {
-	c, ok := l.CycleOf(version)
+func (l Lifecycle) PlaceVersion(version string, day time.Time) (ReleaseCycle, Support) {
+	c, ok := l.FindCycle(version)
 	if !ok {
 		return ReleaseCycle{}, SupportUnknown
 	}

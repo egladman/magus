@@ -124,8 +124,8 @@ func (r *Tracer) addEdge(to string) {
 	r.edges = append(r.edges, Edge{From: r.cur, To: to})
 }
 
-// depsOf returns the direct dependencies of target (edges from target -> dep).
-func (r *Tracer) depsOf(target string) []string {
+// directDeps returns the direct dependencies of target (edges from target -> dep).
+func (r *Tracer) directDeps(target string) []string {
 	var out []string
 	for _, e := range r.edges {
 		if e.From == target {
@@ -147,7 +147,7 @@ func (r *Tracer) topoOrder(target string) []string {
 			return // already placed, or a cycle: stop without re-adding
 		}
 		onStack[n] = true
-		deps := r.depsOf(n)
+		deps := r.directDeps(n)
 		slices.Sort(deps) // deterministic order among siblings
 		for _, d := range deps {
 			visit(d)

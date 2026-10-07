@@ -14,7 +14,7 @@ import {
   rowOffsets,
   rowAt,
   fileOfRow,
-  heightOf,
+  rowHeight,
   maxLineChars,
   narrowToHunk,
   placeThreads,
@@ -346,15 +346,15 @@ test("a file with no hunks still gets its heading row", () => {
 // The virtualizer positions rows from these offsets instead of measuring them, so an error here
 // does not throw - it silently paints rows at the wrong y. These pin the arithmetic.
 
-// A stand-in row of each kind. Only `kind` is read by heightOf, so the rest stays minimal.
+// A stand-in row of each kind. Only `kind` is read by rowHeight, so the rest stays minimal.
 function rowOfKind(kind: string): Row {
   return { kind } as unknown as Row;
 }
 
-test("a file row is taller than a code row, and heightOf is what says so", () => {
-  assert.equal(heightOf(rowOfKind("file")), FILE_ROW_HEIGHT);
-  assert.equal(heightOf(rowOfKind("line")), ROW_HEIGHT);
-  assert.equal(heightOf(rowOfKind("hunk")), ROW_HEIGHT);
+test("a file row is taller than a code row, and rowHeight is what says so", () => {
+  assert.equal(rowHeight(rowOfKind("file")), FILE_ROW_HEIGHT);
+  assert.equal(rowHeight(rowOfKind("line")), ROW_HEIGHT);
+  assert.equal(rowHeight(rowOfKind("hunk")), ROW_HEIGHT);
   assert.ok(FILE_ROW_HEIGHT > ROW_HEIGHT, "the file header must have more room than a code line");
 });
 

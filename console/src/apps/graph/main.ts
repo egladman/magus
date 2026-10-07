@@ -105,7 +105,7 @@ import {
   opensProjected,
   projectOwners as computeProjectOwners,
 } from "./views.js";
-import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
+import { detectFlavor, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import {
   installKeybindings,
   mergeKeymap,
@@ -1593,7 +1593,7 @@ function draw() {
     if (scope) alpha = scope.has(n.id) || lit(n.id) ? 1 : 0.12;
     else if (highlight) alpha = lit(n.id) ? 1 : 0.15;
     if (cardsActive() && n.w) {
-      const kindColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
+      const kindColor = matchGroupColor(n) || th.kindColor[n.kind] || "#888";
       drawCard(ctx, n, {
         theme: th,
         kindColor,
@@ -1607,7 +1607,7 @@ function draw() {
       continue;
     }
     ctx.globalAlpha = alpha;
-    const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
+    const nodeColor = matchGroupColor(n) || th.kindColor[n.kind] || "#888";
     // The hovered node and everything one hop from it GLOW, rather than merely failing to dim.
     // Blur is divided by the zoom so the halo stays a constant size on screen instead of
     // ballooning as the view zooms in. Skipped when the neighborhood is large: a canvas shadow
@@ -2760,7 +2760,7 @@ interface ColorGroup {
 
 const groups: ColorGroup[] = []; // { query, color, terms }
 
-function groupColorFor(node: GNode) {
+function matchGroupColor(node: GNode) {
   for (const g of groups) {
     // Groups with a nodeSet (e.g. depth preset) match directly by id, bypassing
     // the query grammar so a fake `layer:N` string doesn't silently match nothing.
@@ -3066,7 +3066,7 @@ async function suggestNodes(prefix: string, gen: number) {
 }
 
 // refineQueryFromServer replaces the locally-computed match set with the server's, which is the
-// actual magus query grammar rather than the partial reimplementation matchSetFor carries.
+// actual magus query grammar rather than the partial reimplementation resolveMatchSet carries.
 //
 // The local pass still runs FIRST and is what the operator sees while typing: a round trip per
 // keystroke would make the box feel broken, and the local answer approximates the server's well
@@ -3107,13 +3107,13 @@ async function refineQueryFromServer(q: string, gen: number) {
   }
 }
 
-// matchSetFor resolves a query string to the set of ids it matches, or null when the query
+// resolveMatchSet resolves a query string to the set of ids it matches, or null when the query
 // is empty. null means NO FILTER, which is not the same as a filter that matched nothing.
 //
 // This is a REIMPLEMENTATION of the magus query grammar, and a partial one. It stays because
 // the explorer runs with no server on every static path - the demo, a #data= snapshot, the
 // docs site - where there is nothing to ask. refineQueryFromServer supersedes it in live mode.
-function matchSetFor(q: string): Set<string> | null {
+function resolveMatchSet(q: string): Set<string> | null {
   const terms = q ? parseQuery(q) : [];
   if (!terms.length) return null;
   if (!graph.relIndex) graph.relIndex = relationIndex();
@@ -3147,7 +3147,7 @@ function applyQuery(q: string) {
     flowOn = false;
   }
   query = q.trim();
-  matchSet = matchSetFor(query);
+  matchSet = resolveMatchSet(query);
   serverScores = null;
   const gen = ++viewGeneration;
   if (query) void refineQueryFromServer(query, gen);
@@ -3376,7 +3376,7 @@ function renderGroupLegend(preset: string) {
         : g.terms.length > 0 && g.terms.every((t) => termMatches(n, t));
       if (hit) {
         counts[i]++;
-        break; // first match wins, exactly as groupColorFor resolves it
+        break; // first match wins, exactly as matchGroupColor resolves it
       }
     }
   }
@@ -3477,7 +3477,7 @@ function termText(t: QueryTerm): string {
   return (t.negated ? "-" : "") + (t.field ? t.field + ":" : "") + value;
 }
 
-function labelFor(id: string): string {
+function nodeLabel(id: string): string {
   return graph?.byId.get(id)?.label ?? id;
 }
 
@@ -3500,9 +3500,9 @@ function scopePills(): ScopePill[] {
   });
   if (activeView) {
     const subject = viewNodeTo
-      ? labelFor(viewNode ?? "") + " to " + labelFor(viewNodeTo)
+      ? nodeLabel(viewNode ?? "") + " to " + nodeLabel(viewNodeTo)
       : viewNode
-        ? labelFor(viewNode)
+        ? nodeLabel(viewNode)
         : "";
     pills.push({
       label: subject ? activeView + ": " + subject : activeView,
@@ -3513,7 +3513,7 @@ function scopePills(): ScopePill[] {
   if (focusId) {
     pills.push({
       label:
-        "around " + labelFor(focusId) + ", " + focusDepth + (focusDepth === 1 ? " hop" : " hops"),
+        "around " + nodeLabel(focusId) + ", " + focusDepth + (focusDepth === 1 ? " hop" : " hops"),
       title: "Leave the local graph",
       clear: clearFocus,
     });
@@ -3543,7 +3543,7 @@ function scopePills(): ScopePill[] {
 // both, which is right for Esc and wrong for a pill that names only the focus.
 function clearFocus() {
   focusId = null;
-  matchSet = matchSetFor(query);
+  matchSet = resolveMatchSet(query);
   setStatus("");
   renderList();
   updateHash();
@@ -3683,7 +3683,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   updateSnapshotBadge(null);
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
-  graphFlavor = flavorOf(data);
+  graphFlavor = detectFlavor(data);
   let raw: GraphPayload;
   if (isTargetGraph(data)) {
     const nl = targetGraphToNodeLink(data);
@@ -4865,7 +4865,7 @@ const COLOR_PRESETS: ColorPreset[] = [
         s.push(id);
       }
       const maxLayer = Math.max(...byLayer.keys(), 0);
-      // Return one entry per layer; each entry carries a nodeSet so groupColorFor
+      // Return one entry per layer; each entry carries a nodeSet so matchGroupColor
       // can match directly without going through parseQuery/termMatches (which
       // would require a real `layer:` query field that doesn't exist in the CLI).
       return [...byLayer.entries()]
@@ -5075,7 +5075,7 @@ function recomputeMatchSet() {
     return;
   }
   if (query) {
-    matchSet = matchSetFor(query);
+    matchSet = resolveMatchSet(query);
     return;
   }
   if (!projectionUnfolded) {
@@ -5100,7 +5100,7 @@ function recomputeMatchSet() {
 // activeView/query/activePreset/projectionUnfolded/layoutMode/search. Positions
 // carry over by node id via capturePositions/applyPositions (unchanged).
 function liveApplyGraphUpdate(data: GraphPayload) {
-  const flavor = flavorOf(data);
+  const flavor = detectFlavor(data);
   graphFlavor = flavor;
   let raw: GraphPayload = data;
   if (flavor === "targets") {
@@ -5469,7 +5469,7 @@ function finishInteractiveSetup() {
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
 // excluding the one-time interaction wiring, so the demo button can re-run it in place.
 function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
-  const flavor = flavorOf(loaded.data);
+  const flavor = detectFlavor(loaded.data);
   graphEpoch++; // see replaceGraph: a different graph retires in-flight answers about the old one
   graphFlavor = flavor;
   graphSource = loaded.source;
@@ -5647,7 +5647,7 @@ function bootWireEvents() {
     // triggers - which is what the 120ms is protecting, not the matching.
     const typed = searchEl.value.trim();
     renderScope(
-      typed === query ? undefined : (matchSetFor(typed)?.size ?? graph?.nodes.length ?? 0),
+      typed === query ? undefined : (resolveMatchSet(typed)?.size ?? graph?.nodes.length ?? 0),
     );
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => {
@@ -6117,7 +6117,7 @@ async function bootLive() {
     publishLiveStatus();
 
     // Render the skeleton immediately.
-    const flavor = flavorOf(skeletonData);
+    const flavor = detectFlavor(skeletonData);
     graphFlavor = flavor;
     let rawForPrepare = skeletonData;
     if (flavor === "targets") {
@@ -6136,7 +6136,7 @@ async function bootLive() {
         liveETag = fullResp.headers.get("ETag") || null;
         liveGraphQuery = fullQuery;
         const fullData = await fullResp.json();
-        const ff = flavorOf(fullData);
+        const ff = detectFlavor(fullData);
         graphFlavor = ff;
         let rr = fullData;
         if (ff === "targets") {

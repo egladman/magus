@@ -319,14 +319,14 @@ type errSilent struct{ exitCode int }
 func (errSilent) Error() string { return "silent exit" }
 
 // AlreadyReported says the failure has already been explained to the user, so no caller should
-// print this error's text. exitCodeOf has always honored that locally; the method states
+// print this error's text. mapExitCode has always honored that locally; the method states
 // it for the ADOPTED path too, where the error crosses a socket and the process that
 // receives it cannot see this type. Without it a forwarded failure reports itself as
 // "silent exit", which is a sentence about magus's internals and not about the failure.
 func (errSilent) AlreadyReported() bool { return true }
 
 // ExitCode states the process status this failure carries, for the ADOPTED path.
-// exitCodeOf reads the field directly; the server holds the error as a plain `error`
+// mapExitCode reads the field directly; the server holds the error as a plain `error`
 // and cannot, so without the method every forwarded failure collapsed to 1 and the
 // documented 1-vs-2 split existed only when no server was running.
 func (e errSilent) ExitCode() int { return e.exitCode }
@@ -350,7 +350,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // 75 is EX_TEMPFAIL from sysexits.h, borrowed the same way. Two failures carry it: a
 // contended no-wait project lock (lockContendedExit) and a step the machine's build
 // budget could not seat (cache.ExitCodeMachineBusy, MGS3009). Neither is named here:
-// each error states its own code and exitCodeOf reads it through proc.ExitCode, which
+// each error states its own code and mapExitCode reads it through proc.ExitCode, which
 // is what lets the server report the same status for a run it executed on a client's
 // behalf. A caller that cannot tell either from 1 reads a busy machine as a broken
 // build: CI retries nothing, and an agent debugs a target that never ran.

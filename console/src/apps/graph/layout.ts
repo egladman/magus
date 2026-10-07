@@ -374,11 +374,11 @@ export function layoutWaves(
     if (!waveGroups.has(l)) waveGroups.set(l, []);
     waveGroups.get(l)?.push(id);
   }
-  const projectOf = (id: string): string => byId.get(id)?.attrs?.project ?? "";
+  const projectName = (id: string): string => byId.get(id)?.attrs?.project ?? "";
   for (const arr of waveGroups.values()) {
     arr.sort((a, b) => {
-      const pa = projectOf(a);
-      const pb = projectOf(b);
+      const pa = projectName(a);
+      const pb = projectName(b);
       if (pa !== pb) return pa < pb ? -1 : 1;
       return a < b ? -1 : a > b ? 1 : 0;
     });

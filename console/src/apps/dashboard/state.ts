@@ -268,9 +268,9 @@ export interface StatusView {
   brokerPolicy: BrokerPolicy;
 }
 
-// brokerPolicyOf reads the wire's policy string, which is empty from a report that predates it and
+// parseBrokerPolicy reads the wire's policy string, which is empty from a report that predates it and
 // otherwise one of the three names. Empty is the default, best-effort.
-function brokerPolicyOf(s: string): BrokerPolicy {
+function parseBrokerPolicy(s: string): BrokerPolicy {
   return s === "required" || s === "off" ? s : "best-effort";
 }
 
@@ -378,7 +378,7 @@ export function mapStatus(st: Status): StatusView {
     ownerVersion: (pool && pool.ownerVersion) || "",
     broker: mapBroker(st.broker),
     server: mapServer(st.server),
-    brokerPolicy: brokerPolicyOf(st.brokerPolicy || ""),
+    brokerPolicy: parseBrokerPolicy(st.brokerPolicy || ""),
   };
 }
 

@@ -169,7 +169,7 @@ fun magusAt(bin: str, root: str, args: [str]) > str !> any {
     return r.stdout;
 }
 
-fun headOf(dir: str) > str !> any {
+fun readHead(dir: str) > str !> any {
     return vcs\cmd(["rev-parse", "HEAD"], opts: {"dir": dir, "quiet": true}).stdout.trim();
 }
 
@@ -195,11 +195,11 @@ fun reusable(root: str, source: str) > obj{ bin: str, build: BuildFacts } !> any
         throw "bootstrap-worktree: {source} holds no ./magus to reuse";
     }
     final build = parseBuild(magusAt(bin, root: source, args: ["version", "-o", "json"]));
-    final rootRev = headOf(root);
+    final rootRev = readHead(root);
     final sourceInputs = if (build.dirty) changedInputs(bin, root: source, rev: build.commit) else [<str>];
     final rootInputs = changedInputs(bin, root: root, rev: rootRev);
     try {
-        checkReusable(build, rootRev: rootRev, sourceRev: headOf(source), sourceInputs: sourceInputs, rootInputs: rootInputs);
+        checkReusable(build, rootRev: rootRev, sourceRev: readHead(source), sourceInputs: sourceInputs, rootInputs: rootInputs);
     } catch (e: str) {
         throw "{bin} is not this worktree's build:\n  {e}";
     }

@@ -15,7 +15,7 @@ import (
 // A workspace script is served as a breadcrumb when a situation it declares it serves
 // comes up: a guard rule refusing a line, a diagnostic, a doctor check, another next,
 // or one of the events below. The graph build reads each script's declaration and
-// writes scripts.idx; a serving site asks ScriptsFor and never loads the graph.
+// writes scripts.idx; a serving site asks MatchScripts and never loads the graph.
 
 // ScriptIDPrefix starts the id of every script breadcrumb, so `session hints` counts
 // uptake per script beside the built-in templates.
@@ -38,7 +38,7 @@ type ScriptsIndex struct {
 	// Root is the absolute workspace root every Path is relative to.
 	Root string `json:"root"`
 	// Revision is the commit the index was built at, "" where no version control
-	// answers. ScriptsFor does not compare it: a checkout that moves rewrites the
+	// answers. MatchScripts does not compare it: a checkout that moves rewrites the
 	// files it changes, which the per-script stamp already catches without a VCS
 	// process on the serving path.
 	Revision string `json:"revision,omitempty"`
@@ -151,7 +151,7 @@ var scriptPlaceholders = []string{"ref", "rule", "project"}
 
 var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 
-// ScriptsFor returns the breadcrumbs for every script the index under cacheDir lists
+// MatchScripts returns the breadcrumbs for every script the index under cacheDir lists
 // for situation, in index order and uncapped: the serving site merges them with its
 // own and ServableTo caps what survives.
 //
@@ -160,7 +160,7 @@ var placeholderRe = regexp.MustCompile(`\{([a-z]+)\}`)
 // args name a placeholder facts does not bind, or whose id an earlier entry already
 // took. An entry is a read only when it declares read and its file still matches the
 // stamp; Reads is never set otherwise.
-func ScriptsFor(cacheDir, situation string, facts map[string]string) ([]Next, error) {
+func MatchScripts(cacheDir, situation string, facts map[string]string) ([]Next, error) {
 	if err := ValidateSituation(situation); err != nil {
 		return nil, err
 	}

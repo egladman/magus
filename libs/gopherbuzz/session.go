@@ -1336,7 +1336,7 @@ func parseDiagnostic(err error) Diagnostic {
 		inner = me
 	}
 	if inner != nil {
-		if d, ok := DiagnosticOf(inner.err); ok {
+		if d, ok := DiagnosticFromError(inner.err); ok {
 			d.File = inner.file
 			return d
 		}
@@ -1436,11 +1436,11 @@ func (s *Session) Diagnostics(code string) []Diagnostic {
 	return out
 }
 
-// DiagnosticOf locates err, an Exec or Compile failure, as a positioned Diagnostic, so an
+// DiagnosticFromError locates err, an Exec or Compile failure, as a positioned Diagnostic, so an
 // embedder can report where a load stopped without parsing the rendered sentence. A type
 // error keeps its code; a parse error has none. ok is false when err carries no position.
 // File is left for the caller, which is the only one that knows it.
-func DiagnosticOf(err error) (d Diagnostic, ok bool) {
+func DiagnosticFromError(err error) (d Diagnostic, ok bool) {
 	var te typeError
 	if errors.As(err, &te) {
 		return Diagnostic{Line: te.Line, Col: te.Col, Code: te.Code, Msg: te.Msg, Severity: te.Severity}, true

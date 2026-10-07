@@ -289,8 +289,8 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 }
 
-// ownBuildOutcomeFor builds the outcome rankOwnBuild layers onto the deny for denied.
-func ownBuildOutcomeFor(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
+// newOwnBuildOutcome builds the outcome rankOwnBuild layers onto the deny for denied.
+func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, d Dialect, denied hint.Invocation, call goCall, root string, multipleCmds bool, cwd string) *ownBuildOutcome {
 	where := "this checkout"
 	argv := bootstrapArgv
 	if root != filepath.Clean(cwd) {
@@ -354,7 +354,7 @@ func ownBuildVerdict(ctx context.Context, deps Dependencies, cwd, command string
 		return nil
 	}
 	if root := call.buildRoot(cwd); ownSourceRoot(root) {
-		return ownBuildOutcomeFor(ctx, deps, command, d, cmds[i], call, root, len(cmds) > 1, cwd)
+		return newOwnBuildOutcome(ctx, deps, command, d, cmds[i], call, root, len(cmds) > 1, cwd)
 	}
 	return nil
 }

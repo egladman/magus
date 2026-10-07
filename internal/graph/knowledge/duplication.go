@@ -52,7 +52,7 @@ func (g *Graph) Duplicates(opts types.DuplicationOptions) []types.DuplicationGro
 		if !opts.IncludeTests && isTestSource(n.Source) {
 			continue
 		}
-		start, end := spanOf(n)
+		start, end := definitionSpan(n)
 		if end < start || start == 0 {
 			continue
 		}
@@ -292,9 +292,9 @@ func pairScore(a, b map[string]bool, aID, bID string, aSpan, bSpan int, idf func
 	return score, score >= opts.MinScore
 }
 
-// spanOf is a symbol's first and last definition line, or zeros when the index emitted no
+// definitionSpan is a symbol's first and last definition line, or zeros when the index emitted no
 // enclosing range. Source is "<path>:<line>".
-func spanOf(n types.KnowledgeNode) (start, end int) {
+func definitionSpan(n types.KnowledgeNode) (start, end int) {
 	_, line, ok := strings.Cut(n.Source, ":")
 	if !ok {
 		return 0, 0

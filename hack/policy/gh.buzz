@@ -109,7 +109,7 @@ fun readsOneCI(call: GhCall) > bool {
     if (runs(call, first: "pr", second: "view") and jsonFields(call.args).indexOf("statusCheckRollup") != null) {
         return true;
     }
-    final ops = helpers\operandsOf(call.args, valueFlags: ghValueFlags);
+    final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
     if (ops.len() > 1 and ops[0] == "api") {
         foreach (suffix in ["/check-runs", "/check-suites", "/status", "/statuses"]) {
             if (ops[1].endsWith(suffix)) { return true; }
@@ -154,7 +154,7 @@ fun readsPRState(call: GhCall) > bool {
         }
         return false;
     }
-    final ops = helpers\operandsOf(call.args, valueFlags: ghValueFlags);
+    final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
     if (ops.len() > 1 and ops[0] == "api") {
         final parts = ops[1].split("/");
         return parts.len() == 5 and parts[0] == "repos" and parts[3] == "pulls" and (std\parseInt(parts[4]) ?? 0) > 0;
@@ -168,7 +168,7 @@ fun isQueueWorkflow(name: str) > bool {
 
 // runs reports whether call's first two operands are first and second: `gh pr checks`.
 fun runs(call: GhCall, first: str, second: str) > bool {
-    final ops = helpers\operandsOf(call.args, valueFlags: ghValueFlags);
+    final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
     return ops.len() > 1 and ops[0] == first and ops[1] == second;
 }
 

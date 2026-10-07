@@ -91,7 +91,7 @@ export fun orderLayers(stack: BranchStack) > BranchStack !> any {
     return BranchStack{ schema = stack.schema, base = stack.base, layers = order };
 }
 
-fun keysOf(m: {str: serialize\Boxed}, allowed: [str], where: str) > void !> any {
+fun checkKeys(m: {str: serialize\Boxed}, allowed: [str], where: str) > void !> any {
     foreach (k in m.keys()) {
         if (allowed.indexOf(k) == null) {
             throw "branch-stack: {where} has unknown member {k}; it takes {allowed.join(", ")}";
@@ -129,7 +129,7 @@ fun strsField(m: {str: serialize\Boxed}, key: str, where: str) > [str] !> any {
     return acc;
 }
 
-fun mapOf(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
+fun requireMap(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
     final m = b.map();
     if (m == null) { throw "branch-stack: {where} is not an object"; }
     return m!;
@@ -140,21 +140,21 @@ fun mapOf(b: serialize\Boxed, where: str) > {str: serialize\Boxed} !> any {
 // given twice in one layer. Members left out read as empty. It does not order the layers;
 // orderLayers does.
 export fun readStack(json: str) > BranchStack !> any {
-    final doc = mapOf(serialize\jsonDecode(json), where: "the stack");
-    keysOf(doc, allowed: ["schema", "base", "layers"], where: "the stack");
+    final doc = requireMap(serialize\jsonDecode(json), where: "the stack");
+    checkKeys(doc, allowed: ["schema", "base", "layers"], where: "the stack");
     final schema = strField(doc, key: "schema", where: "the stack", required: true);
     if (schema != SCHEMA) { throw "branch-stack: the stack is {schema}, and this reads {SCHEMA}"; }
     final layers = mut [<StackLayer>];
     foreach (i, lb in listField(doc, key: "layers", where: "the stack")) {
         final where = "layer {i}";
-        final m = mapOf(lb, where: where);
-        keysOf(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "goals", "status", "reason"], where: where);
+        final m = requireMap(lb, where: where);
+        checkKeys(m, allowed: ["branch", "parent", "job", "paths", "declarations", "check", "goals", "status", "reason"], where: where);
         final goals = mut [<CheckGoal>];
         final ids = mut [<str>];
         foreach (j, gb in listField(m, key: "goals", where: where)) {
             final gw = "{where}'s goals[{j}]";
-            final gm = mapOf(gb, where: gw);
-            keysOf(gm, allowed: ["id", "target", "project", "args"], where: gw);
+            final gm = requireMap(gb, where: gw);
+            checkKeys(gm, allowed: ["id", "target", "project", "args"], where: gw);
             final id = strField(gm, key: "id", where: gw, required: true);
             if (ids.indexOf(id) != null) { throw "branch-stack: {where} names goal {id} twice"; }
             ids.append(id);

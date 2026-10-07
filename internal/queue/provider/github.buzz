@@ -154,7 +154,7 @@ fun slug(remote: str, host: str) > str {
     return parts[0] + "/" + parts[1];
 }
 
-fun repoOf(io: {str: any}) > str !> any {
+fun remoteRepo(io: {str: any}) > str !> any {
     final remote = "{io["remote_url"] ?? ""}";
     final repo = slug(remote, host: apiHost(apiBase()));
     if (repo == "") {
@@ -331,10 +331,10 @@ fun describeFrom(body: str, rules: str, setup: any, committer: any) > any !> any
 // of them needing checks read, which the apply job's token does not hold.
 export fun describe(io: {str: any}) > any !> any {
     final hdrs = reading("describe");
-    final repo = repoOf(io);
+    final repo = remoteRepo(io);
     final body = expect(get(apiBase() + "/repos/" + repo, hdrs: hdrs), status: 200, what: "describe {repo}");
     final base = "{io["base"] ?? ""}";
-    final rules = readFor(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(base), what: "read the rules on {base}",
+    final rules = fetchSetup(apiBase() + "/repos/" + repo + "/rules/branches/" + escape(base), what: "read the rules on {base}",
         needs: "metadata read on {repo}", hdrs: hdrs);
     final context = "{io["status_context"] ?? ""}";
     if (context == "") {
@@ -365,7 +365,7 @@ export fun describe(io: {str: any}) > any !> any {
         return refused(reason + "; it is under About on the app's settings page", url: appsPage(web, owner: owner, org: org) + "/" + slug, app: slug + ":<id>");
     }
     final steps = "{io["setup_steps"] ?? false}" == "true";
-    final branch = readFor(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
+    final branch = fetchSetup(apiBase() + "/repos/" + repo + "/branches/" + escape(base), what: "read the protection of {base}",
         needs: "contents read on {repo}", hdrs: hdrs);
     var reports = [<{str: str}>];
     var rulesets = {<str: str>};
@@ -446,13 +446,13 @@ final APP_PERMISSIONS = "contents=write&pull_requests=write&statuses=write&actio
 // still holds nothing but the queue's own rule.
 final RULESET_NAME = "magus merge queue";
 
-// readFor reads url for describe's setup. A 403 or 404 names the permission the read
+// fetchSetup reads url for describe's setup. A 403 or 404 names the permission the read
 // needs: a token without it reads the same as a missing resource.
-fun readFor(url: str, what: str, needs: str, hdrs: {str: str}) > str !> any {
+fun fetchSetup(url: str, what: str, needs: str, hdrs: {str: str}) > str !> any {
     return checkRead(get(url, hdrs: hdrs), what: what, needs: needs);
 }
 
-// checkRead is readFor on an answer already read.
+// checkRead is fetchSetup on an answer already read.
 fun checkRead(res: {str: any}, what: str, needs: str) > str !> any {
     if (res["status"] == 403 or res["status"] == 404) {
         throw "github: {what}: HTTP {res["status"]}: either it does not exist or the token lacks {needs}: {res["body"]}";
@@ -603,12 +603,12 @@ fun sampleHeads(body: str, repo: str) > [str] !> any {
 // head whose runs have not finished carries only some of them.
 fun reportsOn(repo: str, base: str, wanted: [{str: str}], hdrs: {str: str}) > [{str: str}] !> any {
     final prefix = apiBase() + "/repos/" + repo;
-    final heads = sampleHeads(readFor(prefix + "/pulls?state=all&base=" + escape(base) + "&sort=updated&direction=desc&per_page=20",
+    final heads = sampleHeads(fetchSetup(prefix + "/pulls?state=all&base=" + escape(base) + "&sort=updated&direction=desc&per_page=20",
         what: "list pull requests into {base}", needs: "pull requests read on {repo}", hdrs: hdrs), repo: repo);
     var chosen = "";
     var chosenRuns = "";
     foreach (head in heads) {
-        final checkRuns = readFor(prefix + "/commits/" + head + "/check-runs?per_page=100", what: "list the checks on {head}",
+        final checkRuns = fetchSetup(prefix + "/commits/" + head + "/check-runs?per_page=100", what: "list the checks on {head}",
             needs: "checks read on {repo}", hdrs: hdrs);
         final carries = carriesRequired(checkRuns, wanted: wanted);
         if (carries or (chosen == "" and serialize\jsonDecode(checkRuns).q("check_runs").listValue().len() > 0)) {
@@ -622,7 +622,7 @@ fun reportsOn(repo: str, base: str, wanted: [{str: str}], hdrs: {str: str}) > [{
     if (chosen == "") {
         return [<{str: str}>];
     }
-    final runs = readFor(prefix + "/actions/runs?head_sha=" + chosen + "&per_page=100", what: "list the workflow runs on {chosen}",
+    final runs = fetchSetup(prefix + "/actions/runs?head_sha=" + chosen + "&per_page=100", what: "list the workflow runs on {chosen}",
         needs: "actions read on {repo}", hdrs: hdrs);
     return reportsFrom(chosenRuns, runs: runs);
 }
@@ -646,7 +646,7 @@ fun rulesetNames(repo: str, checks: [{str: str}], hdrs: {str: str}) > {str: str}
     foreach (c in checks) {
         final ruleset = c["ruleset"] ?? "";
         if (ruleset != "" and names[ruleset] == null) {
-            names[ruleset] = ownRuleset(readFor(apiBase() + "/repos/" + repo + "/rulesets/" + ruleset, what: "read ruleset {ruleset}",
+            names[ruleset] = ownRuleset(fetchSetup(apiBase() + "/repos/" + repo + "/rulesets/" + ruleset, what: "read ruleset {ruleset}",
                 needs: "metadata read on {repo}", hdrs: hdrs));
         }
     }
@@ -664,7 +664,7 @@ fun ownRuleset(body: str) > str !> any {
     return r.q("name").stringValue();
 }
 
-fun eventsOf(reports: [{str: str}], context: str) > [str] {
+fun contextEvents(reports: [{str: str}], context: str) > [str] {
     final events = mut [<str>];
     foreach (r in reports) {
         if ((r["name"] ?? "") == context) {
@@ -772,7 +772,7 @@ fun setupFrom(at: {str: str}, repoBody: str, checks: [{str: str}], reports: [{st
     final credential = {"id": app["id"] ?? "", "name": app["name"] ?? ""};
     final required = mut [<any>];
     foreach (c in checks) {
-        required.append({"context": c["context"] ?? "", "integration": c["integration"] ?? "", "events": eventsOf(reports, context: c["context"] ?? "")});
+        required.append({"context": c["context"] ?? "", "integration": c["integration"] ?? "", "events": contextEvents(reports, context: c["context"] ?? "")});
     }
     final autoMerge = r.q("allow_auto_merge").booleanValue();
     final settings = [{"name": "allow_auto_merge", "value": "{autoMerge}", "want": "true"}];
@@ -824,14 +824,14 @@ fun id(b: serialize\Boxed) > str {
 fun queueLabel(pr: serialize\Boxed) > str {
     foreach (l in pr.q("labels").listValue()) {
         final name = l.q("name").stringValue();
-        if (name.startsWith(QUEUE_LABEL) and METHODS.indexOf(methodOf(name)) != null) {
+        if (name.startsWith(QUEUE_LABEL) and METHODS.indexOf(queueMethod(name)) != null) {
             return name;
         }
     }
     return "";
 }
 
-fun methodOf(label: str) > str {
+fun queueMethod(label: str) > str {
     return label.sub(QUEUE_LABEL.len());
 }
 
@@ -853,7 +853,7 @@ fun stackTops(pages: [str], base: str) > [{str: str}] !> any {
             if (label == "") {
                 continue;
             }
-            tops.append({"stack": sid, "number": "{pr.q("number").integerValue()}", "label": label, "method": methodOf(label)});
+            tops.append({"stack": sid, "number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
         }
     }
     return tops;
@@ -872,7 +872,7 @@ fun labeledSingles(pages: [str], base: str) > [{str: str}] !> any {
             }
             final label = queueLabel(pr);
             if (label != "") {
-                singles.append({"number": "{pr.q("number").integerValue()}", "label": label, "method": methodOf(label)});
+                singles.append({"number": "{pr.q("number").integerValue()}", "label": label, "method": queueMethod(label)});
             }
         }
     }
@@ -1206,7 +1206,7 @@ fun onlyIn(pages: [str], number: str, repo: str) > [any] !> any {
 // queued pull request.
 export fun list_changes(io: {str: any}) > any !> any {
     final hdrs = reading("list_changes");
-    final repo = repoOf(io);
+    final repo = remoteRepo(io);
     final base = "{io["base"] ?? ""}";
     final only = "{io["only"] ?? ""}";
     final pulls = openPulls(repo, hdrs: hdrs);
@@ -1351,7 +1351,7 @@ fun targetFrom(body: str, method: str) > {str: str} !> any {
     var m = pr.q("auto_merge").q("merge_method").stringValue().lower();
     final label = queueLabel(pr);
     if (m == "" and label != "" and id(pr.q("stack").q("id")) == "") {
-        m = methodOf(label);
+        m = queueMethod(label);
     }
     if (m == "") {
         m = method;
@@ -1639,7 +1639,7 @@ fun greenNext(body: str) > str !> any {
 // merges, and a success it carried then would count.
 export fun list_green(io: {str: any}) > any !> any {
     final hdrs = reading("list_green");
-    final repo = repoOf(io);
+    final repo = remoteRepo(io);
     final parts = repo.split("/");
     final green = mut [<any>];
     var after = "";
@@ -1964,7 +1964,7 @@ fun kickComment(io: {str: any}, web: str, requeue: str) > str !> any {
     }
     final source = "{io["source"] ?? ""}";
     if (source != "") {
-        final run = runOf(source);
+        final run = parseRunSpec(source);
         final host = apiHost(web);
         var repoArg = run["repo"] ?? "";
         if (host != "github.com") {
@@ -2193,8 +2193,8 @@ export fun mark(io: {str: any}) > bool !> any {
     return true;
 }
 
-// runOf reads "<owner>/<name>/runs/<id>" into {repo, id}, or throws.
-fun runOf(spec: str) > {str: str} !> any {
+// parseRunSpec reads "<owner>/<name>/runs/<id>" into {repo, id}, or throws.
+fun parseRunSpec(spec: str) > {str: str} !> any {
     final parts = spec.split("/");
     if (parts.len() != 4 or parts[0] == "" or parts[1] == "" or parts[2] != "runs" or (std\parseInt(parts[3]) ?? 0) < 1) {
         throw "github: a run is <owner>/<name>/runs/<id>, got '{spec}'";
@@ -2242,7 +2242,7 @@ fun originFrom(body: str, repo: str) > {str: any} !> any {
 // redirect to the storage host.
 export fun list_artifacts(io: {str: any}) > any !> any {
     final hdrs = reading("list_artifacts");
-    final run = runOf("{io["source"] ?? ""}");
+    final run = parseRunSpec("{io["source"] ?? ""}");
     final base = apiBase();
     final prefix = base + "/repos/" + (run["repo"] ?? "") + "/actions/runs/" + (run["id"] ?? "");
     final view = expect(get(prefix, hdrs: hdrs), status: 200, what: "run {run["id"] ?? ""}");
@@ -2967,7 +2967,7 @@ test "a long status description is cut to what GitHub accepts" {
 }
 
 test "a run names its repository and id, and its artifacts download from the API" {
-    final run = runOf("acme/widgets/runs/7");
+    final run = parseRunSpec("acme/widgets/runs/7");
     assert\equal(run["repo"], want: "acme/widgets", message: "repository");
     assert\equal(run["id"], want: "7", message: "run id");
     final got = artifactsFrom(`{"artifacts": [{"id": 100, "name": "mergequeue-plan"}]}`, base: "https://api.github.com", repo: "acme/widgets");
@@ -3044,8 +3044,8 @@ test "a check's events are the workflow runs that reported it" {
         {"name": "ci gate", "check_suite": {"id": 1}}, {"name": "ci gate", "check_suite": {"id": 2}},
         {"name": "ci gate", "check_suite": {"id": 1}}, {"name": "codecov", "check_suite": {"id": 5}}]}`,
         runs: `{"workflow_runs": [{"check_suite_id": 1, "event": "pull_request"}, {"check_suite_id": 2, "event": "push"}]}`);
-    assert\equal(eventsOf(reports, context: "ci gate"), want: ["pull_request", "push"], message: "each event once");
-    assert\equal(eventsOf(reports, context: "codecov").len(), want: 0, message: "another app's check has no workflow event");
+    assert\equal(contextEvents(reports, context: "ci gate"), want: ["pull_request", "push"], message: "each event once");
+    assert\equal(contextEvents(reports, context: "codecov").len(), want: 0, message: "another app's check has no workflow event");
 }
 
 test "the sampled heads are pull requests from this repository, newest first" {

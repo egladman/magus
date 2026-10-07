@@ -244,7 +244,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 						a.sym.Label = si.DisplayName
 					}
 					a.sym.SymbolKind = si.Kind.String()
-					a.sym.Signature = signatureOf(si)
+					a.sym.Signature = renderedSignature(si)
 				}
 				byKey[key] = a
 			}
@@ -310,9 +310,9 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	return out
 }
 
-// signatureOf returns the declaration an indexer rendered for a symbol, or "" when it
+// renderedSignature returns the declaration an indexer rendered for a symbol, or "" when it
 // rendered none.
-func signatureOf(si *scip.SymbolInformation) string {
+func renderedSignature(si *scip.SymbolInformation) string {
 	if sig := strings.TrimSpace(si.GetSignatureDocumentation().GetText()); sig != "" {
 		return sig
 	}

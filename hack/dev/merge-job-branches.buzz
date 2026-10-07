@@ -48,7 +48,7 @@ export object Conflict {
     theirs: [str],
 }
 
-fun cycleOf(names: [str], after: {str: [Edge]}) > str {
+fun findCycle(names: [str], after: {str: [Edge]}) > str {
     foreach (start in names) {
         final path = mut [start];
         var cur = start;
@@ -127,7 +127,7 @@ export fun order(cands: [Candidate], contains: {str: [str]}, base: str) > stack\
             foreach (c in cands) {
                 if (placed[c.branch] == null) { left.append(c.branch); }
             }
-            throw "merge-job-branches: the branches order in a cycle: {cycleOf(left, after: after)}";
+            throw "merge-job-branches: the branches order in a cycle: {findCycle(left, after: after)}";
         }
         final c = cands[pick];
         placed[c.branch] = true;
@@ -737,7 +737,7 @@ fun fixtureRows() > [JobRow] !> any {
 
 fun featBranch(row: JobRow) > str { return "feat/{row.id}"; }
 
-fun branchesOf(s: stack\BranchStack) > str {
+fun joinBranches(s: stack\BranchStack) > str {
     final names = mut [<str>];
     foreach (l in s.layers) { names.append(l.branch); }
     return names.join(" ");
@@ -756,7 +756,7 @@ test "jobs merge after the jobs they depend_on, and a dependency left out is nam
     final rows = fixtureRows();
     final cands = candidatesFromJobs(["docs", "api", "core"], rows: rows, branchOf: featBranch);
     final s = order(cands, contains: {<str: [str]>}, base: "main");
-    assert\equal(branchesOf(s), want: "feat/core feat/api feat/docs", message: "order");
+    assert\equal(joinBranches(s), want: "feat/core feat/api feat/docs", message: "order");
     assert\equal(s.layers[0].parent, want: "main", message: "the first layer goes on the base");
     assert\equal(s.layers[2].parent, want: "feat/api", message: "each later layer goes on the one merged before it");
     assert\equal(s.layers[2].reason, want: "after feat/api: its job depends_on api; depends_on elsewhere, which this merge leaves out", message: "reason");
@@ -771,7 +771,7 @@ test "a branch based on another merges after it, and ready branches keep their i
         Candidate{ branch = "gen-c", dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = [<str>] },
     ];
     final s = order(cands, contains: {"dep": ["gen-b"]}, base: "main");
-    assert\equal(branchesOf(s), want: "gen-b dep gen-c", message: "order");
+    assert\equal(joinBranches(s), want: "gen-b dep gen-c", message: "order");
     assert\equal(s.layers[1].reason, want: "after gen-b: based on it", message: "reason");
 }
 
@@ -874,7 +874,7 @@ fun fixtureRegenerate(dir: str) > void !> any {
     git(dir, args: ["add", "gen/list.txt"]);
 }
 
-fun planFor(root: str, names: [str]) > stack\BranchStack !> any {
+fun planStack(root: str, names: [str]) > stack\BranchStack !> any {
     final cands = mut [<Candidate>];
     foreach (n in names) {
         cands.append(Candidate{ branch = n, dependsOn = [<str>], goals = [<stack\CheckGoal>], paths = changedPaths(root, branch: n, base: "main") });
@@ -884,8 +884,8 @@ fun planFor(root: str, names: [str]) > stack\BranchStack !> any {
 
 test "a merge orders by ancestry, lets the driver settle generated output, and stops whole at a source conflict" {
     final root = fixtureRepo();
-    final plan = planFor(root, names: ["dep", "gen-b", "gen-c", "edit-a", "clash"]);
-    assert\equal(branchesOf(plan), want: "gen-b dep gen-c edit-a clash", message: "dep goes after the branch it is based on");
+    final plan = planStack(root, names: ["dep", "gen-b", "gen-c", "edit-a", "clash"]);
+    assert\equal(joinBranches(plan), want: "gen-b dep gen-c edit-a clash", message: "dep goes after the branch it is based on");
 
     final mainBefore = git(root, args: ["rev-parse", "main"]);
     var result = plan;
@@ -909,7 +909,7 @@ test "a merge orders by ancestry, lets the driver settle generated output, and s
 
 test "a clean merge regenerates once and commits the output apart" {
     final root = fixtureRepo();
-    final plan = planFor(root, names: ["gen-b", "gen-c", "dep", "edit-a"]);
+    final plan = planStack(root, names: ["gen-b", "gen-c", "dep", "edit-a"]);
     var listed = "";
     var dirty = [<str>];
     var subjects = [<str>];

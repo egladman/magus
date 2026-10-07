@@ -165,7 +165,7 @@ func TestShareRoutesHoldTheLoopbackNeeds(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"/api/v1/events", "/api/v1/insight"} {
-		assert.Equal(t, map[string]types.Need{path: pinnedNeeds[path]}, apiNeedsFor(path))
+		assert.Equal(t, map[string]types.Need{path: pinnedNeeds[path]}, requireAPINeeds(path))
 	}
 	assert.Empty(t, serviceRoute("/magus.nothing.v1alpha1.NoService/", http.NotFoundHandler()).Needs,
 		"an unknown service yields no Needs, which the share listener refuses to guard")

@@ -771,7 +771,7 @@ func TestDescribeMachineHoldersBoundsTheList(t *testing.T) {
 	assert.Equal(t, "nothing else holds a claim", describeMachineHolders(nil))
 }
 
-// TestMachineRefusalStatesItsExitCode pins the method the SERVER reads. exitCodeOf
+// TestMachineRefusalStatesItsExitCode pins the method the SERVER reads. mapExitCode
 // sees the concrete error and could go on matching the diagnostic code; a run the
 // server executes for an adopted client cannot, because the type does not survive the
 // socket. Without the method the refusal exits 75 alone and 1 under a server, which is

@@ -153,7 +153,7 @@ func TestConsultationOfReadsTheVerbAndItsSubject(t *testing.T) {
 		{cmd: "rg query internal", ok: false},
 		{cmd: "", ok: false},
 	} {
-		verb, subject, ok := consultationOf(tc.cmd)
+		verb, subject, ok := parseConsultation(tc.cmd)
 		assert.Equal(t, tc.ok, ok, tc.cmd)
 		assert.Equal(t, tc.verb, verb, tc.cmd)
 		assert.Equal(t, tc.subject, subject, tc.cmd)
@@ -167,7 +167,7 @@ func TestConsultationOfBoundsTheSubject(t *testing.T) {
 	for len(long) < maxSubjectLen*2 {
 		long += "ünïcödé"
 	}
-	_, subject, ok := consultationOf("magus explain " + long)
+	_, subject, ok := parseConsultation("magus explain " + long)
 	require.True(t, ok)
 	assert.LessOrEqual(t, len(subject), maxSubjectLen)
 	assert.True(t, utf8.ValidString(subject))

@@ -1058,10 +1058,10 @@ func TestTheCacheDirCarriesOnlyTheSpellsCachesOutOfTheBox(t *testing.T) {
 	home, tmp := newBox(t)
 	decl := goCachingDecl(goroot)
 
-	queued, err := HookEnv{Spells: decl}.of(home, tmp)
+	queued, err := HookEnv{Spells: decl}.assignments(home, tmp)
 	require.NoError(t, err)
 	assert.Equal(t, boxEnv(home, tmp, ""), queued, "the queue's box keeps every cache in it")
-	carried, err := HookEnv{Spells: decl, Cache: dir}.of(home, tmp)
+	carried, err := HookEnv{Spells: decl, Cache: dir}.assignments(home, tmp)
 	require.NoError(t, err)
 	assert.Equal(t, append(boxEnv(home, tmp, dir), "GOCACHE="+gocache, "GOMODCACHE="+gomodcache), carried)
 

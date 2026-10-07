@@ -99,7 +99,7 @@ func runCLI() int {
 	if err := config.MisconfiguredEnv(os.Environ()); err != nil {
 		switch sub, subArgs := peekSub(args); sub {
 		case "shell":
-			return exitCodeOf(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
+			return mapExitCode(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
 			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
@@ -163,7 +163,7 @@ func runCLI() int {
 	if exitCode >= 0 {
 		cleanup()
 		code := withInterrupt(exitCode, nil, interrupted)
-		pipeStageOf(rootCtx).linger()
+		pipeStageFromContext(rootCtx).linger()
 		recordPipeExit(args, code, interrupted)
 		return code
 	}
@@ -177,7 +177,7 @@ func runCLI() int {
 	default:
 		dispatchErr = dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs)
 	}
-	code := exitCodeOf(dispatchErr)
+	code := mapExitCode(dispatchErr)
 	// Offer the run's pinned failures for rerun or inspection, while they are
 	// still on screen. A no-op unless a run left failures on a terminal, so
 	// every other command reaches it and returns immediately.
@@ -196,12 +196,12 @@ func runCLI() int {
 	// never an upstream's.
 	if code == 0 {
 		if err := settlePipeline(res.rootCtx, args); err != nil {
-			dispatchErr, code = err, exitCodeOf(err)
+			dispatchErr, code = err, mapExitCode(err)
 		}
 	}
 	cleanup()
 	code = withInterrupt(code, dispatchErr, interrupted)
-	pipeStageOf(rootCtx).linger()
+	pipeStageFromContext(rootCtx).linger()
 	recordPipeExit(args, code, interrupted)
 	return code
 }
@@ -209,13 +209,13 @@ func runCLI() int {
 // withInterrupt reports a signal-stopped run as the conventional 128+N.
 //
 // A cancelled run's targets die with `context canceled`, which reaches
-// [exitCodeOf] as a nil error, so without this the process printed [fail] and
+// [mapExitCode] as a nil error, so without this the process printed [fail] and
 // exited 0, and `magus run test . && deploy` deployed after a Ctrl+C.
 //
 // Only when code == 0, so a command that already failed for its own reason keeps
 // the more specific code, with one exception. A command that RETURNS the
 // cancellation instead of swallowing it (awaitInvocation returns ctx.Err()) reached
-// exitCodeOf as a generic failure and reported 1, which says the WORK failed about a
+// mapExitCode as a generic failure and reported 1, which says the WORK failed about a
 // run the user stopped. Still gated on interrupted(), so a deadline or a
 // caller-cancelled context (neither of which is a signal) keeps its own code.
 func withInterrupt(code int, err error, interrupted func() (syscall.Signal, bool)) int {
@@ -1493,8 +1493,8 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
-// exitCodeOf maps a dispatch error to an exit code; errSilent means the caller already printed.
-func exitCodeOf(err error) int {
+// mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
+func mapExitCode(err error) int {
 	if err == nil {
 		return 0
 	}

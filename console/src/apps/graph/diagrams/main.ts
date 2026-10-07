@@ -15,7 +15,7 @@ import {
   type RenderedDiagram,
 } from "./api";
 import { decodeFigureLink } from "./figure-link";
-import { attachFigure, edgesOf, neighbours, type FigureController } from "./interact";
+import { attachFigure, readEdges, neighbours, type FigureController } from "./interact";
 import {
   EMPTY_LENS,
   fragmentForView,
@@ -34,7 +34,7 @@ import {
   figureForLink,
   linkedRows,
   relayout,
-  relayoutOf,
+  toRelayout,
   IMPORTS,
   type BuzzRuntime,
   type FigureMeta,
@@ -216,8 +216,8 @@ export function build(host: HTMLElement): DiagramsRefs {
   };
 }
 
-// claimFor reads the kind from the figure id, as the handler's parseLens does.
-function claimFor(id: string): string {
+// parseClaim reads the kind from the figure id, as the handler's parseLens does.
+function parseClaim(id: string): string {
   return id.split(":")[0] === IMPORTS ? IMPORTS : "flow";
 }
 
@@ -279,7 +279,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const onFocusChange = (id: string | null): void => {
     refs.clearFocus.disabled = id === null;
     const svg = refs.frame.querySelector("svg");
-    const lit = id !== null && svg ? neighbours(edgesOf(svg), id) : new Set<string>();
+    const lit = id !== null && svg ? neighbours(readEdges(svg), id) : new Set<string>();
     markListFocus(refs.nodes, id, lit);
   };
 
@@ -336,7 +336,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     clearNotices();
     const sameFigure = base?.id === id && controller !== null;
-    const claim = claimFor(id);
+    const claim = parseClaim(id);
     const rendered: RenderedDiagram = {
       ...read.value,
       nodes: drawnNodes(read.value.nodes, claim),
@@ -355,7 +355,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       base = {
         id,
         rendered,
-        decl: { nodes: rendered.nodes, edges: svg ? edgesOf(svg) : [] },
+        decl: { nodes: rendered.nodes, edges: svg ? readEdges(svg) : [] },
         meta: {
           id,
           title: rendered.title,
@@ -554,7 +554,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       refuse("The runtime that draws this figure did not load", loadError);
       return;
     }
-    const out = relayoutOf(runtime.drawFigure(figureForLink(read.figure), ""));
+    const out = toRelayout(runtime.drawFigure(figureForLink(read.figure), ""));
     if (out.kind !== "ok") {
       refuse("This figure could not be drawn", out.detail);
       return;

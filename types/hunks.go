@@ -66,8 +66,8 @@ var typescriptFuncname = strings.Join([]string{
 	`^[[:blank:]]+(((public|private|protected|static|readonly|override|async|get|set)[[:blank:]]+)*\*?[A-Za-z_$#][A-Za-z0-9_$]*[[:blank:]]*(<[^>]*>)?[[:blank:]]*\([^;]*\)[[:blank:]]*(:.*)?\{[[:blank:]]*)$`,
 }, "\n")
 
-// DiffDriverFor returns the driver p's base name routes to, and false when none does.
-func DiffDriverFor(p string) (DiffDriver, bool) {
+// MatchDiffDriver returns the driver p's base name routes to, and false when none does.
+func MatchDiffDriver(p string) (DiffDriver, bool) {
 	base := path.Base(p)
 	for _, d := range DiffDrivers {
 		for _, g := range d.Globs {

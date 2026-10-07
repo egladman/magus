@@ -49,16 +49,16 @@ export fun trips(reached: int, total: int, share: double) > bool {
     return reached >= total * share;
 }
 
-// figure is the console link for graphOf's graph, "" when the link would be too long for a
+// figure is the console link for reachGraph's graph, "" when the link would be too long for a
 // comment.
 export fun figure(base: str, reached: [str], seeds: [str], dependsOn: {str: [str]}) > str !> any {
-    final g = graphOf(reached, seeds: seeds, dependsOn: dependsOn);
+    final g = reachGraph(reached, seeds: seeds, dependsOn: dependsOn);
     return figurelink\figureLink(base, title: g.title, nodes: g.nodes, edges: g.edges);
 }
 
-// graphOf is the reached projects, the ones the change edited marked and the dependencies
+// reachGraph is the reached projects, the ones the change edited marked and the dependencies
 // among them drawn. A dependency outside the set is not drawn.
-export fun graphOf(reached: [str], seeds: [str], dependsOn: {str: [str]}) > figurelink\FigureGraph {
+export fun reachGraph(reached: [str], seeds: [str], dependsOn: {str: [str]}) > figurelink\FigureGraph {
     final nodes = mut [<figurelink\FigureNode>];
     foreach (path in reached) {
         nodes.append(figurelink\FigureNode{ id = path, label = path, seed = seeds.indexOf(path) != null });
@@ -152,7 +152,7 @@ fun main() > void !> any {
 
     // Only the reached projects, so the picture is this change's reach and not the whole
     // workspace - the workspace-wide graph is already rendered in MAGUS.md.
-    final g = graphOf(reached, seeds: seeds, dependsOn: magus\projectGraph().dependsOn);
+    final g = reachGraph(reached, seeds: seeds, dependsOn: magus\projectGraph().dependsOn);
     final link = figurelink\figureLink(advice\input("console-base"), title: g.title, nodes: g.nodes, edges: g.edges);
 
     advice\publish(repo, pr: pr, name: section,

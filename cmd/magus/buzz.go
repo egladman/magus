@@ -263,7 +263,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	// emits records downstream. While a magus reads its stdout, stdout carries records
 	// alone and what the script prints goes to stderr, as a run's prose does.
 	scriptOut := io.Writer(os.Stdout)
-	if pipeStageOf(ctx).writesRecords() {
+	if pipeStageFromContext(ctx).writesRecords() {
 		scriptOut = os.Stderr
 	}
 	records := io.Writer(os.Stdout)

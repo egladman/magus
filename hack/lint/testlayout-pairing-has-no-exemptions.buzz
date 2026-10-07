@@ -57,7 +57,7 @@ fun named(list: serialize\Boxed, name: str) > bool {
 fun configFindings(f: Path, found: mut [Finding]) > void !> any {
     final src = support\read(f);
     final doc = serialize\Boxed.init(yaml\parse(src));
-    final line = support\lineOf(src, needle: LINTER);
+    final line = support\findLine(src, needle: LINTER);
     if (!named(doc.q(["linters", "enable"]), name: LINTER)) {
         found.append(Finding{ path = f.value, line = line,
             message = "linters.enable leaves out testpair, so no test file is held to a pair",
@@ -72,12 +72,12 @@ fun configFindings(f: Path, found: mut [Finding]) > void !> any {
             fix = "Delete the settings block under linters.settings.custom.testpair." });
     }
     if (doc.q(["linters", "exclusions", "paths"]).listValue().len() > 0) {
-        found.append(Finding{ path = f.value, line = support\lineOf(src, needle: "\n    paths:"),
+        found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\n    paths:"),
             message = "linters.exclusions.paths excludes every linter, testpair included, from those paths",
             fix = "Scope the exclusion to the linters it is for with a rules entry naming them." });
     }
     if (support\scalar(doc.q(["run", "tests"])) == "false") {
-        found.append(Finding{ path = f.value, line = support\lineOf(src, needle: "\n  tests:"),
+        found.append(Finding{ path = f.value, line = support\findLine(src, needle: "\n  tests:"),
             message = "run.tests is false, so no test file is analyzed and none is held to a pair",
             fix = "Delete run.tests." });
     }

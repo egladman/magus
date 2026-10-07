@@ -83,7 +83,7 @@ export fun findings(outputs: [str], shipped: [str], twinSuffix: str, magusfile: 
     if (outputs.len() == 0) {
         return [Finding{ path = "magusfile.buzz", message = "declares no installed-skill outputs" }];
     }
-    final line = support\lineOf(magusfile, needle: "export fun skills_generate(");
+    final line = support\findLine(magusfile, needle: "export fun skills_generate(");
     final found = mut [<Finding>];
     foreach (name in support\sorted(shipped)) {
         foreach (dest in DESTINATIONS) {
@@ -114,7 +114,7 @@ export fun findings(outputs: [str], shipped: [str], twinSuffix: str, magusfile: 
     return found;
 }
 
-fun outputsFor(names: [str]) > [str] {
+fun skillOutputGlobs(names: [str]) > [str] {
     final globs = mut [<str>];
     foreach (dest in DESTINATIONS) {
         foreach (name in names) {
@@ -125,12 +125,12 @@ fun outputsFor(names: [str]) > [str] {
 }
 
 test "every shipped skill and its twin declared, no hand-authored one, passes" {
-    assert\equal(findings(outputsFor(["magus-run", "magus-query"]), shipped: ["magus-run", "magus-query"], twinSuffix: "-full", magusfile: "").len(),
+    assert\equal(findings(skillOutputGlobs(["magus-run", "magus-query"]), shipped: ["magus-run", "magus-query"], twinSuffix: "-full", magusfile: "").len(),
         want: 0, message: "clean");
 }
 
 test "a shipped skill with no output is reported at skills_generate" {
-    final got = findings(outputsFor(["magus-run"]), shipped: ["magus-run", "magus-new"], twinSuffix: "-full",
+    final got = findings(skillOutputGlobs(["magus-run"]), shipped: ["magus-run", "magus-new"], twinSuffix: "-full",
         magusfile: "x\nexport fun skills_generate(ctx: magus\\Context) > void \{}\n");
     assert\equal(got.len(), want: 6, message: "three destinations, each with its twin");
     assert\equal(got[0].message, want: "internal/agent/skills ships magus-new, but no declared output covers .claude/skills/magus-new/SKILL.md", message: "message");

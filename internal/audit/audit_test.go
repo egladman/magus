@@ -221,12 +221,12 @@ func TestRootProjectTreatsAllOthersAsDescendants(t *testing.T) {
 	child := &types.Project{Path: "api", Dir: childDir}
 	ws := &fakeWS{projects: []*types.Project{root, child}}
 
-	descs := descendantsOf(ws, root, nil)
+	descs := listDescendants(ws, root, nil)
 	require.Len(t, descs, 1, "root project should see api as descendant; got %v", descs)
 	assert.Equal(t, "api", descs[0].path, "root project should see api as descendant")
 
 	// Sibling-of-root case: child has no descendants.
-	descs = descendantsOf(ws, child, nil)
+	descs = listDescendants(ws, child, nil)
 	assert.Empty(t, descs, "non-root leaf should have no descendants")
 }
 
@@ -374,7 +374,7 @@ func BenchmarkSnapshotAndDiff(b *testing.B) {
 
 // TestMarkedMidRunIsNotAViolation covers the ordering the descendant audit lives or
 // dies by: a project reached through a cross-project dependency is marked WHILE the
-// parent's body runs, which is after descendantsOf has already chosen what to watch.
+// parent's body runs, which is after listDescendants has already chosen what to watch.
 // Excluding only at Begin meant the mark always arrived too late, and the child's own
 // output was reported as the parent writing across a boundary, which is what made
 // `magus run build .` fail on a tree where nothing was wrong.

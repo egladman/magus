@@ -103,7 +103,7 @@ func Assess(ctx context.Context, in Inputs) types.RiskReport {
 	for _, p := range in.Projects {
 		a.projects[p.Path] = p
 	}
-	a.chain = a.chainOf(in.Target)
+	a.chain = a.needsChain(in.Target)
 
 	verdicts := make([]verdict, len(in.Delta.Paths))
 	for i, c := range in.Delta.Paths {
@@ -240,9 +240,9 @@ func readerList(rs []reader) string {
 	return strings.Join(names, ", ")
 }
 
-// chainOf walks target's ctx.needs chain from every project that has it, across
+// needsChain walks target's ctx.needs chain from every project that has it, across
 // projects, into the (project, target) pairs it reaches.
-func (a *assessment) chainOf(target string) map[[2]string]bool {
+func (a *assessment) needsChain(target string) map[[2]string]bool {
 	seen := map[[2]string]bool{}
 	var walk func(project, target string)
 	walk = func(project, target string) {

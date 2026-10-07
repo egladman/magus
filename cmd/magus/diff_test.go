@@ -511,14 +511,14 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 	affected := []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go"}}, {Path: "docs"}}
 
 	t.Run("no history at all", func(t *testing.T) {
-		assert.Nil(t, impactCostOf(&forecast.History{}, affected))
+		assert.Nil(t, estimateImpactCost(&forecast.History{}, affected))
 	})
 
 	t.Run("a project below the sample floor is not a measurement", func(t *testing.T) {
 		h := &forecast.History{Projects: map[string]map[string]forecast.Stats{
 			"root": {"ci": {P75Ms: 90_000, Samples: impactMinSamples - 1}},
 		}}
-		assert.Nil(t, impactCostOf(h, affected))
+		assert.Nil(t, estimateImpactCost(h, affected))
 	})
 
 	t.Run("only the measured projects are counted, and the rest are not guessed at", func(t *testing.T) {
@@ -526,7 +526,7 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 			"root": {"ci": {P75Ms: 90_000, Samples: 12}},
 			"docs": {"lint": {P75Ms: 5_000, Samples: 40}},
 		}}
-		c := impactCostOf(h, affected)
+		c := estimateImpactCost(h, affected)
 		require.NotNil(t, c)
 		require.Len(t, c.Projects, 1, "docs declares no ci or test target the history has timed")
 		assert.Equal(t, "root", c.Projects[0].Project)
@@ -542,7 +542,7 @@ func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
 				"test": {P75Ms: 30_000, Samples: 99},
 			},
 		}}
-		c := impactCostOf(h, affected)
+		c := estimateImpactCost(h, affected)
 		require.NotNil(t, c)
 		assert.Equal(t, "ci", c.Projects[0].Target)
 	})
@@ -559,7 +559,7 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 	}}
 	affected := []types.ImpactProject{{Path: "root"}, {Path: "docs"}, {Path: "never-committed"}}
 
-	got := impactOwnersOf(own, affected)
+	got := listImpactOwners(own, affected)
 	require.Len(t, got, 1)
 	assert.Equal(t, "root", got[0].Project)
 	assert.Equal(t, "alice", got[0].Primary)
@@ -569,9 +569,9 @@ func TestImpactOwnersJoinOnlyTheReach(t *testing.T) {
 // own idea of the blast radius: types.Diff has carried these two fields all along and this
 // section only prints them.
 func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
-	assert.Nil(t, impactReachOf(types.Diff{}), "an empty closure is a state, not a lookup failure")
+	assert.Nil(t, computeImpactReach(types.Diff{}), "an empty closure is a state, not a lookup failure")
 
-	r := impactReachOf(types.Diff{
+	r := computeImpactReach(types.Diff{
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})

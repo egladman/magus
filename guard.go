@@ -825,10 +825,10 @@ func (m *Magus) GuardPolicy() GuardPolicy {
 	if m.wsReg != nil {
 		write = m.wsReg.WriteRule() != nil
 	}
-	return guardPolicyOf(m.ShellRules(), m.SpawnRule() != nil, m.CommandRule() != nil, write, sources)
+	return buildGuardPolicy(m.ShellRules(), m.SpawnRule() != nil, m.CommandRule() != nil, write, sources)
 }
 
-func guardPolicyOf(rules []workspace.ShellRule, spawn, command, write bool, sources []interp.SourceFile) GuardPolicy {
+func buildGuardPolicy(rules []workspace.ShellRule, spawn, command, write bool, sources []interp.SourceFile) GuardPolicy {
 	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write}
 	if len(rules) == 0 && !spawn && !command && !write {
 		return policy
@@ -949,7 +949,7 @@ func (g *GuardRules) WriteRule() workspace.WriteRule { return g.registry.WriteRu
 
 // Policy describes the rules for the trail's lineage, as Magus.GuardPolicy does.
 func (g *GuardRules) Policy() GuardPolicy {
-	return guardPolicyOf(g.ShellRules(), g.SpawnRule() != nil, g.CommandRule() != nil, g.WriteRule() != nil, g.sources)
+	return buildGuardPolicy(g.ShellRules(), g.SpawnRule() != nil, g.CommandRule() != nil, g.WriteRule() != nil, g.sources)
 }
 
 // ApprovedSpawnRule is Magus.ApprovedSpawnRule for these rules. It costs one VCS status

@@ -59,7 +59,7 @@ func runCLIFlags(args []string) error {
 
 	for _, c := range cli.All {
 		walkCommands(c.Name, c, func(path string, cmd cli.Command) {
-			for _, mode := range modesOf(cmd.Flags) {
+			for _, mode := range flagModes(cmd.Flags) {
 				name := path
 				if mode != "" {
 					name += " " + mode
@@ -86,10 +86,10 @@ func walkCommands(path string, c cli.Command, visit func(string, cli.Command)) {
 	}
 }
 
-// modesOf lists the distinct sub-modes declared across a command's flags, base
+// flagModes lists the distinct sub-modes declared across a command's flags, base
 // ("") first. A command whose flags declare no Modes yields just the base, so it
 // keeps a single binder.
-func modesOf(flags []cli.Flag) []string {
+func flagModes(flags []cli.Flag) []string {
 	out := []string{""}
 	seen := map[string]bool{"": true}
 	for _, f := range flags {

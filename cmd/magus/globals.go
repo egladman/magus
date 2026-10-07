@@ -224,7 +224,7 @@ func outputOptionsOrDefault() (OutputOptions, error) {
 	return ResolveOutput(global.output)
 }
 
-// isFlagNamed and flagValueOf recognize a flag the way Go's flag package does,
+// isFlagNamed and parseFlagValue recognize a flag the way Go's flag package does,
 // for the few readers that scan a raw argument tail instead of a FlagSet.
 //
 // Go accepts all FOUR spellings of every flag (`-f v`, `--f v`, `-f=v`,
@@ -243,9 +243,9 @@ func isFlagNamed(arg, name string) bool {
 	return arg == "-"+name || arg == "--"+name
 }
 
-// flagValueOf returns the value of an `-name=value` or `--name=value` argument,
+// parseFlagValue returns the value of an `-name=value` or `--name=value` argument,
 // or "" when arg is not that flag.
-func flagValueOf(arg, name string) string {
+func parseFlagValue(arg, name string) string {
 	for _, prefix := range []string{"-" + name + "=", "--" + name + "="} {
 		if v, ok := strings.CutPrefix(arg, prefix); ok {
 			return v

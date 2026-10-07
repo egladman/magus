@@ -794,7 +794,7 @@ func discardingRedirect(redirs []*syntax.Redirect, runWork bool) *syntax.Redirec
 		target := redirectWord(r)
 		switch r.Op {
 		case syntax.RdrAll, syntax.AppAll, syntax.RdrAllClob, syntax.AppAllClob:
-			end := streamEnd{sink: sinkFor(target), by: r}
+			end := streamEnd{sink: classifySink(target), by: r}
 			fds["1"], fds["2"] = end, end
 			continue
 		case syntax.DplOut:
@@ -808,12 +808,12 @@ func discardingRedirect(redirs []*syntax.Redirect, runWork bool) *syntax.Redirec
 				continue
 			}
 			if r.N == nil {
-				end := streamEnd{sink: sinkFor(target), by: r}
+				end := streamEnd{sink: classifySink(target), by: r}
 				fds["1"], fds["2"] = end, end
 				continue
 			}
 		}
-		fds[redirectFd(r)] = streamEnd{sink: sinkFor(target), by: r}
+		fds[redirectFd(r)] = streamEnd{sink: classifySink(target), by: r}
 	}
 	for _, fd := range []string{"1", "2"} {
 		if fds[fd].sink == sinkFile {
@@ -845,9 +845,9 @@ func redirectWord(r *syntax.Redirect) string {
 	return r.Word.Lit()
 }
 
-// sinkFor classifies a redirect target. A computed target is a file: it names somewhere
+// classifySink classifies a redirect target. A computed target is a file: it names somewhere
 // that is not the console, and the guard cannot see where.
-func sinkFor(target string) sinkKind {
+func classifySink(target string) sinkKind {
 	switch target {
 	case "/dev/null":
 		return sinkNull
@@ -2696,7 +2696,7 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
-		return ShellVerdict{Deny: denyExitStatusEchoFor(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+		return ShellVerdict{Deny: exitEchoDenial(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
 	}
 	if timeoutAdvice.Context != "" {
 		return timeoutAdvice

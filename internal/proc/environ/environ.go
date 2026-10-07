@@ -103,8 +103,8 @@ func Lookup(ctx context.Context, name string) (string, bool) {
 	return os.LookupEnv(name)
 }
 
-// Of is os.Environ as the run on ctx sees it.
-func Of(ctx context.Context) []string {
+// List is os.Environ as the run on ctx sees it.
+func List(ctx context.Context) []string {
 	readlog.EnvAll(ctx)
 	return From(ctx).Apply(os.Environ())
 }

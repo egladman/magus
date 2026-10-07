@@ -152,7 +152,7 @@ func packageDirs(sources []string, projects []types.TargetGraphProject, layers m
 	}
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
 		n := nodes[id]
-		if layer, ok := types.LayerFor(layers, n.Source); ok {
+		if layer, ok := types.ResolveLayer(layers, n.Source); ok {
 			if n.Attrs == nil {
 				n.Attrs = map[string]string{}
 			}
@@ -178,7 +178,7 @@ func majorityLanguage(counts map[string]int) string {
 	return best
 }
 
-// unionLayers joins every project's "layers" into the one map types.LayerFor reads. A
+// unionLayers joins every project's "layers" into the one map types.ResolveLayer reads. A
 // directory sits in one layer, so one declared under two names, in any projects, is
 // LayerDeclarationInvalid.
 func unionLayers(byProject map[string]map[string]string) (map[string]string, error) {

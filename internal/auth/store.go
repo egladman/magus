@@ -527,7 +527,7 @@ func writeTokenRecord(dir string, t Token) error {
 // BearerRejected). The token takes the code's name when it is still free.
 func (s *Store) Redeem(code string) (secret string, rec Token, err error) {
 	notFound := types.WrapDiagnostic(types.BearerRejected, ErrTokenNotFound, "auth: the link code is wrong, expired, or already used; open a fresh link")
-	if kind, ok := kindOf(code); !ok || kind != types.KindExchange {
+	if kind, ok := credentialKind(code); !ok || kind != types.KindExchange {
 		return "", Token{}, notFound
 	}
 	st := s.state()
@@ -599,7 +599,7 @@ func (s *Store) Revoke(revoker types.Grant, q string) (Token, error) {
 // mgs_ token is refused before any hashing, so an operator, share or exchange secret never
 // matches here even if a record carried its hash.
 func (s *Store) Lookup(presented string) (Token, bool) {
-	if kind, ok := kindOf(presented); !ok || kind != types.KindStored {
+	if kind, ok := credentialKind(presented); !ok || kind != types.KindStored {
 		return Token{}, false
 	}
 	st := s.state()

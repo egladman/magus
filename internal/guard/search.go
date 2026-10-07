@@ -119,7 +119,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		if !hint.IsSearchTool(c.Name) {
 			continue
 		}
-		switch searchReachOf(deps, dir, typed, c) {
+		switch placeSearch(deps, dir, typed, c) {
 		case reachNone:
 			continue
 		case reachFile:
@@ -167,9 +167,9 @@ const (
 	reachTree                    // a directory, a glob, or several files: a search
 )
 
-// searchReachOf places one search. typed is the command as written, c the same command read
+// placeSearch places one search. typed is the command as written, c the same command read
 // as a search, which differs for `git grep`.
-func searchReachOf(deps Dependencies, dir string, typed, c hint.Invocation) searchReach {
+func placeSearch(deps Dependencies, dir string, typed, c hint.Invocation) searchReach {
 	paths := invocationPaths(c)
 	switch hint.Classify(c) {
 	case hint.ClassSearchSource:

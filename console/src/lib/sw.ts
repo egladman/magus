@@ -52,8 +52,8 @@ export function registerServiceWorker(
 
 const CACHE_PREFIX = "magus-console-";
 
-// buildIdOf reads the BUILD_ID a sw.js source was stamped with, or null for an unstamped one.
-export function buildIdOf(workerSource: string): string | null {
+// parseBuildId reads the BUILD_ID a sw.js source was stamped with, or null for an unstamped one.
+export function parseBuildId(workerSource: string): string | null {
   const m = workerSource.match(/const BUILD_ID = "([^"]+)";/);
   return m && m[1] !== "unstamped" ? m[1] : null;
 }
@@ -61,7 +61,7 @@ export function buildIdOf(workerSource: string): string | null {
 // servedBuildId fetches sw.js past every cache (the worker never serves it) and reads its build.
 export async function servedBuildId(workerUrl: URL | string): Promise<string | null> {
   const res = await fetch(workerUrl, { cache: "no-store" });
-  return res.ok ? buildIdOf(await res.text()) : null;
+  return res.ok ? parseBuildId(await res.text()) : null;
 }
 
 // cachedBuildId is the build the service worker served this page from, or null when no worker

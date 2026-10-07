@@ -540,7 +540,7 @@ fun resolved() > str {
 // See MGS1028.
 final section_order = ["unclaimed"];
 
-fun rankOf(name: str) > int {
+fun sectionRank(name: str) > int {
     var i = 0;
     foreach (ranked in section_order) {
         if (ranked == name) { return i; }
@@ -554,7 +554,7 @@ fun rankOf(name: str) > int {
 // It reads placement off the markers rather than tracking positions, because the comment
 // it splices into was composed by one separate script run per advisor.
 fun rankedInsert(text: str, name: str) > int? {
-    final mine = rankOf(name);
+    final mine = sectionRank(name);
     if (mine == section_order.len()) { return null; }
     final prefix = "<!-- magus:advice:";
     var scan = 0;
@@ -570,7 +570,7 @@ fun rankedInsert(text: str, name: str) > int? {
         final marker = rest.sub(0, len: closes);
         final opens = marker.indexOf(":begin");
         if (opens == null) { continue; }
-        if (rankOf(marker.sub(0, len: opens)) > mine) { return at; }
+        if (sectionRank(marker.sub(0, len: opens)) > mine) { return at; }
     }
 }
 

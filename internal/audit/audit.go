@@ -86,7 +86,7 @@ func Begin(ctx context.Context, p *types.Project, write bool) *Audit {
 	if ws == nil {
 		return nil
 	}
-	descs := descendantsOf(ws, p, types.ActiveDispatchFromContext(ctx))
+	descs := listDescendants(ws, p, types.ActiveDispatchFromContext(ctx))
 	if len(descs) == 0 {
 		return nil
 	}
@@ -126,7 +126,7 @@ func Replayed(ctx context.Context, p *types.Project, target string, written []st
 	if ws == nil {
 		return nil
 	}
-	descs := descendantsOf(ws, p, types.ActiveDispatchFromContext(ctx))
+	descs := listDescendants(ws, p, types.ActiveDispatchFromContext(ctx))
 	if len(descs) == 0 {
 		return nil
 	}
@@ -142,7 +142,7 @@ func Replayed(ctx context.Context, p *types.Project, target string, written []st
 	return report(ctx, p, target, descs, changes, writer)
 }
 
-func descendantsOf(ws types.WorkspaceReader, parent *types.Project, active *types.ActiveDispatch) []descendant {
+func listDescendants(ws types.WorkspaceReader, parent *types.Project, active *types.ActiveDispatch) []descendant {
 	isRoot := parent.Path == "" || parent.Path == "."
 	prefix := parent.Path + "/"
 	all := ws.All()
@@ -307,8 +307,8 @@ func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 // reportCap bounds each reported path list.
 const reportCap = 50
 
-// dirOf returns the on-disk dir recorded for a descendant path.
-func dirOf(descs []descendant, path string) (string, bool) {
+// descendantDir returns the on-disk dir recorded for a descendant path.
+func descendantDir(descs []descendant, path string) (string, bool) {
 	for _, d := range descs {
 		if d.path == path {
 			return d.dir, true
@@ -364,7 +364,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 	if project == "" {
 		project = "."
 	}
-	// Re-check the dispatch set HERE, not at Begin. descendantsOf runs before the
+	// Re-check the dispatch set HERE, not at Begin. listDescendants runs before the
 	// target body, so a project reached through a cross-project dependency has not been
 	// marked yet; by the time its writes appear it is running a target of its own, and
 	// those writes are its business. Checking only up front blamed the parent for them.
@@ -375,7 +375,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 		if active.Has(desc) {
 			continue
 		}
-		if d, ok := dirOf(descs, desc); ok && active.Has(d) {
+		if d, ok := descendantDir(descs, desc); ok && active.Has(d) {
 			continue
 		}
 		summary := changeSummary(b)

@@ -75,7 +75,7 @@ func (t ShareToken) Verify(presented string, now time.Time) bool {
 	if t.SHA256 == "" || t.Expired(now) {
 		return false
 	}
-	if kind, ok := kindOf(presented); !ok || kind != types.KindShare {
+	if kind, ok := credentialKind(presented); !ok || kind != types.KindShare {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(t.SHA256), []byte(digest(presented))) == 1

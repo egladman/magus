@@ -252,7 +252,7 @@ func EnvRequire(ctx context.Context, name string) (string, error) {
 // It reports no MGS2013: that would name every withheld variable at once, where a read
 // names only the one the code asked for.
 func EnvList(ctx context.Context) (map[string]string, error) {
-	raw := environ.Of(ctx)
+	raw := environ.List(ctx)
 	p := sandbox.PolicyFromContext(ctx)
 	m := make(map[string]string, len(raw))
 	for _, kv := range raw {

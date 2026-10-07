@@ -1444,7 +1444,7 @@ var gitDriftHooks = []string{"post-commit", "pre-push"}
 // install cannot pair one's attributes with the other's registration. A root outside any
 // git repository is an error.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, globs types.MergeDriverGlobs) error {
-	paths, ok, err := gitRepoPathsOf(ctx, root)
+	paths, ok, err := resolveGitRepoPaths(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -1703,7 +1703,7 @@ func (v gitVCS) CheckMergeDriver(ctx context.Context, root string) (bool, error)
 // missing, since Ensure overwrites it. Nil means complete, or root is not in a git
 // repository. A torn managed section is an error.
 func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
-	if _, ok, err := gitRepoPathsOf(ctx, root); err != nil || !ok {
+	if _, ok, err := resolveGitRepoPaths(ctx, root); err != nil || !ok {
 		return nil, err
 	}
 	path := filepath.Join(root, ".gitattributes")
@@ -2086,9 +2086,9 @@ type gitRepoPaths struct {
 	commonDir string
 }
 
-// gitRepoPathsOf resolves root's gitRepoPaths in one git call. ok is false when root is
+// resolveGitRepoPaths resolves root's gitRepoPaths in one git call. ok is false when root is
 // not inside a git repository; any other failure, cancellation included, is an error.
-func gitRepoPathsOf(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
+func resolveGitRepoPaths(ctx context.Context, root string) (paths gitRepoPaths, ok bool, err error) {
 	// The C locale keeps git's "not a git repository" wording what the test below reads.
 	cmd := gitExec(ctx, root, gitOpts{Env: []string{"LC_ALL=C"}}, "rev-parse", "--git-path", "hooks", "--git-common-dir")
 	var stderr bytes.Buffer
@@ -2120,7 +2120,7 @@ func gitRepoPathsOf(ctx context.Context, root string) (paths gitRepoPaths, ok bo
 // named hook of root's repository under one repository lock, and returns the hooks it
 // changed. A root outside any git repository installs nothing.
 func installGitHookSections(ctx context.Context, root string, names []string, m managedMarkers, body func(name string) string) ([]string, error) {
-	paths, ok, err := gitRepoPathsOf(ctx, root)
+	paths, ok, err := resolveGitRepoPaths(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -2183,7 +2183,7 @@ type GitRefreshHook struct {
 // is installed. A root outside any git repository is [types.ErrVCSUnsupported]: another
 // VCS keeps its hooks elsewhere, so "none installed" would be a guess.
 func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, ok bool, err error) {
-	paths, inRepo, err := gitRepoPathsOf(ctx, root)
+	paths, inRepo, err := resolveGitRepoPaths(ctx, root)
 	if err != nil {
 		return GitRefreshHook{}, false, err
 	}
@@ -2299,7 +2299,7 @@ func gitSettleHookBody(name, command string) string {
 // removeGitHookSections deletes the m section from each named hook of root's repository
 // and returns the hooks it changed. A hook without one is left as it is.
 func removeGitHookSections(ctx context.Context, root string, names []string, m managedMarkers) ([]string, error) {
-	paths, ok, err := gitRepoPathsOf(ctx, root)
+	paths, ok, err := resolveGitRepoPaths(ctx, root)
 	if err != nil || !ok {
 		return nil, err
 	}

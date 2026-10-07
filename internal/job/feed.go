@@ -166,7 +166,7 @@ func ToolEvents(events []trail.Event) []FeedEvent {
 			Job:      e.Lease,
 			Action:   e.Action,
 			Origin:   e.Origin,
-			Decision: decisionOf(e),
+			Decision: eventDecision(e),
 			Outcome:  e.Outcome,
 			Error:    e.Error,
 		})
@@ -174,11 +174,11 @@ func ToolEvents(events []trail.Event) []FeedEvent {
 	return out
 }
 
-// decisionOf reads the guard's verdict off the event without opening its payload blob. The
+// eventDecision reads the guard's verdict off the event without opening its payload blob. The
 // preview is written as "guard: <decision>" by the producer, and "observed" when the guard
 // judged nothing; a feed line that had to fetch a blob to say "deny" would cost one round
 // trip per row.
-func decisionOf(e trail.Event) string {
+func eventDecision(e trail.Event) string {
 	const prefix = "guard: "
 	if rest, ok := strings.CutPrefix(e.Preview, prefix); ok {
 		return rest

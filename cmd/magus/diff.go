@@ -410,7 +410,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 	// Resolved once: every receipt this command mints or reports on must agree about which
 	// tree it is talking about, and a second resolve is a second chance to disagree.
-	content := contentOf(ctx, m, src)
+	content := readReviewedContent(ctx, m, src)
 	if tui {
 		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
 	}
@@ -1722,18 +1722,18 @@ const impactListCap = 10
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this surface reports context rather than passing judgement.
 func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffImpact {
-	p := diffImpact{Reach: impactReachOf(rev)}
+	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
 	// sections of one report cannot describe two different windows of history.
 	if own, err := m.Ownership(ctx, types.InsightOptions{Commits: diffHistoryCommits}); err == nil {
-		p.Ownership = impactOwnersOf(own, rev.AffectedProjects)
+		p.Ownership = listImpactOwners(own, rev.AffectedProjects)
 	}
 
 	if path := globalCfg.HistoryPath; path != "" {
 		var h forecast.History
 		if err := h.Load(ctx, path); err == nil {
-			p.Cost = impactCostOf(&h, rev.AffectedProjects)
+			p.Cost = estimateImpactCost(&h, rev.AffectedProjects)
 		}
 	}
 
@@ -1751,7 +1751,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	if err != nil {
 		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
 	}
-	p.AdvisorBase = impactAdvisorBaseOf(ctx, m, base)
+	p.AdvisorBase = resolveImpactAdvisorBase(ctx, m, base)
 
 	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
 	// the override they were first handed, so the anchors' graph load must spell the root
@@ -1769,12 +1769,12 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	return p
 }
 
-// impactReachOf renders what types.Diff has carried since the impact join landed and
+// computeImpactReach renders what types.Diff has carried since the impact join landed and
 // nothing has ever printed: which projects were edited, and which merely rebuild.
 //
 // nil when the closure is empty, which is a real state: a change entirely outside every
 // project directory seeds nothing.
-func impactReachOf(rev types.Diff) *impactReach {
+func computeImpactReach(rev types.Diff) *impactReach {
 	if len(rev.AffectedProjects) == 0 {
 		return nil
 	}
@@ -1785,12 +1785,12 @@ func impactReachOf(rev types.Diff) *impactReach {
 	return r
 }
 
-// impactOwnersOf joins the ownership lens onto the reach, in reach order.
+// listImpactOwners joins the ownership lens onto the reach, in reach order.
 //
 // Projects the lens has nothing to say about are DROPPED rather than listed with an empty
 // author: a project with no commits in the window has no owner to name, and a blank name
 // beside a path reads as a lookup that failed.
-func impactOwnersOf(own types.OwnershipOutput, affected []types.ImpactProject) []impactOwner {
+func listImpactOwners(own types.OwnershipOutput, affected []types.ImpactProject) []impactOwner {
 	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
 	for _, e := range own.Projects {
 		byPath[e.Path] = e
@@ -1812,14 +1812,14 @@ func impactOwnersOf(own types.OwnershipOutput, affected []types.ImpactProject) [
 	return out
 }
 
-// impactCostOf sums the recorded history's per-project prediction over the reach.
+// estimateImpactCost sums the recorded history's per-project prediction over the reach.
 //
 // nil when the history has nothing to say about ANY project in reach. That case matters more
 // than the happy one: forecast falls back to a workspace-wide default and then to a compiled-in
 // constant, so a total is always computable and a total computed from those is a fabrication
 // wearing a duration. Only projects with enough samples for forecast's own project tier are
 // counted, and a reach whose projects all fall short reports no history at all.
-func impactCostOf(h *forecast.History, affected []types.ImpactProject) *impactCost {
+func estimateImpactCost(h *forecast.History, affected []types.ImpactProject) *impactCost {
 	c := &impactCost{}
 	for _, p := range affected {
 		target, stats, ok := impactCostTarget(h, p)
@@ -1978,13 +1978,13 @@ func impactCostLines(c *impactCost) []string {
 	return append(out, impactMoreLine(len(c.Projects))...)
 }
 
-// impactAdvisorBaseOf dates this clone's copy of the ref the advisors compared against.
+// resolveImpactAdvisorBase dates this clone's copy of the ref the advisors compared against.
 //
 // nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
 // revision. A ref the clone does not HAVE is not that case; it resolves to a
 // impactAdvisorBase with no Tip, because "you have never fetched this" is the single most
 // useful thing the report can say about why nine advisors went quiet.
-func impactAdvisorBaseOf(ctx context.Context, m *magus.Magus, base string) *impactAdvisorBase {
+func resolveImpactAdvisorBase(ctx context.Context, m *magus.Magus, base string) *impactAdvisorBase {
 	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
 	if err != nil || res.VCS == nil {
 		return nil
@@ -3035,13 +3035,13 @@ func (c reviewedContent) digest(path string) string {
 	return review.Digest([]byte(body))
 }
 
-// contentOf says which tree a receipt minted for this source should attest to.
+// readReviewedContent says which tree a receipt minted for this source should attest to.
 //
 // A source magus cannot address yields the working tree, which is what every caller did before
 // this existed. That is safe only because the two gates that mint receipts (--ack and the viewer)
 // both refuse an unaddressable source outright, so the fallback is unreachable rather than
 // merely unlikely. If either ever accepts a patch on stdin, this has to refuse instead.
-func contentOf(ctx context.Context, m *magus.Magus, src diffInput) reviewedContent {
+func readReviewedContent(ctx context.Context, m *magus.Magus, src diffInput) reviewedContent {
 	c := reviewedContent{
 		root: m.Root(),
 		read: func(rev, path string) (string, error) { return m.FileAt(ctx, rev, path) },

@@ -74,7 +74,7 @@ fun unqualifiedPush(programs: [helpers\Program], checkout: Checkout) > str {
     }
     foreach (p in programs) {
         if (p.name == "git") {
-            final ops = helpers\operandsOf(p.args, valueFlags: pushValueFlags);
+            final ops = helpers\stripFlags(p.args, valueFlags: pushValueFlags);
             if (ops.len() > 2 and ops[0] == "push") {
                 final remote = ops[1];
                 foreach (spec in ops.sub(2)) {

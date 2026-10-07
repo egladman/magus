@@ -255,7 +255,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		return exitForQuery(out)
 	case outputName:
-		if err := emitNamesOf(out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
+		if err := emitItemNames(out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
 			return err
 		}
 		if err := reportIndexStaleness(os.Stderr, out.Answer); err != nil {
@@ -901,7 +901,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	g, err := knowledgeGraphOf(ctx, ws, globalCfg, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
+	g, err := loadWorkspaceGraph(ctx, ws, globalCfg, pf.Refresh, pf.Global, knowledge.SeedsLazyLayer(pos[0]) || knowledge.SeedsLazyLayer(pos[1]))
 	if err != nil {
 		return err
 	}
@@ -977,7 +977,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	var out types.KnowledgeQueryOutput
 	var err error
 	if seeded && !global {
-		// The answer knowledgeGraphOf then Query give, ranked from the symbol names index so only
+		// The answer loadWorkspaceGraph then Query give, ranked from the symbol names index so only
 		// the shards the answer touches are decoded.
 		stop := tr.phase("query.load_and_search")
 		if refresh {
@@ -990,7 +990,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 		}
 	} else {
 		stop := tr.phase("query.load_graph")
-		g, err = knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
+		g, err = loadWorkspaceGraph(ctx, ws, cfg, refresh, global, seeded)
 		stop()
 		if err != nil {
 			return queryResult{}, err
@@ -1000,7 +1000,7 @@ func searchGraph(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 		stop()
 	}
 	stop := tr.phase("query.coverage")
-	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, symbolCoverageOf(ctx, ws, cfg, read.Input, seeded))
+	out.Answer = knowledge.Answer(read.Input, out.MatchCount > 0, measureSymbolCoverage(ctx, ws, cfg, read.Input, seeded))
 	stop()
 	res := queryResult{Out: out}
 	if out.MatchCount == 0 && read.Nearest {
@@ -1013,7 +1013,7 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	tr := traceFromContext(ctx)
 	seeded := knowledge.SeedsLazyLayer(read.Input)
 	stop := tr.phase("explain.load_graph")
-	g, err := knowledgeGraphOf(ctx, ws, cfg, refresh, global, seeded)
+	g, err := loadWorkspaceGraph(ctx, ws, cfg, refresh, global, seeded)
 	stop()
 	if err != nil {
 		return explainResult{}, err
@@ -1026,10 +1026,10 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	// look nonexistent, so the answer says so when the input could have named one, and a
 	// typo'd `kind:target` still gets the absent verdict it deserves.
 	stop = tr.phase("explain.coverage")
-	cov := symbolCoverageOf(ctx, ws, cfg, read.Input, seeded)
+	cov := measureSymbolCoverage(ctx, ws, cfg, read.Input, seeded)
 	if found {
 		// One symbol: only its own language's indexes could have missed a site of it.
-		cov = cov.For(g.SymbolLanguage(read.Input))
+		cov = cov.Narrow(g.SymbolLanguage(read.Input))
 	}
 	res := explainResult{Out: out, Found: found, Answer: knowledge.Answer(read.Input, found, cov)}
 	stop()
@@ -1170,8 +1170,8 @@ func serveGraphRead(ctx context.Context, m *magus.Magus, cfg config.Config, verb
 		res, err = explainNode(ctx, m, cfg, read, false, false)
 	case readRefs:
 		var g *knowledge.Graph
-		if g, err = knowledgeGraphForRefsOf(ctx, m, cfg, false, read.Input); err == nil {
-			res = refsOf(ctx, m, cfg, g, read)
+		if g, err = loadRefsGraph(ctx, m, cfg, false, read.Input); err == nil {
+			res = lookupRefs(ctx, m, cfg, g, read)
 		}
 	default:
 		return nil, fmt.Errorf("%w: no %q read", proc.ErrNotAdoptable, verb)
