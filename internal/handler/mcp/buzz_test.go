@@ -35,6 +35,11 @@ func TestBuzzStandInProcess(t *testing.T) {
 	os.Exit(code)
 }
 
+// standInBudget bounds a stand-in call a test expects to finish. Each call execs this test
+// binary afresh, which takes seconds on a loaded machine, so a test that is not about the
+// timeout must not race one.
+const standInBudget = time.Minute
+
 func useStandInMagus(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -129,7 +134,7 @@ func TestBuzzToolRoundTripsInputThroughServeStdio(t *testing.T) {
 
 func TestBuzzToolArgsAreAnArray(t *testing.T) {
 	useStandInMagus(t)
-	tool := &buzzTool{root: t.TempDir(), timeout: 5 * time.Second}
+	tool := &buzzTool{root: t.TempDir(), timeout: standInBudget}
 	got := decodeBuzzResult(t, callBuzz(t, tool, map[string]any{
 		"script": `fun transform(input: any, args: [str]) > any { return args; }`,
 		"args":   []any{"one", "two words"},
@@ -141,7 +146,7 @@ func TestBuzzToolArgsAreAnArray(t *testing.T) {
 // than wrapped in a second diagnostic that repeats both.
 func TestBuzzToolDirectsMagusImportToClient(t *testing.T) {
 	useStandInMagus(t)
-	tool := &buzzTool{root: t.TempDir(), timeout: 5 * time.Second}
+	tool := &buzzTool{root: t.TempDir(), timeout: standInBudget}
 	res := callBuzz(t, tool, map[string]any{
 		"script": `import "magus"; fun transform(input: any, args: [str]) > any { return input; }`,
 	})
