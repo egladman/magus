@@ -426,7 +426,8 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	require.True(t, ok, "missing image-build; got %v", g)
 	// The spell ops and the charm are reached through the helper.
 	wantImg := types.TargetGraphNode{
-		Name: "image-build",
+		Name:     "image-build",
+		Declared: "image_build",
 		Spells: []types.TargetSpellUse{
 			{Spell: "cosign", Ops: []string{"cosign-sign"}},
 			{Spell: "docker", Ops: []string{"docker-buildx"}},
