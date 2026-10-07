@@ -1991,7 +1991,7 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 // imports this project, so it cannot be a need.
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // test reads every module's Go files, which each library test's own format rewrites.
-    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format);
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
@@ -2277,7 +2277,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
     // rewrites (MGS4008).
-    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
