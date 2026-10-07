@@ -216,7 +216,7 @@ var denyRuleDocs = []types.RuleDoc{
 			"The search must reach the tree: a directory, a glob, or several files. One named file is a read and runs, with refs advised when the index vouches for the name; a definition lookup carrying -A, -B or -C is a read of the body, and grep-reader refuses it. " +
 			"The files refs answers for are the languages a spell declares a symbol indexer for (here Go and TypeScript), read from the spell catalog. A search of stdin, Markdown, a log, Buzz (source no indexer reads, so a Buzz `fun` or `object` lookup is text too), a directory holding none of those languages (a skills tree, fixtures), a dot-directory (.github, .git), node_modules, a revision, or a tree outside the workspace runs. " +
 			"A search of the tree carries the index's own answer when the index is current: every file under the searched paths with its occurrence count and lines, as `magus refs` prints them. It is refs' answer, not grep's: comments, strings and prose are not in it. " +
-			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it. "},
+			"A pipe after the search is not reproduced. The deny still carries the unfiltered answer and says so: a model of sort, sed or awk substituted for the real tool diverges from it."},
 	{Name: string(denyRuleSearchTranslation),
 		Catches: "a text search whose pattern a graph query provably answers with the same entities",
 		Why: "The pattern is compiled in the tool's own dialect (BRE, ERE or fixed) and run against the graph's ids when the command is judged, so the deny names a query that was checked rather than one that looks equivalent, and carries that query's answer, bounded to twenty results and a count, so the refused search costs nothing. " +
@@ -229,7 +229,7 @@ var denyRuleDocs = []types.RuleDoc{
 			"A metadata flag (-l, -a, -t, -S), hidden or ignored files (fd -H, rg -uu), an untracked-files question (`--others`), one named file (a tracked check), an inverted or counted filter, a file the graph does not index, or a walk past the budget is silent. " +
 			"A host's own content and file search tools are judged as the rg and find lines they stand for, read by the shape of their input. " +
 			"A pipe after the search is not reproduced, except the search a tracked listing is piped into: the deny carries the query's unfiltered answer and says so, rather than a model of the filter that could diverge from the real tool. " +
-			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. A graph describing another tree advises, as graph-stale, except for a listing, which the walk proves. "},
+			"Anything else stays silent: -i, -v, -c, -l, -x, context flags, a stale index, a level-specific heading pattern, a BZZ code, a line anchor on a code, a heading inside a fence, one hit that is a call or a comment, stdin, or a tree outside the workspace. A graph describing another tree advises, as graph-stale, except for a listing, which the walk proves."},
 	{Name: string(denyRuleThrowawayCopy),
 		Catches: "a run inside a temp or scratchpad copy, which leaves the real tree unverified",
 		Why: "A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits. " +
@@ -352,7 +352,7 @@ var advisoryDocs = []types.RuleDoc{
 	{Name: string(advisoryNewSourceDir), Catches: "a new file that opens a directory, which is a boundary rather than a file"},
 	{Name: string(advisoryPrecedent),
 		Catches: "a hunt for one distinctive name, which refs answers with verified sites",
-		Why:     "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. "},
+		Why:     "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits."},
 	{Name: string(advisoryPushGate), Catches: "a push the run log does not prove ungated, which names the gate and lets it through"},
 	{Name: string(advisoryRegenSource), Catches: "a hand edit to a file a target regenerates"},
 	{Name: string(advisoryRevertClassify),

@@ -99,6 +99,7 @@ func TestCatalogCarriesNoMeasurements(t *testing.T) {
 		for field, text := range map[string]string{"Why": r.Why, "Catches": r.Catches} {
 			assert.NotContainsf(t, strings.ToLower(text), "measured", "%q: %s reports a measurement", r.Name, field)
 			assert.Emptyf(t, measurementFigure.FindString(text), "%q: %s carries a figure", r.Name, field)
+			assert.Equalf(t, strings.TrimSpace(text), text, "%q: %s ends in whitespace, which the rule page renders", r.Name, field)
 		}
 	}
 }

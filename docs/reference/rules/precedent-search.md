@@ -14,7 +14,7 @@ A hunt for one distinctive name, which refs answers with verified sites.
 
 ## Why
 
-A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. 
+A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits.
 
 ## Default and override
 
