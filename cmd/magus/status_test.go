@@ -619,7 +619,7 @@ func TestRunProbesMCPOnly(t *testing.T) {
 	ctx := context.Background()
 	t.Run("serving-returns-nil", func(t *testing.T) {
 		// socket "" is never dialed for an mcp-only probe, so this makes no proc RPC.
-		assert.NoError(t, runProbes(ctx, "", mcpServing(t, http.StatusOK), []probeKind{probeMCP}, ""))
+		require.NoError(t, runProbes(ctx, "", mcpServing(t, http.StatusOK), []probeKind{probeMCP}, ""))
 	})
 	t.Run("unreachable-exits-1", func(t *testing.T) {
 		err := runProbes(ctx, "", mcpUnreachable(), []probeKind{probeMCP}, "")

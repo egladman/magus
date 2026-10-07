@@ -436,7 +436,7 @@ func TestResolveOutput_GraphFormatExtras(t *testing.T) {
 	t.Parallel()
 	for _, fmt := range []Format{outputDot, outputTree} {
 		opts, err := ResolveOutput(string(fmt), outputDot, outputTree)
-		assert.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
+		require.NoError(t, err, "ResolveOutput(%q, extras)", fmt)
 		assert.Equal(t, fmt, opts.Format)
 	}
 }

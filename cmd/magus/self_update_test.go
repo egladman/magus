@@ -226,7 +226,7 @@ func TestSelfUpdate_NewerVersion(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"}))
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"}))
 }
 
 func TestSelfUpdate_AlreadyUpToDate(t *testing.T) {
@@ -279,7 +279,7 @@ func TestSelfUpdate_DowngradeForce(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected forced downgrade to succeed in dry-run")
 }
 
@@ -317,7 +317,7 @@ func TestSelfUpdate_ExplicitPrereleaseInstalls(t *testing.T) {
 	newCandidateFixture(t, false).activate(t)
 	setVersion(t, "v0.4.3")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.5.0-rc.1"}))
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.5.0-rc.1"}))
 }
 
 func TestSelfUpdate_RunningPrereleaseRefusalNamesTheChannel(t *testing.T) {
@@ -354,7 +354,7 @@ func TestSelfUpdate_UnknownVersionWithExplicitVersionSucceeds(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "unknown")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.4.0"}),
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--version", "v0.4.0"}),
 		"expected explicit --version to bypass the unversioned-build guard")
 }
 
@@ -365,7 +365,7 @@ func TestSelfUpdate_UnknownVersionWithForceSucceeds(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "unknown")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--force"}),
 		"expected --force to bypass the unversioned-build guard")
 }
 
@@ -439,7 +439,7 @@ func TestSelfUpdate_BinDir(t *testing.T) {
 	setVersion(t, "v0.3.0")
 
 	dir := t.TempDir()
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}),
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes", "--bin-dir", dir}),
 		"expected success with --bin-dir")
 }
 
@@ -457,7 +457,7 @@ func TestSelfUpdate_CheckOnly(t *testing.T) {
 	fx.activate(t)
 	setVersion(t, "v0.3.0")
 
-	assert.NoError(t, selfUpdateCmd(context.Background(), []string{"--check"}),
+	require.NoError(t, selfUpdateCmd(context.Background(), []string{"--check"}),
 		"--check should succeed even without --yes")
 }
 
@@ -487,7 +487,7 @@ func TestCheckParentWritable(t *testing.T) {
 	t.Run("writable dir succeeds", func(t *testing.T) {
 		dir := t.TempDir()
 		path := filepath.Join(dir, "magus")
-		assert.NoError(t, selfupdate.CheckParentWritable(path))
+		require.NoError(t, selfupdate.CheckParentWritable(path))
 	})
 
 	t.Run("missing parent errors cleanly", func(t *testing.T) {
@@ -515,7 +515,7 @@ func TestParseManifest_Valid(t *testing.T) {
 	raw := "version: v1.2.3\n" +
 		"aabbcc" + strings.Repeat("0", 58) + "  magus_v1.2.3_linux_amd64.tar.gz\n"
 	_, err := selfupdate.ParseManifest([]byte(raw))
-	assert.NoError(t, err, "valid manifest failed")
+	require.NoError(t, err, "valid manifest failed")
 }
 
 func TestParseManifest_MissingVersion(t *testing.T) {
@@ -601,7 +601,7 @@ func TestReleaseArchMatchesGOARCHOffARM(t *testing.T) {
 func TestSelfUpdate_ConfirmYes(t *testing.T) {
 	var out bytes.Buffer
 	err := confirmInstall(&out, strings.NewReader(""), true, true, "v0.4.0", "example.com", "/usr/local/bin/magus")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, out.String(), "no prompt should be printed when --yes is set")
 }
 

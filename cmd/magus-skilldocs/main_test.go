@@ -183,7 +183,7 @@ func TestPruneDeletesOnlyTheGeneratorsOwnOrphans(t *testing.T) {
 
 	for _, kept := range []string{"magus-query.md", "index.md", "notes.md", "magus-query.txt", "magus-a-directory.md"} {
 		_, err := os.Stat(filepath.Join(dir, kept))
-		assert.NoError(t, err, "%s was removed", kept)
+		require.NoError(t, err, "%s was removed", kept)
 	}
 	_, err := os.Stat(filepath.Join(dir, "magus-renamed-away.md"))
 	assert.True(t, os.IsNotExist(err), "the orphaned page survived pruning")

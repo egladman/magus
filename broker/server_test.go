@@ -309,7 +309,7 @@ func TestIdleExitWaitsForWhatIsHeld(t *testing.T) {
 	c.Release(t.Context(), v.ID)
 	select {
 	case err := <-done:
-		assert.NoError(t, err, "idle exit is a clean exit")
+		require.NoError(t, err, "idle exit is a clean exit")
 	case <-time.After(3 * time.Second):
 		t.Fatal("the broker did not exit after it held nothing")
 	}
@@ -325,7 +325,7 @@ func TestAConnectionWithoutStateDoesNotPinTheBroker(t *testing.T) {
 
 	select {
 	case err := <-done:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(3 * time.Second):
 		t.Fatal("an idle connection kept the broker up")
 	}
@@ -528,7 +528,7 @@ func TestShutdownStopsTheBroker(t *testing.T) {
 	require.NoError(t, dial(t, addr).Shutdown(t.Context()))
 	select {
 	case err := <-done:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(3 * time.Second):
 		t.Fatal("shutdown did not stop the broker")
 	}
@@ -548,7 +548,7 @@ func awaitServe(t *testing.T, done <-chan error, why string) {
 	t.Helper()
 	select {
 	case err := <-done:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal(why)
 	}

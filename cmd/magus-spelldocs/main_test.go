@@ -60,7 +60,7 @@ func TestEveryBuiltinHasEditorialMetadata(t *testing.T) {
 		assert.NotEmpty(t, meta.intro, "%s has no page intro", name)
 
 		_, err := os.Stat(filepath.Join("../../spells", meta.dir, "spell.buzz"))
-		assert.NoError(t, err, "%s points at a source directory that does not exist", name)
+		require.NoError(t, err, "%s points at a source directory that does not exist", name)
 	}
 
 	for name := range spellMeta {
@@ -283,7 +283,7 @@ func TestPruneUnregisteredRemovesRenamedPages(t *testing.T) {
 
 	for _, kept := range []string{"go.md", "notes.txt", "sub.md"} {
 		_, err := os.Stat(filepath.Join(dir, kept))
-		assert.NoError(t, err, "%s was removed", kept)
+		require.NoError(t, err, "%s was removed", kept)
 	}
 	_, err := os.Stat(filepath.Join(dir, "ts.md"))
 	assert.True(t, os.IsNotExist(err), "the renamed spell's page survived")

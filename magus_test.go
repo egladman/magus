@@ -66,12 +66,12 @@ func TestTargetHandlerConventionalTargets(t *testing.T) {
 		if !assert.NotNilf(t, h, "targetHandler(%q) = nil; expected non-nil handler", name) {
 			continue
 		}
-		assert.NoErrorf(t, h(ctx, p), "targetHandler(%q)(ctx, emptyProject)", name)
+		require.NoErrorf(t, h(ctx, p), "targetHandler(%q)(ctx, emptyProject)", name)
 	}
 	// Arbitrary non-conventional names also get a handler.
 	h := m.targetHandler("go-build")
 	if assert.NotNil(t, h, "targetHandler(\"go-build\") = nil; any target name should produce a handler") {
-		assert.NoError(t, h(ctx, p), "targetHandler(\"go-build\")(ctx, emptyProject)")
+		require.NoError(t, h(ctx, p), "targetHandler(\"go-build\")(ctx, emptyProject)")
 	}
 }
 
@@ -252,11 +252,11 @@ func TestPoolRegistry_IdempotentNonNil(t *testing.T) {
 func TestClose_Idempotent(t *testing.T) {
 	t.Parallel()
 	m := &Magus{}
-	assert.NoError(t, m.Close(), "Close on fresh Magus")
+	require.NoError(t, m.Close(), "Close on fresh Magus")
 	// Trigger lazy init of poolReg, then Close again.
 	_ = m.buzzPoolRegistry()
-	assert.NoError(t, m.Close(), "Close after PoolRegistry")
-	assert.NoError(t, m.Close(), "second Close")
+	require.NoError(t, m.Close(), "Close after PoolRegistry")
+	require.NoError(t, m.Close(), "second Close")
 }
 
 func TestSetGraphObserver_Invoked(t *testing.T) {
@@ -1280,7 +1280,7 @@ func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
 
 	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"))
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // No floor declared is the overwhelmingly common case and must stay free.
@@ -1289,7 +1289,7 @@ func TestRequiredVersion_NoFloorOpens(t *testing.T) {
 
 	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"))
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // A library caller that never supplied a version has no version to be too old.
@@ -1298,7 +1298,7 @@ func TestRequiredVersion_NoVersionSuppliedOpens(t *testing.T) {
 
 	_, err := Inspect(context.Background(), root)
 
-	assert.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
+	require.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
 }
 
 func TestStatusLinePath(t *testing.T) {

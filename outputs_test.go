@@ -144,7 +144,7 @@ func TestCleanOutputsDryRunDoesNotDelete(t *testing.T) {
 	require.NotEmpty(t, cleaned.Removed, "dry-run: expected at least one matched path to be returned")
 	// File must still exist.
 	_, err = os.Stat(target)
-	assert.NoError(t, err, "dry-run: file was deleted")
+	require.NoError(t, err, "dry-run: file was deleted")
 }
 
 // TestCleanOutputsNoMatchIsNoop verifies that CleanOutputs is a no-op when

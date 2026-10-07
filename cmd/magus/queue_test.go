@@ -799,7 +799,7 @@ func TestCIShardsGateInTheBoxTheQueueGatesACandidateIn(t *testing.T) {
 	require.NoError(t, err)
 	names := strings.Split(flags[slices.Index(flags, "--env")+1], ",")
 	_, err = queue.HookEnv{Sandbox: cfg.Sandbox}.Pass(names)
-	assert.NoError(t, err, "nothing ci.yaml passes moves the box")
+	require.NoError(t, err, "nothing ci.yaml passes moves the box")
 }
 
 // The gate builds with the spells' caches CI carries: restored before it and saved after
@@ -843,7 +843,7 @@ func TestCIShardsCarryTheSpellsCachesTheGateBuildsWith(t *testing.T) {
 			assert.Equal(t, gateStep.Env[v], step.Env[v], "%s: %s differs from the gate's", name, v)
 		}
 		_, err := queue.HookEnv{Sandbox: cfg.Sandbox}.Pass(strings.Split(flag(argv, "--env"), ","))
-		assert.NoError(t, err, "nothing %s passes moves the box", name)
+		require.NoError(t, err, "nothing %s passes moves the box", name)
 	}
 
 	restore, save := steps[at["restore"]], steps[at["save"]]

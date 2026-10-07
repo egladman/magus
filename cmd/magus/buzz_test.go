@@ -866,7 +866,7 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 					}
 					schemaFile = gluePermissionRequestSchema
 				}
-				assert.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, literal)),
+				require.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, literal)),
 					"%s prints %s, which %s would not accept, per %s", name, literal, host, schemaFile)
 			}
 		}
@@ -911,14 +911,14 @@ func TestGlueRepliesValidateAgainstTheirHostSchema(t *testing.T) {
 					}
 					if strings.Contains(text, gluePermissionRequestEvent) {
 						require.True(t, hosts["codex"], "%s answers a PermissionRequest but declares no codex coverage", name)
-						assert.NoError(t, glueLoadSchema(t, gluePermissionRequestSchema).Validate(glueDecode(t, name, text)),
+						require.NoError(t, glueLoadSchema(t, gluePermissionRequestSchema).Validate(glueDecode(t, name, text)),
 							"%s prints %s, which codex would not accept, per %s", name, text, gluePermissionRequestSchema)
 						continue
 					}
 					schemaFile, ok := glueHostOutputSchema[a.host]
 					require.True(t, ok, "%s answers %s and no schema grades that host's stdout", name, a.host)
 					require.True(t, hosts[a.host], "%s is wired for %s but declares no coverage for it", name, a.host)
-					assert.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, text)),
+					require.NoError(t, glueLoadSchema(t, schemaFile).Validate(glueDecode(t, name, text)),
 						"%s prints %s, which %s would not accept, per %s", name, text, a.host, schemaFile)
 				}
 			})
@@ -974,7 +974,7 @@ func TestGlueHandsBackTheRewrittenCommand(t *testing.T) {
 					continue
 				}
 				assert.JSONEq(t, want, out.String(), "%s on a %s", tc.label, decision)
-				assert.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, out.String())))
+				require.NoError(t, glueLoadSchema(t, glueHostOutputSchema[tc.host]).Validate(glueDecode(t, tc.label, out.String())))
 			}
 			var plain strings.Builder
 			require.NoError(t, tmpl.Execute(&plain, map[string]any{"decision": "pass"}), "a pass with no rewrite has no updated_command key")
@@ -1043,7 +1043,7 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
 					}
 				}
-				assert.NoError(t, schema.Validate(reply),
+				require.NoError(t, schema.Validate(reply),
 					"the %s template renders %s, which Cursor would not accept, per %s", name, out.String(), ev.schema)
 				for field := range reply {
 					assert.Contains(t, named, field,
