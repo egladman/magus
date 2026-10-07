@@ -48,18 +48,18 @@ bisects the target across commits until it isolates the break. See
 
 When a failure is real but only sometimes, narrow the cause:
 
-- **Data races**: `magus run test --race` enables magus's own race diagnostics
+- For a data race, `magus run test --race` enables magus's own race diagnostics
   (MGS4001-4004), not the language toolchain's race detector. It always runs the
   target fresh (never a cache replay) and watches for concurrent-write conflicts
   and non-deterministic output. A race is the most common source of "passes
   locally, fails in CI."
-- **Order and isolation**: run the single target alone (`magus run test api`) and
+- For test order or isolation, run the single target alone (`magus run test api`) and
   compare to the full run. A difference points to shared state or test ordering.
-- **Under-declared inputs**: if a target passes fresh but fails from cache (or the
-  reverse), its `needs`/`provides` may be wrong, so the cache replays a stale
+- For an under-declared input, look for a target that passes fresh but fails from cache (or the
+  reverse): its `needs`/`provides` may be wrong, so the cache replays a stale
   result. `magus describe target <path:target>` shows the declared inputs; see
   [cache.md](cache.md).
-- **Disable retry to see raw behavior**: `magus run --no-volatility-retry` (and
+- To see raw behavior, disable retry: `magus run --no-volatility-retry` (and
   `magus affected --bisect` internally) runs without the retry cushion so you
   observe the failure directly.
 

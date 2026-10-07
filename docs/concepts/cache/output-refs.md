@@ -206,7 +206,7 @@ account for most of the questions people ask.
 prints as `magus`, not `.`) cannot change a ref.
 
 Ref equality is therefore input equality. When two refs differ, one of the lines
-above differs, and `--against` will name which.
+above differs, and `--against` names which.
 
 ## A known leak: a multi-line tool probe lands whole in the key
 
@@ -326,7 +326,7 @@ extras are staged until the signature clears, so a rejected artifact leaves noth
 behind. A signature is also bound to the KIND of object it was made over and to the
 `(project, cache key)` it is served for, so a published output can never be re-served
 as a cache entry, and an entry can never file itself under a different key. Artifacts
-from an older magus still verify; magus simply ignores the extras their signature did
+from an older magus still verify; magus ignores the extras their signature did
 not cover.
 
 ## Re-running a target whose inputs have not moved
@@ -387,7 +387,7 @@ and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 fragment is never sent to any server, so nothing about the run (not even its ref) ever
 leaves your machine.
 
-For a very large log, print it instead (`magus query output out1a2b3c`) and pipe it; a URL
+For a large log, print it instead (`magus query output out1a2b3c`) and pipe it; a URL
 fragment is bounded by the browser's address-bar length.
 
 `--open` follows the `BROWSER` environment variable (the freedesktop convention) to

@@ -39,9 +39,9 @@ A project is a directory that carries a **declaration file**: `magusfile.buzz`, 
 
 A project owns:
 
-- **its targets**: the exported functions in its magusfile become the runnable operations (`build`, `test`, `lint`, ...); no registration call is needed (see [targets.md](targets.md)).
-- **its bound spells**: the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
-- **its policy**: dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
+- Its targets are the exported functions in its magusfile, which become the runnable operations (`build`, `test`, `lint`, ...); no registration call is needed (see [targets.md](targets.md)).
+- Its bound spells are the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
+- Its policy is dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
 
 ## Project discovery
 

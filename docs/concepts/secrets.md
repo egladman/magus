@@ -46,7 +46,7 @@ how:
   rather than everything you have ever exported or written to a file.
 - **Reaching for a credential is recorded, and readable.** Every read lands in the run's
   journal with its reference and provider, and `magus query invocation <id> --secrets`
-  reads it back, so "what did this run touch" has an answer you can actually get.
+  reads it back, so "what did this run touch" has an answer you can get.
 
 This is what makes running integration tests against real infrastructure from a laptop a
 reasonable thing to do rather than a thing you get away with. The credential is scoped to
@@ -172,7 +172,7 @@ keep the _act of authenticating_ a tool out of targets altogether; see
 
 The same rule applies to reporting. `magus run image-registries` lists what a publish
 needs and resolves nothing; only `image-registries:cd,verify` (a user explicitly asking
-"am I set up") actually calls the provider. A status table that pops an unlock dialog is
+"am I set up") calls the provider. A status table that pops an unlock dialog is
 the single most annoying thing this feature could do.
 
 **Every wait is announced before it happens.** A provider that prompts prints first:
@@ -183,7 +183,7 @@ secret: waiting on onepassword for "Private/Docker Hub/credential" (timeout 60s)
 
 An unexplained biometric prompt in the middle of a build is a trust failure, not a UX
 wrinkle: you cannot tell whether magus asked for it or something else on your machine
-did. The line names what is waiting, what it wants, and how long it will wait. The
+did. The line names what is waiting, what it wants, and how long it waits. The
 [journal](#what-magus-does-with-a-resolved-value) records the read afterwards; this is the
 half you can see while the dialog is on screen.
 
@@ -228,7 +228,7 @@ That is deliberately not phrased as a timeout. "Timed out" invites a retry; "the
 nobody to ask" tells you to wire a service account. In CI the failure arrives in seconds
 rather than at the job's 45-minute limit.
 
-### Why magus will not let you paste a secret instead
+### Why magus does not let you paste a secret instead
 
 Buzz can read stdin, so magus could offer "provider unavailable: paste the value to
 continue" during a wait. It deliberately does not, for four reasons that compound:
@@ -364,7 +364,7 @@ and it reaches no other process.
 
 The reverse is also worth stating: a credential your magusfile read with `os\env` rather
 than through a provider is subject to the allowlist like any other variable, and with the
-sandbox enabled it will not reach a subprocess unless you passed it through.
+sandbox enabled it does not reach a subprocess unless you passed it through.
 
 ## Handing a secret to a container build
 
@@ -596,7 +596,7 @@ interceptors compare against what `fmt` renders while a handler emits what its _
 produces, and the two differ: a `[]byte` attribute rendered as decimal bytes by `fmt`
 was emitted base64-encoded, and decodable, by the JSON handler. No amount of additional
 kind-handling closes that, because an interceptor cannot know what a downstream encoder
-will do. The value has to mask itself.
+does. The value has to mask itself.
 
 Both mechanisms are required, and neither replaces the other. `secret.Value` covers
 return values, structured log attributes and descriptor fields. The write interceptors
@@ -647,7 +647,7 @@ guarantee described as total changes what people are willing to risk.
   splits the value defeats it.
 - **It cannot see across a write boundary.** A secret straddling two separate writes
   from a child process is redacted only if both halves land in one write.
-- **Very short values are not redacted at all.** Below four characters, masking every
+- **Short values are not redacted at all.** Below four characters, masking every
   occurrence would shred ordinary output while protecting something that was never a
   credential, so magus declines. It does say so:
   [MGS2011](../reference/codes/sandbox/MGS2011.md) names the reference and the threshold

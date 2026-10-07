@@ -126,7 +126,7 @@ magus run format:rw,update    # also let go mod tidy amend go.mod and go.sum
 magus run generate:rw         # write derived output; touches no dependency versions
 ```
 
-The middle two are the pair worth internalizing. `rw` alone already writes a great deal, and it still will not re-resolve your dependencies. Asking for that is a second, deliberate act, and it stays separate even when you are already writing.
+The middle two are the pair worth internalizing. `rw` alone already writes a great deal, and it still does not re-resolve your dependencies. Asking for that is a second, deliberate act, and it stays separate even when you are already writing.
 
 ## The `extended` charm
 
@@ -167,7 +167,7 @@ Two rules keep it honest:
   untested.
 - A test that spends money or a person's quota (a paid API, a locally signed-in agent CLI)
   stays behind its own explicit opt-in, never behind `extended`: an agent told to make sure
-  the tests pass will reach for the extended suite unprompted.
+  the tests pass reaches for the extended suite unprompted.
 
 Where it runs is a workflow's choice. A scheduled job, a release, and a person before a
 risky change are the usual ones.
@@ -472,7 +472,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 Charm args are **literal**: there is no `${VAR}` interpolation, by design. The host language is the interpolation engine:
 
-- **Known at load time:** build the string in code and pass it to a constructor:
+- A value known at load time: build the string in code and pass it to a constructor:
 
   ```buzz
   import "charm";
@@ -480,7 +480,7 @@ Charm args are **literal**: there is no `${VAR}` interpolation, by design. The h
   charms = { "rw": charm\after(base, "run", ["--config={env\get("LINT_CONFIG")}"]) };
   ```
 
-- **Per-invocation:** use a function target. Charms are static data; they cannot read the env at run time.
+- A value that varies per invocation: use a function target. Charms are static data; they cannot read the env at run time.
 
 ## How a charm reaches a spell
 
@@ -524,11 +524,11 @@ Names are normalized the same way target names are (`types.Normalize`, kebab-cas
 
 ## What is not a charm
 
-- **A different command.** Charms rewrite args, never `cmd`; see [the boundary](#charm-vs-target-the-command-boundary).
-- **A whole-argv rewrite.** The root pointer is rejected; express the change as individual `replace`/`remove`/`add` ops.
-- **Project selection** (`api`, `/`): positional arguments, not charms.
-- **Spell qualifier** (`go::`): a `RunOption` (`WithSpellFilter`), stripped by the CLI before charms are parsed.
-- **One-off tool flags**: pass these after `--` (`magus run test -- -run TestX`).
+- A different command is not a charm. Charms rewrite args, never `cmd`; see [the boundary](#charm-vs-target-the-command-boundary).
+- A whole-argv rewrite is not a charm. The root pointer is rejected; express the change as individual `replace`/`remove`/`add` ops.
+- Project selection (`api`, `/`) uses positional arguments, not charms.
+- A spell qualifier (`go::`) is a `RunOption` (`WithSpellFilter`), stripped by the CLI before charms are parsed.
+- One-off tool flags go after `--` (`magus run test -- -run TestX`).
 
 ## Reference: the patch model
 

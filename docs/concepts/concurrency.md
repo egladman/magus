@@ -22,12 +22,12 @@ tags:
 magus coordinates parallel work at two distinct scopes, and it helps to keep them
 apart:
 
-- **Within one run**: the scheduler fans a single invocation out across projects
+- Within one run, the scheduler fans a single invocation out across projects
   and targets, ordered by the dependency graph. This is [dependencies](dependencies.md)
   and per-target policy (`slots`, `exclusive`) doing their job.
-- **Across separate runs**: the **workspace lock** stops two _independent_ `magus`
+- Across separate runs, the **workspace lock** stops two _independent_ `magus`
   processes from mutating the same project at the same time.
-- **Across the whole machine**: the **machine budget** stops every magus on the
+- Across the whole machine, the **machine budget** stops every magus on the
   host, in every worktree, from starting more work than the machine can carry.
 
 The first is about _ordering and fan-out_, the second about _mutual exclusion_, the
@@ -108,7 +108,7 @@ cannot solve it: `needs` orders targets _inside one run_ and has no visibility i
 separate process. Only a lock does.
 
 So before a non-dry run begins mutating, magus takes a **per-project advisory lock**
-for every project the run will touch, holds it for the whole invocation, and releases
+for every project the run touches, holds it for the whole invocation, and releases
 it at the end. **magus never waits on another magus invocation**: a second `magus` that
 wants the same project is refused immediately rather than queued behind the first.
 
@@ -310,7 +310,7 @@ Key properties:
   retry once it frees. A step kept out only by its own process or its own run waits
   for them, on the same terms as the lock.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
-  leaves a run whose broker will not start, or dies mid-run, unarbitrated and
+  leaves a run whose broker does not start, or dies mid-run, unarbitrated and
   finishing, having said once that it is. `broker: required` refuses the step instead
   ([MGS3022](../reference/codes/sandbox/MGS3022.md), exit 69), and `broker: off` never
   asks one. Nothing has to release cleanly: each claim rides the run's one connection

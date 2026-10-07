@@ -147,7 +147,7 @@ where those are the ordinary case. Calibrate the gate against your OWN license b
 turning it on: magus is GPL-3.0-or-later and ignores the compatible copyleft licenses
 explicitly, while still failing on the genuinely incompatible ones (GPL-2.0-only, which
 cannot be upgraded to v3, plus CDDL, EPL, and MPL-1.1). A gate that reports dependencies you
-are perfectly entitled to use is a gate someone will switch off.
+are perfectly entitled to use is a gate someone switches off.
 
 Custom target names must use the target-name charset: letters, digits, `-`, `_` (`types.ValidateTargetName`). `:`, `@`, and `/` are reserved for the grammar above.
 
@@ -158,19 +158,19 @@ you declaring any name the charset allows. The questions below are the ones wort
 asking before you do, because a name that fails them usually describes something
 that already has a home:
 
-1. **Universality**: the phase must mean something in every toolchain magus
+1. The phase must be universal: it must mean something in every toolchain magus
    adapts. A phase that only makes sense for one language fails this test:
    `typecheck` is universal-sounding but Go and Rust type-check as part of
    `build`, not as a separate phase, so it does not earn a slot of its own.
-2. **Distinctness**: it must be a genuine phase, not a subset of an existing
+2. The phase must be distinct: it must be a genuine phase, not a subset of an existing
    one. `vet`, `audit`, and `typecheck` are all static analysis or formatting
    fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
    not phases of their own. A different CACHE CONTRACT counts as distinct: that is
    what separates `security` from the fragments it otherwise resembles.
-3. **Pipeline membership**: `ci` must need to order it against the other
+3. The phase must belong in the pipeline: `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
    has weak claim on a name of its own.
-4. **Tooling weight**: `ci` is the one name the engine treats specially. Every
+4. A name carries no tooling weight of its own: `ci` is the one name the engine treats specially. Every
    other behavior attaches to a declaration, not a name: any target that declares
    output is drift-gated when it runs without `rw` (see
    [operations.md](operations.md)), whatever it is called. Reuse an existing name
@@ -297,7 +297,7 @@ in-browser playground evaluates a script but does not execute `test` blocks; a
 runnable version would sit there reporting nothing while a wrong assertion looked
 like it passed. It also keeps to `strings\kebabCase`, which the standalone
 runner can resolve without a workspace, and which is the point rather than a
-concession: the rule really is just kebab-case.
+concession: the rule is kebab-case.
 
 Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` and
 `@` especially, is reserved for reference grammar such as `spell::target`.
@@ -352,8 +352,8 @@ or `snake_case` op, it now works instead of silently never running.
 ### Where it deliberately does not apply
 
 - **Spell names.** A spell's own name is matched byte-for-byte. A spell named
-  `Go` and one named `go` are two different spells, not one; the registry will
-  hold both.
+  `Go` and one named `go` are two different spells, not one; the registry
+  holds both.
 - **Lookups by literal key.** Normalization canonicalizes what gets _stored_, not
   how a literal subscript is spelled. `typescript["tsc"]` is an ordinary map-key
   lookup into the value `import "magus/spell/typescript"` binds, so it must name the canonical
@@ -361,7 +361,7 @@ or `snake_case` op, it now works instead of silently never running.
   linter op is `golangci-lint`, and that is a different word, not a different
   casing. See [spell-qualified targets](#cli-extension-spell-qualified-targets).
 - **Project paths.** `Path` is never normalized; `api` and `Api` are different
-  (and, in practice, one of them just won't exist).
+  (and, in practice, one of them does not exist).
 
 ### Worked example
 

@@ -8,7 +8,7 @@ aliases: [guides/insight, concepts/insight, reference/manpage/magus-insight]
 # Insight
 
 Insight reads version-control history to show where a codebase's attention and risk
-actually concentrate. Static structure tells you how the code is organized; history
+concentrate. Static structure tells you how the code is organized; history
 tells you how it is _used_: which files churn, which projects change together, who
 owns what. This page is the intent.
 
@@ -43,16 +43,16 @@ magus\log.info(magus\insightMarkdown()); // the INSIGHT.md page
 
 Each lens is a field on the report:
 
-- **hotspots**: edit frequency times complexity, the prime refactoring targets.
+- `hotspots`: edit frequency times complexity, the prime refactoring targets.
   Ranks projects by default; ask for `--files` to rank individual files instead.
-- **affinity**: projects that change together (temporal coupling). A pair that
+- `affinity`: projects that change together (temporal coupling). A pair that
   co-changes without either declaring a dependency on the other is a candidate
   architectural smell: a hidden coupling the graph does not know about.
-- **ownership**: author concentration: the primary author and their share,
+- `ownership`: author concentration: the primary author and their share,
   distinct author count (the bus factor), and abandonment (projects gone quiet).
-- **trend**: the recent half of the window against the earlier half. A positive
+- `trend`: the recent half of the window against the earlier half. A positive
   delta is a rising hotspot; a negative one is cooling.
-- **unreferenced**: code symbols the workspace defines and nothing in it names:
+- `unreferenced`: code symbols the workspace defines and nothing in it names:
   no call from another symbol, and no file outside the one defining them. It reads
   the [knowledge graph](../knowledge.md), not git, so it takes no window and is always
   workspace-wide.
