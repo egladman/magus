@@ -1,6 +1,6 @@
 ---
 title: Attention hooks
-description: magus session notify turns one host event into a desktop notification, so a blocked or finished agent reaches you - and why this is a hook sink rather than an MCP tool.
+description: magus session notify turns one host event into a desktop notification, so a blocked or finished agent reaches you, and why this is a hook sink rather than an MCP tool.
 tags: [agents, notify, hooks, notifications, desktop]
 ---
 
@@ -26,7 +26,7 @@ printf '%s\n' "finished" | magus session notify --outcome Stop -o json
 ## Why this is not an MCP tool
 
 An MCP server only ever observes tool calls. A blocked agent makes no call at
-all - the blockage IS the silence, and silence is precisely what MCP has no way
+all: the blockage IS the silence, and silence is precisely what MCP has no way
 to report. The host's own hook system is the only surface that fires on it. So
 this is a hook sink rather than a tool, and it stays one whether or not the
 server is up.
@@ -67,7 +67,7 @@ waiting for input; its event JSON carries `hook_event_name`, `message` and
 ## Fail quietly, on purpose
 
 A notifier hook should exit 0 and swallow its own output. A notifier that can
-fail is a hook that can break the session it was meant to watch - the same
+fail is a hook that can break the session it was meant to watch, the same
 reasoning as the guard's fail-open contract.
 
 Resolve the binary the way the guard does: prefer a repo-local `./magus`, then

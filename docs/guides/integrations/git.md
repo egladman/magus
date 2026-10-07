@@ -1,6 +1,6 @@
 ---
 title: Git integration
-description: What magus writes into your repository - the generated-file merge driver, the .gitattributes section behind it, and the refresh hooks - plus the rule every magus hook obeys, which is that a hook hands off work and never does work, and how to settle a conflict in generated output without a rebase, a force-push, or a broken stack.
+description: What magus writes into your repository (the generated-file merge driver, the .gitattributes section behind it, and the refresh hooks), plus the rule every magus hook obeys, which is that a hook hands off work and never does work, and how to settle a conflict in generated output without a rebase, a force-push, or a broken stack.
 tags: [git, vcs, hooks, gitattributes, merge-driver, generated-files, conflicts]
 aliases: [guides/git]
 ---
@@ -46,8 +46,8 @@ slower and nobody will notice until it does.
 - loading the workspace, evaluating magusfiles, or opening the knowledge graph;
 - touching the network, including a cache the hook thinks is nearby;
 - running a build, a test, a linter, a formatter, or a generator;
-- enforcing policy locally - blocking a commit, rewriting a file, staging something on
-  your behalf.
+- enforcing policy locally (blocking a commit, rewriting a file, staging something on
+  your behalf).
 
 That last one is worth stating plainly, because it is the one every other tool reaches
 for. magus does not enforce in a hook. Enforcement belongs where it can be read,
@@ -375,7 +375,7 @@ That merges, resolves, and leaves the merge in progress for you to commit. It ne
 clean tree, so backing the merge out cannot lose uncommitted work. Add `--dry-run` to see
 the classification and have the merge backed out again.
 
-`magus vcs resolve` works on git, Mercurial and Jujutsu - all three implement conflict
+`magus vcs resolve` works on git, Mercurial and Jujutsu: all three implement conflict
 reporting. Only `--against` is git-only, because only git has a merge-starting implementation;
 on the others, merge the base in yourself and then run `magus vcs resolve`.
 
@@ -431,7 +431,7 @@ one you touch.
 ## Whose conflict is it
 
 `magus vcs resolve` reports the paths it deliberately left alone. To answer the same question
-before you start a merge, ask the workspace - `magus describe file` reads the declarations
+before you start a merge, ask the workspace: `magus describe file` reads the declarations
 rather than guessing from a path convention:
 
 ```sh
@@ -443,7 +443,7 @@ its diff. `role: source` is yours, and an ordinary conflict.
 
 ## When the driver is doing nothing
 
-The driver's failure mode is quiet, and it looks like the opposite of a failure - git reports
+The driver's failure mode is quiet, and it looks like the opposite of a failure: git reports
 a conflict in a generated file it should have settled by itself. A file that both sides
 changed to the same bytes is the clearest tell, because that is the easiest merge there is.
 
@@ -453,8 +453,8 @@ The registration is a command line, held in one clone's config:
 git config --get merge.magus.driver
 ```
 
-It names a magus binary and a subcommand. If that command cannot run - the binary moved, or
-it predates the subcommand the registration names - the driver exits non-zero, and git reads
+It names a magus binary and a subcommand. If that command cannot run (the binary moved, or
+it predates the subcommand the registration names), the driver exits non-zero, and git reads
 a non-zero driver as _conflict_. Every file routed to it is then reported as conflicted
 whether it is or not, which inflates the count rather than raising an error.
 
@@ -464,8 +464,8 @@ magus that cannot load this workspace never reaches the refresh, and the `vcs` v
 on purpose, because the refresh writes the tracked `.gitattributes` and those verbs run while
 that file may itself be unmerged.
 
-`magus vcs resolve` does not depend on the driver - it reads the conflicted paths from git
-and regenerates - so it settles the inflated list too. A broken driver makes a conflict look
+`magus vcs resolve` does not depend on the driver: it reads the conflicted paths from git
+and regenerates, so it settles the inflated list too. A broken driver makes a conflict look
 worse than it is; it does not stop you fixing it.
 
 ## Staging
@@ -474,7 +474,7 @@ worse than it is; it does not stop you fixing it.
 source change in the same commit accounts for. Anything undeclared is reported rather
 than swept in, which is the difference between it and `git add -A`.
 
-It also skips generated output that nothing in the change accounts for - output that moved
+It also skips generated output that nothing in the change accounts for: output that moved
 with no declared input behind it, which means either a different magus build produced it
 or a generator is not deterministic. Name such a path explicitly to stage it anyway.
 
@@ -511,8 +511,8 @@ Then `git reading` and `git reading main` read through magus, and `git diff` doe
 
 `GIT_EXTERNAL_DIFF` and `diff.external` are for a program that renders ONE file's diff:
 git calls them once per file, with seven arguments. Almost everything magus has to say
-is a property of the whole changeset - which projects rebuild, who owns them, what it
-costs, what to read first - so per-file invocation would mean printing the report once
+is a property of the whole changeset (which projects rebuild, who owns them, what it
+costs, what to read first), so per-file invocation would mean printing the report once
 per file, or not at all. Wire magus there and it refuses, naming the pager setting
 above; it does not half-answer.
 
@@ -528,13 +528,13 @@ diff, once, on stdin.
 ### The same shape in the other backends
 
 This is not a git quirk. Every backend magus supports offers a diff-tool slot and a
-pager, and in each of them the tool slot is the wrong shape for the same reason -
+pager, and in each of them the tool slot is the wrong shape for the same reason,
 measured against the installed versions:
 
 | backend   | diff-tool slot hands the tool                                                                              | pager hands the tool                  |
 | --------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------- |
 | git       | seven arguments, once per file (`GIT_EXTERNAL_DIFF`), or two temp directories (`difftool --dir-diff`)      | the whole unified diff on stdin       |
-| Mercurial | two directories - a temp snapshot and the working dir (`extdiff`)                                          | the whole unified diff on stdin       |
+| Mercurial | two directories: a temp snapshot and the working dir (`extdiff`)                                           | the whole unified diff on stdin       |
 | Sapling   | two file paths, once per file (`extdiff`)                                                                  | the whole unified diff on stdin       |
 | Jujutsu   | two directories, `$left` and `$right` (`ui.diff-formatter`, or `file-by-file` with `diff-invocation-mode`) | whatever `ui.diff-formatter` produced |
 
@@ -565,8 +565,8 @@ and anything regenerated would land in the copy.
 
 ### Reading a patch you did not produce
 
-The same input works from anywhere a patch comes from - a colleague, a mail
-attachment, a stash, a code-review tool:
+The same input works from anywhere a patch comes from (a colleague, a mail
+attachment, a stash, a code-review tool):
 
 ```sh
 gh pr diff 123 | magus diff -

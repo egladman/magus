@@ -11,8 +11,8 @@ first clients changed about it. Recorded 2026-08-27.
 
 ## The request
 
-Provide a mechanism third parties can build integrations against - an Emacs
-package, a Vim plugin, a status bar, a notifier - without magus shipping one
+Provide a mechanism third parties can build integrations against (an Emacs
+package, a Vim plugin, a status bar, a notifier) without magus shipping one
 integration per host.
 
 ## What the research found
@@ -53,15 +53,15 @@ evaluation, and states the test for any new extension seam:
 > it may change what magus does, never what a verdict means.
 
 An outbound stream passes cleanly: it reads a model magus already built, and no
-subscriber can alter an outcome. Inbound lifecycle callbacks - commands magus
-invokes mid-run - do not pass, because a post-target callback that touches
+subscriber can alter an outcome. Inbound lifecycle callbacks (commands magus
+invokes mid-run) do not pass, because a post-target callback that touches
 outputs breaks the cache-replay contract. They are out of scope, deliberately,
 and this section is the record of that decision rather than a gap to fill later.
 
 ## Direction: outbound only
 
 magus emits; integrations consume and react. Extending build BEHAVIOR stays
-where it already is - spells, charms, the magusfile - which are declarations the
+where it already is (spells, charms, the magusfile), which are declarations the
 sealed engine evaluates.
 
 ## Relationship to `magus session hook`
@@ -102,7 +102,7 @@ bus.
 `internal/proc` was the candidate before that: a JSONL-framed Unix socket in a
 0700 directory where the filesystem permissions ARE the authentication, and
 `proc.DiscoverSocket` finds a live daemon with no env var. It lacks a subscribe
-frame - every call in `internal/proc/client.go` is request/reply - and adding one
+frame (every call in `internal/proc/client.go` is request/reply) and adding one
 turns a control plane into a bus. That work was not done and is not needed: it
 would buy latency over a 250ms poll, and it would make the stream depend on a
 daemon the design deliberately does not require.
@@ -135,13 +135,13 @@ what the review of this branch measured, not an estimate made while designing.
 
 | type                 | store                                                                  | what it costs                                                                                                                                                                                                                                            |
 | -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `diagnostic.emitted` | `diagCollector`, already fanning to report + the graph's runtime shard | smallest: a new `journal.Kind` plus one adapter arm. `file`/`line` need a wider change - `types.DiagnosticEvent` carries only unit, code, message                                                                                                        |
+| `diagnostic.emitted` | `diagCollector`, already fanning to report + the graph's runtime shard | smallest: a new `journal.Kind` plus one adapter arm. `file`/`line` need a wider change: `types.DiagnosticEvent` carries only unit, code, message                                                                                                         |
 | `guard.verdict`      | trail `agent_command`, verdict in a payload blob                       | the trail lives in `activity/`, not `runs/`, so this needs a second reader with an unrelated line schema and blob dereferencing. The hook is its own short-lived process, so `inv` would be empty                                                        |
 | `attention.raised`   | sessions `attention_open`                                              | a third file, in XDG state rather than the cache dir. The store FLATTENS `types.Event` to strings on the way in, so the body cannot be reconstructed from it without a second record                                                                     |
-| `workspace.changed`  | none - `magus watch` persists nothing                                  | largest, and it breaks the design's central property: there is no store to adapt, so either a long-running watcher writes to `runs/` (which is not what that directory means) or `magus events` grows a watcher and stops being a pure reader of the bus |
+| `workspace.changed`  | none: `magus watch` persists nothing                                   | largest, and it breaks the design's central property: there is no store to adapt, so either a long-running watcher writes to `runs/` (which is not what that directory means) or `magus events` grows a watcher and stops being a pure reader of the bus |
 
 An earlier draft of this table listed a `target.started` type sourced from
-`KindExec`. It was dropped - `KindExec` is per subprocess, not per target - and
+`KindExec`. It was dropped (`KindExec` is per subprocess, not per target) and
 the row outlived the decision by several commits. It is recorded here because a
 taxonomy table that describes intentions as facts is the specific way this
 document went wrong.
@@ -159,7 +159,7 @@ document went wrong.
    NOT built: the run-log directory turned out to serve as the bus without it,
    so this is a latency optimization rather than a requirement.
 5. A reference client living beside `docs/guides/integrations/` the way the
-   OpenCode plugin does - a template the reader owns and edits, per the "the
+   OpenCode plugin does: a template the reader owns and edits, per the "the
    host wiring is yours" entry in `docs/doctrine.md`. Shipped as POSIX sh; see
    [Reference clients](#reference-clients-shell-first) for why, and for what is
    still held back.
@@ -202,8 +202,8 @@ directory ([bae836df6](https://github.com/egladman/magus/commit/bae836df6), dele
 20 hours later): a passive registry can add up what its peers claim, and it cannot
 tell a waiter that its turn came, so every contended run had to be REFUSED. That
 is a capability magus could not offer without a process, which is the definition
-of daemon-only. What the rule protects against - documentation that forks on
-whether a daemon is running - is bought back by starting one, so no page says "if
+of daemon-only. What the rule protects against (documentation that forks on
+whether a daemon is running) is bought back by starting one, so no page says "if
 the daemon is up, X; otherwise Y".
 
 Two things bound it:
@@ -220,7 +220,7 @@ Two things bound it:
 
 A related correction landed with it. An adopted run executes in the daemon's
 process, where its console output goes to the daemon's log and the caller's
-terminal shows nothing - measured, not theoretical. That was survivable while
+terminal shows nothing (measured, not theoretical). That was survivable while
 nobody started a daemon for an ordinary build, and it is not now that a run starts
 one. So a TOP-LEVEL `run`/`affected` no longer forwards to the stable daemon: it
 runs here, prints here, and asks the daemon only for admission. A NESTED call
@@ -232,7 +232,7 @@ process, and prints where the parent does.
 - It trades a legible failure for an illegible one. "Daemon off" is visible today
   and one command fixes it. A daemon that fails to launch, wedges, or is a stale
   binary serving a newer CLI turns EVERY command into a hang with no obvious
-  cause - the same failure class MGS1021's stale-binary explainer exists for.
+  cause, the same failure class MGS1021's stale-binary explainer exists for.
 - `magus ls` inside a `docker build` layer would leave an orphaned background
   process. A build tool that silently spawns long-lived processes is a surprise.
 - `docs/scope.md` promises the daemon "carries an asterisk". Global auto-start
@@ -247,7 +247,7 @@ X; otherwise Y". It says X, and the daemon makes X faster.
 
 ### The residual set, and why it is not a violation
 
-`/mcp` and the console are network surfaces BY DEFINITION - something connects to
+`/mcp` and the console are network surfaces BY DEFINITION: something connects to
 them over a socket. The shared concurrency pool, machine-wide
 admission, and background jobs are cross-process by definition. Nobody is surprised that asking for a server needs a
 server, so these are not a capability split; they are the daemon's own surface.
@@ -257,7 +257,7 @@ IS asking for the daemon and starting it is doing what was asked rather than a
 side effect.
 
 **Amended 2026-09-02.** This paragraph used to end "CI never spawns one under
-this rule - not by a special case, but because CI never asks for a console. That
+this rule, not by a special case, but because CI never asks for a console. That
 absence of a conditional is the point." That is no longer true, and the honest
 correction is to say so rather than to add the special case it was praising.
 `magus run` and `magus affected` now start a daemon for machine-wide admission,
@@ -270,7 +270,7 @@ What bounds it instead is a lifetime, not a caller. A daemon started for
 admission exits on its own after ten minutes with no claims held, no work in
 flight, and no client asking (`watchAdmissionIdle`); a daemon a person started
 with `magus server start` has no such bound, because they said what they wanted.
-That keeps the `docker build` objection answered - a layer that runs one magus
+That keeps the `docker build` objection answered: a layer that runs one magus
 command leaves a process that reaps itself, rather than one that lives as long as
 the machine.
 
@@ -281,7 +281,7 @@ review found are the specification for anyone touching it again:
 - **The child must not inherit `MAGUS_DAEMON_SOCKET`.** `spawnDetachedDaemon` was
   safe only because its one caller ran under a dispatch profile that never hosts a
   per-process proc server. Called from one that does, the child decided it was
-  already adopted, bound no socket, and reported its PARENT's - leaving a daemon
+  already adopted, bound no socket, and reported its PARENT's, leaving a daemon
   `magus server stop` could not find and only `kill` could remove.
   `daemonChildEnv` scrubs it.
 - **Every failure path must reap what it spawned.** With `console.enabled=false`
@@ -344,7 +344,7 @@ violating it.
 **The journal buffered, so a naive tail could not fire.** `journal.FileHandler`
 wrote into a `bufio.Writer` flushed only at run end, so a follower would have
 lagged by up to a page and a short run would have delivered nothing until it
-finished - shipped, green, and unable to work. It now flushes every kind EXCEPT
+finished, shipped, green, and unable to work. It now flushes every kind EXCEPT
 output: lifecycle and result are one per run and one per target, so the syscall
 is free at that rate, while output stays buffered as the one high-volume kind.
 That is a hot path changed for a new feature's benefit and deserves review.
@@ -352,7 +352,7 @@ That is a hot path changed for a new feature's benefit and deserves review.
 **jsonv2 does not omit zero numbers.** The repo builds with the jsonv2 codec,
 where `omitempty` omits only empty JSON values (null, "", [], {}) and NOT `0`.
 Every `duration_ms,omitempty` therefore shipped `"duration_ms":0` on events where
-the field does not apply - telling a subscriber a cached replay took no time
+the field does not apply, telling a subscriber a cached replay took no time
 rather than that it never ran. The numeric fields carry `omitzero`, and a test
 pins the distinction. Any new numeric field on this contract has the same trap.
 
@@ -373,7 +373,7 @@ relative path resolves against the SUBSCRIBER's cwd rather than the producer's.
 
 Found by running the shell watcher: it announced the previous day's failure the
 moment it started. `--limit` originally read 0 as "replay everything", so there
-was no way to ask for "only what happens next" - `Follower.Skip` existed in the
+was no way to ask for "only what happens next"; `Follower.Skip` existed in the
 library and the CLI could not reach it.
 
 The semantics are now the ones a subscriber actually needs:
@@ -385,7 +385,7 @@ The semantics are now the ones a subscriber actually needs:
 | `< 0`     | every retained invocation, then follow |
 
 A notifier wants 0; a statusline wants 1. The library's `Replay` still reads 0
-as "no cap", and the CLI maps - changing the method would have altered what it
+as "no cap", and the CLI maps: changing the method would have altered what it
 means for every other caller to fix a flag's ergonomics.
 
 ## Reference clients: shell first
@@ -407,7 +407,7 @@ unreviewed plugin in the docs tree is a promise magus has not checked.
 Two findings from writing them are worth keeping even so:
 
 - **Vimscript reaches more editors than Lua and is shorter here.** Nothing in
-  this contract needs Neovim - it is a subprocess pipe, and Vim 8 has had
+  this contract needs Neovim: it is a subprocess pipe, and Vim 8 has had
   `job_start()` and `json_decode()` for years. The deciding detail runs opposite
   to the usual assumption: Vim's `out_mode: 'nl'` delivers exactly one complete
   line per callback, so the Vim path needs no line buffering, while Neovim's

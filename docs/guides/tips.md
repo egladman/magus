@@ -1,6 +1,6 @@
 ---
 title: Tips and tricks
-description: Non-obvious ways to combine magus subcommands - status sidebars, --step debugging, watch loops, health probes, output field discovery, typed data boundaries, container registry vocabulary and auth realms, and recursive invocation.
+description: Non-obvious ways to combine magus subcommands (status sidebars, --step debugging, watch loops, health probes, output field discovery, typed data boundaries, container registry vocabulary and auth realms, and recursive invocation).
 tags:
   [
     tips,
@@ -86,7 +86,7 @@ magus status -o json   # machine-readable output
 
 ## Discover an output's fields for -o json and -o template
 
-Any command that emits structured data documents its own shape. Run it with a bare `-o template` (no template body) and it prints the fields instead of rendering - the json keys usable in both `-o json` and `-o template`, with each field's type and doc. Referenced output types are listed too, so you can drill into a `[]ProjectEntry` without reading source:
+Any command that emits structured data documents its own shape. Run it with a bare `-o template` (no template body) and it prints the fields instead of rendering: the json keys usable in both `-o json` and `-o template`, with each field's type and doc. Referenced output types are listed too, so you can drill into a `[]ProjectEntry` without reading source:
 
 ```sh
 magus describe projects -o template
@@ -114,7 +114,7 @@ Then write the template (or `jq` filter) against those keys:
 magus describe projects -o template='{{range .projects}}{{.path}}{{"\n"}}{{end}}'
 ```
 
-The field names are always the json keys - `-o json` and `-o template` share one vocabulary - so `-o json` output doubles as the field reference.
+The field names are always the json keys, and `-o json` and `-o template` share one vocabulary, so `-o json` output doubles as the field reference.
 
 ## Where typed data lives: built-in commands versus your targets
 
@@ -139,7 +139,7 @@ fun publish_registries(ctx: magus\Context) > [Registry] {
 }
 ```
 
-The practical rule this leads to: **when two steps need to agree on structured data, keep the data in the magusfile and export a verb for each thing you want done with it** - not a target that prints the data for something else to parse.
+The practical rule this leads to: **when two steps need to agree on structured data, keep the data in the magusfile and export a verb for each thing you want done with it**, not a target that prints the data for something else to parse.
 
 ## Keep structured data in the magusfile, not in the shell
 
@@ -176,11 +176,11 @@ Why `host` and `repository` are separate fields, and why `user_ref` names a cred
 Two properties fall out of this that the shell version does not have:
 
 - **The verbs cannot drift.** `image-registries` and `image-build` read the same function, so the set reported is by construction the set pushed to. Adding a registry is one entry in one list.
-- **Selection is by name, not position.** `magus run image-registries:cd docker.io` picks one; an unknown host is an error listing the valid ones. Positional indexing would have been worse than it looks - charms change the list length, so index `1` is a registry under one charm and out of range under another.
+- **Selection is by name, not position.** `magus run image-registries:cd docker.io` picks one; an unknown host is an error listing the valid ones. Positional indexing would have been worse than it looks: charms change the list length, so index `1` is a registry under one charm and out of range under another.
 
 Logging docker in is not one of the verbs. docker owns its credential store, so it is authenticated the way the environment authenticates every tool it provides: a login action on a CI runner, a credential helper or one `docker login` on a laptop. A target that runs `docker login` would mutate state outside the workspace, could never be cached, and would only order a step the runner already takes. The table still says what to log in to: `magus run image-registries:cd` prints it.
 
-Where magus is the client itself - `magus spell push`, `magus graph push` - it reads the credential through a reference and takes the token on stdin, because magus captures a command's argv into the run log and output store and `opts.stdin` is not captured. That is the boundary worth stating explicitly: **declare the shape in the magusfile, keep the secrets in the environment, and leave logging a tool in to the environment that provides the tool.**
+Where magus is the client itself, `magus spell push`, `magus graph push`, it reads the credential through a reference and takes the token on stdin, because magus captures a command's argv into the run log and output store and `opts.stdin` is not captured. That is the boundary worth stating explicitly: **declare the shape in the magusfile, keep the secrets in the environment, and leave logging a tool in to the environment that provides the tool.**
 
 ## The auth realm is not the push path
 
@@ -193,9 +193,9 @@ Container registry vocabulary is used loosely everywhere, and the looseness is w
 | **tag**        | a _mutable_ pointer to one manifest in a repository                        | `latest`, `v1.2.3`                |
 | **digest**     | the _immutable_ content address                                            | `sha256:9f86d0...`                |
 | **reference**  | the whole addressable string                                               | `ghcr.io/egladman/magus:v1.2.3`   |
-| **image**      | strictly the **artifact** - manifest, config, layers                       | not a string at all               |
+| **image**      | strictly the **artifact** (manifest, config, layers)                       | not a string at all               |
 
-That last row is the one worth internalizing. An image is a thing in a registry, not its name; the name is a _reference_. "Image" gets used for the reference constantly - Docker's own CLI help says `docker pull NAME[:TAG|@DIGEST]` while its glossary defines an image as a filesystem artifact - so if you name a variable `image` nobody knows which you meant. Name it `reference`, `repository`, or `tag`.
+That last row is the one worth internalizing. An image is a thing in a registry, not its name; the name is a _reference_. "Image" gets used for the reference constantly (Docker's own CLI help says `docker pull NAME[:TAG|@DIGEST]` while its glossary defines an image as a filesystem artifact), so if you name a variable `image` nobody knows which you meant. Name it `reference`, `repository`, or `tag`.
 
 Now the practical problem. **What you authenticate against and what you push to are different strings, and how they differ is per-provider:**
 
@@ -206,7 +206,7 @@ Now the practical problem. **What you authenticate against and what you push to 
 | Amazon ECR        | `<acct>.dkr.ecr.<region>.amazonaws.com` | `<acct>.dkr.ecr.<region>.amazonaws.com/myapp` |
 | Artifact Registry | `us-central1-docker.pkg.dev`            | `us-central1-docker.pkg.dev/proj/repo/app`    |
 
-For GHCR and Docker Hub the registry is just the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a _project_, and a robot account is frequently scoped to exactly one - so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
+For GHCR and Docker Hub the registry is just the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a _project_, and a robot account is frequently scoped to exactly one, so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
 
 **magus does not try to model this, and should not.** There is no registry-provider abstraction to get wrong, because the shape is different at every vendor and changes when they change. What magus gives you is the place to compute it:
 
@@ -255,8 +255,8 @@ Two things to keep straight while you do:
 
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
-- **`magus buzz`** - standalone shell with the magusfile loaded.
-- **`magus\pry()`** - `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
+- **`magus buzz`**: standalone shell with the magusfile loaded.
+- **`magus\pry()`**: `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
 import "magus";

@@ -1,6 +1,6 @@
 ---
 title: Quick start
-description: Everything you need to be productive with magus on one page - install, first target, the output flags, the agent skills and the guard hook - each linking to the page that goes deeper.
+description: Everything you need to be productive with magus on one page (install, first target, the output flags, the agent skills and the guard hook), each linking to the page that goes deeper.
 tags: [getting-started, install, quickstart, agents, skills, cli, reference]
 ---
 
@@ -123,7 +123,7 @@ magus agent install .opencode/skills    # opencode
 ```
 
 If your host reads `AGENTS.md` instead of a skills directory, install prints the
-magus block for you to paste in. magus does not write that file - it is yours,
+magus block for you to paste in. magus does not write that file; it is yours,
 and it stays quiet once your copy is current. For a whole starter file to own:
 
 ```sh
@@ -144,7 +144,7 @@ writes both by default. `--skill-form=short` or `--skill-form=full` writes one
 body per skill instead.
 
 The primary entry is the SHORT form: the enumeration dropped, the judgment kept,
-for the most capable readers - the ones that can re-derive the steps from the
+for the most capable readers, the ones that can re-derive the steps from the
 tool surface but not which failures are silent. It is the one always loaded, so
 it is the one whose size every session pays for.
 
@@ -187,7 +187,7 @@ Wire it into your host with the ready-made scripts:
 
 Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and
-fails when it is older than your working tree - because a stale guard enforces
+fails when it is older than your working tree, because a stale guard enforces
 stale rules while looking perfectly healthy. The **guard wiring** check answers
 a different question: whether anything actually invokes it. It probes the resolved
 binary with a known-denied command and inventories every host hook config it
@@ -213,4 +213,4 @@ failing when a config points at a template file that is stale or missing.
 
 Every flag and target set differs per workspace and magus version, so trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
-over anything written down - including this page.
+over anything written down, including this page.

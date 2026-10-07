@@ -1,6 +1,6 @@
 ---
 title: Pull request advice
-description: What magus comments on a pull request, why each finding exists, and how to turn any of it off - per advisor, per repository, or entirely.
+description: What magus comments on a pull request, why each finding exists, and how to turn any of it off (per advisor, per repository, or entirely).
 tags: [ci, github, pull-request, advice, comments, review, doctor, cache]
 ---
 
@@ -13,7 +13,7 @@ finding stops being true.
 
 None of it blocks a merge. The checks do that.
 
-The same advisors run at the keyboard - `magus diff --impact`, before you push. See
+The same advisors run at the keyboard (`magus diff --impact`) before you push. See
 [Before the push](#before-the-push-the-same-advisors-locally).
 
 ## Turning it off
@@ -79,7 +79,7 @@ against your working tree, in process, before you push:
 magus diff --impact
 ```
 
-Same scripts, same graph, same wording - the difference is where the answers go. In CI
+Same scripts, same graph, same wording: the difference is where the answers go. In CI
 they are composed into one comment; locally they are a section of the `--impact` report,
 where acting on a finding still costs one edit rather than a review round trip.
 
@@ -91,7 +91,7 @@ you want everything in it. Silencing is a decision to record where the next read
 see it, which is the pull request.
 
 **The base is whatever your clone has.** A local run never fetches. `magus diff` is a
-read-only report, it may run offline, and under `--watch` it re-fires on every save -
+read-only report, it may run offline, and under `--watch` it re-fires on every save,
 none of which may write `refs/remotes/`. So it compares against the `origin/<base>` in
 your clone as it stands, and the report says how old that is:
 
@@ -108,7 +108,7 @@ before you go looking for a bug.
 **Uncommitted edits count.** CI diffs the pull request's commits, `base...head`. A local
 run diffs the working tree against the merge base, so the change it describes is the one
 you are about to commit rather than the one you already did. Committed work is still
-included - the merge base is the same starting point either way. Untracked files are
+included: the merge base is the same starting point either way. Untracked files are
 outside both: `git diff` reports tracked paths, so a brand new file no project claims is
 invisible until you `git add` it.
 
@@ -224,7 +224,7 @@ reporting less.
 
 `api-surface` takes a `baseline`: a `magus graph export --symbols -o json` of the revision
 the pull request started from. With one, it compares every changed symbol against its base
-and reports what the change did to it - added, removed, re-signed, or changed in the body -
+and reports what the change did to it (added, removed, re-signed, or changed in the body)
 and the semver bump that evidence proves.
 
 The bump is a LOWER bound and never a ceiling. A removed public symbol proves a major, an
@@ -236,8 +236,8 @@ compared as the indexer rendered them, which is what keeps this language-agnosti
 also the one place it can be wrong: renaming a parameter, widening a type, or changing a
 constant's value all move the rendered text without breaking a consumer.
 
-Index both sides in one checkout. Two environments render one declaration differently -
-a missing `node_modules` turns a TypeScript parameter into `any` - and every difference
+Index both sides in one checkout. Two environments render one declaration differently
+(a missing `node_modules` turns a TypeScript parameter into `any`) and every difference
 would read as a changed signature.
 
 ```sh

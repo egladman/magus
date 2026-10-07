@@ -1,6 +1,6 @@
 ---
 title: Codex
-description: Wiring magus into Codex - skills in .agents/skills, the AGENTS.md block you paste, MCP in the user-level config, and the hooks that carry the guard, the checkpoint and the post-compaction brief.
+description: Wiring magus into Codex (skills in .agents/skills, the AGENTS.md block you paste, MCP in the user-level config, and the hooks that carry the guard, the checkpoint and the post-compaction brief).
 tags: [agents, codex, skills, AGENTS.md, guard, hooks, MCP]
 ---
 
@@ -296,7 +296,7 @@ will be handed.
 ## Notifications
 
 Codex runs a program on its notify setting. Shape the event into the canonical
-envelope and pipe it to `magus session notify`, exactly as the other hosts do - see
+envelope and pipe it to `magus session notify`, exactly as the other hosts do; see
 [Attention hooks](notifications.md) for the envelope and the vocabulary.
 
 ## Coverage and limits

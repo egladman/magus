@@ -1,6 +1,6 @@
 ---
 title: Reviewing your changes
-description: Read a changeset in the order that its consequences suggest, price what landing it costs before you push, and keep a bookmark of what you have actually read - from the terminal, your own editor, the console, or a patch someone sent you.
+description: Read a changeset in the order that its consequences suggest, price what landing it costs before you push, and keep a bookmark of what you have actually read, from the terminal, your own editor, the console, or a patch someone sent you.
 tags:
   [
     diff,
@@ -25,7 +25,7 @@ magus diff
 
 Two things separate it from `git diff`. Declared target outputs are folded away, because
 reading a generated file is reading a machine's restatement of a change made somewhere
-else - the source edit is the one to read. And what remains is ordered by what it can
+else, so the source edit is the one to read. And what remains is ordered by what it can
 break, widest reach first, rather than alphabetically.
 
 Reach needs a symbol index. Without one there is no ranking key at all, and diff says so
@@ -74,13 +74,13 @@ that changed AFTER you read them, and files you have never opened, widest blast 
 first.
 
 It is a bookmark, not a score. There is no ratio, and it stays quiet on a small change
-nobody has disturbed - a count with a target is a count that gets cleared instead of
+nobody has disturbed: a count with a target is a count that gets cleared instead of
 satisfied. It is also never shown to a second person: no team view, no aggregate, no
 pull-request comment. A read measure someone else can see is a performance metric, and a
 performance metric gets gamed rather than met.
 
 Record what you read, wherever you read it. Read the files in vim, in your editor, in a
-pager - whatever you already use - then say so:
+pager, whatever you already use, then say so:
 
 ```sh
 magus diff --ack path/to/file.go path/to/other.go
@@ -88,7 +88,7 @@ magus diff --ack path/to/file.go path/to/other.go
 
 With no paths it covers the whole changeset, and `--reason` keeps a note with it for the
 next reader of the report. A receipt covers a file at the content it holds NOW, so editing
-that file afterwards voids its receipt - which is exactly what makes "changed since you
+that file afterwards voids its receipt, which is exactly what makes "changed since you
 read it" answerable.
 
 magus never infers a receipt from an editor or a session. A measure satisfied by scrolling
@@ -97,7 +97,7 @@ it outright.
 
 ## Stepping through it in the terminal
 
-At a terminal, `magus diff` opens the viewer - the same annotations, plus navigation and a
+At a terminal, `magus diff` opens the viewer: the same annotations, plus navigation and a
 way to mark what you have read. Nothing is hidden behind a keypress: the file lines and
 their evidence render there exactly as they do in the report.
 
@@ -108,8 +108,8 @@ of a file earns that file a receipt without a separate `--ack`.
 The viewer joins the same session the console's Diff surface and an agent share, so a hunk
 marked in one is marked in the others.
 
-It stands aside wherever it cannot draw - no terminal, `-o json`, `--watch`, a patch
-argument, `--impact` - and the report prints instead. That is not a refusal and needs no
+It stands aside wherever it cannot draw (no terminal, `-o json`, `--watch`, a patch
+argument, `--impact`) and the report prints instead. That is not a refusal and needs no
 flag, so a script or an agent is unaffected by the default. To read the report at a
 terminal anyway:
 
@@ -134,7 +134,7 @@ gh pr diff 123 | magus diff -
 Both dialects parse: git's `diff --git a/x b/x` headers, and the bare `--- a/x` / `+++ b/x`
 pair that GNU `diff -u` and `patch` speak. A patch magus cannot read is refused rather than
 reported as an empty changeset, because "nothing to review" is the one wrong answer that
-costs something - you stop looking.
+costs something: you stop looking.
 
 ## Staying in git
 

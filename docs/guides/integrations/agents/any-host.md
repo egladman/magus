@@ -1,6 +1,6 @@
 ---
 title: Any other host
-description: The host-neutral contract - install the guidance where your host reads it, pipe the event to magus shell, render the verdict with -o template - for an agent host magus does not document by name.
+description: The host-neutral contract (install the guidance where your host reads it, pipe the event to magus shell, render the verdict with -o template) for an agent host magus does not document by name.
 tags: [agents, guard, hooks, integration, template]
 ---
 
@@ -63,11 +63,11 @@ printf '%s' "$command" | magus shell -o 'template=<your host reply>'
 If your host writes its payload as JSON with `tool_input.command` or
 `tool_input.file_path`, pipe the payload in unchanged: magus reads the envelope
 itself, infers a write from a file path, and picks up `session_id` and
-`hook_event_name` for attribution. Otherwise select the field yourself - the
-shipped templates set `HOST_EVENT_PATH` to a dot-path - and pass `--path` when the
+`hook_event_name` for attribution. Otherwise select the field yourself: the
+shipped templates set `HOST_EVENT_PATH` to a dot-path, and pass `--path` when the
 input is a file. A lease id is not a field you select out of the event: the guard
 inherits it from the worker's environment, which the orchestrator that spawned
-the worker has to export - see
+the worker has to export; see
 [wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
 The fastest start is to copy [`magus-command.buzz`](guard-templates.md) and
@@ -116,7 +116,7 @@ would have to enumerate per host: a `tool_input` with a `prompt` is a spawn. It
 reads the prompt as the handed context, takes the callee's label from
 `subagent_type`, then `description`, then `tool_name`, and takes the parent's
 session from `session_id`. If your host names those fields differently, reshape
-the payload before piping it - a few lines of Buzz run by `magus buzz` are enough.
+the payload before piping it: a few lines of Buzz run by `magus buzz` are enough.
 
 The ordering is deliberate: a payload carrying `command` or `file_path` is judged
 as a command or a write exactly as before, and only one carrying neither is read
@@ -129,7 +129,7 @@ rather than blocked. Discard the output and exit 0.
 ### The event
 
 One `agent_spawn` event per lease, in the same activity trail and the same
-listing as every other kind - no new endpoint, and the console's activity filters
+listing as every other kind; no new endpoint, and the console's activity filters
 already select it.
 
 | field             | what it carries                                                     |

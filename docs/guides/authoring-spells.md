@@ -1,6 +1,6 @@
 ---
 title: Writing a spell
-description: Author a magus spell - the mgs_ contract functions, toolchain spells that contribute operations, and provider spells that back the remote cache, CI annotations, or secret resolution.
+description: Author a magus spell (the mgs_ contract functions, toolchain spells that contribute operations, and provider spells that back the remote cache, CI annotations, or secret resolution).
 tags:
   [
     spell,
@@ -41,7 +41,7 @@ at all.
 spells/<dir>/spell.buzz
 ```
 
-The directory name and the registered name are **independent** - the `go` spell lives in
+The directory name and the registered name are **independent**: the `go` spell lives in
 `spells/golang/`. What magus registers is whatever `mgs_getName()` returns.
 
 The constraint that decides how your spell is loaded:
@@ -51,7 +51,7 @@ The constraint that decides how your spell is loaded:
 > session that offers only `magus/spell`, `magus/charm` and `magus/lint`; any other
 > import fails there with [BZZ2001](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/BZZ2001.md).
 
-So there are two shapes, and you do not get to choose - the imports choose for you:
+So there are two shapes, and you do not get to choose: the imports choose for you:
 
 |             | Built-in spell                                  | Workspace-local spell                  |
 | ----------- | ----------------------------------------------- | -------------------------------------- |
@@ -80,12 +80,12 @@ the split is not arbitrary:
 
 That single fact decides which members you may call:
 
-|            | members                                                                               | in a spell                                                                                                                               |
-| ---------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| in-process | `describe.project`, `affected`, `projectGraph`, `where`, `insight`, `insightMarkdown` | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)** - they read the workspace already open on the context, and there is not one |
-| declaring  | `project`, `cache.remote`, `ci.provider`                                              | **raise MGS1022** - only a magusfile evaluation has the registry to declare into                                                         |
-| forking    | `cmd`, `run`, `doctor`, `clean`, `impact`, and the other `describe` methods           | **work** - each spawns a nested magus that discovers and loads its own workspace                                                         |
-| either     | `describe.graph`, `describe.tool`                                                     | **work** - serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
+|            | members                                                                               | in a spell                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| in-process | `describe.project`, `affected`, `projectGraph`, `where`, `insight`, `insightMarkdown` | **raise [MGS1022](../reference/codes/magusfile/MGS1022.md)**: they read the workspace already open on the context, and there is not one |
+| declaring  | `project`, `cache.remote`, `ci.provider`                                              | **raise MGS1022**: only a magusfile evaluation has the registry to declare into                                                         |
+| forking    | `cmd`, `run`, `doctor`, `clean`, `impact`, and the other `describe` methods           | **work**: each spawns a nested magus that discovers and loads its own workspace                                                         |
+| either     | `describe.graph`, `describe.tool`                                                     | **work**: serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
 
 So the rule is: from a spell, fork. `magus\describe.evaluatedProject()` answers what
 `magus\describe.project()` would have, at the cost of a subprocess.
@@ -95,7 +95,7 @@ Two things that follow, and neither is guessable:
 **A file under `spells/` is loaded twice.** Once as a discovered spell (a spell session, no
 workspace) and once if a magusfile imports it by path (the magusfile session, workspace
 present). A helper called FROM a magusfile therefore runs on the magusfile surface, where
-the in-process members do work - the same call inside a handler op does not. If you are
+the in-process members do work; the same call inside a handler op does not. If you are
 writing a helper for a magusfile to call, you have the full surface; if you are writing an
 op body, assume you do not.
 
@@ -111,7 +111,7 @@ a default when it is absent, so a minimal spell is two functions.
 
 | Function                | Signature                         | What it decides                                                                                                                                                                                                                                                                 |
 | ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mgs_getName`           | `() > str`                        | the registered name. **Required.** It must stand alone - it is what `magus describe spells` and every diagnostic show, with no directory around it to supply context                                                                                                            |
+| `mgs_getName`           | `() > str`                        | the registered name. **Required.** It must stand alone: it is what `magus describe spells` and every diagnostic show, with no directory around it to supply context                                                                                                             |
 | `mgs_listTargets`       | `() > {str: fun(Target) Command}` | the operations this spell contributes. Absent for providers                                                                                                                                                                                                                     |
 | `mgs_getLanguage`       | `() > Language`                   | the language: its canonical `name` (the tag reported for projects bound to it), the `extensions` that are the language, and, when the spell can declare it honestly, the `comments` syntax the gate's comment-only classifier consumes                                          |
 | `mgs_isOpaque`          | `() > bool`                       | true when another tool owns the dependency graph (a package manager), so magus does not try to infer one                                                                                                                                                                        |
@@ -145,7 +145,7 @@ export fun mgs_getTools() > {str: Tool} {
 ```
 
 Keyed by **tool**, and resolved through an op's own `bin`, so no op restates which tool
-it runs. The `docker` spell gates `docker` and deliberately not `hadolint` - linting a
+it runs. The `docker` spell gates `docker` and deliberately not `hadolint`: linting a
 Dockerfile talks to no daemon, and a spell-scoped probe would make a lint wait on a
 service it never uses.
 
@@ -158,7 +158,7 @@ The result **never enters a cache key**: it is a precondition, not an input. `do
 reports running containers and disk usage, so keying on it would invalidate every entry on
 every run. `magus doctor` lists every declared gate without running any of them.
 
-Most spells need none - `go`, `rustc`, and `node` are self-contained.
+Most spells need none: `go`, `rustc`, and `node` are self-contained.
 
 A version probe is worth more thought than it looks. If a tool changes what passes and
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
@@ -269,7 +269,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 }
 ```
 
-Add [charms](../concepts/charms.md) to reshape the argv without a second operation - each
+Add [charms](../concepts/charms.md) to reshape the argv without a second operation; each
 is an RFC 6902 JSON Patch built by the `magus/charm` constructors, so adding one later
 never shifts another's indices.
 
@@ -280,12 +280,12 @@ fill a payload map by calling `cb`, and return data rather than a `Command`.
 
 Four subsystems accept one, and each detects its ops by name:
 
-| Subsystem                                   | Selected with                    | Ops                                                                                |
-| ------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
-| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled`, `has_artifact`, `prune` (optional); `get_artifact`, `put_artifact`      |
-| [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
-| [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
-| [Review](../concepts/review.md)             | `magus\review.provider(<spell>)` | `find_review`, `review_threads`, `publish_review`, `reply_review` - any subset     |
+| Subsystem                                   | Selected with                    | Ops                                                                               |
+| ------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------- |
+| [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled`, `has_artifact`, `prune` (optional); `get_artifact`, `put_artifact`     |
+| [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes`: all optional |
+| [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                  |
+| [Review](../concepts/review.md)             | `magus\review.provider(<spell>)` | `find_review`, `review_threads`, `publish_review`, `reply_review`: any subset     |
 
 One spell may carry several of these, and several spells may serve one vendor. Which shape is
 right is decided by RUNTIME, not by the vendor's name: `spells/github/actions` carries the
@@ -343,7 +343,7 @@ magus buzz -t spells/myspell/spell.buzz
 ```
 
 Toolchain spells are mostly assertions about the `Command` an op returns, which needs no
-tool installed. Provider spells are worth testing against a stub binary on `PATH` - that is
+tool installed. Provider spells are worth testing against a stub binary on `PATH`; that is
 how this repo's secret provider covers its not-installed, not-signed-in, and wrong-path
 branches without a 1Password account.
 
@@ -361,8 +361,8 @@ branches without a 1Password account.
 
 ## See also
 
-- [Spells](../concepts/spells.md) - what a spell is and how it binds to a project
-- [Operations](../concepts/operations.md) - what an op contributes to a target
-- [Charms](../concepts/charms.md) - reshaping an op's argv
-- [Buzz module reference](../reference/buzz/index.md) - every host module a spell can import
-- [Wards](../concepts/wards.md) - spell-authored diagnostics over resolved ops
+- [Spells](../concepts/spells.md): what a spell is and how it binds to a project
+- [Operations](../concepts/operations.md): what an op contributes to a target
+- [Charms](../concepts/charms.md): reshaping an op's argv
+- [Buzz module reference](../reference/buzz/index.md): every host module a spell can import
+- [Wards](../concepts/wards.md): spell-authored diagnostics over resolved ops
