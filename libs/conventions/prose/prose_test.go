@@ -84,11 +84,11 @@ func TestProseLinesDropCodeAndKeepListItems(t *testing.T) {
 		"  After the fence."
 
 	want := []proseLine{
-		{text: "Intro line.", start: 0, opens: true},
+		{text: "Intro line.", start: 0, opens: true, paragraph: true},
 		{text: "wraps here.", start: 0},
-		{text: "- an item", start: 2, opens: true, item: true},
+		{text: "- an item", start: 2, opens: true, paragraph: true, item: true},
 		{text: "  continues", start: 2},
-		{text: "After the fence.", start: 0, opens: true},
+		{text: "After the fence.", start: 0, opens: true, paragraph: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
@@ -103,9 +103,28 @@ func TestProseLinesOpenAnItemPerMarkerLine(t *testing.T) {
 	doc := "Rules are derived:\n    - one property;\n   - the next - here `a  - b`"
 
 	want := []proseLine{
-		{text: "Rules are derived:", start: 0, opens: true},
-		{text: "    - one property;", start: 6, opens: true, item: true},
+		{text: "Rules are derived:", start: 0, opens: true, paragraph: true},
+		{text: "    - one property;", start: 6, opens: true, paragraph: true, item: true},
 		{text: "   - the next - here `a  - b`", start: 5, opens: true, item: true},
+	}
+
+	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
+		t.Errorf("proseLines:\n got %#v\nwant %#v", got, want)
+	}
+}
+
+// TestProseLinesOpenAParagraphWhereAListStartsAndEnds pins Vale's text scope
+// for a list with no blank line around it: the list is one paragraph, apart
+// from the lines on either side, and only its first item opens it.
+func TestProseLinesOpenAParagraphWhereAListStartsAndEnds(t *testing.T) {
+	doc := "Lead:\n  - one\n    wraps\n  - two\nAfter the list."
+
+	want := []proseLine{
+		{text: "Lead:", start: 0, opens: true, paragraph: true},
+		{text: "  - one", start: 4, opens: true, paragraph: true, item: true},
+		{text: "    wraps", start: 4},
+		{text: "  - two", start: 4, opens: true, item: true},
+		{text: "After the list.", start: 0, opens: true, paragraph: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {

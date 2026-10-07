@@ -17,7 +17,7 @@ import (
 type Rule string
 
 const (
-	// RuleCommentBlock reports a doc over 250 words.
+	// RuleCommentBlock reports a doc paragraph over 250 words.
 	RuleCommentBlock Rule = "comment-block"
 	// RuleCommentSentence reports a doc sentence over 60 words.
 	RuleCommentSentence Rule = "comment-sentence"
@@ -107,9 +107,14 @@ type proseLine struct {
 	// start is the offset past the line's indent and any list marker, so a
 	// bullet's own hyphen is never read as an aside.
 	start int
-	// opens is set on the first line of a paragraph: after a blank or a
-	// dropped line, or on a list item.
+	// opens is set where no sentence runs on from the line before: on the
+	// first line of a paragraph and on every list item.
 	opens bool
+	// paragraph is set on the first line of a paragraph as Vale's text scope
+	// reads one: after a blank or a dropped line, and where a list starts or
+	// ends. A list with no blank line between its items is one paragraph, so
+	// its later items set opens and not paragraph.
+	paragraph bool
 	// item is set on a line that opens a list item.
 	item bool
 }
@@ -125,13 +130,13 @@ func proseLines(doc string) []proseLine {
 
 	var out []proseLine
 
-	inList, opens := false, true
+	inList, opens, paragraph := false, true, true
 
 	for _, text := range lines {
 		if strings.TrimSpace(text) == "" {
 			// A blank line neither opens nor closes a list: go/doc/comment keeps a
 			// list running across the blank line that separates loose items.
-			opens = true
+			opens, paragraph = true, true
 
 			continue
 		}
@@ -142,19 +147,22 @@ func proseLines(doc string) []proseLine {
 
 		switch {
 		case marker > 0:
+			paragraph = paragraph || !inList
 			inList, opens = true, true
 		case indent > 0 && inList:
 			// A wrapped list item is prose, not code, however deep it sits.
 		case indent > 0:
-			opens = true
+			opens, paragraph = true, true
 
 			continue
-		default:
-			inList = false
+		case inList:
+			inList, opens, paragraph = false, true, true
 		}
 
-		out = append(out, proseLine{text: text, start: indent + marker, opens: opens, item: marker > 0})
-		opens = false
+		out = append(out, proseLine{
+			text: text, start: indent + marker, opens: opens, paragraph: paragraph, item: marker > 0,
+		})
+		opens, paragraph = false, false
 	}
 
 	return out
@@ -227,9 +235,9 @@ func commonPrefix(a, b string) string {
 	return a[:n]
 }
 
-// paragraphs joins the bodies of prose into one line per paragraph, so a
-// phrase or sentence wrapped across lines is read whole. mask rewrites each
-// line before the join.
+// paragraphs joins the bodies of prose into one line per paragraph or list
+// item, so a phrase or sentence wrapped across lines is read whole and none
+// runs from one item into the next. mask rewrites each line before the join.
 func paragraphs(prose []proseLine, mask func(string) string) []string {
 	var out []string
 

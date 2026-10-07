@@ -31,17 +31,30 @@ var termsPattern = regexp.MustCompile(`(?i)\bsub-agents?\b`)
 // describes its argument rather than what it returns.
 var nameSuffixPattern = regexp.MustCompile(`\b(?:\w*[a-z0-9](?:Of|For)|\w+_(?:of|for))\b`)
 
+// commentBlock budgets each paragraph rather than the whole doc, the scope
+// Vale judged the rule at.
 func commentBlock(_ Symbol, prose []proseLine) []Finding {
-	n := 0
+	var words []int
+
 	for _, ln := range prose {
-		n += len(strings.Fields(ln.body()))
+		if ln.paragraph || len(words) == 0 {
+			words = append(words, 0)
+		}
+
+		words[len(words)-1] += len(strings.Fields(ln.body()))
 	}
 
-	if n <= maxBlockWords {
-		return nil
+	var out []Finding
+
+	for _, n := range words {
+		if n > maxBlockWords {
+			out = append(out, Finding{
+				Message: "Keep a comment paragraph under 250 words: say why, and move the rest to docs.",
+			})
+		}
 	}
 
-	return []Finding{{Message: "Keep a comment block under 250 words: say why, and move the rest to docs."}}
+	return out
 }
 
 func commentSentence(_ Symbol, prose []proseLine) []Finding {
