@@ -1059,3 +1059,26 @@ func TestCauseLinePrefersTheErrorOverTheFooter(t *testing.T) {
 	assert.Equal(t, "mise WARN fetch error", causeLine("starting\nmise WARN fetch error\n"), "a warning still beats a line with no error")
 	assert.Empty(t, causeLine(""))
 }
+
+// TestRegisterLocalSpellKeepsItsSymbolIndexer registers a spell by value, as magus.project
+// does for a handle the registry does not hold yet. The indexer's op alone is not enough:
+// the auto-indexer and index status find a spell's index through SymbolIndexer.
+func TestRegisterLocalSpellKeepsItsSymbolIndexer(t *testing.T) {
+	const name = "register-local-spell-indexer"
+	m, err := spell.DecodeHandle(spellHandleFromMeta(spells.Descriptor{
+		Name: name,
+		SymbolIndexer: &spells.SymbolIndexer{
+			Format:  spells.SymbolFormatSCIP,
+			Command: spells.Command{Bin: "scip-test", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+		},
+	}))
+	require.NoError(t, err)
+	registerLocalSpell(m)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+
+	sp, ok := project.DefaultSpellRegistry().Lookup(name)
+	require.True(t, ok)
+	require.NotNil(t, sp.SymbolIndexer())
+	assert.Equal(t, "scip-test", sp.SymbolIndexer().Command.Bin)
+	assert.Equal(t, spells.DefaultSymbolIndexOp, sp.SymbolIndexOp())
+}
