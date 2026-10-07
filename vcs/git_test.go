@@ -436,17 +436,22 @@ func TestParseChangesByCommit(t *testing.T) {
 	got := parseChangesByCommit(out)
 	require.Len(t, got, 2)
 
-	assert.Equal(t, "abc123", got[0].ID)
-	assert.Equal(t, "Ada", got[0].Author)
-	assert.Equal(t, time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC), got[0].Date.UTC())
-	assert.Equal(t, []types.FileChange{
-		{Path: "api/main.go", Status: types.ChangeModified},
-		{Path: "api/util.go", Status: types.ChangeAdded},
-	}, got[0].Files)
+	assert.Equal(t, types.CommitChange{
+		ID:     "abc123",
+		Author: "Ada",
+		Date:   time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC),
+		Files: []types.FileChange{
+			{Path: "api/main.go", Status: types.ChangeModified},
+			{Path: "api/util.go", Status: types.ChangeAdded},
+		},
+	}, got[0])
 
-	assert.Equal(t, "def456", got[1].ID)
-	assert.Equal(t, "Babbage", got[1].Author)
-	assert.Equal(t, []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}}, got[1].Files)
+	assert.Equal(t, types.CommitChange{
+		ID:     "def456",
+		Author: "Babbage",
+		Date:   time.Date(2026, 6, 19, 9, 0, 0, 0, time.UTC),
+		Files:  []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}},
+	}, got[1])
 }
 
 // TestParseChangesByCommitRename is the case -M exists for: a rename arrives as ONE entry

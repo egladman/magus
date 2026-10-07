@@ -284,8 +284,9 @@ func TestClaimMemoryFoldsSizedFigures(t *testing.T) {
 
 	var step cache.Step
 	sizing := (&Magus{}).claimMemory(&step, p, "ci", memorySizer(&x, shape))
-	assert.Equal(t, 5000+1024, step.MemoryMB, "test sized to 1.25 x 4000; lint has no runs, so its declaration stands")
-	assert.Equal(t, "test", step.MemoryDeclaredBy)
+	// test is sized to 1.25 x 4000; lint has no runs, so its declaration stands. Slots follow the
+	// host's capacity, which the test does not control.
+	assert.Equal(t, cache.Step{MemoryMB: 5000 + 1024, MemoryDeclaredBy: "test", Slots: step.Slots}, step)
 	assert.Equal(t, types.MemorySizing{Samples: 3}, sizing)
 
 	assert.Nil(t, memorySizer(nil, shape), "no history, no sizer: declarations fold as written")

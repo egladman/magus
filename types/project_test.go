@@ -25,11 +25,14 @@ func TestAttachSpellSkipsInternalForThePrimarySlot(t *testing.T) {
 	assert.Empty(t, p.Spell, "plumbing must not claim the primary slot")
 
 	p.AttachSpell(toolchain)
-	assert.Equal(t, "go", p.Spell, "the first real toolchain does")
 
-	// Both are still BOUND: only the display slot is affected, so dispatch through
-	// the magusfile registration is untouched.
-	assert.Equal(t, []string{"magusfile", "go"}, p.Spells)
+	// The first real toolchain claims the primary slot. Both are still BOUND: only the
+	// display slot is affected, so dispatch through the magusfile registration is untouched.
+	assert.Equal(t, &Project{
+		Spell:    "go",
+		Spells:   []string{"magusfile", "go"},
+		Bindings: []*Binding{{Name: "magusfile"}, {Name: "go"}},
+	}, p)
 }
 
 // TestAttachSpellLeavesNoPrimaryWhenOnlyInternal covers a project whose targets
@@ -229,12 +232,15 @@ func TestProject_AttachSpell(t *testing.T) {
 	p := &Project{Path: "api/"}
 	p.AttachSpell(goSpell)
 
-	assert.Equal(t, "go", p.Spell)
-	assert.Equal(t, []string{"go"}, p.Spells)
-	assert.Len(t, p.Bindings, 1)
-	assert.Equal(t, "go", p.Bindings[0].Name)
-	assert.NotEmpty(t, p.Sources, "Sources should be populated after AttachSpell")
-	assert.NotEmpty(t, p.Outputs, "Outputs should be populated after AttachSpell")
+	// Sources and Outputs are populated from the spell's own declarations.
+	assert.Equal(t, &Project{
+		Path:     "api/",
+		Spell:    "go",
+		Spells:   []string{"go"},
+		Bindings: []*Binding{{Name: "go"}},
+		Sources:  MustParseGlobs("**/*.go"),
+		Outputs:  MustParseGlobs("bin/**"),
+	}, p)
 
 	// Attaching a second spell must NOT overwrite the primary Spell field.
 	pySpell := spells.NewSpell("python",

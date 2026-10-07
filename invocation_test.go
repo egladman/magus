@@ -156,10 +156,15 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 
 	inv, err := m.InvocationByID(id)
 	require.NoError(t, err)
-	assert.Equal(t, id, inv.ID)
-	assert.Equal(t, Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun}, inv.Command)
-	assert.Equal(t, "v0.cov", inv.MagusVersion)
-	assert.Equal(t, journal.StatusPass, inv.Status, "finish(nil) is a passing run")
+	// The clock fields are taken from inv and checked below; finish(nil) is a passing run.
+	assert.Equal(t, Invocation{
+		ID:           id,
+		Command:      Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun},
+		StartedMs:    inv.StartedMs,
+		FinishedMs:   inv.FinishedMs,
+		Status:       journal.StatusPass,
+		MagusVersion: "v0.cov",
+	}, inv)
 	assert.Positive(t, inv.StartedMs)
 	assert.GreaterOrEqual(t, inv.FinishedMs, inv.StartedMs)
 
@@ -168,15 +173,21 @@ func TestInvocationRoundTripsThroughTheJournal(t *testing.T) {
 	assert.Equal(t, inv, header, "both accessors reconstruct the same header")
 
 	require.Len(t, events, 2)
-	assert.Equal(t, journal.KindStarted, events[0].Kind)
-	assert.Equal(t, id, events[0].Inv)
-	assert.Equal(t, "v0.cov", events[0].MagusVersion)
-	require.NotNil(t, events[0].Command)
-	assert.Equal(t, []string{"run", "build", "api"}, events[0].Command.Arguments)
+	assert.Equal(t, Event{
+		Ts:           events[0].Ts, // wall clock
+		Inv:          id,
+		Kind:         journal.KindStarted,
+		Command:      &Command{Arguments: []string{"run", "build", "api"}, Cwd: m.Root(), Trigger: journal.TriggerRun},
+		MagusVersion: "v0.cov",
+	}, events[0])
 
-	assert.Equal(t, journal.KindFinished, events[1].Kind)
-	assert.Equal(t, journal.StatusPass, events[1].Status)
-	assert.Nil(t, events[1].Command, "the lineage rides the started event alone")
+	// The lineage rides the started event alone, so the finished event has no Command.
+	assert.Equal(t, Event{
+		Ts:     events[1].Ts, // wall clock
+		Inv:    id,
+		Kind:   journal.KindFinished,
+		Status: journal.StatusPass,
+	}, events[1])
 }
 
 // TestBeginInvocationReusesAnIDFromTheContext: the server mints the id before

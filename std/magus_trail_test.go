@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -16,13 +17,16 @@ func TestFeedbackWindow(t *testing.T) {
 
 	w, err := feedbackWindow(nil, now)
 	require.NoError(t, err)
-	assert.Equal(t, now.Add(-24*time.Hour), w.Since, "a window nobody names is the last day")
-	assert.Equal(t, now, w.Until)
+	assert.Equal(t, trail.FeedbackWindow{Since: now.Add(-24 * time.Hour), Until: now}, w, "a window nobody names is the last day")
 
 	w, err = feedbackWindow(map[string]any{"session": "s1", "since": "6h", "until": "2026-09-30T20:00:00Z"}, now)
 	require.NoError(t, err)
-	assert.Equal(t, "s1", w.Session)
-	assert.Equal(t, time.Date(2026, 9, 30, 14, 0, 0, 0, time.UTC), w.Since, "a duration counts back from until")
+	// A duration counts back from until.
+	assert.Equal(t, trail.FeedbackWindow{
+		Session: "s1",
+		Since:   time.Date(2026, 9, 30, 14, 0, 0, 0, time.UTC),
+		Until:   time.Date(2026, 9, 30, 20, 0, 0, 0, time.UTC),
+	}, w)
 
 	w, err = feedbackWindow(map[string]any{"since": "2026-09-30T16:00:00Z"}, now)
 	require.NoError(t, err)

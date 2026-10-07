@@ -73,12 +73,13 @@ func TestParseOccurrencesRangesRolesAndOrder(t *testing.T) {
 	occs := files[0].Occurrences
 	require.Len(t, occs, 3)
 
-	assert.Equal(t, types.SymbolOccurrence{Line: 11, Column: 6, EndLine: 11, EndColumn: 9, Definition: true}, occs[0],
-		"SCIP 0-based (10,5)-(10,8) becomes 1-based (11,6)-(11,9), flagged as the definition")
-	assert.Equal(t, 21, occs[1].Line)
-	assert.Equal(t, 3, occs[1].Column, "the (20,2) occurrence sorts before (20,8)")
-	assert.Equal(t, 9, occs[2].Column)
-	assert.False(t, occs[1].Definition, "a plain reference is not a definition")
+	// SCIP 0-based (10,5)-(10,8) becomes 1-based (11,6)-(11,9), flagged as the definition;
+	// the (20,2) occurrence sorts before (20,8), and a plain reference is not a definition.
+	assert.Equal(t, []types.SymbolOccurrence{
+		{Line: 11, Column: 6, EndLine: 11, EndColumn: 9, Definition: true},
+		{Line: 21, Column: 3, EndLine: 21, EndColumn: 6},
+		{Line: 21, Column: 9, EndLine: 21, EndColumn: 12},
+	}, occs)
 }
 
 // TestParseOccurrencesSkipsOtherSymbolsAndOutsideDocuments keeps the read scoped. A
@@ -130,10 +131,11 @@ func TestVerifyConfirmsRangesAgainstTheTree(t *testing.T) {
 	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "func Bar() {}\nBar()\n"})))
 	got := files
 
-	for _, occ := range got[0].Occurrences {
-		assert.Equal(t, types.SymbolOccurrenceVerified, occ.Status)
-		assert.Equal(t, "Bar", occ.Text, "the text read back is the evidence behind the status")
-	}
+	// The text read back is the evidence behind the status.
+	assert.Equal(t, []types.SymbolOccurrence{
+		{Line: 1, Column: 6, EndLine: 1, EndColumn: 9, Text: "Bar", Status: types.SymbolOccurrenceVerified},
+		{Line: 2, Column: 1, EndLine: 2, EndColumn: 4, Text: "Bar", Status: types.SymbolOccurrenceVerified},
+	}, got[0].Occurrences)
 }
 
 // TestVerifyRejectsAStaleIndex is the test this whole feature turns on. The index says
@@ -149,9 +151,11 @@ func TestVerifyRejectsAStaleIndex(t *testing.T) {
 	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "func (r T) Bar() {}\n"})))
 	got := files
 
-	occ := got[0].Occurrences[0]
-	assert.Equal(t, types.SymbolOccurrenceMismatch, occ.Status, "a shifted range must never read as editable")
-	assert.Equal(t, "(r ", occ.Text, "and it reports what is really there, which is what shows the index is stale")
+	// A shifted range must never read as editable, and it reports what is really there,
+	// which is what shows the index is stale.
+	assert.Equal(t, types.SymbolOccurrence{
+		Line: 1, Column: 6, EndLine: 1, EndColumn: 9, Text: "(r ", Status: types.SymbolOccurrenceMismatch,
+	}, got[0].Occurrences[0])
 }
 
 // TestVerifyReportsUnreadableSites separates "the range is wrong" from "magus could not
@@ -188,8 +192,9 @@ func TestVerifyRejectsAMultiLineRange(t *testing.T) {
 	}}
 	require.NoError(t, VerifyOccurrences(t.Context(), files, []string{"Bar"}, fileReader(map[string]string{"a.go": "Bar\nBar\n"})))
 	got := files
-	assert.Equal(t, types.SymbolOccurrenceMismatch, got[0].Occurrences[0].Status)
-	assert.Equal(t, "Bar\nB", got[0].Occurrences[0].Text)
+	assert.Equal(t, types.SymbolOccurrence{
+		Line: 1, Column: 1, EndLine: 2, EndColumn: 2, Text: "Bar\nB", Status: types.SymbolOccurrenceMismatch,
+	}, got[0].Occurrences[0])
 }
 
 // TestVerifyWithNoNamesVerifiesNothing pins the conservative default. An index that names

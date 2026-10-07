@@ -42,11 +42,9 @@ func TestCheckpointCleanTree(t *testing.T) {
 
 	head, err := gitOutput(ctx, dir, gitOpts{}, "rev-parse", "HEAD")
 	require.NoError(t, err)
-	assert.Equal(t, head, cp.Revision, "revision must be the full head id, feedable back to a VCS")
-	assert.Equal(t, "work", cp.Branch)
-	assert.False(t, cp.Dirty)
-	assert.Empty(t, cp.PatchDigest, "a clean tree has no patch, so no digest")
-	assert.Equal(t, "git", cp.VCS)
+	// The revision must be the full head id, feedable back to a VCS; a clean tree has no
+	// patch, so no digest.
+	assert.Equal(t, types.VCSCheckpoint{Revision: head, Branch: "work", VCS: "git"}, cp)
 }
 
 // TestCheckpointDirtyTree covers the properties a ledger actually relies on: the digest
@@ -202,8 +200,10 @@ func TestCheckpointPreservesOnlyWhenAsked(t *testing.T) {
 	assert.Equal(t, "unfinished", held, "the handle does not hold the untracked work")
 
 	// The identity half of the record is unaffected by capturing: same tree, same digests.
-	assert.Equal(t, plain.PatchDigest, kept.PatchDigest)
-	assert.Equal(t, plain.UntrackedDigest, kept.UntrackedDigest)
+	// Only the handle differs.
+	identity := plain
+	identity.Preserved = kept.Preserved
+	assert.Equal(t, identity, kept)
 }
 
 // preserveFailsAfterMinting is a driver whose Preserve returns a handle AND an error, the

@@ -206,9 +206,7 @@ func TestHTTPFailCarriesTheStatus(t *testing.T) {
 
 	var se *StatusError
 	require.ErrorAs(t, err, &se, "the error must carry its status structurally")
-	assert.Equal(t, http.StatusNotFound, se.Status)
-	assert.Equal(t, "get", se.Method)
-	assert.Equal(t, srv.URL, se.URL)
+	assert.Equal(t, &StatusError{Method: "get", URL: srv.URL, Status: http.StatusNotFound}, se)
 
 	fields := se.BuzzError()
 	assert.Equal(t, "404", fields["status"], "a Buzz catch must be able to index the status")
@@ -241,8 +239,8 @@ func TestHTTPRetryThenSucceeds(t *testing.T) {
 		"fixed":    true,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, res.Status)
-	assert.Equal(t, "ok", res.Body)
+	// The response headers are the transport's own (Date, Content-Length), not this test's to pin.
+	assert.Equal(t, types.HTTPResponse{Status: http.StatusOK, Body: "ok", Headers: res.Headers}, res)
 	assert.Equal(t, int32(3), atomic.LoadInt32(&hits), "server hits")
 }
 
@@ -645,7 +643,5 @@ func TestParseHTTPRetryReadsMilliseconds(t *testing.T) {
 		"max_elapsed_ms": 10000.0,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, 250*time.Millisecond, r.delay)
-	assert.Equal(t, 2*time.Second, r.maxDelay)
-	assert.Equal(t, 10*time.Second, r.maxElapsed)
+	assert.Equal(t, httpRetry{delay: 250 * time.Millisecond, maxDelay: 2 * time.Second, maxElapsed: 10 * time.Second}, r)
 }

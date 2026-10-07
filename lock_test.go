@@ -20,6 +20,7 @@ import (
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestSameProjectExclusiveFailsFastThenSucceedsAfterRelease proves two exclusive
@@ -797,9 +798,8 @@ func TestLockRecordReadsBothDirectionsAcrossVersions(t *testing.T) {
 	if err := record.Read(old, &got); err != nil {
 		t.Fatalf("read old record: %v", err)
 	}
-	if got.PID != 4821 || got.Root != "" || got.Gate {
-		t.Errorf("old record decoded to %+v, want the known fields and zeroed supersede fields", got)
-	}
+	assert.Equal(t, processRecord{PID: 4821, Command: "magus run ci .", Dir: "/ws"}, got,
+		"old record: want the known fields and zeroed supersede fields")
 
 	// And the other direction: an older reader knows only its own field names, so the two
 	// lines it has never heard of are lines it ignores rather than lines it rejects.
@@ -816,9 +816,8 @@ func TestLockRecordReadsBothDirectionsAcrossVersions(t *testing.T) {
 	if err := record.Read(fresh, &legacy); err != nil {
 		t.Fatalf("old reader on a new record: %v", err)
 	}
-	if legacy.PID != 41221 || legacy.Command != "magus affected ci ." {
-		t.Errorf("old reader decoded %+v, want the fields it knows intact", legacy)
-	}
+	assert.Equal(t, legacyRecord{PID: 41221, Command: "magus affected ci .", Dir: "/ws"}, legacy,
+		"old reader: want the fields it knows intact")
 }
 
 // TestSupersedeQualifier walks every way a contention is NOT a supersede. The positive

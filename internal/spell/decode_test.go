@@ -146,8 +146,7 @@ func TestDecode_CommandOp(t *testing.T) {
 	require.NoError(t, err)
 	tgt, ok := m.Ops["build"]
 	require.True(t, ok, `Targets["build"] missing`)
-	assert.Equal(t, "go", tgt.Bin)
-	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
+	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"build", "./..."}}}, tgt)
 }
 
 // TestDecode_StartService pins a start service's decode: Start, Readiness and Stop land
@@ -169,14 +168,13 @@ func TestDecode_StartService(t *testing.T) {
 	m, err := Decode(src)
 	require.NoError(t, err)
 	op := m.Ops["machine"]
-	assert.Equal(t, spells.OpKindService, op.Kind)
-	assert.Equal(t, &spells.Service{
+	svc := &spells.Service{
 		Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},
 		Readiness: spells.Command{Bin: "podman", Args: []string{"info"}},
 		Stop:      spells.Command{Bin: "podman", Args: []string{"machine", "stop"}},
 		Idle:      "30m",
-	}, op.Service)
-	assert.Equal(t, op.Service.Start, op.Command)
+	}
+	assert.Equal(t, spells.Op{Kind: spells.OpKindService, Command: svc.Start, Service: svc}, op)
 }
 
 // TestDecode_PodmanMachine pins the built-in podman spell's machine op, which
@@ -246,8 +244,10 @@ func TestDecode_SymbolIndexer(t *testing.T) {
 
 	op, ok := m.Ops[spells.DefaultSymbolIndexOp]
 	require.True(t, ok, "an indexer that declares no op runs under the default, whatever the spell is named")
-	assert.Equal(t, spells.OpKindSymbolIndex, op.Kind)
-	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
+	assert.Equal(t, spells.Op{
+		Kind:    spells.OpKindSymbolIndex,
+		Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+	}, op)
 	assert.Len(t, m.Ops, 1)
 }
 
@@ -364,8 +364,7 @@ func TestDecode_CommandDefaultArgs(t *testing.T) {
 	require.NoError(t, err)
 	tgt, ok := m.Ops["test"]
 	require.True(t, ok, `Ops["test"] missing`)
-	assert.Equal(t, []string{"test"}, tgt.Args)
-	assert.Equal(t, []string{"./..."}, tgt.DefaultArgs)
+	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}, tgt)
 
 	absent := mapObj{
 		"name": "myspell",

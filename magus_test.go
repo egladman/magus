@@ -290,13 +290,18 @@ func TestStepFor_RootProject(t *testing.T) {
 		Outputs: types.MustParseGlobs("bin/app"),
 	}
 	spec := m.baseStep(p)
-	assert.Equal(t, ".", spec.ProjectPath, "ProjectPath")
 	// Root project: declared glob passes through unchanged; magusfile globs are
 	// also appended (see magusfileGlobs). Use Contains rather than exact-count.
 	assert.Contains(t, spec.Sources, types.Glob{Pattern: "**/*.go"}, "Sources must contain declared glob")
 	assert.Contains(t, spec.Sources, types.Glob{Pattern: "magusfile.buzz"}, "Sources must contain root magusfile glob")
-	assert.Equal(t, types.MustParseGlobs("bin/app"), spec.Outputs, "Outputs")
-	assert.Equal(t, m.Root(), spec.WorkspaceRoot, "WorkspaceRoot")
+	assert.Equal(t, cache.Step{
+		ProjectPath:     ".",
+		Sources:         spec.Sources, // checked by Contains above
+		Outputs:         types.MustParseGlobs("bin/app"),
+		WorkspaceRoot:   m.Root(),
+		SpellDefVersion: spec.SpellDefVersion, // the builtins' hash, not this test's to pin
+		Label:           types.ProjectDisplayName(p.Path, p.Name, p.Dir),
+	}, spec)
 }
 
 // TestStepFor_NoSpellsHasNoIgnoreDirs pins that a project with no resolved spells
@@ -552,8 +557,7 @@ func TestExpand_ExplicitPath(t *testing.T) {
 	targets, err := ws.ExpandPath(types.Target{Path: "api", Name: "test"})
 	require.NoError(t, err)
 	require.Len(t, targets, 1)
-	assert.Equal(t, "api", targets[0].Path)
-	assert.Equal(t, "test", targets[0].Name)
+	assert.Equal(t, types.Target{Path: "api", Name: "test"}, targets[0])
 }
 
 // TestExpand_SlashAlias verifies "/" is treated as all-projects.
@@ -606,8 +610,7 @@ func TestParseTarget(t *testing.T) {
 			t.Parallel()
 			got, err := types.ParseTarget(input)
 			require.NoErrorf(t, err, "ParseTarget(%q)", input)
-			assert.Equalf(t, wantName, got.Name, "ParseTarget(%q).Name", input)
-			assert.Equalf(t, wantCharms, got.Charms, "ParseTarget(%q).Charms", input)
+			assert.Equalf(t, types.Target{Name: wantName, Charms: wantCharms}, got, "ParseTarget(%q)", input)
 		})
 	}
 	parseErr := func(name, input string) {
@@ -707,11 +710,7 @@ func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	require.NoError(t, err, "Inspect")
 
 	got := ws.VCSOptions()
-	assert.Equal(t, "git", got.Name, "VCSOptions.Name")
-	assert.Equal(t, "origin/main", got.BaseRef, "VCSOptions.BaseRef")
-	if assert.NotNil(t, got.Enabled, "VCSOptions.Enabled") {
-		assert.False(t, *got.Enabled, "VCSOptions.Enabled")
-	}
+	assert.Equal(t, types.VCSOptions{Name: "git", BaseRef: "origin/main", Enabled: &disabled}, got, "VCSOptions")
 }
 
 func b64Pub(t *testing.T) (pub string, seed string) {

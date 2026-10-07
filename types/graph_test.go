@@ -96,7 +96,7 @@ func TestGraphDelegatesToRepository(t *testing.T) {
 	assert.Equal(t, 1.75, g.NCCD())
 
 	assert.Equal(t, f.paths, g.PathsFromSeeds([]string{"a"}, "b"))
-	assert.Equal(t, []string{"a"}, f.gotPathsSeeds, "PathsFromSeeds must forward seeds")
+	assert.Equal(t, []string{"a"}, f.gotPathsSeeds, "PathsFromSeeds must forward seeds") //nolint:fieldwise // fakeRepo holds canned answers and a call record for every Graph method, each asserted on its own line here, so a whole comparison would restate the fixture
 	assert.Equal(t, "b", f.gotPathsTarget, "PathsFromSeeds must forward target")
 
 	assert.Equal(t, []string{"s1"}, g.Successors("x"))

@@ -45,8 +45,8 @@ func TestAnswerSymbolsNotLoaded(t *testing.T) {
 func TestAnswerStatedReasonWinsOverMissingIndex(t *testing.T) {
 	gaps := []KnowledgeSymbolGap{{Project: NewProjectRef("libs/api", ""), State: SymbolIndexNotBuilt}}
 	got := ClassifyAnswer(false, ReasonSymbolsNotLoaded, gaps)
-	assert.Equal(t, ReasonSymbolsNotLoaded, got.Reason)
-	assert.Equal(t, gaps, got.Gaps, "the gaps still ride along; only the reason changes")
+	// The gaps still ride along; only the reason changes.
+	assert.Equal(t, KnowledgeAnswer{Verdict: VerdictUnknown, Reason: ReasonSymbolsNotLoaded, Gaps: gaps}, got)
 }
 
 // The wire keys are a contract with agents and external consumers, so pin them. Verdict

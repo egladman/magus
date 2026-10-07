@@ -31,6 +31,18 @@ func captureWarnings(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// stamped fills what the trail decides rather than the producer: the OS account and entry point
+// Append stamps (see origin_test.go), and the clock and content-addressed refs of the one event
+// read back.
+func stamped(t *testing.T, got, want Event) Event {
+	t.Helper()
+	want.Ts = got.Ts
+	want.Origin = StampOrigin(t.Context(), want.Origin)
+	want.RequestRef, want.RequestBytes = got.RequestRef, got.RequestBytes
+	want.ResponseRef, want.ResponseBytes = got.ResponseRef, got.ResponseBytes
+	return want
+}
+
 // seedEvents writes n events (Ts 1..n) straight into the trail file, bypassing Append so a
 // large fixture is one write, not n opens. Returns the events in append order (oldest first).
 func seedEvents(t *testing.T, base string, n int) []Event {
@@ -65,9 +77,8 @@ func TestAppendAndReadRecent_NewestFirst(t *testing.T) {
 	if events[0].Action != "graph build" || events[2].Action != "query" { // newest first
 		t.Errorf("order = %q..%q, want graph build..query", events[0].Action, events[2].Action)
 	}
-	if events[0].Outcome != OutcomeError || events[0].Error != "boom" || events[0].Workspace != "/ws" {
-		t.Errorf("event not round-tripped: %+v", events[0])
-	}
+	want := stamped(t, events[0], Event{Ts: 3, Kind: KindJob, Workspace: "/ws", Action: "graph build", Outcome: OutcomeError, Error: "boom"})
+	assert.Equal(t, want, events[0], "event not round-tripped")
 }
 
 func TestReadRecent_LimitKeepsTailNewestFirst(t *testing.T) {
@@ -116,16 +127,17 @@ func TestAppendAgentCommand_NormalizesHookObservation(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	require.Equal(t, KindAgentCommand, event.Kind)
 	// Host and session ride the event LINE as well as the request blob, so a reader can group a
-	// page of observations by host without a blob fetch per row.
-	require.Equal(t, "codex", event.Host)
-	require.Equal(t, "abc123", event.Session)
-	require.Equal(t, types.EntryPointHook, event.EntryPoint, "an observation naming no entry point came through the hook")
-	require.Equal(t, "/repo/magus", event.Workspace)
-	require.Equal(t, "Bash", event.Action)
-	require.Equal(t, OutcomeOK, event.Outcome)
-	require.Equal(t, "guard: pass", event.Preview)
+	// page of observations by host without a blob fetch per row. An observation naming no entry
+	// point came through the hook.
+	require.Equal(t, stamped(t, event, Event{
+		Kind:      KindAgentCommand,
+		Origin:    types.Origin{EntryPoint: types.EntryPointHook, Host: "codex", Session: "abc123"},
+		Workspace: "/repo/magus",
+		Action:    "Bash",
+		Outcome:   OutcomeOK,
+		Preview:   "guard: pass",
+	}), event)
 
 	request, err := ReadBlob(dir, event.RequestRef)
 	require.NoError(t, err)
@@ -163,10 +175,14 @@ func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	event := events[0]
-	require.Equal(t, types.EntryPointHook, event.EntryPoint)
-	require.Empty(t, event.Session, "no host session means unattributed, never a default party")
-	require.Equal(t, "command", event.Action)
-	require.Equal(t, "guard: advise", event.Preview)
+	// No host session means unattributed, never a default party.
+	require.Equal(t, stamped(t, event, Event{
+		Kind:    KindAgentCommand,
+		Origin:  types.Origin{EntryPoint: types.EntryPointHook},
+		Action:  "command",
+		Outcome: OutcomeOK,
+		Preview: "guard: advise",
+	}), event)
 
 	request, err := ReadBlob(dir, event.RequestRef)
 	require.NoError(t, err)
@@ -262,9 +278,13 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	events, err = ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	require.Equal(t, types.EntryPointHook, events[0].EntryPoint)
-	require.Equal(t, "agent.spawn", events[0].Action, "an unlabelled callee still says a spawn happened")
-	require.Empty(t, events[0].Lease)
+	// An unlabelled callee still says a spawn happened, and names no lease.
+	require.Equal(t, stamped(t, events[0], Event{
+		Kind:    KindAgentSpawn,
+		Origin:  types.Origin{EntryPoint: types.EntryPointHook},
+		Action:  "agent.spawn",
+		Outcome: OutcomeOK,
+	}), events[0])
 }
 
 // A continuation is recorded because the caller says so, not because it named a target: a
@@ -363,8 +383,15 @@ func TestAppendAgentCommand_RecordsOnlyTheSuppliedLease(t *testing.T) {
 	assert.Empty(t, events[0].Lease, "newest first: an unresolved call is uncorrelated, never the environment's")
 	assert.Empty(t, events[1].Lease)
 	assert.Empty(t, events[1].LeaseFrom, "a dropped lease drops its source")
-	assert.Equal(t, "fleet/supplied", events[2].Lease)
-	assert.Equal(t, types.LeaseSourceMarker, events[2].LeaseFrom)
+	assert.Equal(t, stamped(t, events[2], Event{
+		Kind:      KindAgentCommand,
+		Origin:    types.Origin{EntryPoint: types.EntryPointHook},
+		Action:    "Bash",
+		Lease:     "fleet/supplied",
+		LeaseFrom: types.LeaseSourceMarker,
+		Outcome:   OutcomeOK,
+		Preview:   "observed",
+	}), events[2])
 }
 
 func TestAppendAgentCommand_NoLeaseAnywhereStaysUncorrelated(t *testing.T) {

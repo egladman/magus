@@ -58,19 +58,25 @@ func TestAskLifecyclesStoresWhatDoctorReads(t *testing.T) {
 	installed := []InstalledTool{{Project: ".", Bin: "go", Lifecycle: "go", Version: "v1.26.6"}}
 	live, err := AskLifecycles(t.Context(), ProviderCache{Dir: cacheDir}, root, "endoflife-date", keys, installed)
 	require.NoError(t, err)
-	assert.Equal(t, types.LifecycleLive, live.Status.State)
-	assert.Equal(t, "endoflife-date", live.Status.Provider)
-	assert.Equal(t, []string{"https://endoflife.date/api/v1/products/go", "https://endoflife.date/api/v1/products/nodejs"}, live.Status.Sources)
-	assert.Equal(t, "2026-09-20T00:00:00Z", live.Status.AsOf, "the report is no fresher than its stalest source")
+	// The report is no fresher than its stalest source, so AsOf is the nodejs answer's.
+	liveStatus := types.LifecycleStatus{
+		Provider:  "endoflife-date",
+		State:     types.LifecycleLive,
+		Sources:   []string{"https://endoflife.date/api/v1/products/go", "https://endoflife.date/api/v1/products/nodejs"},
+		AsOf:      "2026-09-20T00:00:00Z",
+		FetchedAt: live.Status.FetchedAt, // the wall clock at the call; parsed below
+	}
+	assert.Equal(t, LifecycleAnswer{Status: liveStatus, Lifecycles: goAndNode}, live)
 	_, perr := time.Parse(time.RFC3339, live.Status.FetchedAt)
 	require.NoError(t, perr)
 
 	cached, ok := CachedLifecycles(t.Context(), cacheDir, root, "endoflife-date", []string{"go", "nodejs"})
 	require.True(t, ok, "key order does not change the question")
-	assert.Equal(t, types.LifecycleCached, cached.Status.State)
-	assert.Equal(t, live.Status.FetchedAt, cached.Status.FetchedAt)
-	assert.Equal(t, goAndNode, cached.Lifecycles)
-	assert.Equal(t, installed, cached.Installed, "doctor places installed versions without a probe")
+	// Same records and fetch time as the live call, with the installed versions stored beside
+	// them so doctor places them without a probe.
+	cachedStatus := liveStatus
+	cachedStatus.State = types.LifecycleCached
+	assert.Equal(t, LifecycleAnswer{Status: cachedStatus, Lifecycles: goAndNode, Installed: installed}, cached)
 
 	_, ok = CachedLifecycles(t.Context(), cacheDir, root, "endoflife-date", []string{"go", "nodejs", "python"})
 	assert.False(t, ok, "an answer to a different set of keys does not answer this one")
@@ -116,10 +122,10 @@ func TestAskLifecyclesReplaysWhenTheProviderIsNotAsked(t *testing.T) {
 			stubLifecycleRunner(t, answering(nil, tc.err))
 			none, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
 			require.NoError(t, err, "not asking is not a failure")
-			assert.Equal(t, tc.state, none.Status.State)
-			assert.Empty(t, none.Lifecycles)
-			assert.Empty(t, none.Status.FetchedAt, "nothing stored, so nothing to date")
-			assert.Equal(t, tc.err.Error(), none.Status.Detail)
+			// Nothing stored, so no records and nothing to date.
+			assert.Equal(t, LifecycleAnswer{
+				Status: types.LifecycleStatus{Provider: "endoflife-date", State: tc.state, Detail: tc.err.Error()},
+			}, none)
 
 			stubLifecycleRunner(t, answering(goAndNode[:1], nil))
 			live, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
@@ -128,9 +134,17 @@ func TestAskLifecyclesReplaysWhenTheProviderIsNotAsked(t *testing.T) {
 			stubLifecycleRunner(t, answering(nil, tc.err))
 			replayed, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
 			require.NoError(t, err)
-			assert.Equal(t, tc.state, replayed.Status.State)
-			assert.Equal(t, live.Status.FetchedAt, replayed.Status.FetchedAt)
-			assert.Equal(t, goAndNode[:1], replayed.Lifecycles)
+			assert.Equal(t, LifecycleAnswer{
+				Status: types.LifecycleStatus{
+					Provider:  "endoflife-date",
+					State:     tc.state,
+					Sources:   []string{goAndNode[0].Source},
+					AsOf:      goAndNode[0].AsOf,
+					FetchedAt: live.Status.FetchedAt,
+					Detail:    tc.err.Error(),
+				},
+				Lifecycles: goAndNode[:1],
+			}, replayed)
 		})
 	}
 }

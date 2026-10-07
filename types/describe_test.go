@@ -82,9 +82,12 @@ func TestNewFileReportOverlaps(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := NewFileReport(tc.files)
-			assert.Equal(t, tc.want, got.Overlaps, "Overlaps")
-			assert.Equal(t, len(tc.files), got.Count, "Count")
-			assert.Equal(t, FileDefinition, got.Definition, "Definition")
+			assert.Equal(t, FileReport{
+				Definition: FileDefinition,
+				Count:      len(tc.files),
+				Files:      tc.files,
+				Overlaps:   tc.want,
+			}, got)
 		})
 	}
 }

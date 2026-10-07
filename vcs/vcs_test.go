@@ -279,9 +279,14 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 
 	c, err := res.VCS.FindCommit(context.Background(), dir, "")
 	require.NoError(t, err, "FindCommit")
-	assert.Equal(t, "second line", c.Subject)
-	assert.Equal(t, "body text", c.Body)
-	assert.Equal(t, types.Person{Name: "Alice", Email: "alice@example.com"}, c.Author)
+	// The revision's identity, date and parents are git's to stamp; the Date, ID and Short are
+	// checked below.
+	assert.Equal(t, types.Commit{
+		ID: c.ID, Short: c.Short, Date: c.Date, Parents: c.Parents,
+		Author:  types.Person{Name: "Alice", Email: "alice@example.com"},
+		Subject: "second line",
+		Body:    "body text",
+	}, c)
 	assert.False(t, c.Date.IsZero(), "Date is zero; expected a parsed RFC3339 record date")
 	assert.NotEmpty(t, c.ID)
 	assert.NotEmpty(t, c.Short)

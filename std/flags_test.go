@@ -186,12 +186,20 @@ func TestFlagsParseCommandModeKeepsTheCommandVerbatim(t *testing.T) {
 	argv := []string{"--keep", "--arch", "arm64", "magus", "run", "test", "--keep", "-s"}
 	got, err := FlagsParse(context.Background(), argv, []string{"--keep"}, []string{"--arch"}, nil, nil, true)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]string{"--keep": "true", "--arch": "arm64"}, got.Values)
-	assert.Equal(t, []string{"magus", "run", "test", "--keep", "-s"}, got.Positionals)
-	assert.Empty(t, got.Unknown)
+	assert.Equal(t, types.FlagParse{
+		Values:      map[string]string{"--keep": "true", "--arch": "arm64"},
+		Lists:       map[string][]string{},
+		Positionals: []string{"magus", "run", "test", "--keep", "-s"},
+		Unknown:     []string{},
+	}, got)
 
 	got, err = FlagsParse(context.Background(), []string{"--bogus", "ls"}, nil, nil, nil, nil, true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"--bogus"}, got.Unknown, "an undeclared flag before the command is still unknown")
-	assert.Equal(t, []string{"ls"}, got.Positionals)
+	// An undeclared flag before the command is still unknown.
+	assert.Equal(t, types.FlagParse{
+		Values:      map[string]string{},
+		Lists:       map[string][]string{},
+		Positionals: []string{"ls"},
+		Unknown:     []string{"--bogus"},
+	}, got)
 }

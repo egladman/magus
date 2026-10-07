@@ -240,9 +240,8 @@ func TestFsStat(t *testing.T) {
 
 	st, err := FsStat(ctx, file)
 	require.NoError(t, err)
-	assert.Equal(t, int64(5), st.Size)
-	assert.False(t, st.IsDir, "is_dir should be false")
-	assert.Equal(t, int64(0o640), st.Mode)
+	// Mtime is the wall clock, so it is taken from st and checked for being set.
+	assert.Equal(t, types.FileInfo{Size: 5, Mtime: st.Mtime, Mode: 0o640, IsDir: false}, st)
 	assert.NotZero(t, st.Mtime, "mtime should be set")
 
 	_, err = FsStat(ctx, filepath.Join(dir, "missing"))
@@ -561,8 +560,7 @@ func TestOsExecQuietStillCaptures(t *testing.T) {
 	res, err := OsExec(context.Background(), "sh", []string{"-c", "echo captured"}, "",
 		map[string]any{"quiet": true})
 	require.NoError(t, err)
-	assert.Equal(t, "captured", res.Stdout, "proc.exec trims captured output")
-	assert.Equal(t, 0, res.Code)
+	assert.Equal(t, types.ExecResult{Stdout: "captured", Code: 0, OK: true}, res, "proc.exec trims captured output")
 }
 
 func TestProcShellQuietStillCaptures(t *testing.T) {

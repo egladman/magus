@@ -275,19 +275,29 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
 	second.Unattributed = append(second.Unattributed, JobUnattributedWrite{Path: "second/z.go"})
 
-	assert.Equal(t, []string{"types/", "first/"}, first.WritePaths)
-	assert.Equal(t, []string{"gen/", "first/"}, first.DenyPaths)
-	assert.Equal(t, []string{"b", "first"}, first.DependsOn)
-	assert.Equal(t, []string{"check", "first"}, first.Goals[0].DependsOn)
-	assert.Equal(t, []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}}, first.GateAttempts)
-	assert.Equal(t, []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
-	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
+	assert.Equal(t, Job{
+		ID:           "a",
+		WritePaths:   []string{"types/", "first/"},
+		DenyPaths:    []string{"gen/", "first/"},
+		DependsOn:    []string{"b", "first"},
+		Goals:        []CompletionGate{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
+		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}},
+		Releases:     []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}},
+		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
+	}, first)
 
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
-	assert.Equal(t, []string{"types/"}, orig.WritePaths)
-	assert.Equal(t, []string{"check"}, orig.Goals[0].DependsOn)
-	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
+	assert.Equal(t, Job{
+		ID:           "a",
+		WritePaths:   []string{"types/"},
+		DenyPaths:    []string{"gen/"},
+		DependsOn:    []string{"b"},
+		Goals:        []CompletionGate{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
+		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}},
+		Releases:     []JobRelease{{Path: "types/x.go"}},
+		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}},
+	}, orig)
 }
 
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
@@ -343,9 +353,13 @@ func TestAnOlderReaderKeepsEntries(t *testing.T) {
 
 	var back Job
 	require.NoError(t, json.Unmarshal(rewritten, &back))
-	assert.Equal(t, JobSchemaVersion, back.Version, "the stamp an older reader sees is one it accepts")
-	assert.Equal(t, in.Entries, back.Entries)
-	assert.Equal(t, StatePass, back.State)
+	// The stamp an older reader sees is one it accepts, and it carries the entries through.
+	assert.Equal(t, Job{
+		Schema:  Schema{Version: JobSchemaVersion},
+		ID:      "worker",
+		State:   StatePass,
+		Entries: in.Entries,
+	}, back)
 }
 
 func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {

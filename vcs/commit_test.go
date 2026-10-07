@@ -14,12 +14,15 @@ func TestParseCommit(t *testing.T) {
 	raw := "abc123def" + nul + "abc123d" + nul + "Alice" + nul + "alice@example.com" + nul +
 		"2026-06-04T12:34:56+00:00" + nul + "p1 p2" + nul + "subject line\n\nbody text"
 	c := parseCommit(raw)
-	assert.Equal(t, "abc123def", c.ID)
-	assert.Equal(t, "abc123d", c.Short)
-	assert.Equal(t, types.Person{Name: "Alice", Email: "alice@example.com"}, c.Author)
-	assert.Equal(t, "subject line", c.Subject)
-	assert.Equal(t, "body text", c.Body)
-	assert.Equal(t, []string{"p1", "p2"}, c.Parents)
+	assert.Equal(t, types.Commit{
+		ID:      "abc123def",
+		Short:   "abc123d",
+		Author:  types.Person{Name: "Alice", Email: "alice@example.com"},
+		Date:    c.Date, // parsed from the record; its year is checked below
+		Subject: "subject line",
+		Body:    "body text",
+		Parents: []string{"p1", "p2"},
+	}, c)
 	assert.False(t, c.Date.IsZero())
 	assert.Equal(t, 2026, c.Date.Year())
 }

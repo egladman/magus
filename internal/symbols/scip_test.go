@@ -52,15 +52,19 @@ func TestParseIndexDefsRefsAndDedup(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, syms, 1, "v1 and v2 collapse to one symbol")
 
-	s := syms[0]
-	assert.Equal(t, "gomod example.com/foo Bar#", s.Key, "manager kept, version stripped")
-	assert.Equal(t, "Bar", s.Label, "display name from SymbolInformation")
-	assert.Equal(t, "go", s.Language)
-	assert.Equal(t, "pkg/foo/foo.go:11", s.Source, "1-based definition line")
-	assert.Equal(t, []string{"pkg/foo/foo.go"}, s.Defs)
-
-	// Both refs are in one file, so one per-file entry carries the occurrence count.
-	assert.Equal(t, []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}}, s.Refs)
+	// Key keeps the manager and strips the version; Label is the display name from
+	// SymbolInformation; Source is the 1-based definition line. Both refs are in one
+	// file, so one per-file entry carries the occurrence count.
+	assert.Equal(t, types.KnowledgeSymbol{
+		Key:        "gomod example.com/foo Bar#",
+		Moniker:    monikerV1,
+		Label:      "Bar",
+		Language:   "go",
+		SymbolKind: scip.SymbolInformation_Type.String(),
+		Source:     "pkg/foo/foo.go:11",
+		Defs:       []string{"pkg/foo/foo.go"},
+		Refs:       []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}},
+	}, syms[0])
 }
 
 func TestParseIndexSignature(t *testing.T) {
@@ -210,8 +214,16 @@ func TestParseIndexRebasesProjectPaths(t *testing.T) {
 	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "gopherbuzz", "")
 	require.NoError(t, err)
 	require.Len(t, syms, 1)
-	assert.Equal(t, []string{"gopherbuzz/compiler.go"}, syms[0].Defs, "def path rebased under the project")
-	assert.Equal(t, "gopherbuzz/compiler.go:1", syms[0].Source, "source path rebased under the project")
+	// The def and source paths are rebased under the project.
+	assert.Equal(t, types.KnowledgeSymbol{
+		Key:      "gomod example.com/foo Bar#",
+		Moniker:  monikerV1,
+		Label:    "Bar",
+		Language: "go",
+		Source:   "gopherbuzz/compiler.go:1",
+		Defs:     []string{"gopherbuzz/compiler.go"},
+		Refs:     []types.KnowledgeSymbolRef{{Path: "gopherbuzz/compiler.go", Count: 1, Lines: []int{5}}},
+	}, syms[0])
 }
 
 // callerMoniker/calleeMoniker are two distinct symbols used by the call-attribution

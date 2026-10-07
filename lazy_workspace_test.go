@@ -208,8 +208,8 @@ func TestLazyWorkspaceRemoteShardsOpenOnGetAndPutOnly(t *testing.T) {
 	// chain exposes as itself; its write is whatever that backing does with it.
 	require.NoError(t, r.PutShard(ctx, "k2", strings.NewReader("body")))
 	assert.Equal(t, 1, *opens, "the second use reuses the open")
-	assert.Equal(t, []string{"k1"}, published.gets)
-	assert.Equal(t, []string{"k2=body"}, published.puts)
+	// The fake's mutex is back at its zero value once both calls have returned.
+	assert.Equal(t, &lazyShards{gets: []string{"k1"}, puts: []string{"k2=body"}}, published)
 }
 
 func TestLazyWorkspaceRemoteShardsWithNoBackingBehaveAsLocalOnly(t *testing.T) {

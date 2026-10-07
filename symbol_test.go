@@ -970,8 +970,7 @@ func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
 
 func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	d := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale"))
-	assert.Equal(t, "MGS7003", d.Code)
-	assert.Equal(t, "stale", d.Message)
+	assert.Equal(t, types.Diagnostic{Code: "MGS7003", Message: "stale", URL: d.URL}, d)
 	assert.NotEmpty(t, d.URL)
 	assert.Equal(t, types.Diagnostic{Message: "plain"}, toDiagnostic(errors.New("plain")))
 }

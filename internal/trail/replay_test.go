@@ -29,13 +29,16 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	touches := got["magus.go"]
 	require.Len(t, touches, 1)
 
-	assert.Equal(t, "claude-code", touches[0].Host)
-	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
-	// Most recent read first: this is the "what was it looking at" ordering.
-	assert.Equal(t, []string{"types/impact.go", "internal/cache/output.go"}, touches[0].Read)
-	// The PROGRAM, not the command line; see types.DiffTouch.Ran. The argument list is dropped at
+	// Read is most recent first: this is the "what was it looking at" ordering. Ran is the
+	// PROGRAM, not the command line; see types.DiffTouch.Ran. The argument list is dropped at
 	// ingest, so this asserts the reduction rather than the recorded text.
-	assert.Equal(t, []string{"go"}, touches[0].Ran)
+	assert.Equal(t, types.DiffTouch{
+		Host:       "claude-code",
+		Session:    "s1",
+		Transcript: "/tmp/s1.jsonl",
+		Read:       []string{"types/impact.go", "internal/cache/output.go"},
+		Ran:        []string{"go"},
+	}, touches[0])
 }
 
 // A recorded command must never carry its arguments into the review payload, because that
@@ -197,10 +200,14 @@ func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 
 	touches := replayLoaded(fold, []string{"magus.go"})["magus.go"]
 	require.Len(t, touches, 1)
-	assert.Equal(t, "claude-code", touches[0].Host)
-	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
-	assert.Equal(t, []string{"types/impact.go"}, touches[0].Read, "a read after the write does not explain it")
-	assert.Equal(t, []string{"go"}, touches[0].Ran)
+	// A read after the write does not explain it, so late.go is absent from Read.
+	assert.Equal(t, types.DiffTouch{
+		Host:       "claude-code",
+		Session:    "s1",
+		Transcript: "/tmp/s1.jsonl",
+		Read:       []string{"types/impact.go"},
+		Ran:        []string{"go"},
+	}, touches[0])
 }
 
 // AttachTouches merges both stores onto the review: the trail wins for a session both hold,
@@ -225,10 +232,9 @@ func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 
 	got := rev.Files[0].Touches
 	require.Len(t, got, 2, "one entry per session, whichever store saw it")
-	assert.Equal(t, "s1", got[0].Session)
-	assert.Equal(t, []string{"from-trail.go"}, got[0].Read, "the trail's account wins for a session both stores hold")
-	assert.Equal(t, "s2", got[1].Session)
-	assert.Equal(t, "codex", got[1].Host)
+	// The trail's account wins for a session both stores hold.
+	assert.Equal(t, types.DiffTouch{Host: "claude-code", Session: "s1", Read: []string{"from-trail.go"}}, got[0])
+	assert.Equal(t, types.DiffTouch{Host: "codex", Session: "s2", Read: []string{}}, got[1])
 	assert.Nil(t, rev.Files[1].Touches, "a file nobody wrote keeps no touches")
 }
 
@@ -249,12 +255,13 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 	AppendAgentSpawn(context.Background(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
 
 	got := ForSession(base, "s1", 100)
-	assert.Equal(t, 2, got.Commands)
-	assert.Equal(t, 1, got.Denied)
-	assert.Equal(t, []string{"fleet/w1", "fleet/w1-child"}, got.Leases)
 	require.Len(t, got.Spawns, 1)
-	assert.Equal(t, "Explore", got.Spawns[0].Child)
-	assert.Equal(t, "fleet/w1-child", got.Spawns[0].Lease)
+	assert.Equal(t, SessionTrail{
+		Commands: 2,
+		Denied:   1,
+		Leases:   []string{"fleet/w1", "fleet/w1-child"},
+		Spawns:   []SessionSpawn{{Child: "Explore", Lease: "fleet/w1-child", At: got.Spawns[0].At}}, // At is a wall-clock stamp
+	}, got)
 
 	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
 	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
@@ -270,8 +277,7 @@ func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
 
 	got, ok := LastAgentActivity(base)
 	require.True(t, ok)
-	assert.Equal(t, "s2", got.Session)
-	assert.Equal(t, "opencode", got.Host)
+	assert.Equal(t, AgentActivity{Session: "s2", Host: "opencode", At: got.At}, got)
 	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
 
 	_, ok = LastAgentActivity(t.TempDir())

@@ -20,8 +20,8 @@ func TestPathResolveUsesItsOwnBase(t *testing.T) {
 
 	rel, err := resolved.RelativeTo("/repo")
 	require.NoError(t, err)
-	assert.Equal(t, "src/main.go", rel.Value)
-	assert.Equal(t, "/repo", rel.Base, "a relative result names what it is relative to")
+	// A relative result names what it is relative to.
+	assert.Equal(t, Path{Value: "src/main.go", Base: "/repo"}, rel)
 }
 
 func TestPathResolveEmptyPreservesOptionalPath(t *testing.T) {
@@ -60,6 +60,5 @@ func TestPathRelativeToCrossesBases(t *testing.T) {
 	p := Path{Value: "conventions.md", Base: "/repo/docs"}
 	rel, err := p.RelativeTo("/repo")
 	require.NoError(t, err)
-	assert.Equal(t, "docs/conventions.md", rel.Value)
-	assert.Equal(t, "/repo", rel.Base)
+	assert.Equal(t, Path{Value: "docs/conventions.md", Base: "/repo"}, rel)
 }

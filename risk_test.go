@@ -61,8 +61,16 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 		t.Run(tc.path, func(t *testing.T) {
 			rep, err := m.AssessChange(context.Background(), types.TargetCI, AssessOptions{ChangedPaths: []string{tc.path}})
 			require.NoError(t, err)
-			assert.Equal(t, tc.tier, rep.Tier, rep.Lines())
-			assert.Equal(t, []string{"."}, rep.Affected)
+			// Base, the evidence and the gate steps are the assessor's own working, which the
+			// tier cases elsewhere pin; the gate's commands are asserted below.
+			assert.Equal(t, types.RiskReport{
+				Base:     rep.Base,
+				Target:   types.TargetCI,
+				Tier:     tc.tier,
+				Affected: []string{"."},
+				Evidence: rep.Evidence,
+				Gate:     rep.Gate,
+			}, rep, rep.Lines())
 			assert.Equal(t, tc.gate, rep.Commands())
 		})
 	}

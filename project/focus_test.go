@@ -63,9 +63,13 @@ func fixture() focusWorkspace {
 func TestFocusAtIncludesUpstreamAndNestingOnly(t *testing.T) {
 	f, ok := FocusAt(fixture(), "/ws/app")
 	require.True(t, ok)
-	assert.Equal(t, []string{"app"}, f.Seeds)
-	assert.Equal(t, []string{"app", "app/plugin", "libs/core"}, f.Projects,
-		"focus runs upstream and into nested projects, never sideways or into dependents")
+	// Focus runs upstream and into nested projects, never sideways or into dependents.
+	// owners is the workspace's own project list, not what this test pins.
+	assert.Equal(t, Focus{
+		Seeds:    []string{"app"},
+		Projects: []string{"app", "app/plugin", "libs/core"},
+		owners:   f.owners,
+	}, f)
 }
 
 func TestFocusContains(t *testing.T) {
@@ -109,9 +113,13 @@ func TestFocusAtOutsideTheWorkspaceReportsNoFocus(t *testing.T) {
 func TestFocusForPathsSeedsFromDeclarations(t *testing.T) {
 	f, ok := FocusForPaths(fixture(), []string{"app/**", "libs/ui/theme/*.css"})
 	require.True(t, ok)
-	assert.Equal(t, []string{"app", "libs/ui"}, f.Seeds,
-		"a glob names its project by its literal prefix")
-	assert.Equal(t, []string{"app", "app/plugin", "libs/core", "libs/ui"}, f.Projects)
+	// A glob names its project by its literal prefix. owners is the workspace's own project
+	// list, not what this test pins.
+	assert.Equal(t, Focus{
+		Seeds:    []string{"app", "libs/ui"},
+		Projects: []string{"app", "app/plugin", "libs/core", "libs/ui"},
+		owners:   f.owners,
+	}, f)
 	assert.False(t, f.Contains("web/server.go"))
 }
 

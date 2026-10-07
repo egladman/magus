@@ -285,8 +285,8 @@ func TestSchemaUnknownRoundTrips(t *testing.T) {
 	in := `{"schema_version":99,"requires":["x"],"id":"a","future_field":{"x":1}}`
 	var row Job
 	require.NoError(t, json.Unmarshal([]byte(in), &row))
-	assert.Equal(t, 99, row.Version)
-	assert.Equal(t, []string{"x"}, row.Requires)
+	// The bag's raw values are the decoder's own; its keys are checked below.
+	assert.Equal(t, Job{Schema: Schema{Version: 99, Requires: []string{"x"}, Unknown: row.Unknown}, ID: "a"}, row)
 	assert.Equal(t, []string{"future_field"}, slices.Collect(maps.Keys(row.Unknown)))
 
 	out, err := json.Marshal(row.Clone())

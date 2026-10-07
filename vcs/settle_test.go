@@ -40,9 +40,9 @@ func TestGitHookOperationBeforeTheCommit(t *testing.T) {
 	op, ok, err = GitHookOperation(ctx, dir, HookEvent{Hook: HookPreCommit})
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, "merge", op.Kind)
-	assert.True(t, op.CommitPending)
-	assert.Equal(t, []string{"g"}, op.Changed)
+	assert.Equal(t, HookOperation{
+		Kind: "merge", Changed: []string{"g"}, CommitPending: true, indexFile: op.indexFile, gitDir: op.gitDir,
+	}, op)
 
 	// pre-merge-commit fires before git writes MERGE_HEAD, so it takes the hook's word.
 	op, ok, err = GitHookOperation(ctx, dir, HookEvent{Hook: HookPreMergeCommit})
@@ -157,9 +157,8 @@ func TestGitHookOperationAfterTheCommit(t *testing.T) {
 	op, ok, err := GitHookOperation(ctx, dir, HookEvent{Hook: HookPostCommit})
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, "cherry-pick", op.Kind)
-	assert.False(t, op.CommitPending)
-	assert.Equal(t, []string{"f"}, op.Changed, "HEAD against its parent")
+	// Changed is HEAD against its parent.
+	assert.Equal(t, HookOperation{Kind: "cherry-pick", Changed: []string{"f"}, indexFile: op.indexFile, gitDir: op.gitDir}, op)
 
 	touch("sequencer/todo")
 	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "sequencer", "todo"), []byte("pick 1111111 one\npick 2222222 two\n"), 0o644))
@@ -188,8 +187,8 @@ func TestGitHookOperationAfterTheCommit(t *testing.T) {
 	op, ok, err = GitHookOperation(ctx, dir, HookEvent{Hook: HookPostRewrite, Args: []string{"rebase"}})
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, "rebase", op.Kind)
-	assert.Equal(t, []string{"f"}, op.Changed, "onto against HEAD")
+	// Changed is onto against HEAD.
+	assert.Equal(t, HookOperation{Kind: "rebase", Changed: []string{"f"}, indexFile: op.indexFile, gitDir: op.gitDir}, op)
 	untouch("rebase-merge")
 
 	touch("rebase-apply/next")
