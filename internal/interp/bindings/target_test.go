@@ -300,14 +300,6 @@ func TestBuildBuzzGlob(t *testing.T) {
 		assert.Contains(t, err.Error(), "at least one glob pattern")
 	})
 
-	t.Run("a pattern matching nothing yields an empty list", func(t *testing.T) {
-		targets, exports := mkTargets("go-build")
-		v, err := buildBuzzGlob(targets, exports)(context.Background(), []vm.Value{vm.StrValue("python-*")})
-		require.NoError(t, err)
-		require.True(t, v.IsList())
-		assert.Empty(t, v.ListItems(), "no match yields no handles")
-	})
-
 	t.Run("needs flattens a glob list and dispatches each match", func(t *testing.T) {
 		var runs atomic.Int32
 		record := func(context.Context, []vm.Value) (vm.Value, error) { runs.Add(1); return vm.Null, nil }
@@ -322,6 +314,48 @@ func TestBuildBuzzGlob(t *testing.T) {
 		require.Equal(t, vm.Null, v)
 		assert.Equal(t, int32(2), runs.Load(), "needs(glob(go-*)) dispatches go-build and go-test, not lint")
 	})
+}
+
+// An empty glob used to come back as an empty list, so ctx.needs(ctx.glob(...)) passed
+// having run nothing: the shape of a target that wanted a fresh symbol index and never got
+// one.
+func TestGlobMatchingNothingRaises(t *testing.T) {
+	targets := map[string]vm.Callable{"go-build": noop, "scip-only": noop}
+	exports := map[string]vm.Value{"go-build": vm.DirectValue("go_build", noop)}
+	glob := buildBuzzGlob(targets, exports)
+
+	t.Run("names every pattern", func(t *testing.T) {
+		_, err := glob(context.Background(), []vm.Value{vm.StrValue("python-*"), vm.StrValue("*-lint")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `ctx.glob: "python-*", "*-lint" matches no exported target`)
+	})
+
+	t.Run("a match with no exported handle is still nothing", func(t *testing.T) {
+		_, err := glob(context.Background(), []vm.Value{vm.StrValue("scip-*")})
+		require.Error(t, err, "scip-only is matched by name but carries no handle to need")
+		assert.Contains(t, err.Error(), `"scip-*" matches no exported target`)
+	})
+
+	t.Run("a bare target name points at passing the function", func(t *testing.T) {
+		_, err := glob(context.Background(), []vm.Value{vm.StrValue("go-build")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `never "go-build" itself`)
+		assert.Contains(t, err.Error(), "ctx.needs(go_build)")
+	})
+}
+
+func TestNeedsNamingNoTargetRaises(t *testing.T) {
+	needs := buildBuzzNeeds(noopTargets("go-build"), nil, &externalHandles{})
+	for name, args := range map[string][]vm.Value{
+		"no argument":   nil,
+		"an empty list": {vm.ListValue(nil)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := needs(context.Background(), args)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "ctx.needs: names no target")
+		})
+	}
 }
 
 func TestBuildCache(t *testing.T) {
