@@ -120,6 +120,29 @@ export fun rangeMessages(revs: str) > {str: str} !> any {
     return found;
 }
 
+// commits judges each commit message in revs, a git revision range.
+export fun commits(dir: str, revs: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    final docs = mut {<str: Document>};
+    foreach (hash, message in rangeMessages(revs)) {
+        if (!exempt(message.split("\n")[0])) {
+            docs["{hash}.commit"] = commitDocument(message, label: "commit " + hash);
+        }
+    }
+    return judge(dir, docs: docs, vale: vale);
+}
+
+// title judges a pull request title's wording; pr-title's conventional rule owns its
+// form, case and length.
+export fun title(dir: str, title: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    return judge(dir, docs: {"title.prtitle": titleDocument(title, label: "pull request title")}, vale: vale);
+}
+
+// description judges a pull request description's wording; the guard's pull request
+// rules own its budget and shape.
+export fun description(dir: str, body: str, label: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    return judge(dir, docs: {"description.pr": descriptionDocument(body, label: label)}, vale: vale);
+}
+
 test "a commit message renders its subject as a heading and maps each line back" {
     final doc = commitDocument("# a git comment\nadd a vale spell\n\nwhy it exists\n\n# Please enter\n", label: "COMMIT_EDITMSG");
     std\assert(doc.text == "# add a vale spell\n\nwhy it exists\n", message: doc.text);

@@ -1,0 +1,12 @@
+- name: "past tense"
+  format: commit
+  input: "# added a vale spell\n"
+  contains: "Magus.Imperative"
+- name: "third person after a prefix"
+  format: commit
+  input: "# feat(prose): adds a vale spell\n"
+  contains: "Magus.Imperative"
+- name: "imperative"
+  format: commit
+  input: "# fix(cache): keep the key stable\n"
+  absent: ["Magus.Imperative"]

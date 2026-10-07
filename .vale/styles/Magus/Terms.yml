@@ -1,0 +1,9 @@
+# One spelling per term, as docs/glossary.md uses it. "Magus" is left out: in a comment it
+# usually names the Go type, which no rule can tell from the tool.
+extends: substitution
+message: "Write '%s', not '%s'."
+level: error
+ignorecase: true
+swap:
+  sub-agents: subagents
+  sub-agent: subagent

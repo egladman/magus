@@ -1,0 +1,8 @@
+- name: "a sentence over 60 words"
+  format: comments
+  input: "The cache keys a run on the cache keys a run on what it reads and the cache keys a run\non what it reads and the cache keys a run on what it reads and the cache keys a run on\nwhat it reads and the cache keys a run on what it reads and the cache keys a run on what\nit reads and the cache keys a run on what it reads and the cache keys a run on what it\nreads.\n"
+  contains: "Magus.CommentSentence"
+- name: "short sentences"
+  format: comments
+  input: "The cache keys a run on what it reads. A miss reruns it.\n"
+  absent: ["Magus.CommentSentence"]

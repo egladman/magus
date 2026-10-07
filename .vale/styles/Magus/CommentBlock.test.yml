@@ -1,0 +1,8 @@
+- name: "a block over 250 words"
+  format: comments
+  input: "The cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\nThe cache keys a run on what it reads, so an undeclared input replays a stale verdict.\n"
+  contains: "Magus.CommentBlock"
+- name: "a short block"
+  format: comments
+  input: "The cache keys a run on what it reads. A miss reruns it.\n"
+  absent: ["Magus.CommentBlock"]

@@ -9,6 +9,12 @@ import "vcs";
 import "magus/lint";
 import "encoding/json";
 
+// STYLES holds the repository's rules, each with its <Rule>.test.yml cases.
+export final STYLES = ".vale/styles/Magus";
+
+// SCRATCH is where the checks write the documents Vale reads, relative to the root.
+export final SCRATCH = ".magus/prose";
+
 // SourceLine is where one document line came from. A separator line has no path. col is
 // the source column of the document line's first byte, 0 when only the line is known,
 // and -1 for a line rendered behind a `# ` heading marker.
@@ -130,6 +136,44 @@ export fun render(f: Finding) > str {
     return "{at}: {f.message} [{f.rule}]";
 }
 
+// TEST_ARGS make the vale op run every rule's <Rule>.test.yml cases instead of linting:
+// --coverage fails a rule that raises in none of its cases.
+export final TEST_ARGS = ["test", "--coverage", STYLES];
+
+// testFindings is a finding per failed case, and per uncovered rule, in the JSON report
+// `vale --output=JSON test` prints.
+export fun testFindings(report: str) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final doc: {str: any} = json\parse(report);
+    final results: [any] = doc["results"] ?? [<any>];
+    foreach (r in results) {
+        if (r["passed"] == true) {
+            continue;
+        }
+        final name: str = r["name"] ?? "";
+        final got: str = r["got"] ?? "no alerts";
+        found.append(Finding{ path = r["file"] ?? STYLES, rule = "vale-test",
+            message = "case \"{name}\" failed; Vale reported: {got.trim()}" });
+    }
+    final uncovered: [any] = doc["uncovered"] ?? [<any>];
+    foreach (rule in uncovered) {
+        found.append(Finding{ path = STYLES, rule = "vale-test", message = "{rule} raises in none of its cases" });
+    }
+    if (results.len() == 0) {
+        found.append(Finding{ path = STYLES, rule = "vale-test", message = "Vale ran no test case" });
+    }
+    return found;
+}
+
+// failure is the message a target throws for findings, one rendered finding per line.
+export fun failure(target: str, findings: [Finding]) > str {
+    final lines = mut ["{target}: {findings.len()} prose finding(s)"];
+    foreach (f in findings) {
+        lines.append("  " + render(f));
+    }
+    return lines.join("\n");
+}
+
 final REPORT = `{"doc.comments":[
   {"Check":"Magus.CommentBlock","Message":"too long","Severity":"error","Line":1,"Span":[7,9]},
   {"Check":"Magus.Filler","Message":"drop","Severity":"error","Line":3,"Span":[1,6]},
@@ -152,6 +196,20 @@ test "a line-only origin reports no column" {
     final f = locate(Alert{ check = "Magus.NameSuffix", message = "rename", line = 1, col = 1 },
         origins: [SourceLine{ path = "x.go", line = 42 }], doc: "doc.names");
     std\assert(render(f) == "x.go:42: rename [Magus.NameSuffix]", message: render(f));
+}
+
+test "a failed or uncovered rule test is a finding" {
+    final report = `{"passed":1,"failed":1,"results":[
+        {"file":".vale/styles/Magus/Filler.test.yml","name":"ok","passed":true},
+        {"file":".vale/styles/Magus/Filler.test.yml","name":"a filler adverb","passed":false}],
+        "uncovered":["Magus.Banner"]}`;
+    final got = testFindings(report) catch [<Finding>];
+    std\assert(got.len() == 2, message: "{got.len()} findings");
+    std\assert(got[0].path == ".vale/styles/Magus/Filler.test.yml" and got[0].message.indexOf("a filler adverb") != null,
+        message: got[0].message);
+    std\assert(got[1].message == "Magus.Banner raises in none of its cases", message: got[1].message);
+    final none = testFindings(`{"passed":0,"failed":0,"results":[]}`) catch [<Finding>];
+    std\assert(none.len() == 1, message: "no case at all");
 }
 
 test "an empty report has no alerts" {

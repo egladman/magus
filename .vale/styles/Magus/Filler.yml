@@ -1,18 +1,21 @@
+# Throat-clearing opens a sentence ("Note that", "This function"), so those match only
+# capitalized: "a note that ..." names the notes feature, and "this function's job" is a
+# contract. The adverbs are filler wherever they sit.
 extends: existence
 message: "Drop '%s': state the fact."
 level: error
-ignorecase: true
+ignorecase: false
 tokens:
-  - note that
-  - please note
-  - it should be noted
-  - it is worth noting
-  - it's worth noting
-  - it is important to
-  - it's important to
-  - this function
-  - this method
-  - simply
-  - basically
-  - essentially
-  - needless to say
+  - Note that
+  - Please note
+  - It should be noted
+  - It is worth noting
+  - It's worth noting
+  - It is important to
+  - It's important to
+  - This function
+  - This method
+  - '[Ss]imply'
+  - '[Bb]asically'
+  - '[Ee]ssentially'
+  - '[Nn]eedless to say'
