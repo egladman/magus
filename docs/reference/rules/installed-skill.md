@@ -1,16 +1,27 @@
 ---
 title: "installed-skill: a write to an installed skill copy, which re-installing discards"
-description: "An advisory: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards."
+description: "An advisory by default: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards."
 tags: [guard, rules, installed-skill, advise]
 ---
 
 # installed-skill
 
-An advisory: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards.
+An advisory by default: it explains, and blocks nothing, on a write to an installed skill copy, which re-installing discards.
 
 ## What it catches
 
 A write to an installed skill copy, which re-installing discards.
+
+## Default and override
+
+By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"installed-skill": "deny"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -27,3 +38,4 @@ advise [installed-skill]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

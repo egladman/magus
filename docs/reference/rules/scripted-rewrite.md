@@ -1,12 +1,12 @@
 ---
 title: "scripted-rewrite: a scripted substitute-and-write, which cannot tell your symbol from a dependency's"
-description: "A deny rule: it refuses a scripted substitute-and-write, which cannot tell your symbol from a dependency's, and names what to run instead."
-tags: [guard, rules, scripted-rewrite, deny]
+description: "An advisory by default: it explains, and blocks nothing, on a scripted substitute-and-write, which cannot tell your symbol from a dependency's."
+tags: [guard, rules, scripted-rewrite, advise]
 ---
 
 # scripted-rewrite
 
-A deny rule: it refuses a scripted substitute-and-write, which cannot tell your symbol from a dependency's, and names what to run instead.
+An advisory by default: it explains, and blocks nothing, on a scripted substitute-and-write, which cannot tell your symbol from a dependency's.
 
 ## What it catches
 
@@ -16,12 +16,23 @@ A scripted substitute-and-write, which cannot tell your symbol from a dependency
 
 A regex cannot tell YOUR symbol from a dependency's symbol of the same name. A `\.Sum\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which and a pattern never can: `magus refs <symbol> --occurrences` returns verified sites, per file, with columns. Run `magus graph build` first if refs reports a project not-indexed, because that verdict means unknown rather than absent, and taking it for "no matches" is how a rename misses half its sites. Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent; say so and use an editor tool. A script file is judged by its program: `python3 p.py`, and a write of p.py, get the verdict the same program would get inline. A program whose every named path lies outside the workspace is untouched. An APPEND passes, since it adds to the end and cannot mangle a line already there: a heredoc appended with `cat >> f <<EOF` or `tee -a`, whatever program its text documents, and a program whose every file write opens in append mode (`open(p, 'a')`, perl's `'>>'`) or goes to its own stdout.
 
+## Default and override
+
+By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"scripted-rewrite": "deny"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
+
 ## Seeing it
 
 A verdict names its rule in brackets, which is how you got here:
 
 ```text
-deny [scripted-rewrite]: ...
+advise [scripted-rewrite]: ...
 ```
 
 `magus describe rule scripted-rewrite` prints the same entry at a terminal, and
@@ -31,3 +42,4 @@ deny [scripted-rewrite]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

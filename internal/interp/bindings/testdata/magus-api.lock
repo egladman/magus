@@ -35,6 +35,7 @@ guard
 guard.advise
 guard.allow
 guard.binary
+guard.builtins
 guard.command
 guard.count
 guard.deny

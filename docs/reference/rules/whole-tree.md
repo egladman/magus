@@ -1,12 +1,12 @@
 ---
 title: "whole-tree: a whole-tree VCS reset, checkout, restore or clean, which cannot be undone"
-description: "A deny rule: it refuses a whole-tree VCS reset, checkout, restore or clean, which cannot be undone, and names what to run instead."
+description: "A deny rule by default: it refuses a whole-tree VCS reset, checkout, restore or clean, which cannot be undone, and names what to run instead."
 tags: [guard, rules, whole-tree, deny]
 ---
 
 # whole-tree
 
-A deny rule: it refuses a whole-tree VCS reset, checkout, restore or clean, which cannot be undone, and names what to run instead.
+A deny rule by default: it refuses a whole-tree VCS reset, checkout, restore or clean, which cannot be undone, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ A whole-tree VCS reset, checkout, restore or clean, which cannot be undone.
 ## Why
 
 These destroy uncommitted and untracked work across the WHOLE tree, including a concurrent session's, and nothing recorded anywhere can give it back. It is the one category where an over-eager refusal is the safe direction, which is why an unparsable line falls back to the pattern rather than passing. Verify in place instead: no magus run needs a clean tree. git's own help passes, because git documents that it prints usage without running: `git stash --help`, `git reset -h`, `git help stash`. It has to be the whole line, with nothing between the verb and the flag, so `git reset --hard --help`, `git -c ... stash --help`, a `VAR=value` prefix, `sh -c` or a pipe are judged as work.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"whole-tree": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [whole-tree]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

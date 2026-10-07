@@ -352,7 +352,7 @@ var advisoryDocs = []types.RuleDoc{
 	{Name: string(advisoryNewSourceDir), Catches: "a new file that opens a directory, which is a boundary rather than a file"},
 	{Name: string(advisoryPrecedent),
 		Catches: "a hunt for one distinctive name, which refs answers with verified sites",
-		Why: "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. "},
+		Why:     "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. "},
 	{Name: string(advisoryPushGate), Catches: "a push the run log does not prove ungated, which names the gate and lets it through"},
 	{Name: string(advisoryRegenSource), Catches: "a hand edit to a file a target regenerates"},
 	{Name: string(advisoryRevertClassify),

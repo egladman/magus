@@ -1,12 +1,12 @@
 ---
 title: "vcs-off-switch: an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads"
-description: "A deny rule: it refuses an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads, and names what to run instead."
+description: "A deny rule by default: it refuses an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads, and names what to run instead."
 tags: [guard, rules, vcs-off-switch, deny]
 ---
 
 # vcs-off-switch
 
-A deny rule: it refuses an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads, and names what to run instead.
+A deny rule by default: it refuses an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ An agent's write setting vcs.enabled: false in a magus.yaml this workspace reads
 ## Why
 
 With vcs off, vcs.Resolve returns no VCS, so the guard has no approved copy to compare a policy edit against and every workspace rule is read from the working tree alone. Decided by parsing the proposed magus.yaml content, never by matching text. A person editing their own checkout, with no lease and no spawn ancestry, is untouched.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"vcs-off-switch": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [vcs-off-switch]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

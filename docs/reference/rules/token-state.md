@@ -1,12 +1,12 @@
 ---
 title: "token-state: an agent reading or writing the token secrets: the operator token file or the token store"
-description: "A deny rule: it refuses an agent reading or writing the token secrets: the operator token file or the token store, and names what to run instead."
+description: "A deny rule by default: it refuses an agent reading or writing the token secrets: the operator token file or the token store, and names what to run instead."
 tags: [guard, rules, token-state, deny]
 ---
 
 # token-state
 
-A deny rule: it refuses an agent reading or writing the token secrets: the operator token file or the token store, and names what to run instead.
+A deny rule by default: it refuses an agent reading or writing the token secrets: the operator token file or the token store, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ An agent reading or writing the token secrets: the operator token file or the to
 ## Why
 
 The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. A bare listing passes (`ls`, `du`, `stat`, `test` of the state dir or a token file), alone or piped into a text filter such as `head` or `grep`: it shows file names, and none is a secret, since the operator file is always `mcp_token` and a store entry is `<token name>.json`, the name `magus config mcp connector ls` already prints. A listing inside a substitution, or piped into anything else (`| xargs cat`), is refused like any mention. Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"token-state": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [token-state]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default
