@@ -24,7 +24,7 @@ magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(ar
 ```
 
 {{if .Full}} Affinity deserves special weight: two projects that keep changing
-together WITHOUT a declared dependency edge are coupled through the back door -
+together WITHOUT a declared dependency edge are coupled through the back door:
 either declare the dependency or move the shared concern.{{else}} Weight affinity most: changing
 together with no declared edge is back-door coupling.{{end}}
 
@@ -52,7 +52,7 @@ The shapes worth flagging, in rough order of how clearly they are wrong:
 | Single file, single exported symbol | The package name is a second name for one function |
 
 Note the third column that is NOT there: size. Small is not the same as needless.
-Check what a package HIDES before proposing a merge - one exported function over
+Check what a package HIDES before proposing a merge: one exported function over
 four unexported helpers is real encapsulation at any line count, and two importers
 in different trees means merging makes one depend on the other.
 
@@ -71,10 +71,10 @@ and nothing it exports would need to be exported once merged.
 2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming
    any exported symbol.{{if .Full}} An empty result states which kind of empty it is:
-   `absent` is verified, `unknown` names the projects with no symbol index - build
+   `absent` is verified, `unknown` names the projects with no symbol index; build
    them with `magus graph build` before trusting it.{{else}} An empty result carries a
    verdict; `unknown` means an index is missing, not that nothing uses it.{{end}}
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}} -
+3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}};
    use it to test whether a proposed boundary actually separates them{{end}}.
 4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
@@ -90,7 +90,7 @@ that shows it.
 
 ## Audit the domain model itself
 
-{{if .Full}}The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
+{{if .Full}}The graph is also a lens on its OWN abstractions: use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
 stats for smells (see the {{skill "query"}} skill for the query syntax):{{else}}Census the kinds, then read the stats for smells:{{end}}
 
@@ -105,13 +105,13 @@ magus explain "<node>"               # compare a kind's edges against a neighbor
 
 Confirm each smell against the source before acting on it:
 
-- A SINGLETON kind (one member) is often over-modeled - does it earn a distinct
+- A SINGLETON kind (one member) is often over-modeled; does it earn a distinct
   kind, or fold into an attr on an existing one?
 - Two kinds with near-identical population AND edge shape may be one concept
   under two names. Keep them distinct only if their PROVENANCE differs (the kind
   doctrine in `types/knowledge.go`){{if .Full}}: a kind whose every instance is derivable
   from another kind's attr fails that test and should fold{{end}}.
-- An ORPHAN (nothing links to it) is dead weight or a missing edge - decide
+- An ORPHAN (nothing links to it) is dead weight or a missing edge; decide
   which{{if .Full}}; an undeclared-but-available builtin is neither{{end}}.
 - A NODE LABEL that varies by checkout (a worktree name where a stable module
   name belongs) is an identity smell{{if .Full}}, even when the ID is stable{{end}}.
@@ -134,11 +134,11 @@ wolf teaches people to route around it{{if .Full}}, taking the real findings wit
 
 After restructuring, show the impact in graph terms: `magus graph diff --rev
 <base> -o markdown` lists the nodes and edges the change added, removed, or
-altered{{if .Full}} - blast radius as data, suitable for a PR description{{end}}. Then run
+altered{{if .Full}} (blast radius as data, suitable for a PR description){{end}}. Then run
 `magus affected ci` to prove the affected projects still pass.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To look at structure, offer an export
 (`magus graph export -o json` or `-o graphml`) that opens in Gephi, yEd, or a
-browser graph tool{{if .Full}} - do not hand-draw diagrams of what the graph already knows{{end}}.
+browser graph tool{{if .Full}}; do not hand-draw diagrams of what the graph already knows{{end}}.

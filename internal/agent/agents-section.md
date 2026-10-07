@@ -6,7 +6,7 @@ declared inputs and outputs, and what a diff affects. Use that model instead
 of rediscovering it by reading files.
 
 If the magus-* skills are installed (.claude/skills/, .opencode/skills/, or
-.agents/skills/), load the matching skill BEFORE acting - at the moment, not
+.agents/skills/), load the matching skill BEFORE acting, at the moment, not
 after something breaks:
 
 | before you                                                 | load                  |
