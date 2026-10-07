@@ -33,6 +33,7 @@ import "std";
 import "magus";
 import "vcs";
 import "proc";
+import "fs";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/commits" as subjects;
@@ -336,17 +337,39 @@ export object Judged {
 // lint and the CI step reach the same rules; a judge that did not run is a finding, since
 // silence would read as a pass.
 export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
+    final dir = workspace + "/libs/conventions";
     return fun (text: str) > [Judged] {
         final run = proc\exec("go", args: ["run", "./cmd/judge-docs", "-surface", "pull-request"],
-            dir: workspace + "/libs/conventions", opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
+            dir: dir, opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         if (run == null or run!.code != 0) {
-            final why = if (run == null) "go did not start" else run!.stderr.trim();
+            var why = "go did not start in {dir}";
+            if (run != null) {
+                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, dir: dir);
+            }
             return [Judged{ rule = "judge", line = 0,
                 message = "the prose judge did not run ({why}); run `go run ./cmd/judge-docs -surface pull-request` "
                     + "in libs/conventions with the title and description on stdin, and read why" }];
         }
         return parseJudged(run!.stdout);
     };
+}
+
+// judgeFailure names why the judge exited non-zero. With allow_failure, proc\exec reports a
+// process that never started (a missing dir, go off PATH) as exit -1 and drops the error,
+// so an empty stderr falls back to the exit code, stdout, and the one start failure the
+// policy can test for itself.
+export fun judgeFailure(code: int, stdout: str, stderr: str, dir: str) > str {
+    if (stderr.trim() != "") {
+        return stderr.trim();
+    }
+    var why = "go exited {code} with nothing on stderr";
+    if (code == -1) {
+        why = if (fs\exists(dir) catch false) "{why}: it never started or a signal ended it" else "{why}: it never started, since {dir} does not exist";
+    }
+    if (stdout.trim() != "") {
+        why = "{why}; stdout: {stdout.trim()}";
+    }
+    return why;
 }
 
 // parseJudged reads judge-docs's findings, whose source is `pull-request:<line>`.
@@ -892,6 +915,14 @@ test "parseJudged reads each finding's line from its source" {
     std\assert(got.len() == 1 and got[0].rule == "hedge" and got[0].line == 3 and got[0].matched == "might fix", message: "{got.len()}");
     std\assert(judgedProblem(got[0]) == "description line 2: Drop 'might fix'. [hedge]", message: judgedProblem(got[0]));
     std\assert(parseJudged("[]").len() == 0, message: "no finding");
+}
+
+test "a judge that failed is named by its stderr, else its exit, stdout and dir" {
+    std\assert(judgeFailure(code: 1, stdout: "", stderr: " no Go files \n", dir: ".") == "no Go files", message: "stderr wins");
+    final gone = judgeFailure(code: -1, stdout: "", stderr: "", dir: "./gone/libs/conventions");
+    std\assert(gone == "go exited -1 with nothing on stderr: it never started, since ./gone/libs/conventions does not exist", message: gone);
+    final said = judgeFailure(code: 2, stdout: "bad flag", stderr: "", dir: ".");
+    std\assert(said == "go exited 2 with nothing on stderr; stdout: bad flag", message: said);
 }
 
 test "a description is judged for the selling words the prose judge leaves" {
