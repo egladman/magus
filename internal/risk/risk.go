@@ -303,32 +303,54 @@ func CommentOnlyDeclared(old, cur string, syn spells.CommentSyntax) bool {
 // of code lines is never touched: that is the no-whitespace-normalization rule, and
 // Python is why it exists.
 func StripComments(src string, syn spells.CommentSyntax) string {
+	var out strings.Builder
+	out.Grow(len(src))
+	prev := 0
+	for _, s := range commentSpans(src, syn) {
+		out.WriteString(src[prev:s.start])
+		dropTrailingIndent(&out)
+		end := s.end
+		wholeLine := s.ownLine && (s.closer == "" || end >= len(src) || src[end] == '\n')
+		if wholeLine && end < len(src) {
+			end++ // the whole line was the comment; its newline goes too
+		}
+		prev = end
+	}
+	out.WriteString(src[prev:])
+	return out.String()
+}
+
+// commentSpan is one non-directive comment of a source: src[start:end] from its opener
+// through its closer, or to the end of the line for a line comment (closer "").
+type commentSpan struct {
+	start, end     int
+	opener, closer string
+	// ownLine reports that nothing but whitespace precedes the opener on its line.
+	ownLine bool
+}
+
+// commentSpans is the string-aware state machine StripComments documents, reporting the
+// spans it would strip instead of stripping them.
+func commentSpans(src string, syn spells.CommentSyntax) []commentSpan {
 	quotes := slices.Clone(syn.Quotes)
 	// Longest opener first, so `"""` wins over `"` and `r#"` over `r"`.
 	slices.SortStableFunc(quotes, func(a, b spells.Quote) int { return len(b.Open) - len(a.Open) })
 
-	var out strings.Builder
-	out.Grow(len(src))
+	var spans []commentSpan
 	i := 0
 	lineHasCode := false
 	for i < len(src) {
 		if q, ok := openingQuote(src, i, quotes); ok {
-			end := stringEnd(src, i+len(q.Open), q)
-			out.WriteString(src[i:end])
+			i = stringEnd(src, i+len(q.Open), q)
 			lineHasCode = true
-			i = end
 			continue
 		}
 		if opener, ok := openingToken(src, i, syn.LineComments); ok {
 			end := lineEnd(src, i)
 			if isDirective(src[i+len(opener):end], syn.Directives) {
-				out.WriteString(src[i:end])
 				lineHasCode = true
 			} else {
-				dropTrailingIndent(&out)
-				if !lineHasCode && end < len(src) {
-					end++ // the whole line was the comment; its newline goes too
-				}
+				spans = append(spans, commentSpan{start: i, end: end, opener: opener, ownLine: !lineHasCode})
 			}
 			i = end
 			continue
@@ -336,28 +358,23 @@ func StripComments(src string, syn spells.CommentSyntax) string {
 		if open, closer, ok := openingBlock(src, i, syn.BlockComments); ok {
 			end := blockEnd(src, i+len(open), open, closer, syn.Nested)
 			if isDirective(src[i+len(open):end], syn.Directives) {
-				out.WriteString(src[i:end])
 				lineHasCode = true
 			} else {
-				dropTrailingIndent(&out)
-				wholeLine := !lineHasCode && (end >= len(src) || src[end] == '\n')
-				if wholeLine && end < len(src) {
-					end++
-				}
+				spans = append(spans, commentSpan{start: i, end: end, opener: open, closer: closer, ownLine: !lineHasCode})
 			}
 			i = end
 			continue
 		}
-		ch := src[i]
-		out.WriteByte(ch)
-		if ch == '\n' {
+		switch src[i] {
+		case '\n':
 			lineHasCode = false
-		} else if ch != ' ' && ch != '\t' && ch != '\r' {
+		case ' ', '\t', '\r':
+		default:
 			lineHasCode = true
 		}
 		i++
 	}
-	return out.String()
+	return spans
 }
 
 func openingQuote(src string, i int, quotes []spells.Quote) (spells.Quote, bool) {
