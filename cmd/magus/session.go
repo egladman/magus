@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -567,7 +568,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		in = f
 	}
 
-	summary, err := readLoadStream(in, dir)
+	summary, err := readLoadStream(in, dir, newRejudge(ctx, root))
 	if err != nil {
 		return err
 	}
@@ -607,7 +608,7 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 // A rejected line does not stop the read, and neither does an overlong one. An adapter
 // emitting one bad shape emits it for a whole transcript, and loading the rest is what
 // lets the reader fix the adapter and re-run without losing what already worked.
-func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
+func readLoadStream(in io.Reader, dir string, rejudge rejudgeFunc) (sessionLoadSummary, error) {
 	var summary sessionLoadSummary
 	reject := func(line int, format string, args ...any) {
 		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
@@ -633,7 +634,7 @@ func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 			reject(line, "longer than any event (%d bytes)", loadMaxLineBytes)
 		case text == "":
 		default:
-			if ev, command, reason := decodeLoadEvent(text, sameRepo); reason != "" {
+			if ev, command, reason := decodeLoadEvent(text, sameRepo, rejudge); reason != "" {
 				reject(line, "%s", reason)
 			} else if ev != nil {
 				summary.Events = append(summary.Events, *ev)
@@ -652,7 +653,7 @@ func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 // command text beside it for the served-next join, "" for every other kind. A line
 // that fails validation returns the reason; a well-formed line from another
 // repository returns neither an event nor a reason, which is the dropped case.
-func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEvent, string, string) {
+func decodeLoadEvent(raw string, sameRepo func(string) bool, rejudge rejudgeFunc) (*sessions.LoadEvent, string, string) {
 	var ev loadEvent
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 		return nil, "", fmt.Sprintf("not a JSON object: %v", err)
@@ -674,7 +675,7 @@ func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEven
 	if ev.Kind == sessions.EventShellCommand {
 		command = ev.Text
 	}
-	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)}, command, ""
+	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev, rejudge)}, command, ""
 }
 
 func validateLoadEvent(ev loadEvent) string {
@@ -697,7 +698,7 @@ func validateLoadEvent(ev loadEvent) string {
 // storedEvent is what a wire event becomes on disk. A shell command loses its text
 // here and nowhere else, so this is the one function to read when asking whether a
 // command line can reach the store.
-func storedEvent(ev loadEvent) sessions.AgentEvent {
+func storedEvent(ev loadEvent, rejudge rejudgeFunc) sessions.AgentEvent {
 	out := sessions.AgentEvent{
 		Host:        ev.Host,
 		Agent:       ev.Agent,
@@ -713,7 +714,7 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 	case sessions.EventShellCommand:
 		sum := sha256.Sum256([]byte(ev.Text))
 		out.Digest = hex.EncodeToString(sum[:])
-		out.Program, out.Verdict, out.Rule = rejudgeCommand(ev.Text)
+		out.Program, out.Verdict, out.Rule = rejudge(ev.Text)
 	case sessions.EventHookOutput:
 		out.Text = ev.Text
 		if len(out.Text) > loadHookTextCap {
@@ -725,8 +726,12 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 	return out
 }
 
-// rejudgeCommand runs a past command through today's rules and reports what they
-// would say now: the program, the verdict, and the rule or advisory behind it.
+// rejudgeFunc runs a past command through today's rules and reports what they would say
+// now: the program, the verdict, and the rule or advisory behind it.
+type rejudgeFunc func(text string) (program, verdict, rule string)
+
+// newRejudge judges by the built-in catalog and the shell rules of the workspace found from
+// root, loaded once, on the first command.
 //
 // It calls the pure rule set rather than the hook, so no subprocess runs and no
 // live workspace state is read. The rules that DO read the filesystem (the sibling
@@ -736,23 +741,28 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 //
 // The rule's argument is dropped along with the text: it renders the resolved
 // argv, which is the content this whole path exists to keep out of the store.
-func rejudgeCommand(text string) (program, verdict, rule string) {
-	program = commandProgram(text)
+func newRejudge(ctx context.Context, root string) rejudgeFunc {
 	// Same catalog + workspace bash rules the live hook uses; Inspect and cache
 	// facts are unused on this pure command path.
-	shellRules, shellDialect := loadWorkspaceShellRules(context.Background())
-	v := guard.Evaluate(guard.Dependencies{
-		Spells:       project.DefaultSpellRegistry().All,
-		ShellRules:   shellRules,
-		ShellDialect: shellDialect,
-	}, text)
-	switch {
-	case v.Deny != "":
-		return program, sessions.VerdictDeny, v.RuleName()
-	case v.Context != "":
-		return program, sessions.VerdictAdvise, v.AdvisoryKind()
+	deps := sync.OnceValue(func() guard.Dependencies {
+		shellRules, shellDialect := loadWorkspaceShellRules(ctx, root)
+		return guard.Dependencies{
+			Spells:       project.DefaultSpellRegistry().All,
+			ShellRules:   shellRules,
+			ShellDialect: shellDialect,
+		}
+	})
+	return func(text string) (program, verdict, rule string) {
+		program = commandProgram(text)
+		v := guard.Evaluate(deps(), text)
+		switch {
+		case v.Deny != "":
+			return program, sessions.VerdictDeny, v.RuleName()
+		case v.Context != "":
+			return program, sessions.VerdictAdvise, v.AdvisoryKind()
+		}
+		return program, sessions.VerdictPass, ""
 	}
-	return program, sessions.VerdictPass, ""
 }
 
 // commandProgram names the program a line runs, wrappers already peeled. A line the

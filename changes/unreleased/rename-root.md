@@ -1,5 +1,6 @@
 ### Fixed
 
-- **`refs --rename` under `--root` no longer panics when run from another checkout.** Its
-  guard grading inspects, and loads its rules from, the workspace the command loaded
-  instead of the one the shell sits in.
+- **`--root` from another checkout no longer mixes in the cwd's workspace.** `refs
+  --rename` no longer panics: its guard grading inspects, loads rules from and reads the
+  graph index of the workspace the command loaded. `session load` rejudges commands by
+  that workspace's shell rules.
