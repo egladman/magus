@@ -123,9 +123,21 @@ func AnchorNodeID(kind, target, scope string) string {
 // control characters (which would corrupt MAGUS.md, MCP responses, and agent
 // contexts) and cap length to keep node cards and exports bounded. Newlines and
 // tabs collapse to spaces; other control runes are dropped.
-func sanitize(s string, limit int) string {
+func sanitize(s string, limit int) string { return scrub(s, limit, false) }
+
+// sanitizeDoc is sanitize for a symbol's [AttrDoc], which keeps its newlines and tabs: the
+// prose rules read a doc's paragraphs, list items and code blocks from its lines. A carriage
+// return is dropped, so a CRLF doc splits the same as an LF one.
+func sanitizeDoc(s string) string { return scrub(s, maxSymbolDocLen, true) }
+
+// scrub is sanitize, keeping newlines and tabs when lines is set; limit 0 is no cap.
+func scrub(s string, limit int, lines bool) string {
 	s = strings.Map(func(r rune) rune {
 		switch {
+		case lines && r == '\r':
+			return -1
+		case lines && (r == '\n' || r == '\t'):
+			return r
 		case r == '\n' || r == '\t' || r == '\r':
 			return ' '
 		case r < 0x20 || r == 0x7f:
@@ -152,6 +164,10 @@ const (
 	maxLabelLen = 256
 	maxDocLen   = 512
 	maxSrcLen   = 512
+	// maxSymbolDocLen sits far above any real doc (this repo's longest is 17.5 KiB) so only
+	// a pathological generated comment is cut. A doc that long is already past the prose
+	// rules' 250-word budget, so the cut costs no verdict on its size.
+	maxSymbolDocLen = 64 << 10
 )
 
 // attrDiagnostic is the node-attribute key under which an extractor records the
@@ -365,6 +381,8 @@ const (
 )
 
 // AttrDoc is a symbol's doc comment as its indexer recorded it, signature block dropped.
+// Unlike every other attr it keeps its newlines and tabs, so a reader sees its paragraphs,
+// lists and code blocks.
 const AttrDoc = "doc"
 
 // AttrLines and AttrBytes size a file node: its line count as an editor numbers lines, and

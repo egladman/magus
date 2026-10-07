@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -62,6 +63,37 @@ func TestProse(t *testing.T) {
 
 	again, _ := g.Prose(opts)
 	assert.Equal(t, findings, again, "two runs over one graph agree")
+}
+
+// TestProseJudgesTheWholeDoc pins that a doc reaches prose.Judge with its newlines and its
+// full length, past the 256 bytes every other attr is cut to: a 260-word doc is over the
+// block budget, and a fenced block's words are code the budget never counts.
+func TestProseJudgesTheWholeDoc(t *testing.T) {
+	const sentence = "The cache keeps one entry per key until it expires.\n" // ten words
+	long := "Long keeps entries.\n" + strings.Repeat(sentence, 26)
+	fenced := "Fenced keeps entries.\n" + strings.Repeat(sentence, 20) +
+		"\n```\n" + strings.Repeat(sentence, 6) + "x := a - b\n```\n"
+	syms := []types.KnowledgeSymbol{
+		{
+			Key: goNS("a") + "Long().", Label: "Long", Language: "go", SymbolKind: "Function",
+			Source: "a/long.go:1", Defs: []string{"a/long.go"}, Doc: long,
+		},
+		{
+			Key: goNS("a") + "Fenced().", Label: "Fenced", Language: "go", SymbolKind: "Function",
+			Source: "a/fenced.go:1", Defs: []string{"a/fenced.go"}, Doc: fenced,
+		},
+	}
+	g := namingGraph(t, syms)
+
+	assert.Equal(t, strings.TrimSpace(long), g.nodes[symbolID(goNS("a")+"Long().")].Attrs[AttrDoc],
+		"the doc is stored whole, lines kept")
+
+	findings, _ := g.Prose(ProseOptions{})
+
+	assert.Equal(t, []types.ProseFinding{{
+		Node: symbolID(goNS("a") + "Long()."), Source: "a/long.go:1", Language: "go", Rule: "comment-block",
+		Message: "Keep a comment block under 250 words: say why, and move the rest to docs.",
+	}}, findings, "the fenced doc's prose is 203 words, its code neither counted nor read as an aside")
 }
 
 func TestProseEmptyGraph(t *testing.T) {

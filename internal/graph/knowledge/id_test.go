@@ -23,3 +23,14 @@ func TestSanitizeTruncatesOnRuneBoundary(t *testing.T) {
 	assert.True(t, utf8.ValidString(s), "truncation split a rune: %q", s)
 	assert.Equal(t, "世世", s)
 }
+
+// TestSanitizeDocKeepsLines pins what a symbol doc keeps that a label loses: newlines and
+// tabs survive, a carriage return and any other control rune are dropped, and only a doc
+// past maxSymbolDocLen is cut.
+func TestSanitizeDocKeepsLines(t *testing.T) {
+	assert.Equal(t, "Doc opens.\n\n\tcode()\n- item", sanitizeDoc("Doc opens.\r\n\n\tcode()\n- item\x07"))
+
+	long := strings.Repeat("word ", 300)
+	assert.Equal(t, strings.TrimSpace(long), sanitizeDoc(long), "a doc past maxLabelLen stays whole")
+	assert.Len(t, sanitizeDoc(strings.Repeat("w", maxSymbolDocLen+10)), maxSymbolDocLen)
+}
