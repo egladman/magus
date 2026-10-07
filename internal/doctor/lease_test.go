@@ -117,8 +117,7 @@ func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
 
-	require.Equal(t, types.CheckFail, got.Status)
-	require.Equal(t, types.EvidenceUnknown, got.Evidence)
+	require.Equal(t, types.Check{Status: types.CheckFail, Evidence: types.EvidenceUnknown}, withoutWording(got))
 	require.Contains(t, got.Message, "could not read the job store")
 }
 

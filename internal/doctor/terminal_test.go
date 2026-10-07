@@ -18,9 +18,15 @@ import (
 // check, which is the one outcome that makes it worthless.
 func TestCheckTerminalUnderTest(t *testing.T) {
 	c := (&runner{}).checkTerminal()
-	assert.Equal(t, "terminal-capabilities", c.Name)
-	assert.Equal(t, types.CheckOK, c.Status, "a pipe is not a fault")
-	assert.Contains(t, c.Message, "plain output")
+	// What it saw is the environment's (TERM, locale), so the details are carried over and
+	// pinned by substring below.
+	want := types.Check{
+		Name:    "terminal-capabilities",
+		Status:  types.CheckOK, // a pipe is not a fault
+		Message: "not an interactive terminal; magus renders plain output",
+		Details: c.Details,
+	}
+	assert.Equal(t, want, c)
 	require.NotEmpty(t, c.Details, "it still reports what it saw, so the reason is legible")
 	assert.Contains(t, c.Details[0], "TERM=")
 }

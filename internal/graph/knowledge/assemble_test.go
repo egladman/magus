@@ -189,11 +189,20 @@ func TestAssembleEdges(t *testing.T) {
 
 func TestOutputMetadata(t *testing.T) {
 	out := mergeAll(AssembleShards(sampleInputs())).Output()
-	assert.Equal(t, types.KnowledgeSchemaVersion, out.SchemaVersion)
-	assert.True(t, out.Directed)
-	assert.False(t, out.Multigraph)
-	assert.Equal(t, len(out.Nodes), out.NodeCount)
-	assert.Equal(t, len(out.Links), out.EdgeCount)
+	// The nodes and links are what the other tests pin; this one judges the envelope round them.
+	want := types.KnowledgeGraphOutput{
+		Definition:          types.KnowledgeGraphDefinition,
+		SchemaVersion:       types.KnowledgeSchemaVersion,
+		Directed:            true,
+		Multigraph:          false,
+		NodeCount:           len(out.Nodes),
+		EdgeCount:           len(out.Links),
+		Relations:           types.KnowledgeRelationDefinitions(),
+		RelationFingerprint: types.KnowledgeRelationFingerprint(),
+		Nodes:               out.Nodes,
+		Links:               out.Links,
+	}
+	assert.Equal(t, want, out)
 }
 
 // TestDeterministicSerialization guards the byte-identical-output invariant that
@@ -265,11 +274,14 @@ func TestAssembleRuntimeTimingAttrs(t *testing.T) {
 
 	require.Len(t, s.Nodes, 1, "only the known, signal-bearing target yields a node")
 	n := s.Nodes[0]
-	assert.Equal(t, "target:pkg/a:build", n.ID)
-	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
-	assert.Equal(t, "4200", n.Attrs[AttrDurationP75Ms])
-	assert.Equal(t, "9", n.Attrs[attrRunSamples])
-	assert.Equal(t, "0.75", n.Attrs[attrCacheHitRate])
+	// Typed, so the merge is order-independent.
+	want := types.KnowledgeNode{
+		ID:    "target:pkg/a:build",
+		Kind:  types.KindTarget,
+		Label: "build",
+		Attrs: map[string]string{AttrDurationP75Ms: "4200", attrRunSamples: "9", attrCacheHitRate: "0.75"},
+	}
+	assert.Equal(t, want, n)
 }
 
 // TestRuntimeTimingMergesOntoTarget: a timing node merges its attrs onto the
@@ -298,10 +310,14 @@ func TestAssembleRuntimeOutputRefAttrs(t *testing.T) {
 
 	require.Len(t, s.Nodes, 1, "only the known target with a ref yields a node")
 	n := s.Nodes[0]
-	assert.Equal(t, "target:pkg/a:build", n.ID)
-	assert.Equal(t, types.KindTarget, n.Kind, "typed so the merge is order-independent")
-	assert.Equal(t, "out1a2b3c", n.Attrs[AttrLastOutputRef])
-	assert.Equal(t, "true", n.Attrs[AttrLastRunOK])
+	// Typed, so the merge is order-independent.
+	want := types.KnowledgeNode{
+		ID:    "target:pkg/a:build",
+		Kind:  types.KindTarget,
+		Label: "build",
+		Attrs: map[string]string{AttrLastOutputRef: "out1a2b3c", AttrLastRunOK: "true"},
+	}
+	assert.Equal(t, want, n)
 }
 
 // TestRuntimeOutputRefMergesOntoTarget: a failing run's ref merges its attrs onto the
@@ -348,9 +364,15 @@ func TestAssembleOpTools(t *testing.T) {
 	tID := "tool:go"
 	toolNode, ok := nodeByID(out, tID)
 	require.True(t, ok, "the tool node exists")
-	assert.Equal(t, types.KindTool, toolNode.Kind, "a program is its own kind")
-	assert.Equal(t, "go", toolNode.Label, "tool label is the basename (filepath.Base)")
-	assert.Empty(t, toolNode.Source, "the tool node is workspace-scoped, not project-owned")
+	// A program is its own kind, labelled by the basename (filepath.Base), and the node is
+	// workspace-scoped rather than project-owned, so it has no Source.
+	wantTool := types.KnowledgeNode{
+		ID:    tID,
+		Kind:  types.KindTool,
+		Label: "go",
+		Attrs: map[string]string{attrTool: "go"},
+	}
+	assert.Equal(t, wantTool, toolNode)
 
 	assert.True(t, hasEdge(out, opID, tID, types.RelationUses), "go-build op uses the go tool")
 	assert.True(t, hasEdge(out, "op:go:go-test", tID, types.RelationUses), "go-test op uses the SAME tool")
@@ -662,8 +684,19 @@ func TestUndeclaredEdgesSkipsADanglingEdge(t *testing.T) {
 func TestOutputCarriesTheRelationVocabulary(t *testing.T) {
 	out := mergeAll(AssembleShards(sampleInputs())).Output()
 
-	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
-	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
+	// The nodes and links are what the other tests pin; this one judges the vocabulary round them.
+	want := types.KnowledgeGraphOutput{
+		Definition:          types.KnowledgeGraphDefinition,
+		SchemaVersion:       types.KnowledgeSchemaVersion,
+		Directed:            true,
+		NodeCount:           len(out.Nodes),
+		EdgeCount:           len(out.Links),
+		Relations:           types.KnowledgeRelationDefinitions(),
+		RelationFingerprint: types.KnowledgeRelationFingerprint(),
+		Nodes:               out.Nodes,
+		Links:               out.Links,
+	}
+	assert.Equal(t, want, out)
 	assert.NotEmpty(t, out.RelationFingerprint)
 }
 

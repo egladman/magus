@@ -317,10 +317,15 @@ export fun deploy(ctx: magus\Context, args: [str]) > void {}`
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
 	p := g.Projects[0]
-	assert.Equal(t, []string{"../lib"}, p.DependsOn)
-	assert.Equal(t, []string{"src/**"}, p.Sources)
-	assert.Equal(t, []string{"bin/app"}, p.Outputs, "a bare str outputs coerces to a one-element list")
-	assert.Equal(t, []string{"deploy"}, p.NoCache)
+	// A bare str outputs coerces to a one-element list.
+	want := Project{
+		Path:      ".",
+		DependsOn: []string{"../lib"},
+		Outputs:   []string{"bin/app"},
+		Sources:   []string{"src/**"},
+		NoCache:   []string{"deploy"},
+	}
+	assert.Equal(t, want, p)
 }
 
 // TestTraceProject_malformedCall: a non-map, non-str argument is a no-op config
@@ -339,8 +344,7 @@ func TestTraceProject_explicitPath(t *testing.T) {
 	g := LoadMagusfile(context.Background(), `import "magus"; magus\project("./sub", {"outputs": ["out/**"]});`)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
-	assert.Equal(t, "./sub", g.Projects[0].Path)
-	assert.Equal(t, []string{"out/**"}, g.Projects[0].Outputs)
+	assert.Equal(t, Project{Path: "./sub", Outputs: []string{"out/**"}}, g.Projects[0])
 
 	g2 := LoadMagusfile(context.Background(), `import "magus"; magus\project("./sub", 5);`)
 	require.True(t, g2.OK, "load failed: %+v", g2.Diag)
@@ -502,8 +506,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
 	require.Len(t, r.Trace, 1)
-	assert.Equal(t, "run", r.Trace[0].Kind)
-	assert.Equal(t, "image-build:cd,fast", r.Trace[0].Name, "both charms survive on the suffix")
+	// Both charms survive on the suffix.
+	assert.Equal(t, Op{Target: "release", Kind: "run", Name: "image-build:cd,fast"}, r.Trace[0])
 }
 
 // TestRun_spellListTargets drives buildSpell's listTargets member (and strsToList)
@@ -563,8 +567,7 @@ func TestEval_tracerSpellBuffer(t *testing.T) {
 	r := Eval(context.Background(), twoOpSpell, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	require.Len(t, r.Trace, 2)
-	assert.Equal(t, "command", r.Trace[0].Kind)
-	assert.Equal(t, "a run", r.Trace[0].Detail)
+	assert.Equal(t, Op{Target: "alpha", Kind: "command", Name: "alpha", Detail: "a run"}, r.Trace[0])
 	assert.Equal(t, "b go", r.Trace[1].Detail)
 }
 

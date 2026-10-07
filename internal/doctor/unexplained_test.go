@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,8 +66,11 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+		assert.Equal(t, types.Check{
+			Status:   types.CheckOK,
+			Evidence: types.EvidenceUnknown,
+			Details:  []string{"start one where a reason is worth keeping: " + hint.NotesEdit.With("<name>")},
+		}, withoutWording(got))
 	})
 
 	t.Run("no caller-supplied store is unknown, never a clean bill", func(t *testing.T) {
@@ -81,8 +85,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 2}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
 		assert.Contains(t, got.Message, "no history lens")
 	})
 
@@ -99,8 +102,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 		r.opts.explanations = &Explanations{Notes: 3, Files: []string{"internal/cache/key.go"}}
 
 		got := r.checkUnexplainedHotspots(nil)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, types.EvidenceInferred, got.Evidence)
+		assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceInferred}, withoutWording(got))
 		assert.Contains(t, got.Message, "1 of the 2")
 	})
 

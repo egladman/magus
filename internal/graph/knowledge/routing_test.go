@@ -45,11 +45,16 @@ func TestRoutingCountsAndKinds(t *testing.T) {
 	g := sampleGraph()
 	r := g.Routing()
 
-	assert.Equal(t, types.KnowledgeSchemaVersion, r.SchemaVersion)
-	assert.Equal(t, len(g.Nodes()), r.NodeCount)
-	// Equal only because sampleInputs sets no Runtime events; EdgeCount counts
-	// non-runtime edges, which TestRoutingIgnoresRuntimeShard pins.
-	assert.Equal(t, len(g.Edges()), r.EdgeCount)
+	// EdgeCount equals the graph's only because sampleInputs sets no Runtime events; it counts
+	// non-runtime edges, which TestRoutingIgnoresRuntimeShard pins. The rows are checked below.
+	want := types.KnowledgeRouting{
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		NodeCount:     len(g.Nodes()),
+		EdgeCount:     len(g.Edges()),
+		Kinds:         r.Kinds,
+		Projects:      r.Projects,
+	}
+	assert.Equal(t, want, r)
 
 	tgt, ok := routingKind(r, types.KindTarget)
 	require.True(t, ok, "target kind row present")
@@ -122,8 +127,8 @@ func TestRoutingWithholdsAnchorsForMethodKind(t *testing.T) {
 	afterRouting := after.Routing()
 	rowAfter, ok := routingKind(afterRouting, types.KindMethod)
 	require.True(t, ok)
-	assert.Equal(t, row.Anchors, rowAfter.Anchors, "a new host module cannot churn withheld method anchors")
-	assert.Equal(t, 4, rowAfter.Count)
+	// A new host module cannot churn withheld method anchors.
+	assert.Equal(t, types.KnowledgeRoutingKind{Kind: types.KindMethod, Count: 4, FromBinary: true, Anchors: row.Anchors}, rowAfter)
 }
 
 func TestRoutingIncludesMarkerKind(t *testing.T) {

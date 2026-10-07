@@ -26,9 +26,7 @@ func TestContainsChain(t *testing.T) {
 	t.Run("nested file threads the dir chain", func(t *testing.T) {
 		nodes, edges := containsChain(".", "internal/interp/discovery.go", "file:internal/interp/discovery.go")
 		require.Len(t, nodes, 2)
-		assert.Equal(t, "dir:internal", nodes[0].ID)
-		assert.Equal(t, types.KindDir, nodes[0].Kind)
-		assert.Equal(t, "internal", nodes[0].Label)
+		assert.Equal(t, types.KnowledgeNode{ID: "dir:internal", Kind: types.KindDir, Label: "internal", Source: "internal"}, nodes[0])
 		assert.Equal(t, "dir:internal/interp", nodes[1].ID)
 
 		tr := edgeTriples(edges)
@@ -41,8 +39,7 @@ func TestContainsChain(t *testing.T) {
 		nodes, edges := containsChain(".", "magusfile.buzz", "file:magusfile.buzz")
 		assert.Empty(t, nodes, "no intermediate directories")
 		require.Len(t, edges, 1)
-		assert.Equal(t, "project:.", edges[0].Source)
-		assert.Equal(t, "file:magusfile.buzz", edges[0].Target)
+		assert.Equal(t, extractedEdge("project:.", "file:magusfile.buzz", types.RelationContains, "magusfile.buzz"), edges[0])
 	})
 
 	t.Run("sub-project chain starts at the project, not the workspace root", func(t *testing.T) {
@@ -105,10 +102,12 @@ func TestDirNodeStructuralAndAggregateMerge(t *testing.T) {
 
 	n, ok := nodeByID(out, "dir:internal/interp")
 	require.True(t, ok, "one merged dir node")
-	assert.Equal(t, types.KindDir, n.Kind)
-	assert.Equal(t, "internal/interp", n.Label, "structural label survives")
-	assert.Equal(t, "1", n.Attrs[AttrDirFiles], "aggregate attr folded in")
-	assert.Equal(t, "go", n.Attrs[AttrDirLanguages])
+	// The structural label and source survive, and the aggregate attrs fold in.
+	want := types.KnowledgeNode{
+		ID: "dir:internal/interp", Kind: types.KindDir, Label: "internal/interp", Source: "internal/interp",
+		Attrs: map[string]string{AttrDirFiles: "1", AttrDirCommits: "3", AttrDirLanguages: "go"},
+	}
+	assert.Equal(t, want, n)
 	assert.True(t, hasEdge(out, "dir:internal", "dir:internal/interp", types.RelationContains))
 }
 

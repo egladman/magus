@@ -20,10 +20,11 @@ func TestReadSortsAndFiltersByExtension(t *testing.T) {
 
 	got, err := Read(dir, "json")
 	require.NoError(t, err)
-	require.Len(t, got, 2, "only *.json files, and never a directory")
-	assert.Equal(t, "alpha", got[0].Name)
-	assert.Equal(t, "zulu", got[1].Name)
-	assert.Equal(t, []byte("alpha.json"), got[0].Data)
+	want := []Entry{
+		{Name: "alpha", Path: filepath.Join(dir, "alpha.json"), Data: []byte("alpha.json")},
+		{Name: "zulu", Path: filepath.Join(dir, "zulu.json"), Data: []byte("zulu.json")},
+	}
+	assert.Equal(t, want, got, "only *.json files, and never a directory")
 }
 
 // TestReadMissingDirIsEmptyNotAnError: nothing configured is a normal state.

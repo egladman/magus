@@ -42,8 +42,13 @@ func TestDiffGraphs(t *testing.T) {
 	assert.Equal(t, "target:pkg/a:gone", d.NodesRemoved[0].ID)
 
 	require.Len(t, d.NodesChanged, 1)
-	assert.Equal(t, "target:pkg/a:build", d.NodesChanged[0].ID)
-	assert.Equal(t, []string{"doc"}, d.NodesChanged[0].Fields)
+	wantChange := types.KnowledgeNodeChange{
+		ID:     "target:pkg/a:build",
+		Fields: []string{"doc"},
+		Before: before.Nodes[1],
+		After:  after.Nodes[1],
+	}
+	assert.Equal(t, wantChange, d.NodesChanged[0])
 
 	require.Len(t, d.EdgesAdded, 1)
 	assert.Equal(t, "target:pkg/a:test", d.EdgesAdded[0].Target)

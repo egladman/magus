@@ -47,16 +47,14 @@ func TestAssembleSessionFoldsOntoFileAndRollsUpToDirs(t *testing.T) {
 		AttrAgentDenials:     "1",
 		AttrAgentLastTouched: "300",
 	}
+	// A partial node: the real file node owns label and source.
 	file := sessionNode(t, s, fileID(path))
-	assert.Equal(t, types.KindFile, file.Kind)
-	assert.Equal(t, want, file.Attrs)
+	assert.Equal(t, types.KnowledgeNode{ID: fileID(path), Kind: types.KindFile, Attrs: want}, file)
 	for _, dir := range []string{"internal/graph", "internal/graph/knowledge"} {
 		node := sessionNode(t, s, dirID(dir))
-		assert.Equal(t, types.KindDir, node.Kind)
-		assert.Equal(t, want, node.Attrs, "dir %s", dir)
+		assert.Equal(t, types.KnowledgeNode{ID: dirID(dir), Kind: types.KindDir, Attrs: want}, node, "dir %s", dir)
 	}
 	assert.Len(t, s.Nodes, 3, "no node beyond the file and its two known ancestors")
-	assert.Empty(t, file.Label, "partial node: the real file node owns label and source")
 }
 
 func TestAssembleSessionCountsUnresolvedRatherThanMinting(t *testing.T) {
@@ -141,8 +139,7 @@ func TestSessionContactsStayOutOfTheDefaultGraph(t *testing.T) {
 		}
 	}
 	after := mergeAll(merged).Output()
-	assert.Equal(t, before.NodeCount, after.NodeCount)
-	assert.Equal(t, before.EdgeCount, after.EdgeCount)
+	assert.Equal(t, before, after)
 	for _, n := range after.Nodes {
 		for k := range n.Attrs {
 			assert.False(t, IsSessionAttr(k), "session attr %s reached the default graph on %s", k, n.ID)

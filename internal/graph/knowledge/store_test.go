@@ -876,20 +876,33 @@ func TestEnsureFastMissWithMatchingFullStampRecordsFastAndIndexesWithoutRebuildi
 		fast: stampsAll("f2"), full: stampsAll("v1"), indexes: declsFixture(),
 	}, DefaultClasses, in)
 
-	assert.Equal(t, 1, calls.stamps, "an unsettled class is judged by the full stamps, computed once")
-	assert.Equal(t, 1, calls.indexes, "the workspace was paid for, so the declarations ride along")
-	assert.Nil(t, calls.gathered, "the full stamp matched: nothing is reassembled")
+	// An unsettled class is judged by the full stamps, computed once. The workspace was paid for,
+	// so the declarations ride along. The full stamp matched, so nothing is reassembled.
+	assert.Equal(t, fastRead{stamps: 1, indexes: 1}, *calls)
 	after := readManifest(t, cacheDir)
+	// A class that just missed records the fast stamp that missed; one that was not wanted keeps
+	// its record.
+	wantFast := map[ShardClass]string{}
 	for _, c := range DefaultClasses {
-		assert.Equalf(t, "f2"+string(c), after.FastStamps[c], "class %s records the fast stamp that just missed", c)
+		wantFast[c] = "f2" + string(c)
 	}
 	for _, c := range LazyClasses {
-		assert.Equalf(t, "f1"+string(c), after.FastStamps[c], "class %s was not wanted, so its record stays", c)
+		wantFast[c] = "f1" + string(c)
 	}
-	assert.Equal(t, before.Inputs, after.Inputs, "the full stamps are what settled the read, never rewritten")
-	assert.Equal(t, before.Shards, after.Shards, "no shard moves")
-	assert.Equal(t, declsFixture(), after.Indexes)
-	assert.True(t, after.IndexesKnown)
+	// The full stamps are what settled the read, never rewritten, and no shard moves.
+	wantManifest := manifest{
+		SchemaVersion: before.SchemaVersion,
+		Shards:        before.Shards,
+		Inputs:        before.Inputs,
+		FastStamps:    wantFast,
+		Reads:         before.Reads,
+		ReadsKnown:    before.ReadsKnown,
+		Indexes:       declsFixture(),
+		IndexesKnown:  true,
+		Extra:         before.Extra,
+		Routing:       before.Routing,
+	}
+	assert.Equal(t, wantManifest, after)
 
 	_, calls = ensureFast(t, cacheDir, fastReadOptions{
 		fast: stampsAll("f2"), full: stampsAll("never"), indexes: declsFixture(),
@@ -933,8 +946,9 @@ func TestEnsureFastMissWithMissingFullStampRebuildsAndRecordsInputsFastAndIndexe
 
 	_, calls := ensureFast(t, cacheDir, fastReadOptions{fast: stampsAll("f2"), full: full}, DefaultClasses, in)
 
-	assert.Equal(t, 1, calls.stamps, "the stamps asked for before the verdict are still asked for once")
-	assert.Equal(t, []ShardClass{ClassRuntime}, calls.gathered, "only the class whose full stamp moved is reassembled")
+	// The stamps asked for before the verdict are still asked for once, and only the class whose
+	// full stamp moved is reassembled. Whether the indexes callback ran is not under test.
+	assert.Equal(t, fastRead{stamps: 1, indexes: calls.indexes, gathered: []ShardClass{ClassRuntime}}, *calls)
 	after := readManifest(t, cacheDir)
 	assert.Equal(t, "v2runtime", after.Inputs[ClassRuntime])
 	assert.Equal(t, "f2runtime", after.FastStamps[ClassRuntime], "a rebuilt class is stamped with both stamps")
@@ -969,8 +983,9 @@ func TestEnsureFastFreshClassWhoseShardWentBadResolvesTheFullStampsToRebuild(t *
 
 	_, calls := ensureFast(t, cacheDir, fastReadOptions{fast: stampsAll("f1"), full: stampsAll("v1")}, DefaultClasses, in)
 
-	assert.Equal(t, 1, calls.stamps, "a rebuilt class is stamped with the full stamps, so the fast verdict alone is not enough")
-	assert.Equal(t, []ShardClass{ClassDomain}, calls.gathered)
+	// A rebuilt class is stamped with the full stamps, so the fast verdict alone is not enough.
+	// Whether the indexes callback ran is not under test.
+	assert.Equal(t, fastRead{stamps: 1, indexes: calls.indexes, gathered: []ShardClass{ClassDomain}}, *calls)
 }
 
 func TestEnsureRefreshIgnoresFastStamps(t *testing.T) {

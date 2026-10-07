@@ -138,9 +138,16 @@ func TestLayoutNamesTheOutliers(t *testing.T) {
 
 	got := g.Layout(LayoutChange{Added: addedSet(added, layoutFile{path: "internal/zed/x_test.go"})})
 	require.Len(t, got["internal/zed"], 1)
-	assert.Equal(t, types.CheckPackageFiles, got["internal/zed"][0].Name)
+	// The message is pinned by substring below.
+	want := types.Check{
+		Name:     types.CheckPackageFiles,
+		Status:   types.CheckAdvice,
+		Evidence: types.EvidenceMeasured,
+		Message:  got["internal/zed"][0].Message,
+		Details:  []string{"not: internal/lone"},
+	}
+	assert.Equal(t, want, got["internal/zed"][0])
 	assert.Contains(t, got["internal/zed"][0].Message, "5 of 6 Go directories beside it hold more than one, as `internal/pkge` and `internal/pkgd` do")
-	assert.Equal(t, []string{"not: internal/lone"}, got["internal/zed"][0].Details)
 }
 
 func TestLayoutComparesOnlyTheSameLanguage(t *testing.T) {

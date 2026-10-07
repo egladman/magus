@@ -25,8 +25,9 @@ func TestQualified(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []string{"web//spell:go", "web//op:go:go-build"}, ids)
 	require.Len(t, out.Links, 1)
-	assert.Equal(t, "web//spell:go", out.Links[0].Source)
-	assert.Equal(t, "web//op:go:go-build", out.Links[0].Target)
+	assert.Equal(t, types.KnowledgeEdge{
+		Source: "web//spell:go", Target: "web//op:go:go-build", Relation: types.RelationContains,
+	}, out.Links[0])
 
 	// The original graph is untouched: its IDs stay unqualified.
 	for _, n := range g.Nodes() {

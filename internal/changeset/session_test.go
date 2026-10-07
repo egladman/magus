@@ -320,11 +320,15 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	second := NewStore(dir)
 	sess := second.Attach(root, "main", types.Diff{}, "asof2")
 	require.Len(t, sess.Comments, 1, "exactly the human draft should come back")
-	assert.Equal(t, "a.go", sess.Comments[0].Path)
-	assert.Equal(t, "this is the bit reviewers always ask about", sess.Comments[0].Body)
-	// The anchor rides along, so the surface can still say the code under it moved.
-	assert.Equal(t, types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"}, sess.Comments[0].Anchor)
-	assert.False(t, sess.Comments[0].Published)
+	want := types.DiffComment{
+		Path: "a.go",
+		Body: "this is the bit reviewers always ask about",
+		// The anchor rides along, so the surface can still say the code under it moved.
+		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
+	}
+	// The store stamps the id, author and origin; a restart is not judged on them.
+	want.ID, want.Author, want.Origin = sess.Comments[0].ID, sess.Comments[0].Author, sess.Comments[0].Origin
+	assert.Equal(t, want, sess.Comments[0])
 }
 
 // A published comment lives on the host, where a teammate may already have replied. Restoring
@@ -445,8 +449,14 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 
 	got := s.Get(root)
 	require.Len(t, got.Comments, 1)
-	assert.Equal(t, 32, got.Comments[0].Line, "the remark follows its code")
-	assert.Equal(t, types.AnchorMoved, got.Comments[0].Rung, "and says it moved rather than claiming it never did")
+	// The remark follows its code, and says it moved rather than claiming it never did.
+	want := types.DiffComment{
+		ID: "c1", Path: "a.go", Hunk: 0, Line: 32, Author: types.DiffAuthorUnattributed,
+		Body: "why is this not a pointer", Rung: types.AnchorMoved,
+		// Relocation rewrites the anchor's digest and context; the anchor's own tests pin those.
+		Anchor: got.Comments[0].Anchor,
+	}
+	assert.Equal(t, want, got.Comments[0])
 }
 
 // A published remark is not re-placed: a colleague may already have replied to it where it sits,
@@ -470,6 +480,11 @@ func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
 
 	got := s.Get(root)
 	require.Len(t, got.Comments, 1)
-	assert.Equal(t, 1, got.Comments[0].Line, "a published remark stays where the colleague saw it")
-	assert.Equal(t, types.AnchorUnknown, got.Comments[0].Rung)
+	// A published remark stays where the colleague saw it.
+	want := types.DiffComment{
+		ID: "c1", Path: "a.go", Line: 1, Author: types.DiffAuthorUnattributed,
+		Body: "sent already", Published: true, Rung: types.AnchorUnknown,
+		Anchor: types.CommentAnchor{Quote: "a"},
+	}
+	assert.Equal(t, want, got.Comments[0])
 }

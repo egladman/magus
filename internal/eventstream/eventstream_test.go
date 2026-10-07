@@ -158,6 +158,5 @@ func TestFromJournalCarriesTheFailureReason(t *testing.T) {
 	require.True(t, ok)
 	body, ok := got.Body.(types.StreamTarget)
 	require.True(t, ok)
-	assert.Equal(t, "failed", body.Status)
-	assert.Equal(t, "exit status 2", body.Error)
+	assert.Equal(t, types.StreamTarget{Project: "api", Target: "build", Status: "failed", Error: "exit status 2"}, body)
 }

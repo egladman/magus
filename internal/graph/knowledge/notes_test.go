@@ -29,11 +29,15 @@ func TestAssembleNotes(t *testing.T) {
 
 	n, ok := nodeByID(out, "note:cache-invalidation-pairing")
 	require.True(t, ok)
-	assert.Equal(t, types.KindNote, n.Kind)
-	assert.Equal(t, "The two caches invalidate together", n.Label)
-	assert.Equal(t, "notes/cache-invalidation-pairing.md", n.Source,
-		"Source is the file path, which is what lets @vcs attribute the note to its author")
-	assert.Equal(t, "cache,gotcha", n.Attrs[attrTags])
+	// Source is the file path, which is what lets @vcs attribute the note to its author.
+	want := types.KnowledgeNode{
+		ID:     "note:cache-invalidation-pairing",
+		Kind:   types.KindNote,
+		Label:  "The two caches invalidate together",
+		Source: "notes/cache-invalidation-pairing.md",
+		Attrs:  map[string]string{attrScope: ScopeShared, attrTags: "cache,gotcha"},
+	}
+	assert.Equal(t, want, n)
 
 	// A note anchored to several entities is the case no single comment could express.
 	assert.True(t, hasEdge(out, "note:cache-invalidation-pairing", "symbol:m internal/cache/Store#Put().", types.RelationAnnotates))
