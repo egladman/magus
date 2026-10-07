@@ -13,7 +13,7 @@ import (
 //
 // /proc/<pid>/task/<tid>/children rather than a scan of the whole table: the
 // kernel already maintains the child list, so the walk touches only the tree it is
-// asked about. A pid that exits mid-walk simply stops contributing.
+// asked about. A pid that exits mid-walk stops contributing.
 func TreeBytes(pid int) int64 {
 	var total int64
 	seen := map[int]bool{}
