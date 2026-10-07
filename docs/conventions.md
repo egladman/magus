@@ -1,6 +1,6 @@
 ---
 title: Conventions
-description: How to read the magus docs - placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.
+description: How to read the magus docs: placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.
 tags: [conventions, documentation, placeholders, examples, style, reference]
 ---
 
@@ -10,7 +10,7 @@ A few conventions run through every page on this site. This page is the key.
 
 ## Placeholders
 
-Angle brackets mark a value you replace with your own - never type the brackets:
+Angle brackets mark a value you replace with your own; never type the brackets:
 
 ```sh
 magus run <target>
@@ -30,7 +30,7 @@ same five marks. This is the whole vocabulary:
 | `[thing]`    | optional; omit the brackets if you use it | `magus ls [flags]`                               |
 | `<a\|b\|c>`  | required, and one of these exact words    | `magus completion <bash\|zsh\|fish\|powershell>` |
 | `<value>...` | repeatable; one or more, space separated  | `magus describe file <path> [<path>...]`         |
-| `word[s]`    | the `s` is optional - both spellings work | `magus describe spell[s]`                        |
+| `word[s]`    | the `s` is optional; both spellings work  | `magus describe spell[s]`                        |
 
 The last one is the only place square brackets do NOT mean "optional argument":
 `spell[s]` means `magus describe spell` and `magus describe spells` are the same
@@ -44,7 +44,7 @@ magus run <target> [flags] [project...]
 magus describe file <path> [<path>...] [flags]
 ```
 
-`[flags]` and `[args]` are categories rather than placeholders - there is nothing
+`[flags]` and `[args]` are categories rather than placeholders: there is nothing
 called "flags" to substitute. Run the command with `-h` to see which it accepts.
 
 A bare `--` ends magus's own arguments; everything after it is passed through
@@ -86,8 +86,8 @@ magus version
 # magus <version> (<commit>) built <date>
 ```
 
-Where the real output carries a value that changes between builds or between machines -
-a version, a commit, a duration, a cache key - the comment shows the SHAPE with
+Where the real output carries a value that changes between builds or between machines
+(a version, a commit, a duration, a cache key), the comment shows the SHAPE with
 placeholders in it, not one machine's answer. A pasted-in literal goes stale silently;
 a shape does not.
 
@@ -106,7 +106,7 @@ Windows examples are shown in PowerShell and labeled as such.
 ## Reading Buzz: the backslash
 
 Buzz code on this site is full of names like `fs\readFile` and `magus\project`. The
-backslash is namespace access - it reaches into a module. Most languages spell this
+backslash is namespace access: it reaches into a module. Most languages spell this
 with a dot, so it is the one piece of syntax worth knowing before you read anything
 else here.
 
@@ -129,7 +129,7 @@ The full module list is the [standard library reference](reference/buzz/index.md
 Some Buzz code blocks are live. They carry a bar above (**Open in Playground**, and a
 copy button) and a **Run** button below; Run executes the snippet in your browser via
 the same WebAssembly build of Buzz the [playground](playground.html) uses, and the output
-lands in a panel under the block. Nothing is sent anywhere - there is no server in this
+lands in a panel under the block. Nothing is sent anywhere; there is no server in this
 loop, and no install. Blocks without the bars are illustrative only. (With JavaScript
 off, every block is plain, copyable text.)
 
@@ -209,16 +209,16 @@ site is built:
 - **Code entities.** Inline code that names a diagnostic code, a CLI command, a config
   key, or a stdlib method (`` `MGS1002` ``, `` `magus affected` ``, `` `fs\glob` ``)
   links to its reference page.
-- **Convention hints.** Each rendered convention marker - an admonition title, a
-  code-block caption, the first angle-bracket placeholder - grows a small `?` that links
+- **Convention hints.** Each rendered convention marker (an admonition title, a
+  code-block caption, the first angle-bracket placeholder) grows a small `?` that links
   back to the matching section of this page.
 
 All three bake the target's one-line definition into the link as a `data-def` attribute.
 That is what the hover popover reads: it never fetches anything, it reads the text
 already in the page. On a touch device, where there is no hover, the same content opens
 as a panel below the paragraph instead. With JavaScript off, every one of them is still
-an ordinary link to the page that defines the thing, so nothing is lost - only the
-shortcut is.
+an ordinary link to the page that defines the thing, so nothing is lost but the
+shortcut.
 
 The whole-docs view runs the other direction: the glossary page lists, per term, every
 page that references it. That is an aggregate over every page, so it is computed
@@ -230,7 +230,7 @@ Almost everything on these pages is decided at build time and shipped as plain H
 footnotes and their back-links, all three kinds of cross-link and their definitions, the
 table of contents, breadcrumbs, reading time, the auto-generated chip, and the
 `Last updated` provenance line. There is no client-side rendering step and no API behind
-this site - it is a static tree of files.
+this site; it is a static tree of files.
 
 A few things are deliberately left to the browser, each for its own reason:
 
@@ -241,7 +241,7 @@ A few things are deliberately left to the browser, each for its own reason:
 | relative timestamps | `Last updated` ships as an absolute date and is swapped to "3 days ago" in the browser. A build-time relative date would change every day, which would make the rendered site differ from the committed one and trip the drift gate |
 
 Each is additive. With JavaScript off you get uncolored code, plain fenced text where a
-diagram would be, an absolute date instead of a relative one, and no Run button - never a
+diagram would be, an absolute date instead of a relative one, and no Run button, but never a
 blank page.
 
 ## Code-block titles
@@ -263,9 +263,9 @@ removed lines (leading `-`) as a red one.
 
 ## Auto-generated pages
 
-Pages built from source - the [module reference](reference/buzz/index.md), the
+Pages built from source (the [module reference](reference/buzz/index.md), the
 [spell reference](concepts/spells.md), the [man pages](reference/manpage/magus.md), and the
-[configuration reference](reference/config.md) - lead their tag row with this chip:
+[configuration reference](reference/config.md)) lead their tag row with this chip:
 
 <div class="post-tags" aria-label="Example chip">
   <span class="tag generated" data-tooltip="Auto-generated from source; edit the generator, not this page" title="Auto-generated from source; edit the generator, not this page">auto-generated</span>
@@ -304,6 +304,24 @@ aliases: [<old paths>, optional]
   not a page, so a link to it stays absolute.
 
 Generated pages are their generator's to fix, and skip these checks.
+
+## Prose punctuation and headings
+
+Hand-written Markdown anywhere in the repository keeps to plain punctuation, and
+`magus run lint-rules .` refuses a file that departs from it
+([`hack/lint/markdown-prose.buzz`](https://github.com/egladman/magus/blob/main/hack/lint/markdown-prose.buzz)):
+
+- **No typographic characters outside code.** No em or en dash, curly quote or ellipsis
+  character: each has a plain spelling anyone can type and search for.
+- **No hyphen standing in for a dash.** A hyphen spaced between words (`a - b`), or a
+  doubled one (`a -- b`), leaves the reader to guess how the two halves relate. Name it: a
+  colon before an explanation or a list, a semicolon between two related clauses, commas
+  or parentheses around an aside, or two sentences. A list marker, a table cell holding
+  only `-`, and anything in code are not dashes, so a command's `--` goes in a code span.
+- **Headings in sentence case.** After the first word, only proper nouns, acronyms and
+  identifiers are capitalized.
+
+Generated Markdown is its generator's to fix, and skips these checks too.
 
 ## Architecture decision records
 
@@ -357,7 +375,7 @@ tags: [adr, decision, <topics>]
 
 ## Reading time
 
-Longer pages show an estimated reading time near the top. Nothing is measured about you -
+Longer pages show an estimated reading time near the top. Nothing is measured about you:
 it is computed from the Markdown source at build time and baked into the page, so it is
 the same number for every reader.
 
