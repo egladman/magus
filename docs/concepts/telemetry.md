@@ -90,7 +90,7 @@ per-project attribute.
 what it **saved**, one observation per hit. Its sum is the wall-clock the cache
 has given back, and its distribution says which hits are worth having. An entry
 written before the manifest carried a duration reports nothing rather than zero,
-so the total understates and never overstates - the same measured-not-modeled
+so the total understates and never overstates: the same measured-not-modeled
 rule the `cache_saved_ms` field in `magus status` follows.
 
 ### Remote cache
@@ -162,7 +162,7 @@ slots and falls as they release, so its value reads as the live running depth.
 
 Leases, attention requests and paired review: the three places a fleet of
 agents and the people working with them meet. **Every producer here runs in the
-server**, which is what makes them collectable at all - a magus CLI invocation is
+server**, which is what makes them collectable at all: a magus CLI invocation is
 a one-shot process, and the CLI halves of these same surfaces (raising an
 attention request, the agent guard grading a write) reach the
 [activity trail](../guides/integrations/server.md) instead. Read each row for
@@ -185,7 +185,7 @@ known only here.
 
 `magus.attention.disposition.duration` counts the disposals made through the
 console route. `magus session dispose` closes a request from a one-shot process
-with no collector, so those are absent - the instrument is a wait-time
+with no collector, so those are absent: the instrument is a wait-time
 distribution rather than a queue depth, which would read as the whole queue and
 be neither. `severity` is re-read from the store and clamped to the declared
 tiers (`info`, `notice`, `warning`, `critical`, plus `unset`), so a record written

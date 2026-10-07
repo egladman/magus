@@ -9,7 +9,7 @@ tags: [workspace, projects, discovery, magusfile, depends-on, monorepo]
 
 A **workspace** is the whole tree magus operates on: a single root directory, its `magus.yaml`, and the set of projects discovered beneath it. A **project** is one directory inside that tree whose presence of a magusfile registers it, together with the targets it declares. Every target you run (see [targets.md](targets.md)) is addressed by a project `Path` plus an operation `Name`; the workspace is the space those paths live in.
 
-The split is deliberate. The workspace is the unit of _discovery, caching, and affected-set computation_ - it is opened once and shared. A project is the unit of _work_ - it owns a magusfile, binds spells, and declares its dependencies. magus never operates outside the one workspace it discovered.
+The split is deliberate. The workspace is the unit of _discovery, caching, and affected-set computation_; it is opened once and shared. A project is the unit of _work_: it owns a magusfile, binds spells, and declares its dependencies. magus never operates outside the one workspace it discovered.
 
 ## Design intent
 
@@ -29,7 +29,7 @@ The workspace root is the nearest ancestor directory carrying a root marker. `Fi
 | `magus.yaml`     | the workspace config file                     |
 | `go.mod`         | the Go-module root, as a last-resort fallback |
 
-magus markers precede `go.mod`, so an explicit `magus.yaml` or `magusfile.buzz` always wins over a stray module boundary. `magus.yaml` (workspace configuration - see [config.md](../reference/config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
+magus markers precede `go.mod`, so an explicit `magus.yaml` or `magusfile.buzz` always wins over a stray module boundary. `magus.yaml` (workspace configuration; see [config.md](../reference/config.md)) lives at the root; it is optional, and its absence does not stop discovery once a root is found by another marker.
 
 The root is **canonicalised at discovery** (symlinks resolved via `filepath.EvalSymlinks`). Every project path is then computed relative to that real path, and the sandbox enforces access against resolved paths (see [sandbox.md](sandbox.md) and [targets.md#symlinks](targets.md#symlinks)).
 
@@ -39,15 +39,15 @@ A project is a directory that carries a **declaration file**: `magusfile.buzz`, 
 
 A project owns:
 
-- **its targets** - the exported functions in its magusfile become the runnable operations (`build`, `test`, `lint`, ...); no registration call is needed (see [targets.md](targets.md)).
-- **its bound spells** - the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
-- **its policy** - dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
+- **its targets**: the exported functions in its magusfile become the runnable operations (`build`, `test`, `lint`, ...); no registration call is needed (see [targets.md](targets.md)).
+- **its bound spells**: the tool libraries whose ops the targets compose (see [spells.md](spells.md) and [operations.md](operations.md)).
+- **its policy**: dependencies, outputs, watch-ignore patterns, and per-target execution flags, all layered on by an optional `magus\project({...})` call.
 
 ## Project discovery
 
 `project.Discover` walks the workspace root once with `filepath.WalkDir` and registers every directory that `hasDeclaration` reports true. The rules:
 
-- **A magusfile registers a project.** A directory with `magusfile.buzz` (or a matching `magusfiles/*.buzz`) becomes a project. Nothing else registers one: auto-detection from tool markers such as a stray `go.mod` or `package.json` has been retired. If you want a directory to be a project, give it a magusfile - or have another tool report it, which is the one other route in and is never inferred: a [workspace provider](workspace/providers.md) the magusfile explicitly wires (`magus\workspace.provider(nx)`) supplies projects for a repo whose structure is owned by nx, gradle, pnpm or cargo. Those are folded in after discovery, and a magusfile always wins over a provider for the same directory.
+- **A magusfile registers a project.** A directory with `magusfile.buzz` (or a matching `magusfiles/*.buzz`) becomes a project. Nothing else registers one: auto-detection from tool markers such as a stray `go.mod` or `package.json` has been retired. If you want a directory to be a project, give it a magusfile, or have another tool report it, which is the one other route in and is never inferred: a [workspace provider](workspace/providers.md) the magusfile explicitly wires (`magus\workspace.provider(nx)`) supplies projects for a repo whose structure is owned by nx, gradle, pnpm or cargo. Those are folded in after discovery, and a magusfile always wins over a provider for the same directory.
 - **The root is the project `.`.** The workspace root, if it carries a magusfile, is the project whose path is `.`.
 - **Well-known directories are pruned.** Discovery skips a fixed set of ignore directories at any depth and does not descend into them: `.git`, `.hg`, `.sl`, `.jj`, `.magus`, `.build`, `vendor`, `node_modules`, `target`, and `gen`. A magusfile buried inside one of these is invisible. (`gen` is treated as machine-written output, never a discoverable project.)
 - **Symlinked directories are not followed.** `WalkDir` does not traverse symlinks, so a symlinked directory is silently skipped and never registered as a project.
@@ -58,7 +58,7 @@ Discovery is cached against directory mtimes, so a repeat open on an unchanged t
 
 ## The magusfile
 
-A project's magusfile is `magusfile.buzz` (or the split `magusfiles/*.buzz` form). Its **mere presence registers the project on defaults** - a magusfile that only exports target functions is complete:
+A project's magusfile is `magusfile.buzz` (or the split `magusfiles/*.buzz` form). Its **mere presence registers the project on defaults**: a magusfile that only exports target functions is complete:
 
 ```buzz
 import "magus";
@@ -80,24 +80,24 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 `magus\project({...})` is **optional**. It does not create the project (the magusfile's presence already did that); it layers configuration onto it. The options map accepts:
 
-| Key              | Effect                                                                                                                                                                                                                                                |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `spells`         | binds spell handles to the project, contributing their ops, sources, and outputs                                                                                                                                                                      |
-| `depends_on`     | declares upstream project paths this project depends on (repo-relative or project-relative)                                                                                                                                                           |
-| `outputs`        | declares the project-relative file globs this project produces                                                                                                                                                                                        |
-| `sources`        | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim - for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
-| `exclusive`      | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                          |
-| `watch_ignore`   | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                      |
-| `no_language`    | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                           |
-| `gate_low_risk`  | project-relative globs whose paths classify as prose, which [gate sizing](ci/risk.md) tiers trivial unless something reads them; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off      |
-| `gate_inherit`   | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta tiers; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                       |
-| `merge_low_risk` | project-relative globs of code a merge may settle without a person when the three-way merge settles it; prose, generated and comment-only edits qualify without it (see below)                                                                        |
-| `tools`          | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                               |
-| `targets`        | a per-target policy table (see below)                                                                                                                                                                                                                 |
+| Key              | Effect                                                                                                                                                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spells`         | binds spell handles to the project, contributing their ops, sources, and outputs                                                                                                                                                                     |
+| `depends_on`     | declares upstream project paths this project depends on (repo-relative or project-relative)                                                                                                                                                          |
+| `outputs`        | declares the project-relative file globs this project produces                                                                                                                                                                                       |
+| `sources`        | declares additional project-relative file globs feeding the cache key and affected set, on top of whatever the project's spells already claim, for real inputs a spell doesn't know about (non-code assets, sibling schemas, docs a generator reads) |
+| `exclusive`      | marks the project as must-not-run-alongside-peers in a batch                                                                                                                                                                                         |
+| `watch_ignore`   | appends `glob` / `regex` / `literal` patterns to the project's watch-ignore list                                                                                                                                                                     |
+| `no_language`    | a reason string recording that this project binds no toolchain spell on purpose, exempting it from `magus doctor`'s language-coverage check                                                                                                          |
+| `gate_low_risk`  | project-relative globs whose paths classify as prose, which [gate sizing](ci/risk.md) tiers trivial unless something reads them; magus ships markdown defaults, any declaration replaces them workspace-wide, and `[]` turns the prose class off     |
+| `gate_inherit`   | `false` stops `magus affected ci --plan` inheriting a green CI run's verdict, however the delta tiers; one declaration turns it off workspace-wide, and `true` restates the default (see below)                                                      |
+| `merge_low_risk` | project-relative globs of code a merge may settle without a person when the three-way merge settles it; prose, generated and comment-only edits qualify without it (see below)                                                                       |
+| `tools`          | the version window this project requires of each binary its spells drive, keyed by bin name (see below)                                                                                                                                              |
+| `targets`        | a per-target policy table (see below)                                                                                                                                                                                                                |
 
 Unknown keys in either map (a typo like `depend_on`, or a per-target policy key
 other than `skip_cache`/`exclusive`/`slots`) are a magusfile load error, not a
-silently dropped option - the error names the offending key and suggests the
+silently dropped option: the error names the offending key and suggests the
 nearest known one. A key that resembles nothing magus knows is reported as one
 this binary may be too old for, with the upgrade command, because a magusfile
 schema key added upstream fails workspace load for every command at once.
@@ -122,7 +122,7 @@ magus\project({
 
 `min` is an inclusive floor and `below` is an exclusive ceiling, both plain
 versions. `below` names the first version REJECTED, so `below: "25"` accepts
-24.19.0 and rejects 25.0.0 - the off-by-one an inclusive `max` invites.
+24.19.0 and rejects 25.0.0, the off-by-one an inclusive `max` invites.
 
 This states POLICY: what this project has qualified. It is intersected with the
 window the spell declares for its own ops (what those ops need to function at
@@ -161,7 +161,7 @@ that turns the prose class off entirely. Every sized gate, refusal and advisory
 names, per path, the glob that classified it and where it was declared, so the
 decision reads straight back to this key. Only the prose class is a glob list:
 the generated class stays structural (declared outputs), and comment-only stays
-a mechanism - every spelled language through a declared comment/string syntax
+a mechanism: every spelled language through a declared comment/string syntax
 table, and a language with no declaration is always code.
 
 ```buzz
@@ -177,9 +177,9 @@ laptop. When a CI provider is wired (`magus\ci.provider(...)`) and answers which
 run of this pipeline last passed on this branch, `magus affected ci --plan` tiers
 everything changed since that run's head commit; if the change tiers `trivial`,
 the plan emits no shards and an `inherit` block instead, and the workflow reads
-that one output to skip its fan-out. The verdict is green with a report - the
+that one output to skip its fan-out. The verdict is green with a report: the
 inherited run, its commit, and every changed path with its tier and what decided
-it - never a silent skip. A merge pushed into the range
+it, never a silent skip. A merge pushed into the range
 re-runs the fan-out regardless. Declaring `false` on any project turns the whole
 mechanism off workspace-wide, the same reach a `gate_low_risk` declaration has,
 because inheritance is one decision over the plan rather than a per-project one.
@@ -214,8 +214,8 @@ The `targets` sub-map keys a target name to a policy table:
 
 | Policy              | Effect                                                                                                                                                                                                                                                                                          |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache`        | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error - for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting))                                        |
-| `exclusive`         | runs the target alone - no peer target runs concurrently while it does                                                                                                                                                                                                                          |
+| `skip_cache`        | a reason string stating why REPLAYING this target would be wrong; magus then always runs it and never replays or snapshots it. A bare `true` is a load error; for a merely fresh run use `--no-cache` (see [cache.md](cache.md#opting-out-and-busting))                                         |
+| `exclusive`         | runs the target alone: no peer target runs concurrently while it does                                                                                                                                                                                                                           |
 | `slots`             | the target holds N concurrency slots while it runs, throttling parallel work                                                                                                                                                                                                                    |
 | `memory_mb`         | the peak memory this target needs, in megabytes; magus converts it to slots against the host's memory-per-slot share, so one declaration throttles correctly on a 16GB runner and a 64GB workstation. A composed target inherits the largest declaration in its chain                           |
 | `timeout`           | a duration string (`"15m"`) bounding one run of this target, subprocesses included. Undeclared is unbounded. A runaway guard, not a budget: declare a multiple of the worst run on record. The deadline rides the context, so a SCHEDULED ceiling bounds what it composes                       |
@@ -279,7 +279,7 @@ magus\project({ "spells": [go] });          // configures THIS project (path fro
 magus\project("api", { "depends_on": ["shared"] });  // configures the discovered "api" project
 ```
 
-The explicit-path form configures a project that **discovery already found** - it does not create one. The path is relative to the workspace root, not to the declaring magusfile's directory. Passing the magusfile's own directory name here is the classic footgun; to configure the calling project, omit the path. An explicit path that matches no discovered project is a hard error that lists the known projects.
+The explicit-path form configures a project that **discovery already found**; it does not create one. The path is relative to the workspace root, not to the declaring magusfile's directory. Passing the magusfile's own directory name here is the classic footgun; to configure the calling project, omit the path. An explicit path that matches no discovered project is a hard error that lists the known projects.
 
 ### Addressing projects on the CLI
 
@@ -301,7 +301,7 @@ The workspace/project model is the substrate the affected engine and the cache b
 - **Affected computation** attributes each changed file to the project that owns it, seeds the change, and takes the reverse closure over `depends_on` to select every dependent. `magus affected ci` runs only that set. See [operations.md](operations.md) for where affected sits, and the seed/claim mechanics in [cache.md](cache.md).
 - **The cache** is content-addressed per target. A target's key includes its own inputs plus the `dep:` keys of its upstream projects, so cross-project dependencies invalidate transitively without rerunning unaffected work. This page does not restate the key format; see [cache.md](cache.md).
 
-Together, discovery gives magus the set of projects, `depends_on` gives it the edges, and the cache gives it the memory - so a run touches only the minimum the change demands.
+Together, discovery gives magus the set of projects, `depends_on` gives it the edges, and the cache gives it the memory, so a run touches only the minimum the change demands.
 
 ## Glossary
 

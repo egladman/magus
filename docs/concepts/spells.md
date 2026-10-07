@@ -231,7 +231,7 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 **Not every op is a CLI command.** A cache-provider verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
 
-**Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
+**Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context (the `ctx` the target function received), and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
 
 This is the one place magus has two name spaces with different rules, so it is worth stating side by side:
 
@@ -254,8 +254,8 @@ The full-command convention is enforced even for streamlined toolchains like Go,
 
 ## Authoring a custom spell
 
-> For the full contract - every `mgs_` function, the built-in versus workspace-local
-> constraint, and the provider variants - see [Writing a spell](../guides/authoring-spells.md).
+> For the full contract (every `mgs_` function, the built-in versus workspace-local
+> constraint, and the provider variants), see [Writing a spell](../guides/authoring-spells.md).
 
 A spell file exposes the spell contract as `mgs_`-prefixed functions: the required `mgs_getName`, plus optional `mgs_listRequiredGlobs`, `mgs_listProvidedGlobs`, `mgs_listIgnoreDirs`, `mgs_getVersionProbe`, `mgs_isOpaque`, `mgs_listScriptRunners`, `mgs_getModeArgs`, and `mgs_listTargets`.
 
@@ -267,7 +267,7 @@ execution. File metadata uses generated `Path` values, not strings. Put
 per-invocation inputs and calls to other spell operations on ordinary typed spell
 functions, then compose those functions explicitly from a magusfile target.
 
-A spell is the layer that carries logic, so it is also the layer worth testing -
+A spell is the layer that carries logic, so it is also the layer worth testing,
 unlike the magusfile that binds it, which should stay thin enough that the
 question never arises. See [Testing](../guides/testing.md) for where that line
 sits and how to write in-file `test "..." {}` blocks.
@@ -312,7 +312,7 @@ a compromise: a build system whose declarations cannot express a loop or a
 conditional pushes that logic into shell scripts nobody can cache, or into the CI
 provider nobody can run locally.
 
-So the question is not "how do we stop a spell doing things" - it is "which
+So the question is not "how do we stop a spell doing things"; it is "which
 things does magus govern, and which are yours". Being explicit about that line is
 the point of this section.
 
@@ -355,7 +355,7 @@ The Buzz VM samples cancellation on loop back edges, so a spinning target notice
 promptly without the interpreter paying for a check on every instruction.
 
 It is **off by default**, deliberately. The deadline covers the whole target,
-subprocesses included - cancelling the context kills what the target spawned - so
+subprocesses included (cancelling the context kills what the target spawned), so
 a value set near a legitimate target's runtime turns a slow compile into a failed
 build. Set it well above your slowest target, as a runaway guard rather than a
 performance budget.
@@ -378,7 +378,7 @@ magus\project({
 ```
 
 The two compose by taking whichever is tighter, and an undeclared target is unbounded
-exactly as before - nothing is inferred. The value is a Go duration string, matching
+exactly as before: nothing is inferred. The value is a Go duration string, matching
 `target_timeout` above rather than inventing a second spelling for a time.
 
 Exceeding a ceiling **fails** the target with
@@ -392,7 +392,7 @@ declaration honest against the durations magus recorded
 The watchdog beside those ceilings is the opposite check, and is on by default for
 that reason: it bounds an invocation that makes **no** progress at all rather than
 one that runs long, so a target that is slow but still printing never reaches it.
-Every accounting edge counts as progress - a target taking or handing back its
+Every accounting edge counts as progress: a target taking or handing back its
 limiter slot, and every line its subprocesses write.
 
 The gap it was built for is work that runs outside every target: the post-batch

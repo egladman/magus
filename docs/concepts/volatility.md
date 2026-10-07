@@ -22,7 +22,7 @@ target's history:
   there is not enough history to judge, so magus retries every failure once.
 - **Scored phase.** With enough history (`volatility.min_samples`), magus computes a
   Wilson-score volatility rate and retries when it exceeds `volatility.threshold`. A
-  stable target that suddenly fails is _not_ retried - that looks like a regression.
+  stable target that suddenly fails is _not_ retried: that looks like a regression.
 - **Unaffected prior.** A failure in a project the diff did not touch carries a
   strong prior on volatility (its code did not change), so magus leans toward retry.
 
@@ -48,18 +48,18 @@ bisects the target across commits until it isolates the break. See
 
 When a failure is real but only sometimes, narrow the cause:
 
-- **Data races** - `magus run test --race` enables magus's own race diagnostics
+- **Data races**: `magus run test --race` enables magus's own race diagnostics
   (MGS4001-4004), not the language toolchain's race detector. It always runs the
   target fresh (never a cache replay) and watches for concurrent-write conflicts
   and non-deterministic output. A race is the most common source of "passes
   locally, fails in CI."
-- **Order and isolation** - run the single target alone (`magus run test api`) and
+- **Order and isolation**: run the single target alone (`magus run test api`) and
   compare to the full run. A difference points to shared state or test ordering.
-- **Under-declared inputs** - if a target passes fresh but fails from cache (or the
+- **Under-declared inputs**: if a target passes fresh but fails from cache (or the
   reverse), its `needs`/`provides` may be wrong, so the cache replays a stale
   result. `magus describe target <path:target>` shows the declared inputs; see
   [cache.md](cache.md).
-- **Disable retry to see raw behavior** - `magus run --no-volatility-retry` (and
+- **Disable retry to see raw behavior**: `magus run --no-volatility-retry` (and
   `magus affected --bisect` internally) runs without the retry cushion so you
   observe the failure directly.
 
@@ -89,6 +89,6 @@ surfaces retried and regression outcomes as GitHub Actions annotations.
 
 ## See also
 
-- [affected.md](workspace/affected.md) - the `--bisect` regression hunt.
-- [cache.md](cache.md) - why an under-declared input reads as volatility.
-- [debugging.md](../guides/debugging.md) - the interactive REPL and `magus\pry` breakpoints.
+- [affected.md](workspace/affected.md): the `--bisect` regression hunt.
+- [cache.md](cache.md): why an under-declared input reads as volatility.
+- [debugging.md](../guides/debugging.md): the interactive REPL and `magus\pry` breakpoints.

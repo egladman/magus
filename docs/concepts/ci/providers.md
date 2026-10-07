@@ -1,6 +1,6 @@
 ---
 title: CI providers
-description: Teach magus your CI system's job-log structure with a provider spell - fold markers around failures and annotations that surface on a pull request - without magus itself knowing any vendor's syntax.
+description: Teach magus your CI system's job-log structure with a provider spell: fold markers around failures and annotations that surface on a pull request, without magus itself knowing any vendor's syntax.
 tags:
   [
     ci,
@@ -24,7 +24,7 @@ the log. Every system spells that differently, and several have no syntax for it
 at all.
 
 magus emits that structure through a **provider spell**. The binary knows the
-generic shape - open a section, close it, raise a notice - and a spell knows one
+generic shape (open a section, close it, raise a notice), and a spell knows one
 vendor's syntax. This is the same arrangement as [remote caching](../cache/remote.md):
 the extension point is a spell so a provider magus has never heard of is
 something you write, not something you wait for.
@@ -56,7 +56,7 @@ env:
 ```
 
 magus ships two: `spells/github/actions` (which also carries the Actions remote
-cache provider - one spell per vendor, two contracts) and `spells/gitlab/ci`.
+cache provider; one spell per vendor, two contracts) and `spells/gitlab/ci`.
 
 Neither magus nor a shipped provider detects which CI system it runs under. A wired
 provider writes its markers wherever it runs, so the same command behaves the same on a
@@ -72,8 +72,8 @@ Only two things today, both on failure:
 - The failure is raised as an error annotation, so it reaches a reviewer without
   anyone opening the log.
 
-Sections request **expanded** for a failure. That is a request, not a guarantee -
-see the capability table below - and a provider that cannot honor it leaves the
+Sections request **expanded** for a failure. That is a request, not a guarantee
+(see the capability table below), and a provider that cannot honor it leaves the
 output inline rather than folding it. A collapsed failure is a failure nobody
 sees, which is worse than no fold at all.
 
@@ -94,12 +94,12 @@ that", which is the normal case rather than an error.
 Nothing here is called per log line. That is deliberate: crossing into a spell's
 VM for every line of a failing build's output would cost more than the whole
 feature is worth. `quote_prefixes` is the shape that keeps the one per-line job
-affordable - the spell declares its command prefixes once and magus does the
+affordable: the spell declares its command prefixes once and magus does the
 matching itself.
 
 ### Why the arguments look the way they do
 
-The vocabulary is the **union** of what real systems need, not the intersection -
+The vocabulary is the **union** of what real systems need, not the intersection;
 the intersection is nearly empty:
 
 | System                  | Section open                       | Section close             | Collapse           | Annotations                                            |
@@ -107,20 +107,20 @@ the intersection is nearly empty:
 | GitHub Actions          | `::group::TITLE`                   | `::endgroup::`            | always collapsed   | `::error/warning/notice::` with file, line, col, title |
 | GitLab CI               | `section_start:<unix>:<id>`        | `section_end:<unix>:<id>` | `[collapsed=true]` | none in-log (report artifacts)                         |
 | Azure Pipelines         | `##[group]TITLE`                   | `##[endgroup]`            | -                  | `##vso[task.logissue ...]` with a `code` field         |
-| Buildkite               | `--- TITLE` / `+++` / `~~~`        | none - implicit           | three modes        | out-of-band: `buildkite-agent annotate`                |
+| Buildkite               | `--- TITLE` / `+++` / `~~~`        | none (implicit)           | three modes        | out-of-band: `buildkite-agent annotate`                |
 | TeamCity                | `##teamcity[blockOpened name=...]` | `blockClosed name=...`    | -                  | `message status='ERROR'`                               |
 | AWS CodeBuild, CircleCI | none                               | none                      | -                  | none                                                   |
 
 Hence: a section carries an `id` distinct from its `title`, because GitLab and
 TeamCity key sections by name while GitHub and Azure use only a title.
-`group_end` may legitimately do nothing, because Buildkite has no end marker - a
+`group_end` may legitimately do nothing, because Buildkite has no end marker: a
 new section closes the previous one. Annotations carry a source location and a
 `code`, because every system that supports annotations at all supports those, and
 `code` is where magus's `MGSxxxx` diagnostics belong. And nothing assumes the
 output is a stream, because Buildkite raises annotations by running a binary.
 
 `id` is opaque. magus passes something readable, such as a project path, and does
-**not** normalize the character set - what is legal differs per system, and
+**not** normalize the character set: what is legal differs per system, and
 encoding one system's rule into the shared contract would put that system back
 into the layer that is supposed to name nobody. GitLab's spell folds the id with
 `strings\kebabCase` because GitLab rejects slashes; that rule lives in the spell
@@ -151,7 +151,7 @@ What magus guarantees at the boundary:
 - **Time-bounded.** Every op runs under a short deadline. A spell that blocks on
   a network call costs one timeout, not the build.
 - **Clamped prefixes.** `quote_prefixes` is capped in count and length, and an
-  empty prefix is rejected - it would match every line.
+  empty prefix is rejected: it would match every line.
 
 What magus does **not** guarantee: a spell has the full host module surface,
 including `proc\exec` and `http`. Loading a spell is trusting it, exactly as with a
@@ -163,7 +163,7 @@ output can contain secrets, a hostile provider spell could exfiltrate them.
 ### Replayed output is quoted
 
 magus captures a failing process's output and replays it into the job log. Left
-alone, a test printing `::error::` would have the runner execute it - forging
+alone, a test printing `::error::` would have the runner execute it, forging
 annotations, or closing a section magus opened. Providers declare their command
 prefixes via `quote_prefixes`, and magus neutralizes matching lines before replay
 by dropping the prefix's first character, leaving text a reader can still read.
@@ -184,7 +184,7 @@ Anything a spell _can_ answer, a spell does.
 > The shared spell contract, and the cache and secret provider variants alongside this
 > one, are in [Writing a spell](../../guides/authoring-spells.md).
 
-Start from `spells/gitlab/ci/spell.buzz` - it is the shorter of the two and
+Start from `spells/gitlab/ci/spell.buzz`; it is the shorter of the two and
 exercises the parts of the contract GitHub does not (an id distinct from the
 title, a timestamp per marker, collapse as a flag, and no annotation support at
 all).

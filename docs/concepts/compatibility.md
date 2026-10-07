@@ -1,6 +1,6 @@
 ---
 title: Compatibility
-description: What magus promises across versions - the three contracts it keeps, why a magusfile that works today keeps working, how a workspace declares the magus version it needs, and why there is no plan for a 2.0.
+description: What magus promises across versions: the three contracts it keeps, why a magusfile that works today keeps working, how a workspace declares the magus version it needs, and why there is no plan for a 2.0.
 tags:
   [
     compatibility,
@@ -88,7 +88,7 @@ may be renamed, a flag may be dropped, a message may be restructured, and the
 changelog says so under **Breaking**.
 
 Practically, that means the run-up to 1.0 includes a deliberate pass over the
-whole surface - every `magus\project` key, every CLI flag, every config field -
+whole surface (every `magus\project` key, every CLI flag, every config field),
 asking whether each name is one worth keeping forever. Any rename that pass wants
 has to happen before 1.0 or never.
 
@@ -103,7 +103,7 @@ required_version: ">= 0.4.0"
 magus checks this before it evaluates a single magusfile, so a too-old binary
 reports [MGS1021](../reference/codes/magusfile/MGS1021.md) and names both fixes:
 upgrade the binary, or raise the pin in your CI setup step. Without the floor, the
-same situation surfaces from wherever the magusfile happened to fail - `import
+same situation surfaces from wherever the magusfile happened to fail: `import
 "xml": module not found` reads like a typo, not like an out-of-date tool.
 
 The floor has to be a declaration rather than something magus derives, because of
@@ -132,7 +132,7 @@ dirty tree gets a per-process token that can never match anything. Two dirty tre
 at the same revision are not provably the same code, so they refuse each other.
 
 **The console is a wire client, and follows the wire contract.** It reads status,
-graphs, and activity - it does not hand the server code to run - so exact-match
+graphs, and activity; it does not hand the server code to run, so exact-match
 would be absurd: every magus upgrade would blank the browser until you found the
 right refresh. Instead the protobuf contract applies, an older console keeps
 working against a newer server, and the console compares the build it was compiled
@@ -171,7 +171,7 @@ An occasional awkward name is cheaper than a migration every user has to perform
 ## See also
 
 - [Breaking changes](../migrating/breaking-changes.md): the mechanisms magus gives
-  _you_ for your own contracts - `buf-breaking` and a drift-gated `api.lock`.
+  _you_ for your own contracts: `buf-breaking` and a drift-gated `api.lock`.
 - [MGS1021](../reference/codes/magusfile/MGS1021.md): the workspace requires a
   newer magus than the one running.
 - `magus version`: the running build's version, commit, and build date.
