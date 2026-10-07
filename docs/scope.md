@@ -116,32 +116,32 @@ You supply knowledge about the world.
 
 Name a boundary before anyone wants to cross it, or naming it proves nothing.
 
-magus will not select a version, install one, or move you to one. It compares
+magus does not select a version, install one, or move you to one. It compares
 what ran against what you declared. An install, switch, or resolve verb under
-`tools:` is the creep, and it will arrive with a good argument attached.
+`tools:` is the creep, and it arrives with a good argument attached.
 
-magus will not require a second toolchain to build your projects. No container
+magus does not require a second toolchain to build your projects. No container
 runtime, no language runtime to provision, no separate binary. The server carries
 an asterisk; see below.
 
-magus will not be recommended for install through a package manager belonging to
+magus does not recommend installing itself through a package manager belonging to
 a toolchain it manages. Install a build tool with npm and you need a Node runtime
 before you can run the thing managing your Node builds. When it breaks, you fix
 it by upgrading the toolchain you were using magus to pin. Those failures are
 oblique, hard to guard against, and there is rarely anywhere sensible to attach
 an error explaining them. The same objection rules out `go install`. Anyone who
-knows what they are doing will do it anyway; nobody should be pointed down that
+knows what they are doing does it anyway; nobody should be pointed down that
 path.
 
-magus will not generate code your build depends on. Nothing it writes into your
+magus does not generate code your build depends on. Nothing it writes into your
 repository has to exist or be current for `magus run build` to work. That promise
 is narrower than "magus writes nothing into your repo", because it writes several
 things; see below.
 
-magus will not require an account or a subscription, and no capability sits
+magus does not require an account or a subscription, and no capability sits
 behind a paid tier. Nothing exists to upsell.
 
-magus will not decide for you. It answers questions. You decide; an agent may
+magus does not decide for you. It answers questions. You decide; an agent may
 propose.
 
 ## The container question
@@ -158,7 +158,7 @@ and it removes an entire category of support burden.
 image fixes what is installed. Inside it, a step can still reach the network,
 read the clock, resolve a floating tag, or depend on filesystem ordering.
 Nothing fails a build there because a step read a file it never declared. That
-is what Bazel's sandbox buys (the undeclared file simply is not there, when the
+is what Bazel's sandbox buys (the undeclared file is not there, when the
 sandbox is in use), and containerizing does not supply it. The certainty a
 container produces is partly a feeling, and the feeling is
 what makes the runtime dependency seem cheap.
@@ -222,7 +222,7 @@ who cannot tell you what turning it off would break.
 So the default is the product: correct behavior must never require a knob.
 magus is opinionated where an opinion prevents a footgun: one
 required target name, four reserved charms, `skip_cache` demanding a reason
-string rather than a boolean, no fallback chain when a secret will not resolve.
+string rather than a boolean, no fallback chain when a secret does not resolve.
 Each of those removes states rather than adding them.
 
 The honest numbers, because this is the section where a claim like that gets
@@ -337,7 +337,7 @@ and you opt into the check, and it remains infrastructure we control, in a
 project that pitches not having any.
 
 **The docs describe a `go install` path.** `docs/setup/mise.md` documents the
-route the rule above says not to recommend, because you will find it anyway. It
+route the rule above says not to recommend, because you find it anyway. It
 carries a warning giving the structural reason. Documenting a route while telling
 you to avoid it is a compromise, and a tension.
 
@@ -377,7 +377,7 @@ with a message naming the cause. magus already held the answer.
 
 The repo artifacts and the update endpoint are rules stated harder than the code
 earns, so we narrowed the rules. The server and the console toolchain are
-deliberate trades worth re-examining. The codec gate was simply a bug, fixed
+deliberate trades worth re-examining. The codec gate was a bug, fixed
 separately once someone looked.
 
 ## Where others drew it

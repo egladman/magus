@@ -22,7 +22,7 @@ import "os"  in a magusfile
   so `import "os"` carries both. magus wins on the few shared keys because its
   forms are sandbox- and context-aware (the wiring lives in
   `internal/interp/bindings`, which is shared by the magusfile and spell paths).
-- **Plus modules Buzz has no concept of:** `vcs`, `archive`, `http`, `env`,
+- magus adds modules Buzz has no concept of: `vcs`, `archive`, `http`, `env`,
   `time`, `fmt`, `markdown`, `charm`, `encoding`, `path`, `strings`, `semver`,
   `yaml`, `platform`, and the `magus` core namespace.
 - The native-equivalent cross-reference (which host method duplicates a Buzz

@@ -67,8 +67,8 @@ Two consequences worth knowing before you pick a build:
 - On **all Windows builds**, the Buzz JIT is newly enabled (it used to be disabled
   on Windows entirely) and its machine-code path has not executed on any Windows
   machine here. If a magusfile produces a result that looks wrong on Windows, set
-  `BUZZ_JIT=0` and re-run: if the answer changes, that is a JIT bug and a very
-  valuable report. See the [gopherbuzz JIT notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-actually-run-on)
+  `BUZZ_JIT=0` and re-run: if the answer changes, that is a JIT bug and a
+  valuable report. See the [gopherbuzz JIT notes](https://github.com/egladman/magus/blob/main/libs/gopherbuzz/README.md#which-platforms-this-has-run-on)
   for the full matrix.
 
 ## Version control

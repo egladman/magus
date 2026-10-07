@@ -51,7 +51,7 @@ command and names the runtime explicitly. Each also paid for it in expectations 
 equivalence it then had to meet.
 
 `docs/scope.md` states that a container gives environment reproducibility, not
-hermeticity, that magus offers no opt-in container isolation, and that magus will not
+hermeticity, that magus offers no opt-in container isolation, and that magus does not
 require a container runtime. This page amends the last of those, and says how much.
 
 ## Decision
@@ -291,7 +291,7 @@ Each line is a reviewer finding, kept or answered.
   with the loudness of version skew, so two backends never alternate on one index.
 - The daemon never pulls. An indexer image is pulled only under `--fetch` on a typed
   invocation, with the registry host, the HTTP status on failure (Docker Hub's anonymous
-  limit will be met by an office behind one egress address) and the elapsed time
+  limit is reached by an office behind one egress address) and the elapsed time
   printed; until then every read says the image is absent and names the command.
 - Every indexer container is resource-bound, so an indexer never takes over the machine.
   The create request sets `Memory` with `MemorySwap` equal to it (no swap), `NanoCpus` and

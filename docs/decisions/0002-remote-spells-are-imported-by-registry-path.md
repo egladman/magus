@@ -56,7 +56,7 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    import "ghcr.io/egladman/magus/spells/go";  // binds `go`
    ```
 
-2. **Three kinds of import, each readable from the path alone:**
+2. **Imports come in three kinds, each readable from the path alone.**
    - a dot in the first element (`ghcr.io/...`) is a **remote** spell;
    - the `magus/` prefix (`magus/spell/go`) is **embedded**, provided by the binary, and keeps
      its current spelling;
@@ -104,8 +104,8 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    nested spell shadowed higher in the tree. An override is never inferred from a file
    existing, because a stray directory would then change what runs with nothing in any
    import or manifest diff to show it.
-8. **Misconfiguration is an error, each with its own code and doc page:** a dotted import
-   with no `magus.yaml` entry; a declared spell with no lock entry, or whose lock entry was
+8. **Misconfiguration is an error, each with its own code and doc page.** The cases are
+   a dotted import with no `magus.yaml` entry; a declared spell with no lock entry, or whose lock entry was
    written for a different tag; an override whose `path` holds no spell; an undeclared
    shadow of an embedded or declared spell.
 

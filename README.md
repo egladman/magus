@@ -17,7 +17,7 @@ Change a file and magus works out which projects it reaches, rebuilds only those
 
 magus informs; it never decides. It hands you everything it knows about your repository (what a change reaches, which files are generated, where a symbol is used) and the call stays yours. It was built for humans, not for agents: agents drive it well anyway, because an interface legible to a person is legible to anything, and that ordering is the design.
 
-Prove it before you plan it. A hunch about what a change will break is cheap to test, and a plan built on an untested one fails late, where it costs most. Run the smallest thing that settles it and point at the run: every run leaves an output ref (`magus query output <ref>`) that anyone can reopen, so a plan, a review comment or a job's goal cites evidence instead of asserting it.
+Prove it before you plan it. A hunch about what a change breaks is cheap to test, and a plan built on an untested one fails late, where it costs most. Run the smallest thing that settles it and point at the run: every run leaves an output ref (`magus query output <ref>`) that anyone can reopen, so a plan, a review comment or a job's goal cites evidence instead of asserting it.
 
 <!-- README terminal recordings are rendered by `magus run termcast-generate` from
      tapes/core-loop.capture. Re-record that real CLI session with `magus run
@@ -124,12 +124,12 @@ these surfaces degrades to plain text when there is no terminal to draw on.
 - No remote execution. magus caches results and shares them. It does not run
   your work on someone else's machine.
 - No toolchain management. magus compares what ran against what you declared and
-  stops. It will not select, install or switch a version.
+  stops. It does not select, install or switch a version.
 - No hermetic sandbox. The sandbox is a supply-chain defense, off by default,
-  with no kernel layer on macOS. It will not fail a build on an undeclared read.
+  with no kernel layer on macOS. It does not fail a build on an undeclared read.
 - No container isolation. Steps run on the host. The `container` charm changes
   what a target produces, not where it runs.
-- Small ecosystem. magus is young and mostly one person's work, so you will hit
+- Small ecosystem. magus is young and mostly one person's work, so you hit
   behavior nobody has hit before you. It is one Go binary and one
   [Buzz](docs/concepts/spells/buzz.md) file, both of which you can read.
 
@@ -362,7 +362,7 @@ These are add-ons, not a runtime you depend on. Two decisions keep them that way
 
 #### The binary embeds no UI
 
-magus never embeds a web server that ships a UI, and a released binary carries no pages: the console is a separate static site (rendered from `docs/` at deploy time, hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). What the server exposes over loopback is a small API: read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. It will also serve a console build you point it at on disk (`console/gen`, or `MAGUS_CONSOLE_DIR`) so you can host your own copy, but it ships none and 404s `/console/` until one is built.
+magus never embeds a web server that ships a UI, and a released binary carries no pages: the console is a separate static site (rendered from `docs/` at deploy time, hosted at [eli.gladman.cc/magus](https://eli.gladman.cc/magus/), or self-hosted from any file server). What the server exposes over loopback is a small API: read-only views (`/api/v1/...`), one bearer-gated [job-control service](docs/reference/console.md#job-control) for maintenance jobs, and the MCP endpoint. It also serves a console build you point it at on disk (`console/gen`, or `MAGUS_CONSOLE_DIR`) so you can host your own copy, but it ships none and 404s `/console/` until one is built.
 
 #### Your data never leaves the loopback
 
@@ -401,10 +401,10 @@ never hand-edit.
 
 magus is built and tested by magus, so this repository is a magus workspace like any other. That means parts of the contributor reference are generated from the workspace's own graph rather than written, and can show things a hand-maintained page cannot:
 
-- **[Project catalogs](https://eli.gladman.cc/magus/development/projects/)**: one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
-- **[Workspace dependencies](https://eli.gladman.cc/magus/development/projects/)**: the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
-- **[Contributing guide](https://eli.gladman.cc/magus/development/contributing/)**: the conventions worth knowing before opening a pull request, including the benchmark-evidence rule for performance changes.
-- **[Configuration reference](https://eli.gladman.cc/magus/reference/config/)**: the `magus.yaml` keys and the `MAGUS_*` environment inventory.
+- The [project catalogs](https://eli.gladman.cc/magus/development/projects/) give one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
+- The [workspace dependencies](https://eli.gladman.cc/magus/development/projects/) page lists the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
+- The [contributing guide](https://eli.gladman.cc/magus/development/contributing/) covers the conventions worth knowing before opening a pull request, including the benchmark-evidence rule for performance changes.
+- The [configuration reference](https://eli.gladman.cc/magus/reference/config/) lists the `magus.yaml` keys and the `MAGUS_*` environment inventory.
 
 The architecture diagram above tags each runtime component with the package it lives in, which is the quickest map of where code goes.
 

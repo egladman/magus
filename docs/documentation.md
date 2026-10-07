@@ -87,7 +87,7 @@ Once the basics click, these cover running magus at scale and in CI.
 - [Concurrency](concepts/concurrency.md): the two scopes of parallel work: the scheduler within a run, and the cross-process workspace lock between separate `magus` invocations, which never waits.
 - [Remote caching](concepts/cache/remote.md): share the build cache across machines and CI, with a signing-based trust model.
 - [Editor setup](guides/integrations/editor.md): wire your editor to `magus buzz lsp` for magusfile completion, hover, and signature help.
-- [Git integration](guides/integrations/git.md): the generated-file merge driver and what no forge will run, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
+- [Git integration](guides/integrations/git.md): the generated-file merge driver and what no forge runs, settling conflicts with `magus vcs resolve`, and the rule every magus hook obeys: a hook hands off work, it never does work.
 - [Debugging](guides/debugging.md): the interactive REPL, `magus\pry()` breakpoints, and stepping through a target.
 - [Profiling](guides/profiling.md): find the magusfile line filling memory, read the low-headroom warning, and fix the string-building pattern that costs gigabytes.
 - [Jobs](guides/jobs.md): coordinate work by hand: one person across worktrees, teammates sharing a file, CI checking merged work, and splitting other work.

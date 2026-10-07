@@ -34,7 +34,7 @@ both of which need upstream's C API rather than a language feature.
 
 **The compile-error row is the uncomfortable one and the most important.** 10 of those
 82 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
-is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
+is missing strictness: gopherbuzz accepts source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
 the behavior row; a permissive checker is the failure mode a subset does not warn you
 about.
@@ -168,7 +168,7 @@ backlog:
 
 - **buzz's own native-extension ABI.** `extern-library` and `c-buzz-api` are a
   different problem, and the failure mode hides it: `extern-library` looks like it
-  only wants a shared library, and "null is not callable" is just its unbound
+  only wants a shared library, and "null is not callable" is its unbound
   `extern fun sayHello()`. But `tests/utils/hello.zig` takes a `*api.NativeCtx`,
   imports `buzz_api.zig` and LINKS AGAINST LIBBUZZ, exposing a `hello(symbol)`
   resolver keyed by name. Loading it would mean gopherbuzz reproducing upstream's
@@ -213,7 +213,7 @@ reproducible difference at the pinned ref.
   and never reported, because a false positive here rejects a correct program.
 - **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
   cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
-  instead. This is the one "cannot accommodate" above that is really a design choice.
+  instead. This is the one "cannot accommodate" above that is a design choice.
 
 **Narrower gaps.** Known, bounded, and unlikely to bite most programs.
 
@@ -403,7 +403,7 @@ operand stack is `[]uint64`). `buzz_safe` is behaviorally identical and slower,
 which lets CI validate the fast build. The [JIT](#baseline-jit) is built with the
 default rep on amd64 and arm64 (on every OS, including Windows); every other
 config (safe/unsafe, other arches, wasm) uses a no-op stub. See
-[which platforms this has actually run on](#which-platforms-this-has-actually-run-on)
+[which platforms this has run on](#which-platforms-this-has-run-on)
 before trusting a JIT result on a platform CI does not cover.
 
 ```sh
@@ -467,8 +467,8 @@ source -> token.Tokenize -> []token.Token -> parser -> ast.Program
 The magus docs walk the same path with figures:
 [How gopherbuzz runs Buzz](../../docs/concepts/buzz.md).
 
-- **`Instr`** `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
-- **`Value`**: 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into one process-wide handle table, so the operand stack is `[]uint64` with no GC-visible pointers. A `vm.Owner` holds the slots each session allocated and releases them when the session closes.
+- `Instr` is `{Op uint8, A, B int32}`: word-coded, pointer-free, in a contiguous slice, fetched without bounds checks on the hot path.
+- `Value` is an 8-byte NaN-boxed word. Immediates (int/float/bool/null) live in the payload; heap objects are indices into one process-wide handle table, so the operand stack is `[]uint64` with no GC-visible pointers. A `vm.Owner` holds the slots each session allocated and releases them when the session closes.
 
 ## Baseline JIT
 
@@ -522,7 +522,7 @@ Codegen uses [`golang-asm`](https://github.com/twitchyliquid64/golang-asm): same
 Only the trampolines (`vm/jit_<arch>.s`) are hand asm. Not yet JIT'd: calls,
 non-top-level frames, strings.
 
-### Which platforms this has actually run on
+### Which platforms this has run on
 
 This is hand-written machine code, so "it compiles" and "it produces the right
 answer" are different claims. Only the second one matters, and it is only earned
@@ -579,30 +579,30 @@ The interpreter's throughput rests on a few load-bearing tricks. Before touching
 the hot path, baseline with `benchstat` over `-bench=. -count=10` and re-check
 under `buzz_safe`.
 
-- **`Exec` is I-cache-bound** (~50 KB single `switch`). Adding a new full `case`
+- `Exec` is I-cache-bound (~50 KB single `switch`). Adding a new full `case`
   regresses _all_ benchmarks 25-55%. Add small branches inside existing handlers,
   or move cold code to `//go:noinline` helpers, never a new case body.
-- **Superinstructions** (`FusePeephole`): `OpBinLC`, `OpBinLL`,
-  `OpCmpLC` fuse the dominant `GetLocal/LoadConst/<op>/JumpFalse` patterns.
-- **SetLocal absorption**: fused ops peek ahead and write `x = x op y` straight
+- Superinstructions (`FusePeephole`) fuse the dominant
+  `GetLocal/LoadConst/<op>/JumpFalse` patterns into `OpBinLC`, `OpBinLL` and
+  `OpCmpLC`.
+- Fused ops absorb `SetLocal`: they peek ahead and write `x = x op y` straight
   to the slot.
-- **Static int proof**: bit 31 of a fused op's `B` means "both operands proven
-  int" (drops the tag checks); sub-opcode is masked `& 0x7F` / `& 0x7FFF`. Sound
-  because `OpCheckType` guards every `any → int` narrowing.
-- **Inline caches**: per-VM `mcache` (member access) and field-slot hints
-  (`OpGetField`/`OpSetField`): pointer/index compares, no string scan. Per-VM,
-  not per-Chunk (chunks are shared; verified `-race`).
-- **NaN-box + handle table**: zero write barriers on push/pop; the table pins
-  objects until the session that owns them closes.
-- **Pooled lexer buffer**: `Tokenize` lexes into a `sync.Pool` scratch buffer
-  and returns an exact-length copy. The pool keeps buffers up to 16K tokens,
-  about 64 KB of source; a larger module lexes into a fresh buffer the pool
-  drops. Each buffer goes back cleared, so it pins no source text.
-- **Source slices, not copies**: string and interpolation text slice the source
-  until an escape rewrites a run, and a doc comment block joins once, only when
-  it lands on a token. A surviving literal pins its source string, as
-  identifiers do.
-- **80-byte `Token`** on 64-bit: `token.Kind` is a byte beside `Raw`, sharing
+- A static int proof lives in bit 31 of a fused op's `B`, which means "both
+  operands proven int" (drops the tag checks); sub-opcode is masked `& 0x7F` /
+  `& 0x7FFF`. Sound because `OpCheckType` guards every `any → int` narrowing.
+- Inline caches are per-VM: `mcache` (member access) and field-slot hints
+  (`OpGetField`/`OpSetField`) turn lookups into pointer/index compares with no
+  string scan. They are per-VM, not per-Chunk (chunks are shared; verified `-race`).
+- The NaN-box and handle table need zero write barriers on push/pop; the table
+  pins objects until the session that owns them closes.
+- `Tokenize` lexes into a pooled `sync.Pool` scratch buffer and returns an
+  exact-length copy. The pool keeps buffers up to 16K tokens, about 64 KB of
+  source; a larger module lexes into a fresh buffer the pool drops. Each buffer
+  goes back cleared, so it pins no source text.
+- Strings and interpolation text slice the source rather than copy it, until an
+  escape rewrites a run, and a doc comment block joins once, only when it lands
+  on a token. A surviving literal pins its source string, as identifiers do.
+- `Token` is 80 bytes on 64-bit: `token.Kind` is a byte beside `Raw`, sharing
   one padded word. The parse cache holds one `Token` per lexeme of every module
   it keeps; `TestTokenSize` pins the layout.
 

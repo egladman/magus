@@ -14,7 +14,7 @@ tags: [download, install, windows, powershell, path]
 >
 > The Buzz JIT is also newly enabled on Windows and its machine-code path has never run on a
 > Windows machine here. If a magusfile gives a result that looks wrong, set `BUZZ_JIT=0` and
-> re-run: if the answer changes, that is a JIT bug and a very valuable report.
+> re-run: if the answer changes, that is a JIT bug and a valuable report.
 >
 > See [platform support](../setup.md#platform-support) for the full matrix.
 
@@ -38,7 +38,7 @@ The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
 `BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
 `magus.exe` on the `tar` line above extracts just the binary; drop it to unpack all of
 them. `BUILDINFO` is readable without running anything, which is the point if a
-dynamically linked build will not start.
+dynamically linked build does not start.
 
 Both `curl.exe` and `tar` ship with Windows 10 (1803+) and Windows 11, so no extra tooling is needed. `$VERSION` above is the current release; [GitHub Releases](https://github.com/egladman/magus/releases) lists every build.
 
@@ -65,7 +65,7 @@ magus run <target>
 ```
 
 If the answer changes, that is a JIT bug rather than a magusfile bug, and it is a
-very useful thing to report. See [Platform support](../setup.md#platform-support).
+useful thing to report. See [Platform support](../setup.md#platform-support).
 
 ## Which archive
 

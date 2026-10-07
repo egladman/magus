@@ -141,7 +141,7 @@ every build from source. The floor is enforced only against a clean release tag,
 which is exactly who it is for.
 
 Two things follow from raising it early, and both are the mechanism working:
-`audit.yaml`'s `compat` job pins the newest release and will fail until the one
+`audit.yaml`'s `compat` job pins the newest release and fails until the one
 you named ships, and a released binary meeting the workspace gets
 [MGS1021](https://github.com/egladman/magus/blob/main/docs/reference/codes/magusfile/MGS1021.md)
 naming the version it needs. The alternative is worse: a floor that still admits
@@ -290,7 +290,7 @@ under a second. Worse, it was silent: git reads a driver that exits non-zero as
 Nothing to run. A workspace that has built its own `./magus` registers that as
 its driver, and `magus doctor` fails if the registered one cannot read this
 workspace. To pin a specific build instead (so a long rebase cannot have the
-driver rebuilt under it), register one by hand and it will stick:
+driver rebuilt under it), register one by hand and it sticks:
 
 ```sh
 git config --worktree merge.magus.driver "$PWD/magus vcs merge-driver %O %A %B %L %P"
@@ -452,7 +452,7 @@ comment. Do the same in any new generator.
 When you add a generated artifact here, follow the five-step checklist in the concepts
 page. The magus-specific part is that the root `generate` target already drift-gates
 every generated file in the workspace, so a per-artifact drift test in Go is redundant
-and will drift from the real `//go:generate` directive.
+and drifts from the real `//go:generate` directive.
 
 ## Coverage badges are published, never committed
 
@@ -494,14 +494,14 @@ figure can only understate coverage, never overstate it.
 Pull requests are squash merged, so the title becomes the commit subject main
 records. `.github/workflows/pr.yaml` checks two things about every pull request:
 
-- **The title is a conventional commit subject**: `<type>(<scope>): <description>`,
+- The title is a conventional commit subject, `<type>(<scope>): <description>`,
   with the scope and a `!` optional. The types are `build`, `chore`, `ci`, `docs`,
   `feat`, `fix`, `perf`, `refactor`, `revert` and `test`. The description keeps
   the lowercase imperative this repository writes, with no trailing period, in 100
   bytes at most. `feat(git): install version-controlled buzz hooks` passes;
   `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
-- **A `feat`, `fix` or `perf` change to shipped code adds a changelog
-  fragment**, as does any title marked breaking with `!`. Every other type
+- A `feat`, `fix` or `perf` change to shipped code adds a changelog
+  fragment, as does any title marked breaking with `!`. Every other type
   passes without one, and so do changes that touch only docs, tests, workflows,
   repository tooling and plans; `hack/magusfile/changelog.buzz` lists what does not
   ship. A change no user can notice is not a `feat`, `fix` or `perf`, so
@@ -509,7 +509,7 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
   `magus run pr-changelog . -- "<title>"`.
 
 **Fragments.** The entry is its own file, `changes/unreleased/<branch>.md`: a
-`### <group>` heading and one entry, exactly as it will read in the changelog.
+`### <group>` heading and one entry, exactly as it reads in the changelog.
 There is no changelog file to edit: concurrent pull requests add different files
 and never touch a shared one. The docs changelog page renders the fragments and
 the release manifests (`magus run changelog-page docs`), and cutting a release

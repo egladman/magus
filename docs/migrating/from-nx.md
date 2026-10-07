@@ -73,7 +73,7 @@ result_: it signs a fresh artifact, records a screen capture, mutates
 disables replay permanently, for every user, on every machine.
 
 If you only distrust the cache for one run, that is `--no-cache`, which still
-refreshes the entry afterward. And if a target seems to need `skip_cache`
+refreshes the entry afterward. And if you think a target needs `skip_cache`
 because it produces no files, it does not: a pure orchestration target caches
 correctly with no policy at all. See
 [Opting out and busting](../concepts/cache.md#opting-out-and-busting) for the
@@ -111,7 +111,7 @@ Said plainly, no hedging:
   and visualizing the graph.
 - Nx Cloud's managed distributed task execution (Nx Agents) and a flaky-task
   retry service, as a hosted product.
-- Years of production maturity across a very wide range of ecosystems.
+- Years of production maturity across a wide range of ecosystems.
 
 ## What magus has that Nx does not
 
