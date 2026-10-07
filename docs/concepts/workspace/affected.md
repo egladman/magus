@@ -32,7 +32,7 @@ A project enters the affected set two ways:
 2. **Transitive.** A project it depends on is affected. Dependencies come from
    [the two dependency mechanisms](../dependencies.md): a `magus\needs` edge, a
    project-level `depends_on`, or a cross-project target reference (folded
-   into `depends_on` - see [the fold](../dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)).
+   into `depends_on`; see [the fold](../dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)).
 
 The closure runs until it reaches a fixed point, so a chain A -> B -> C rebuilds C
 when A changes. `magus affected --explain <project>` prints the reason a project is
@@ -89,8 +89,8 @@ newlines. See [tips](../../guides/tips.md) for the continuous-build loop.
 
 ## See also
 
-- [ci.md](../../guides/integrations/ci.md) - checking out a repository so the diff is computable and cheap.
-- [dependencies.md](../dependencies.md) - `magus\needs` versus `depends_on`, the edges the closure walks.
-- [targets.md](../targets.md) - the target grammar these edges resolve against.
-- [operations.md](../operations.md) - what a target dispatches to per project.
-- [cache.md](../cache.md) - why an affected-but-unchanged target still replays from cache.
+- [ci.md](../../guides/integrations/ci.md): checking out a repository so the diff is computable and cheap.
+- [dependencies.md](../dependencies.md): `magus\needs` versus `depends_on`, the edges the closure walks.
+- [targets.md](../targets.md): the target grammar these edges resolve against.
+- [operations.md](../operations.md): what a target dispatches to per project.
+- [cache.md](../cache.md): why an affected-but-unchanged target still replays from cache.

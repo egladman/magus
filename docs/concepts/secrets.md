@@ -1,6 +1,6 @@
 ---
 title: Secrets
-description: Resolve credentials through a secret provider so magus knows a value is sensitive and redacts it from the run log, the terminal and the output store - with the built-in environment provider, spell-backed providers, and the limits stated plainly.
+description: Resolve credentials through a secret provider so magus knows a value is sensitive and redacts it from the run log, the terminal and the output store, with the built-in environment provider, spell-backed providers, and the limits stated plainly.
 tags:
   [
     secrets,
@@ -23,7 +23,7 @@ The default way developers hold credentials is a `.env` file and an exported she
 variable, and both are worse than they look.
 
 An exported variable is inherited by **every** process you launch afterwards, for as long
-as that shell lives. Not just the command that needs it - the package manager, its
+as that shell lives. Not just the command that needs it: the package manager, its
 lifecycle scripts, your editor's language server, whatever a dependency decided to run at
 install time. That is the shape of a supply-chain attack: the malicious postinstall does
 not have to steal anything clever, it just reads its own environment. A `.env` file is the
@@ -53,11 +53,11 @@ reasonable thing to do rather than a thing you get away with. The credential is 
 the run that needs it.
 
 magus does not stop a compromised machine, and nothing here claims to. What it removes is
-the _standing_ exposure - the plaintext file and the inherited variable that are readable
+the _standing_ exposure: the plaintext file and the inherited variable that are readable
 long before and long after the moment they were needed.
 
 > The built-in environment provider still reads environment variables, because a CI
-> workflow's `env:` block is the only thing that can reach a repository secret - there,
+> workflow's `env:` block is the only thing that can reach a repository secret; there,
 > the platform owns the secret store and the exposure is already scoped to one job. That
 > provider is the CI bridge, not an endorsement of `.env` on a workstation. Locally,
 > select a real provider.
@@ -69,7 +69,7 @@ does shelling out to `op read` with [`proc\exec`](../reference/buzz/os.md). What
 can do is tell magus that the value is sensitive.
 
 **So do not use `os\env` for a credential.** With no provider selected,
-`magus\secret.read("DOCKERHUB_TOKEN")` reads exactly the same environment variable -
+`magus\secret.read("DOCKERHUB_TOKEN")` reads exactly the same environment variable:
 the built-in environment provider _is_ a provider. Same variable, same plaintext, same
 line of code. The only difference is that magus now knows the value is a credential and
 keeps it out of everything it writes down. Reading it with `os\env` gives that up and
@@ -86,33 +86,33 @@ magus\cmd("spell", args: ["push", "spells/lint", "docker.io/acme/lint:v1", "--us
     opts: {"stdin": token});
 ```
 
-If the command prints that token back - and plenty of tools do, in a debug dump or a
-failure trace - magus redacts it:
+If the command prints that token back (and plenty of tools do, in a debug dump or a
+failure trace), magus redacts it:
 
 ```text
 DEBUG: authenticating to ghcr.io with password=***
 ```
 
-Read the same variable with `os\env` and magus has no reason to protect the result -
+Read the same variable with `os\env` and magus has no reason to protect the result:
 provenance is what marks a value as a credential, not its name. That seam is deliberate
 rather than a gap, and it is exactly why the paragraph above says to stop reaching for
 `os\env` here.
 
 ## Secrets in a spell op
 
-`magus\secret.read` only works inside a magusfile target body - it is a function call,
+`magus\secret.read` only works inside a magusfile target body; it is a function call,
 and a command op has no body. A spell op's `Command` is static data (`bin`, `args`,
 `charms`), resolved once and cached, so it can be charm-patched and previewed by `magus
 describe` without running anything. There is no point in that shape for a function call
 to land.
 
 That is a real gap for two cases: a command op that genuinely needs a credential (`npm
-publish`, a signed release upload), and a **provided** project - one a workspace provider
+publish`, a signed release upload), and a **provided** project (one a workspace provider
 declared, with no magusfile at all, so there is no target body to call `magus\secret.read`
-from in the first place.
+from in the first place).
 
 `Command.secrets` closes both. It declares the environment the command needs, as env var
-name to provider reference - the same kind of reference `magus\secret.read` takes, just
+name to provider reference, the same kind of reference `magus\secret.read` takes, just
 carried as data instead of passed to a function:
 
 ```buzz
@@ -129,22 +129,22 @@ export fun mgs_listTargets() > any {
 The two sides are different kinds of name and the example keeps them visibly
 different on purpose. The **key** is the environment variable the command itself
 looks for, fixed by whatever you are running (`npm` wants `NPM_TOKEN`). The **value**
-is a reference in your provider's own addressing - an `op://` path here, a bare
+is a reference in your provider's own addressing: an `op://` path here, a bare
 variable name under the built-in environment provider. Writing the same string on both
 sides happens to work under the built-in provider and teaches the wrong thing: it makes
 the mapping look like a redundant restatement rather than the translation it is.
 
 Each reference is resolved through the workspace's selected provider **at spawn**, the
 moment before the command runs, and injected into **that one child process's**
-environment - never into `args`, never into a sibling op's environment, never into the
+environment, never into `args`, never into a sibling op's environment, never into the
 declaration itself. The declaration only ever holds the reference; the value never does.
 Resolution goes through the same resolver `magus\secret.read` uses, so the value is
 redacted from captured output exactly the same way, and it is subject to the same
-[limits](#limits) - short values, encodings other than the ones magus knows, output that
+[limits](#limits): short values, encodings other than the ones magus knows, output that
 straddles a write boundary.
 
-A charm cannot touch `secrets`. Charms patch `args` - the argv a run prints and a reader
-compares - and a charm silently changing which credential a command receives would be the
+A charm cannot touch `secrets`. Charms patch `args` (the argv a run prints and a reader
+compares), and a charm silently changing which credential a command receives would be the
 one kind of edit a diff of the command line could never show.
 
 A **service op** cannot declare secrets, and magus refuses the spell at load rather
@@ -167,12 +167,12 @@ Three rules, and each exists because the alternative is infuriating.
 calls `magus\secret.read`, never at magusfile evaluation. This matters more than it
 sounds: a magusfile that read a secret at the top level would prompt on `magus ls`, on
 `magus describe`, on every command in the workspace. Keep reads inside target bodies, and
-keep the _act of authenticating_ a tool out of targets altogether - see
+keep the _act of authenticating_ a tool out of targets altogether; see
 [Authenticating the tools a build drives](#authenticating-the-tools-a-build-drives) below.
 
 The same rule applies to reporting. `magus run image-registries` lists what a publish
-needs and resolves nothing; only `image-registries:cd,verify` - a user explicitly asking
-"am I set up" - actually calls the provider. A status table that pops an unlock dialog is
+needs and resolves nothing; only `image-registries:cd,verify` (a user explicitly asking
+"am I set up") actually calls the provider. A status table that pops an unlock dialog is
 the single most annoying thing this feature could do.
 
 **Every wait is announced before it happens.** A provider that prompts prints first:
@@ -182,13 +182,13 @@ secret: waiting on onepassword for "Private/Docker Hub/credential" (timeout 60s)
 ```
 
 An unexplained biometric prompt in the middle of a build is a trust failure, not a UX
-wrinkle - you cannot tell whether magus asked for it or something else on your machine
+wrinkle: you cannot tell whether magus asked for it or something else on your machine
 did. The line names what is waiting, what it wants, and how long it will wait. The
 [journal](#what-magus-does-with-a-resolved-value) records the read afterwards; this is the
 half you can see while the dialog is on screen.
 
 **No terminal means fail fast, not wait.** With a TTY, magus allows 60 seconds for you to
-answer an unlock. Without one, it allows 10 - because a provider that would prompt cannot,
+answer an unlock. Without one, it allows 10, because a provider that would prompt cannot,
 so it either answers from a cached session immediately or it is going to block until
 something else kills it. The error says which situation you are in:
 
@@ -218,8 +218,8 @@ hide a missing credential just moves the failure later.
 
 > This page named the interactive one `timeout` / `MAGUS_SECRET_TIMEOUT` /
 > `--secret-timeout` for several releases. None of those ever existed. The flag and the
-> variable fail loudly - a parse error, and `magus doctor` reporting an unknown `MAGUS_*`
-> name - but an unrecognized **config key** is only a warning, so a `magus.yaml` copied
+> variable fail loudly (a parse error, and `magus doctor` reporting an unknown `MAGUS_*`
+> name), but an unrecognized **config key** is only a warning, so a `magus.yaml` copied
 > from the old text left the budget at its default while looking set. The table above is
 > generated from the same source as [the config reference](../reference/config.md); trust
 > it over any prose.
@@ -230,7 +230,7 @@ rather than at the job's 45-minute limit.
 
 ### Why magus will not let you paste a secret instead
 
-Buzz can read stdin, so magus could offer "provider unavailable - paste the value to
+Buzz can read stdin, so magus could offer "provider unavailable: paste the value to
 continue" during a wait. It deliberately does not, for four reasons that compound:
 
 - **It undoes the point.** The value ends up in your terminal buffer, your scrollback,
@@ -238,7 +238,7 @@ continue" during a wait. It deliberately does not, for four reasons that compoun
   feature exists to remove.
 - **It builds a phishing surface.** Once magus is a thing that asks for credentials at a
   prompt, any magusfile can ask for credentials at a prompt that looks exactly like
-  magus's. The announcement above is meant to make an unexplained request _suspicious_ -
+  magus's. The announcement above is meant to make an unexplained request _suspicious_;
   a paste prompt makes it routine.
 - **It has no provenance.** A pasted value came from no provider, so the audit trail
   cannot say which provider served it, and "which credentials did this run touch" loses its
@@ -261,7 +261,7 @@ serves it, and nothing persists after the process exits.
 Most workspaces should not need a login step at all. Authenticate when the tool tells you
 to: run the build, let the push fail, log in, run it again. The re-run is cheap because
 everything before the push replays from cache, so being reactive costs a few seconds
-rather than a rebuild - and nobody has to know a convention exists in order to get it
+rather than a rebuild, and nobody has to know a convention exists in order to get it
 right.
 
 That works because the failure teaches the fix. A command op declares `hints`, so the
@@ -274,7 +274,7 @@ hint: the registry accepted you but not this repository; check the image name an
 ```
 
 The bundled `docker` spell declares these for `docker-buildx`, the op that pushes. Any
-spell can, and it is static data like `args` - describable, and not charm-patchable:
+spell can, and it is static data like `args`, describable and not charm-patchable:
 
 ```buzz
 Command{
@@ -288,18 +288,18 @@ Command{
 ```
 
 Matching is a plain substring against the tail of the failed command's output, and the
-first declared match wins - so order specific before general. See
+first declared match wins, so order specific before general. See
 [Writing a spell](../guides/authoring-spells.md).
 
 An unattended runner authenticates the same tools ahead of time, and the runner does it,
 not magus: the CI provider's login step (`docker/login-action` on GitHub Actions) logs
 docker in before magus runs, the way the checkout token authenticates git. Do not wrap a
 tool's login in a target. It would have no inputs and no output, could never be cached,
-and would mutate ambient state outside your repo - a mode switch magus runs rather than a
-unit of work - to order a step the runner already takes.
+and would mutate ambient state outside your repo (a mode switch magus runs rather than a
+unit of work) to order a step the runner already takes.
 
-The line is who the client is. When magus itself talks to a registry - `magus spell push`,
-`magus graph push`, a [remote cache](cache/remote.md) - it reads the credential through a
+The line is who the client is. When magus itself talks to a registry (`magus spell push`,
+`magus graph push`, a [remote cache](cache/remote.md)), it reads the credential through a
 reference as above and takes the token on stdin. When magus drives a tool that keeps its
 own credential store, logging that tool in belongs to the environment that provides it.
 
@@ -309,15 +309,15 @@ This is the one limit on this page that can produce a wrong build rather than a 
 log line.
 
 **A resolved credential contributes nothing to the cache key.** The key is a function of
-the [hashed `Step` fields](cache.md#the-cache-key) - sources, charms, args, allow-listed
-env, dependencies, spell version, tool versions - and a value returned by
+the [hashed `Step` fields](cache.md#the-cache-key) (sources, charms, args, allow-listed
+env, dependencies, spell version, tool versions), and a value returned by
 `magus\secret.read` is none of them. That is the right design: hashing a credential would
 write it into cache metadata and partition your cache per rotation. But it has a
 consequence you have to handle yourself.
 
 Rotating or revoking a credential invalidates nothing. And a publishing target is the
 sharpest case: its sources rarely change between runs, so it becomes a cache hit that
-never contacts the provider, never pushes, and **reports success** - a release whose
+never contacts the provider, never pushes, and **reports success**: a release whose
 spells were never published, on a pipeline whose publish step is green.
 
 So declare it, with the reason:
@@ -336,7 +336,7 @@ That is magus's own declaration, verbatim.
 [MGS1026](../reference/codes/magusfile/MGS1026.md) reports a target that reads a credential
 and is still cacheable, so forgetting it is caught rather than discovered as a green publish
 that pushed nothing. `skip_cache` takes a reason string rather than
-a boolean on purpose - see [Cache](cache.md) - and this is the case the requirement was
+a boolean on purpose (see [Cache](cache.md)), and this is the case the requirement was
 written for.
 
 The same applies to any target whose output is a function of a credential, not only a
@@ -389,8 +389,8 @@ RUN --mount=type=secret,id=registry_token \
     TOKEN="$(cat /run/secrets/registry_token)" && ./fetch-private-dep.sh
 ```
 
-The argv magus runs carries only `--secret id=registry_token,env=BK_TOKEN` - the flag, not
-the value - so nothing sensitive reaches the run log. The child process does receive the
+The argv magus runs carries only `--secret id=registry_token,env=BK_TOKEN` (the flag, not
+the value), so nothing sensitive reaches the run log. The child process does receive the
 real value, because BuildKit needs it, and if the build echoes it back magus redacts it on
 the way out.
 
@@ -399,12 +399,12 @@ the way out.
 - **Redacts it from captured output.** Four paths carry a subprocess's bytes and all
   four are covered: the live stream (terminal), the raw run log, the buffered result a
   magusfile reads back from `proc\exec`, and the command line recorded in the invocation
-  journal. They are genuinely separate - the buffered result bypasses the live tap
-  entirely, and a quiet capture has no live tap at all - so each is redacted at its own
+  journal. They are genuinely separate: the buffered result bypasses the live tap
+  entirely, and a quiet capture has no live tap at all, so each is redacted at its own
   point rather than at one shared choke point. The mask is a fixed `***`, so it does
   not leak the value's length.
 - **Records the read in the run's journal, where you can read it back.** A `secret` event
-  carries the reference and the provider that served it - never the value. Every run has
+  carries the reference and the provider that served it, never the value. Every run has
   an invocation id, shown as `inv:` in `magus query output <ref> --identity`, and that id
   answers the audit question directly:
 
@@ -432,7 +432,7 @@ the way out.
   before selecting a provider cannot memoize the built-in answer and then serve it under
   a declared one.
 - **Holds the value for as long as the workspace is open, not for one run.** That scope
-  is deliberate - a magusfile is evaluated once during preload and again during the run,
+  is deliberate: a magusfile is evaluated once during preload and again during the run,
   and a narrower scope made a single command prompt twice. The cost is that the server
   keeps a workspace open for as long as it serves it, so on a machine running `magus
 server start` a resolved credential is resident in that process until it restarts, and
@@ -588,12 +588,12 @@ serve, and that is what an endpoint is for.
 ## What a resolved credential is, in Go
 
 Inside magus a resolved credential is a `secret.Value`, not a `string`. Every standard
-way of rendering one - `fmt` with any verb, `slog`, JSON - yields `***`, so the plaintext
+way of rendering one (`fmt` with any verb, `slog`, JSON) yields `***`, so the plaintext
 reaches output only where a caller explicitly asked for it by name with `Reveal()`.
 
 That type exists because redaction at the write boundary cannot be finished. Those
 interceptors compare against what `fmt` renders while a handler emits what its _encoder_
-produces, and the two differ - a `[]byte` attribute rendered as decimal bytes by `fmt`
+produces, and the two differ: a `[]byte` attribute rendered as decimal bytes by `fmt`
 was emitted base64-encoded, and decodable, by the JSON handler. No amount of additional
 kind-handling closes that, because an interceptor cannot know what a downstream encoder
 will do. The value has to mask itself.
@@ -612,7 +612,7 @@ A reasonable instinct is that `magus\secret.read` should return a distinct `Secr
 so a credential cannot be mistaken for an ordinary string. It does not, and the reason is
 that the type would not be enforced where it matters.
 
-Buzz checks **function signatures** - `fun registries(ctx) > [Registry]` is a real
+Buzz checks **function signatures**: `fun registries(ctx) > [Registry]` is a real
 constraint, and a wrong return type fails the build. It does not check **host call
 results**: every module magus exposes (`os`, `fs`, `magus`, ...) is typed as unknown to
 the checker, so a `Secret` coming back from `magus\secret.read` would be unknown too.
@@ -620,7 +620,7 @@ Every call site would gain a `.value()` unwrap and the checker would verify none
 
 What protects a secret is not its type, it is its **provenance**: magus knows the value is
 a credential because it was resolved through the resolver, and that knowledge survives
-being assigned, concatenated, and passed to a subprocess - all the things that discard a
+being assigned, concatenated, and passed to a subprocess, all the things that discard a
 type. Redaction keys off having been read, so a wrapper adds ceremony without adding
 protection.
 
@@ -649,7 +649,7 @@ guarantee described as total changes what people are willing to risk.
   from a child process is redacted only if both halves land in one write.
 - **Very short values are not redacted at all.** Below four characters, masking every
   occurrence would shred ordinary output while protecting something that was never a
-  credential - so magus declines. It does say so:
+  credential, so magus declines. It does say so:
   [MGS2011](../reference/codes/sandbox/MGS2011.md) names the reference and the threshold
   at the moment of the read. The value is still unprotected; the warning is the only
   thing magus can offer, and it is on the run log rather than a build failure.
@@ -662,7 +662,7 @@ command's argv into the run log and the output store, so `--password-stdin` with
 
 ## See also
 
-- [Output references](cache/output-refs.md) - the durable store redaction protects
-- [Tips and tricks](../guides/tips.md) - the declare-once registry-table pattern
-- [Writing a spell](../guides/authoring-spells.md) - the full provider contract
+- [Output references](cache/output-refs.md): the durable store redaction protects
+- [Tips and tricks](../guides/tips.md): the declare-once registry-table pattern
+- [Writing a spell](../guides/authoring-spells.md): the full provider contract
 - [CI integration](../guides/integrations/ci.md)

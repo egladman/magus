@@ -103,14 +103,14 @@ In the console's Diff surface:
 ### One hunk at a time
 
 A changeset arrives as everything at once: eleven files, a dozen chips, a rail, and somewhere in
-it the hunk you were going to judge. `f` puts one hunk on screen and takes the rest away - the
+it the hunk you were going to judge. `f` puts one hunk on screen and takes the rest away: the
 file index, the counts, all of it one key from coming back.
 
 What replaces them is a line saying where you are: a bar, the position, how many hunks you have
 read, and how many remarks the pass has produced so far. That last number is the one worth
 having. It is the evidence that reading is turning into something.
 
-![The Diff surface in focus mode: the head still names the review and carries Test and Leave focus, and under it one line - a progress bar, "hunk 1 of 14, 0 read, 1 drafted - libs/authkit/claims.go", and the key legend at the far end - over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
+![The Diff surface in focus mode: the head still names the review and carries Test and Leave focus, and under it one line (a progress bar, "hunk 1 of 14, 0 read, 1 drafted - libs/authkit/claims.go", and the key legend at the far end) over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
 
 The toolbar collapses with the rest of it: the counts row goes entirely rather than emptying, and
 the key legend moves onto the progress line, which is the one row a mode about less chrome can
@@ -129,8 +129,8 @@ time.
 ### Writing one
 
 A remark is markdown, and the box you write it in is a real one: **Enter is a line break**, so a
-paragraph, a list or a fenced block all survive being typed. Committing takes a deliberate act -
-Cmd or Ctrl with Enter, or the button beside the field - because a field where Enter commits
+paragraph, a list or a fenced block all survive being typed. Committing takes a deliberate act:
+Cmd or Ctrl with Enter, or the button beside the field, because a field where Enter commits
 cannot hold a remark worth writing, and because sending is not something to do by reflex.
 
 **Write** and **Preview** sit above the field. What a remark looks like rendered is what your
@@ -158,7 +158,7 @@ the patch it is showing. It cannot publish, and no review command carries a `--p
 you send with the batch in front of you or you do not send.
 
 Two things the console has that the terminal viewer does not yet: reading one hunk at a time
-(`f`), and the run control below. Both are read-side and nothing about a terminal prevents them -
+(`f`), and the run control below. Both are read-side and nothing about a terminal prevents them;
 they are missing, not withheld, unlike publishing. `--prompt` needs neither: it is a flag on
 `magus diff` itself, and the viewer stands aside for it the way it does for `--impact`.
 
@@ -171,7 +171,7 @@ diff does not. So each thread lands in one of three places, and the console drop
 - on the hunk holding its line;
 - under the file heading, when this changeset no longer contains that line;
 - listed as **elsewhere** (press `Esc` for the overview), when the file is not on screen at
-  all - either outside this changeset, or folded away, as a generated file is by default.
+  all: either outside this changeset, or folded away, as a generated file is by default.
 
 The third bucket is keyed on what the surface is showing rather than on what the changeset
 holds, because a thread rendered nowhere and a thread on a folded file look identical to the
@@ -182,12 +182,12 @@ so neither surface drops one.
 
 The overview reads those remarks out rather than counting them. A chip saying "1 elsewhere"
 tells you something was said and withholds what, which leaves you to open a browser to find
-out - the one errand this whole surface exists to save you.
+out, the one errand this whole surface exists to save you.
 
 ## When somebody says something
 
 A remark arriving on your review is the one thing here that interrupts you. The bell rings, and
-the reason it earns that is not that something happened - it is that **somebody is waiting on
+the reason it earns that is not that something happened; it is that **somebody is waiting on
 you**, and a question left sitting for a day costs your colleague their day too.
 
 The threads that arrived since you last read the conversation are marked **new** where they sit
@@ -206,7 +206,7 @@ a report, not a prediction: two branches touching one file is ordinary and usual
 Both your own branches and the remote-tracking copies of everyone else's. Local ones matter most
 where they are least visible: several agents in several worktrees of one repository are all on
 branches nobody has pushed, and a lookup that read only remote-tracking refs answered nothing
-there - which reads exactly like nothing competing.
+there, which reads exactly like nothing competing.
 
 magus never fetches to answer this, so the two kinds are as fresh as different moments and the
 tooltip says which: a local branch is **here now**, and a remote-tracking one is true **as of your
@@ -216,12 +216,12 @@ A branch and its remote-tracking copy are one line of work under two names, so t
 once, under the local side.
 
 A backend that cannot answer says nothing at all, which is deliberately different from saying
-nothing competes - those are different facts, and only one of them is reassuring.
+nothing competes; those are different facts, and only one of them is reassuring.
 
 ## After it merges
 
 A merged pull request is where a review stops being live and becomes the only record of why the
-code is the way it is - and that record is on somebody else's website. So when the host says a
+code is the way it is, and that record is on somebody else's website. So when the host says a
 review you took part in has landed, magus offers once to keep the conversation:
 
 > This review merged on acme/acme, and its 3 remarks live only on the host. Run
@@ -232,12 +232,12 @@ strip under the toolbar. Merge while you are elsewhere in the console and it is 
 notification panel, silently: a merge changes nothing you were relying on, so it is worth keeping
 and not worth ringing a bell for.
 
-That second one asks the host on a slow clock and only for a branch you actually reviewed -
+That second one asks the host on a slow clock and only for a branch you actually reviewed:
 opening a review is what opts it in. magus does not go asking a forge about branches you never
 looked at.
 
 **Only when there was a conversation.** A pull request nobody remarked on has nothing worth
-preserving, and a prompt that fires on every merge is one you learn to dismiss without reading -
+preserving, and a prompt that fires on every merge is one you learn to dismiss without reading,
 which spends the attention it was saving for the merge that mattered.
 
 It names the command rather than running it. Notes are human-authored by construction, which is
@@ -284,7 +284,7 @@ magus diff --prompt
 prints a review prompt to paste into whichever model you use. `--prompt --impact` adds the
 rationale behind each instruction, for a reader deciding whether to trust it.
 
-magus assembles it and stops. Nothing calls a model, holds a key, or sends anything anywhere -
+magus assembles it and stops. Nothing calls a model, holds a key, or sends anything anywhere:
 the clipboard is the airgap, and it is what keeps the review something you wrote. The prompt asks
 for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
 because generated text is the wrong thing to put in front of the colleague who asked.
@@ -342,7 +342,7 @@ to call a bug. If you cannot find where a claim is verified, say it is unverifie
 
 What it carries is the part no model can work out from a diff: the reading order magus ranked,
 which projects rebuild as a result, what could NOT be measured, and which other branches are
-changing the same files. What it does NOT carry is the durable half of a review briefing - it
+changing the same files. What it does NOT carry is the durable half of a review briefing: it
 names the magus skills you already have rather than pasting copies of them, because a copy drifts
 from the installed one and spends your context on text your tools already loaded.
 
@@ -353,13 +353,13 @@ from the installed one and spends your context on text your tools already loaded
   transport a write arrived on rather than from the payload, so nothing can claim to be you.
 - **An agent cannot reply to a person.** A remark is addressed to whoever reads the review; a
   reply is addressed to the colleague who asked, by name. There is no agent-reachable op that
-  produces one - replying lives on the human route alone - so an answer to your colleague is
+  produces one; replying lives on the human route alone, so an answer to your colleague is
   something you wrote. Receiving generated text where you asked a question is how the human half
   of a review dies, and this is the one place magus spends a refusal to prevent it.
 - **A review never approves a change its own credential opened.** Reviewing a colleague's
   branch, you may approve or request changes; on your own, the verdict is silently downgraded
   to remarks and the surface says so. The API would happily let your change approve itself,
-  which is why the rule lives in magus rather than in a spell you could edit - and why
+  which is why the rule lives in magus rather than in a spell you could edit, and why
   "magus could not tell who opened this" resolves the same way as "you did". Not knowing is
   not permission.
 - **A draft with no line never moves to a line magus guessed.** The send box marks those
@@ -368,7 +368,7 @@ from the installed one and spends your context on text your tools already loaded
 
 ## See also
 
-- [Authoring spells](../guides/authoring-spells.md) - the provider-op shape and every
+- [Authoring spells](../guides/authoring-spells.md): the provider-op shape and every
   contract magus detects by name.
-- [Secrets](secrets.md) - how the token reaches the spell without being written down.
-- [Knowledge](knowledge.md) - where a captured review conversation lives afterwards.
+- [Secrets](secrets.md): how the token reaches the spell without being written down.
+- [Knowledge](knowledge.md): where a captured review conversation lives afterwards.

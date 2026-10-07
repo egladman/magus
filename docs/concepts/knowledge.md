@@ -1,6 +1,6 @@
 ---
 title: Knowledge graph
-description: The knowledge graph is a deterministic, cache-backed graph of the magus domain - projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources - that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.
+description: The knowledge graph is a deterministic, cache-backed graph of the magus domain (projects, targets, spells, ops, charms, modules, diagnostics, docs, and buzz sources) that agents and humans query instead of grepping. This page covers the schema, the verbs, the file layout, and how to point external graph tools at an export.
 tags:
   [
     knowledge graph,
@@ -18,8 +18,8 @@ tags:
 # Knowledge graph
 
 The knowledge graph is a deterministic, cache-backed graph of the magus domain.
-Every node and edge is EXTRACTED or rubric-INFERRED from workspace sources - no
-LLM pass, ever - so it is safe to rebuild implicitly and byte-for-byte
+Every node and edge is EXTRACTED or rubric-INFERRED from workspace sources: no
+LLM pass, ever, so it is safe to rebuild implicitly and byte-for-byte
 reproducible from the same inputs. It is assembled from machinery magus already
 owns: the verified project dependency DAG, static magusfile extraction, the
 spell/module/diagnostic registries, markdown docs, and buzz source parsing.
@@ -38,7 +38,7 @@ distance is the point.
 - **Not open-world.** General knowledge graphs are genuinely hard: ontology
   design, entity resolution, and modeling discipline that stays expensive at
   scale. magus never attempts that problem. The build domain hands it a closed
-  ontology - the node kinds and relations above are the complete list - so
+  ontology (the node kinds and relations above are the complete list), so
   there is no modeling step to do well or badly, and no linking judgment to
   trust.
 - **Not a second indexer.** Most codebase graphs are built by a separate system
@@ -46,7 +46,7 @@ distance is the point.
   and your build stays invisible until it bites. This graph is assembled from
   the same declarations the build executes. A wrong edge is a broken build,
   and a broken build is loud.
-- **Not synthesized links.** No pass ever guesses an edge - no LLM, no fuzzy
+- **Not synthesized links.** No pass ever guesses an edge: no LLM, no fuzzy
   matching, no "related notes" heuristics. Every edge is extracted or
   rubric-inferred from a source you can open, and `magus explain` prints each
   edge's provenance so the claim is checkable per edge, not per marketing page.
@@ -57,8 +57,8 @@ distance is the point.
 
 ## The two-concept model
 
-- **query / explain / path READ the graph** - daily retrieval.
-- **`magus graph` IS the graph** - emit it (`deps`), export it (`export`), or
+- **query / explain / path READ the graph**: daily retrieval.
+- **`magus graph` IS the graph**: emit it (`deps`), export it (`export`), or
   measure its shape (`stats`).
 
 ```sh
@@ -73,7 +73,7 @@ magus graph export --open            # explore it visually in your browser (data
 ```
 
 Prefer a picture? `magus graph export --open` launches the interactive [Graph
-Explorer](../console/) seeded with your own workspace - a force-directed, searchable
+Explorer](../console/) seeded with your own workspace: a force-directed, searchable
 view of the same graph. Your data never leaves your machine: it rides in the URL
 fragment (or a local loopback server with `--serve`), never reaching the site. This
 site's own graph is the [live demo](../console/).
@@ -113,7 +113,7 @@ Recipes for the graph as a lens on the workspace. Rebuild first with `magus grap
 build` if you want it fresh; combine field filters freely.
 
 **What programs does the workspace actually run?** magus owns the task layer, so it
-knows the concrete tool behind every operation - not just the source.
+knows the concrete tool behind every operation, not just the source.
 
 ```sh
 magus query "kind=tool"                    # the workspace's toolchain (go, buf, docker, ...)
@@ -123,7 +123,7 @@ magus path "target:.:test" "tool:go"       # a target reaches its tool via targe
 ```
 
 Each spell op carries the base argv it runs on an `argv` attr (rendered with empty
-charms) and `use`s the `tool:<program>` node for its argv[0] - the program, its own kind
+charms) and `use`s the `tool:<program>` node for its argv[0]: the program, its own kind
 because it is an entity, not an operation. The op's spell `use`s the tool too, so
 `magus explain tool:go` lists every op and spell that runs go; a target reaches the tool
 through its existing `target --uses--> op` edge. (There is no per-target command node:
@@ -181,7 +181,7 @@ next:
 
 <!-- /example -->
 
-And `path` connects two nodes as a chain - a target reaches its tool through its op:
+And `path` connects two nodes as a chain: a target reaches its tool through its op:
 
 <!-- example:path-test-to-tool -->
 
@@ -231,7 +231,7 @@ magus path <a> <b>        # the shortest edge chain between two nodes
 ```
 
 **Which code lacks test coverage?** magus runs the tests, so it owns the coverage
-profile - a pure code-graph tool cannot answer this.
+profile; a pure code-graph tool cannot answer this.
 
 ```sh
 magus explain "symbol:<id>"      # a function's coverage ratio + test_refs (test files that reference it)
@@ -259,7 +259,7 @@ named visibility boundary; do not turn missing edges into a universal
 
 **What does a target produce or consume, and is a file generated?** magus indexes each
 target's declared `magus\outputs` / `magus\inputs`, so the graph knows the build's file
-flow - which a pure code-graph cannot.
+flow, which a pure code-graph cannot.
 
 ```sh
 magus explain "target:.:content-generate"   # the files a target produces and consumes
@@ -271,7 +271,7 @@ node it matches, so a generated file is self-labeled by its producing target (no
 needed) and you can walk from a target to exactly what it writes.
 
 **Which markdown is what?** Every authored markdown file in the workspace is a `doc`
-node tagged with a `role` from a universal filename convention - so it works in any repo.
+node tagged with a `role` from a universal filename convention, so it works in any repo.
 
 ```sh
 magus query "kind=doc role=agent"    # the agent-instruction files (AGENTS.md, CLAUDE.md)
@@ -286,7 +286,7 @@ doc`), so from a project you reach its README and design notes as contextual doc
 ## Graph Explorer
 
 `magus graph export --open` opens the graph in an interactive, force-directed
-[Graph Explorer](../console/) in your browser - **privately**. Your graph never
+[Graph Explorer](../console/) in your browser, **privately**. Your graph never
 leaves your machine: by default it rides in the link's URL `#fragment` (which
 browsers never send to a server), and `--serve` instead hands it to the page from
 an ephemeral `127.0.0.1` loopback server that serves once and stops. The hosted
@@ -321,7 +321,7 @@ query dims non-matching nodes so the subgraph stands out. Beyond the filter:
 double-click a node for its **local graph** (its neighborhood, `[`/`]` to change
 depth), click a legend color to isolate a kind, and use the **hubs**/**orphans**
 lenses (the visual twin of `magus graph stats`). The page is fully client-side and
-data-agnostic - it also loads any `graph.json` from `magus graph export -o json`
+data-agnostic; it also loads any `graph.json` from `magus graph export -o json`
 via the Open-file button or drag-and-drop. This site's own graph is the
 [demo](../console/).
 
@@ -343,7 +343,7 @@ project's `engine`, and a doc page carries its frontmatter `title` and `tags`.
 Attributes are additive and absent when unknown, so they never bump the schema
 version.
 
-Edges are directed and carry provenance and a confidence tag - `extracted` (1.0,
+Edges are directed and carry provenance and a confidence tag: `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
@@ -354,8 +354,8 @@ buzz function, or at its symbol once a Buzz index covers the file.
 Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
 root, `.github/`, or `docs/`): each owner becomes an `owner` node with an `owns`
 edge to every project and buzz file it covers, under GitHub's last-match-wins rule,
-with `CODEOWNERS:<line>` provenance. Only declared ownership is taken - blame-derived
-ownership is insight's job, not a graph edge - so "who owns the blast radius of this
+with `CODEOWNERS:<line>` provenance. Only declared ownership is taken; blame-derived
+ownership is insight's job, not a graph edge, so "who owns the blast radius of this
 change" is one path query.
 
 Both node-link JSON and GraphML carry a `schema_version`; external consumers and
@@ -364,7 +364,7 @@ agent skills should check it, since a bump is a changelog event.
 ## File layout
 
 The graph lives under the cache dir at `.magus/knowledge/`, cache-owned and NOT
-committed by default - the build is cheap and deterministic, so committing
+committed by default: the build is cheap and deterministic, so committing
 derived data buys nothing (`export` exists for teams that want a snapshot).
 
 ```text
@@ -386,7 +386,7 @@ merged file on every edit is an O(graph) write. Merging happens in memory at loa
 time; the merged export is produced on demand. Shards are per-project plus
 singletons for the registry (spells/modules/diagnostics), docs, buzz sources, and
 run history (`@runtime`, below). A query loads the store, fingerprint-checks each
-shard, and rebuilds only the stale ones - the "cache that gets hit first". First
+shard, and rebuilds only the stale ones, the "cache that gets hit first". First
 run pays a full build; steady state is a fingerprint check. `--refresh` forces a
 full rebuild.
 
@@ -407,8 +407,8 @@ Two optional knobs bound and share the store. `knowledge.max_size_mb` soft-caps
 the shard directory: over the cap, least-recently-used shard files are evicted
 (their manifest entries stay, so an evicted shard is restored from the remote
 cache or rebuilt on the next query; 0, the default, is unlimited). When a remote
-build cache is configured, deterministic shards ride it - pushed on build,
-restored by fingerprint - so teammates and CI can reuse them. The `@runtime` shard
+build cache is configured, deterministic shards ride it: pushed on build,
+restored by fingerprint, so teammates and CI can reuse them. The `@runtime` shard
 is never pushed: it is local run history, not shareable derived data.
 
 ## Third-party packages (@packages)
@@ -451,7 +451,7 @@ Beyond the static graph, magus records which diagnostics (`MGSxxxx` codes) each
 target trips during real runs, as `emits` edges in the isolated `@runtime` shard.
 A run captures every fired diagnostic through one sink that also feeds the report
 stream, and persists the set to `<cache>/knowledge/runtime.json`. This answers
-"what has this target tripped" - history the static `documents` edge cannot. The
+"what has this target tripped": history the static `documents` edge cannot. The
 same shard also folds observed performance onto target nodes from the local timing
 history: `duration_p75_ms`, `cache_hit_rate`, and `run_samples`, so an agent
 planning work sees a target's cost without a separate history query. It also folds
@@ -486,7 +486,7 @@ cache, and stripped from `magus graph export --reproducible`.
 
 magus never parses source code. To bring code symbols into the graph, it ingests a
 [SCIP](https://docs.sourcegraph.com/code_navigation/explanations/scip) index file
-that a per-language indexer (`scip-go`, `scip-typescript`, ...) emits - so any
+that a per-language indexer (`scip-go`, `scip-typescript`, ...) emits, so any
 language with an indexer works, with no magus code per language.
 
 **This is automatic.** Every symbol-capable spell (go, typescript, python, rust, buzz)
@@ -522,7 +522,7 @@ journaled job, not hidden work. It is on by default in the server; a one-shot CL
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run of that index just fails and backs off, while the project's other indexes keep
-running - install it, or run `magus run <project>::scip` yourself, or index in CI.
+running; install it, or run `magus run <project>::scip` yourself, or index in CI.
 `magus status` and the gaps a lookup reports name a missing indexer and where to get it.
 
 An index that has not been built yet is simply skipped, so symbols appear once its op
@@ -561,7 +561,7 @@ occurrence count and capped lines), and `calls` edges between symbols.
 A call edge is attributed, not inferred: SCIP records an enclosing range for each
 definition, so a reference occurrence that falls inside one was written in that
 definition's body, and the enclosing symbol is the caller. Two restrictions keep the
-relation honest. The callee must be something callable - an enclosing range spans the
+relation honest. The callee must be something callable: an enclosing range spans the
 whole declaration, signature included, so most occurrences inside it are types and
 fields rather than calls. Callability is read off the moniker's SCIP descriptor suffix
 rather than the optional `SymbolInformation.Kind`, so it does not depend on an indexer
@@ -570,25 +570,25 @@ would silently produce no calls for an entire language. And the callee must be d
 this workspace: a call into a dependency has no body to navigate to, and its usage is
 already recorded by the referencing file's `references` edge. A symbol seen only as a reference still gets a
 node, so cross-project usage resolves. Every indexed source file also becomes a
-browsable `file` node the edges land on, linked to the project that owns it - so a
+browsable `file` node the edges land on, linked to the project that owns it, so a
 `.go` or `.ts` file sits in the graph the same way a `.buzz` file does, reachable from
 its project and the workspace. SCIP paths are relative to the indexer's root, so magus
 rebases them onto the project's workspace path; a nested project's files land under the
 right project, not the workspace root.
 
 Both file and symbol nodes carry a `language` attr, so `magus query language:go`
-groups every Go source file and symbol - and `language:buzz` the buzz sources - one
+groups every Go source file and symbol (and `language:buzz` the buzz sources), one
 filter across everything the graph knows, however it was extracted (magus's own AST
 walk or a foreign SCIP index).
 
 SCIP makes a document's language optional and not every indexer sets it (scip-typescript
-sets it on none), so magus falls back to the language the producing spell declares - the
+sets it on none), so magus falls back to the language the producing spell declares, the
 same declaration that made the project symbol-capable. A document that names its own
 language still wins, since one index may legitimately span several.
 
 Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
 `magus query`/`magus graph stats`/`magus graph export --open`/warm graph never touch them. They load only when a query is
-symbol-seeded - `kind:symbol`, a `symbol:` ID,
+symbol-seeded: `kind:symbol`, a `symbol:` ID,
 `relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
 referencing file (`client` calling `magus\refs`). At very large scale a derived
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
@@ -609,7 +609,7 @@ how a blind spot gets recorded as a fact. `magus query`, `magus explain`, and
 
 An `unknown` verdict names its cause. `symbol-index-missing` lists the projects whose
 declared SCIP index magus could not read, which `magus graph build` fixes.
-`symbols-not-loaded` means the lookup never consulted the symbol layer at all - a bare
+`symbols-not-loaded` means the lookup never consulted the symbol layer at all: a bare
 `magus query someFunc` searches domain entities, so it says nothing about whether a code
 symbol by that name exists, and `magus refs someFunc` is the verb that would know.
 `coverage-unknown` means the probe itself failed, so magus cannot say what it searched.
@@ -629,19 +629,19 @@ Over MCP every verdict comes back as a result rather than an error, so an agent 
 on the field in all three cases rather than pattern-matching an error string for one of
 them.
 
-Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` - the request
-cannot be carried out as stated, and magus verified that - and 1 on `unknown`, where the
+Exit codes follow the same split. `refs` and `explain` exit 2 on `absent` (the request
+cannot be carried out as stated, and magus verified that) and 1 on `unknown`, where the
 invocation was fine and a prerequisite artifact was missing. A `refs` lookup that resolved
 but found no references follows the verdict too, exiting 1 when magus could not verify the
 emptiness: "nothing uses this" is a negative claim like any other. `magus query` exits 0 when
-it can answer - it matched, or it verified the absence - and 1 when it cannot: nothing
+it can answer (it matched, or it verified the absence) and 1 when it cannot: nothing
 matched and the verdict is `unknown`, the case `magus graph build` fixes. It never exits 2,
 and it never fails on a populated result, whose `unknown` caveats rows that are facts
 already. An empty result set stays a legitimate answer to a search; a blind spot is not
 one, and a caller that reads it as "not in the graph" goes back to grepping.
 
 The coverage probe is one `stat` per declared index, and it is skipped entirely when the
-symbol layer was irrelevant to the question - `kind:author` returning nothing has nothing
+symbol layer was irrelevant to the question: `kind:author` returning nothing has nothing
 to do with a missing symbol index, so nothing about one is reported. The probe
 deliberately does not decode each index to check it parses: that is a full unmarshal per
 lookup to catch a case the graph build already logs, while a never-built index is the case
@@ -701,7 +701,7 @@ When enabled and the workspace is a git repo, a `@vcs` shard adds four attrs to 
 file node: `vcs_last_commit` (short SHA of the most recent commit touching the file),
 `vcs_last_modified` (its date), `vcs_last_author` (who last touched it), and
 `vcs_commits` (commits touching the file within the window). It also mints an `author`
-node per contributor with an `authored` edge to each file they touched in the window -
+node per contributor with an `authored` edge to each file they touched in the window:
 who edits what, so an agent can ask `magus explain author:Ada` or trace ownership. These edges
 are uncapped: `max_commits` already bounds the scan, so a dominant maintainer legitimately
 having many is a fact to teach, not a smell. Set `authorship: false` to keep only the
@@ -711,10 +711,10 @@ The values are EXTRACTED from git and deterministic per commit, so the shard is
 remote-shareable like the other extracted shards. The `git log` walk is bounded by
 `max_commits` and keyed by an input fingerprint (schema, HEAD, the window, the dirty-file
 set, and the `authorship` flag), so the standard shard store reuses it whole and it
-re-runs only when one of those actually moves - never on the query path. A non-git
+re-runs only when one of those actually moves, never on the query path. A non-git
 workspace or a git error simply yields no shard. Because the `vcs_*` attrs vary by commit,
 `magus graph diff` strips them from both sides, so a file node is not reported as changed just
-because its last commit moved - the diff stays structural.
+because its last commit moved; the diff stays structural.
 
 ## Human-authored notes
 
@@ -729,7 +729,7 @@ the way it does.
 If you have played Dark Souls, you have already used this. Players there cannot talk to
 each other; they can only leave a short message on the ground where they are standing, and
 everyone who passes that spot afterwards reads it. A few are jokes. Most are someone who
-just got caught by something, telling you what caught them - and they beat any wiki,
+just got caught by something, telling you what caught them, and they beat any wiki,
 because they are lying exactly where you needed them.
 
 That is what a note is for, and the rest of this section is the machinery that keeps the
@@ -740,9 +740,9 @@ meaning what the note said, and git is how the person who left it has their name
 
 ### Where a note goes, and what that means
 
-There is one question that matters to a reader - **may I act on this without checking it?** -
-and the answer the store gives is that **somebody accountable pressed commit**. An agent may
-never write a note, but the rule is not really "a human typed this" - a person pasting an
+There is one question that matters to a reader: **may I act on this without checking it?**
+The answer the store gives is that **somebody accountable pressed commit**. An agent may
+never write a note, but the rule is not really "a human typed this": a person pasting an
 agent's prose into `$EDITOR` always passed it. What git records is who stood behind it.
 
 `magus notes edit` opens a scaffold and gets out of the way. `magus notes capture` files the
@@ -757,10 +757,10 @@ knowledge:
 
 One sentence each, and the whole surface follows from them:
 
-- **`notes.shared`** - a person stands behind it, the team has it, git says who. Must live
+- **`notes.shared`**: a person stands behind it, the team has it, git says who. Must live
   inside the checkout; outside it there is no commit to attribute a note to and no review to
   have seen it, so "shared" would be a claim the location cannot back.
-- **`knowledge.notes.private`** - **superseded, still read.** A second notes location, yours
+- **`knowledge.notes.private`**: **superseded, still read.** A second notes location, yours
   rather than the team's, anywhere on disk. It is no longer the recommended shape: a private
   note is uncommitted, unattributed, unreviewed and unrecoverable, so nothing a reader can
   check stands behind it. Existing stores keep working; new workspaces should not declare one.
@@ -801,8 +801,8 @@ Three consequences worth knowing:
   replaces the `magus:` block and leaves every other key, and their order, exactly as they
   were.
 - **`id` is what survives a reorganization.** Without it a note is identified by its path,
-  so renaming the file in Obsidian - which rewrites your `[[wikilinks]]` and knows nothing
-  about magus - changes the note's identity and dangles anchors pointing at it. magus
+  so renaming the file in Obsidian (which rewrites your `[[wikilinks]]` and knows nothing
+  about magus) changes the note's identity and dangles anchors pointing at it. magus
   stamps an `id` on every note it creates; add one by hand to a vault note you intend to
   keep. Notes are looked up by id first, then by path.
 - **Nested folders are walked**, dot-directories (`.obsidian`, `.trash`) are skipped, and a
@@ -811,7 +811,7 @@ Three consequences worth knowing:
 `symbol`, `file`, `project`, `target`, and `note` are the whole set. There is deliberately
 no line-anchored kind: a node ID is checkable, so its breakage is reportable, while a line
 number changes on the next edit above it with nothing to detect. Anchor as narrowly as the
-knowledge allows - a coarse anchor is more durable, and multiple anchors are how a note
+knowledge allows: a coarse anchor is more durable, and multiple anchors are how a note
 records something no single comment could hold ("these two caches must be invalidated
 together").
 
@@ -822,7 +822,7 @@ together").
 - **Does it still resolve?** A renamed or deleted subject reports `dangling-anchor`, with
   the coarser anchor it degrades to. Nothing is ever re-pointed at a guess.
 - **Did the content change?** A stored fingerprint of the anchored definition detects the
-  more common and more dangerous case - the code still exists and quietly stopped saying
+  more common and more dangerous case: the code still exists and quietly stopped saying
   what the note claims. The fingerprint ignores whitespace, so reformatting is free, and
   reacts to tokens, so a real edit is loud.
 
@@ -834,19 +834,19 @@ verdict and `outrun_days` so a reader can see "400 days behind its subject" besi
 result, but it keeps its rank.
 
 Ranking on staleness was tried and removed, because it points the wrong way. Code that
-keeps changing is where knowledge is worth most - relative churn is one of the better
-predictors of defect density - so demoting the prose about a moving subject hides it
+keeps changing is where knowledge is worth most: relative churn is one of the better
+predictors of defect density, so demoting the prose about a moving subject hides it
 exactly where it is needed. Elapsed days measure calendar time rather than divergence: a
 note and its subject both untouched for a year are settled, not stale. And prose whose
 subject is *gone* is often the only surviving record of why it went, which is the last
 thing a search should bury. Systems that solved this in production reached the same
-answer - Google's g3doc carries a "last reviewed" byline, and Guru keeps an unverified
+answer: Google's g3doc carries a "last reviewed" byline, and Guru keeps an unverified
 card searchable and visible with its lapsed state shown. Both label. Neither demotes.
 
 ## Exporting to external tools
 
 magus emits; it does not render. To look at the graph, export it and open the
-file in a graph tool - files are the interface.
+file in a graph tool; files are the interface.
 
 ```sh
 magus graph export -o json > graph.json       # node-link JSON (NetworkX, D3, ...)
@@ -866,7 +866,7 @@ magus graph export --select "project=pkg/foo" --budget 80 -o dot
 
 `magus graph diff` reports what a branch did to the domain's shape: the nodes and
 edges added or removed, and (for nodes) which fields changed. Export a baseline on
-the base branch, then diff the working tree against it - the PR blast-radius artifact.
+the base branch, then diff the working tree against it: the PR blast-radius artifact.
 
 ```sh
 magus graph diff --rev HEAD~1                    # against a git revision, no export needed
@@ -882,7 +882,7 @@ the current config) in an isolated throwaway tree that never touches your real c
 it and the positional baseline are mutually exclusive, and it cannot be combined with
 `--global` (the base is a single-workspace build). A baseline file must be a whole-graph
 `magus graph export -o json` (symbol shards in it are matched automatically; pass `--global`
-if the baseline was global). Edge diffs are structural -
+if the baseline was global). Edge diffs are structural:
 an edge is identified by (source, target, relation), so a re-scored or re-provenanced
 edge that keeps those three is not reported as a change.
 
@@ -909,14 +909,14 @@ Each workspace's node IDs are namespaced by the workspace (`api//spell:go`,
 `web//spell:go`) so IDs from different repos cannot collide; the unqualified ID
 stays a readable substring, so `magus explain go --global` still resolves. A
 registered workspace that cannot be opened is skipped rather than failing the
-query. There is no cross-workspace edge inference - a union with qualified IDs
+query. There is no cross-workspace edge inference: a union with qualified IDs
 only.
 
 ## Extraction diagnostics
 
 When extraction cannot resolve something cleanly it records a silent
 [`MGS7xxx`](../reference/codes/knowledge/README.md) code as a node attribute (visible via
-`magus explain`), rather than logging - so an implicit rebuild stays quiet while
+`magus explain`), rather than logging, so an implicit rebuild stays quiet while
 the ambiguity stays queryable. The first two are
 [MGS7001](../reference/codes/knowledge/MGS7001.md) (a buzz import that resolves to no file)
 and [MGS7002](../reference/codes/knowledge/MGS7002.md) (a doc citing an unregistered code).
@@ -935,7 +935,7 @@ and still report the full count. Filter in the script before returning: the
 client tool does not page a result for you.
 
 `magus agent install .agents/skills` equips Codex with Agent Skills, and prints
-the always-on `AGENTS.md` block for you to paste - magus never writes that file.
+the always-on `AGENTS.md` block for you to paste; magus never writes that file.
 Claude Code uses `magus agent install .claude/skills`. The skills teach HOW to use magus (the
 repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.
@@ -958,7 +958,7 @@ understands precisely.
 of a queryable, committable code knowledge graph with an honest audit trail,
 and its verb vocabulary was good enough that magus reuses it outright: query,
 explain, path. The two tools have different jobs, though. Graphify is a
-general document indexer - point it at any folder of code, docs, papers, or
+general document indexer: point it at any folder of code, docs, papers, or
 media and it extracts a graph, using an LLM pass for non-code content. magus
 only ever models its own domain, and its graph is assembled entirely from
 declarations it already verifies as a build tool (the project DAG, target

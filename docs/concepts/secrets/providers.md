@@ -1,6 +1,6 @@
 ---
 title: Secret providers
-description: Where a credential comes from - the built-in environment provider, a spell-backed one, and why magus keeps exactly one active per run instead of a fallback chain.
+description: Where a credential comes from: the built-in environment provider, a spell-backed one, and why magus keeps exactly one active per run instead of a fallback chain.
 tags:
   [
     secrets,
@@ -21,7 +21,7 @@ provider plus two spells, and treats everything else as a spell you write.
 
 With no provider selected, a reference is an environment variable name. This is what CI
 needs, because a workflow's `env:` block is the only thing that can read a repository
-secret - nothing outside the workflow file can:
+secret; nothing outside the workflow file can:
 
 ```yaml
 - name: Publish spells
@@ -62,7 +62,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
 `Secret` comes from `magus/spell`, alongside `Target` and `Command`. The return is typed
 because Buzz checks function signatures: a provider returning the wrong shape fails to
 load rather than failing at the first read. That is worth having here and not on
-`magus\secret.read`, which hands a magusfile a plain `str` - Buzz does not check
+`magus\secret.read`, which hands a magusfile a plain `str`; Buzz does not check
 host-call results, so a type there would be decoration rather than a constraint.
 
 A provider that returns a bare string still works, so an older spell keeps loading, but
@@ -209,13 +209,13 @@ The spell classifies its own failures rather than surfacing an exit status:
 | anything else          | the CLI's own stderr, trimmed                                              |
 
 For CI or any unattended run, a 1Password service account token avoids the interactive
-signin entirely - but note that on a CI runner the platform's own secret store is usually
+signin entirely, but note that on a CI runner the platform's own secret store is usually
 the simpler answer, and the built-in provider already reads it.
 
 There is deliberately **no URI scheme**. `op://`-style references exist in tools that
 resolve providers per secret, with no selection step; magus selects once, explicitly, so
 a reference does not also have to declare which provider it belongs to. The reference
-format is the provider's own - a variable name here, a vault path there - and magus
+format is the provider's own (a variable name here, a vault path there), and magus
 passes it through without parsing.
 
 ## One provider per run, and why there is no fallback chain
@@ -230,7 +230,7 @@ failed read is an error rather than a reason to try the next provider.
 
 The reason is not simplicity. A fallback chain fails _open_: a locked 1Password vault
 silently falls through to a stale environment variable, the read succeeds, and the build
-pushes with the wrong credential. That failure is invisible - everything is green - and it
+pushes with the wrong credential. That failure is invisible (everything is green), and it
 is strictly worse than an error naming the reference and the provider. Secrets are the one
 place where "try harder to succeed" is the wrong instinct.
 
@@ -271,7 +271,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
 
 Now the magusfile says `magus\secret.read("dockerhub-token")` and never learns which
 provider served it. Each provider owns its own naming convention, one file per provider, and
-the credential a developer cannot reach simply fails with a message naming what it wanted -
+the credential a developer cannot reach simply fails with a message naming what it wanted,
 which is the correct outcome, not a gap.
 
 This is the same principle as [deriving a registry's auth realm](../../guides/tips.md#the-auth-realm-is-not-the-push-path):
@@ -280,7 +280,7 @@ magus does not model the vendors, it gives you the place to express them.
 > **Note:** magus's own magusfile uses environment-variable names as references, because
 > it publishes from CI and the built-in provider is the only one it needs. That is the
 > less portable choice, taken knowingly. A workspace that expects several providers should
-> use logical names from the start - retrofitting them means touching every call site.
+> use logical names from the start; retrofitting them means touching every call site.
 
 ### When a single run genuinely needs two providers
 

@@ -1,6 +1,6 @@
 ---
 title: Workspace providers
-description: Let a spell supply the workspace's project set by asking the tool that already owns it - nx, gradle, pnpm, cargo - so a repo needs no magusfile per project.
+description: Let a spell supply the workspace's project set by asking the tool that already owns it (nx, gradle, pnpm, cargo), so a repo needs no magusfile per project.
 tags:
   [
     workspace-provider,
@@ -160,7 +160,7 @@ and a provider spell's doc comment should say so: an op key is normally the
 tool's own command, but here it is what makes a magusfile-less project runnable.
 
 **An op's argv cannot name the project.** An op is declarative data resolved
-ONCE, before any project is selected - that is what lets magus charm-patch it,
+ONCE, before any project is selected; that is what lets magus charm-patch it,
 hash it into a cache key, and print it under `magus describe` without running
 anything. So `target.projectPath` is not available when the argv is built, and a
 command like `nx run <project>:build` cannot be assembled there.
@@ -168,13 +168,13 @@ command like `nx run <project>:build` cannot be assembled there.
 What identifies the project instead is the **working directory**: magus runs an
 op in the project's own directory, and most tools infer the project from it
 (`nx build` inside `libs/foo` is `nx run libs/foo:build`). A tool that cannot
-infer it needs the project to reach the command another way - through the
+infer it needs the project to reach the command another way: through the
 environment, or through a wrapper script the argv names.
 
 `magus affected ci` anchors on a target named `ci`. For a provided project, a
 bound spell satisfies that anchor the same way it satisfies `build` or `test`:
 by exporting a `ci` op. For a project with its own magusfile, the magusfile
-stays the only place a `ci` target can live - a spell's `ci` op only reaches
+stays the only place a `ci` target can live; a spell's `ci` op only reaches
 projects that have none.
 
 A provided project also has no magusfile body to call `magus\secret.read`

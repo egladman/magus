@@ -1,6 +1,6 @@
 ---
 title: Target output references
-description: Every target that runs gets a short reference id (out1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer - no copy-pasting a wall of text.
+description: Every target that runs gets a short reference id (out1a2b3c) for its captured output. Retrieve any target's exact output later with magus query, pipe it anywhere, or open it in the browser log viewer, no copy-pasting a wall of text.
 tags: [output, ref, logs, query, failure, debugging, clipboard, mcp, agent]
 aliases: [concepts/output-refs]
 ---
@@ -9,7 +9,7 @@ aliases: [concepts/output-refs]
 
 A pretty `magus run` interleaves magus's own status lines with each target's real
 stdout and stderr. Two things are then hard: telling magus chrome from a target's
-output, and pulling out ONE target's full output - especially a failure - to share
+output, and pulling out ONE target's full output (especially a failure) to share
 with a teammate, an agent, or another tool.
 
 Output references fix this. Every target that runs is given a short **reference id**
@@ -78,7 +78,7 @@ be deleted from the data rather than reworded.
 `magus query` doubles as the retrieval verb through an explicit `output` subcommand.
 `magus query output out1a2b3c` prints that execution's captured output instead of
 searching the [knowledge graph](../knowledge.md). It is a subcommand, not a shape-routed
-positional, so a free-text search term can never collide with a ref id - `magus query
+positional, so a free-text search term can never collide with a ref id: `magus query
 refactor` always searches the graph.
 
 - `magus query output out1a2b3c` - print the exact output to stdout.
@@ -103,19 +103,19 @@ required.
 ## Refs are portable: same inputs, same ref
 
 The ref is a truncation of the step's [cache key](../cache.md), which is computed
-from workspace-relative paths, content hashes, and sorted components - nothing
+from workspace-relative paths, content hashes, and sorted components; nothing
 machine-local. So the SAME inputs produce the SAME ref on every machine: an inspect
 line pasted from CI or a teammate's terminal resolves in your checkout, provided
 your cache holds a run of that step.
 
 The corollary is the debugging story: ref equality is input equality. If CI prints
 `outa1b2c3d4e5f6` and your laptop prints a different ref for the same target, your
-inputs differ - a source file, a tool version, an env var, or a charm disagrees.
+inputs differ: a source file, a tool version, an env var, or a charm disagrees.
 
 ### Attempts: one ref, every execution
 
 The ref names the step, not one execution. Retention keeps the last few executions
-per step - a volatile target's recent failures each stay addressable:
+per step: a volatile target's recent failures each stay addressable:
 
 ```sh
 magus query output outa1b2c3d4e5f6 --attempts
@@ -127,7 +127,7 @@ bare ref always answers with the newest execution; pass a full attempt id to
 
 ### Explaining a ref difference
 
-Because the ref is the key, "different ref" means "different inputs" - and magus can
+Because the ref is the key, "different ref" means "different inputs", and magus can
 name the input. Each run stores the deterministic label:value lines its key was
 hashed from (secret-redacted), so:
 
@@ -135,8 +135,8 @@ hashed from (secret-redacted), so:
 magus query output out4ef30de6abcd --identity
 ```
 
-shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...) -
-compact enough to compare across machines to learn WHICH class disagrees - and a
+shows one digest per component class (`src`, `env`, `tool`, `charm`, `dep`, ...),
+compact enough to compare across machines to learn WHICH class disagrees, and a
 `rev:` line: the VCS revision the run's inputs were read at, with a `(dirty:
 ...)` note when the working tree had uncommitted changes, and a `recorded at X,
 you are on Y.` line when it differs from your current HEAD.
@@ -145,7 +145,7 @@ you are on Y.` line when it differs from your current HEAD.
 through its source content hashes, never a commit, so two different commits
 with identical file contents key identically. The recorded revision names
 whichever commit the FIRST run to mint this key happened to be on, which can
-differ from HEAD even on a cache hit whose bytes reproduce perfectly - checking
+differ from HEAD even on a cache hit whose bytes reproduce perfectly; checking
 out that commit is not the fix for a mismatch. Whether the key still matches is
 the question that matters. This command answers it:
 
@@ -162,7 +162,7 @@ class digests. This is the works-on-my-machine debugging story: paste CI's ref i
 
 The verdict is key equality, not the line list, and a mismatch exits non-zero so a
 script can gate on it. CI runs with `--no-default-charms`, so pass that flag too when
-comparing against a CI ref - otherwise your local `default_charms` show up as the
+comparing against a CI ref; otherwise your local `default_charms` show up as the
 difference.
 
 Env values never reach the store: a key line's value is replaced by a short digest
@@ -311,7 +311,7 @@ look. Two paths put it there:
 
   That uploads a signed **output bundle**: the descriptor, the key lines, and the
   captured bytes. A bundle carries no manifest and no artifact blobs, so it can never
-  be replayed as a cache hit - a published failure cannot become someone's cached
+  be replayed as a cache hit; a published failure cannot become someone's cached
   success. Publishing needs a signing key, and reading one needs the matching trust
   set, the same asymmetry the remote cache already uses.
 
@@ -377,17 +377,17 @@ magus query output out1a2b3c -o json
 
 ## The log viewer
 
-`magus query output out1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/) -
+`magus query output out1a2b3c --open` opens the [log viewer](https://eli.gladman.cc/magus/console/):
 a standalone browser page that renders the captured output with collapsible sections,
 status badges, in-page search, ANSI color, and copy. A "Copy command" button hands back
 a `magus query output` one-liner (per section too), so you can pass an exact slice to an agent,
 and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
 [`magus graph export --open`](../knowledge.md): the ref and the output both ride the link fragment
 (`#ref=...&data=...`, gzipped then base64url-encoded), decoded in your browser. The
-fragment is never sent to any server, so nothing about the run - not even its ref - ever
+fragment is never sent to any server, so nothing about the run (not even its ref) ever
 leaves your machine.
 
-For a very large log, print it instead (`magus query output out1a2b3c`) and pipe it - a URL
+For a very large log, print it instead (`magus query output out1a2b3c`) and pipe it; a URL
 fragment is bounded by the browser's address-bar length.
 
 `--open` follows the `BROWSER` environment variable (the freedesktop convention) to
@@ -417,7 +417,7 @@ collides with a ref id.
   on any machine. Each execution additionally gets a nonce-derived **attempt id**,
   so repeated runs of one step never overwrite each other.
 - The truncation is 12 hex digits (48 bits), chosen so a workspace with a million
-  distinct step keys collides at roughly 1-in-1000 odds - acceptable for a
+  distinct step keys collides at roughly 1-in-1000 odds, acceptable for a
   per-workspace namespace. A colliding prefix is never silently resolved to one
   answer: it lists every matching candidate, git-style, and any longer prefix (up
   to the full 64 hex digits) still resolves.
@@ -439,7 +439,7 @@ When a ref cannot be resolved, `magus query` reports a coded
 [diagnostic](../../reference/codes/outputref/README.md) so the error points at the fix:
 
 - [MGS8001](../../reference/codes/outputref/MGS8001.md): the ref is well-formed but no stored output
-  exists - it aged out of the cache, or the ref is mistyped.
+  exists: it aged out of the cache, or the ref is mistyped.
 - [MGS8002](../../reference/codes/outputref/MGS8002.md): a shortened ref prefix matches more than one
   stored output, so the lookup is ambiguous.
 - [MGS8003](../../reference/codes/outputref/MGS8003.md): `magus query output` was given an argument
@@ -448,8 +448,8 @@ When a ref cannot be resolved, `magus query` reports a coded
 ### Reproducing a ref that resolves nowhere
 
 On MGS8001, `magus query output <ref>` does not just report the ref missing. A
-ref cannot be decoded back into a target - it is a truncated hash, not an
-encoding - but it CAN be predicted: `magus describe target <target> --cache`
+ref cannot be decoded back into a target (it is a truncated hash, not an
+encoding), but it CAN be predicted: `magus describe target <target> --cache`
 already prints the ref a run of that target's exact current inputs would print,
 so the lookup sweeps every candidate target in the workspace, keys each one
 exactly as a run would, and compares. A match is exact in the same sense
@@ -478,7 +478,7 @@ Two things worth stating precisely, since getting them wrong defeats the point:
 
 - **`--base` plays no part.** `--base` scopes which targets `magus affected` treats
   as changed; it does not change what any one target hashes to. The command to
-  reproduce a ref is always `magus run <target> [project]` - no `--base`.
+  reproduce a ref is always `magus run <target> [project]`; no `--base`.
 - **A ref minted by a run that forwarded extra args after `--` cannot be
   predicted.** Those arguments are part of the key, and a prediction computes a
   key with none to compare against.
@@ -556,5 +556,5 @@ supports it (APFS, btrfs, XFS), so comparing a large artifact costs almost nothi
 - **"artifact blob evicted."** The store evicts least-recently-used blobs, so a
   version can be listed from a surviving manifest and still have no bytes behind it.
   This is reported rather than shown as an empty diff, because an empty diff reads as
-  "unchanged" - the most misleading answer available. Re-run the target with
+  "unchanged", the most misleading answer available. Re-run the target with
   `--no-cache` to regenerate it.

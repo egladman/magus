@@ -1,6 +1,6 @@
 ---
 title: Terminal
-description: How magus draws in your terminal - a band of pinned rows that ordinary output scrolls past, notifications for conditions you have to act on, and interactive surfaces you can click - and how every one of them degrades to plain text when there is no terminal to draw on.
+description: How magus draws in your terminal (a band of pinned rows that ordinary output scrolls past, notifications for conditions you have to act on, and interactive surfaces you can click) and how every one of them degrades to plain text when there is no terminal to draw on.
 tags: [terminal, tui, interactive, notifications, mouse, picker, tty]
 aliases: [tui, interactive-terminal]
 ---
@@ -14,35 +14,35 @@ happening right now.
 
 The one exception is `magus status --watch`: each frame normally redraws in
 place, but a frame taller than your terminal has nowhere to redraw to, so that
-one case clears the visible screen and reprints. Scrollback still survives -
+one case clears the visible screen and reprints. Scrollback still survives:
 clearing is not the alternate screen buffer, so what scrolled past before is
 still there when you scroll up.
 
 Every surface on this page degrades to plain output when there is no terminal to
-draw on - a pipe, a CI log, a `magus` inside another tool, or a real terminal
+draw on: a pipe, a CI log, a `magus` inside another tool, or a real terminal
 whose `TERM` declares it understands no escape sequence (`TERM=dumb`, which
-Emacs shell-mode sets) - so all of those behave the way they always did.
+Emacs shell-mode sets), so all of those behave the way they always did.
 `magus doctor` reports which way your terminal degraded, if it does.
 
 ## The pinned band
 
 The bottom rows of the terminal are reserved. Output above them scrolls
-normally - selectable, copyable, in real scrollback - and the reserved rows do
+normally (selectable, copyable, in real scrollback), and the reserved rows do
 not move with it.
 
 ![A magus run: build output scrolling above a dim status row pinned at the bottom of the terminal](../../assets/gen/terminal-run-band.svg)
 
 A dim box encloses the band, so it is obvious at a glance which lines will
 scroll away and which are being repainted in place. It is drawn with
-box-drawing runes, and the same box is drawn by every interactive surface -
-the band, the failure list, the `magus x` picker - because two surfaces that
+box-drawing runes, and the same box is drawn by every interactive surface
+(the band, the failure list, the `magus x` picker), because two surfaces that
 frame themselves differently read as two different products.
 
 Those runes are multi-byte, so a terminal whose locale is not UTF-8 renders
 them as mojibake. That is a deliberate trade rather than an oversight: the
 border is only ever drawn when there is an interactive terminal to draw it on,
-and the environments that still run non-UTF-8 locales - CI, cron, minimal
-containers, `LANG=C` scripts - are the ones where output is piped and no border
+and the environments that still run non-UTF-8 locales (CI, cron, minimal
+containers, `LANG=C` scripts) are the ones where output is piped and no border
 is drawn at all. Choosing per locale would also make a committed screenshot a
 function of whichever shell recorded it.
 
@@ -73,7 +73,7 @@ exits 75 naming the holder.
 
 A magusfile can raise its own with
 [`term\notify`](../reference/buzz/term.md). Those expire on their own clock, and
-are dropped rather than replayed when there is no terminal - so log anything
+are dropped rather than replayed when there is no terminal, so log anything
 that also has to survive the run.
 
 ## Failures you can act on
@@ -101,7 +101,7 @@ Hovering moves the highlight, so what a click would take is never a guess:
 ![The magus x picker, filtered, with the highlighted row a click would select](../../assets/gen/terminal-picker.svg)
 
 Keys still do everything the mouse does. The mouse is captured only while magus
-is genuinely waiting on you - never during a run - so drag-to-select and your
+is genuinely waiting on you (never during a run), so drag-to-select and your
 scroll wheel keep working the rest of the time.
 
 Clicking needs your terminal to answer a cursor-position query. Most do; one
@@ -112,7 +112,7 @@ than leaving you to wonder.
 
 Your transcript is ordinary scrollback and always was: no frame, no padding, no
 box characters. Selection, copy and paste work there exactly as they do for any
-other command, and that is where magus prints the things worth taking - a
+other command, and that is where magus prints the things worth taking: a
 failure's cause, its output reference, and the `magus run <target> <project>`
 that reproduces it.
 
@@ -124,8 +124,8 @@ modifier-gated, missing from several terminals, and something you would have to
 already know about.
 
 So magus does not ask you to select. Press **y** and the selected failure's
-captured output goes straight to your system clipboard - the bytes the tool
-emitted, with no frame, no padding and no escape sequences - through a sequence
+captured output goes straight to your system clipboard (the bytes the tool
+emitted, with no frame, no padding and no escape sequences) through a sequence
 that survives ssh and tmux. Press **o** and the same output is printed into the
 transcript, where it copies like anything else.
 
