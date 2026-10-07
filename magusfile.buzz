@@ -2248,6 +2248,9 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // Runs the CI gates through their declared dependencies.
 // Under `--inherited=fatal` security runs in the body: ctx.needs hands a dependency no args.
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
+    // lint and test read libs/gopherbuzz (the go.mod replace compiles it, lint runs in each
+    // module), which build's gopherbuzz\format rewrites (MGS4008).
+    ctx.needs(gopherbuzz\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;
