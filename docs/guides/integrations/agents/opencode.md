@@ -226,7 +226,7 @@ function argString(args: unknown, keys: readonly string[]): string {
  * the magusfile, or null when that workspace has not built one.
  *
  * Walked rather than testing `./magus` alone: a plugin runs in the host's session
- * directory, and that is not always the workspace root - a session opened in a
+ * directory, and that is not always the workspace root: a session opened in a
  * subdirectory, or opened in one checkout while the work happens in another, tests a
  * `./magus` that is not there and falls through to PATH. Where PATH's copy cannot load
  * the workspace at all, that is the entire guard failing open.
