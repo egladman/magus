@@ -1,19 +1,19 @@
 name: PR
 
-# Checks the pull request itself rather than the code in it: the title, and whether a
-# shipped change carries a changelog entry. Its own workflow rather than a ci.yaml job
-# because it must rerun when the title changes, and ci.yaml rerunning its whole
-# shard matrix on a title edit would buy nothing.
+# Checks the pull request itself rather than the code in it: the title, the description,
+# and whether a shipped change carries a changelog entry. Its own workflow rather than a
+# ci.yaml job because it must rerun when the title or description changes, and ci.yaml
+# rerunning its whole shard matrix on such an edit would buy nothing.
 #
-# Both rules live in the root magusfile (pr-title, pr-changelog) and run by hand the same
-# way; this file only supplies the event.
+# The rules live in the root magusfile (pr-title, pr-description, pr-changelog) and run by
+# hand the same way; this file only supplies the event.
 
 on:
   pull_request:
     branches: [main]
-    # edited reruns both checks on a title change, since the title's type decides whether
-    # an entry is owed. A fresh event rather than a rerun, because a rerun replays the old
-    # payload.
+    # edited reruns every check on a title or description change, since the title's type
+    # decides whether an entry is owed. A fresh event rather than a rerun, because a rerun
+    # replays the old payload.
     types: [opened, edited, reopened, synchronize]
 
 concurrency:
@@ -62,7 +62,17 @@ jobs:
       - name: Title is a conventional commit subject
         run: magus run pr-title:gha .
 
-      # Runs even when the title failed, so one push reports both.
+      # The text arrives through env and the joined flag form, so the shell never parses it
+      # and a description opening with `-` stays a value. Runs even when the title failed,
+      # so one push reports every check.
+      - name: Title and description follow the prose rules
+        if: ${{ !cancelled() }}
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: magus run pr-description . -- "--title=$PR_TITLE" "--body=$PR_BODY"
+
+      # Runs even when an earlier check failed, for the same reason.
       - name: Shipped feat, fix and perf changes carry a changelog entry
         if: ${{ !cancelled() }}
         run: magus run pr-changelog:gha .

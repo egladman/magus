@@ -37,10 +37,12 @@
 //     or describe, that carries an attribution or a body, or whose subject breaks the form
 //     its branch takes: the conventional subject hack/magusfile/commits.buzz defines on the base
 //     branch, one lowercase imperative line anywhere else.
-//   pull-request-text (deny): a `gh pr create|edit` title or description that names a
-//     person, credits a tool, narrates its session, runs past the word budget its diff
-//     earns, has no lead paragraph or has a heading, or has a title the pr-title check
-//     would fail. Prose outside the lead-and-bullets shape is advised once per pull request.
+//   pull-request-text (deny): a `gh pr create|edit` title or description the prose judge
+//     in libs/conventions/prose finds a fault in (no lead naming the goal, a heading, reply
+//     voice, tense, a hedge, filler, credit to a tool), one that runs past the word budget
+//     its diff earns, or a title the pr-title check would fail. Prose outside the
+//     lead-and-bullets shape, and an area the diff touches that the description never
+//     names, are advised once per pull request.
 //   code-comments (write): a Go comment block the write adds over the owner's budget is
 //     advised, over twice it or above the package clause denied; the first write of a
 //     session adding comments to any code file is advised once.
@@ -108,7 +110,7 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final texts = withHeredocs(programs, line: req.command);
     final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
-        diff: pullRequests\branchDiff(req.workspace), once: once,
+        diff: pullRequests\branchDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic });
     if (verdict.decision != "allow" or stale\rebuilds(programs)) {
         return verdict;
@@ -288,8 +290,9 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // commit and pull request text denials, then the gh advisories, then the pull request text
 // advisories, then the branch name advisories. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
-// files it names, and diff reads the branch's diff for a description's budget.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
+// files it names, diff reads the branch's diff for a description's budget, and judge runs
+// the prose judge over a pull request's title and description.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
     final hostVerdict = host\decideHost(programs);
     if (hostVerdict.decision != "allow") {
         return hostVerdict;
@@ -307,7 +310,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     if (names.decision == "deny") {
         return names;
     }
-    final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, once: once);
+    final rest = decideText(programs, baseBranch: baseBranch, line: line, files: files, diff: diff, judge: judge, once: once);
     if (rest.decision == "allow") {
         return names;
     }
@@ -316,13 +319,13 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
 // denials, the gh advisories, then the pull request text advisories.
-fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, once: fun (key: str) > bool) > GuardVerdict {
+fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once);
     if (github.decision == "deny") {
         return github;
     }
     final commit = subjects\decideCommit(programs, baseBranch: baseBranch);
-    final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, once: once);
+    final pull = pullRequests\decidePullRequest(programs, line: line, files: files, diff: diff, judge: judge, once: once);
     if (commit.decision == "deny" and pull.decision == "deny") {
         return magus\guard.deny(commit.reason + "\n\n" + pull.reason);
     }

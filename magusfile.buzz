@@ -6,6 +6,7 @@ import "./hack/magusfile/harness" as hostconfig;
 import "./hack/magusfile/toolchain" as toolchains;
 import "./hack/magusfile/commits" as commits;
 import "./hack/policy/commits" as wording;
+import "./hack/policy/pull_requests" as descriptions;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
 import "spells/git/hooks" as githooks;
@@ -19,6 +20,7 @@ magus\guard.write(agentpolicy\judgeWrite);
 import "os";
 import "proc";
 import "fs";
+import "flags";
 import "http";
 import "vcs";
 import "archive";
@@ -182,6 +184,7 @@ magus\project({
         },
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
+        "pr-description": {"skip_cache": "judges the title and description its flags carry, which no file input holds"},
         "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
@@ -658,6 +661,33 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
         throw "pr-title: \"{title}\": {problems.join("; ")}";
     }
     magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
+}
+
+// Fails a pull request whose title or description the prose judge in libs/conventions/prose
+// finds a fault in, the judge the guard's pull-request-text rule runs, so the two cannot
+// disagree. Each area the branch touches that the description never names is asked about
+// as a warning, which fails nothing. --title and --body carry the text; the workflow, not
+// this target, reads the event.
+export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: [<str>], valued: ["--title", "--body"], required: ["--title", "--body"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "pr-description: unexpected arguments {args.join(" ")}; pass --title=<title> --body=<description>";
+    }
+    final text = "{parsed.values["--title"] ?? ""}\n{parsed.values["--body"] ?? ""}";
+    final problems = mut [<str>];
+    final judge = descriptions\judgeRunner(".");
+    foreach (f in judge(text)) {
+        problems.append(descriptions\judgedProblem(f));
+    }
+    final changed = mut [<str>];
+    foreach (f in vcs\changedFiles(vcs\base())) { changed.append(f.value); }
+    foreach (question in descriptions\areaQuestions(descriptions\unnamedAreas(descriptions\describedAreas(changed), text: text))) {
+        magus\log.warn("pr-description: {question}");
+    }
+    if (problems.len() > 0) {
+        throw "pr-description: the description breaks the prose rules (docs/conventions.md):\n  " + problems.join("\n  ");
+    }
+    magus\log.info("pr-description: the title and description pass the prose rules");
 }
 
 // Fails a feat, fix, perf or breaking pull request that ships code without a changelog
