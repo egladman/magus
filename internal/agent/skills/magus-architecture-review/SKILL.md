@@ -75,7 +75,7 @@ and nothing it exports would need to be exported once merged.
    them with `magus graph build` before trusting it.{{else}} An empty result carries a
    verdict; `unknown` means an index is missing, not that nothing uses it.{{end}}
 3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}};
-   use it to test whether a proposed boundary actually separates them{{end}}.
+   use it to test whether a proposed boundary separates them{{end}}.
 4. Owners: `magus query kind=owner` (populated from CODEOWNERS) tells you whose
    review a move needs.
 

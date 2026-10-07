@@ -83,7 +83,7 @@ end line/column, and each range checked against the file on disk.
 magus refs <symbol> --occurrences -o json
 ```
 
-magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
+magus reports the sites; YOU apply the edits. It does not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
@@ -107,7 +107,7 @@ rewrite corrupts a file:
 - **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
   magus read that exact range and found the symbol there. `mismatch` means it found
   something else (the index predates an edit), and `unreadable` means the range is no
-  longer inside the file. The `text` field shows what is really there, and `names` is every
+  longer inside the file. The `text` field shows what is there, and `names` is every
   spelling that would have verified, so you can check the verdict rather than trust it.
 - **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
   verified sites ONLY, so a wholly stale index prints nothing, which on its own is

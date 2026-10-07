@@ -116,7 +116,7 @@ belong inside a function.{{end}}
 
 ## Coming from TypeScript, Go, Python or Swift
 
-Each row is a mistake observed in practice, with what Buzz wants and what you will
+Each row is a mistake observed in practice, with what Buzz wants and what you
 see if you make it. "nothing" means the checker accepts it and the result is wrong.
 
 | you write | Buzz | you see |
@@ -262,12 +262,12 @@ embedded, not strict{{end}}.
 
 ## Where Buzz code belongs
 
-- **A one-off**: a standalone `.buzz` file run with `{{cmd "buzz"}}`.{{if .Full}} Before
+- A one-off is a standalone `.buzz` file run with `{{cmd "buzz"}}`.{{if .Full}} Before
   writing one from nothing, look for a script the workspace keeps to copy; magus's own
   repository indexes its tested scripts in `hack/README.md`.{{end}}
-- **Work the workspace repeats**: a target in `magusfile.buzz`{{if .Full}}, so it is
+- Work the workspace repeats goes in a target in `magusfile.buzz`{{if .Full}}, so it is
   cached, sandboxed and affected-tracked; a script re-runs from scratch every time{{end}}.
   Targets take `(ctx: magus\Context, args: [str])`.
-- **A tool adapter**: a spell, so every project of that type gets its ops.
+- A tool adapter is a spell, so every project of that type gets its ops.
 
 Reviewing Buzz rather than writing it: {{skill "buzz-review"}}.

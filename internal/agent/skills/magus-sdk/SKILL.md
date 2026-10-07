@@ -63,8 +63,8 @@ AffectedComputer + Inspector`, embedded, not one flat interface. `*Magus`
 (from `Open`) and the value `Inspect` returns both satisfy the whole thing,
 but a function that only reads project facts should take
 `types.WorkspaceReader`, not `types.WorkspaceRepository`;
-`types/repository.go` says this outright: "Prefer the narrowest embedded role
-a consumer actually uses."
+`types/repository.go` says this outright:
+"Prefer the narrowest embedded role a consumer actually uses."
 
 | Role | Methods | Answers |
 |---|---|---|
@@ -155,12 +155,12 @@ RULE, not vocabulary: `Entry` is added to a type name only when the bare name
 would collide with an existing type (`ProjectEntry` because `types.Project`
 exists; `Charm` has no suffix because nothing else claims that name).
 `Output` means "the `Inspector` method itself returns this shape"
-(`ProjectsOutput`, `TargetGraphOutput`). `Report` means "rebuilt at the render
-edge from a plain slice the method actually returned" (`FileReport`,
-`CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
+(`ProjectsOutput`, `TargetGraphOutput`). `Report` means
+"rebuilt at the render edge from a plain slice the method actually returned"
+(`FileReport`, `CharmReport`); `ListProjects`/`EvaluateProjects` are the deliberate
 exceptions, still returning their `*Output` type directly because they carry
 a real `Workspace` field a `{definition, count, items}` envelope cannot
-derive. Guess at this pattern instead of reading the comment and you will
+derive. Guess at this pattern instead of reading the comment and you
 misname a type you add.
 
 **Buzz magusfile evaluation is not reachable from outside this module.**

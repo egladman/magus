@@ -45,13 +45,13 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
 
 ## Write the brief
 
-Lead with three to seven grouped changes, not every commit. For each item state:
+Lead with three to seven grouped changes, not every commit. For each item:
 
-- **What landed**: a plain-language feature or behavioral change.
-- **Where**: projects and graph entities affected.
-- **Evidence**: merge commit(s), source files, and the relevant graph relation.
-- **Why it matters**: user impact, dependency impact, or an explicit uncertainty.
-- **Follow-up**: a concrete next command when more detail is useful.
+- Say what landed, as a plain-language feature or behavioral change.
+- Name the projects and graph entities affected.
+- Give the evidence: merge commit(s), source files, and the relevant graph relation.
+- Say why it matters: user impact, dependency impact, or an explicit uncertainty.
+- Add a follow-up: a concrete next command when more detail is useful.
 
 Use this shape:
 

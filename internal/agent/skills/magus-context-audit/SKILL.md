@@ -68,20 +68,20 @@ document{{end}}.
 Report findings in this order.{{if .Full}} Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".{{end}}
 
-1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
+1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall.{{if .Full}} Nothing else on this list is worth
    reporting before one of these.{{end}}
-2. **Stale instruction**: a named command no longer exists, no longer works, or
-   is now denied.{{if .Full}} Indistinguishable from a dead end until the agent tries it.{{end}}
-3. **Split authority**: two surfaces describe the same decision differently
+2. A stale instruction names a command that no longer exists, no longer works, or
+   is now denied.{{if .Full}} It is indistinguishable from a dead end until the agent tries it.{{end}}
+3. Split authority is two surfaces describing the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    {{if .Full}}A workspace-local rule contradicting a shipped skill is always this finding:
-   local text overrides nothing, so the two are simply in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
+   local text overrides nothing, so the two are in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement**: a denial or deprecation names a tool that no
+4. An orphaned replacement is a denial or deprecation that names a tool no
    instruction anywhere documents.
-5. **Silent duplication**: the same rule restated in several places.{{if .Full}} Not yet a
-   contradiction; it is where the next one is born, because an edit will update
+5. Silent duplication is the same rule restated in several places.{{if .Full}} It is not yet a
+   contradiction; it is where the next one is born, because an edit updates
    some of them.{{end}}
 
 ## Do not report these
@@ -99,7 +99,7 @@ session", not "how wrong is the sentence".{{end}}
 ## Recommend, then verify the fix landed
 
 Fix at the SOURCE and let generation propagate{{if .Full}}; editing an installed copy is
-drift a verify step will flag anyway{{end}}. For magus's own skills that means
+drift a verify step flags anyway{{end}}. For magus's own skills that means
 `internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content

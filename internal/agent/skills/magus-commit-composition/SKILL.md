@@ -108,4 +108,4 @@ often the single largest reduction available{{end}}.
 
 ## See also
 
-- **{{skill "vcs-hygiene"}}**: classifying paths and staging one commit safely.
+- {{skill "vcs-hygiene"}} covers classifying paths and staging one commit safely.

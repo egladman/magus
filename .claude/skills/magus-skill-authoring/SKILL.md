@@ -30,7 +30,7 @@ inconveniences. Probe every claim adversarially before teaching it: when
 workaround in the skill; the right response was tracing the scorer, fixing
 the filter, and adding a regression test. Fix the tool before teaching the
 workaround. When the fix is out of reach, teach ONLY verified idioms and file
-the gap where it will be found (the plans doc, a task, the harness memory).
+the gap where a reader finds it (the plans doc, a task, the harness memory).
 
 ## 3. One source of truth, drift-gated
 
@@ -171,8 +171,8 @@ Not every rule tolerates losing its rationale, and the split is not stylistic.
 The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader
 on its own and needs no rationale in short; a failure that is silent (an edit
 that stops existing, a guard that fails open, a pipe that turns a failing gate
-into exit 0) can only arrive as text, because nothing in the session will ever
-say it.
+into exit 0) can only arrive as text, because nothing in the session ever
+says it.
 
 The evidence, for the record: an ablation of repository context files
 (arXiv:2602.11988) found imperative instructions are followed well while
@@ -231,7 +231,7 @@ Frontmatter descriptions carry the triggers ("Use when...", "Do NOT use
 for..."). Bodies use imperative fast paths, WRONG/CORRECT pairs, and tables
 over prose. Defer to `-h` and live tools for anything versionable. Plain
 ASCII, no emojis (tests enforce it). Spell every rule out; a rule the reader
-has to infer will be inferred differently by every model that reads it.
+has to infer is inferred differently by every model that reads it.
 
 ## 5b. Phrase verification as proof, not as care
 
@@ -273,7 +273,7 @@ reader can generalize for a ritual.
      `go test ./cmd/magus/` this line used to carry is guard-denied; magus flags
      go BEFORE the `--`, and everything after it forwards to the test binary.
   3. `./magus agent install .claude/skills --force`: reinstall the dogfooded
-     copies, which are stamped and will otherwise read as drift.
+     copies, which are stamped and otherwise read as drift.
   4. Refresh the AGENTS.md managed block: `./magus agent starter` prints the
      current block (so does `agent install`), and you replace everything
      between the `magus:skills:begin` and `magus:skills:end` markers with it,
