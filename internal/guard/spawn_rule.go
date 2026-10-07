@@ -80,16 +80,31 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	decided := ""
 	var failures []trail.RuleFailure
+	// The first built-in deny the workspace demoted, spoken once both built-ins have had
+	// their turn.
+	var held heldAdvice
 	if env.IsSpawn {
-		if verdict = spawnBuiltIns(ctx, req, who, at); verdict.Decision != "pass" {
+		verdict = spawnBuiltIns(ctx, req, who, at)
+		if verdict.Decision == "deny" {
+			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
+				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+			}
+		}
+		if verdict = deps.gradeAdvice(verdict); verdict.Decision != "pass" {
 			decided = decidedByBuiltin
 		}
 	}
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
-		if v := denyBriefCommand(deps, env.Value); v.Deny != "" {
+		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			decided = decidedByBuiltin
+		}
+	}
+	if held.v.demoted {
+		held.speak(hint.NewGate(at.cacheDir, who.callerKey()), &verdict)
+		if verdict.Decision != "pass" {
 			decided = decidedByBuiltin
 		}
 	}

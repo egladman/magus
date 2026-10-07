@@ -16,11 +16,13 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -140,6 +142,10 @@ type Dependencies struct {
 	// VCS is the workspace's version-control configuration. The worktree rule reads its
 	// base branch, and refuses when it disables version control.
 	VCS types.VCSOptions
+	// Builtins is the effective setting of every compiled rule, resolved from what the
+	// workspace declared over builtin.Defaults. Nil means the defaults, with no
+	// parameters set.
+	Builtins map[string]builtin.Setting
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -232,6 +238,132 @@ func (d Dependencies) graphIDs(ctx context.Context, kind string) ([]string, bool
 		return nil, false
 	}
 	return d.GraphIDs(ctx, kind)
+}
+
+var builtinDefaults = sync.OnceValue(builtin.Defaults)
+
+// setting is rule's effective setting, and false for a name the table does not carry,
+// which keeps the decision it was compiled with.
+func (d Dependencies) setting(rule string) (builtin.Setting, bool) {
+	if s, ok := d.Builtins[rule]; ok {
+		return s, true
+	}
+	dec, ok := builtinDefaults()[rule]
+	return builtin.Setting{Decision: dec}, ok
+}
+
+// off reports a rule the workspace turned off. A notice that is appended to a verdict
+// rather than graded as one asks only this.
+func (d Dependencies) off(rule string) bool {
+	s, ok := d.setting(rule)
+	return ok && s.Decision == builtin.Off
+}
+
+// grade applies the effective setting of the rule that reached v. A deny set to advise
+// comes back demoted: an advisory keyed on the rule, spoken once per session, that
+// outranks every plain advisory and yields to any deny. An advisory set to deny comes
+// back refusing with its own text, and off drops either.
+//
+// Every compiled rule site passes its verdict through here, and grading a graded verdict
+// returns it unchanged.
+func (d Dependencies) grade(v ShellVerdict) ShellVerdict {
+	switch {
+	case v.Deny != "":
+		s, ok := d.setting(string(v.Rule.Name))
+		switch {
+		case !ok || s.Decision == builtin.Deny:
+			return v
+		case s.Decision == builtin.Advise:
+			return ShellVerdict{Context: v.Deny, Kind: hint.MarkerKind(v.Rule.Name), demoted: true}
+		}
+		return ShellVerdict{}
+	case v.Context != "":
+		s, ok := d.setting(v.advisoryName())
+		switch {
+		case !ok || s.Decision == builtin.Advise:
+			return v
+		case s.Decision == builtin.Deny:
+			return ShellVerdict{Deny: v.Context, Rule: denyRule{Name: denyRuleName(v.advisoryName())}}
+		}
+		return ShellVerdict{}
+	}
+	return v
+}
+
+// gradeAdvice grades a hook verdict that advises; any other passes through.
+func (d Dependencies) gradeAdvice(v Verdict) Verdict {
+	if v.Decision != "advise" {
+		return v
+	}
+	switch g := d.grade(ShellVerdict{Context: v.Context, Rule: denyRule{Name: denyRuleName(v.Rule)}}); {
+	case g.Deny != "":
+		v.Decision, v.Reason, v.Context = "deny", g.Deny, ""
+	case g.Context == "":
+		v.Decision, v.Context, v.Rule = "pass", "", ""
+	}
+	return v
+}
+
+// strength orders verdicts for ranking: a deny, then a demoted deny, then an advisory.
+//
+// The push gate's advisory ranks with a demoted deny, so one never hides it: Judge
+// upgrades that advisory to an ask or a deny when no green gate covers the commit, and a
+// push is not undone.
+func (v ShellVerdict) strength() int {
+	switch {
+	case v.Deny != "":
+		return 3
+	case v.demoted, v.Context != "" && v.Rule.Name == advisoryPushGate:
+		return 2
+	case v.Context != "":
+		return 1
+	}
+	return 0
+}
+
+// stronger is whichever of a and b ranks higher, a on a tie.
+func stronger(a, b ShellVerdict) ShellVerdict {
+	if b.strength() > a.strength() {
+		return b
+	}
+	return a
+}
+
+// rankGraded grades rule's reason, a would-be deny, and ranks it against v: still a deny,
+// rank orders it among the line's other denies; demoted, it outranks only advisories.
+func (d Dependencies) rankGraded(v ShellVerdict, rule denyRuleName, reason string, rank func(ShellVerdict, string) ShellVerdict) ShellVerdict {
+	if reason == "" {
+		return v
+	}
+	if g := d.grade(ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); g.Deny == "" {
+		return stronger(v, g)
+	}
+	return rank(v, reason)
+}
+
+// heldAdvice is the first demoted deny a hook call met, kept until every rule has had
+// its turn so a later deny still wins.
+type heldAdvice struct{ v ShellVerdict }
+
+// hold grades v and keeps it when it is the call's first demoted deny. It reports a deny
+// that still refuses.
+func (h *heldAdvice) hold(deps Dependencies, v ShellVerdict) (ShellVerdict, bool) {
+	v = deps.grade(v)
+	if v.demoted && !h.v.demoted {
+		h.v = v
+	}
+	return v, v.Deny != ""
+}
+
+// speak puts the held advice on verdict when nothing refused or asked, once per session
+// per rule. It replaces any advisory there, which it outranks.
+func (h heldAdvice) speak(markers hint.Gate, verdict *Verdict) {
+	if !h.v.demoted || verdict.Decision == "deny" || verdict.Decision == "ask" {
+		return
+	}
+	if shown := markers.Once(h.v.Kind, h.v.Context); shown != "" {
+		verdict.Decision, verdict.Context, verdict.Rule = "advise", shown, string(h.v.Kind)
+	}
 }
 
 // Request is one call the guard was asked to judge: the payload, plus what the caller's
@@ -501,13 +633,22 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if binding.Gone {
 		standing.endedBinding = binding.Job
 	}
+	// pending is the call's first deny the workspace demoted to advise. It is spoken only
+	// once every rule has had its turn, so a later deny still wins.
+	var pending heldAdvice
+	// refuse grades a compiled rule's would-be deny onto the verdict.
+	refuse := func(rule denyRuleName, reason string) {
+		if v, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); refused {
+			verdict.Decision, verdict.Reason, verdict.Context = "deny", v.Deny, ""
+			verdict.Rule = string(rule)
+		}
+	}
 	denyUndeclared := func(command string) {
 		if req.Observe || verdict.Decision == "deny" {
 			return
 		}
 		if reason := denyUndeclaredLease(standing, actingLease, command); reason != "" {
-			verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
-			verdict.Rule = string(denyRuleLeaseUndeclared)
+			refuse(denyRuleLeaseUndeclared, reason)
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -558,18 +699,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// a worker whose write paths happen to cover the dir must not be told it owns the
 		// dir: what it is editing is whether the boundary was checked.
 		if reason := denyCacheDirPath(location, input); reason != "" {
-			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleCacheDirWrite)
+			refuse(denyRuleCacheDirWrite, reason)
 		}
 		if reason := denyTokenStatePath(location, input); reason != "" {
-			verdict.Decision, verdict.Reason, verdict.Rule = "deny", reason, string(denyRuleTokenState)
+			refuse(denyRuleTokenState, reason)
 		}
 		denyUndeclared("")
 		if verdict.Decision != "deny" {
 			switch g := gradeLeasedEdit(ctx, deps, actingLease, input, write); g.Decision {
 			case "deny":
-				verdict.Decision = "deny"
-				verdict.Reason = g.Reason
-				verdict.Rule = cmp.Or(g.Rule, string(denyRuleLeaseWrite))
+				refuse(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), g.Reason)
 			case "advise":
 				// Held by its own key when it has one; lease-state only names the rest.
 				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState)), true
@@ -577,13 +716,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if verdict.Decision != "deny" {
 			if g := denyVCSOffSwitch(actingLease, input, write); g.Decision == "deny" {
-				verdict.Decision, verdict.Reason, verdict.Rule = "deny", g.Reason, g.Rule
+				refuse(denyRuleName(g.Rule), g.Reason)
 			}
 		}
 		if verdict.Decision != "deny" {
 			switch g := gradeHookWiringWrite(actingLease, who.Agent != "", input); g.Decision {
 			case "deny":
-				verdict.Decision, verdict.Reason, verdict.Rule = "deny", g.Reason, string(denyRuleHookWiringWrite)
+				refuse(denyRuleHookWiringWrite, g.Reason)
 			case "advise":
 				if !spoken {
 					advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
@@ -595,14 +734,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// there is nothing to learn before a write that is refused anyway.
 		if verdict.Decision != "deny" {
 			if reason := denyBuzzWriteWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input); reason != "" {
-				verdict.Decision, verdict.Reason = "deny", reason
-				verdict.Rule = string(denyBuzzUnbriefed)
+				refuse(denyBuzzUnbriefed, reason)
 			}
 		}
 		// A script is judged by what running it would be judged by, and the write is the
-		// last moment that costs nothing to change.
+		// last moment that costs nothing to change. Its verdict is graded already.
 		if verdict.Decision != "deny" {
-			if v := denyScriptWrite(deps, input, write); v.Deny != "" {
+			if v, refused := pending.hold(deps, denyScriptWrite(deps, input, write)); refused {
 				verdict.Decision, verdict.Reason, verdict.Rule = "deny", v.Deny, v.RuleName()
 			}
 		}
@@ -618,9 +756,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// blocks is not something to fall through to.
 		if verdict.Decision == "pass" && !spoken {
 			if reason := denyNotesWrite(deps, input); reason != "" {
-				verdict.Decision = "deny"
-				verdict.Reason = reason
-				verdict.Rule = string(denyRuleNotesAuthor)
+				refuse(denyRuleNotesAuthor, reason)
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
@@ -682,6 +818,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Context = advice
 			verdict.Rule = string(adviceKind)
 		}
+		verdict = deps.gradeAdvice(verdict)
+		pending.speak(markers, &verdict)
 		// The workspace's magus\guard.write rule, last because it may only add.
 		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, stateAt)
 		// A denied write never happens, so it never touched anything.
@@ -701,7 +839,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
-		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD)); {
+		switch v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -715,6 +853,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				v = v.withRemedy(lead, next...)
 			}
 			remedy = v
+		case v.demoted:
+			pending.hold(deps, v)
 		case v.Context != "" && preauth == "":
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
@@ -733,8 +873,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				break
 			}
 			if reason := rule.judge(ctx, deps, actingLease, input); reason != "" {
-				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
-				verdict.Rule = string(rule.name)
+				refuse(rule.name, reason)
 			}
 		}
 		// The focus rule. Its DENY outranks any advisory above it, because that one is
@@ -745,8 +884,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			focus := gradeFocusRead(ctx, deps, actingLease, input)
 			switch {
 			case focus.Decision == "deny":
-				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
-				verdict.Rule = string(denyRuleFocusRead)
+				refuse(denyRuleFocusRead, focus.Reason)
 			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.MarkFired(advisoryFocusPath(focus.Rel)):
 				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
 					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
@@ -770,7 +908,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if me, ok := actingLiveLease(ctx, deps, actingLease); ok && workerRole(me, deps.caller) == "" {
 				worker = ""
 			}
-			switch decision, reason := gradePushWithoutGate(cover, commit, worker); decision {
+			// An ask is graded as the deny it stands in for: demoted, nobody is asked.
+			decision, reason := gradePushWithoutGate(cover, commit, worker)
+			if decision != "" {
+				if _, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRulePushUngated}}); !refused {
+					decision = ""
+				}
+			}
+			switch decision {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
 				if !req.RendersAsk {
@@ -781,6 +926,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision, verdict.Context, verdict.Reason = "deny", "", reason
 				verdict.Rule = string(denyRulePushUngated)
 			}
+		}
+		if preauth == "" {
+			pending.speak(markers, &verdict)
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's answer is to run a narrower target, and firing on one argues with
@@ -818,6 +966,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				}
 			}
 		}
+		verdict = deps.gradeAdvice(verdict)
 		// The workspace's magus\guard.command rule, last because it may only add to what
 		// every rule above said.
 		verdict, ruleRecord = gradeWorkspaceCommand(ctx, deps, verdict, commandRuleInput{
@@ -840,7 +989,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		advisoryLeaseTerminal: adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:  adviseInvalidLease(actingLease),
 	} {
-		if notice == "" || req.Observe || verdict.Decision == "deny" || verdict.Decision == "ask" {
+		if notice == "" || req.Observe || verdict.Decision == "deny" || verdict.Decision == "ask" || deps.off(string(kind)) {
 			continue
 		}
 		held := markers.Once(kind, notice)
@@ -858,7 +1007,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.RewritesInput && tool == hookToolCommand && hasInput && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 		if line, closed := closeStdin(input); closed {
 			verdict.UpdatedCommand = line
-			if notice := markers.Once(advisoryStdinClosed, stdinClosedNotice); notice != "" {
+			// Turning the rule off silences the notice; the rewrite stands.
+			notice := ""
+			if !deps.off(string(advisoryStdinClosed)) {
+				notice = markers.Once(advisoryStdinClosed, stdinClosedNotice)
+			}
+			if notice != "" {
 				if verdict.Decision == "advise" {
 					verdict.Context += "\n\n" + notice
 				} else {
@@ -906,7 +1060,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 }
 
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
-// holds: Evaluate's, then the ones that read the filesystem.
+// holds: Evaluate's, then the ones that read the filesystem. Each is graded before it is
+// ranked, so a demoted one outranks only an advisory.
 func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir, line string, d Dialect) ShellVerdict {
 	v := rankOwnBuild(Evaluate(deps, line), ownBuildVerdict(ctx, deps, callDir, line, d))
 	// A remedy computed from a script's line would run outside the directory and the
@@ -914,11 +1069,11 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	script := denyScriptContent(deps, callDir, line, d)
 	script.Next, script.Lead = nil, ""
 	v = rankScriptContent(v, script)
-	v = rankSiblingCheckout(v, denySiblingCheckout(callDir, line, d))
-	v = rankWorktreeRemove(v, denyWorktreeRemove(ctx, deps, at, callDir, line, d))
-	v = rankInterpreterRewrite(v, denyInterpreterRewrite(at, line, d))
-	v = rankCacheDirWrite(v, denyCacheDirCommand(at, line, d))
-	return rankTokenState(v, denyTokenStateCommand(at, line, d))
+	v = deps.rankGraded(v, denyRuleSiblingCheckout, denySiblingCheckout(callDir, line, d), rankSiblingCheckout)
+	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
+	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
+	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
+	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
 }
 
 // roleScopedRule is a command rule that reads the acting lease's row, with the name its

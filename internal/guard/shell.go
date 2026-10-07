@@ -65,6 +65,9 @@ import (
 // and Lead the one line that replaces Deny when Judge serves it. Deny stays whole on its
 // own: a remedy the acting role may not run is dropped, and the reader then needs the
 // prose that names the lever.
+//
+// demoted marks an advisory that is a deny the workspace set to advise; see
+// Dependencies.grade.
 type ShellVerdict struct {
 	Deny    string
 	Context string
@@ -73,6 +76,7 @@ type ShellVerdict struct {
 	Rule    denyRule
 	Next    []hint.Next
 	Lead    string
+	demoted bool
 }
 
 // withRemedy attaches next to a deny, or leaves v alone when the rule computed none.
@@ -2447,15 +2451,16 @@ func Evaluate(deps Dependencies, command string) ShellVerdict {
 		builtin.Deny += referenceScriptNote(deps.scope.root, builtin.Rule.Name)
 	}
 	// Here rather than in gitGuard, which answers for every backend and names no paths.
-	if builtin.Rule.Name == denyRuleStageAll {
+	if builtin.Deny != "" && builtin.Rule.Name == denyRuleStageAll {
 		lead, next := stageAllRemedy(command, d)
 		builtin = builtin.withRemedy(lead, next...)
 	}
 	// A built-in advisory is about this workspace, so a line that only touches paths
 	// outside it has nothing to be advised about. Denies are exempt: each one decides for
-	// itself whether a path outside the tree changes its answer. So is capture-filter: a
-	// host keeps its task captures outside the tree, and what they hold is a run of it.
-	if builtin.Deny == "" && builtin.Context != "" && builtin.Kind != advisoryCaptureFilter && deps.scope.lineOutside(command, d) {
+	// itself whether a path outside the tree changes its answer, and so does a deny demoted
+	// to advise. So is capture-filter: a host keeps its task captures outside the tree,
+	// and what they hold is a run of it.
+	if builtin.Deny == "" && builtin.Context != "" && !builtin.demoted && builtin.Kind != advisoryCaptureFilter && deps.scope.lineOutside(command, d) {
 		builtin = ShellVerdict{}
 	}
 	v := strengthenWithWorkspace(builtin, matchWorkspaceShell(deps.ShellRules, command, d))
@@ -2535,7 +2540,24 @@ func nothingRanNote(command string, d Dialect) string {
 	return ""
 }
 
+// evaluateRules grades every rule site on the line: a deny the workspace demoted is held
+// while the rules after it take their turn, and outranks whatever advisory the line ends
+// on.
 func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
+	var held heldAdvice
+	v := deps.grade(evaluateLine(deps, &held, command, d))
+	return stronger(v, held.v)
+}
+
+// ends grades v, one rule site's verdict, and reports whether it ends the line's
+// evaluation: a deny still refusing, or an advisory still speaking. A demoted deny is
+// held instead.
+func (h *heldAdvice) ends(deps Dependencies, v ShellVerdict) (ShellVerdict, bool) {
+	v, _ = h.hold(deps, v)
+	return v, v.Deny != "" || v.Context != "" && !v.demoted
+}
+
+func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect) ShellVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE (a pipe, a redirect, a magus call in a
 	// throwaway copy) rather than which program runs.
@@ -2550,47 +2572,64 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
 	// these verbs are commands.
 	if notesWriteFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}); ok {
+			return v
+		}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
 	if agentSignOffFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyAgentSignOff, Rule: denyRule{Name: denyRuleAgentSignOff}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyAgentSignOff, Rule: denyRule{Name: denyRuleAgentSignOff}}); ok {
+			return v
+		}
 	}
 	// A credential rule, so it holds however the line is spelled, before any rule about shape.
 	if credentialVerbFires(cmds, parsed, command) {
-		return ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}); ok {
+			return v
+		}
 	}
 	// Both rewrite rules promise to leave a scratch file alone, and the promise has to hold
 	// however the path was spelled, including relative to a scratch directory cd'd into.
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) && !rewriteStaysOutside(deps.scope, command, d) {
-		return ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}); ok {
+			return v
+		}
 	}
 	if busyWaitFires(command, d) {
 		reason := denyBusyWait
 		if foreignWaitFires(command, d) {
 			reason = denyBusyWaitForeign
 		}
-		return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleBusyWait}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleBusyWait}}); ok {
+			return v
+		}
 	}
 	// Beside busy-wait: both invent a waiter for work magus already tracks. This one is
 	// the process-table form (pgrep/ps/pidof); that one is the sleep-loop form.
 	if parsed && processPollFires(work) {
 		// The one-shot read, not --watch: a watch never exits, and a served command that
 		// holds the caller's tool slot until it times out is the poll again.
-		return ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
+		poll := ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
 			"`pgrep`, `pidof` and `ps` answer what the project lock already records.",
 			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
 				"status reads the live pool once and exits, where the process table only guesses at it."))
+		if v, ok := held.ends(deps, poll); ok {
+			return v
+		}
 	}
 	// Beside busy-wait too: each is a line that hangs past the tool timeout and goes on
 	// waiting in the background. The backtick is judged first because a stray one is how a
 	// filter loses its file operand in the first place.
 	if backtickSubstFires(command, d) {
-		return ShellVerdict{Deny: denyBacktickSubstitution, Rule: denyRule{Name: denyRuleBacktickSubstitution}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyBacktickSubstitution, Rule: denyRule{Name: denyRuleBacktickSubstitution}}); ok {
+			return v
+		}
 	}
 	if tool, ok := unfedReader(command, d); ok {
-		return ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: filterWithoutInputDeny(tool), Rule: denyRule{Name: denyRuleFilterWithoutInput, Arg: tool}}); ok {
+			return v
+		}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one advises against trimming it once it arrives. It is held
@@ -2601,7 +2640,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
 	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
-		return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
+			return v
+		}
 	}
 	var advisory, chained ShellVerdict
 	// Held rather than returned, like the git advisories below: the rules that name a
@@ -2615,8 +2656,9 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	// A help request for a program documented never to run on one prints usage, so the
 	// destructive-command rules have nothing to guard.
+	grade := func(v ShellVerdict) (ShellVerdict, bool) { return held.ends(deps, v) }
 	if parsed && !helpOnlyLine(command, d) {
-		if v, matched := gitGuard(cmds); matched {
+		if v, matched := gitGuard(cmds, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
@@ -2626,14 +2668,14 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 		// fallback because clean, update, revert, goto, restore and abandon are ordinary English
 		// that a commit message or a skill body would carry, and matching prose is the
 		// false positive gitGuard's own doc says the AST exists to avoid.
-		if v, matched := nonGitVCSGuard(cmds); matched {
+		if v, matched := nonGitVCSGuard(cmds, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
 			advisory = v
 		}
 	} else if !parsed {
-		if v, matched := gitGuardFallback(command); matched {
+		if v, matched := gitGuardFallback(command, grade); matched {
 			if v.Deny != "" {
 				return v
 			}
@@ -2644,10 +2686,13 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
 	piped, pipedRead := magusPipedToFilter(command, d)
 	redir := magusRedirect(command, d)
-	switch {
-	case magusInThrowawayCopy(command, d):
-		return ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
-	case rawToolDeny:
+	// In this order, each graded in turn: a demoted one hands the line to the next.
+	if magusInThrowawayCopy(command, d) {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}); ok {
+			return v
+		}
+	}
+	if rawToolDeny {
 		match, _ := rawToolMatch(deps, rawToolCmd)
 		reason := runGuardAdvice(match)
 		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
@@ -2671,32 +2716,48 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 			lead, next := rawToolRemedy(deps, rawToolCmd, match)
 			v = v.withRemedy(lead, next...)
 		}
-		return v
-	case piped.ok:
+		if v, ok := held.ends(deps, v); ok {
+			return v
+		}
+	}
+	if piped.ok {
 		lead, next := pipeRemedy(piped)
-		return ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}.withRemedy(lead, next...)
-	case redir.ok:
+		if v, ok := held.ends(deps, ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}.withRemedy(lead, next...)); ok {
+			return v
+		}
+	}
+	if redir.ok {
 		lead, next := redirectRemedy(redir)
-		return ShellVerdict{Deny: redirectDeny(redir.verb, redir.dest), Rule: denyRule{Name: denyRuleOutputRedirect}}.withRemedy(lead, next...)
-	case chained.Deny != "":
-		return chained
+		if v, ok := held.ends(deps, ShellVerdict{Deny: redirectDeny(redir.verb, redir.dest), Rule: denyRule{Name: denyRuleOutputRedirect}}.withRemedy(lead, next...)); ok {
+			return v
+		}
+	}
+	if chained.Deny != "" {
+		if v, ok := held.ends(deps, chained); ok {
+			return v
+		}
 	}
 	if name, msg, ok := misconfiguredMagusEnv(command, d); ok {
-		return ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyMisconfiguredMagusEnv(msg), Rule: denyRule{Name: denyRuleUnknownEnv, Arg: name}}); ok {
+			return v
+		}
 	}
 	// Below the rules that name what the magus call does, whose remedies keep the
 	// wrapper: the next call is judged here once they are fixed.
 	var timeoutAdvice ShellVerdict
 	if v, ok := magusTimeoutVerdict(command, d); ok {
-		if v.Deny != "" {
+		if v.Deny == "" {
+			timeoutAdvice = v
+		} else if v, ok := held.ends(deps, v); ok {
 			return v
 		}
-		timeoutAdvice = v
 	}
 	// Below the rules that name the command itself: on `go test ./...; echo $?` the raw
 	// tool is the correction worth reading first.
 	if echo := exitStatusEchoFires(command, d); echo != exitEchoNone {
-		return ShellVerdict{Deny: exitEchoDenial(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}
+		if v, ok := held.ends(deps, ShellVerdict{Deny: exitEchoDenial(echo), Rule: denyRule{Name: denyRuleExitStatusEcho}}); ok {
+			return v
+		}
 	}
 	if timeoutAdvice.Context != "" {
 		return timeoutAdvice
@@ -2709,10 +2770,14 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	}
 	if parsed {
 		if v, ok := readVerdict(deps, command, d); ok {
-			return v
+			if v, ok := held.ends(deps, v); ok {
+				return v
+			}
 		}
 		if v, ok := grepReaderVerdict(deps, cmds); ok {
-			return v
+			if v, ok := held.ends(deps, v); ok {
+				return v
+			}
 		}
 	}
 	switch {
@@ -2726,10 +2791,14 @@ func evaluateRules(deps Dependencies, command string, d Dialect) ShellVerdict {
 	// Each translation weighs a stale graph itself: a listing proved against the disk holds
 	// at any revision, and a diagnostic code is symbol-search's.
 	if v, ok := translateVerdict(deps, cmds); ok {
-		return v
+		if v, ok := held.ends(deps, v); ok {
+			return v
+		}
 	}
 	if v, ok := searchVerdict(deps, cmds); ok {
-		return v
+		if v, ok := held.ends(deps, v); ok {
+			return v
+		}
 	}
 	switch {
 	case echoOnSuccessRe.MatchString(command):

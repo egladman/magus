@@ -46,6 +46,7 @@ const (
 // typed inline. callDir resolves a relative script path; with none, only an absolute one
 // is read.
 func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) ShellVerdict {
+	var held ShellVerdict
 	for _, run := range scriptRuns(command, d) {
 		file := run.path
 		if !filepath.IsAbs(file) {
@@ -62,21 +63,21 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 		if lang == scriptNone {
 			lang = detectScriptLang(file, body)
 		}
-		if v := judgeScript(deps, lang, body); v.Deny != "" {
-			v.Deny += "\nJudged from the content of " + run.path + ", which this line runs: a script gets the verdict its lines would get typed inline."
+		v := judgedFrom(judgeScript(deps, lang, body), "\nJudged from the content of "+run.path+", which this line runs: a script gets the verdict its lines would get typed inline.")
+		switch {
+		case v.Deny != "":
 			return v
+		case v.demoted && !held.demoted:
+			held = v
 		}
 	}
-	return ShellVerdict{}
+	return held
 }
 
 // rankScriptContent fills a silence and outranks an advisory, but never replaces a deny
-// the line earned on its own.
+// the line earned on its own. A demoted script verdict outranks only an advisory.
 func rankScriptContent(v, script ShellVerdict) ShellVerdict {
-	if script.Deny == "" || v.Deny != "" {
-		return v
-	}
-	return script
+	return stronger(v, script)
 }
 
 // denyScriptWrite refuses a write that leaves a script refused typed inline, when the
@@ -102,11 +103,10 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 	}
 	lang = detectScriptLang(file, after)
 	v := judgeScript(deps, lang, after)
-	if v.Deny == "" || judgeScript(deps, lang, before).Rule.Name == v.Rule.Name {
+	if v.Deny == "" && !v.demoted || judgeScript(deps, lang, before).advisoryName() == v.advisoryName() {
 		return ShellVerdict{}
 	}
-	v.Deny += "\nJudged from what this write leaves in " + file + ": a script gets the verdict its lines would get typed inline."
-	return v
+	return judgedFrom(v, "\nJudged from what this write leaves in "+file+": a script gets the verdict its lines would get typed inline.")
 }
 
 // judgeScript is the inline verdict for a script's content, kept only when it is one of
@@ -115,24 +115,36 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 	switch lang {
 	case scriptShell:
 		v := evaluateRules(deps, body, DialectBash)
-		if v.Deny != "" && slices.Contains(scriptJudgedRules, v.Rule.Name) {
+		if (v.Deny != "" || v.demoted) && slices.Contains(scriptJudgedRules, denyRuleName(v.advisoryName())) {
 			return v
 		}
 	case scriptInterpreter:
 		if scriptRewrites(body) && !allOutside(deps.scope, scriptPaths(body)) {
-			return ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
+			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}})
 		}
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
 		// in a Buzz script writes exactly what open(p, 'w') does in a python one.
 		if rel := buzzRewrittenFile(deps.scope.root, body); rel != "" {
-			return ShellVerdict{
+			return deps.grade(ShellVerdict{
 				Deny: interpreterRewriteDenial(rel) + referenceScriptNote(deps.scope.root, denyRuleInterpreterRewrite),
 				Rule: denyRule{Name: denyRuleInterpreterRewrite},
-			}
+			})
 		}
 	}
 	return ShellVerdict{}
+}
+
+// judgedFrom appends note, which names the script a verdict was judged from, to a deny or
+// a demoted deny; any other v comes back unchanged.
+func judgedFrom(v ShellVerdict, note string) ShellVerdict {
+	switch {
+	case v.Deny != "":
+		v.Deny += note
+	case v.demoted:
+		v.Context += note
+	}
+	return v
 }
 
 func readScript(file string) (string, bool) {

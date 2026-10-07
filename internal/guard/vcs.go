@@ -60,8 +60,95 @@ func isDependencyMutation(c hint.Invocation) bool {
 	return false
 }
 
+// gitDeny is the deny one git invocation earns, if any.
+func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
+	if c.Name != "git" {
+		return ShellVerdict{}, false
+	}
+	g := parseGit(c.Args)
+	if g.alias != "" {
+		return denyInlineAlias("git", g.alias), true
+	}
+	sub, rest := g.sub, g.rest
+	switch sub {
+	case "stash":
+		// Reading a stash is safe. RESTORING one is not, which this rule used to
+		// assume it was: the stash stack is per-REPOSITORY, shared by every linked
+		// worktree, so `git stash pop` with no ref applies whatever is at stash@{0}
+		// (routinely a stranger's work from another worktree) into your tree, and
+		// drops the entry if it applies cleanly. Naming the entry after reading
+		// `git stash list` is the deliberate form and stays allowed.
+		// `create` writes a stash COMMIT OBJECT and returns its name, touching
+		// neither the working tree nor the stash stack, so denyWholeTree was a
+		// false positive on it. It falls through to the checkpoint advisory
+		// below, which is what it was reaching for.
+		if len(rest) > 0 && slices.Contains([]string{"list", "show", "create"}, rest[0]) {
+			return ShellVerdict{}, false
+		}
+		if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
+			return ShellVerdict{}, false // an explicit stash@{N}: the caller chose which entry
+		}
+		// `git stash push -- <paths>` shelves only what it names, so the whole-tree
+		// reason does not apply: nothing outside those paths moves, and a concurrent
+		// agent's untracked work is untouched. It is also how a workspace escapes a
+		// bootstrap deadlock (shelve the one hunk an old binary rejects, build,
+		// restore), which this rule was denying, putting that answer out of reach.
+		// A bare `git stash push` names nothing and stashes everything, so it stays
+		// denied.
+		if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
+			return ShellVerdict{}, false
+		}
+		if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
+			return denySharedStash(rest[0]), true
+		}
+		return denyWholeTree("git stash"), true
+	// `git worktree remove` is judged in internal/guard/worktree.go, which reads the
+	// worktree and the job store.
+	case "reset":
+		if slices.Contains(rest, "--hard") {
+			return denyWholeTree("git reset --hard"), true
+		}
+	case "checkout":
+		// Whole-tree first: it is the broader reason, and one rule owning `-- .`
+		// keeps the message the same whichever revision precedes the pathspec.
+		if isWholeTreePathspec(rest) {
+			return denyWholeTree("git checkout ."), true
+		}
+		if side := mergeSideRef(rest); side != "" {
+			return ShellVerdict{
+				Deny: denyMergeSideCheckout(side),
+				Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
+			}, true
+		}
+	case "restore":
+		if isWholeTreePathspec(rest) {
+			return denyWholeTree("git restore ."), true
+		}
+		if side := mergeSideRef(rest); side != "" {
+			return ShellVerdict{
+				Deny: denyMergeSideCheckout(side),
+				Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
+			}, true
+		}
+	case "clean":
+		if isDeletingClean(rest) {
+			return denyWholeTree("git clean"), true
+		}
+	case "add":
+		// In the DENY pass, not beside the advisory below it: a stage-everything
+		// form reached second (`git restore -- x && git add -A`) lost its deny to
+		// whichever advisory the first command earned, which is the ordering the
+		// two-pass split exists to prevent.
+		if slices.ContainsFunc(rest, isStageAllOperand) {
+			return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+		}
+	}
+	return ShellVerdict{}, false
+}
+
 // gitGuard classifies git invocations from PARSED commands, returning the first
-// verdict any of them earns.
+// verdict any of them earns. grade is the line's grading: a deny it demotes or turns
+// off hands the line to the commands after it, then to the advisories.
 //
 // Parsed rather than pattern-matched because the unanchored form denied `git
 // stash` written as PROSE - a commit message, or the magus-vcs-hygiene skill,
@@ -69,87 +156,11 @@ func isDependencyMutation(c hint.Invocation) bool {
 // as the safe direction; with an AST it is not a trade at all, since a quoted
 // word structurally cannot be a command, and `cd /repo && git stash` still
 // matches however it is reached.
-func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
+func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if c.Name != "git" {
-			continue
-		}
-		g := parseGit(c.Args)
-		if g.alias != "" {
-			return denyInlineAlias("git", g.alias), true
-		}
-		sub, rest := g.sub, g.rest
-		switch sub {
-		case "stash":
-			// Reading a stash is safe. RESTORING one is not, which this rule used to
-			// assume it was: the stash stack is per-REPOSITORY, shared by every linked
-			// worktree, so `git stash pop` with no ref applies whatever is at stash@{0}
-			// (routinely a stranger's work from another worktree) into your tree, and
-			// drops the entry if it applies cleanly. Naming the entry after reading
-			// `git stash list` is the deliberate form and stays allowed.
-			// `create` writes a stash COMMIT OBJECT and returns its name, touching
-			// neither the working tree nor the stash stack, so denyWholeTree was a
-			// false positive on it. It falls through to the checkpoint advisory
-			// below, which is what it was reaching for.
-			if len(rest) > 0 && slices.Contains([]string{"list", "show", "create"}, rest[0]) {
-				continue
-			}
-			if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
-				continue // an explicit stash@{N}: the caller chose which entry
-			}
-			// `git stash push -- <paths>` shelves only what it names, so the whole-tree
-			// reason does not apply: nothing outside those paths moves, and a concurrent
-			// agent's untracked work is untouched. It is also how a workspace escapes a
-			// bootstrap deadlock (shelve the one hunk an old binary rejects, build,
-			// restore), which this rule was denying, putting that answer out of reach.
-			// A bare `git stash push` names nothing and stashes everything, so it stays
-			// denied.
-			if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
-				continue
-			}
-			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
-				return denySharedStash(rest[0]), true
-			}
-			return denyWholeTree("git stash"), true
-		// `git worktree remove` is judged in internal/guard/worktree.go, which reads the
-		// worktree and the job store.
-		case "reset":
-			if slices.Contains(rest, "--hard") {
-				return denyWholeTree("git reset --hard"), true
-			}
-		case "checkout":
-			// Whole-tree first: it is the broader reason, and one rule owning `-- .`
-			// keeps the message the same whichever revision precedes the pathspec.
-			if isWholeTreePathspec(rest) {
-				return denyWholeTree("git checkout ."), true
-			}
-			if side := mergeSideRef(rest); side != "" {
-				return ShellVerdict{
-					Deny: denyMergeSideCheckout(side),
-					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
-				}, true
-			}
-		case "restore":
-			if isWholeTreePathspec(rest) {
-				return denyWholeTree("git restore ."), true
-			}
-			if side := mergeSideRef(rest); side != "" {
-				return ShellVerdict{
-					Deny: denyMergeSideCheckout(side),
-					Rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: side},
-				}, true
-			}
-		case "clean":
-			if isDeletingClean(rest) {
-				return denyWholeTree("git clean"), true
-			}
-		case "add":
-			// In the DENY pass, not beside the advisory below it: a stage-everything
-			// form reached second (`git restore -- x && git add -A`) lost its deny to
-			// whichever advisory the first command earned, which is the ordering the
-			// two-pass split exists to prevent.
-			if slices.ContainsFunc(rest, isStageAllOperand) {
-				return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+		if v, ok := gitDeny(c); ok {
+			if v, ok := grade(v); ok {
+				return v, true
 			}
 		}
 	}
@@ -488,26 +499,39 @@ func isTreeIdentityQuery(args []string) bool {
 // is confined to the case where there is no AST to consult, and there, an
 // over-eager deny really is the safe direction, because these rules guard work
 // that cannot be recovered.
-func gitGuardFallback(command string) (ShellVerdict, bool) {
+//
+// grade is the line's grading, as gitGuard takes it.
+func gitGuardFallback(command string, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
+	var denies []ShellVerdict
 	if m := inlineAliasRe.FindStringSubmatch(command); m != nil {
-		return denyInlineAlias("git", m[1]), true
+		denies = append(denies, denyInlineAlias("git", m[1]))
 	}
-	switch {
-	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
-		return denyWholeTree("git stash"), true
-	case resetRe.MatchString(command):
-		return denyWholeTree("git reset --hard"), true
-	case checkoutRe.MatchString(command):
-		return denyWholeTree("git checkout ."), true
-	case restoreRe.MatchString(command):
-		return denyWholeTree("git restore ."), true
-	case cleanRe.MatchString(command):
-		return denyWholeTree("git clean"), true
+	for _, wt := range []struct {
+		matched bool
+		op      string
+	}{
+		{stashRe.MatchString(command) && !stashSafeRe.MatchString(command), "git stash"},
+		{resetRe.MatchString(command), "git reset --hard"},
+		{checkoutRe.MatchString(command), "git checkout ."},
+		{restoreRe.MatchString(command), "git restore ."},
+		{cleanRe.MatchString(command), "git clean"},
+	} {
+		if wt.matched {
+			denies = append(denies, denyWholeTree(wt.op))
+		}
+	}
 	// Above the push ADVISORY, which used to answer first: `git add -A && git push` on an
 	// unparsable line got a reminder instead of the deny, in the one place the file's own
 	// invariant says an over-eager deny is the safe direction.
-	case stageAllRe.MatchString(command):
-		return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+	if stageAllRe.MatchString(command) {
+		denies = append(denies, ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}})
+	}
+	for _, v := range denies {
+		if v, ok := grade(v); ok {
+			return v, true
+		}
+	}
+	switch {
 	case pushRe.MatchString(command):
 		return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 	case stageRe.MatchString(command):
@@ -634,40 +658,49 @@ func isDeletingClean(args []string) bool {
 //
 // SCOPED forms stay allowed, matching the git rules: `hg revert <paths>` names what it
 // touches, and only the whole-tree flags below discard a tree the caller did not enumerate.
-func nonGitVCSGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
+//
+// grade is the line's grading, as gitGuard takes it.
+func nonGitVCSGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bool)) (ShellVerdict, bool) {
 	for _, c := range cmds {
-		if _, ok := vcsGlobals[c.Name]; !ok {
-			continue
-		}
-		v := parseVCS(c.Name, c.Args)
-		if v.alias != "" {
-			return denyInlineAlias(c.Name, v.alias), true
-		}
-		sub, rest := v.sub, v.rest
-		if c.Name == "jj" {
-			if v, matched := jjRule(c.Name, sub, rest); matched {
+		if v, ok := nonGitDeny(c); ok {
+			if v, ok := grade(v); ok {
 				return v, true
 			}
-			continue
 		}
-		if c.Name != "hg" && c.Name != "sl" {
-			continue
+	}
+	return ShellVerdict{}, false
+}
+
+// nonGitDeny is the deny one hg, sl or jj invocation earns, if any.
+func nonGitDeny(c hint.Invocation) (ShellVerdict, bool) {
+	if _, ok := vcsGlobals[c.Name]; !ok {
+		return ShellVerdict{}, false
+	}
+	v := parseVCS(c.Name, c.Args)
+	if v.alias != "" {
+		return denyInlineAlias(c.Name, v.alias), true
+	}
+	sub, rest := v.sub, v.rest
+	if c.Name == "jj" {
+		return jjRule(c.Name, sub, rest)
+	}
+	if c.Name != "hg" && c.Name != "sl" {
+		return ShellVerdict{}, false
+	}
+	switch sub {
+	// Deletes UNTRACKED files outright. No backup, no undo, and untracked is exactly
+	// where a concurrent agent's unfinished work lives.
+	case "purge", "clean":
+		return denyWholeTree(c.Name + " " + sub), true
+	case "revert":
+		if hasAnyFlag(rest, "--all", "-a") {
+			return denyWholeTree(c.Name + " revert --all"), true
 		}
-		switch sub {
-		// Deletes UNTRACKED files outright. No backup, no undo, and untracked is exactly
-		// where a concurrent agent's unfinished work lives.
-		case "purge", "clean":
-			return denyWholeTree(c.Name + " " + sub), true
-		case "revert":
-			if hasAnyFlag(rest, "--all", "-a") {
-				return denyWholeTree(c.Name + " revert --all"), true
-			}
-		// `-C`/`--clean` discards uncommitted changes on the way to another revision,
-		// with no .orig backup. sl spells the verb goto; hg accepts update, up and co.
-		case "update", "up", "goto", "co":
-			if hasAnyFlag(rest, "--clean", "-C") {
-				return denyWholeTree(c.Name + " " + sub + " --clean"), true
-			}
+	// `-C`/`--clean` discards uncommitted changes on the way to another revision,
+	// with no .orig backup. sl spells the verb goto; hg accepts update, up and co.
+	case "update", "up", "goto", "co":
+		if hasAnyFlag(rest, "--clean", "-C") {
+			return denyWholeTree(c.Name + " " + sub + " --clean"), true
 		}
 	}
 	return ShellVerdict{}, false
