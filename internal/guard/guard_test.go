@@ -375,10 +375,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		})
 	}
 
-	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main.
-	shellIn := func(t *testing.T, branch string) func(command string) Verdict {
+	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main. The
+	// workspace is an empty temporary dir unless one is named.
+	shellIn := func(t *testing.T, branch, workspace string) func(command string) Verdict {
 		t.Helper()
-		ctx, _ := spawnFixture(t)
+		ctx, cacheDir := spawnFixture(t)
+		if workspace != "" {
+			ctx = WithLocation(ctx, cacheDir, workspace, workspace)
+		}
 		deps := Dependencies{
 			CommandRule: m.CommandRule(),
 			CheckoutState: func(context.Context, string) *types.CheckoutState {
@@ -395,7 +399,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
-		run := shellIn(t, "trim-key")
+		run := shellIn(t, "trim-key", "")
 		for _, line := range []string{
 			`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`,
 			`hg -R . --config ui.username=x commit -m "trim a fragment" -y`,
@@ -430,7 +434,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
-		run := shellIn(t, "main")
+		run := shellIn(t, "main", "")
 		for _, line := range []string{
 			`git commit -m "fix(cache): keep the key stable across runs"`,
 			`jj describe -m "feat: add a commit-msg hook"`,
@@ -446,9 +450,16 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		run := shellIn(t, "trim-key")
+		// The rule runs the prose judge with `go run` in the workspace's libs/conventions, so
+		// this one holds that module. It is not the checkout itself: the rule would then
+		// describe the branch's diff with a nested `magus describe file`, and inside a test
+		// that nested magus is this test binary.
+		ws := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
+		require.NoError(t, os.Symlink(filepath.Join(root, "libs", "conventions"), filepath.Join(ws, "libs", "conventions")))
+		run := shellIn(t, "trim-key", ws)
 		v := run(`gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`)
-		assert.NotEqual(t, "deny", v.Decision, "no first-use gate: "+v.Reason)
+		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
@@ -457,7 +468,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		assert.NotContains(t, v.Reason, "Skill(")
 
 		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
-		assert.NotEqual(t, "deny", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason)
+		assert.Equal(t, "pass", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
 	})
 
 	covered["code-comments"] = true
