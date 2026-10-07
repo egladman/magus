@@ -180,8 +180,10 @@ export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > s
     if (marker == null) { return html; }
     // Frontmatter dates decode as full RFC3339; the calendar day is all an ADR records.
     final day = date.split("T")[0];
-    var meta = "\n<p class=\"adr-meta\">Status: <strong>" + escapeAttr(status) + "</strong> &middot; Date: <time datetime=\""
-        + escapeAttr(day) + "\">" + escapeAttr(day) + "</time>";
+    // A sentence rather than "Status:" and "Date:" labels: the code cross-linker links the
+    // first "status" on a page to `magus status`, and a label line reads as a form.
+    var meta = "\n<p class=\"adr-meta\">Decision <strong>" + escapeAttr(status) + "</strong> on <time datetime=\""
+        + escapeAttr(day) + "\">" + escapeAttr(day) + "</time>.";
     if (supersedes != "") { meta = meta + "<br>Supersedes: " + codeSpans(supersedes); }
     meta = meta + "</p>";
     return html.sub(0, marker + 5) + meta + html.sub(marker + 5);
@@ -189,7 +191,7 @@ export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > s
 
 test "insertAdrMeta places status and date right after the h1" {
     final got = insertAdrMeta("<h1 id=\"t\">Title</h1>\n<p>body</p>", "accepted (partly built)", "2026-09-22T00:00:00Z", "");
-    assert\equal(got.indexOf("Status: <strong>accepted (partly built)</strong>") != null, true, "status");
+    assert\equal(got.indexOf("Decision <strong>accepted (partly built)</strong> on") != null, true, "status");
     assert\equal(got.indexOf("<time datetime=\"2026-09-22\">2026-09-22</time>") != null, true, "the calendar day");
     assert\equal(got.indexOf("Supersedes") == null, true, "no supersedes line without a value");
     assert\equal(got.indexOf("adr-meta") < got.indexOf("<p>body"), true, "between the h1 and the body");
