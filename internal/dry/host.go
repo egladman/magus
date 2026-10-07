@@ -3,6 +3,7 @@ package dry
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -574,9 +575,11 @@ func insightLens(listKeys ...string) vm.Value {
 // same normalizer as the real binding's resolveTargetFun; a glob(...) list arg is
 // flattened to its handles. Cross-project handles aren't modeled in the single-file dry
 // run (there's no sibling project in the sandbox), so a non-function argument is
-// skipped, best-effort.
+// skipped, best-effort. Like the real binding, a call naming no target (no argument, or
+// only empty lists) raises.
 func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		named := 0
 		var trace func(a vm.Value)
 		trace = func(a vm.Value) {
 			if a.IsList() {
@@ -585,6 +588,9 @@ func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) 
 				}
 				return
 			}
+			// Counted before the skip below: an unmodeled cross-project handle still names
+			// a target.
+			named++
 			if a.IsFun() {
 				if name := a.FunName(); name != "" {
 					tr.addEdge(normalizeTarget(name))
@@ -593,6 +599,9 @@ func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) 
 		}
 		for _, a := range args {
 			trace(a)
+		}
+		if named == 0 {
+			return vm.Null, errors.New("ctx.needs: names no target; pass a target function, a project import member, or a ctx.glob(...) that matches one")
 		}
 		return vm.Null, nil
 	}
@@ -616,6 +625,14 @@ func traceGlob(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 		matched, err := types.MatchTargetPatterns(tr.targetKeys, patterns)
 		if err != nil {
 			return vm.Null, fmt.Errorf("ctx.glob: %w", err)
+		}
+		// The real binding raises here too: an empty list let a needs pass having run nothing.
+		if len(matched) == 0 && len(patterns) > 0 {
+			quoted := make([]string, len(patterns))
+			for i, p := range patterns {
+				quoted[i] = strconv.Quote(p)
+			}
+			return vm.Null, fmt.Errorf("ctx.glob: %s matches no exported target of this project", strings.Join(quoted, ", "))
 		}
 		handles := make([]vm.Value, 0, len(matched))
 		for _, name := range matched {
