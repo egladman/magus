@@ -14,7 +14,7 @@ tags:
   ]
 ---
 
-# Telemetry (OpenTelemetry)
+# Telemetry
 
 magus can export **metrics** and **traces** to any OTLP collector you run.
 Telemetry is **OFF by default**: there is no magus-operated backend. The

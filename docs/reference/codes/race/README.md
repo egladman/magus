@@ -1,5 +1,5 @@
 ---
-title: race diagnostics
+title: Race diagnostics
 page_type: overview
 description: Landing page for MGS4xxx race condition diagnostics emitted by the magus race detector across static, watch, and replay modes.
 tags:
@@ -15,7 +15,7 @@ tags:
   ]
 ---
 
-# Race condition diagnostics
+# Race diagnostics
 
 Codes in the `MGS4xxx` range are emitted by the magus race condition detector.
 Enable with `magus run <target> --race`.

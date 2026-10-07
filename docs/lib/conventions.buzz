@@ -150,7 +150,8 @@ fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
 // Every rule here earned its place by catching a bug that shipped, and every one of them
 // is a fact about the text rather than a matter of taste - a stale version literal in an
 // example, a shell prompt the reader has to strip, a backticked path that moved. Style
-// judgments are deliberately absent: a lint that argues about wording gets suppressed,
+// judgments enter only once decided and written on conventions.md (front-matter order, H1
+// equal to the title, relative links): a lint that argues about wording gets suppressed,
 // and then the rules that matter go with it.
 //
 // Pure, like everything above: these take the Markdown and hand back findings. The
@@ -288,7 +289,209 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
     foreach (p in adrProblems(file, md: md)) {
         found.append(ConventionFinding{ file = file, line = p.line, rule = "adr-template", message = p.message });
     }
+    if (isAuthoredPage(file)) {
+        pageFindings(file, md: md, found: found);
+    }
     return found;
+}
+
+// GENERATED_PAGES are the docs pages a generator writes: the declared outputs of
+// content-generate and index-generate, and the changelog page. Their front matter and
+// headings are the generator's to fix, so the page rules below skip them. A generated tree
+// missing here fails the lint rather than passing it, which is the direction to drift in.
+final GENERATED_PAGES = ["docs/reference/api/", "docs/reference/buzz/", "docs/reference/manpage/",
+    "docs/reference/rules/", "docs/reference/skills/", "docs/concepts/spells/", "docs/benchmarks/",
+    "docs/reference/config.md", "docs/reference/spell-contract.md", "docs/changelog.md",
+    "docs/MAGUS.md", "docs/guides/integrations/agents/MAGUS.md",
+    "docs/guides/integrations/agents/guard-templates.md"];
+
+// isAuthoredPage reports whether file is a hand-written docs page: under docs/, and not a
+// generator's output.
+export fun isAuthoredPage(file: str) > bool {
+    if (file.startsWith("docs/") == false) { return false; }
+    foreach (g in GENERATED_PAGES) {
+        if (file == g or (g.endsWith("/") and file.startsWith(g))) { return false; }
+    }
+    return true;
+}
+
+// FRONT_MATTER_KEYS are the keys a page may carry, each with its rank: the order the site
+// reads them in, and the order every page writes them in so a reader finds the description
+// in the same place. order and page_type share a slot; aliases trail because only a moved
+// page has any.
+final FRONT_MATTER_KEYS = {"title": 0, "order": 1, "page_type": 2, "description": 3, "tags": 4, "aliases": 5};
+final FRONT_MATTER_ORDER = "title, optional order or page_type, description, tags, optional aliases";
+
+// SITE_URL is where the docs are published. A docs page linked by it skips the build's link
+// check and the local preview, and breaks for a reader of any other version.
+final SITE_URL = "eli.gladman.cc/magus/";
+
+// unquoteYaml returns a YAML scalar's text: a double-quoted one with its \\ and \" escapes
+// undone, a single-quoted one with '' as ', and a plain one trimmed.
+export fun unquoteYaml(v: str) > str {
+    final t = v.trim();
+    if (t.len() >= 2 and t.startsWith("\"") and t.endsWith("\"")) {
+        final body = t.sub(1, len: t.len() - 2);
+        final chars = mut [<str>];
+        var i = 0;
+        while (i < body.len()) {
+            if (body.byte(i) == 92 and i + 1 < body.len()) {   // 92 = backslash
+                chars.append(body.sub(i + 1, len: 1));
+                i = i + 2;
+            } else {
+                chars.append(body.sub(i, len: 1));
+                i = i + 1;
+            }
+        }
+        return chars.join("");
+    }
+    if (t.len() >= 2 and t.startsWith("'") and t.endsWith("'")) {
+        return t.sub(1, len: t.len() - 2).replace("''", with: "'");
+    }
+    return t;
+}
+
+// pageFindings holds an authored docs page to the page conventions: its front matter, its
+// H1, and how it links other pages.
+fun pageFindings(file: str, md: str, found: mut [ConventionFinding]) > void {
+    final lines = md.split("\n");
+    var close = -1;
+    if (lines.len() > 0 and lines[0] == "---") {
+        var i = 1;
+        while (i < lines.len() and close < 0) {
+            if (lines[i] == "---") { close = i; }
+            i = i + 1;
+        }
+    }
+    if (close < 0) {
+        found.append(ConventionFinding{ file = file, line = 1, rule = "front-matter",
+            message = "no front matter; open the page with `---`, " + FRONT_MATTER_ORDER + ", `---`" });
+        return;
+    }
+    final title = frontMatterFindings(file, lines: lines, close: close, found: found);
+    h1Findings(file, lines: lines, close: close, title: title, found: found);
+    siteLinkFindings(file, lines: lines, start: close + 1, found: found);
+}
+
+// frontMatterFindings checks the keys' order, the required ones, and the description's
+// closing period, and returns the title.
+fun frontMatterFindings(file: str, lines: [str], close: int, found: mut [ConventionFinding]) > str {
+    var title = "";
+    var lastKey = "";
+    var lastRank = -1;
+    final seen = mut {<str: bool>};
+    var i = 1;
+    while (i < close) {
+        final line = lines[i];
+        final n = i + 1;
+        final colon = line.indexOf(":");
+        if (line == "" or line.startsWith(" ") or line.startsWith("\t") or colon == null) {
+            i = i + 1;
+            continue;
+        }
+        final key = line.sub(0, len: colon!);
+        final value = line.sub(colon! + 1).trim();
+        final rank = FRONT_MATTER_KEYS[key];
+        if (rank == null) {
+            found.append(ConventionFinding{ file = file, line = n, rule = "front-matter",
+                message = "front matter carries `{key}`, which no page reads; drop it, or keep to " + FRONT_MATTER_ORDER });
+        } else {
+            if (rank! < lastRank) {
+                found.append(ConventionFinding{ file = file, line = n, rule = "front-matter",
+                    message = "`{key}` follows `{lastKey}`; order the keys " + FRONT_MATTER_ORDER });
+            } else {
+                lastRank = rank!;
+                lastKey = key;
+            }
+            seen[key] = true;
+        }
+        if (key == "title") { title = unquoteYaml(value); }
+        if (key == "description") {
+            var text = value;
+            var j = i + 1;
+            while (j < close and (lines[j].startsWith(" ") or lines[j].startsWith("\t"))) {
+                text = text + " " + lines[j].trim();
+                j = j + 1;
+            }
+            if (text.startsWith(">") or text.startsWith("|")) {
+                final sp = text.indexOf(" ");
+                text = if (sp != null) text.sub(sp!) else "";
+            }
+            if (unquoteYaml(text).endsWith(".") == false) {
+                found.append(ConventionFinding{ file = file, line = n, rule = "front-matter",
+                    message = "the description does not end with a period; end it with one, it is shown as a sentence" });
+            }
+        }
+        i = i + 1;
+    }
+    foreach (key in ["title", "description", "tags"]) {
+        if (seen[key] == null) {
+            found.append(ConventionFinding{ file = file, line = close + 1, rule = "front-matter",
+                message = "front matter has no `{key}`; add it, keeping to " + FRONT_MATTER_ORDER });
+        }
+    }
+    return title;
+}
+
+// h1Findings holds the page's H1 to its front-matter title: the title names the page in
+// the browser, search and every index, and the H1 names it on the page, so a reader who
+// followed one should land on the other.
+fun h1Findings(file: str, lines: [str], close: int, title: str, found: mut [ConventionFinding]) > void {
+    var marker = "";
+    var i = close + 1;
+    while (i < lines.len()) {
+        final line = lines[i];
+        i = i + 1;
+        if (marker != "") {
+            if (closesFence(line, marker)) { marker = ""; }
+            continue;
+        }
+        final open = fenceMarker(line);
+        if (open != "") { marker = open; continue; }
+        if (line.startsWith("# ")) {
+            final h1 = line.sub(2).trim();
+            if (title != "" and h1 != title) {
+                found.append(ConventionFinding{ file = file, line = i, rule = "h1-title",
+                    message = "the H1 `{h1}` is not the front-matter title `{title}`; make the two the same words" });
+            }
+            return;
+        }
+    }
+    found.append(ConventionFinding{ file = file, line = close + 2, rule = "h1-title",
+        message = "the page has no H1; open the body with `# {title}`" });
+}
+
+// siteLinkFindings reports a link from one docs page to another by its published URL,
+// outside code. The hosted console is an app, not a page, so a link to it stays absolute.
+fun siteLinkFindings(file: str, lines: [str], start: int, found: mut [ConventionFinding]) > void {
+    var marker = "";
+    var i = start;
+    while (i < lines.len()) {
+        final line = lines[i];
+        i = i + 1;
+        if (marker != "") {
+            if (closesFence(line, marker)) { marker = ""; }
+            continue;
+        }
+        final open = fenceMarker(line);
+        if (open != "") { marker = open; continue; }
+        final parts = line.split("`");
+        var prose = mut [<str>];
+        var k = 0;
+        while (k < parts.len()) {
+            prose.append(parts[k]);
+            k = k + 2;
+        }
+        foreach (target in linkTargets(prose.join(" "))) {
+            var rest = "";
+            foreach (scheme in ["https://", "http://"]) {
+                if (target.startsWith(scheme + SITE_URL)) { rest = target.sub(scheme.len() + SITE_URL.len()); }
+            }
+            if (rest == "" or rest.startsWith("console/")) { continue; }
+            found.append(ConventionFinding{ file = file, line = i, rule = "site-link",
+                message = "links `{target}` by its site URL; link the page by its relative .md path" });
+        }
+    }
 }
 
 // looksLikeRepoPath reports whether an inline-code token is claiming a file in THIS
@@ -509,8 +712,74 @@ test "lintMarkdown flags a pinned version in example output" {
 
 test "lintMarkdown holds a decisions page to the ADR template" {
     final f = lintMarkdown("docs/decisions/0009-x.md", "# ADR 0009: x\n");
-    assert\equal(f.len(), 1, "one finding: no front matter");
+    assert\equal(f.len(), 2, "no front matter, reported by the ADR rule and the page rule");
     assert\equal(f[0].rule, "adr-template", "rule name");
+    assert\equal(f[1].rule, "front-matter", "the page rule's name");
+}
+
+// rulesOf is the rule of each finding, in order.
+fun rulesOf(found: [ConventionFinding]) > str {
+    final names = mut [<str>];
+    foreach (f in found) { names.append(f.rule); }
+    return names.join(",");
+}
+
+final CLEAN_PAGE = "---\ntitle: Remote caching\norder: 3\ndescription: Share a cache.\ntags: [cache]\naliases: [/old/]\n---\n\n# Remote caching\n\nSee [targets](targets.md).\n";
+
+test "an authored page in the documented shape passes the page rules" {
+    assert\equal(rulesOf(lintMarkdown("docs/concepts/cache.md", CLEAN_PAGE)), "", "clean");
+}
+
+test "front matter out of order, with an unknown key or a missing one, is reported at its line" {
+    final md = "---\ntitle: A\naliases: [/a/]\ndescription: An a.\nlayout: wide\n---\n\n# A\n";
+    final f = lintMarkdown("docs/a.md", md);
+    assert\equal(rulesOf(f), "front-matter,front-matter,front-matter", "three findings");
+    assert\equal(f[0].line, 4, "description after aliases");
+    assert\equal(f[0].message.indexOf("`description` follows `aliases`") != null, true, "names both keys");
+    assert\equal(f[1].line, 5, "the unknown key");
+    assert\equal(f[2].message.indexOf("no `tags`") != null, true, "the missing key");
+}
+
+test "order and page_type share the slot after title, in that order" {
+    final both = "---\ntitle: S\norder: 4\npage_type: overview\ndescription: S.\ntags: [s]\n---\n\n# S\n";
+    assert\equal(rulesOf(lintMarkdown("docs/s.md", both)), "", "both, in order");
+    final swapped = "---\ntitle: S\npage_type: overview\norder: 4\ndescription: S.\ntags: [s]\n---\n\n# S\n";
+    assert\equal(rulesOf(lintMarkdown("docs/s.md", swapped)), "front-matter", "order after page_type");
+}
+
+test "a description must end with a period, however it is quoted or wrapped" {
+    final page = fun (d: str) > str => "---\ntitle: D\n" + d + "\ntags: [d]\n---\n\n# D\n";
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: no period"))), "front-matter", "plain");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: \"quoted.\""))), "", "quoted");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: wrapped\n  over two lines."))), "", "wrapped");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("description: >-\n  folded"))), "front-matter", "folded, no period");
+}
+
+test "the H1 must be the front-matter title, compared after YAML unquoting" {
+    final page = fun (t: str, h: str) > str => "---\ntitle: " + t + "\ndescription: D.\ntags: [d]\n---\n\n" + h + "\n";
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("Debugging magusfiles", "# Debugging"))), "h1-title", "mismatch");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("\"MGS1045: a magus\\\\guard.spawn\"", "# MGS1045: a magus\\guard.spawn"))),
+        "", "escaped backslash");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("D", "```md\n# D\n```\n\n# D"))), "", "a fenced H1 is not the H1");
+    assert\equal(rulesOf(lintMarkdown("docs/d.md", page("D", "## D"))), "h1-title", "no H1");
+}
+
+test "a docs page linked by its site URL is reported, the hosted console and code are not" {
+    final page = fun (body: str) > str => "---\ntitle: L\ndescription: L.\ntags: [l]\n---\n\n# L\n\n" + body + "\n";
+    final f = lintMarkdown("docs/l.md", page("See [targets](https://eli.gladman.cc/magus/concepts/targets/)."));
+    assert\equal(rulesOf(f), "site-link", "absolute page link");
+    assert\equal(f[0].line, 9, "its line");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("The [console](https://eli.gladman.cc/magus/console/)."))), "", "console");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("`[x](https://eli.gladman.cc/magus/a/)`"))), "", "inline code");
+    assert\equal(rulesOf(lintMarkdown("docs/l.md", page("```md\n[x](https://eli.gladman.cc/magus/a/)\n```"))), "", "fenced");
+}
+
+test "generated pages and pages outside docs/ skip the page rules" {
+    final bare = "# Something else\n";
+    assert\equal(rulesOf(lintMarkdown("docs/reference/rules/raw-tool.md", bare)), "", "generated tree");
+    assert\equal(rulesOf(lintMarkdown("docs/reference/config.md", bare)), "", "generated file");
+    assert\equal(rulesOf(lintMarkdown("README.md", bare)), "", "repo root");
+    assert\equal(rulesOf(lintMarkdown("docs/concepts/x.md", bare)), "front-matter", "authored page");
 }
 
 test "a four-backtick fence holds three-backtick fences without ending the block" {

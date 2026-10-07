@@ -1,11 +1,11 @@
 ---
-title: magusfile diagnostics
+title: Magusfile diagnostics
 page_type: overview
 description: Landing page for MGS1xxx diagnostics that flag authoring mistakes in a workspace's magusfile, such as missing targets or unresolved declarations.
 tags: [magusfile, diagnostics, error codes, MGS1xxx, targets, doctor, authoring]
 ---
 
-# Magusfile authoring diagnostics
+# Magusfile diagnostics
 
 Codes in the `MGS1xxx` range flag problems with how a workspace's magusfile(s)
 are authored: targets that must exist but don't, declarations that won't

@@ -275,6 +275,36 @@ It is filled rather than outlined so it reads as a status, not a topic, next to 
 topical tags beside it. Edit the generator, not the page; a hand edit is overwritten on
 the next build.
 
+## Page shape
+
+Every hand-written page opens the same way, so a reader and a script each find the same
+thing in the same place. `magus run lint docs` refuses a page that departs from it:
+
+```md
+---
+title: <the page's name>
+order: <a number, optional; or page_type: overview>
+description: <one or two sentences, ending with a period.>
+tags: [<topics>]
+aliases: [<old paths>, optional]
+---
+
+# <the title, word for word>
+```
+
+- **Keys in that order.** The description sits where every other page keeps it, and
+  `aliases` trails because only a page that moved has any.
+- **The description ends with a period.** Search results and link previews show it as a
+  sentence.
+- **The H1 is the title.** The title names the page in the browser tab, search and every
+  index; the H1 names it on the page. A reader who followed one should land on the other.
+- **Pages link pages by relative `.md` path**, never by their published URL. A relative
+  link is checked by this lint and the build, works in a local preview and on GitHub, and
+  points at the same version of the docs the reader is on. The hosted console is an app,
+  not a page, so a link to it stays absolute.
+
+Generated pages are their generator's to fix, and skip these checks.
+
 ## Architecture decision records
 
 Every page in `docs/decisions/` named `NNNN-<slug>.md` is an ADR, and every ADR follows

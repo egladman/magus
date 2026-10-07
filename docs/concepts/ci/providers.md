@@ -1,6 +1,5 @@
 ---
 title: CI providers
-aliases: [concepts/ci-providers]
 description: Teach magus your CI system's job-log structure with a provider spell - fold markers around failures and annotations that surface on a pull request - without magus itself knowing any vendor's syntax.
 tags:
   [
@@ -14,6 +13,7 @@ tags:
     extension,
     security,
   ]
+aliases: [concepts/ci-providers]
 ---
 
 # CI providers

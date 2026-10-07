@@ -1,5 +1,5 @@
 ---
-title: services diagnostics
+title: Services diagnostics
 page_type: overview
 description: Landing page for MGS5xxx diagnostics that flag problems with long-running service ops, such as near-duplicate services that should be shared instead of run as separate processes.
 tags: [services, diagnostics, error codes, MGS5xxx, service op, doctor, sharing]
