@@ -6,8 +6,12 @@ import "magus";
 import "magus/lint";
 
 // FAMILIES are the precedents this repository holds itself to. dep-direction and dep-fanout
-// stay advice: depguard and importceiling enforce the layering by declaration.
-export final FAMILIES = ["err-sentinel-name", "test-package-name"];
+// stay advice: depguard and importceiling enforce the layering by declaration. ctx-first and
+// error-last repeat revive's rules, but revive does not lint every nested module (gopherbuzz
+// runs go vet alone), and these read every Go index. param-name-by-type and param-order stay advice: measured at 3e29af6ff they
+// establish 176 and 435 keys, most of them a local habit (a rune named r), with 144 and 76
+// departures.
+export final FAMILIES = ["ctx-first", "err-sentinel-name", "error-last", "test-package-name"];
 
 // LANGUAGES are the indexes the rule judges. Buzz joins once CI installs scip-buzz; until
 // then a Buzz row would hold on one machine and not another.
@@ -69,30 +73,34 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
     final departed = mut {<str: bool>};
     foreach (lang in LANGUAGES) {
         foreach (family in FAMILIES) {
-            var row: any = null;
+            // A keyed family (a parameter type, a pair of names) makes a row per key, and each
+            // established one is held.
+            final held = mut [<any>];
             foreach (r in rows) {
-                if (r["family"] == family and r["scope"]["language"] == lang) {
-                    row = r;
+                if (r["family"] == family and r["scope"]["language"] == lang and r["established"] == true) {
+                    held.append(r);
                 }
             }
-            if (row == null or row["established"] != true) {
+            if (held.len() == 0) {
                 found.append(Finding{ path = ".", message = "the index establishes no {lang} {family} precedent to hold",
                     fix = "The miner or the index changed under this rule; read `magus\\precedents()` before dropping the family." });
                 continue;
             }
-            final follow = std\toInt(row["follow"]);
-            final cohort = std\toInt(row["cohort"]);
-            final departures: [any] = row["departures"] ?? [<any>];
-            foreach (d in departures) {
-                final node: str = d["node"] ?? "";
-                departed[node] = true;
-                if (sanctioned[node] != null) {
-                    continue;
+            foreach (row in held) {
+                final follow = std\toInt(row["follow"]);
+                final cohort = std\toInt(row["cohort"]);
+                final departures: [any] = row["departures"] ?? [<any>];
+                foreach (d in departures) {
+                    final node: str = d["node"] ?? "";
+                    departed[node] = true;
+                    if (sanctioned[node] != null) {
+                        continue;
+                    }
+                    final at = position(d["source"] ?? "");
+                    found.append(Finding{ path = at.path, line = at.line,
+                        message = "departs from the {family} precedent that {follow} of {cohort} {lang} cases follow: {node}",
+                        fix = "Follow it, or add the node to SANCTIONED in " + THIS + " with the reason it departs." });
                 }
-                final at = position(d["source"] ?? "");
-                found.append(Finding{ path = at.path, line = at.line,
-                    message = "departs from the {family} precedent that {follow} of {cohort} {lang} cases follow: {node}",
-                    fix = "Follow it, or add the node to SANCTIONED in " + THIS + " with the reason it departs." });
             }
         }
     }
@@ -132,9 +140,13 @@ fun row(family: str, departures: [any]) > {str: any} {
         "follow": 85.0, "cohort": 86.0, "departures": departures};
 }
 
+// report holds a row of every family, with departures under err-sentinel-name.
 fun report(indexes: [any], departures: [any]) > {str: any} {
-    return {"indexes": indexes,
-        "precedents": [row("err-sentinel-name", departures: departures), row("test-package-name", departures: [<any>])]};
+    final rows = mut [<any>];
+    foreach (family in FAMILIES) {
+        rows.append(row(family, departures: if (family == "err-sentinel-name") departures else [<any>]));
+    }
+    return {"indexes": indexes, "precedents": rows};
 }
 
 test "an unsanctioned departure is reported at its line" {
@@ -167,7 +179,29 @@ test "a stale or missing index fails instead of passing on what it lacks" {
 }
 
 test "a family the index no longer establishes fails" {
-    final r: {str: any} = {"indexes": [fresh("go")], "precedents": [row("test-package-name", departures: [<any>])]};
-    final got = judge(r, sanctioned: {<str: str>});
+    final r = report([fresh("go")], departures: [<any>]);
+    final rows: [any] = r["precedents"];
+    final kept = mut [<any>];
+    foreach (p in rows) {
+        if (p["family"] != "err-sentinel-name") {
+            kept.append(p);
+        }
+    }
+    final got = judge({"indexes": r["indexes"], "precedents": kept}, sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "err-sentinel-name is missing");
+}
+
+test "every established row of a keyed family is held and an unestablished one is not" {
+    final r = report([fresh("go")], departures: [<any>]);
+    final rows: [any] = r["precedents"];
+    final keyed = mut [<any>];
+    foreach (p in rows) {
+        keyed.append(p);
+    }
+    keyed.append(row("ctx-first", departures: [{"node": "symbol:x/callValue().", "source": "vm/operators.go:1344"}]));
+    keyed.append({"family": "ctx-first", "scope": {"language": "go"}, "established": false,
+        "follow": 3.0, "cohort": 6.0, "departures": [{"node": "symbol:x/other().", "source": "vm/other.go:1"}]});
+    final got = judge({"indexes": r["indexes"], "precedents": keyed}, sanctioned: {<str: str>});
+    assert\equal(got.len(), want: 1, message: "the second established row's departure, and not the loose row's");
+    assert\equal(got[0].path, want: "vm/operators.go", message: got[0].message);
 }
