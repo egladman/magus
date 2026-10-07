@@ -1,16 +1,15 @@
-// Comment extraction for the prose check. Vale never reads a source file: the comment
-// scanner the spells declare (internal/risk) writes one Markdown document of comment
-// blocks and a table mapping each document line back to its file and line.
+// Comment extraction for the prose check. Vale never reads a source file: the comments
+// host module hands back each comment block's prose with its file, line and column, and
+// this renders them as one document of paragraphs beside a table mapping each document
+// line back to its source.
 namespace prosecomments;
 
 import "std";
 import "fs";
-import "os";
-import "proc";
 import "vcs";
 import "magus";
+import "comments";
 import "magus/lint";
-import "encoding/json";
 import "hack/prose/vale" as prosevale;
 
 // SKIPPED are trees whose comments are not this repository's prose: upstream and
@@ -21,8 +20,7 @@ final SKIPPED = ["hack/testdata-upstream/", "testdata/", "/testdata/"];
 // extension a spell declares comment syntax for, in each project holding one.
 export final READS = ["**/*.go", "**/*.buzz", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs",
     "**/*.proto", "console/**/*.ts", "docs/**/*.ts", "docs/**/*.mjs", "libs/**/*.go",
-    "libs/**/*.buzz", "proto/**/*.proto", ".vale.ini", ".vale/styles/**/*.yml",
-    "internal/risk/*.go", "hack/prose/*.buzz"];
+    "libs/**/*.buzz", "proto/**/*.proto"];
 
 // syntax maps each extension a spell claims to the comment syntax it declares.
 export fun syntax() > {str: any} !> any {
@@ -72,35 +70,31 @@ export fun sources(exts: {str: any}) > [str] !> any {
     return kept;
 }
 
-// extract writes <prefix>.comments and <prefix>.json for paths through internal/risk's
-// TestProseExport, the one entry to the Go scanner a Buzz script can reach.
-export fun extract(paths: [str], exts: {str: any}, prefix: str) > [prosevale\SourceLine] !> any {
-    final root = vcs\root();
-    // go test runs in the package directory, so both paths it reads are absolute.
-    final abs = if (prefix.startsWith("/")) prefix else root + "/" + prefix;
-    final request = abs + ".request.json";
-    fs\writeFile(request, content: json\stringify({"root": root, "syntax": exts, "paths": paths}));
-    final env = {"MAGUS_PROSE_REQUEST": request, "MAGUS_PROSE_OUT": abs, "GOEXPERIMENT": "jsonv2"};
-    os\withEnv(env, callback: fun () > void !> any {
-        final res = proc\exec("go", args: ["test", "-count=1", "-run", "^TestProseExport$", "./internal/risk/"],
-            dir: root, opts: {"quiet": true, "allow_failure": true});
-        if (!res.ok) {
-            throw "prose: extracting comments failed:\n{res.stdout}{res.stderr}";
-        }
-    });
-    fs\rename(abs + ".md", dst: abs + ".comments");
-    return origins(fs\readFile(abs + ".json"));
+// Document is a rendered comment document and the table mapping each of its lines back
+// to its source; a separator line maps to an empty SourceLine.
+export object Document {
+    text: str = "",
+    table: [prosevale\SourceLine] = [<prosevale\SourceLine>],
 }
 
-// origins decodes the position table extract writes.
-export fun origins(table: str) > [prosevale\SourceLine] !> any {
-    final rows: [any] = json\parse(table)["origins"] ?? [<any>];
-    final found = mut [<prosevale\SourceLine>];
-    foreach (r in rows) {
-        found.append(prosevale\SourceLine{ path = r["path"] ?? "", line = std\toInt(r["line"] ?? 0),
-            col = std\toInt(r["col"] ?? 0) });
+// render lays out blocks, as comments\blocks returns them, one paragraph each.
+export fun render(blocks: [any]) > Document {
+    final lines = mut [<str>];
+    final table = mut [<prosevale\SourceLine>];
+    foreach (i, b in blocks) {
+        if (i > 0) {
+            lines.append("");
+            table.append(prosevale\SourceLine{});
+        }
+        final path: str = b["path"];
+        final rows: [any] = b["lines"];
+        foreach (r in rows) {
+            final text: str = r["text"];
+            lines.append(text);
+            table.append(prosevale\SourceLine{ path = path, line = std\toInt(r["line"]), col = std\toInt(r["col"]) });
+        }
     }
-    return found;
+    return Document{ text = lines.join("\n") + "\n", table = table };
 }
 
 // Judged is a check's result: the findings that fail it and the advice that does not.
@@ -113,13 +107,12 @@ export object Judged {
 // prosevale\run, or a magusfile's call of the vale spell's op.
 export fun check(dir: str, vale: fun (paths: [str]) > str !> any) > Judged !> any {
     final exts = syntax();
-    fs\mkdirAll(dir);
-    final prefix = dir + "/comments";
-    final table = extract(sources(exts), exts: exts, prefix: prefix);
-    final doc = prefix + ".comments";
+    final blocks: [any] = comments\blocks(sources(exts), syntax: exts);
+    final rendered = render(blocks);
+    final doc = prosevale\writeDocument(dir, name: "comments.comments", text: rendered.text);
     final found = prosevale\alerts(vale([doc]));
-    return Judged{ blocking = prosevale\blocking(found, origins: table, doc: doc),
-        advice = prosevale\advice(found, origins: table, doc: doc) };
+    return Judged{ blocking = prosevale\blocking(found, origins: rendered.table, doc: doc),
+        advice = prosevale\advice(found, origins: rendered.table, doc: doc) };
 }
 
 test "generated output and fixture trees are skipped" {
@@ -128,10 +121,18 @@ test "generated output and fixture trees are skipped" {
     std\assert(!skipped("internal/risk/prose.go"), message: "source");
 }
 
-test "the position table decodes separator rows as empty origins" {
-    final got = origins(`{"origins":[{"path":"a.go","line":3,"col":4},{},{"path":"b.ts","line":1,"col":15}]}`)
-        catch [<prosevale\SourceLine>];
-    std\assert(got.len() == 3, message: "three rows");
-    std\assert(got[0].path == "a.go" and got[0].line == 3 and got[0].col == 4, message: "first");
-    std\assert(got[1].path == "", message: "separator");
+test "blocks render as paragraphs and each line maps back to its source column" {
+    final blocks: [any] = [
+        {"path": "a.go", "lines": [{"line": 3, "col": 4, "text": "Alpha simply."}, {"line": 4, "col": 4, "text": "Beta."}]},
+        {"path": "b.ts", "lines": [{"line": 1, "col": 15, "text": "Epsilon."}]},
+    ];
+    final doc = render(blocks);
+    std\assert(doc.text == "Alpha simply.\nBeta.\n\nEpsilon.\n", message: doc.text);
+    std\assert(doc.table.len() == 4 and doc.table[2].path == "", message: "a separator has no source");
+    final at = prosevale\locate(prosevale\Alert{ check = "Magus.Filler", message = "m", line = 1, col = 7 },
+        origins: doc.table, doc: "doc");
+    std\assert(at.path == "a.go" and at.line == 3 and at.col == 10, message: prosevale\render(at));
+    final last = prosevale\locate(prosevale\Alert{ check = "Magus.Filler", message = "m", line = 4, col = 1 },
+        origins: doc.table, doc: "doc");
+    std\assert(last.path == "b.ts" and last.line == 1 and last.col == 15, message: prosevale\render(last));
 }

@@ -51,6 +51,13 @@ var modules = []Module{
 		},
 	},
 	{
+		Name: "comments",
+		Doc:  "Comment blocks of source files, read with the comment syntax their spells declare.",
+		Methods: []Method{
+			{Name: "blocks", Doc: "Return the prose of each comment block in paths as [{path, lines: [{line, col, text}]}], in path order. syntax maps a file extension (\".go\") to the comment syntax a spell declares for it, as magus\\describe.spell() reports it; a path whose extension it lacks is skipped. A block is a run of own-line line comments on consecutive lines, one block comment, or one trailing comment; directive comments, blank comment lines and indented code examples are left out. line and col are 1-based, col counted in runes, and text is the source from col on, so a column into text maps back by addition.", Sig: "comments\\blocks(paths, syntax) -> any"},
+		},
+	},
+	{
 		Name: "crypto",
 		Doc:  "Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.",
 		Methods: []Method{

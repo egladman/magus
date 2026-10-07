@@ -84,67 +84,26 @@ func nextLine(src string, off int) int {
 	return len(src)
 }
 
-// ProseOrigin is where one line of a ProseDocument came from. A separator line has none.
-type ProseOrigin struct {
-	Path string `json:"path,omitzero"`
-	Line int    `json:"line,omitzero"`
-	// Col is the source column, in runes, of the document line's first rune.
-	Col int `json:"col,omitzero"`
-}
-
-// ProseDocument is the plain text a prose linter judges in place of the sources: one
-// paragraph per comment block, blocks separated by a blank line. Origins[i] is the source
-// of document line i+1, which is how a finding at a document line maps back to a file.
-// Each line is its comment's text byte for byte, so a column maps back by addition.
-type ProseDocument struct {
-	Text    string        `json:"-"`
-	Origins []ProseOrigin `json:"origins"`
-}
-
-// NewProseDocument renders blocks into one document. A blank comment line and an
-// indented one, a code example, are left out, so each block reads as a single
-// paragraph of prose.
-func NewProseDocument(blocks []CommentBlock) ProseDocument {
-	var doc ProseDocument
-	var text strings.Builder
+// ProseBlocks keeps the prose of each block: a blank comment line and an indented one,
+// a code example, are left out, and so is a block left with no line. Each kept line's
+// Text is its source text byte for byte from its first word, and Col points there, so a
+// prose linter's column on that text maps back to the source by addition.
+func ProseBlocks(blocks []CommentBlock) []CommentBlock {
+	var kept []CommentBlock
 	for _, b := range blocks {
-		var lines []ProseOrigin
-		var body []string
+		var lines []CommentLine
 		for _, l := range b.Lines {
 			prose, lead, ok := proseLine(l.Text)
 			if !ok {
 				continue
 			}
-			body = append(body, prose)
-			lines = append(lines, ProseOrigin{Path: b.Path, Line: l.Line, Col: l.Col + lead})
+			lines = append(lines, CommentLine{Line: l.Line, Col: l.Col + lead, Text: prose})
 		}
-		if len(body) == 0 {
-			continue
+		if len(lines) > 0 {
+			kept = append(kept, CommentBlock{Path: b.Path, Lines: lines})
 		}
-		if len(doc.Origins) > 0 {
-			text.WriteString("\n")
-			doc.Origins = append(doc.Origins, ProseOrigin{})
-		}
-		for _, line := range body {
-			text.WriteString(line)
-			text.WriteString("\n")
-		}
-		doc.Origins = append(doc.Origins, lines...)
 	}
-	doc.Text = text.String()
-	return doc
-}
-
-// Locate maps a 1-based document line and column to the source position it came from.
-func (d ProseDocument) Locate(line, col int) (ProseOrigin, bool) {
-	if line < 1 || line > len(d.Origins) || d.Origins[line-1].Path == "" {
-		return ProseOrigin{}, false
-	}
-	o := d.Origins[line-1]
-	if col > 1 {
-		o.Col += col - 1
-	}
-	return o, true
+	return kept
 }
 
 // proseLine is a comment line's prose and the bytes before it. A line indented past the

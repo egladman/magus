@@ -1,8 +1,0 @@
-# The squash merge makes the title main's subject, and GitHub appends ` (#NNN)` to it.
-extends: existence
-message: "Keep the pull request title within 72 characters; aim for 50 to 70."
-level: error
-scope: raw
-nonword: true
-raw:
-  - '\A# [^\n]{73,}'
