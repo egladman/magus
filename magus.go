@@ -311,7 +311,7 @@ func (m *Magus) explainStale(err error) error {
 func WorkspaceLoadFailure(root string, err error) *types.WorkspaceFailure {
 	f := &types.WorkspaceFailure{Message: err.Error()}
 	for _, branch := range joinedBranches(err, "") {
-		d, ok := buzz.DiagnosticOf(branch.err)
+		d, ok := buzz.DiagnosticFromError(branch.err)
 		if !ok {
 			continue
 		}
