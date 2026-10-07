@@ -43,11 +43,11 @@ Inherited rather than yielded: the run-isolation lease and the cross-process mac
 
 Two watchers remain, plus one deleted:
 
-| Code | Watches | Grace | Kind |
-|---|---|---|---|
-| MGS3013 | the slot pool | 3s | reduction over **registered** holds |
-| MGS3012 | invocation silence | 15m | timeout |
-| ~~MGS3015~~ | the isolation gate | 30s | deleted 2026-09-19 |
+| Code        | Watches            | Grace | Kind                                |
+| ----------- | ------------------ | ----- | ----------------------------------- |
+| MGS3013     | the slot pool      | 3s    | reduction over **registered** holds |
+| MGS3012     | invocation silence | 15m   | timeout                             |
+| ~~MGS3015~~ | the isolation gate | 30s   | deleted 2026-09-19                  |
 
 MGS3013's 3s grace is a settling delay rather than the test. The test is a predicate: "no
 holder can release and the free count cannot satisfy any waiter". But it is **one-sided**,
@@ -76,9 +76,9 @@ wrong record refuses healthy runs. Both happened; the second is why MGS3015 is g
 
 ### The contradiction already in the codebase
 
-The dependency barrier has never deadlocked, and its doc says why: *"Every goroutine is
+The dependency barrier has never deadlocked, and its doc says why: _"Every goroutine is
 launched immediately and blocks on deps without holding a slot, so the pool never
-deadlocks."* That is the opposite principle from `Yield`, in the same package, and nobody
+deadlocks."_ That is the opposite principle from `Yield`, in the same package, and nobody
 reconciled the two.
 
 ## Decision
@@ -93,7 +93,7 @@ admission, the Buzz pool, `proc`, the daemon and every raw acquisition site.
 first child; the last child hands it back. Same parallelism, no non-cancellable re-acquire,
 no FIFO priority inversion where a parent that already owns work queues behind strangers,
 and a continuous hold record. This is GNU make's token rule ("every recursive invocation can
-always run at least one job"), which magus already adopted for the *machine* budget as
+always run at least one job"), which magus already adopted for the _machine_ budget as
 `freeSlot`. Both detectors stay. Small, and valuable even if the later stages never land.
 
 **Stage 2. Leaf acquisition inside the yielded regions.** A slot is taken where a subprocess
@@ -148,7 +148,7 @@ Bazel's `exclusive` are per-action because their actions are leaves; magus's are
 
 With the flag gone, the run-isolation gate, its lease and the inheritance rule go with it.
 
-MGS3012 stays throughout, as the only timer. It bounds invocation *silence*, not a resource
+MGS3012 stays throughout, as the only timer. It bounds invocation _silence_, not a resource
 wait, and it is the backstop for waits whose subject is outside this process.
 
 ### What this buys
@@ -172,7 +172,7 @@ held while a lease is re-taken. Gradle's cycles need a second lock beside the le
 has one, `hashLocks`, held across the whole body.
 
 **Exact detection via a wait-for graph.** Postgres, InnoDB and the JVM do this and it is
-correct. It is also what this codebase just failed at: MGS3015 *was* a reduction and it
+correct. It is also what this codebase just failed at: MGS3015 _was_ a reduction and it
 answered off an aliased record. A full graph would cover five in-process wait types, cost
 nothing at runtime, and inherit exactly the marking discipline that produced the incident.
 It names deadlocks; it does not remove them.
@@ -187,7 +187,7 @@ up front. A target's transitive slot need is unknowable before its body runs. No
 system uses it for this reason.
 
 **Ordered acquisition alone.** Already in place (machine, gate, slot, key) and kept. Breaks
-cycles *between* resource types; cannot address a re-entrant request for the same type at a
+cycles _between_ resource types; cannot address a re-entrant request for the same type at a
 deeper nesting level, which is the only cycle recursion creates.
 
 **Priority ceiling protocols.** Require static knowledge of which task can ever take which
@@ -206,13 +206,13 @@ a structural rule.
 
 ### What other systems do
 
-| System | Recursion | What is bounded | Nested wait |
-|---|---|---|---|
-| **GNU make** | yes | one token per *job* | the recipe's token becomes the sub-make's implicit token: direct hand-off |
-| **Shake** | yes | `shakeThreads` over running rules; `Resource` around the expensive part | `need` captures a continuation; no thread blocks |
-| **Buck2 / DICE** | yes | permits around *command execution* | an awaiting computation holds no thread; identifier semaphores taken before permits |
-| **Bazel** | no, actions are leaves | `--jobs` over actions | not evidence about recursion |
-| **Tokio** | yes | worker threads | `block_in_place` hands the worker's tasks away first |
+| System           | Recursion              | What is bounded                                                         | Nested wait                                                                         |
+| ---------------- | ---------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **GNU make**     | yes                    | one token per _job_                                                     | the recipe's token becomes the sub-make's implicit token: direct hand-off           |
+| **Shake**        | yes                    | `shakeThreads` over running rules; `Resource` around the expensive part | `need` captures a continuation; no thread blocks                                    |
+| **Buck2 / DICE** | yes                    | permits around _command execution_                                      | an awaiting computation holds no thread; identifier semaphores taken before permits |
+| **Bazel**        | no, actions are leaves | `--jobs` over actions                                                   | not evidence about recursion                                                        |
+| **Tokio**        | yes                    | worker threads                                                          | `block_in_place` hands the worker's tasks away first                                |
 
 make holds its bound across a nested wait by design, with bounded overshoot; that is
 stage 1. Shake, Buck2 and Tokio move the bound off the suspending computation; that is

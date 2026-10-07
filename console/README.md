@@ -168,7 +168,7 @@ the end of `tokens.css` maps all nine roles (paper, surface, ink, muted, soft, r
 accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
 with no per-theme copy. `apps/graph/diagrams/view-dom.test.ts` fails if a role goes missing.
 
-## The Graph's Figures mode (`src/apps/graph/diagrams/`)
+## Figures mode in the graph app (`src/apps/graph/diagrams/`)
 
 A view inside the Graph app, bundled into `gen/graph/graph.js` and `graph.css`, over
 `GET /api/v1/diagrams`. The Graph's Figures button, the `graph.figures.toggle` command and
@@ -210,7 +210,7 @@ skips until `magus run build_playground docs` has run.
 - **Escape hatch:** one small audited `overrides.css` for a genuinely PF-less bit. Prefer a
   `pf-v6-u-*` utility or an ID-scoped rule first.
 
-## Naming methodology (STRICT - the formula for every class we author)
+## Naming methodology (strict - the formula for every class we author)
 
 PatternFly owns the `pf-v6-*` vocabulary; we consume it as-is and invent NOTHING that overlaps
 it. But some bits have no PF component (the status bar, the ANSI log body, the graph stage, the
@@ -222,7 +222,9 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
 
 ### The formula
 
-    console-<area>-<block>[__<element>][--<modifier>]
+```text
+console-<area>-<block>[__<element>][--<modifier>]
+```
 
 - **`console-`** - the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
   A bare class like `.badge` or `.qchip` is forbidden; `grep -r "class=" | grep -v "pf-v6-\|console-"`
@@ -281,15 +283,17 @@ before reusing a name that reads as generic.
 
 ### Examples (ad-hoc -> the convention)
 
-    .a-fg-red        -> .console-render-ansi__fg--red
-    .a-bold          -> .console-render-ansi--bold
-    .badge-pass      -> .console-render-badge--pass
-    .log-section     -> .console-render-section
-    .status-item     -> .console-shell-statusbar__item
-    .conn (dot)      -> .console-shell-statusbar__dot   (+ [data-state]/[data-health])
-    .dash-hero       -> .console-dashboard-hero
-    .gantt-bar       -> .console-dashboard-gantt__bar   (+ --running/--failed/... variants)
-    .node-pill       -> .console-graph-nodelist__pill
-    .k-<kind> dot    -> .console-graph-legend__swatch   (+ data-kind="<kind>")
-    .sw-toast        -> .console-shell-toast
-    .qchip           -> .console-log-filter__chip
+```text
+.a-fg-red        -> .console-render-ansi__fg--red
+.a-bold          -> .console-render-ansi--bold
+.badge-pass      -> .console-render-badge--pass
+.log-section     -> .console-render-section
+.status-item     -> .console-shell-statusbar__item
+.conn (dot)      -> .console-shell-statusbar__dot   (+ [data-state]/[data-health])
+.dash-hero       -> .console-dashboard-hero
+.gantt-bar       -> .console-dashboard-gantt__bar   (+ --running/--failed/... variants)
+.node-pill       -> .console-graph-nodelist__pill
+.k-<kind> dot    -> .console-graph-legend__swatch   (+ data-kind="<kind>")
+.sw-toast        -> .console-shell-toast
+.qchip           -> .console-log-filter__chip
+```
