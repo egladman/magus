@@ -224,53 +224,18 @@ func (d *DerivedOrder) TopoNodes() []int {
 //
 // Exclusions are never a side of the pair. They rule a pair out only where that is
 // decidable: a literal side one of the two globs excludes.
-//
-// A write glob stops at a nested project the way the snapshot and replay have it
-// (types.GlobClaims): a read confined to a reader nested under the writer's project meets
-// only a write glob rooted inside that reader. Read globs keep no such boundary, because
-// the hasher walks into nested projects and so do the tools (a go.mod replace compiles a
-// nested module).
 func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
-	nested := r.Project != n.Project && nestedUnder(r.Project, n.Project)
 	for _, wg := range n.Writes {
 		if !r.DeclaredReads && underIgnoredDir(wg.Pattern, r.IgnoreDirs) {
 			continue
 		}
 		for _, rg := range r.Reads {
-			if nested && globWithin(rg.Pattern, r.Project) && !claimsInside(wg.Pattern, r.Project) {
-				continue
-			}
 			if types.GlobsOverlap(wg.Pattern, rg.Pattern) && !excludedLiteral(wg, rg) {
 				return wg.Pattern, rg.Pattern, true
 			}
 		}
 	}
 	return "", "", false
-}
-
-// nestedUnder reports whether project path child lies below parent, the root "." holding
-// every other project.
-func nestedUnder(child, parent string) bool {
-	if parent == "" || parent == "." {
-		return child != "" && child != "."
-	}
-	return strings.HasPrefix(child, parent+"/")
-}
-
-// globWithin reports whether every path glob can match lies inside dir: its literal
-// prefix, or the whole of a literal glob, is dir or below it.
-func globWithin(glob, dir string) bool {
-	lead := glob
-	if types.IsGlobMeta(glob) {
-		lead = staticDirPrefix(glob)
-	}
-	return lead == dir || strings.HasPrefix(lead, dir+"/")
-}
-
-// claimsInside reports whether write glob may claim a path inside the nested project dir,
-// by types.GlobClaims with dir as the only nested project.
-func claimsInside(glob, dir string) bool {
-	return types.GlobClaims(glob, dir+"/", []string{dir})
 }
 
 // excludedLiteral reports whether a literal side of an overlapping pair is excluded by

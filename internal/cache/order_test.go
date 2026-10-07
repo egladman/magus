@@ -367,30 +367,6 @@ func TestFindSameStepConflictsHonorsTheWitness(t *testing.T) {
 	assert.NotEmpty(t, FindSameStepConflicts(badgeFixture(false), always))
 }
 
-// A write tree glob stops at a nested project, as types.GlobClaims has it for the snapshot
-// and replay: the root's gofmt over **/*.go never claims libs/x, so libs/x's own format is
-// not its reader. A root file that libs/x reads is still the root's to write.
-func TestOrderWriteTreeGlobStopsAtANestedReader(t *testing.T) {
-	t.Parallel()
-	step := ref(".", "ci")
-	nodes := []TargetNode{
-		{Project: ".", Target: "ci", Steps: []types.TargetRef{step},
-			Needs: Needs(ref(".", "format"), ref("libs/x", "format"), ref("libs/x", "index"))},
-		{Project: ".", Target: "format", Steps: []types.TargetRef{step},
-			Writes: types.MustParseGlobs("**/*.go"), DeclaredWrites: true},
-		{Project: "libs/x", Target: "format", Steps: []types.TargetRef{step},
-			Reads: types.MustParseGlobs("libs/x/**/*.go"), DeclaredReads: true,
-			Writes: types.MustParseGlobs("libs/x/**/*.go"), DeclaredWrites: true},
-		{Project: "libs/x", Target: "index", Steps: []types.TargetRef{step},
-			Reads: types.MustParseGlobs("internal/hint/cli.go"), DeclaredReads: true,
-			Writes: types.MustParseGlobs("libs/x/MAGUS.md"), DeclaredWrites: true},
-	}
-	got := FindSameStepConflicts(nodes, nil)
-	require.Len(t, got, 1, "only the read of a root file meets the root's write")
-	assert.Equal(t, ref(".", "format"), got[0].Writer)
-	assert.Equal(t, ref("libs/x", "index"), got[0].Reader)
-}
-
 // A cross-project pair is real and reported, but the refusal is reserved for a pair
 // whose fix is one ctx.needs in the file that composes both.
 func TestCrossProjectConflictAdvisesInsteadOfRefusing(t *testing.T) {
