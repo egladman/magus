@@ -1113,7 +1113,7 @@ func magusInThrowawayCopy(command string, d Dialect) bool {
 
 // expandGuardVars substitutes $NAME and ${NAME} from assignments made earlier on
 // the same line. Anything it cannot resolve is left as written, so an unknown
-// variable simply fails to match rather than matching everything.
+// variable fails to match rather than matching everything.
 func expandGuardVars(s string, vars map[string]string) string {
 	for name, val := range vars {
 		s = strings.ReplaceAll(s, "${"+name+"}", val)

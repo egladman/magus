@@ -246,10 +246,10 @@ func hasMagusBinary(root string) bool {
 const ownRebuild = "`./magus run go-build .`"
 
 // ownBuildOutcome is the correction rankOwnBuild applies to a raw-tool deny of a go
-// command in a checkout of magus: whether the call is the bootstrap, whether its line
-// carries exactly the bootstrap's prefix, whether root already has a binary, whether the
-// call shared its line with something else, and the verdict to use when the bootstrap
-// stands alone in a root with none.
+// command in a checkout of magus. It records whether the call is the bootstrap, whether
+// its line carries exactly the bootstrap's prefix, whether root already has a binary and
+// whether the call shared its line with something else. It also holds the verdict to use
+// when the bootstrap stands alone in a root with none.
 type ownBuildOutcome struct {
 	root string
 	// bootstrapArgv is the bootstrap as the call's directory runs it: with -C when root

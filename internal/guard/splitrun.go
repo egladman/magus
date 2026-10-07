@@ -196,7 +196,7 @@ func sortedCopy(s []string) []string {
 // magusRunValueFlags are magus's own global flags that consume a separate operand,
 // mirrored from cmd/magus's peekSub (which this package cannot import: main is a command,
 // not a library). Missing an entry here costs a missed advisory, not a wrong one: the next
-// bare word is misread as the verb and parsing simply stops rather than misfiring.
+// bare word is misread as the verb and parsing stops rather than misfiring.
 var magusRunValueFlags = map[string]bool{
 	"-root": true, "--root": true, "-C": true, "--C": true,
 	"-config": true, "--config": true, "-c": true, "--c": true,

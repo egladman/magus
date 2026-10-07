@@ -19,7 +19,7 @@ import (
 //   - a list needs `mut` before .append, and the declaration had `var` alone
 //   - the ternary form is rejected outside --embedded, where upstream-strict parsing applies
 //   - archive\extract does not exist; the module offers uncompress and readFile
-//   - `import "fs"` was simply missing
+//   - `import "fs"` was missing
 //   - strings are BYTE-indexed, so .sub produced a digest that matched nothing
 //
 // Six, all of them facts that reading first would have supplied. None was a typo.
