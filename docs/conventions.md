@@ -1,6 +1,6 @@
 ---
 title: Conventions
-description: How to read the magus docs: placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages.
+description: "How to read the magus docs: placeholders, shell commands, runnable examples, admonitions, code-block titles, and auto-generated pages."
 tags: [conventions, documentation, placeholders, examples, style, reference]
 ---
 

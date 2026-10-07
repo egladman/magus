@@ -1,6 +1,6 @@
 ---
 title: Compatibility
-description: What magus promises across versions: the three contracts it keeps, why a magusfile that works today keeps working, how a workspace declares the magus version it needs, and why there is no plan for a 2.0.
+description: "What magus promises across versions: the three contracts it keeps, why a magusfile that works today keeps working, how a workspace declares the magus version it needs, and why there is no plan for a 2.0."
 tags:
   [
     compatibility,

@@ -1,7 +1,7 @@
 ---
 title: Running under CI
 order: 10
-description: What changes when magus runs on a build server rather than your machine: the pipeline verb, the checkout, the shared cache, and the provider spell that teaches magus one CI system's log format.
+description: "What changes when magus runs on a build server rather than your machine: the pipeline verb, the checkout, the shared cache, and the provider spell that teaches magus one CI system's log format."
 tags:
   [
     ci,

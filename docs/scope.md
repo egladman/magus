@@ -1,6 +1,6 @@
 ---
 title: Scope
-description: The claim magus is built on: that a correct incremental build already requires a precise model of your repo, and everything else is a read of it. Includes the test for what belongs, the boundaries, and where the claim is strained.
+description: "The claim magus is built on: that a correct incremental build already requires a precise model of your repo, and everything else is a read of it. Includes the test for what belongs, the boundaries, and where the claim is strained."
 tags:
   [scope, boundaries, design, philosophy, prior art, nx, dagger, bazel]
 ---

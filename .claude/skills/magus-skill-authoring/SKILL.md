@@ -1,6 +1,6 @@
 ---
 name: magus-skill-authoring
-description: The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary.
+description: "The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary."
 ---
 
 # Authoring the agent surface
