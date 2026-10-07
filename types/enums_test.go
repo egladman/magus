@@ -10,7 +10,10 @@ func TestEnumPrecedentFamilyClosesItsSet(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t,
-		[]string{"dep-direction", "dep-fanout", "err-sentinel-name", "test-package-name"},
+		[]string{
+			"dep-direction", "dep-fanout", "err-sentinel-name", "test-package-name", "param-name-by-type",
+			"param-order", "ctx-first", "error-last",
+		},
 		PrecedentFamily("").Values())
 	assert.Equal(t,
 		map[PrecedentFamily]bool{"": true, PrecedentDepFanout: true, "dep-fan-out": false},
