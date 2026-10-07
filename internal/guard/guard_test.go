@@ -447,14 +447,17 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
 		run := shellIn(t, "trim-key")
-		assert.NotEqual(t, "deny", run(`gh pr create --title "fix(cache): pin the key" --body "Pins it."`).Decision, "no first-use gate")
+		v := run(`gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`)
+		assert.NotEqual(t, "deny", v.Decision, "no first-use gate: "+v.Reason)
 
-		v := run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
+		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, `pr-title: "Pin the key": no `+"`<type>: `"+` prefix`)
-		assert.Contains(t, v.Reason, "credits a tool")
+		assert.Contains(t, v.Reason, "Drop 'Claude': describe the change, not who or what produced it. [attribution]")
 		assert.NotContains(t, v.Reason, "Skill(")
-		assert.NotEqual(t, "deny", run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Reads .claude/skills/x/SKILL.md."`).Decision)
+
+		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
+		assert.NotEqual(t, "deny", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason)
 	})
 
 	covered["code-comments"] = true
