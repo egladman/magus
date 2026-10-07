@@ -66,7 +66,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      57 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      58 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `ci`                                 |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -89,6 +89,7 @@ magus graph export -o json  # the whole graph
 | `security`               | Runs govulncheck and gates on dependency license terms.                                                                                                                                                                        |
 | `man-generate`           | Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock, both serialized from the internal/cli registry.                                                                                         |
 | `pr-title`               | Fails a pull request title that is not a conventional commit subject, or whose description opens in the past tense or sells instead of saying what changed.                                                                    |
+| `pr-description`         | Fails a pull request whose title or description the prose judge in libs/conventions/prose finds a fault in, the judge the guard's pull-request-text rule runs, so the two cannot disagree.                                     |
 | `pr-changelog`           | Fails a feat, fix, perf or breaking pull request that ships code without a changelog fragment under changes/unreleased/, and any malformed fragment.                                                                           |
 | `git-hooks-install`      | Installs a shim in git's hooks directory for every hack/git-hooks/<hook>.buzz.                                                                                                                                                 |
 | `git-hooks-remove`       | Deletes the shims git_hooks_install wrote, and no hook anything else wrote.                                                                                                                                                    |

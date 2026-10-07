@@ -373,6 +373,45 @@ tags: [adr, decision, <topics>]
 `magus run conventions docs` enforces all of it as the `adr-template` rule
 ([`docs/lib/adr.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/adr.buzz)).
 
+## Writing rules
+
+Hand-written Markdown and every pull request's title and description read as plain,
+prescriptive technical writing: a stranger understands each sentence without the request,
+the conversation or the tool behind it. The judge is Go, in
+[`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose).
+`judge-docs -surface markdown <file>...` judges files, and `judge-docs -surface
+pull-request` judges a pull request read from stdin, its title on the first line. The
+guard's `pull-request-text` rule runs it on `gh pr create` and `gh pr edit`, and the
+`pr-description` check runs it on every pull request, so the two cannot disagree. Every
+rule is an error:
+
+- `reply-voice`: no opener that answers a request (`This PR`, `This change`, `Here's`,
+  `I've`, `Let me`), no reference to a conversation (`as discussed`, `per your`), and no
+  list item that opens with a bold label (`- **Cache:** on`). A pull request description
+  also carries no heading and no section label such as `Summary` or `Test plan`.
+- `lead-context`: a pull request description opens with a paragraph of at least 12 words
+  naming the goal behind the change and why this code stands in its way. The bullets of
+  what changes follow it.
+- `tense`: the present tense, describing the code after the change, with no `will`. A page
+  may speak as the project (`we believe`), but no author is the actor of a change
+  (`we added`), and a pull request names no author at all.
+- `hedge`: no softener on a claim (`might fix`, `may help`, `probably`, `aims to`,
+  `hopefully`). A `may` that grants a permission or states a contract (`a workspace may
+  declare`, `the value may be empty`) is not one.
+- `attribution`: no credit to a tool and no account of how the work was made
+  (`Co-Authored-By`, `Generated with`, `written with an AI`, `after several iterations`).
+  Agents, subagents, prompts and sessions are what magus is about, so a page names them
+  freely; in a pull request an agent that found or fixed something, or `this session`, is
+  the story of the work and is refused.
+- `filler`: no throat-clearing (`Note that`) and no filler word (`simply`, `actually`,
+  `really`, `very`, `robust`, `seamless`, `leverage`, `utilize`, and `just` meaning
+  merely).
+- `terms`: one spelling per glossary term, such as `subagent`.
+
+Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
+The guard and the check also ask, as advice that fails nothing, why a pull request touches
+a project or top-level package its description never names.
+
 ## Reading time
 
 Longer pages show an estimated reading time near the top. Nothing is measured about you:
