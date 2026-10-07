@@ -2,10 +2,13 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -437,10 +440,12 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 // a name pattern becomes handles through ctx.glob, so needs only ever sees target
 // functions and stays monomorphic. Same-project targets are awaited through the VM
 // pool / TargetRuns path (runBuzzDependencies); a cross-project handle dispatches via
-// CrossDispatch.
+// CrossDispatch. A call that names no target at all (no argument, or only empty lists)
+// raises rather than succeeding having run nothing.
 func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value, ext *externalHandles) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
 		var names []string
+		external := 0
 		// collect resolves one argument to its target name(s): a target function to
 		// its name, or a ctx.glob(...) list to each element's name. A cross-project
 		// handle dispatches immediately (awaited via CrossDispatch, not the same-project
@@ -459,6 +464,7 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 				return fmt.Errorf("each argument must be a target function (an exported target, a project import member, or a ctx.glob(...) result)")
 			}
 			if ref, ok := ext.lookup(arg); ok {
+				external++
 				return dispatchBuzzExternal(callCtx, ref)
 			}
 			name, err := resolveTargetFun(targets, exports, arg)
@@ -472,6 +478,10 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 			if err := collect(arg); err != nil {
 				return vm.Null, fmt.Errorf("ctx.needs: %w", err)
 			}
+		}
+		// The same silent no-op ctx.glob refuses, reached by an empty list or no argument.
+		if len(names) == 0 && external == 0 {
+			return vm.Null, errors.New("ctx.needs: names no target; pass a target function, a project import member, or a ctx.glob(...) that matches one")
 		}
 		// Park instead of blocking, WHEN a driver is there to resume us. What that buys
 		// is the ceiling: a blocking wait runs under the body's deadline, so a declared
@@ -534,17 +544,6 @@ func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Valu
 	return key, nil
 }
 
-// buildBuzzGlob returns ctx.glob(...), the pattern resolver that FEEDS
-// ctx.needs. Each argument is a glob pattern string matched against the project's
-// target names (matchBuzzTargets semantics: "*" wildcards, and a pattern without "*"
-// matches as "-<pattern>" suffix shorthand); it RETURNS the list of matching target
-// function handles, so ctx.needs(ctx.glob("*-generate")) depends on every
-// matching target. glob is the ONE place a pattern (a string) enters the dependency
-// surface: it turns a name query into handles, keeping ctx.needs monomorphic; it
-// only ever receives target functions. A pattern matching nothing yields an empty
-// list (needs of it is a no-op). Only exported-function targets carry a handle, so a
-// pattern that would match a spell-provided op yields no handle for it; depend on
-// such a target directly.
 // buildBuzzUses implements `ctx.uses(&resource(), fun() > void { ... })`: the body runs
 // between a resource fiber's acquire half and its release half, and the release ALWAYS
 // runs.
@@ -616,6 +615,19 @@ func buildBuzzUses(sess *buzz.Session) func(context.Context, []vm.Value) (vm.Val
 	}
 }
 
+// buildBuzzGlob returns ctx.glob(...), the pattern resolver that FEEDS
+// ctx.needs. Each argument is a glob pattern string matched against the project's
+// target names (matchBuzzTargets semantics: "*" wildcards, and a pattern without "*"
+// matches as "-<pattern>" suffix shorthand); it RETURNS the list of matching target
+// function handles, so ctx.needs(ctx.glob("*-generate")) depends on every
+// matching target. glob is the ONE place a pattern (a string) enters the dependency
+// surface: it turns a name query into handles, keeping ctx.needs monomorphic; it
+// only ever receives target functions.
+//
+// Patterns that yield no handle raise, naming the patterns. An empty list let
+// ctx.needs(ctx.glob(...)) succeed having run nothing, so a typo or a pattern aimed at a
+// spell op (which carries no handle here) left the dependent reading stale work with no
+// signal at all.
 func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		var patterns []string
@@ -638,8 +650,32 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 				handles = append(handles, h)
 			}
 		}
+		if len(handles) == 0 {
+			return vm.Null, globMatchedNothing(exports, patterns)
+		}
 		return vm.ListValue(handles), nil
 	}
+}
+
+// globMatchedNothing is the error for patterns that resolved to no target handle. A bare
+// word that IS a target's name gets the one hint that fixes it: suffix shorthand never
+// matches the bare name, so that target is needed by passing its function.
+func globMatchedNothing(exports map[string]vm.Value, patterns []string) error {
+	quoted := make([]string, len(patterns))
+	for i, p := range patterns {
+		quoted[i] = strconv.Quote(p)
+	}
+	msg := fmt.Sprintf("ctx.glob: %s matches no exported target of this project", strings.Join(quoted, ", "))
+	for _, p := range patterns {
+		if strings.ContainsAny(p, "*!") {
+			continue
+		}
+		if fn, ok := exports[types.Normalize(p)]; ok {
+			return fmt.Errorf("%s; a pattern without \"*\" means every target ending in \"-%s\", never %q itself, so pass the function: ctx.needs(%s)",
+				msg, p, p, fn.FunName())
+		}
+	}
+	return errors.New(msg)
 }
 
 // runBuzzDependencies awaits the named same-project targets and returns unprefixed

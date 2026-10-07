@@ -230,6 +230,72 @@ func TestSymbolRunError(t *testing.T) {
 	assert.NotContains(t, noLang.Error(), "install", "no hint when the language is unknown")
 }
 
+// A reindex refused because the outer run holds the project's lock never reached the
+// indexer, so blaming a missing scip-go sent the reader to install a tool they already had.
+func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
+	refusal := fmt.Errorf("run: %w", types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
+		"project . is locked by the magus run this one is nested inside"))
+
+	err := symbolRunError(types.NewProjectRef(".", "/ws/magus"), "go", refusal)
+	require.ErrorIs(t, err, types.ProjectLockHeldByAncestor, "the refusal stays matchable for graph build")
+	assert.Contains(t, err.Error(), "magus: ", "names the project")
+	assert.NotContains(t, err.Error(), "scip-go", "the indexer was never run, so its install hint is wrong")
+	assert.NotContains(t, err.Error(), "rerun once", "rerunning inside the same outer run is refused again")
+}
+
+// indexerOnPath puts the fixture indexer on PATH, which installedIndexes requires before
+// freshenSymbolIndexes will rebuild its index.
+func indexerOnPath(t *testing.T) {
+	t.Helper()
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, indexerBin), []byte("#!/bin/sh\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// A reader that freshens the index it reads (magus\precedents, Diff) is called from a
+// target's body, and the run that body belongs to holds the project's lock for its whole
+// invocation. Rebuilding through m.Run nested a second invocation the lock refused
+// (MGS3007), so the reader read a stale index. The rebuild now runs inside the outer run.
+func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
+	indexerOnPath(t)
+	const readerSpell = "zzz-index-reader-spell"
+	var m *Magus
+	var freshenErr error
+	var seen types.SymbolIndexFreshness
+	reader := spells.NewSpell(readerSpell,
+		spells.WithTargets("lint"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target != "lint" {
+				return nil, nil
+			}
+			freshenErr = m.freshenSymbolIndexes(ctx, []string{"."})
+			seen = freshness(t, m)
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(reader)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(readerSpell) })
+
+	m, src, _ := newIndexedWorkspaceWith(t, readerSpell)
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	require.Equal(t, types.SymbolIndexStale, freshness(t, m), "the Go edit leaves the index behind")
+
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: "lint"}}))
+	require.NoError(t, freshenErr, "the reindex ran under the lock this run holds; a nested run is refused MGS3007")
+	assert.Equal(t, types.SymbolIndexFresh, seen, "the reader inside the target sees the root index up to date")
+}
+
+// Outside any run a reader still rebuilds the index as its own invocation.
+func TestFreshenOutsideARunReindexesThroughItsOwnRun(t *testing.T) {
+	indexerOnPath(t)
+	m, src := newIndexedWorkspace(t)
+	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
+	require.Equal(t, types.SymbolIndexStale, freshness(t, m))
+
+	require.NoError(t, m.freshenSymbolIndexes(context.Background(), []string{"."}))
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m))
+}
+
 func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
 	// Simulate a run cancelled to yield: the parent context is already cancelled and
@@ -267,8 +333,9 @@ const indexerBin = "zzz-scip-freshness-indexer"
 
 // newIndexedWorkspaceWith is newIndexedWorkspace that also binds the root project to a
 // second spell claiming the installed skills under .claude/skills, the way the real root
-// project does, and hands back the indexer version its observe probe reports.
-func newIndexedWorkspaceWith(t *testing.T) (*Magus, string, *string) {
+// project does, and hands back the indexer version its observe probe reports. extra names
+// further registered spells to bind the root project to.
+func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *string) {
 	t.Helper()
 	const spellName = "zzz-scip-freshness-test-spell"
 	const skillsSpell = "zzz-scip-freshness-skills-spell"
@@ -313,7 +380,11 @@ func newIndexedWorkspaceWith(t *testing.T) (*Magus, string, *string) {
 	require.NoError(t, os.WriteFile(skill, []byte("# query\n"), 0o644))
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", WithSpell(spellName), WithSpell(skillsSpell))
+	opts := []ProjectOption{WithSpell(spellName), WithSpell(skillsSpell)}
+	for _, name := range extra {
+		opts = append(opts, WithSpell(name))
+	}
+	reg.RegisterProject(".", opts...)
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })

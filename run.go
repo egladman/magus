@@ -711,6 +711,27 @@ func (r *composedRunner) runSkipCache(ctx context.Context, ref types.TargetRef) 
 	})
 }
 
+// runKeyedStep runs a step its caller keyed (a reader freshening the index it is about to
+// read) inside this run: once per invocation through TargetRuns, cached through RunAside,
+// and under the locks this run holds. The caller is a target body holding a slot, so the
+// slot is yielded for the step's own admission, as a pool dispatch does.
+func (r *composedRunner) runKeyedStep(ctx context.Context, p *types.Project, step cache.Step) error {
+	run := func() error {
+		return r.runs.Once(ctx, types.TargetRef{Project: p.Path, Target: step.Target}, func() error {
+			handler := r.m.targetHandler(step.Target)
+			_, err := r.m.cache.RunAside(cache.WithoutSlotHeld(ctx), step, func(ctx context.Context) error {
+				return handler(buzz.WithTargetRuns(ctx, buzz.NewTargetRuns(r.runs.Passed(p.Path)...)), p)
+			}, r.cacheOpts...)
+			return err
+		})
+	}
+	lim := cache.LimiterFromContext(ctx)
+	if lim == nil || !cache.SlotHeld(ctx) {
+		return run()
+	}
+	return lim.Yield(ctx, run)
+}
+
 // interceptor is the one an uncached composer in p runs its body under. Each same-project
 // ctx.needs member it reaches becomes an independently admitted cache step: GopherBuzz
 // resolves the branch and glob, claims the body's TargetRuns, then delegates here.
@@ -2013,7 +2034,8 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// runs at most once however many composers or passes reach it.
 	runs := cache.NewTargetRuns()
 	ctx = cache.WithTargetRuns(ctx, runs)
-	ctx = interp.WithCrossDispatch(ctx, interp.NewCrossDispatch(runs))
+	cross := interp.NewCrossDispatch(runs)
+	ctx = interp.WithCrossDispatch(ctx, cross)
 	lim := m.limiter()
 	if opts.Step {
 		slog.InfoContext(ctx, "magus: --step forces Concurrency=1")
@@ -2068,6 +2090,12 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}))
 	composed := &composedRunner{m: m, runs: runs, newStep: newStep,
 		skipReplay: opts.NoCache, forceNoCache: forcesNoCache(opts), cacheOpts: cacheOpts}
+	// A body that reads a symbol index freshens it through this run (see
+	// freshenSymbolIndexes): a nested `magus run` of the index op is refused MGS3007.
+	cross.RunStepsWith(func(ctx context.Context, p *types.Project, step cache.Step) error {
+		stampRevision(&step)
+		return composed.runKeyedStep(ctx, p, step)
+	})
 	runStep := func(handlers map[string]TargetHandler, projects map[string]*types.Project) func(context.Context, cache.Step) error {
 		return func(ctx context.Context, s cache.Step) error {
 			// Each step's body gets its own TargetRuns, seeded from the run's, so a target

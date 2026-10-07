@@ -1082,6 +1082,25 @@ export fun build(ctx: magus\Context, _a: [str]) > void !> any {
 	assert.NotContains(t, string(got), "go-test", "go-test ran but does not match *-build")
 }
 
+// TestNeedsGlobMatchingNothingRaises runs the shape that hid a stale symbol index: a
+// target needing a glob that matches nothing must fail before its body continues, not
+// pass having needed nothing.
+func TestNeedsGlobMatchingNothingRaises(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+export fun lint(ctx: magus\Context, _a: [str]) > void !> any {
+   ctx.needs(ctx.glob("scip"));
+   fs\writeFile("body-ran", "1");
+}
+`)
+	err := runTargetIn(t, dir, "lint")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `ctx.glob: "scip" matches no exported target`)
+	assert.NoFileExists(t, filepath.Join(dir, "body-ran"), "the body must not run past an empty dependency")
+}
+
 // TestTargetNamespaceIsGone verifies the removed magus.target.* query namespace no
 // longer exists: a magusfile referencing it must error at runtime (magus.target is
 // undefined), so the old needs-by-query API cannot silently linger.

@@ -18,8 +18,30 @@ type crossAncestorCtxKey struct{}
 // in the run's TargetRuns, so a remote target runs at most once whoever reaches it first.
 // Dispatch is safe for concurrent use.
 type CrossDispatch struct {
-	runs *cache.TargetRuns
-	run  func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
+	runs    *cache.TargetRuns
+	run     func(ctx context.Context, dir, target string) error // RunDir; swappable in tests
+	runStep func(ctx context.Context, p *types.Project, step cache.Step) error
+}
+
+// RunStepsWith sets how DispatchStep runs a step a reader keyed itself. The run scheduler
+// passes its own step runner, so the step runs inside this invocation, under the locks it
+// already holds.
+func (c *CrossDispatch) RunStepsWith(fn func(ctx context.Context, p *types.Project, step cache.Step) error) {
+	c.runStep = fn
+}
+
+// DispatchStep runs step, a target of p keyed by its caller, through the run that owns
+// ctx: at most once per invocation, cached, and without the project lock a nested run would
+// be refused (MGS3007). It reports false when no run scheduler installed a runner, and the
+// caller then runs the target on its own.
+//
+// It exists for a reader that freshens what it reads, such as a symbol index, from inside a
+// target body: the outer run holds the project's lock for its whole invocation.
+func (c *CrossDispatch) DispatchStep(ctx context.Context, p *types.Project, step cache.Step) (bool, error) {
+	if c == nil || c.runStep == nil {
+		return false, nil
+	}
+	return true, c.runStep(ctx, p, step)
 }
 
 // NewCrossDispatch returns a coordinator that records its runs in runs.

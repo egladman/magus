@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -243,4 +245,21 @@ func TestLiveBridgeReachable(t *testing.T) {
 		globalCfg.MCP.Address = addr
 		require.False(t, liveBridgeReachable(context.Background()))
 	})
+}
+
+// graph build exited 0 when the root's reindex was refused by the run it was nested in,
+// and quiet hid the refusal, so the target that ran it read a stale index. A missing
+// indexer must still not fail the build.
+func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
+	refusal := fmt.Errorf("magus: %w", types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
+		"project . is locked by the magus run this one is nested inside"))
+	missing := errors.New("docs: exit status 127; install scip-typescript")
+
+	assert.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
+
+	got := reindexRefusals(errors.Join(missing, refusal))
+	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)
+	assert.NotContains(t, got.Error(), "scip-typescript", "only the refusal fails the build")
+
+	require.ErrorIs(t, reindexRefusals(refusal), types.ProjectLockHeldByAncestor, "an unjoined refusal counts too")
 }

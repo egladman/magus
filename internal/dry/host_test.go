@@ -383,6 +383,37 @@ export fun generate(ctx: magus\Context, args: [str]) > void { ctx.needs(ctx.glob
 		"a starless glob matches any -generate target (but not generate itself)")
 }
 
+// The dry body stops where the real one raises, so it traces nothing past an empty glob.
+func TestGlobMatchingNothingStopsADryRunBody(t *testing.T) {
+	const src = `
+import "magus";
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(ctx.glob("scip"));
+    magus\log.info("after");
+}
+`
+	r := Run(context.Background(), src, "lint", nil)
+	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
+	for _, op := range r.Trace {
+		assert.NotEqual(t, "log", op.Kind, "the body ran past a glob that matched nothing")
+	}
+}
+
+func TestNeedsNamingNoTargetStopsADryRunBody(t *testing.T) {
+	const src = `
+import "magus";
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs([]);
+    magus\log.info("after");
+}
+`
+	r := Run(context.Background(), src, "lint", nil)
+	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
+	for _, op := range r.Trace {
+		assert.NotEqual(t, "log", op.Kind, "the body ran past a needs that named nothing")
+	}
+}
+
 // TestRun_stubbedHostMembers probes the buildMagus stubs the dry run does not
 // model into the graph: the log levels (traced as per-target ops), the
 // captured-command members, module introspection, and the runtime-only no-ops.
