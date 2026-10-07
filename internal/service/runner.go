@@ -134,10 +134,10 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 }
 
 // Stop stops a running service. ctx bounds the wait beyond the usual stop
-// grace: if ctx is done first, Stop escalates to a hard kill immediately instead of
+// grace. If ctx is done first, Stop escalates to a hard kill immediately instead of
 // waiting out the rest of the grace window, and does not block confirming the
-// process was reaped (the Start goroutine still reaps it in the background, so
-// nothing is left a zombie; Stop just stops waiting to hear about it).
+// process was reaped. The Start goroutine still reaps it in the background, so
+// nothing is left a zombie; Stop just stops waiting to hear about it.
 func (ExecRunner) Stop(ctx context.Context, h Handle) {
 	switch h := h.(type) {
 	case *execHandle:

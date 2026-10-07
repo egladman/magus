@@ -168,7 +168,7 @@ func (t Theme) resolve(st sgrState) (fill, bg, weight, opacity string) {
 // No JavaScript and no player: each frame is a group whose opacity is driven by
 // SMIL, which every browser that renders SVG at all supports. That matters for
 // a docs site with a strict content policy, where a script-driven player would
-// simply not run.
+// not run.
 //
 // Frames must share a size; the first one sets it. A frame is shown for its own
 // hold time, and the whole sequence loops: a terminal recording that stops on

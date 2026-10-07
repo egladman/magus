@@ -14,7 +14,7 @@ import (
 // A toast has to VANISH with nothing to replace it, which an append-only
 // surface cannot express: a line written into one stays until something newer
 // displaces it, and that is right for a failure and wrong here. So the whole
-// band is re-composited on every change, and expiry simply produces a shorter
+// band is re-composited on every change, and expiry produces a shorter
 // frame.
 //
 // Expiry is driven by a sweeper goroutine, because a toast that only expired

@@ -95,11 +95,11 @@ const (
 //
 // The join is the LEASE rather than the session [Replay] groups by. A session is one host
 // process; a lease is the declared work unit, and one work unit spans an orchestrator and the
-// sub-agents it hands work to. Joining on the session would report the orchestrator's questions
+// subagents it hands work to. Joining on the session would report the orchestrator's questions
 // and drop every question its workers asked about the same change.
 //
 // Every lease that wrote into paths contributes, and their questions MERGE into one list keyed by
-// subject. A work unit that fanned out to sub-agents has a lease per worker, and the reviewer is
+// subject. A work unit that fanned out to subagents has a lease per worker, and the reviewer is
 // asking what backs the changeset, so splitting the list by worker would answer a question nobody
 // put. A subject two workers both asked about counts twice.
 //

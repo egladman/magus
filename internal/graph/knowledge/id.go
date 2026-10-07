@@ -97,7 +97,7 @@ func noteID(scope, name string) string {
 // One home for a mapping with three callers across two process phases: assembly (which
 // turns an anchor into an edge), resolution (which asks whether an anchor still names
 // something live), and the console handler. Two hand-kept copies existed and had already
-// diverged on exactly the case a reader is least likely to notice: the resolver's copy took
+// diverged on exactly the case a reader is least likely to notice. The resolver's copy took
 // no scope, so it looked up a private note's note-anchor in the SHARED namespace, reported
 // it dangling, and told the author to re-anchor a note that was never broken, while
 // assembly had minted the edge correctly all along.

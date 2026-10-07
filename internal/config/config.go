@@ -538,9 +538,9 @@ type Server struct {
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
 	// RotateActivities is only how often the server CHECKS whether the activity trail is due
-	// for a trim; it is not a retention age. The trail rotates on event count instead (10000
+	// for a trim; it is not a retention age. The trail rotates on event count instead: 10000
 	// events, with a per-kind floor that keeps a rare kind's newest entries no matter how loud
-	// its neighbors are; see maxEvents and perKindFloor in internal/trail), so there is no age
+	// its neighbors are (see maxEvents and perKindFloor in internal/trail). So there is no age
 	// cutoff this field could hand it: an age cutoff would have to decide whether it or the
 	// per-kind floor wins when the two disagree, and that policy does not exist. It runs
 	// hourly because a rotate on an already-small trail costs one stat.
@@ -613,11 +613,11 @@ type Knowledge struct {
 	// not come from a magus indexer op. A project's entries replace every index magus
 	// derives for it, one entry per index, each naming its language when the project
 	// holds more than one. A declared (or derived) index that does not exist yet is
-	// simply skipped, so the shard appears once the index is built.
+	// skipped, so the shard appears once the index is built.
 	Symbols []SymbolIndex `json:"symbols" yaml:"symbols"`
 	// VCS enables folding git history metadata (last-commit SHA and time, commit
 	// count) onto file nodes as a @vcs shard. Opt-in and best-effort: disabled by
-	// default, and a non-git workspace simply yields no shard. The history scan is
+	// default, and a non-git workspace yields no shard. The history scan is
 	// bounded and cached against HEAD, so it runs at build time on a commit change,
 	// never per query.
 	VCS KnowledgeVCSConfig `json:"vcs" yaml:"vcs"`

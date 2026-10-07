@@ -540,7 +540,7 @@ func HunkCounts(patch string) map[string]int {
 }
 
 // PatchDigest is the identity of a whole patch, used to tell "the tree moved" from "the tree
-// is the same and we simply looked again".
+// is the same and we looked again".
 //
 // A session holds a changeset computed at some past moment. Without this, a client that joins
 // later cannot tell a current answer from a frozen one, and the party least able to notice

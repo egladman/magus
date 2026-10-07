@@ -41,7 +41,7 @@ func providerFrom(ctx context.Context) observability.Provider {
 	return p
 }
 
-// ErrNotASpell signals that a Buzz module is simply not a spell (it exports no
+// ErrNotASpell signals that a Buzz module is not a spell (it exports no
 // mgs_getName) rather than a malformed one. Speculative discovery (a local import
 // tried as a spell before falling back to a plain module) treats this as a quiet
 // "not a spell, move on"; an explicit spell load still surfaces it as an error.
@@ -421,7 +421,7 @@ func valStrSlice(key string, v vm.Value) ([]string, error) {
 // obj.Objs.
 //
 // A spell still returning [Path] passes: this checks only for a .value string, which
-// both objects carry, so the pre-Manifest contract keeps loading and simply declares
+// both objects carry, so the pre-Manifest contract keeps loading and declares
 // no lockfile.
 func manifestValues(name string, v vm.Value) (vm.Value, error) {
 	if !v.IsList() {

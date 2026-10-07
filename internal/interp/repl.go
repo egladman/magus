@@ -399,7 +399,7 @@ const stickyFooterRows = 1
 //
 // The last of those is the reason it is worth the row. A continuation prompt says
 // ">>" and nothing else, so an unclosed brace looks identical to a REPL that has
-// simply stopped responding: the state that makes people kill the process. The
+// stopped responding: the state that makes people kill the process. The
 // footer names the depth instead.
 //
 // It degrades to nothing off a TTY: the lease reports disabled, and every method

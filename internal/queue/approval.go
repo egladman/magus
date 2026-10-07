@@ -251,7 +251,7 @@ type carryRef struct {
 // whenever that delta cannot be told apart from another change's: old carries an
 // unqueued change's head, carries two changes stacked on neither, has commits beneath
 // its stack base's head that are not that change's, or shares a commit with another
-// change it does not carry, since the approval was then given on a diff that excluded
+// change it does not carry. The approval was then given on a diff that excluded
 // what the rebase now includes.
 func carryBase(f carryFacts) (string, bool) {
 	own := make(map[string]bool, len(f.commits))

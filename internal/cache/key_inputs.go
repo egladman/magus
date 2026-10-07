@@ -36,7 +36,7 @@ const envValueDigestLen = 12
 // ("env:NAME=abc" -> "env:NAME=sha256:<12hex>"). Env values are the one key-input
 // class that routinely carries material a user would not publish (tokens ride env
 // vars whether or not a secret provider registered them), so the raw value never
-// leaves hashStep: the store persists DIGESTED lines, and every comparison surface
+// leaves hashStep. The store persists DIGESTED lines, and every comparison surface
 // digests its live lines the same way, which also keeps the two sides byte-comparable
 // (a registry-based redaction would fire on one machine and not the other, turning
 // every secret-bearing env line into a false diff). The digest still changes when

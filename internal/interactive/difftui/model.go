@@ -357,10 +357,10 @@ func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 // takeShownThreads is the host threads now inside the viewport that this session has not
 // reported yet, and it reports each one exactly once.
 //
-// Keyed on what the viewport DREW rather than on what the viewer was handed, because the
-// watermark it feeds is the reader's claim to have had a remark in front of them: marking a
-// thread three screens down at open would consume the mark (and the notification that exists
-// to send the reader back to it) for something nobody looked at. Serving is not showing; the
+// Keyed on what the viewport DREW rather than on what the viewer was handed. The watermark
+// it feeds is the reader's claim to have had a remark in front of them: marking a thread
+// three screens down at open would consume the mark (and the notification that exists to
+// send the reader back to it) for something nobody looked at. Serving is not showing; the
 // console's session route draws the same line.
 //
 // The overview draws no changeset rows at all, so it shows nothing.

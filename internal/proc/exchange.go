@@ -19,7 +19,7 @@ import (
 // and path, and its bound.
 //
 // timeout > 0 bounds DIAL as well as the exchange. A server whose accept queue is full is
-// not dead (the socket file is there and the connection simply never completes), so a
+// not dead (the socket file is there and the connection never completes), so a
 // dial outside the bound hangs the caller for as long as the server stays sick. A zero
 // timeout leaves the caller's ctx as the only bound, for exchanges that legitimately wait
 // on the server, a forwarded run above all.

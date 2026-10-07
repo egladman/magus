@@ -49,7 +49,7 @@ var (
 type PromptInput struct {
 	// Changeset is the annotated, reading-ordered set of changed files.
 	Changeset types.Diff
-	// Origin names the branch under review. Empty fields simply do not render.
+	// Origin names the branch under review. Empty fields do not render.
 	Origin types.ReviewOrigin
 	// Overlap is every branch magus knows about with its full path list. Prompt narrows it to
 	// the intersection with this changeset itself, so a caller passes what it has rather than

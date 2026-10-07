@@ -148,7 +148,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 
 // resolveAnchor picks the target this plan is about and says how it was picked. An explicit
 // ?target must resolve or the request is rejected (ok false, with target carrying the
-// caller's spelling back for the message); a DERIVED candidate that no project defines is
+// caller's spelling back for the message). A DERIVED candidate that no project defines is
 // silently skipped instead, so `magus x <ref>` running in the pool falls through to the
 // most recent output rather than serving an empty graph while a build is visibly in flight.
 func (h *Handler) resolveAnchor(raw string, index planTargets, report types.StatusSnapshot, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {

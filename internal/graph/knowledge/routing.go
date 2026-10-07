@@ -9,8 +9,8 @@ import (
 )
 
 // routingKindOrder is the stable display order for the domain routing table.
-// Only kinds actually present (count > 0) are emitted, so phase-4 kinds simply
-// do not appear until an assembler produces them.
+// Only kinds present (count > 0) are emitted, so phase-4 kinds do not appear until
+// an assembler produces them.
 var routingKindOrder = []string{
 	types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
 	types.KindTool, types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,

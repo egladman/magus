@@ -544,7 +544,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider
 // reference) through the run's secret resolver and returns base plus the resolved
-// values, as a fresh map: base is never mutated, so a mid-loop provider failure
+// values, as a fresh map. The caller's base is never mutated, so a mid-loop provider failure
 // cannot leave already-resolved values behind in a map the caller retains.
 // secret.Resolver.Read is what registers each value for redaction (internal/secret),
 // so a secret reaching a child through this path is masked out of captured output
@@ -554,8 +554,8 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 // the way) is deterministic regardless of map iteration order.
 //
 // A name already present in base is an error rather than a silently dropped or
-// overridden value: base is env magus already set for this op (MAGUS_SYMBOL_INDEX on
-// the scip op, a magusfile's withEnv overlay), and a declared secret landing on the
+// overridden value. Base is env magus already set for this op (MAGUS_SYMBOL_INDEX on
+// the scip op, a magusfile's withEnv overlay). A declared secret landing on the
 // same name is an authoring bug in a security-sensitive path, not something to
 // resolve quietly by picking a winner.
 func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]string) (map[string]string, error) {

@@ -66,7 +66,7 @@ func lookupModule(name string) (Module, bool) {
 // process, filesystem, or network). The caller passes the set the interpreter
 // actually registered (dry.PlaygroundHostModules plus dry.PlaygroundSourceModules), so the excluded list is derived
 // from real wiring rather than a hand-kept flag: a module wired into the playground
-// simply never appears here. The playground renders the result as a "not available
+// never appears here. The playground renders the result as a "not available
 // here" notice.
 func ExcludedModules(available []string) []Module {
 	inPlayground := make(map[string]bool, len(available))

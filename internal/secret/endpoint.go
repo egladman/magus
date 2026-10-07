@@ -365,7 +365,7 @@ func (r *Resolver) rewrite(g types.SecretGrant, tok string) func(*httputil.Proxy
 //   - ApplyGrants' caller is the magusfile author. They control the request, so a
 //     collision means they wrote two things that disagree, and erroring tells them.
 //   - This caller is a third-party SDK. openai-python, the Anthropic client and
-//     essentially every API library set their auth header unconditionally from a key
+//     nearly every API library set their auth header unconditionally from a key
 //     they insist on being given, with no supported way to suppress it. Erroring here
 //     made the endpoint unusable with the exact clients it exists for, and refusing to
 //     overwrite would send the child's dummy key upstream instead of the real one.

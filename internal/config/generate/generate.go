@@ -35,7 +35,7 @@ type Paths struct {
 	Flags    string // the ConfigFlags table + BindConfigFlags
 	Fields   string // the schema Fields table
 	Bind     string // BindFlags
-	ApplyEnv string // ApplyEnv
+	ApplyEnv string // the MAGUS_* environment overlay
 }
 
 // Write reads the config struct at schema and renders each artifact p names.
