@@ -635,6 +635,53 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	}
 }
 
+// TestBuzzTestScratchRepositoriesPassLeaseVCS pins lease-vcs to the workspace's own
+// repository. A Buzz test that builds a scratch repository in a temp dir commits, merges
+// and removes worktrees there under its caller's lease, through vcs\cmd and the shell
+// rule alike, yet still may not push from it. A repository nested in the worker's
+// checkout is part of the workspace's tree.
+func TestBuzzTestScratchRepositoriesPassLeaseVCS(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := realPath(t.TempDir())
+	r.git(scratch, "init", "-q", "-b", "main")
+	nested := filepath.Join(wt, "nested")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	r.git(nested, "init", "-q", "-b", "main")
+
+	for _, args := range [][]string{
+		{"commit", "-q", "--no-verify", "-m", "base"},
+		{"merge", "--no-edit", "topic"},
+		{"worktree", "remove", "--force", filepath.Join(scratch, "tree")},
+		{"reset", "--hard", "HEAD"},
+		{"-C", scratch, "rebase", "main"},
+	} {
+		assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", args, scratch), "%v", args)
+	}
+	for _, c := range []struct {
+		args []string
+		dir  string
+	}{
+		{[]string{"push", "origin", "main"}, scratch},
+		{[]string{"-c", "alias.x=push", "x"}, scratch},
+		{[]string{"reset", "--hard"}, nested},
+		{[]string{"commit", "-m", "done"}, nested},
+	} {
+		assert.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir), "%v in %s", c.args, c.dir)
+	}
+
+	from := Dependencies{callDir: wt}
+	for _, command := range []string{
+		"git -C " + scratch + " commit -m done",
+		"cd " + scratch + " && git merge --no-edit topic && git commit -m done",
+		"git -C " + scratch + " worktree remove --force tree",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from, worker.ID, command), "%q", command)
+	}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git -C "+scratch+" push"), "`git push`")
+	assert.NotEmpty(t, denyLeaseScopedVCS(ctx, from, worker.ID, "if true; then git -C "+scratch+" reset --hard; fi"))
+	assert.NotEmpty(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git -C "+nested+" reset --hard"))
+}
+
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
 // reads are recognized past git's global options, and that no option turns a write, or a
 // word an inline alias defines, into one.

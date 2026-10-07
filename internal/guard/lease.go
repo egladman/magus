@@ -1234,7 +1234,9 @@ func validationNamesGate(validation string) bool {
 // worker that pushes, stashes, reverts or rewrites history edits the state it is being
 // integrated from, and a whole-tree revert destroys a sibling's uncommitted work. A commit
 // is the exception: one on the worker's own branch, in the checkout its lease was taken
-// in, adds to that tree without moving anything the orchestrator reads.
+// in, adds to that tree without moving anything the orchestrator reads. A scratch
+// repository outside the workspace is not that tree, so git mutations other than a push
+// run there.
 //
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not version control.
@@ -1254,14 +1256,20 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if role == "" {
 		return ""
 	}
-	for _, c := range cmds {
-		if op := vcsMutation(c); op != "" && !recordsCommit(c) {
-			return workerVCSDenial("`"+command+"`", op, me, role, "")
-		}
-	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
-	calls, ok := locateCalls(command, d, cwd, recordsCommit, false)
+	mutates := func(c hint.Invocation) bool { return vcsMutation(c) != "" }
+	calls, ok := locateCalls(command, d, cwd, mutates, false)
+	// Every other mutation is placed only to find one in a foreign repository; one the
+	// walk did not locate is refused unplaced.
+	if !ok || countFunc(calls, func(c locatedCall) bool { return !recordsCommit(c.inv) }) !=
+		countFunc(cmds, func(c hint.Invocation) bool { return mutates(c) && !recordsCommit(c) }) {
+		for _, c := range cmds {
+			if op := vcsMutation(c); op != "" && !recordsCommit(c) {
+				return workerVCSDenial("`"+command+"`", op, me, role, "")
+			}
+		}
+	}
 	if !ok {
 		return workerVCSDenial("`"+command+"`", "commit", me, role, "The line does not parse, so where it commits cannot be read.")
 	}
@@ -1345,7 +1353,8 @@ type vcsSite struct {
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
 // vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
 // the mutation, "" for a call that mutates nothing. A commit is refused with why; every
-// other mutation is refused with no why. unlocated is why site could not be read, which
+// other mutation is refused with no why. A git mutation other than a push, placed in a
+// repository that is not the workspace's own, is not refused. unlocated is why site could not be read, which
 // refuses a commit, since a commit that cannot be placed cannot be shown to be in the
 // worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
@@ -1353,6 +1362,8 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	switch {
 	case op == "":
 		return "", false, ""
+	case unlocated == "" && localGitMutation(op) && foreignRepository(site, row):
+		return op, false, ""
 	case !recordsCommit(inv):
 		return op, true, ""
 	case unlocated != "":
@@ -1362,6 +1373,51 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 		return op, true, why
 	}
 	return op, false, ""
+}
+
+// countFunc is how many elements of s satisfy f.
+func countFunc[T any](s []T, f func(T) bool) int {
+	n := 0
+	for _, v := range s {
+		if f(v) {
+			n++
+		}
+	}
+	return n
+}
+
+// localGitMutation reports whether op is a git mutation that stays in the repository it
+// runs in. A push publishes wherever it runs, and an inline alias can run a push, so
+// neither is one.
+func localGitMutation(op string) bool {
+	return strings.HasPrefix(op, "git ") && !strings.HasPrefix(op, "git -c ") && op != "git push"
+}
+
+// foreignRepository reports whether site is a git repository that is not the workspace's
+// own: one that shares no git directory with the lease's checkout and lies inside none of
+// its checkouts, as a scratch repository a test or a tool makes in a temp dir does.
+// lease-vcs guards the tree the orchestrator integrates from, and such a repository is
+// not it. Anything that cannot be read is not foreign.
+func foreignRepository(site vcsSite, row types.Job) bool {
+	if row.CheckoutRoot == "" {
+		return false
+	}
+	_, own, ok := gitCheckout(row.CheckoutRoot)
+	if !ok {
+		return false
+	}
+	dir := site.dir
+	if site.gitDir != "" {
+		if dir, ok = gitDirCheckout(site.gitDir); !ok {
+			return false
+		}
+	}
+	root, common, ok := gitCheckout(dir)
+	if !ok || samePath(common, own) || within(root, row.CheckoutRoot) {
+		return false
+	}
+	// A submodule or nested repository in the primary checkout is still in the tree.
+	return filepath.Base(own) != ".git" || !within(root, filepath.Dir(own))
 }
 
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the
