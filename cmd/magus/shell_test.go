@@ -1277,15 +1277,14 @@ func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 }
 
 // TestHookCmdNeverPreauthorizesAWorkspaceWideDeny is the carve-out. These refuse work that
-// cannot be undone or that silently discards an exit status, and they protect everyone, so
-// a journal entry naming one buys nothing.
+// cannot be undone, and they protect everyone, so a journal entry naming one buys nothing.
 func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t)
 	gate := hint.NewGate(cacheDir, "session-carveout")
 
-	for _, command := range []string{"git stash", "magus affected ci | tail -5", "go test ./..."} {
+	for _, command := range []string{"git stash", "git reset --hard", "git clean -fdx"} {
 		serveNext(t, gate, "fabricated", strings.Fields(command)...)
 		var out bytes.Buffer
 		err := shellStdin(ctx, strings.NewReader(command), &out,
@@ -1816,7 +1815,8 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	resetWorkspaceMemo(t)
 	primary := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(primary, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"),
+		[]byte("import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n"), 0o644))
 	runGit(t, primary, "add", "-A")
 	runGit(t, primary, "commit", "-q", "-m", "init")
 	worktree := filepath.Join(t.TempDir(), "worker")

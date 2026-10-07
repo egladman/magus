@@ -242,6 +242,16 @@ func (d Dependencies) graphIDs(ctx context.Context, kind string) ([]string, bool
 
 var builtinDefaults = sync.OnceValue(builtin.Defaults)
 
+// advisoryRule is the set of rules that only ever advise, the ones a workspace can raise
+// to deny.
+var advisoryRule = sync.OnceValue(func() map[string]bool {
+	set := map[string]bool{}
+	for _, n := range advisoryNames() {
+		set[n] = true
+	}
+	return set
+})
+
 // setting is rule's effective setting, and false for a name the table does not carry,
 // which keeps the decision it was compiled with.
 func (d Dependencies) setting(rule string) (builtin.Setting, bool) {
@@ -281,6 +291,11 @@ func (d Dependencies) grade(v ShellVerdict) ShellVerdict {
 		s, ok := d.setting(v.advisoryName())
 		switch {
 		case !ok || s.Decision == builtin.Advise:
+			return v
+		case s.Decision == builtin.Deny && !advisoryRule()[v.advisoryName()]:
+			// A deny rule's own advisory, such as chained-run's "not refused, because ||",
+			// is the case that rule already judged safe; refusing it would deny what the
+			// rule chose to let through.
 			return v
 		case s.Decision == builtin.Deny:
 			return ShellVerdict{Deny: v.Context, Rule: denyRule{Name: denyRuleName(v.advisoryName())}}
