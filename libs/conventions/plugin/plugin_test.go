@@ -15,6 +15,7 @@ func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
 		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
+		"fieldwise":     map[string]any{"report-partial": true},
 		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
