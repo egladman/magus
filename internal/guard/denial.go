@@ -39,8 +39,8 @@ func denyMarker(rule string) hint.MarkerKind {
 // included, so a reader can reopen any refusal it was shown, not only a repeated one.
 //
 // note is the nothing-ran line for the command, appended to the full form when the rule
-// that refused did not already carry it. A rule the catalog does not list as a deny keeps
-// its reason untouched: it has no page to cite and no one-line summary to repeat.
+// that refused did not already carry it. An advisory rule, or one the catalog does not
+// list, keeps its reason untouched: it has no page to cite and no one-line summary to repeat.
 //
 // Every failure speaks in full. A repeat that cannot store the verdict it points at would
 // cite a ref that resolves to nothing, and a long reason beats a dead end.
@@ -49,8 +49,10 @@ func denyMarker(rule string) hint.MarkerKind {
 // every firing, the first included, since the command is what a reader acts on; it is
 // returned as served, and nil for a rule with no page, whose reason stays untouched.
 func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string, remedy []hint.Next) (shown, ref string, served []hint.Next) {
+	// The tier, not the compiled default: a recoverable rule a workspace sets to deny
+	// refuses with its page and remedy like any other deny.
 	doc, ok := Rule(rule)
-	if !ok || doc.Decision != "deny" {
+	if !ok || advisoryRule()[rule] {
 		return reason, "", nil
 	}
 	see := "\nsee: " + ruleDocsBase + rule + "/"
