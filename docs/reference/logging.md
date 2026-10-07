@@ -1,6 +1,6 @@
 ---
 title: Logging and verbosity
-description: What each verbosity level actually prints, when to reach for one over another, and what ends up in your logs that you may not want to paste into a bug report.
+description: What each verbosity level prints, when to reach for one over another, and what ends up in your logs that you may not want to paste into a bug report.
 tags:
   [
     logging,

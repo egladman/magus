@@ -4,7 +4,7 @@ Each unreleased change adds its changelog entry as one file under `unreleased/`.
 There is no changelog file to edit, so concurrent pull requests add different
 files instead of colliding on one section.
 
-A fragment is the entry exactly as it will read under `[Unreleased]`: one Keep a
+A fragment is the entry exactly as it reads under `[Unreleased]`: one Keep a
 Changelog group heading, a blank line, and one entry.
 
 ```markdown

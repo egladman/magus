@@ -1,6 +1,6 @@
 ---
 title: The CLI in practice
-description: The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.
+description: The magus subcommands you reach for most, grouped by the question you are asking, with the quirks that are not obvious from the help text.
 tags:
   [
     cli,

@@ -1,6 +1,6 @@
 ---
 title: Reviewing your changes
-description: Read a changeset in the order that its consequences suggest, price what landing it costs before you push, and keep a bookmark of what you have actually read, from the terminal, your own editor, the console, or a patch someone sent you.
+description: Read a changeset in the order that its consequences suggest, price what landing it costs before you push, and keep a bookmark of what you have read, from the terminal, your own editor, the console, or a patch someone sent you.
 tags:
   [
     diff,
