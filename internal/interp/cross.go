@@ -7,6 +7,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -120,6 +121,9 @@ func (c *CrossDispatch) runRemote(ctx context.Context, dep *types.Project, ref t
 	// Stripped rather than rebuilt for the remote project: without one, that target's own
 	// needs run inline and uncached, which is what run.go does for a cacheable member too.
 	rctx = buzz.WithoutTargetInterceptor(rctx)
+	// `--` args belong to the target the user named, so a remote dependency drops them as
+	// a same-project one does in runBuzzDependencies; ops read them from the context.
+	rctx = project.WithExtraArgs(rctx, nil)
 	rctx = withCrossAncestor(rctx, ref.Ref())
 	return c.run(rctx, dep.Dir, ref.Target)
 }
