@@ -20,7 +20,8 @@ export fun types() > [str] {
 
 // commitlint's default header-max-length, counted in bytes because Buzz strings are
 // byte-indexed. Subjects on main already run past git's customary 72 when a semicolon
-// joins two clauses.
+// joins two clauses. It is the one subject cap: pr-title and the guard read it, and
+// .vale/styles/Magus/SubjectLength.yml restates it for every branch's commits.
 export fun maxLength() > int {
     return 100;
 }
