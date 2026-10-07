@@ -275,6 +275,56 @@ It is filled rather than outlined so it reads as a status, not a topic, next to 
 topical tags beside it. Edit the generator, not the page; a hand edit is overwritten on
 the next build.
 
+## Architecture decision records
+
+Every page in `docs/decisions/` named `NNNN-<slug>.md` is an ADR, and every ADR follows
+one template, so a reader finds the same thing in the same place on each:
+
+```md
+---
+title: "ADR NNNN: <lowercase title>"
+order: <NNNN as a number>
+description: <one paragraph>
+tags: [adr, decision, <topics>]
+---
+
+# ADR NNNN: <lowercase title>
+
+- **Status:** <Proposed, Accepted, ...>
+- **Date:** <YYYY-MM-DD>
+
+## Context
+
+## Decision
+
+## Alternatives
+
+## Consequences
+
+## Open questions
+
+## Amendments
+
+### <YYYY-MM-DD>: <what changed>
+```
+
+- The front matter's `title` carries the file's number and a title that starts lowercase;
+  `order` is that number, so the pages sort as they were written; `tags` include `adr`.
+- The H1 repeats the title. The bullet block under it has at least **Status:** and
+  **Date:** (`YYYY-MM-DD`); other lines, such as **Supersedes:**, may follow.
+- The H2 sections are exactly Context, Decision, Alternatives and Consequences, in that
+  order, then Open questions if any remain, then Amendments last. Any further structure is
+  an H3 under one of them (numbered parts of a decision, each option weighed, when to
+  revisit), so the H2 list is the same on every page.
+- Each amendment is an H3 under Amendments that opens with its date:
+  `### 2026-09-29: <what changed>`.
+- A table whose last column is `State` uses only _done_, _in progress_, _planned_,
+  _proposed_ and _not built_, each optionally followed by a parenthetical, such as
+  `in progress (#550)`.
+
+`magus run conventions docs` enforces all of it as the `adr-template` rule
+([`docs/lib/adr.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/adr.buzz)).
+
 ## Reading time
 
 Longer pages show an estimated reading time near the top. Nothing is measured about you -

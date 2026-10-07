@@ -10,6 +10,7 @@ import "assert";
 import "lib/text" as _;       // escapeAttr, splitPath
 import "lib/glossary" as _;   // glossarySlug, for the goldmark anchors
 import "lib/html" as _;       // resolvePath, to resolve a relative link against its file's dir
+import "lib/adr" as _;        // adrProblems, the ADR template
 
 // Convention is one section of conventions.md: the heading, its goldmark anchor, and the
 // lead paragraph as a one-line description for the popover. The conventions page is prose
@@ -284,6 +285,9 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
                 message = "example output pins a magus version; show the shape with <version> instead" });
         }
     }
+    foreach (p in adrProblems(file, md: md)) {
+        found.append(ConventionFinding{ file = file, line = p.line, rule = "adr-template", message = p.message });
+    }
     return found;
 }
 
@@ -501,6 +505,12 @@ test "lintMarkdown flags a pinned version in example output" {
     final f = lintMarkdown("p.md", "```sh\nmagus version\n# magus 0.4.2\n```\n");
     assert\equal(f.len(), 1, "one finding");
     assert\equal(f[0].rule, "pinned-version", "rule name");
+}
+
+test "lintMarkdown holds a decisions page to the ADR template" {
+    final f = lintMarkdown("docs/decisions/0009-x.md", "# ADR 0009: x\n");
+    assert\equal(f.len(), 1, "one finding: no front matter");
+    assert\equal(f[0].rule, "adr-template", "rule name");
 }
 
 test "a four-backtick fence holds three-backtick fences without ending the block" {

@@ -270,8 +270,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.
 export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/crosscheck.buzz", "engine/gates.buzz",
-        workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
+    ctx.readsFiles("**/*.md", "lib/conventions.buzz", "lib/adr.buzz", "lib/crosscheck.buzz",
+        "engine/gates.buzz", workspace\file("README.md"), workspace\file("CONTRIBUTING.md"),
         workspace\file("changes/unreleased/*.md"), workspace\file("internal/selfupdate/release-keys.json"),
         workspace\file(".claude/settings.json"),
         agents\file("cursor-hook.buzz"), agents\file("magus-*.buzz"), agents\file("codex-hooks.json"),

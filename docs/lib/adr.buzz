@@ -1,0 +1,368 @@
+namespace adr;
+
+import "std";
+import "assert";
+
+// AdrProblem is one way an ADR departs from the template. lib/conventions wraps it as a
+// ConventionFinding; it cannot return one itself, since conventions imports this file.
+export object AdrProblem {
+    line: int = 0,
+    message: str = "",
+}
+
+final SECTIONS = ["Context", "Decision", "Alternatives", "Consequences", "Open questions", "Amendments"];
+final REQUIRED_SECTIONS = 4;
+final STATES = ["done", "in progress", "planned", "proposed", "not built"];
+
+fun isAsciiDigit(b: int) > bool { return b >= 48 and b <= 57; }
+
+fun allDigits(s: str) > bool {
+    if (s.len() == 0) { return false; }
+    var i = 0;
+    while (i < s.len()) {
+        if (isAsciiDigit(s.byte(i)) == false) { return false; }
+        i = i + 1;
+    }
+    return true;
+}
+
+// startsWithDate reports whether s opens with YYYY-MM-DD.
+fun startsWithDate(s: str) > bool {
+    if (s.len() < 10 or s.byte(4) != 45 or s.byte(7) != 45) { return false; }   // 45 = '-'
+    return allDigits(s.sub(0, len: 4)) and allDigits(s.sub(5, len: 2)) and allDigits(s.sub(8, len: 2));
+}
+
+// adrNumber returns the NNNN of docs/decisions/NNNN-<slug>.md, or "" for any other page.
+export fun adrNumber(file: str) > str {
+    final segs = file.split("/");
+    if (segs.len() < 2 or segs[segs.len() - 2] != "decisions") { return ""; }
+    final base = segs[segs.len() - 1];
+    if (base.len() < 6 or base.byte(4) != 45 or base.endsWith(".md") == false) { return ""; }
+    final num = base.sub(0, len: 4);
+    if (allDigits(num) == false) { return ""; }
+    return num;
+}
+
+fun sectionRank(title: str) > int {
+    var i = 0;
+    while (i < SECTIONS.len()) {
+        if (SECTIONS[i] == title) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+fun validState(cell: str) > bool {
+    foreach (s in STATES) {
+        if (cell == s) { return true; }
+        if (cell.startsWith(s + " (") and cell.endsWith(")")) { return true; }
+    }
+    return false;
+}
+
+// lastCell is a table row's final cell. An escaped `\|` inside an earlier cell splits
+// wrongly, which cannot move the last one.
+fun lastCell(row: str) > str {
+    var t = row.trim();
+    if (t.endsWith("|")) { t = t.sub(0, len: t.len() - 1); }
+    final cells = t.split("|");
+    return cells[cells.len() - 1].trim();
+}
+
+fun isSeparatorRow(t: str) > bool {
+    if (t.startsWith("|") == false) { return false; }
+    var i = 0;
+    while (i < t.len()) {
+        final b = t.byte(i);
+        if (b != 124 and b != 45 and b != 58 and b != 32) { return false; }   // | - : space
+        i = i + 1;
+    }
+    return true;
+}
+
+fun fenceRun(t: str) > str {
+    if (t.startsWith("```") == false and t.startsWith("~~~") == false) { return ""; }
+    final ch = t.byte(0);
+    var n = 0;
+    while (n < t.len() and t.byte(n) == ch) { n = n + 1; }
+    return t.sub(0, len: n);
+}
+
+fun frontMatterProblems(num: str, lines: [str], close: int, problems: mut [AdrProblem]) > str {
+    var titleRest = "";
+    var sawTitle = false;
+    var sawOrder = false;
+    var sawDescription = false;
+    var sawTags = false;
+    var i = 1;
+    while (i < close) {
+        final line = lines[i];
+        final n = i + 1;
+        if (line.startsWith("title:")) {
+            sawTitle = true;
+            final v = line.sub(6).trim();
+            final want = "\"ADR {num}: ";
+            final rest = if (v.startsWith(want) and v.endsWith("\"") and v.len() > want.len() + 1)
+                v.sub(want.len(), len: v.len() - want.len() - 1) else "";
+            if (rest == "" or (rest.byte(0) >= 65 and rest.byte(0) <= 90)) {
+                problems.append(AdrProblem{ line = n,
+                    message = "title is {v}; write `title: \"ADR {num}: <lowercase title>\"`" });
+            } else {
+                titleRest = rest;
+            }
+        } else if (line.startsWith("order:")) {
+            sawOrder = true;
+            final v = line.sub(6).trim();
+            final want = std\parseInt(num) ?? -1;
+            if ((std\parseInt(v) ?? -2) != want) {
+                problems.append(AdrProblem{ line = n,
+                    message = "order is {v}, not the file's number; write `order: {want}`" });
+            }
+        } else if (line.startsWith("description:")) {
+            sawDescription = line.sub(12).trim() != "";
+        } else if (line.startsWith("tags:")) {
+            sawTags = true;
+            final v = line.sub(5).trim();
+            var hasAdr = false;
+            if (v.startsWith("[")) {
+                foreach (tag in v.sub(1, len: v.len() - 2).split(",")) {
+                    if (tag.trim() == "adr") { hasAdr = true; }
+                }
+            } else {
+                var j = i + 1;
+                while (j < close and lines[j].startsWith(" ")) {
+                    if (lines[j].trim() == "- adr") { hasAdr = true; }
+                    j = j + 1;
+                }
+            }
+            if (hasAdr == false) {
+                problems.append(AdrProblem{ line = n, message = "tags do not include adr; add `adr` to `tags`" });
+            }
+        }
+        i = i + 1;
+    }
+    final at = close + 1;
+    final order = std\parseInt(num) ?? 0;
+    if (sawTitle == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no title; add `title: \"ADR {num}: <lowercase title>\"`" });
+    }
+    if (sawOrder == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no order; add `order: {order}`" });
+    }
+    if (sawDescription == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no description; add a one-paragraph `description:`" });
+    }
+    if (sawTags == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no tags; add `tags: [adr, decision, ...]`" });
+    }
+    return titleRest;
+}
+
+// adrProblems holds a docs/decisions/NNNN-<slug>.md page to the ADR template documented in
+// docs/conventions.md, and returns nothing for any other page.
+export fun adrProblems(file: str, md: str) > [AdrProblem] {
+    final problems: mut [AdrProblem] = mut [<AdrProblem>];
+    final num = adrNumber(file);
+    if (num == "") { return problems; }
+    final lines = md.split("\n");
+
+    var close = -1;
+    if (lines.len() > 0 and lines[0] == "---") {
+        var i = 1;
+        while (i < lines.len() and close < 0) {
+            if (lines[i] == "---") { close = i; }
+            i = i + 1;
+        }
+    }
+    if (close < 0) {
+        problems.append(AdrProblem{ line = 1,
+            message = "no front matter; open the page with `---`, title, order, description and tags, `---`" });
+        return problems;
+    }
+    final titleRest = frontMatterProblems(num, lines: lines, close: close, problems: problems);
+    final wantH1 = "# ADR {num}: " + (if (titleRest != "") titleRest else "<title>");
+
+    var h1 = 0;
+    var status = false;
+    var date = false;
+    var marker = "";
+    var lastRank = -1;
+    var lastTitle = "";
+    final seen: mut [bool] = mut [false, false, false, false, false, false];
+    var inAmendments = false;
+    var stateTable = false;
+    var i = close + 1;
+    while (i < lines.len()) {
+        final line = lines[i];
+        final n = i + 1;
+        final t = line.trim();
+        i = i + 1;
+        if (marker != "") {
+            final run = fenceRun(t);
+            if (run != "" and run.byte(0) == marker.byte(0) and run.len() >= marker.len() and run.len() == t.len()) {
+                marker = "";
+            }
+            continue;
+        }
+        final open = fenceRun(t);
+        if (open != "") { marker = open; continue; }
+
+        if (stateTable) {
+            if (t.startsWith("|") == false) {
+                stateTable = false;
+            } else if (isSeparatorRow(t) == false and validState(lastCell(t)) == false) {
+                problems.append(AdrProblem{ line = n, message = "state `{lastCell(t)}` is not done, in progress, "
+                    + "planned, proposed or not built; use one, optionally followed by a parenthetical" });
+            }
+        } else if (t.startsWith("|") and lastCell(t) == "State" and i < lines.len()
+                and isSeparatorRow(lines[i].trim())) {
+            stateTable = true;
+        }
+
+        if (line.startsWith("# ")) {
+            if (h1 == 0) {
+                h1 = n;
+                if (titleRest != "" and line != wantH1) {
+                    problems.append(AdrProblem{ line = n, message = "the H1 does not match the title; write `{wantH1}`" });
+                } else if (line.startsWith("# ADR {num}: ") == false) {
+                    problems.append(AdrProblem{ line = n, message = "the H1 does not name the ADR; write `{wantH1}`" });
+                }
+            }
+            continue;
+        }
+        if (h1 > 0 and lastTitle == "") {
+            if (line.startsWith("- **Status:**") and line.sub(13).trim() != "") { status = true; }
+            if (line.startsWith("- **Date:**") and startsWithDate(line.sub(11).trim())) { date = true; }
+        }
+        if (line.startsWith("## ")) {
+            final title = line.sub(3).trim();
+            final rank = sectionRank(title);
+            inAmendments = title == "Amendments";
+            if (rank < 0) {
+                problems.append(AdrProblem{ line = n, message = "`## {title}` is not a template section; "
+                    + "make it an H3 under Context, Decision, Alternatives, Consequences or Open questions" });
+            } else {
+                if (rank <= lastRank) {
+                    problems.append(AdrProblem{ line = n, message = "`## {title}` comes after `## {lastTitle}`; "
+                        + "order the sections Context, Decision, Alternatives, Consequences, Open questions, Amendments" });
+                } else {
+                    lastRank = rank;
+                }
+                seen[rank] = true;
+            }
+            lastTitle = title;
+            continue;
+        }
+        if (inAmendments and line.startsWith("### ")) {
+            final head = line.sub(4).trim();
+            if (startsWithDate(head) == false or head.sub(10).startsWith(": ") == false or head.sub(12).trim() == "") {
+                problems.append(AdrProblem{ line = n,
+                    message = "amendment `{line}` does not open with its date; write `### YYYY-MM-DD: <what changed>`" });
+            }
+        }
+    }
+
+    final at = if (h1 > 0) h1 else close + 2;
+    if (h1 == 0) {
+        problems.append(AdrProblem{ line = at, message = "no H1; write `{wantH1}` after the front matter" });
+    }
+    if (status == false) {
+        problems.append(AdrProblem{ line = at, message = "no `- **Status:**` line under the H1; add one before the first section" });
+    }
+    if (date == false) {
+        problems.append(AdrProblem{ line = at, message = "no `- **Date:** YYYY-MM-DD` line under the H1; add one before the first section" });
+    }
+    var r = 0;
+    while (r < REQUIRED_SECTIONS) {
+        if (seen[r] == false) {
+            problems.append(AdrProblem{ line = at, message = "no `## {SECTIONS[r]}` section; "
+                + "every ADR has Context, Decision, Alternatives and Consequences, in that order" });
+        }
+        r = r + 1;
+    }
+    return problems;
+}
+
+final GOOD = "---\ntitle: \"ADR 0007: one template\"\norder: 7\ndescription: Why.\ntags: [adr, decision]\n---\n\n"
+    + "# ADR 0007: one template\n\n- **Status:** Accepted\n- **Date:** 2026-10-07\n\n"
+    + "## Context\n\nText.\n\n## Decision\n\n### 1. Part\n\n| Item | State |\n|---|---|\n| a | done |\n| b | in progress (#550) |\n\n"
+    + "## Alternatives\n\nText.\n\n## Consequences\n\n```md\n## Not a section\n```\n\n## Open questions\n\n1. Q.\n\n"
+    + "## Amendments\n\n### 2026-10-08: a change\n\nText.\n";
+final FILE = "docs/decisions/0007-one-template.md";
+
+fun problemsFor(md: str) > [AdrProblem] { return adrProblems(FILE, md: md); }
+
+fun onlyProblem(md: str, line: int, has: str) > void !> any {
+    final p = problemsFor(md);
+    assert\equal(p.len(), 1, "exactly one problem, got {p.len()}");
+    assert\equal(p[0].line, line, "the line it names");
+    assert\equal(p[0].message.indexOf(has) != null, true, "message `{p[0].message}` names `{has}`");
+}
+
+test "an ADR that follows the template has no problems" {
+    assert\equal(problemsFor(GOOD).len(), 0, "the template itself passes");
+}
+
+test "only docs/decisions/NNNN-<slug>.md pages are held to the template" {
+    assert\equal(adrNumber(FILE), "0007", "the number");
+    assert\equal(adrNumber("docs/decisions/index.md"), "", "an index page");
+    assert\equal(adrNumber("docs/guides/0001-x.md"), "", "another tree");
+    assert\equal(adrProblems("docs/scope.md", md: "# Scope\n").len(), 0, "a page outside decisions");
+}
+
+test "a missing front matter is one problem, on line 1" {
+    onlyProblem("# ADR 0007: one template\n", line: 1, has: "no front matter");
+}
+
+test "the title must be ADR NNNN with the file's number and a lowercase title" {
+    onlyProblem(GOOD.replace("title: \"ADR 0007: one template\"", with: "title: \"ADR 0008: one template\""),
+        line: 2, has: "write `title: \"ADR 0007: <lowercase title>\"`");
+    onlyProblem(GOOD.replace("title: \"ADR 0007: one template\"", with: "title: \"ADR 0007: One template\""),
+        line: 2, has: "lowercase");
+}
+
+test "order must equal the file's number" {
+    onlyProblem(GOOD.replace("order: 7", with: "order: 3"), line: 3, has: "write `order: 7`");
+}
+
+test "a missing description is named at the front matter's close" {
+    onlyProblem(GOOD.replace("description: Why.\n", with: ""), line: 5, has: "no description");
+}
+
+test "tags must include adr" {
+    onlyProblem(GOOD.replace("tags: [adr, decision]", with: "tags: [decision]"), line: 5, has: "add `adr`");
+}
+
+test "the H1 must repeat the title" {
+    onlyProblem(GOOD.replace("# ADR 0007: one template", with: "# ADR 0007: another"),
+        line: 8, has: "write `# ADR 0007: one template`");
+}
+
+test "the block under the H1 carries Status and a YYYY-MM-DD Date" {
+    onlyProblem(GOOD.replace("- **Status:** Accepted\n", with: ""), line: 8, has: "Status");
+    onlyProblem(GOOD.replace("2026-10-07", with: "October 7"), line: 8, has: "YYYY-MM-DD");
+}
+
+test "a section outside the template is refused and named" {
+    onlyProblem(GOOD.replace("### 1. Part", with: "## 1. Part"), line: 19, has: "not a template section");
+}
+
+test "sections out of order are refused" {
+    final md = GOOD.replace("## Alternatives\n\nText.\n\n## Consequences\n\n",
+        with: "## Consequences\n\n## Alternatives\n\nText.\n\n");
+    onlyProblem(md, line: 28, has: "comes after `## Consequences`");
+}
+
+test "a missing required section is named at the H1" {
+    final md = GOOD.replace("## Alternatives\n\nText.\n\n", with: "");
+    onlyProblem(md, line: 8, has: "no `## Alternatives` section");
+}
+
+test "an amendment opens with its date" {
+    onlyProblem(GOOD.replace("### 2026-10-08: a change", with: "### A change, 2026-10-08"),
+        line: 42, has: "### YYYY-MM-DD: <what changed>");
+}
+
+test "a State column takes only the five states" {
+    onlyProblem(GOOD.replace("| a | done |", with: "| a | shipped |"), line: 23, has: "state `shipped`");
+}
