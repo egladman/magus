@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-9-gfeb125b8e (commit feb125b8e, 2026-10-06T12:26:56-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-22-g0b01cbecb-dirty (commit 0b01cbecb, 2026-10-07T07:22:31-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -133,8 +133,6 @@ internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
 internal/spell/gen/decls/*.buzz merge=magus linguist-generated
 internal/spell/gen/types/*.buzz merge=magus linguist-generated
-libs/coldread/MAGUS.md merge=magus linguist-generated
-libs/coldread/coverage.out merge=magus linguist-generated
 libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated

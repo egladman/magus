@@ -147,6 +147,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.AnyMapVal(ret0), nil
 	}))
+	m.MapSet("prose", vm.DirectValue("magus.prose", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		ret0, err := std.MagusProse(ctx)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.AnyMapVal(ret0), nil
+	}))
 	m.MapSet("dir", vm.DirectValue("magus.dir", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		path := ffi.Str(bzArgs, 0)
 		ret0, err := std.MagusDir(ctx, path)
