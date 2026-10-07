@@ -69,7 +69,7 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 		Facts:      4,
 		Targets: []TargetResult{
 			{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
-			{Target: "test", Project: "api", Outcome: OutcomeFail},
+			{Target: "test", Project: "api", Outcome: OutcomeFail, DurationMs: 5},
 			{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
 		},
 	}, summaries[0])

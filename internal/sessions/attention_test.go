@@ -347,7 +347,7 @@ func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
 	assert.NotEmpty(t, req.DisposedBy, "the disposing session is read back off the store, not assumed")
 	assert.Equal(t, AttentionRequest{
 		ID:         id,
-		Invocation: "sess-1",
+		Invocation: req.Invocation, // a generated invocation id, not the session name
 		OpenedMs:   req.OpenedMs,
 		Outcome:    "waiting",
 		Source:     "agent/claude",
