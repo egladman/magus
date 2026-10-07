@@ -1,13 +1,16 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +31,34 @@ func TestContributesNothing(t *testing.T) {
 	} {
 		assert.Equal(t, tc.want, contributesNothing(tc.spell), name)
 	}
+}
+
+// TestBoundSpellWarnsOnlyWhenItContributesNothing binds spells the way a magusfile's
+// "spells" list does. The built-in buzz spell contributes its scip-buzz index op whether
+// or not scip-buzz is installed, so binding it is quiet; a spell exposing nothing warns.
+func TestBoundSpellWarnsOnlyWhenItContributesNothing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	empty := spells.NewSpell("bound-spell-test-empty")
+	project.DefaultSpellRegistry().RegisterSpell(empty)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(empty.Name()) })
+
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	bind := func(name string) string {
+		logs.Reset()
+		handle := vm.NewMap()
+		handle.MapSet("name", vm.StrValue(name))
+		opts := vm.NewMap()
+		opts.MapSet("spells", vm.ListValue([]vm.Value{handle}))
+		_, err := parseBuzzProjectOpts(context.Background(), opts)
+		require.NoError(t, err, name)
+		return logs.String()
+	}
+
+	assert.Empty(t, bind("buzz"))
+	assert.Contains(t, bind(empty.Name()), "bound spell exposes no targets")
 }
 
 // applyOpts runs the parsed project options against a fresh root project so tests can
