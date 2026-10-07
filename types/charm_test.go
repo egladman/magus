@@ -115,6 +115,6 @@ func TestRenamedCharmError(t *testing.T) {
 		assert.Equal(t, CharmRenamed, d.Code)
 	}
 	for _, name := range []string{CharmUpdate, CharmReadWrite, "rellock"} {
-		assert.NoError(t, RenamedCharmError(name), name)
+		require.NoError(t, RenamedCharmError(name), name)
 	}
 }

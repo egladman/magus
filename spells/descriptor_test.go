@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateScriptRunners(t *testing.T) {
@@ -29,7 +30,7 @@ func TestValidateScriptRunners(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := ValidateScriptRunners(tt.runners)
 			if tt.wantErr == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				return
 			}
 			assert.EqualError(t, err, tt.wantErr)

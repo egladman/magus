@@ -422,7 +422,7 @@ func TestDriftHookBodyNeverBlocksAndNeedsNoServer(t *testing.T) {
 		cmd := exec.Command("sh", hookPath)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
-		assert.NoError(t, err, "%s must exit 0 even when its command fails: %s", name, out)
+		require.NoError(t, err, "%s must exit 0 even when its command fails: %s", name, out)
 	}
 }
 
@@ -2427,10 +2427,10 @@ func TestCheckRemoteNameAndRev(t *testing.T) {
 	for _, bad := range []string{"", "-x", ".", "a/b", "https://x", "a b", "a:b"} {
 		assert.Error(t, checkRemoteName(bad), bad)
 	}
-	assert.NoError(t, checkRemoteName("upstream"))
+	require.NoError(t, checkRemoteName("upstream"))
 	assert.Error(t, checkRev("+refs/heads/*:refs/heads/*"))
 	assert.Error(t, checkRev("HEAD:path"))
-	assert.NoError(t, checkRev("origin/main~2"))
+	require.NoError(t, checkRev("origin/main~2"))
 }
 
 // `bisect run` runs the user's test command, which inherits whatever git exports. magus's
@@ -2986,7 +2986,7 @@ func TestPushRefusalReadsARemoteLeaseLossAsStale(t *testing.T) {
 	}
 	assert.Equal(t, &types.PushRejectedError{Ref: "refs/heads/main", Reason: "protected branch hook declined"},
 		pushRefusal(line("[remote rejected] (protected branch hook declined)"), "refs/heads/main"))
-	assert.NoError(t, pushRefusal(line("[rejected] (stale info)"), "refs/heads/other"), "another ref's line is not this one's")
+	require.NoError(t, pushRefusal(line("[rejected] (stale info)"), "refs/heads/other"), "another ref's line is not this one's")
 }
 
 // B6: no hook on the box runs under a commit, a push or a checkout magus makes.
@@ -3770,15 +3770,15 @@ func TestFetchSweepsOnlyStaleScratchRefs(t *testing.T) {
 
 func TestCheckRefNameAndCommitID(t *testing.T) {
 	for _, ok := range []string{"refs/heads/main", "refs/pull/482/head", "refs/heads/rel/1.0"} {
-		assert.NoError(t, checkRefName(ok), ok)
+		require.NoError(t, checkRefName(ok), ok)
 	}
 	for _, bad := range []string{"main", "refs/", "refs/heads/a..b", "refs/heads/x.lock", "refs/heads/.x",
 		"refs/heads/a:b", "+refs/heads/a", "refs/heads/*", "refs/heads/a b", "refs/heads/a^", "refs/heads/a~1",
 		"refs/heads/a@{1}", "refs/heads/a/", "refs/heads//a", "refs/heads/a\\b"} {
 		assert.Error(t, checkRefName(bad), bad)
 	}
-	assert.NoError(t, checkCommitID(strings.Repeat("a", 40)))
-	assert.NoError(t, checkCommitID(strings.Repeat("0", 64)))
+	require.NoError(t, checkCommitID(strings.Repeat("a", 40)))
+	require.NoError(t, checkCommitID(strings.Repeat("0", 64)))
 	for _, bad := range []string{"", "HEAD", strings.Repeat("A", 40), strings.Repeat("a", 39)} {
 		assert.Error(t, checkCommitID(bad), bad)
 	}

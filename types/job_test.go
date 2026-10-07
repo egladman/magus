@@ -352,7 +352,7 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	t.Parallel()
 
 	schema := Schema{Version: JobSchemaVersion}
-	assert.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
+	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
 	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
 	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
 }

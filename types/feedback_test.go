@@ -4,12 +4,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFeedbackSectionLetters(t *testing.T) {
 	var letters string
 	for _, s := range FeedbackSections {
-		assert.NoError(t, s.Validate())
+		require.NoError(t, s.Validate())
 		letters += s.Letter()
 	}
 	assert.Equal(t, "ABCD", letters, "labels are A refused, B advised, C unguarded, D next-not-taken")
@@ -19,7 +20,7 @@ func TestFeedbackSectionLetters(t *testing.T) {
 
 func TestFeedbackVerdictValidate(t *testing.T) {
 	for _, v := range FeedbackVerdicts {
-		assert.NoError(t, v.Validate())
+		require.NoError(t, v.Validate())
 	}
 	assert.ErrorContains(t, FeedbackVerdict("bad").Validate(), "should-deny, should-advise, wrong-deny, fine")
 }

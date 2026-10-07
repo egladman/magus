@@ -52,7 +52,7 @@ func TestVersionErrorRejectsTheReleaseBeforeTheFlag(t *testing.T) {
 	for _, tc := range cases {
 		err := versionError(tc.bin, tc.output)
 		if !tc.old {
-			assert.NoError(t, err, "%s %q", tc.bin, tc.output)
+			require.NoError(t, err, "%s %q", tc.bin, tc.output)
 			continue
 		}
 		require.ErrorIs(t, err, types.ToolTooOld, "%s %q", tc.bin, tc.output)
@@ -89,7 +89,7 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 	write("2.54.0")
 	require.NoError(t, cachedToolVersion(t.Context(), "git"))
 	write("2.53.0")
-	assert.NoError(t, cachedToolVersion(t.Context(), "git"), "a passing verdict is remembered")
+	require.NoError(t, cachedToolVersion(t.Context(), "git"), "a passing verdict is remembered")
 }
 
 var installedVCSFloor = flag.Bool("installed-vcs-floor", false, "fail when an installed git, hg, sl or jj is older than its floor")
