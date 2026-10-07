@@ -77,7 +77,7 @@ func TestValidateModuleAcceptsWellFormedDeclarations(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.NoError(t, ValidateModule(tc.mod))
+			require.NoError(t, ValidateModule(tc.mod))
 		})
 	}
 }

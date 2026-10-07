@@ -44,7 +44,7 @@ func TestCheckHonoursThePerRuleGrants(t *testing.T) {
 			rs := allowlist(t, dir, tc.read, tc.write, tc.exec)
 			for access, want := range map[Access]bool{Read: tc.read, Write: tc.write, Exec: tc.exec} {
 				if want {
-					assert.NoError(t, rs.Check(inside, access), access.String())
+					require.NoError(t, rs.Check(inside, access), access.String())
 				} else {
 					assert.ErrorIs(t, rs.Check(inside, access), ErrDenied, access.String())
 				}
@@ -68,10 +68,10 @@ func TestSiblingSharingAPathPrefixIsNotUnderTheRule(t *testing.T) {
 
 	rs := allowlist(t, allowed, true, true, false)
 
-	assert.NoError(t, rs.Check(filepath.Join(allowed, "ok.txt"), Read))
+	require.NoError(t, rs.Check(filepath.Join(allowed, "ok.txt"), Read))
 	assert.ErrorIs(t, rs.Check(filepath.Join(sibling, "escape.txt"), Read), ErrDenied,
 		"a sibling sharing the rule's path prefix must not inherit its grant")
-	assert.NoError(t, rs.Check(allowed, Read), "the rule's own directory is under itself")
+	require.NoError(t, rs.Check(allowed, Read), "the rule's own directory is under itself")
 }
 
 // TestUnnormalizedRulePathMatchesNothing is why ResolveRulePath exists. A checked
@@ -93,7 +93,7 @@ func TestUnnormalizedRulePathMatchesNothing(t *testing.T) {
 	raw := Ruleset{Rules: []Rule{{Path: filepath.Clean(dir), Read: true}}}
 	assert.ErrorIs(t, raw.Check(file, Read), ErrDenied,
 		"an unresolved rule path must not silently appear to work")
-	assert.NoError(t, allowlist(t, dir, true, false, false).Check(file, Read),
+	require.NoError(t, allowlist(t, dir, true, false, false).Check(file, Read),
 		"the same rule normalized does grant it")
 }
 
@@ -151,7 +151,7 @@ func TestWriteThroughADanglingSymlinkChecksItsTarget(t *testing.T) {
 
 	// A relative dangling link that stays inside is still fine.
 	require.NoError(t, os.Symlink("sub/new.txt", filepath.Join(ws, "inside")))
-	assert.NoError(t, rs.Check(filepath.Join(ws, "inside"), Write))
+	require.NoError(t, rs.Check(filepath.Join(ws, "inside"), Write))
 }
 
 // A symlink loop is refused rather than walked forever.
@@ -177,11 +177,11 @@ func TestWriteToANonExistentPathResolvesItsNearestRealAncestor(t *testing.T) {
 	dir := t.TempDir()
 	rs := allowlist(t, dir, true, true, false)
 
-	assert.NoError(t, rs.Check(filepath.Join(dir, "not-created-yet.txt"), Write),
+	require.NoError(t, rs.Check(filepath.Join(dir, "not-created-yet.txt"), Write),
 		"one missing level resolves against its existing parent")
-	assert.NoError(t, rs.Check(filepath.Join(dir, "missing-dir", "deep.txt"), Write),
+	require.NoError(t, rs.Check(filepath.Join(dir, "missing-dir", "deep.txt"), Write),
 		"a missing parent walks further up rather than falling back to a lexical path")
-	assert.NoError(t, rs.Check(filepath.Join(dir, "a", "b", "c", "deep.txt"), Write),
+	require.NoError(t, rs.Check(filepath.Join(dir, "a", "b", "c", "deep.txt"), Write),
 		"and it keeps walking for arbitrarily deep missing tails")
 }
 
@@ -197,7 +197,7 @@ func TestAnyMatchingRuleGrants(t *testing.T) {
 		{Path: ResolveRulePath(nested), Read: true},            // narrow, read-only, listed first
 		{Path: ResolveRulePath(root), Read: true, Write: true}, // broad, also grants write
 	}}
-	assert.NoError(t, rs.Check(filepath.Join(nested, "f.txt"), Write),
+	require.NoError(t, rs.Check(filepath.Join(nested, "f.txt"), Write),
 		"the broader rule still grants write even though a narrower read-only rule matched first")
 }
 

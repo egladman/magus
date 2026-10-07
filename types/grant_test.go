@@ -90,7 +90,7 @@ func TestGrantWithinIsPointwiseOnEveryPair(t *testing.T) {
 func TestGrantValidateRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
 	t.Parallel()
 	for _, g := range validGrants() {
-		assert.NoError(t, g.Validate(), g.String())
+		require.NoError(t, g.Validate(), g.String())
 	}
 	for _, g := range []Grant{{Tokens: LevelRead}, {MCP: LevelRead}, {Console: 3}, {Tokens: 9}} {
 		assert.Error(t, g.Validate(), "%+v", g)
@@ -107,7 +107,7 @@ func TestNeedValidateRefusesZeroAndInvalid(t *testing.T) {
 		{Surface: SurfaceConsole, Level: LevelRead},
 		{Surface: SurfaceConsole, Level: LevelWrite},
 	} {
-		assert.NoError(t, n.Validate(), "%+v", n)
+		require.NoError(t, n.Validate(), "%+v", n)
 	}
 	for _, n := range []Need{
 		{},

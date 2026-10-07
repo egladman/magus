@@ -148,7 +148,7 @@ func TestRemove(t *testing.T) {
 	require.NoError(t, Write(dir, owner{PID: 1}))
 	require.NoError(t, Remove(dir))
 	assert.NoDirExists(t, dir)
-	assert.NoError(t, Remove(dir), "removing what is already gone is not an error")
+	require.NoError(t, Remove(dir), "removing what is already gone is not an error")
 }
 
 // benchOwner mirrors the shape lock.go writes on every acquire: a handful of short scalars

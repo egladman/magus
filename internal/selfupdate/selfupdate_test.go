@@ -620,7 +620,7 @@ func TestCheckParentWritable(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	err := CheckParentWritable(filepath.Join(dir, "magus"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // TestDownloadVerifyEmptyKeyringFallsBack verifies that Options with an empty keyring
@@ -790,7 +790,7 @@ func TestCheckFileWritable_Writable(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "writable-*")
 	require.NoError(t, err)
 	f.Close()
-	assert.NoError(t, CheckFileWritable(f.Name()))
+	require.NoError(t, CheckFileWritable(f.Name()))
 }
 
 // TestFetchAndVerifyTarball_OK is an integration-style test covering the

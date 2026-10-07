@@ -322,7 +322,7 @@ func TestCheckLayer(t *testing.T) {
 		{".", "composition"},
 		{"cmd/*", "cli-2"},
 	} {
-		assert.NoErrorf(t, CheckLayer(ok[0], ok[1]), "%v", ok)
+		require.NoErrorf(t, CheckLayer(ok[0], ok[1]), "%v", ok)
 	}
 	for _, tc := range []struct{ dir, name, want string }{
 		{"", "handler", "blank directory"},

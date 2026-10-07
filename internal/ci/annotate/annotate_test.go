@@ -23,9 +23,9 @@ func TestNopIsInertButUsable(t *testing.T) {
 	t.Parallel()
 	var n Nop
 	assert.False(t, n.Active())
-	assert.NoError(t, n.StartGroup(Group{Title: "x"}))
-	assert.NoError(t, n.EndGroup("x"))
-	assert.NoError(t, n.Annotate(Annotation{Message: "x"}))
+	require.NoError(t, n.StartGroup(Group{Title: "x"}))
+	require.NoError(t, n.EndGroup("x"))
+	require.NoError(t, n.Annotate(Annotation{Message: "x"}))
 	assert.Equal(t, "::error::untouched", n.Defang("::error::untouched"),
 		"with no provider there is no syntax to neutralise")
 }

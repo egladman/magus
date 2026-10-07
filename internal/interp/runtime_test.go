@@ -235,9 +235,9 @@ func TestCheckRemoteSpellImports(t *testing.T) {
 	check := func(ctx context.Context, src string) error {
 		return checkRemoteSpellImports(ctx, remoteImportPaths(src))
 	}
-	assert.NoError(t, check(t.Context(), `import "spells/local";`))
-	assert.NoError(t, check(declared, `import "`+lint+`";`))
-	assert.NoError(t, check(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
+	require.NoError(t, check(t.Context(), `import "spells/local";`))
+	require.NoError(t, check(declared, `import "`+lint+`";`))
+	require.NoError(t, check(t.Context(), `// import "ghcr.io/team/spells/fmt";`+"\n"), "a comment imports nothing")
 
 	err = check(t.Context(), `import "`+lint+`";`)
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared, "no workspace declares anything")
@@ -266,7 +266,7 @@ func TestReportImportError(t *testing.T) {
 	ctx := context.WithValue(t.Context(), importErrorsKey{}, sink)
 	assert.True(t, ReportImportError(ctx, assert.AnError))
 	require.ErrorIs(t, sink.take(), assert.AnError)
-	assert.NoError(t, sink.take(), "take drains the sink")
+	require.NoError(t, sink.take(), "take drains the sink")
 }
 
 // stepProbe records the policy a target body's ctx carries; TimeCall hands it the
@@ -328,7 +328,7 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, rec.policies, 2)
-	assert.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
+	require.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
 	assert.Error(t, rec.policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
 	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
 }

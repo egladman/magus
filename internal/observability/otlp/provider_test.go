@@ -27,7 +27,7 @@ func TestNew_DisabledIsNoOp(t *testing.T) {
 	p.RecordCacheMiss(context.Background())
 	p.RecordCacheError(context.Background())
 	p.RecordCacheDuration(context.Background(), 1.5)
-	assert.NoError(t, p.Shutdown(context.Background()))
+	require.NoError(t, p.Shutdown(context.Background()))
 }
 
 // TestNew_EnabledRequiresEndpoint exercises the validation path.
@@ -89,5 +89,5 @@ func TestCacheRunOptions_DisabledProviderIsInert(t *testing.T) {
 		return nil
 	}, opts...)
 	require.NoError(t, err, "Run(hit)")
-	assert.NoError(t, p.Shutdown(context.Background()), "disabled.Shutdown")
+	require.NoError(t, p.Shutdown(context.Background()), "disabled.Shutdown")
 }

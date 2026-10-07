@@ -85,7 +85,7 @@ func TestBoundWorkerEndsItselfInFailureOrExit(t *testing.T) {
 
 	for _, state := range []types.JobState{types.StateFail, types.StateNoReturn, types.StateExited} {
 		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = state })
-		assert.NoError(t, err, "a worker reports its own %s", state)
+		require.NoError(t, err, "a worker reports its own %s", state)
 	}
 
 	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
@@ -164,7 +164,7 @@ func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 		u.Parent = "adj/store"
 		u.WritePaths = []string{"internal/ledger"}
 	})
-	assert.NoError(t, err, "a child inside the parent's own paths")
+	require.NoError(t, err, "a child inside the parent's own paths")
 
 	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
 		u.Parent = "adj/store"

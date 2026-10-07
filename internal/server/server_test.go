@@ -466,6 +466,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 					Type string `json:"type"`
 				} `json:"details"`
 			}
+			//nolint:testifylint // assertRefused reports every route; require would stop at the first
 			if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 				return
 			}
@@ -486,6 +487,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 				} `json:"details"`
 			} `json:"error"`
 		}
+		//nolint:testifylint // assertRefused reports every route; require would stop at the first
 		if !assert.NoError(t, json.Unmarshal(body, &got), "%s: body is not JSON: %s", what, body) {
 			return
 		}

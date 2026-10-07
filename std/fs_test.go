@@ -102,7 +102,7 @@ func TestFsRemoveAll(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "tree should be gone")
 
 	// Removing a path that does not exist is not an error.
-	assert.NoError(t, FsRemoveAll(ctx, filepath.Join(dir, "never-existed")))
+	require.NoError(t, FsRemoveAll(ctx, filepath.Join(dir, "never-existed")))
 }
 
 // TestFsListDir covers entry listing and the documented "empty (nil) if the path
@@ -175,7 +175,7 @@ func TestFsSymlinkChecksItsTarget(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(outside, "d"), filepath.Join(ws, "d")))
 	assert.ErrorIs(t, FsSymlink(ctx, "d/../secret", filepath.Join(ws, "c")), types.PathReadDenied,
 		"d/.. climbs out of where d leads, not back into ws")
-	assert.NoError(t, FsSymlink(ctx, "inside.txt", filepath.Join(ws, "e")))
+	require.NoError(t, FsSymlink(ctx, "inside.txt", filepath.Join(ws, "e")))
 }
 
 // TestFsSymlinkReadlink round-trips FsSymlink and FsReadlink: the link stores the
@@ -223,7 +223,7 @@ func TestRecordModeSkipsFilesystemWrites(t *testing.T) {
 
 		require.NoError(t, FsWriteFile(plain, p, "data"))
 		_, err = os.Stat(p)
-		assert.NoError(t, err, "normal mode must write the file")
+		require.NoError(t, err, "normal mode must write the file")
 	})
 
 	t.Run("mkdir_all", func(t *testing.T) {
@@ -238,7 +238,7 @@ func TestRecordModeSkipsFilesystemWrites(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
 		require.NoError(t, FsRemoveAll(rec, p))
 		_, err := os.Stat(p)
-		assert.NoError(t, err, "record mode must not delete the file")
+		require.NoError(t, err, "record mode must not delete the file")
 	})
 
 	t.Run("temp_dir_returns_stub_without_creating", func(t *testing.T) {
@@ -410,7 +410,7 @@ func TestRecordModeSkipsNewFilesystemWrites(t *testing.T) {
 		require.NoError(t, os.WriteFile(src, []byte("x"), 0o644))
 		require.NoError(t, FsRename(rec, src, filepath.Join(dir, "moved.txt")))
 		_, err := os.Stat(src)
-		assert.NoError(t, err, "record mode must leave the source in place")
+		require.NoError(t, err, "record mode must leave the source in place")
 	})
 
 	t.Run("remove", func(t *testing.T) {
@@ -418,7 +418,7 @@ func TestRecordModeSkipsNewFilesystemWrites(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte("x"), 0o644))
 		require.NoError(t, FsRemove(rec, p))
 		_, err := os.Stat(p)
-		assert.NoError(t, err, "record mode must not delete the file")
+		require.NoError(t, err, "record mode must not delete the file")
 	})
 }
 

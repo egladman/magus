@@ -244,7 +244,7 @@ func TestNotifierPinUpdatesInPlaceAndClears(t *testing.T) {
 
 	// Retracting a condition that was never shown is a no-op, so a caller
 	// reporting the end does not have to know whether the start was displayed.
-	assert.NoError(t, n.Clear("lock"))
+	require.NoError(t, n.Clear("lock"))
 }
 
 func TestNotifierSleepsWhenNothingCanExpire(t *testing.T) {

@@ -229,7 +229,7 @@ func TestFsIsDirIsFile(t *testing.T) {
 	// A missing path is reported as neither, without error.
 	ok, err := FsIsDir(ctx, filepath.Join(dir, "nope"))
 	assert.False(t, ok, "is_dir(missing) should be false")
-	assert.NoError(t, err, "is_dir(missing) should not error")
+	require.NoError(t, err, "is_dir(missing) should not error")
 }
 
 func TestFsStat(t *testing.T) {
@@ -450,7 +450,7 @@ func TestFsWatchFiresCallbackAndStops(t *testing.T) {
 
 	select {
 	case err := <-done:
-		assert.NoError(t, err, "FsWatch should return nil after the callback asked to stop")
+		require.NoError(t, err, "FsWatch should return nil after the callback asked to stop")
 	case <-time.After(5 * time.Second):
 		t.Fatal("FsWatch did not return after the callback asked to stop")
 	}

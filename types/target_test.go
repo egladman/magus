@@ -78,7 +78,7 @@ func TestParseTarget_Errors(t *testing.T) {
 
 func TestValidateTargetName(t *testing.T) {
 	for _, n := range []string{"build", "test", "lint-fix", "gen_2", "ABC123", "a"} {
-		assert.NoErrorf(t, ValidateTargetName(n), "ValidateTargetName(%q)", n)
+		require.NoErrorf(t, ValidateTargetName(n), "ValidateTargetName(%q)", n)
 	}
 	for _, n := range []string{"", "lint:read", "go::lint", "foo@bar", "web/studio", "build prod", "test.unit"} {
 		assert.Errorf(t, ValidateTargetName(n), "ValidateTargetName(%q) should error", n)
@@ -127,7 +127,7 @@ func TestKebabCase(t *testing.T) {
 
 func TestValidateCharmName(t *testing.T) {
 	for _, n := range []string{"read", "write", "strict", "ci-only", "x"} {
-		assert.NoErrorf(t, ValidateCharmName(n), "ValidateCharmName(%q)", n)
+		require.NoErrorf(t, ValidateCharmName(n), "ValidateCharmName(%q)", n)
 	}
 	for _, n := range []string{"", "read:write", "a b", "fast@v2"} {
 		assert.Errorf(t, ValidateCharmName(n), "ValidateCharmName(%q) should error", n)

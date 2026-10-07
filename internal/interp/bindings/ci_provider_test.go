@@ -16,11 +16,11 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 	drv := &stubDriver{}
 	a := &spellAnnotator{drv: drv}
 
-	assert.NoError(t, a.StartGroup(annotate.Group{ID: "g", Title: "t"}))
+	require.NoError(t, a.StartGroup(annotate.Group{ID: "g", Title: "t"}))
 	assert.Equal(t, "group_start", drv.got.Target)
-	assert.NoError(t, a.EndGroup("g"))
+	require.NoError(t, a.EndGroup("g"))
 	assert.Equal(t, "group_end", drv.got.Target)
-	assert.NoError(t, a.Annotate(annotate.Annotation{Level: annotate.LevelError, Message: "m"}))
+	require.NoError(t, a.Annotate(annotate.Annotation{Level: annotate.LevelError, Message: "m"}))
 	assert.Equal(t, "annotate", drv.got.Target)
 }
 

@@ -134,7 +134,7 @@ func TestExecConsultsTheStepGate(t *testing.T) {
 			if tc.wantErr != nil {
 				assert.ErrorIs(t, err, tc.wantErr)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			assert.Equal(t, tc.wantRun, res.Stdout == "ran", "command ran = %v", tc.wantRun)
 		})

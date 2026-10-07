@@ -131,8 +131,8 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 	assert.Contains(t, err.Error(), "internal/config/validate.go")
 	assert.Contains(t, err.Error(), "types/job.go")
 
-	assert.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
-	assert.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare"), nil))
+	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare", "Cold"), read), "a name the graph cannot read fails open at declaration")
+	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare"), nil))
 }
 
 type fakeSymbolGraph struct {

@@ -10,7 +10,6 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,5 +25,5 @@ func TestCheckReadWriteResolveAgainstTheCwd(t *testing.T) {
 	require.ErrorIs(t, CheckWrite(ctx, "inside.txt"), types.PathWriteDenied)
 	require.ErrorIs(t, CheckRead(ctx, filepath.Join("..", "outside.txt")), types.PathReadDenied)
 
-	assert.NoError(t, CheckWrite(context.Background(), "/anywhere"), "no policy, no check")
+	require.NoError(t, CheckWrite(context.Background(), "/anywhere"), "no policy, no check")
 }

@@ -24,13 +24,13 @@ func TestWriter_Stats_InitialZero(t *testing.T) {
 
 	s := w.Stats()
 	assert.Zero(t, s.Recorded, "Stats.Recorded should be 0 before any writes")
-	assert.NoError(t, s.LastErr, "Stats.LastErr should be nil before any writes")
+	require.NoError(t, s.LastErr, "Stats.LastErr should be nil before any writes")
 }
 
 func TestWriter_Close_NoError(t *testing.T) {
 	var buf bytes.Buffer
 	w := NewWriter(&buf)
-	assert.NoError(t, w.Close())
+	require.NoError(t, w.Close())
 }
 
 func TestWriter_RecordAndClose(t *testing.T) {

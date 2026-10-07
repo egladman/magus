@@ -16,7 +16,7 @@ func TestSpellVersionProbe(t *testing.T) {
 	none := NewSpell("none")
 	assert.False(t, none.HasVersionProbe(), "a spell with no tools declares no probe")
 	v, err := none.ProbeVersion(context.Background(), "go", "/dir")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, v)
 
 	probed := NewSpell("go",
@@ -26,12 +26,12 @@ func TestSpellVersionProbe(t *testing.T) {
 		}))
 	assert.True(t, probed.HasVersionProbe())
 	v, err = probed.ProbeVersion(context.Background(), "go", "/d")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "go@/d", v)
 
 	// A tool the spell never declared spawns nothing rather than erroring.
 	v, err = probed.ProbeVersion(context.Background(), "rustc", "/d")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, v)
 
 	boom := errors.New("boom")
@@ -75,7 +75,7 @@ func TestSpellNilInvokerIsNoop(t *testing.T) {
 	// A spell with no invoke function is a graceful no-op, not a panic.
 	s := NewSpell("noop")
 	resp, err := s.Invoke(t.Context(), InvokeRequest{Target: "build"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, InvokeResponse{}, resp)
 }
 
@@ -151,17 +151,17 @@ func TestSpellCommandPreview(t *testing.T) {
 	assert.Empty(t, cmd)
 	assert.Nil(t, args)
 	assert.False(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	steps, ok, err := bare.ExplainCommand("build", nil)
 	assert.Nil(t, steps)
 	assert.False(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	conflicts, ok, err := bare.ConflictingCharms("build", nil)
 	assert.Nil(t, conflicts)
 	assert.False(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	view, ok := bare.ServiceView("serve")
 	assert.Nil(t, view)
@@ -190,17 +190,17 @@ func TestSpellCommandPreview(t *testing.T) {
 	assert.Equal(t, "go", cmd)
 	assert.Equal(t, []string{"build", "rw"}, args)
 	assert.True(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	steps, ok, err = s.ExplainCommand("build", nil)
 	assert.Equal(t, wantSteps, steps)
 	assert.True(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	conflicts, ok, err = s.ConflictingCharms("build", nil)
 	assert.Equal(t, wantConflicts, conflicts)
 	assert.True(t, ok)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	view, ok = s.ServiceView("serve")
 	assert.Equal(t, wantView, view)
@@ -214,7 +214,7 @@ func TestSpellInvokerForwards(t *testing.T) {
 		return "ran:" + req.Target, nil
 	}))
 	resp, err := s.Invoke(context.Background(), InvokeRequest{Target: "build"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, InvokeResponse{Data: "ran:build"}, resp)
 }
 

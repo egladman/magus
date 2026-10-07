@@ -286,7 +286,7 @@ func TestBrokerTermDrainsUntilItsHoldersFinish(t *testing.T) {
 	assert.True(t, b.running(), "a draining broker waits for the run holding it")
 
 	require.NoError(t, holder.Close())
-	assert.NoError(t, b.awaitExit(t, "the broker kept running after its last holder let go"),
+	require.NoError(t, b.awaitExit(t, "the broker kept running after its last holder let go"),
 		"a completed drain is a clean exit")
 	assert.False(t, broker.Live(t.Context(), broker.DefaultAddr()))
 }
@@ -301,7 +301,7 @@ func TestBrokerSecondTermStopsNow(t *testing.T) {
 	b.signal(t, syscall.SIGTERM)
 	awaitBrokerDraining(t)
 	b.signal(t, syscall.SIGTERM)
-	assert.NoError(t, b.awaitExit(t, "a second SIGTERM did not stop a draining broker"))
+	require.NoError(t, b.awaitExit(t, "a second SIGTERM did not stop a draining broker"))
 }
 
 func TestBrokerInterruptStopsNow(t *testing.T) {
@@ -310,7 +310,7 @@ func TestBrokerInterruptStopsNow(t *testing.T) {
 	holdClaim(t)
 
 	b.signal(t, syscall.SIGINT)
-	assert.NoError(t, b.awaitExit(t, "SIGINT did not stop a broker holding a claim"))
+	require.NoError(t, b.awaitExit(t, "SIGINT did not stop a broker holding a claim"))
 }
 
 // TestServerHangupReloadsAndTermStops runs a real foreground server: SIGHUP reloads it
@@ -361,7 +361,7 @@ func TestServerHangupReloadsAndTermStops(t *testing.T) {
 	assert.True(t, proc.SocketLive(t.Context(), addr), "and it keeps serving")
 
 	s.signal(t, syscall.SIGTERM)
-	assert.NoError(t, s.awaitExit(t, "SIGTERM did not stop the server"), "a server stopped by SIGTERM exits 0")
+	require.NoError(t, s.awaitExit(t, "SIGTERM did not stop the server"), "a server stopped by SIGTERM exits 0")
 	assert.False(t, proc.SocketLive(t.Context(), addr))
 }
 

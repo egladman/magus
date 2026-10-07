@@ -199,7 +199,7 @@ func TestCheckpointObserverCutsThePatchDigest(t *testing.T) {
 	// An empty root resolves no VCS, so the observation is UNKNOWN rather than empty,
 	// which is the contract a paths gate turns on.
 	seen, err := CheckpointObserver("", nil)(t.Context(), types.Job{Checkpoint: "abc1234+deadbeef"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, seen.ChangedKnown)
 	assert.False(t, seen.RegionsKnown)
 	assert.NotEmpty(t, seen.RegionsReason, "an unknown footprint says why")

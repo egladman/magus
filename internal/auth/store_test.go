@@ -163,7 +163,7 @@ func TestMintRefusesANameThatLooksLikeAnID(t *testing.T) {
 		assert.ErrorIs(t, err, types.TokenRequestInvalid, name)
 	}
 	_, _, err := store.Mint(types.GrantOperator, MintRequest{Name: "3fa9c1d", Grant: types.GrantViewer, TTL: time.Hour})
-	assert.NoError(t, err, "seven hex digits are a name")
+	require.NoError(t, err, "seven hex digits are a name")
 }
 
 // With no name, Mint takes the first free "<kind>-N" itself, so every door names alike.
@@ -370,7 +370,7 @@ func TestRevokeRefusesATokenOutsideTheRevokersGrant(t *testing.T) {
 	}
 	assert.Len(t, list(t, store), 2, "a refused revoke deletes nothing")
 	_, err = store.Revoke(types.GrantConsole, "console")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // plant writes a record straight into the store under file, holding the hash of a real

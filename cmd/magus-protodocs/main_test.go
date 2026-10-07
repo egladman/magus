@@ -664,7 +664,7 @@ func TestWriteAllRendersEveryPageAndPrunesTheRest(t *testing.T) {
 
 	for _, name := range []string{"index.md", "token/v1/token.md", "legacy/v1/legacy.md", "query/v1/query.md"} {
 		_, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name)))
-		assert.NoError(t, err, "%s was not written", name)
+		require.NoError(t, err, "%s was not written", name)
 	}
 	_, err = os.Stat(stale)
 	assert.True(t, os.IsNotExist(err), "the page for a removed service survived")
@@ -695,7 +695,7 @@ func TestWriteAllPrunesOnlyItsOwnPages(t *testing.T) {
 
 	for _, path := range []string{handwritten, foreign} {
 		_, err := os.Stat(path)
-		assert.NoError(t, err, "%s carries no marker of this generator and must survive", path)
+		require.NoError(t, err, "%s carries no marker of this generator and must survive", path)
 	}
 }
 

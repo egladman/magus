@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Rebase carries under every policy, code under none, and the zero policy is rebase
@@ -31,7 +32,7 @@ func TestCarryPolicyAllows(t *testing.T) {
 
 func TestCheckCarryTier(t *testing.T) {
 	for _, name := range []string{"rebase", "generated", "prose", "comment-only"} {
-		assert.NoError(t, CheckCarryTier(name), name)
+		require.NoError(t, CheckCarryTier(name), name)
 	}
 	assert.EqualError(t, CheckCarryTier("code"), `"code" never carries an approval: a reviewer has to see a code change (want some of rebase, generated, prose, comment-only)`)
 	assert.EqualError(t, CheckCarryTier("docs"), `"docs" is not an approval carry tier (want some of rebase, generated, prose, comment-only)`)

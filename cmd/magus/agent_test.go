@@ -98,7 +98,7 @@ func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	assert.Contains(t, err.Error(), "already exists")
 
 	_, _, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
-	assert.NoError(t, err, "--force overwrites")
+	require.NoError(t, err, "--force overwrites")
 }
 
 func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {

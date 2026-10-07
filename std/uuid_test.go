@@ -53,7 +53,7 @@ func TestUUIDRandomHex(t *testing.T) {
 	assert.Len(t, got, 16, "n bytes render as 2n hex characters")
 	assert.Equal(t, strings.ToLower(got), got, "the hex is lowercase")
 	_, decodeErr := hex.DecodeString(got)
-	assert.NoError(t, decodeErr)
+	require.NoError(t, decodeErr)
 
 	other, err := UUIDRandomHex(ctx, 8)
 	require.NoError(t, err)

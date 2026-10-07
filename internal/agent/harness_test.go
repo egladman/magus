@@ -905,14 +905,14 @@ func TestShippedHookConfigsValidateAgainstTheirHostSchema(t *testing.T) {
 			for _, file := range hostConfigFile[host] {
 				body, err := os.ReadFile(file)
 				require.NoError(t, err, "read %s", file)
-				assert.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
+				require.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
 					"%s is not a config %s would load, per %s", file, host, schemaFile)
 				graded++
 			}
 
 			page := filepath.Join(hookTemplateDir, hostGuidePage[host])
 			for i, block := range hooksConfigBlocks(t, page) {
-				assert.NoError(t, schema.Validate(decodeJSON(t, page, block)),
+				require.NoError(t, schema.Validate(decodeJSON(t, page, block)),
 					"%s json block %d is not a config %s would load, per %s", page, i, host, schemaFile)
 				graded++
 			}
@@ -945,7 +945,7 @@ func TestCursorSchemaAcceptsCursorsOwnConfigs(t *testing.T) {
 		file := filepath.Join(upstreamConfigDir, entry.Name())
 		body, err := os.ReadFile(file)
 		require.NoError(t, err, "read %s", file)
-		assert.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
+		require.NoError(t, schema.Validate(decodeJSON(t, file, string(body))),
 			"%s is a config Cursor ships and our schema rejects it, so the schema is wrong", file)
 	}
 }

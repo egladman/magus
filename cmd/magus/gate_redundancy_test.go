@@ -141,7 +141,7 @@ func TestGateEvaluateInertWithoutRecord(t *testing.T) {
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: t.TempDir(), target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), false))
+	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateOverride: --no-redundancy-check runs under load with a green
@@ -154,7 +154,7 @@ func TestGateEvaluateOverride(t *testing.T) {
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), true))
+	require.NoError(t, g.evaluate(context.Background(), true))
 }
 
 // TestGateEvaluateOtherBranch: a record for another branch says nothing about
@@ -167,7 +167,7 @@ func TestGateEvaluateOtherBranch(t *testing.T) {
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "other", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), false))
+	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateFailedRecord: a recorded FAIL never defers, whatever the
@@ -185,7 +185,7 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), false))
+	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
 // TestGateEvaluateNestedNeverRefuses: a magus under another magus reads its
@@ -198,7 +198,7 @@ func TestGateEvaluateNestedNeverRefuses(t *testing.T) {
 	stubPool(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
-	assert.NoError(t, g.evaluate(context.Background(), false))
+	require.NoError(t, g.evaluate(context.Background(), false))
 }
 
 // TestGateRenderFindingDelta pins the every-file block a delta refusal or

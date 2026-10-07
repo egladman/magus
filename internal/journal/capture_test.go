@@ -131,7 +131,7 @@ func TestFileHandler_WritesEventLinesOnly(t *testing.T) {
 func TestDiscardHandler_NeverEnabled(t *testing.T) {
 	var h slog.Handler = discardHandler{}
 	assert.False(t, h.Enabled(context.Background(), slog.LevelError))
-	assert.NoError(t, h.Handle(context.Background(), recordWith()))
+	require.NoError(t, h.Handle(context.Background(), recordWith()))
 	assert.IsType(t, discardHandler{}, h.WithAttrs(nil))
 	assert.IsType(t, discardHandler{}, h.WithGroup("g"))
 }

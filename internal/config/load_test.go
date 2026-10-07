@@ -482,7 +482,7 @@ func TestWithRunningVersionLeavesOtherErrorsAlone(t *testing.T) {
 	t.Parallel()
 	other := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "too old")
 	assert.Equal(t, error(other), WithRunningVersion(other, "v0.4.3"))
-	assert.NoError(t, WithRunningVersion(nil, "v0.4.3"))
+	require.NoError(t, WithRunningVersion(nil, "v0.4.3"))
 }
 
 // A type mismatch is not an unknown key, and rewriting half of yaml's report

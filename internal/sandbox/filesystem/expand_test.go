@@ -77,7 +77,7 @@ func TestExpandUserRuleResolvesSymlinksWhenThePathExists(t *testing.T) {
 	r, err := ExpandUserRule(link, "ro", "", env(nil))
 	require.NoError(t, err)
 	assert.Equal(t, ResolveRulePath(target), r.Path)
-	assert.NoError(t, Ruleset{Rules: []Rule{r}}.Check(filepath.Join(link, "f.txt"), Read))
+	require.NoError(t, Ruleset{Rules: []Rule{r}}.Check(filepath.Join(link, "f.txt"), Read))
 }
 
 // A rule may name a directory a later step creates.

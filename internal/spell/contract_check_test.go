@@ -125,7 +125,7 @@ func TestShippedSpellsMatchTheContract(t *testing.T) {
 				"spells/%s conforms now; drop it from shippedContractViolations (%s)", dir, why)
 			return nil
 		}
-		assert.NoError(t, cerr, "spells/%s", dir)
+		require.NoError(t, cerr, "spells/%s", dir)
 		return nil
 	})
 	require.NoError(t, err)

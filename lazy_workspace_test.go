@@ -206,7 +206,7 @@ func TestLazyWorkspaceRemoteShardsOpenOnGetAndPutOnly(t *testing.T) {
 
 	// The opened Magus has no cache, so the only link is the published one, which the
 	// chain exposes as itself; its write is whatever that backing does with it.
-	assert.NoError(t, r.PutShard(ctx, "k2", strings.NewReader("body")))
+	require.NoError(t, r.PutShard(ctx, "k2", strings.NewReader("body")))
 	assert.Equal(t, 1, *opens, "the second use reuses the open")
 	assert.Equal(t, []string{"k1"}, published.gets)
 	assert.Equal(t, []string{"k2=body"}, published.puts)
@@ -219,7 +219,7 @@ func TestLazyWorkspaceRemoteShardsWithNoBackingBehaveAsLocalOnly(t *testing.T) {
 
 	_, err := r.GetShard(ctx, "k")
 	assert.ErrorIs(t, err, knowledge.ErrShardMiss, "no remote is a miss, which the store answers by building locally")
-	assert.NoError(t, r.PutShard(ctx, "k", strings.NewReader("body")), "nothing to push to is not a failure")
+	require.NoError(t, r.PutShard(ctx, "k", strings.NewReader("body")), "nothing to push to is not a failure")
 	assert.Equal(t, 1, *opens)
 }
 

@@ -1435,7 +1435,7 @@ func TestParityDirtyDiffOnRepoWithNoCommits(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644))
 
 		_, err := b.drv.DirtyDiff(t.Context(), dir, nil)
-		assert.NoError(t, err, "a repository with no commits has nothing to diff, not an error")
+		require.NoError(t, err, "a repository with no commits has nothing to diff, not an error")
 	})
 }
 

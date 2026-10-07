@@ -523,9 +523,9 @@ func TestEnvDefaultReportsAValueTheFlagCannotParse(t *testing.T) {
 	assert.Contains(t, err.Error(), "max", "the error must name the flag it could not seed")
 	assert.Equal(t, "4", fs.Lookup("max").DefValue, "the flag keeps its default; the caller decides what to do")
 
-	assert.NoError(t, envDefault(fs, "nosuchflag", "x"), "an unknown flag is wiring, not user input")
-	assert.NoError(t, envDefault(fs, "max", ""), "an unset variable is not an error")
-	assert.NoError(t, envDefault(fs, "max", "8"))
+	require.NoError(t, envDefault(fs, "nosuchflag", "x"), "an unknown flag is wiring, not user input")
+	require.NoError(t, envDefault(fs, "max", ""), "an unset variable is not an error")
+	require.NoError(t, envDefault(fs, "max", "8"))
 }
 
 // Not parallel: the prescan binds the global flags into globalCfg.

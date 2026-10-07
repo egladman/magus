@@ -38,7 +38,7 @@ func TestMintShareFollowsTheMintingRule(t *testing.T) {
 	}
 	for _, minter := range []types.Grant{types.GrantViewer, types.GrantConsole, types.GrantOperator} {
 		_, _, err := MintShare(minter, time.Hour)
-		assert.NoError(t, err, minter.String())
+		require.NoError(t, err, minter.String())
 	}
 	for _, ttl := range []time.Duration{0, -time.Minute, 59 * time.Second, MaxShareTTL + time.Second, 90 * 24 * time.Hour} {
 		_, _, err := MintShare(types.GrantOperator, ttl)

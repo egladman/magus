@@ -720,9 +720,9 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 
-	assert.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "advise", Context: "fyi"}),
+	require.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "advise", Context: "fyi"}),
 		"advice teaches and must never block")
-	assert.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "pass"}))
+	require.NoError(t, enforceVerdict(text, guard.Verdict{Decision: "pass"}))
 
 	// The exit code is the enforcement and does not depend on the rendering: a structured
 	// consumer that got a zero status would be told the same lie in a different shape.

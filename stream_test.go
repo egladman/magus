@@ -103,7 +103,7 @@ func TestStream_ContextCancellation(t *testing.T) {
 	cancel()
 	pr, pw := io.Pipe()
 	pw.Close()
-	assert.NoError(t, m.Stream(ctx, pr, "build", nil), "Stream with cancelled ctx")
+	require.NoError(t, m.Stream(ctx, pr, "build", nil), "Stream with cancelled ctx")
 }
 
 // TestStream_EmptyBatchSkipped verifies that an input containing only blank

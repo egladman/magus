@@ -180,7 +180,7 @@ func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 
 	for _, path := range []string{p.Flags, p.Fields, p.Bind, p.ApplyEnv} {
 		_, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		assert.NoError(t, err, "%s is not parsable Go", filepath.Base(path))
+		require.NoError(t, err, "%s is not parsable Go", filepath.Base(path))
 	}
 
 	flags := read(t, p.Flags)

@@ -184,7 +184,7 @@ func TestExecSuccess(t *testing.T) {
 		t.Skip("'true' not available")
 	}
 	_, err := Exec(context.Background(), "true", nil, ExecOptions{Dir: t.TempDir(), Quiet: true})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestExecFailure(t *testing.T) {

@@ -463,7 +463,7 @@ func TestOutputStoreKeepLastK(t *testing.T) {
 	}
 	assert.Equal(t, defaultOutputKeepLast, outs, "retention keeps exactly K executions (each a blob + descriptor)")
 	_, _, err = s.ByRef(last)
-	assert.NoError(t, err, "the newest execution survives pruning")
+	require.NoError(t, err, "the newest execution survives pruning")
 }
 
 // TestOutputStorePruneKeepsWhatTheRefResolvesTo sets every blob's mtime to the REVERSE
@@ -878,7 +878,7 @@ func TestOutputStoreRemoveForProject(t *testing.T) {
 	_, _, err := s.ByRef(gone)
 	assert.ErrorIs(t, err, fs.ErrNotExist, "dropped project's execution should be gone")
 	_, _, err = s.ByRef(keep)
-	assert.NoError(t, err, "other project's execution should remain")
+	require.NoError(t, err, "other project's execution should remain")
 
 	_, statErr := os.Stat(filepath.Join(dir, "outputs", "kb"))
 	assert.ErrorIs(t, statErr, fs.ErrNotExist)

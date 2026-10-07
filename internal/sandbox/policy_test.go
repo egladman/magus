@@ -26,9 +26,9 @@ func TestPolicyContextRoundTrip(t *testing.T) {
 func TestNilPolicyAllowsEverything(t *testing.T) {
 	var p *Policy
 	ctx := t.Context()
-	assert.NoError(t, p.CheckRead(ctx, "/etc/shadow"))
-	assert.NoError(t, p.CheckWrite(ctx, "/etc/passwd"))
-	assert.NoError(t, p.CheckExec(ctx, "/tmp/payload"))
+	require.NoError(t, p.CheckRead(ctx, "/etc/shadow"))
+	require.NoError(t, p.CheckWrite(ctx, "/etc/passwd"))
+	require.NoError(t, p.CheckExec(ctx, "/tmp/payload"))
 	assert.True(t, p.AllowsEnv("GITHUB_TOKEN"))
 }
 
@@ -38,7 +38,7 @@ func TestPolicyChecksHonourTheirOwnFlag(t *testing.T) {
 	dir := filesystem.ResolveRulePath(t.TempDir())
 	p := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
 	ctx := t.Context()
-	assert.NoError(t, p.CheckRead(ctx, filepath.Join(dir, "tool")))
+	require.NoError(t, p.CheckRead(ctx, filepath.Join(dir, "tool")))
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(dir, "tool")), filesystem.ErrDenied)
 	assert.ErrorIs(t, p.CheckExec(ctx, filepath.Join(dir, "tool")), filesystem.ErrDenied)
 }
@@ -85,16 +85,16 @@ func TestCheckWriteRefusesControlFiles(t *testing.T) {
 		"pkg/sub/.envrc", "pkg/sub/mise.toml", "pkg/.claude/settings.json",
 	} {
 		assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), filesystem.ErrDenied, rel)
-		assert.NoError(t, p.CheckRead(ctx, filepath.Join(ws, rel)), "reads are not refused: %s", rel)
+		require.NoError(t, p.CheckRead(ctx, filepath.Join(ws, rel)), "reads are not refused: %s", rel)
 	}
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(gitDir, "config.worktree")), filesystem.ErrDenied,
 		"the worktree's own git dir is write-granted and its config is still refused")
 
 	for _, rel := range []string{"magus", "src/main.go", ".vscode/settings.json", ".gitignore", "docs/magus.yaml.md"} {
-		assert.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), rel)
+		require.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, rel)), rel)
 	}
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")), "git's own writes stay granted")
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")), "git's own writes stay granted")
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")))
 }
 
 // The object store stays readable and loses its write grant, and the worktree's own git
@@ -111,9 +111,9 @@ func TestWithReadOnlyObjectsTakesOnlyTheStoresWrite(t *testing.T) {
 
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "ab", "cd")), filesystem.ErrDenied)
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(common, "objects", "info", "alternates")), filesystem.ErrDenied)
-	assert.NoError(t, p.CheckRead(ctx, filepath.Join(common, "objects", "ab", "cd")))
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")))
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, "src.go")))
+	require.NoError(t, p.CheckRead(ctx, filepath.Join(common, "objects", "ab", "cd")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(gitDir, "index")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(ws, "src.go")))
 	assert.Same(t, p, p.Scoped(nil, nil))
 }
 

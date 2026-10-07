@@ -56,7 +56,7 @@ func TestAllModulesImportable(t *testing.T) {
 			defer func() { _ = sess.Close() }()
 			Register(sess)
 			src := fmt.Sprintf("import %q;", mod)
-			assert.NoErrorf(t, sess.Exec(context.Background(), src), "import %q raised error", mod)
+			require.NoErrorf(t, sess.Exec(context.Background(), src), "import %q raised error", mod)
 		})
 	}
 }

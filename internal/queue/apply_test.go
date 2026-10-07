@@ -1861,7 +1861,7 @@ func TestCheckCredentialPassesWhatTheProviderCounts(t *testing.T) {
 			RequiredChecks: []types.RequiredCheck{{Context: "deploy", Integration: "977"}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			assert.NoError(t, checkCredential(s, "main"))
+			require.NoError(t, checkCredential(s, "main"))
 		})
 	}
 }

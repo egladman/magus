@@ -446,7 +446,7 @@ func TestRemoteRequiresTrustSetOrOptOut(t *testing.T) {
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithLocalWrite(true), WithRemoteBackend(remote),
 		WithInsecureRemote())
-	assert.NoError(t, err, "Open rejected remote + explicit opt-out")
+	require.NoError(t, err, "Open rejected remote + explicit opt-out")
 }
 
 type tarMember struct {

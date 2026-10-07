@@ -134,7 +134,7 @@ func TestSave_BoolValidation(t *testing.T) {
 	}
 
 	for _, good := range []string{"true", "1", "false", "0"} {
-		assert.NoError(t, Save(stamp.Judge{}, path, "dry_run", good), "Save bool %q", good)
+		require.NoError(t, Save(stamp.Judge{}, path, "dry_run", good), "Save bool %q", good)
 	}
 
 	require.NoError(t, Save(stamp.Judge{}, path, "dry_run", "true"))
@@ -292,5 +292,5 @@ func TestSave_CreatesParentDirectory(t *testing.T) {
 
 	require.NoError(t, Save(stamp.Judge{}, path, "log.format", "json"))
 	_, err := os.Stat(path)
-	assert.NoError(t, err, "file not created")
+	require.NoError(t, err, "file not created")
 }

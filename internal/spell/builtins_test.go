@@ -350,25 +350,25 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 
 func TestValidatePatch(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch(nil))
+		require.NoError(t, spells.ValidatePatch(nil))
 	})
 	t.Run("add end", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}))
 	})
 	t.Run("replace index", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}))
 	})
 	t.Run("remove index", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "remove", Path: "/2"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "remove", Path: "/2"}}))
 	})
 	t.Run("move", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "move", Path: "/0", From: "/1"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "move", Path: "/0", From: "/1"}}))
 	})
 	t.Run("copy", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "copy", Path: "/0", From: "/1"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "copy", Path: "/0", From: "/1"}}))
 	})
 	t.Run("test", func(t *testing.T) {
-		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "test", Path: "/0", Value: "go"}}))
+		require.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "test", Path: "/0", Value: "go"}}))
 	})
 	t.Run("unknown op", func(t *testing.T) {
 		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "patch", Path: "/0"}}))

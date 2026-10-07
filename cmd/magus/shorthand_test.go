@@ -32,7 +32,7 @@ func TestInstallShorthand(t *testing.T) {
 func TestInstallShorthandIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, installShorthandCmd([]string{"--dir", dir}))
-	assert.NoError(t, installShorthandCmd([]string{"--dir", dir}))
+	require.NoError(t, installShorthandCmd([]string{"--dir", dir}))
 }
 
 func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
