@@ -1,6 +1,6 @@
 ### Fixed
 
-- **MGS3001 no longer reports writes a run did not make.** An audit re-walk cut short by
-  Ctrl+C or an unreadable directory read every file it never reached as removed, so a
-  target that wrote nothing was blamed for emptying a nested project. An interrupted step
-  now reports its cancellation, and an unreadable tree skips the audit with a warning.
+- **This repo's `ci` and `coverage-render` format the nested Go modules before reading
+  them.** Root lint and test read every module's Go files while a library's `format`
+  rewrote them in the same step (MGS4008). A new `libs-format` target runs those formats
+  first, reached as a same-project need so `ci`'s own `--` args never reach gofmt.
