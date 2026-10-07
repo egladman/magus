@@ -192,7 +192,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	type acc struct {
 		sym  types.KnowledgeSymbol
 		defs map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
-		refs map[string]*types.KnowledgeSymbolRef // ref file -> tally
+		refs map[string]*types.KnowledgeSymbolRef       // ref file -> tally
 	}
 	byKey := map[string]*acc{}
 	skipped := 0
