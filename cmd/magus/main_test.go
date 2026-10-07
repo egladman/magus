@@ -10,7 +10,6 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
-	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -711,93 +710,54 @@ func TestMain(m *testing.M) {
 		}
 	}
 	testscript.Main(testkit.Isolated(m, bootstrapExecIntoHelperTargetVar), map[string]func(){
-		"magus": func() {
-			isolateCoverDir()
-			os.Exit(runCLI())
-		},
+		"magus": func() { os.Exit(runCLI()) },
 	})
 }
 
-// coverStagePrefix starts the name of the directory TestScripts stages its scripts'
-// coverage under, inside the shared GOCOVERDIR. A process finds the stage by this name
-// rather than by a variable because a sandboxed target that runs magus may drop one.
-const coverStagePrefix = "magus-scripts-"
-
-// isolateCoverDir gives this process a GOCOVERDIR of its own when it runs inside the
-// TestScripts stage, so it is the only writer there.
-//
-// The coverage runtime rewrites covmeta.<hash> at every exit: its existence check
-// compares the file's size with a length that leaves out the file's offset table and
-// string table, so it never matches. The rewrite goes through tmp.covmeta.<hash><ns>,
-// named by the wall clock alone, which darwin reports in whole microseconds. Two
-// processes exiting in the same microsecond share that temp file, the second rename
-// fails with ENOENT, and the runtime prints the error to a stderr a script asserts on.
-//
-// A process the sandbox denies writes under the stage could not have emitted coverage
-// either, so it drops GOCOVERDIR and runs uncovered: the runtime then emits nothing,
-// where it would otherwise print its own write failure.
-func isolateCoverDir() {
-	dir := os.Getenv("GOCOVERDIR")
-	if dir == "" || !strings.Contains(filepath.ToSlash(dir), "/"+coverStagePrefix) {
-		return
-	}
-	own, err := os.MkdirTemp(dir, "p")
-	if err != nil {
-		_ = os.Unsetenv("GOCOVERDIR")
-		return
-	}
-	if err := os.Setenv("GOCOVERDIR", own); err != nil {
-		fmt.Fprintln(os.Stderr, "magus test: isolate coverage:", err)
-		os.Exit(1)
-	}
-}
-
-// stageScriptCoverage returns the directory the scripts' GOCOVERDIR points at, or ""
-// when the test binary collects no coverage. At the end of t, after every parallel
-// script, it moves each process's files up into the shared GOCOVERDIR, where the
-// coverage report reads them; the report skips subdirectories.
-func stageScriptCoverage(t *testing.T) string {
+// scriptCoverage returns the directory TestScripts makes each script's GOCOVERDIR in,
+// or "" when the test binary collects no coverage. At the end of t, after every
+// parallel script, it merges them into the shared GOCOVERDIR the coverage report reads.
+func scriptCoverage(t *testing.T) string {
 	shared := os.Getenv("GOCOVERDIR")
 	if shared == "" {
 		return ""
 	}
-	stage, err := os.MkdirTemp(shared, coverStagePrefix)
-	require.NoError(t, err)
+	stage := t.TempDir()
 	t.Cleanup(func() {
-		if err := mergeCoverage(stage, shared); err != nil {
-			t.Errorf("coverage: scripts' output stays in %s: %v", stage, err)
-			return
-		}
-		if err := os.RemoveAll(stage); err != nil {
-			t.Errorf("coverage: %v", err)
+		if err := mergeScriptCoverage(stage, shared); err != nil {
+			t.Errorf("coverage: the scripts' coverage is missing from the report: %v", err)
 		}
 	})
 	return stage
 }
 
-// mergeCoverage moves every coverage file under stage into shared. A meta-data file is
-// named by the hash of its content, so replacing one replaces it with the same bytes. A
-// counter file is linked, never renamed, so a name two processes both claimed is an
-// error rather than one process's counters silently overwriting another's. Any other
-// file, such as a tmp. one, is an emission that never finished.
-func mergeCoverage(stage, shared string) error {
-	var errs []error
-	walkErr := filepath.WalkDir(stage, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
+// mergeScriptCoverage combines the coverage in every directory under stage into shared
+// with one `go tool covdata merge`. It writes into shared directly: its counter file
+// carries pid 0, which no process has, and its meta-data file holds the same bytes the
+// test binary writes under that name, so no file already there is lost.
+func mergeScriptCoverage(stage, shared string) error {
+	entries, err := os.ReadDir(stage)
+	if err != nil {
+		return err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, filepath.Join(stage, e.Name()))
 		}
-		dst := filepath.Join(shared, d.Name())
-		switch {
-		case strings.HasPrefix(d.Name(), "covmeta."):
-			errs = append(errs, os.Rename(path, dst))
-		case strings.HasPrefix(d.Name(), "covcounters."):
-			errs = append(errs, os.Link(path, dst))
-		default:
-			errs = append(errs, fmt.Errorf("unfinished coverage emission %s", path))
-		}
+	}
+	if len(dirs) == 0 {
 		return nil
-	})
-	return errors.Join(append(errs, walkErr)...)
+	}
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		goBin = filepath.Join(os.Getenv("GOROOT"), "bin", "go")
+	}
+	cmd := exec.Command(goBin, "tool", "covdata", "merge", "-i="+strings.Join(dirs, ","), "-o="+shared)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("go tool covdata merge: %w: %s", err, out)
+	}
+	return nil
 }
 
 // TestScripts replays every testdata/script/*.txtar as a black-box CLI behavior
@@ -805,12 +765,21 @@ func mergeCoverage(stage, shared string) error {
 // change to the CLI. Each script runs in its own temp dir with the server off, so
 // tests are hermetic and never touch a real workspace or socket.
 func TestScripts(t *testing.T) {
-	coverDir := stageScriptCoverage(t)
+	coverStage := scriptCoverage(t)
 	testscript.Run(t, testscript.Params{
 		Dir: "testdata/script",
 		Setup: func(e *testscript.Env) error {
-			if coverDir != "" {
-				e.Setenv("GOCOVERDIR", coverDir)
+			// Go's coverage runtime writes meta-data at exit through a temp file it names
+			// by the wall clock alone (openMetaFile's os.Create in
+			// internal/coverage/cfile/emit.go), so processes exiting in the same
+			// microsecond into one GOCOVERDIR collide and print an error a script asserts
+			// on. A dir per script exists only to avoid that.
+			if coverStage != "" {
+				dir := filepath.Join(coverStage, filepath.Base(e.WorkDir))
+				if err := os.Mkdir(dir, 0o755); err != nil {
+					return err
+				}
+				e.Setenv("GOCOVERDIR", dir)
 			}
 			e.Setenv("MAGUS_SERVER_ENABLED", "false")
 			// A run starts a broker otherwise, and a script must leave nothing running.
@@ -843,51 +812,6 @@ func TestScripts(t *testing.T) {
 			"jsonl-records": jsonlRecords,
 		},
 	})
-}
-
-// TestScriptsCoverageConcurrentExits exits magus processes together into one stage, as
-// parallel scripts do, and checks that none prints a coverage error and that every
-// process's counters reach the directory the stage merges into. It runs only in a
-// coverage build, the one where the runtime writes anything.
-func TestScriptsCoverageConcurrentExits(t *testing.T) {
-	if testing.CoverMode() == "" {
-		t.Skip("the binary is not coverage-instrumented")
-	}
-	shared := t.TempDir()
-	stage, err := os.MkdirTemp(shared, coverStagePrefix)
-	require.NoError(t, err)
-	bin := magusBin(t)
-
-	const rounds, procs = 8, 32
-	for range rounds {
-		var wg sync.WaitGroup
-		stderrs := make([]bytes.Buffer, procs)
-		for i := range procs {
-			cmd := exec.Command(bin, "--version")
-			cmd.Env = append(os.Environ(), "GOCOVERDIR="+stage)
-			cmd.Stderr = &stderrs[i]
-			wg.Go(func() { assert.NoError(t, cmd.Run()) })
-		}
-		wg.Wait()
-		for i := range stderrs {
-			assert.NotContains(t, stderrs[i].String(), "coverage")
-		}
-	}
-	require.NoError(t, mergeCoverage(stage, shared))
-
-	var meta, counters int
-	entries, err := os.ReadDir(shared)
-	require.NoError(t, err)
-	for _, e := range entries {
-		switch {
-		case strings.HasPrefix(e.Name(), "covmeta."):
-			meta++
-		case strings.HasPrefix(e.Name(), "covcounters."):
-			counters++
-		}
-	}
-	assert.Equal(t, 1, meta, "one binary, one meta-data file")
-	assert.Equal(t, rounds*procs, counters, "one counter file per process")
 }
 
 // jsonlRecords is `jsonl-records [type...]`: every line the last exec wrote to stdout
