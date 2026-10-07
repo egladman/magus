@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -289,6 +290,31 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 		assert.Contains(t, v.Deny, tt.answer, tt.command)
 		assert.Equal(t, tt.piped, strings.HasSuffix(v.Deny, notReproduced), tt.command)
 	}
+}
+
+// A demoted tree search does not end the walk over a line's searches: a later search whose
+// rule still denies wins, and with none the demoted search outranks plain advice.
+func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
+		"internal/api/config.go":  "package api\n\nfunc ParseConfig() {}\n",
+	})
+	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}
+	const tree, file = `grep -rn ParseConfig internal`, `grep -n HandleRequest internal/api/handler.go`
+	line := parseForTest(t, tree+" && "+file)
+	read, _ := searchVerdictAt(deps, root, parseForTest(t, file))
+
+	v, ok := searchVerdictAt(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "ParseConfig"}, v.Rule, "the demoted tree search outranks the precedent advisory")
+	assert.Equal(t, ShellVerdict{Context: v.Deny, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
+
+	deps.Builtins = map[string]builtin.Setting{string(advisoryPrecedent): {Decision: builtin.Deny}}
+	v, ok = searchVerdictAt(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, read, v)
+	assert.Equal(t, ShellVerdict{Deny: read.Context, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
 }
 
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:

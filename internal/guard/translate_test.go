@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -79,6 +80,27 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		}
 		assert.Equal(t, tt.rule, v.Rule, tt.command)
 	}
+}
+
+// A demoted translation does not end the walk over a line's searches: a later search whose
+// rule still denies wins, and with none the first demoted one answers.
+func TestTranslateWalksPastADemotedTranslation(t *testing.T) {
+	root := repoOperandTree(t)
+	deps := Dependencies{GraphIDs: diagnosticGraph}
+	const listing, literal = `grep -o 'MGS[0-9]' docs/reference/codes/README.md`, `grep -n MGS1046 types/diagnostic.go`
+	line := parseForTest(t, listing+" && "+literal)
+	code, _ := translateSearches(deps, root, parseForTest(t, literal))
+
+	v, ok := translateSearches(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=diagnostic 'id=~^diagnostic:MGS[0-9]\d{3}$' -o name`}, v.Rule, "both demoted, the first answers")
+
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleSymbolSearch): {Decision: builtin.Deny}}
+	v, ok = translateSearches(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, code, v)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS1046"}, v.Rule)
+	assert.Equal(t, v, deps.grade(v), "symbol-search still refuses")
 }
 
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
@@ -902,6 +903,79 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 		closed = append(closed, resp.StdinClosed)
 	}
 	assert.Equal(t, []bool{true, true, false, false, false}, closed, "the trail records each rewrite and nothing else")
+}
+
+// stdin-closed honors every decision a workspace may set: advise says so once a session,
+// off keeps the rewrite and drops the notice, and deny refuses every line that leaves
+// stdin open, without rewriting it.
+func TestJudgeStdinClosedHonorsEveryDecision(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	refused := Verdict{Decision: "deny", Rule: string(advisoryStdinClosed)}
+	for _, tt := range []struct {
+		decision     builtin.Decision
+		first, again Verdict
+	}{
+		{builtin.Advise,
+			Verdict{Decision: "advise", Context: stdinClosedNotice, Rule: string(advisoryStdinClosed), UpdatedCommand: "exec </dev/null; ls -la"},
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
+		{builtin.Off,
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls -la"},
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
+		{builtin.Deny, refused, refused},
+	} {
+		t.Run(string(tt.decision), func(t *testing.T) {
+			ctx := WithLocation(t.Context(), t.TempDir(), "/repo", "")
+			deps := withSetting(string(advisoryStdinClosed), tt.decision)
+			judge := func(input string) Verdict {
+				v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: true})
+				return Verdict{Decision: v.Decision, Context: v.Context, Rule: v.Rule, UpdatedCommand: v.UpdatedCommand}
+			}
+
+			assert.Equal(t, tt.first, judge("ls -la"))
+			assert.Equal(t, tt.again, judge("ls"))
+		})
+	}
+}
+
+// The notices about the acting lease itself honor every decision a workspace may set:
+// advise says so once a session, off says nothing, and deny refuses every call rather
+// than only the first.
+func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
+	for _, notice := range []struct {
+		rule  hint.MarkerKind
+		lease string
+	}{
+		{advisoryLeaseTerminal, "finished"},
+		{advisoryLeaseInvalid, "lease b!"},
+	} {
+		for _, tt := range []struct {
+			decision     builtin.Decision
+			first, again string
+		}{
+			{builtin.Advise, "advise", "pass"},
+			{builtin.Off, "pass", "pass"},
+			{builtin.Deny, "deny", "deny"},
+		} {
+			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
+				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
+				t.Setenv(trail.EnvBaggage, "")
+				deps := withSetting(string(notice.rule), tt.decision)
+				judge := func() Verdict {
+					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})
+					return Verdict{Decision: v.Decision, Rule: v.Rule}
+				}
+				want := func(decision string) Verdict {
+					if decision == "pass" {
+						return Verdict{Decision: "pass"}
+					}
+					return Verdict{Decision: decision, Rule: string(notice.rule)}
+				}
+
+				assert.Equal(t, want(tt.first), judge())
+				assert.Equal(t, want(tt.again), judge())
+			})
+		}
+	}
 }
 
 // TestClosedStdinLineRunsAsWritten runs each rewritten line in bash with a stdin that has

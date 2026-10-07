@@ -262,11 +262,14 @@ func (d Dependencies) setting(rule string) (builtin.Setting, bool) {
 	return builtin.Setting{Decision: dec}, ok
 }
 
-// off reports a rule the workspace turned off. A notice that is appended to a verdict
-// rather than graded as one asks only this.
-func (d Dependencies) off(rule string) bool {
-	s, ok := d.setting(rule)
-	return ok && s.Decision == builtin.Off
+// heldBy is the gate that holds rule's advisory to one firing per session, or a gate that
+// holds nothing when the workspace raised rule to deny: the gate is for advice, and a
+// raised advisory refuses on every firing.
+func (d Dependencies) heldBy(markers hint.Gate, rule string) hint.Gate {
+	if s, ok := d.setting(rule); ok && s.Decision == builtin.Deny && advisoryRule()[rule] {
+		return hint.Gate{}
+	}
+	return markers
 }
 
 // grade applies the effective setting of the rule that reached v. A deny set to advise
@@ -368,6 +371,36 @@ func (h *heldAdvice) hold(deps Dependencies, v ShellVerdict) (ShellVerdict, bool
 		h.v = v
 	}
 	return v, v.Deny != ""
+}
+
+// matchWalk walks the matches one rule site finds on a line, in order. A match that still
+// refuses once graded settles the site, and so does plain advice while no demoted match is
+// held; a demoted or silenced match does not, since a later match may still deny. The
+// verdicts stay ungraded: the site's caller grades whichever one it returns.
+type matchWalk struct {
+	held    ShellVerdict
+	holding bool
+}
+
+// settles grades v and reports whether it is the site's answer.
+func (w *matchWalk) settles(deps Dependencies, v ShellVerdict) bool {
+	switch g := deps.grade(v); {
+	case g.Deny != "":
+		return true
+	case g.demoted:
+		if !w.holding {
+			w.held, w.holding = v, true
+		}
+		return false
+	case g.Context != "":
+		return !w.holding
+	}
+	return false
+}
+
+// rest is the first demoted match, for a walk that found nothing to settle it.
+func (w matchWalk) rest() (ShellVerdict, bool) {
+	return w.held, w.holding
 }
 
 // speak puts the held advice on verdict when nothing refused or asked, once per session
@@ -484,6 +517,11 @@ const stdinClosedPrefix = "exec </dev/null; "
 const advisoryStdinClosed hint.MarkerKind = "stdin-closed"
 
 const stdinClosedNotice = "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly."
+
+// stdinClosedDeny refuses a line that leaves stdin open, for a workspace that raised
+// stdin-closed to deny.
+const stdinClosedDeny = "magus workspace: start the line with `" + stdinClosedPrefix + "` so no command in it waits on stdin; pipe or redirect input explicitly.\n" +
+	"This workspace refuses a shell command that leaves stdin open, since a stray reader of it waits forever."
 
 // closeStdin is line with stdin closed, and false when line already starts by closing it.
 func closeStdin(line string) (string, bool) {
@@ -726,7 +764,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				refuse(denyRuleName(cmp.Or(g.Rule, string(denyRuleLeaseWrite))), g.Reason)
 			case "advise":
 				// Held by its own key when it has one; lease-state only names the rest.
-				advice, adviceKind, spoken = markers.Once(cmp.Or(g.Key, g.Kind), g.Context), cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState)), true
+				adviceKind = cmp.Or(g.Kind, hint.MarkerKind(advisoryLeaseState))
+				advice, spoken = deps.heldBy(markers, string(adviceKind)).Once(cmp.Or(g.Key, g.Kind), g.Context), true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -740,7 +779,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				refuse(denyRuleHookWiringWrite, g.Reason)
 			case "advise":
 				if !spoken {
-					advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
+					advice, adviceKind, spoken = deps.heldBy(markers, string(g.Kind)).Once(g.Kind, g.Context), g.Kind, true
 				}
 			}
 		}
@@ -793,12 +832,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseAgentSurfaceWrite(input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisorySkillSource, text), advisorySkillSource, true
+				advice, adviceKind, spoken = deps.heldBy(markers, string(advisorySkillSource)).Once(advisorySkillSource, text), advisorySkillSource, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseDescriptorWrite(input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisoryRegenSource, text), advisoryRegenSource, true
+				advice, adviceKind, spoken = deps.heldBy(markers, string(advisoryRegenSource)).Once(advisoryRegenSource, text), advisoryRegenSource, true
 			}
 		}
 		// Above the new-directory rule because it is the wider question: whether this
@@ -815,7 +854,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// is not (internal/guard/file.go).
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseNewFileName(input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisoryNewFile, text), advisoryNewFile, true
+				advice, adviceKind, spoken = deps.heldBy(markers, string(advisoryNewFile)).Once(advisoryNewFile, text), advisoryNewFile, true
 			}
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
@@ -897,11 +936,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// project, and the rule that caught it is also the cheaper one to have run.
 		if verdict.Decision != "deny" && preauth == "" {
 			focus := gradeFocusRead(ctx, deps, actingLease, input)
+			gate := deps.heldBy(markers, string(advisoryFocus))
 			switch {
 			case focus.Decision == "deny":
 				refuse(denyRuleFocusRead, focus.Reason)
-			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.MarkFired(advisoryFocusPath(focus.Rel)):
-				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
+			case verdict.Decision == "pass" && focus.Decision == "advise" && !gate.MarkFired(advisoryFocusPath(focus.Rel)):
+				if held := gate.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
 					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
 				}
 			}
@@ -950,7 +990,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// the caller for doing what it asked.
 		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input) {
 			full, brief := adviseRepeatGate(workspaceRunsDir(location.cacheDir), time.Now())
-			if notice := markers.OnceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
+			if notice := deps.heldBy(markers, string(advisoryGateRepeat)).OnceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 				verdict.Rule = string(advisoryGateRepeat)
@@ -960,8 +1000,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// command's own output (stale_index.go). alreadyFired is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
-		if verdict.Decision == "pass" && preauth == "" && !markers.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
-			if notice := markers.Once(advisoryGraphStale, deps.graphStaleAdvice(ctx)); notice != "" {
+		if stale := deps.heldBy(markers, string(advisoryGraphStale)); verdict.Decision == "pass" && preauth == "" && !stale.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
+			if notice := stale.Once(advisoryGraphStale, deps.graphStaleAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 				verdict.Rule = string(advisoryGraphStale)
@@ -974,7 +1014,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// louder already spoke, not only when it turns out to have something to say.
 		if verdict.Decision == "pass" && preauth == "" {
 			if text, matched := gradeSplitRun(facts, input); matched {
-				if held := markers.Once(advisorySplitRun, text); held != "" {
+				if held := deps.heldBy(markers, string(advisorySplitRun)).Once(advisorySplitRun, text); held != "" {
 					verdict.Decision = "advise"
 					verdict.Context = held
 					verdict.Rule = string(advisorySplitRun)
@@ -999,12 +1039,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// The two notices about the acting lease ITSELF: a row that has finished and an id
 	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
 	// identical to a session nobody leased. Once per session each, and never on a deny,
-	// which explains itself and was reached by a rule that did not need the row.
+	// which explains itself and was reached by a rule that did not need the row. Graded
+	// before the gate, so one the workspace raised refuses every call.
 	for kind, notice := range map[hint.MarkerKind]string{
 		advisoryLeaseTerminal: adviseTerminalLease(standing, actingLease),
 		advisoryLeaseInvalid:  adviseInvalidLease(actingLease),
 	} {
-		if notice == "" || req.Observe || verdict.Decision == "deny" || verdict.Decision == "ask" || deps.off(string(kind)) {
+		if notice == "" || req.Observe || verdict.Decision == "deny" || verdict.Decision == "ask" {
+			continue
+		}
+		switch g := deps.grade(ShellVerdict{Context: notice, Kind: kind}); {
+		case g.Deny != "":
+			verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule = "deny", g.Deny, "", string(kind)
+			continue
+		case g.Context == "":
 			continue
 		}
 		held := markers.Once(kind, notice)
@@ -1022,9 +1070,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.RewritesInput && tool == hookToolCommand && hasInput && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 		if line, closed := closeStdin(input); closed {
 			verdict.UpdatedCommand = line
-			// Turning the rule off silences the notice; the rewrite stands.
+			// Turning the rule off silences the notice; the rewrite stands. Raised, the rule
+			// refuses the line instead, and a refused call is never rewritten.
 			notice := ""
-			if !deps.off(string(advisoryStdinClosed)) {
+			switch g := deps.grade(ShellVerdict{Context: stdinClosedNotice, Kind: advisoryStdinClosed}); {
+			case g.Deny != "":
+				verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule, verdict.UpdatedCommand = "deny", stdinClosedDeny, "", string(advisoryStdinClosed), ""
+			case g.Context != "":
 				notice = markers.Once(advisoryStdinClosed, stdinClosedNotice)
 			}
 			if notice != "" {
@@ -1352,7 +1404,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		if env.ParentConversationID != "" {
 			req.Who.Session = env.ParentConversationID
 		}
-		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
+		// Most specific label first. A subagent TYPE names what was delegated to and repeats
 		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
 		for _, label := range []string{
@@ -1793,7 +1845,7 @@ type spawnVerdictRecord struct {
 }
 
 // appendHookSpawn records a spawn or a continuation into the same trail, so a person
-// auditing the activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent,
+// auditing the activity log later can see WHAT CONTEXT an orchestrator handed a subagent,
 // not merely that it spawned one. Like appendHookActivity it is best-effort and cannot fail
 // the tool call.
 func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution, rec spawnVerdictRecord) {

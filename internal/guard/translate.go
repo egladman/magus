@@ -310,7 +310,7 @@ type translation struct {
 }
 
 // translateVerdict denies the first search on the line that a graph query provably
-// answers, and reports false when none is.
+// answers, walked as matchWalk says, and reports false when none is.
 func translateVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
 	dir, ok := deps.workingDir()
 	if !ok {
@@ -320,7 +320,15 @@ func translateVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, 
 }
 
 func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (ShellVerdict, bool) {
+	var walk matchWalk
+	// skip is how many commands the last translation already reproduces, which the walk
+	// past it must not judge again.
+	skip := 0
 	for i, c := range cmds {
+		if skip > 0 {
+			skip--
+			continue
+		}
 		var tr translation
 		var ok bool
 		switch name := path.Base(c.Name); {
@@ -342,25 +350,35 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 		if !ok {
 			continue
 		}
+		skip = tr.consumed
 		if tr.routes != nil {
 			js := searchJudgment{routes: tr.routes}
 			for _, r := range tr.routes {
 				js.classified = append(js.classified, "`"+strings.TrimPrefix(r.name, types.KindDiagnostic+":")+"` is a diagnostic code with a graph node")
 			}
-			return symbolSearchVerdict(deps, dir, asSearch(c), js, pipedInto(cmds[i+1:])), true
+			if v := symbolSearchVerdict(deps, dir, asSearch(c), js, pipedInto(cmds[i+1:])); walk.settles(deps, v) {
+				return v, true
+			}
+			continue
 		}
 		// An answer read off the graph alone is wrong once the graph describes another tree.
 		if !tr.proven {
 			if stale := graphMoved(deps); stale.reason != "" {
-				return stale.verdict(), true
+				if v := stale.verdict(); walk.settles(deps, v) {
+					return v, true
+				}
+				continue
 			}
 		}
-		return ShellVerdict{
+		v := ShellVerdict{
 			Deny: denySearchTranslation(tr, pipedInto(cmds[min(i+1+tr.consumed, len(cmds)):])),
 			Rule: denyRule{Name: denyRuleSearchTranslation, Arg: strings.Join(tr.args, " ")},
-		}, true
+		}
+		if walk.settles(deps, v) {
+			return v, true
+		}
 	}
-	return ShellVerdict{}, false
+	return walk.rest()
 }
 
 func translateSearch(deps Dependencies, dir string, c hint.Invocation) (translation, bool) {

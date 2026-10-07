@@ -103,7 +103,8 @@ func routesIndexed(routes []searchRoute) bool {
 }
 
 // searchVerdict judges the searches on a line against the index, reporting false when no
-// search there is one it has anything to say about.
+// search there is one it has anything to say about. The first search whose verdict settles
+// it answers, walked as matchWalk says.
 func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, bool) {
 	dir, ok := deps.workingDir()
 	if !ok {
@@ -114,6 +115,7 @@ func searchVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict, boo
 
 func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (ShellVerdict, bool) {
 	noGraph := ""
+	var walk matchWalk
 	for i, typed := range cmds {
 		c := asSearch(typed)
 		if !hint.IsSearchTool(c.Name) {
@@ -123,7 +125,7 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 		case reachNone:
 			continue
 		case reachFile:
-			if v, ok := fileSymbolVerdict(deps, dir, c); ok {
+			if v, ok := fileSymbolVerdict(deps, dir, c); ok && walk.settles(deps, v) {
 				return v, true
 			}
 			continue
@@ -135,7 +137,12 @@ func searchVerdictAt(deps Dependencies, dir string, cmds []hint.Invocation) (She
 			}
 			continue
 		}
-		return symbolSearchVerdict(deps, dir, c, js, pipedInto(cmds[i+1:])), true
+		if v := symbolSearchVerdict(deps, dir, c, js, pipedInto(cmds[i+1:])); walk.settles(deps, v) {
+			return v, true
+		}
+	}
+	if v, ok := walk.rest(); ok {
+		return v, true
 	}
 	if noGraph != "" {
 		return noGraphVerdict(noGraph), true

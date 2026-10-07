@@ -556,7 +556,7 @@ func generatedOutput(deps Dependencies, rel string) bool {
 
 // readVerdict denies the first whole read on the line of a mapped file, advises the first
 // bounded read that sits inside one indexed symbol, and reports false when neither is
-// there. A whole read is judged only past the lines the workspace declared for
+// there; the reads are walked as matchWalk says. A whole read is judged only past the lines the workspace declared for
 // read-navigation, when it declared any; the binary ships no length of its own.
 func readVerdict(deps Dependencies, command string, d Dialect) (ShellVerdict, bool) {
 	dir, ok := deps.workingDir()
@@ -575,6 +575,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 		return ShellVerdict{}, false
 	}
 	nav, _ := deps.setting(string(denyRuleReadNavigation))
+	var walk matchWalk
 	for _, rc := range readCalls(command, d) {
 		abs, rel, ok := workspacePath(root, dir, rc.path)
 		if !ok || wholeReadFiles[path.Base(rel)] {
@@ -588,17 +589,22 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			if nav.Lines > 0 && m.lines <= nav.Lines || generatedOutput(deps, rel) {
 				continue
 			}
-			return ShellVerdict{Deny: denyReadNavigation(m), Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}, true
+			if v := (ShellVerdict{Deny: denyReadNavigation(m), Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}); walk.settles(deps, v) {
+				return v, true
+			}
+			continue
 		}
 		if !m.indexed {
 			continue
 		}
 		first, last := rc.span(m.lines)
 		if e, ok := m.covering(first, last); ok && e.symbol != "" {
-			return ShellVerdict{Context: adviseReadSymbol(m, e, first, last), Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}, true
+			if v := (ShellVerdict{Context: adviseReadSymbol(m, e, first, last), Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}); walk.settles(deps, v) {
+				return v, true
+			}
 		}
 	}
-	return ShellVerdict{}, false
+	return walk.rest()
 }
 
 func denyReadNavigation(m fileMap) string {
