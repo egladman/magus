@@ -33,8 +33,8 @@ the C ABI. See [Limitations](#limitations).
 | Zig type                                  | FFI kind                                              |
 | ----------------------------------------- | ----------------------------------------------------- |
 | `bool`, `void`                            | bool / return-only void                               |
-| `i8…i64`, `isize`, `c_int`, `c_long`, …   | int                                                   |
-| `u8…u64`, `usize`, `c_uint`, …            | int (unsigned)                                        |
+| `i8…i64`, `isize`, `c_int`, `c_long`, ... | int                                                   |
+| `u8…u64`, `usize`, `c_uint`, ...          | int (unsigned)                                        |
 | `f32`, `f64`                              | float                                                 |
 | `[*:0]const u8`                           | str                                                   |
 | `*T`, `?*T`, `[*]T`, `**T`                | opaque address (int)                                  |
@@ -116,7 +116,7 @@ from other calls' results.
 
 | C type(s)                                                            | Buzz value | Notes                                                                                                                                         |
 | -------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `void`                                                               | —          | return only                                                                                                                                   |
+| `void`                                                               | -          | return only                                                                                                                                   |
 | `bool`, `_Bool`                                                      | bool       |                                                                                                                                               |
 | `char`, `short`, `int`, `long`, `long long`, `intN_t`, `size_t`, ... | int        | passed/returned as a 64-bit int                                                                                                               |
 | `unsigned …`, `uintN_t`                                              | int        |                                                                                                                                               |

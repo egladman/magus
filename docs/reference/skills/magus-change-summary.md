@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `108` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6058979e8d15` |
+| `skill-content` | `b0007861f6cf` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -127,7 +127,7 @@ Use this shape:
 Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment as a landed feature unless the source and graph evidence support it.
 
-## Write a CHANGELOG entry
+## Write a changelog entry
 
  When
 the ask is "add this to the changelog", match the file's existing shape - Keep a
@@ -290,7 +290,7 @@ experiment as a landed feature unless the source and graph evidence support it.
 Link to the relevant documentation page or generated manpage when it explains a
 new command, target, diagnostic, or workflow.
 
-## Write a CHANGELOG entry
+## Write a changelog entry
 
 A brief is for a person catching up; a changelog entry is a durable record. When
 the ask is "add this to the changelog", match the file's existing shape - Keep a

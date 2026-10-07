@@ -425,7 +425,7 @@ cap = charm\setFunc(base, fun(s: str) > bool { return s.startsWith("-j"); }, "-j
 
 Conditional or per-invocation logic belongs in a **function target**, not a charm. Charms are static data resolved at author time.
 
-## Charm vs Target: the command boundary
+## Charm vs target: the command boundary
 
 **A charm rewrites a target's arguments. It can never change the base command (`cmd`) or replace the whole argv.** `ValidatePatch` rejects the root pointer (`""`), so every charm op edits an _element_ of the argv, never the array as a whole.
 

@@ -34,7 +34,7 @@ the one nobody remembers is loaded.
 repo: nothing about the workspace hints that it exists, and its author may not be
 the person hitting the contradiction.{{end}}
 
-## Check claims against the TOOL, not against the other documents
+## Check claims against the tool, not against the other documents
 
 {{if .Full}}Two documents agreeing with each other and both being wrong is the common case,
 not the exception - they were usually written in the same sitting by the same

@@ -20,13 +20,13 @@ integration per host.
 magus does not lack an integration mechanism. It has five partial ones that do
 not compose, and no integrator can be pointed at a single thing.
 
-| producer          | schema                                          | transport                                    | consumer today  |
-| ----------------- | ----------------------------------------------- | -------------------------------------------- | --------------- |
-| `internal/report` | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`           | CI post-process |
-| `internal/journal`| `{ts,inv,kind,stream,text,ref}` JSONL           | per-invocation file; loopback SSE with `--open` | browser viewer  |
-| `types.Event`     | `{schema_version,outcome,severity,source,where}`| `session notify`, attention store            | humans          |
-| `internal/trail`  | Kind + JSONL + blob refs                        | `/api/v1/activity` Connect                   | governance      |
-| daemon SSE        | graph seq, base64 proto Status, base64 OTLP     | `/api/v1/events`, bearer-gated               | console PWA     |
+| producer           | schema                                              | transport                                       | consumer today  |
+| ------------------ | --------------------------------------------------- | ----------------------------------------------- | --------------- |
+| `internal/report`  | `{"schema":5,"type":"run.target.result",...}` JSONL | stdout of `magus run -o jsonl`                  | CI post-process |
+| `internal/journal` | `{ts,inv,kind,stream,text,ref}` JSONL               | per-invocation file; loopback SSE with `--open` | browser viewer  |
+| `types.Event`      | `{schema_version,outcome,severity,source,where}`    | `session notify`, attention store               | humans          |
+| `internal/trail`   | Kind + JSONL + blob refs                            | `/api/v1/activity` Connect                      | governance      |
+| daemon SSE         | graph seq, base64 proto Status, base64 OTLP         | `/api/v1/events`, bearer-gated                  | console PWA     |
 
 An editor plugin can already reach targets (`-o json`), Buzz completion
 (`magus buzz lsp`), file changes (`magus watch`), and per-target results
@@ -69,12 +69,12 @@ sealed engine evaluates.
 They are duals, not the same mechanism, and fusing them would open the seam
 above.
 
-|            | `session hook`               | `events`                    |
-| ---------- | ---------------------------- | --------------------------- |
-| direction  | inbound                      | outbound                    |
-| shape      | request/reply, blocking      | stream, fire-and-forget     |
-| purpose    | change what happens (a verdict) | inform                   |
-| audience   | one agent host               | any number of subscribers   |
+|           | `session hook`                  | `events`                  |
+| --------- | ------------------------------- | ------------------------- |
+| direction | inbound                         | outbound                  |
+| shape     | request/reply, blocking         | stream, fire-and-forget   |
+| purpose   | change what happens (a verdict) | inform                    |
+| audience  | one agent host                  | any number of subscribers |
 
 The unification that is free and correct is at the VOCABULARY, not the
 mechanism: the guard already writes `KindAgentCommand` / `KindAgentSpawn` into
@@ -86,12 +86,12 @@ denial live without anything being able to influence one.
 ## Transport: one contract, two transports, one front door
 
 ```text
-                  types.StreamEvent  (one envelope, one taxonomy)
-                           |
-                     stdout JSONL
-                  magus events --follow
-                           |
-              <cacheDir>/runs/*.jsonl  (the bus)
+    types.StreamEvent  (one envelope, one taxonomy)
+             |
+       stdout JSONL
+    magus events --follow
+             |
+<cacheDir>/runs/*.jsonl  (the bus)
 ```
 
 The transport question answered itself. Every magus run already appends to
@@ -133,12 +133,12 @@ NOT SHIPPED, and deliberately absent from `StreamEventTypes()` rather than
 present and silent. Each has a store; none has an adapter. The cost column is
 what the review of this branch measured, not an estimate made while designing.
 
-| type                 | store                              | what it costs                                                                                                                |
-| -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `diagnostic.emitted` | `diagCollector`, already fanning to report + the graph's runtime shard | smallest: a new `journal.Kind` plus one adapter arm. `file`/`line` need a wider change - `types.DiagnosticEvent` carries only unit, code, message |
-| `guard.verdict`      | trail `agent_command`, verdict in a payload blob    | the trail lives in `activity/`, not `runs/`, so this needs a second reader with an unrelated line schema and blob dereferencing. The hook is its own short-lived process, so `inv` would be empty |
-| `attention.raised`   | sessions `attention_open`          | a third file, in XDG state rather than the cache dir. The store FLATTENS `types.Event` to strings on the way in, so the body cannot be reconstructed from it without a second record |
-| `workspace.changed`  | none - `magus watch` persists nothing | largest, and it breaks the design's central property: there is no store to adapt, so either a long-running watcher writes to `runs/` (which is not what that directory means) or `magus events` grows a watcher and stops being a pure reader of the bus |
+| type                 | store                                                                  | what it costs                                                                                                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `diagnostic.emitted` | `diagCollector`, already fanning to report + the graph's runtime shard | smallest: a new `journal.Kind` plus one adapter arm. `file`/`line` need a wider change - `types.DiagnosticEvent` carries only unit, code, message                                                                                                        |
+| `guard.verdict`      | trail `agent_command`, verdict in a payload blob                       | the trail lives in `activity/`, not `runs/`, so this needs a second reader with an unrelated line schema and blob dereferencing. The hook is its own short-lived process, so `inv` would be empty                                                        |
+| `attention.raised`   | sessions `attention_open`                                              | a third file, in XDG state rather than the cache dir. The store FLATTENS `types.Event` to strings on the way in, so the body cannot be reconstructed from it without a second record                                                                     |
+| `workspace.changed`  | none - `magus watch` persists nothing                                  | largest, and it breaks the design's central property: there is no store to adapt, so either a long-running watcher writes to `runs/` (which is not what that directory means) or `magus events` grows a watcher and stops being a pure reader of the bus |
 
 An earlier draft of this table listed a `target.started` type sourced from
 `KindExec`. It was dropped - `KindExec` is per subprocess, not per target - and
@@ -369,7 +369,7 @@ absolute root because a subscriber watching two workspaces routes on it, and a
 relative path resolves against the SUBSCRIBER's cwd rather than the producer's.
 `magus events` absolutizes.
 
-## `--limit 0` means replay NOTHING
+## `--limit 0` means replay nothing
 
 Found by running the shell watcher: it announced the previous day's failure the
 moment it started. `--limit` originally read 0 as "replay everything", so there

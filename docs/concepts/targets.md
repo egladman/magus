@@ -402,7 +402,7 @@ This is an **escape hatch** for ad-hoc runs and introspection, not the everyday 
 
 The prefix is **not** stored in `Target`. The CLI strips it via `parseTarget` and passes it as a `WithSpellFilter` `RunOption`. The `ci` target does not support spell-qualified syntax.
 
-## What is not part of a Target's identity
+## What is not part of a target's identity
 
 These modify execution but are **not** durable identity. Charms parse into `Target.Charms` but propagate via context; the rest travel as `RunOption` values alongside the target list.
 

@@ -76,7 +76,7 @@ experiment as a landed feature unless the source and graph evidence support it.{
 Link to the relevant documentation page or generated manpage when it explains a
 new command, target, diagnostic, or workflow.{{end}}
 
-## Write a CHANGELOG entry
+## Write a changelog entry
 
 {{if .Full}}A brief is for a person catching up; a changelog entry is a durable record.{{end}} When
 the ask is "add this to the changelog", match the file's existing shape - Keep a

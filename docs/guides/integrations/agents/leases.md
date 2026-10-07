@@ -746,7 +746,7 @@ the first goal above needs neither. The records are validated on the way in: a
 goal carrying both a check and paths is refused, and so is one naming nothing to
 examine.
 
-## Watch it: the console Jobs view
+## Watch it: the console jobs view
 
 The [console](../../../reference/console.md) draws one Jobs view, because a job
 is ONE KIND OF THING however it was created. The server holds its own

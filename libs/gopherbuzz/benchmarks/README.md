@@ -30,7 +30,7 @@ benchstat interp.txt jit.txt
 ```
 
 The JIT only engages on eligible top-level numeric loops (`LoopSum`,
-`LoopSumFloat`, `LoopEq`, …); call-heavy or object-heavy benchmarks fall back to
+`LoopSumFloat`, `LoopEq`, ...); call-heavy or object-heavy benchmarks fall back to
 the interpreter, so `BUZZ_JIT` leaves them unchanged.
 
 ## Value representation axis

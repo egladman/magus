@@ -41,7 +41,7 @@ silent and exits 0.
 `repo-description.md` is shared by both arms so that the routing block, and not
 the repo prose, is what the arms differ by.
 
-## What is NOT switched: MCP
+## What is not switched: MCP
 
 Neither arm registers an MCP server, and neither runs a persistent daemon. The
 full arm is skills + hooks + routing index; MCP is a v2 switch.

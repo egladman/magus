@@ -119,7 +119,7 @@ know which one is wrong.
 <!-- rule: cursor-grep-through-harness; added: 2026-09-14; origin: agent, unreviewed;
      evidence: memory:query-before-grep-session-audit, transcript 665f41d2 (128 Grep / 18 query), harnesses/cursor.json postToolUse Grep|Glob;
      retire-when: measured Cursor sessions stop grepping past a graph advise, or Cursor exposes a pre-Grep context channel that can carry advise before the call -->
-## Cursor Grep is a harness problem, not a Cursor Rules file
+## Cursor grep is a harness problem, not a Cursor rules file
 
 Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
 `AGENTS.md`; enforcement is the `spells/harness/cursor` Buzz spell plus

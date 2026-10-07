@@ -29,7 +29,7 @@ section, not the file it sits in.{{if .Full}} `project=<p>` scopes it, and `magu
 "docsection:<path>#<anchor>"` walks the page's outline from there.{{end}} The index route
 below is for the PUBLISHED site, where there is no graph to ask.
 
-## FAST PATH: start from the index, do not guess URLs
+## Fast path: start from the index, do not guess URLs
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 
