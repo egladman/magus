@@ -105,7 +105,9 @@ func graphUsage() {
 // because building is otherwise implicit (cache-first, on read), which leaves no obvious
 // way to say "refresh everything now", especially the symbol indexes, which the server
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
-// hint but does not fail the build; the domain graph rebuilds regardless.
+// hint but does not fail the build; the domain graph rebuilds regardless. A reindex refused
+// because an outer run holds the project's lock (MGS3007) fails the build once the rest is
+// done.
 func graphBuild(ctx context.Context, root string, args []string) (err error) {
 	var skipSymbols, skipSessions bool
 	_, err = cmdParse("graph build", args, func(fs *flag.FlagSet) {
@@ -139,6 +141,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 	}
 
+	var refused error
 	if !skipSymbols {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
@@ -148,10 +151,11 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		n, rerr := m.ReindexSymbols(ctx)
 		fmt.Fprintf(os.Stderr, "reindexed %d symbol index(es)\n", n)
 		if rerr != nil {
-			// Non-fatal: a missing/failing indexer must not block the domain-graph
-			// rebuild. Surface the actionable hints and carry on.
+			// A missing or failing indexer must not block the domain-graph rebuild.
+			// Surface the actionable hints and carry on.
 			interactive.Emit(os.Stderr, "some projects were not reindexed:")
 			fmt.Fprintf(os.Stderr, "  %s\n", rerr.Error())
+			refused = reindexRefusals(rerr)
 		}
 	}
 
@@ -174,7 +178,29 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			}
 		}
 	}
+	if refused != nil {
+		return fmt.Errorf("magus graph build: the graph was rebuilt over an index this run was refused the lock to refresh: %w", refused)
+	}
 	return nil
+}
+
+// reindexRefusals is the part of a reindex failure that fails `graph build`: each project
+// refused because the run this one is nested inside holds its lock (MGS3007). A missing
+// indexer is the machine's state and stays a warning. A refusal is the caller's own nesting,
+// and an exit 0 under magus\cmd's quiet hid that the index it wanted stayed stale. Nil when
+// nothing was refused.
+func reindexRefusals(err error) error {
+	errs := []error{err}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		errs = joined.Unwrap()
+	}
+	var refused []error
+	for _, e := range errs {
+		if errors.Is(e, types.ProjectLockHeldByAncestor) {
+			refused = append(refused, e)
+		}
+	}
+	return errors.Join(refused...)
 }
 
 // graphBuildPoll is how often a waiting graph build retries the build lock.

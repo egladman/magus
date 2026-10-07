@@ -763,8 +763,12 @@ func diagnosticOf(err error) types.Diagnostic {
 //
 // A run refused because another magus holds the lock or the machine budget never reached the
 // indexer, so it gets no install hint: the fix is to rerun once the holder the error names
-// finishes.
+// finishes. A refusal by the run this one is nested inside (MGS3007) never reached it either,
+// and rerunning does not help, so it gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
+	if errors.Is(err, types.ProjectLockHeldByAncestor) {
+		return fmt.Errorf("%s: %w", project.Display(), err)
+	}
 	var busy interface{ ExitCode() int }
 	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
 		return fmt.Errorf("%s: %w; the indexer never ran, so rerun once that finishes", project.Display(), err)

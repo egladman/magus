@@ -230,6 +230,19 @@ func TestSymbolRunError(t *testing.T) {
 	assert.NotContains(t, noLang.Error(), "install", "no hint when the language is unknown")
 }
 
+// A reindex refused because the outer run holds the project's lock never reached the
+// indexer, so blaming a missing scip-go sent the reader to install a tool they already had.
+func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
+	refusal := fmt.Errorf("run: %w", types.DiagnosticErrorf(types.ProjectLockHeldByAncestor,
+		"project . is locked by the magus run this one is nested inside"))
+
+	err := symbolRunError(types.NewProjectRef(".", "/ws/magus"), "go", refusal)
+	require.ErrorIs(t, err, types.ProjectLockHeldByAncestor, "the refusal stays matchable for graph build")
+	assert.Contains(t, err.Error(), "magus: ", "names the project")
+	assert.NotContains(t, err.Error(), "scip-go", "the indexer was never run, so its install hint is wrong")
+	assert.NotContains(t, err.Error(), "rerun once", "rerunning inside the same outer run is refused again")
+}
+
 func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
 	// Simulate a run cancelled to yield: the parent context is already cancelled and
