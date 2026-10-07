@@ -77,6 +77,7 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 		Commands:  []types.CommandInvocation{{Program: "git", Args: []string{"push", "origin", "HEAD:x"}}},
 		Agent:     "a534fcfe",
 		Role:      types.AgentRoleRoot,
+		VCS:       &types.VCSInvocation{Tool: "git", Subcommand: "push", Args: []string{"origin", "HEAD:x"}},
 		Checkout:  sub.Checkout, // read from the fixture's own checkout, which this test does not shape
 		Dir:       sub.Dir,
 		Workspace: sub.Workspace,

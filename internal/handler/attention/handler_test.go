@@ -4,9 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
@@ -99,9 +100,7 @@ func TestAttentionHandler_ServesTheOpenQueue(t *testing.T) {
 		Where:      "/repo",
 		Message:    "needs the deploy key",
 	}
-	if !reflect.DeepEqual(want, got) {
-		t.Errorf("want the raised block verbatim:\n want %+v\n  got %+v", want, got)
-	}
+	assert.Equal(t, want, got, "want the raised block verbatim")
 	if out.Requests[0].OpenedMs == 0 {
 		t.Error("want the open timestamp on the wire; the queue is ordered and aged by it")
 	}

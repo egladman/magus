@@ -5,11 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
@@ -150,9 +150,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		Outcome:    trail.OutcomeOK,
 		DurationMs: got.DurationMs,
 	}
-	if !reflect.DeepEqual(want, got) {
-		t.Errorf("recorded event = %+v, want RevokeToken/console-1/rpc/token_lifecycle/ok and no request ref: %+v", got, want)
-	}
+	assert.Equal(t, want, got, "want RevokeToken/console-1/rpc/token_lifecycle/ok and no request ref")
 }
 
 var (

@@ -5,10 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
@@ -81,9 +82,7 @@ func getPlan(t *testing.T, h *Handler, url string) (*httptest.ResponseRecorder, 
 func wantAnchor(t *testing.T, out planResponse, target, anchor, why string) {
 	t.Helper()
 	out.Nodes, out.Edges = nil, nil
-	if want := (planResponse{Target: target, Anchor: anchor}); !reflect.DeepEqual(want, out) {
-		t.Errorf("want %s/%s (%s), got %+v", target, anchor, why, out)
-	}
+	assert.Equal(t, planResponse{Target: target, Anchor: anchor}, out, "want %s/%s (%s)", target, anchor, why)
 }
 
 func planStates(p planResponse) map[string]planNode {

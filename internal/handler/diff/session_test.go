@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -170,9 +169,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := contextResponse{Path: "source.go", AsOf: changeset.PatchDigest(src.patch), Start: 2, Lines: []string{"two", "three", "four"}}
-	if !reflect.DeepEqual(want, out) {
-		t.Fatalf("unexpected context: %#v, want %#v", out, want)
-	}
+	require.Equal(t, want, out)
 }
 
 func TestContextHandler_RejectsPathEscape(t *testing.T) {
