@@ -344,7 +344,7 @@ func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs
 // loadSymbolIndexStatus computes each symbol-capable project's SCIP index freshness,
 // best-effort: it opens the workspace read/write (a full load is needed for the cache
 // probe) and returns nil when there is no workspace here, so `magus status` outside a
-// magus tree simply omits the section.
+// magus tree omits the section.
 func loadSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
 	// No Close: loadMagus is a process-wide sync.Once singleton, so closing it here
 	// tears down a buzz pool every LATER caller still expects to be open. Under

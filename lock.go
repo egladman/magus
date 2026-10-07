@@ -822,9 +822,9 @@ func (l *projectLocker) pendingYield(projectPath string) (processRecord, bool) {
 // askHolderToYield publishes this gate's claim on a held lock and returns the retraction.
 //
 // A marker file rather than a signal, and the reason is what the abort has to SAY. A
-// signal carries no identity, so the aborted run could not name who superseded it, and
-// nothing could tell this from the Ctrl-C or the supervisor SIGTERM the CLI already
-// handles as an interrupt; SIGTERM is not deliverable on Windows at all; and under the
+// signal carries no identity, so the aborted run could not name who superseded it.
+// Nothing could tell this from the Ctrl-C or the supervisor SIGTERM the CLI already
+// handles as an interrupt. SIGTERM is not deliverable on Windows at all. Under the
 // server the holder and the waiter can be threads of one process, where signalling the
 // pid means signalling yourself. The marker carries the successor's pid, command and
 // start time, which is the whole of MGS3014's message.

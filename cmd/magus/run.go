@@ -698,9 +698,9 @@ func (f *skipFlag) Set(value string) error {
 // rather than inferred from the cwd or fanned out over the workspace.
 //
 // Every refusal here exists because the flag's job is to GATE a set, and a skip that
-// quietly matches nothing un-gates a project with no one the wiser: a reference no project
-// matches is a typo, a reference the caller also named explicitly is a contradiction rather
-// than a preference, and emptying the selection would otherwise surface downstream as
+// quietly matches nothing un-gates a project with no one the wiser. A reference no project
+// matches is a typo, and a reference the caller also named explicitly is a contradiction
+// rather than a preference. Emptying the selection would otherwise surface downstream as
 // "workspace has no projects to run target".
 func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetName string, targets []types.Target, skips []string, anchor string, explicit bool) ([]types.Target, error) {
 	if len(skips) == 0 {

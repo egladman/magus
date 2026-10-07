@@ -21,80 +21,22 @@ import (
 
 // KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.
 // External consumers (agent skills, MCP tools, other tools reading the node-link
-// JSON) check it; a bump is a changelog event. Increment when the node/edge shape
-// or ID scheme changes in a way that would break a consumer that parsed the old form.
-// v2 added a "command" kind; v3 a "tool" kind coupled to it. v4 retires "command"
-// (its rendered argv was always identical to the op's static base command, so it was
-// a redundant copy of the op) and moves the model onto the op: an op carries an `argv`
-// attr and `uses` the tool (argv[0]) it runs, so `explain tool:go` reaches every op
-// that runs go and a target reaches its tool via target->op->tool. v2/v3 were unreleased.
-// v5 adds the build I/O layer: `produces`/`consumes` edges from a target's declared
-// magus.outputs/inputs to the file and doc nodes they match, so a generated file is
-// self-labeled by its producing target; plus workspace-wide authored-markdown doc nodes
-// carrying a `role` attr (readme/agent/changelog/...) and a `documents` edge to their project.
-// v6 adds the "author" kind: a git contributor, with `authored` edges to the files they
-// touched (the EMERGENT maintainer, to set against a file's DECLARED CODEOWNERS owner).
-// v7 changes no node or edge shape at all: it bumps because shard fingerprints are now
-// computed by streaming fields into SHA256 instead of hashing marshaled JSON, so every
-// shard's fingerprint VALUE differs from a v6 store's. The manifest check treats a
-// version mismatch as a full rebuild, which is exactly the migration needed: without
-// the bump, a v6 cache would read as current while every fingerprint disagreed, and a
-// changed shard would never be rewritten.
-// v8 adds symbol->symbol `calls` edges to the @symbols shards, attributed from the SCIP
-// occurrence's enclosing_range (the callee is referenced from inside the caller's body).
-// The relation and both node kinds already existed, so a v7 consumer parses a v8 graph
-// without changing, but it would read a symbol's edge set as complete when it is not,
-// and the shard fingerprints all differ, so the bump is what forces the rebuild.
-// v9 adds `secret_refs` to a target node: the credential references the target names,
-// alongside the `reads_secrets` flag that already recorded that it names any. The field
-// is additive, so a v8 consumer parses a v9 graph unchanged: the bump is for the OTHER
-// direction, a v8 store on disk. Its target shards were extracted before the field
-// existed, and the magusfile they were extracted from has not changed, so nothing else
-// would invalidate them: the version mismatch is what forces the rebuild that puts the
-// references there.
-// v10 adds the "docsection" kind: one node per markdown heading, carrying its goldmark
-// auto-heading-id anchor, so an agent retrieves the relevant section of a doc rather than
-// the whole page. A page `contains` its sections and a section `contains` its subsections.
-// The kind is additive, so a v9 consumer parses a v10 graph unchanged: the bump is for a
-// v9 store on disk, whose doc shards were extracted before headings were indexed and whose
-// source markdown has not changed, so only a version mismatch forces the rebuild that adds
-// the sections.
-// v11 makes the edge vocabulary part of the exported schema. Each relation has one
-// canonical definition (description, the labels a reader sees in either direction, and
-// the exact endpoint-kind pairs it may connect), and an export carries those definitions
-// plus a fingerprint of them, so a consumer meeting an unfamiliar predicate can look it
-// up instead of guessing, and two exports built against different vocabularies say so.
+// JSON) check it; a bump is a changelog event.
 //
-// The set is closed but not enforced at write time, deliberately: shards load lazily, so
-// an edge legitimately arrives before the node that gives its endpoint a kind, and
-// rejecting inside AddEdge would discard correct edges by arrival order.
-// Graph.UndeclaredEdges reports violations instead, and a test over this workspace's own
-// graph is what fails when a producer widens the vocabulary without declaring it.
-// v12 adds the "link" kind and the citation layer that mints it: a URL written in a code
-// comment, in a markdown link, or in a generated page's `generated_from` frontmatter now
-// carries an edge from the citing file or page. A citation that names something the
-// workspace already holds resolves to THAT node (a doc, a section, a file, a directory)
-// and mints no link node, so the kind covers only genuinely external documents. The kind
-// is additive and the relations are the existing `references` and `documents` with wider
-// endpoint shapes, so a v11 consumer parses a v12 graph unchanged; the bump is for a v11
-// store on disk, whose doc and buzz shards were extracted before citations were indexed
-// and whose sources have not changed, and for the relation fingerprint, which the wider
-// shapes move.
-// v13 adds a `namespace` attr to symbol nodes: the ID of the SCIP namespace symbol (a Go
-// package, a TypeScript or Python module, a Rust mod) the symbol is declared in. Additive,
-// so a v12 consumer parses a v13 graph unchanged; the bump is for a v12 store on disk,
-// whose symbol shards were extracted before the attr existed and whose indexes have not
-// changed.
-// v14 adds `signature` and `body_digest` attrs to symbol nodes: the declaration text the
-// indexer rendered and a fingerprint of the definition's lines, which is what lets a review
-// compare a symbol against its base and tell an added, removed, or re-signed API from a body
-// edit. Additive; the bump is for a v13 store whose symbol shards predate them.
-// v15 adds `lines` and `bytes` attrs to file nodes an extractor read (buzz sources, and the
-// defining files of a SCIP index), so a reader can size a file before paging through it.
-// Additive; the bump is for a v14 store whose buzz and symbol shards predate them.
-// v16 adds `marker` nodes with `declared` edges, dir -imports-> dir and dir -calls-> dir
-// edges, edge attrs, and the `layer` and `language` attrs on dir nodes. The bump is for a
-// v15 store whose shards predate them.
+// Increment when the node/edge shape or ID scheme changes in a way that would break a
+// consumer that parsed the old form. Also increment when a change is additive but
+// widens what an extractor produces: a new node kind, attr or edge, or a changed
+// fingerprint scheme. A consumer parses such a graph unchanged, but a store on disk
+// holds shards extracted before the change, and nothing else invalidates them because
+// their sources have not moved. The version mismatch is what forces the full rebuild
+// (a manifest at another version is read as absent).
+//
+// The edge vocabulary is part of the exported schema: each relation has one canonical
+// definition, and an export carries those plus a fingerprint, so a consumer meeting an
+// unfamiliar predicate can look it up. The set is closed but not enforced at write time,
+// because shards load lazily and an edge legitimately arrives before the node that gives
+// its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
+// workspace's own graph fails when a producer widens the vocabulary without declaring it.
 const KnowledgeSchemaVersion = 16
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it

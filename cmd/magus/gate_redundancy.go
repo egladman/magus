@@ -25,7 +25,7 @@ import (
 
 // gateMergeScanLimit bounds the history walk that looks for a merge commit
 // between the green gate and HEAD. A green gate older than this many commits
-// simply re-gates.
+// re-gates.
 const gateMergeScanLimit = 200
 
 // gatePoolProbeTimeout bounds the admission-server probe. The server is an

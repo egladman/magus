@@ -234,9 +234,9 @@ var (
 // the environment is the caller's choice and is left alone.
 //
 // Refcounted and shared across callers because loadMagus and inspectWorkspace can both
-// first-load concurrently (the server bootstraps both in parallel goroutines): a plain
-// save/restore pair races there, since either could observe the other's already-raised
-// GOGC as "the prior value" and restore to it instead of the true original, or one
+// first-load concurrently (the server bootstraps both in parallel goroutines). A plain
+// save/restore pair races there: either could observe the other's already-raised GOGC
+// as "the prior value" and restore to it instead of the true original, or one
 // restoring early could drop GOGC out from under the other's still-running load. Only
 // the caller that takes the count from 0 saves the prior value; only the one that takes
 // it back to 0 restores it.

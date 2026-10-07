@@ -21,7 +21,7 @@ func WithInstallRunner(ctx context.Context, r InstallRunner) context.Context {
 }
 
 // InstallRunnerFromContext returns the runner WithInstallRunner stored, or nil outside
-// a run, where an install simply runs.
+// a run, where an install runs without one.
 func InstallRunnerFromContext(ctx context.Context) InstallRunner {
 	r, _ := ctx.Value(installRunnerKey{}).(InstallRunner)
 	return r

@@ -1547,7 +1547,7 @@ func appendUnique(dst []string, values ...string) []string {
 // hand out work the change never justified.
 //
 // Shard IDs are preserved rather than renumbered, so a filtered plan can be read against
-// the unfiltered one it came from; a shard left empty simply drops out.
+// the unfiltered one it came from; a shard left empty drops out.
 //
 // A name that matches no project in the WORKSPACE is an error, because it is a typo and
 // silently planning nothing is how a typo turns into "the change affected nothing". A name

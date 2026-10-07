@@ -751,7 +751,7 @@ func buzzUsage() {
 // error told the reader to reach for the forking `magus\cmd` instead. That advice was
 // sound only because nothing had put the workspace here: the process had already loaded
 // one (loadMagus is a sync.Once singleton, so this is the same instance the dispatcher
-// built, not a second load), and the script simply never saw it. A `magus buzz` script
+// built, not a second load), and the script never saw it. A `magus buzz` script
 // run inside a workspace is a script ON that workspace, the same way the REPL
 // already autoloads the magusfile at cwd.
 //
@@ -763,13 +763,11 @@ func buzzUsage() {
 // running the script anyway runs it confined by nothing. That is refused, so breaking a
 // magusfile is not a way out of the sandbox.
 //
-// The load error is LOGGED rather than discarded. Silently dropping it made the two
-// absences indistinguishable at the point a reader sees them: MGS1022 says "no
-// workspace on the context" either way, so a script inside a workspace that simply
-// failed to load reads as a script that was never in one, and the advice it gives
-// ("fork instead") is then wrong. This is not hypothetical: it is what a green
-// local run and a red CI run of the same script looked like, with nothing in
-// between to tell them apart.
+// The load error is LOGGED rather than discarded. Dropping it made the two absences
+// indistinguishable at the point a reader sees them: MGS1022 says "no workspace on the
+// context" either way. A script inside a workspace that failed to load then reads as a
+// script that was never in one, and the advice it gives ("fork instead") is wrong. A
+// green local run and a red CI run of the same script looked exactly like that.
 //
 // The workspace's sandbox policy rides along, because a script reaches the same
 // fs/proc/http bindings a target does and the guard cannot read a script body: it

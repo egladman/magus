@@ -46,7 +46,7 @@ func projectTargets(p *types.Project) []string {
 //
 // Each target is tried under two charm sets (the workspace's configured default charms
 // and the empty set, deduped) because CI runs `--no-default-charms` and CI is the peer
-// whose refs most often get pasted into a local terminal: a ref minted by the bare CI
+// whose refs most often get pasted into a local terminal. A ref minted by the bare CI
 // variant must still resolve even though this workspace's local runs always carry the
 // configured defaults. The defaults are read from m.cfg.DefaultCharms rather than taken
 // as a parameter, exactly as ListCharms reads them (see its doc comment): a caller that
@@ -60,8 +60,8 @@ func projectTargets(p *types.Project) []string {
 // malformed step) is skipped rather than aborting the sweep, since this runs on a
 // best-effort error path. The one exception is types.ErrNoCache, checked up front
 // (mirroring computeTargetKey's own first line) rather than left to surface from deep
-// in the sweep: a cache-free (Inspect) workspace can mint no keys at all, so the whole
-// method is meaningless without a cache, and there is no point walking every project
+// in the sweep. A cache-free (Inspect) workspace can mint no keys at all, so the whole
+// method is meaningless without a cache. There is no point walking every project
 // and probing every spell's tool version first only to discover that.
 //
 // Both nil-slice cases (ref not shaped like a ref, and a well-formed ref matching
@@ -147,8 +147,8 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 // "magus run" invocation that would key it: the target name (with a
 // :charm1,charm2 suffix when the match required explicit charms), the project
 // (omitted for the workspace root "."), and --no-default-charms when the match
-// required the bare CI variant while m.cfg.DefaultCharms is non-empty, since the
-// workspace's configured defaults would otherwise apply and mint a different key.
+// required the bare CI variant while m.cfg.DefaultCharms is non-empty. Without that
+// flag the workspace's configured defaults would apply and mint a different key.
 //
 // It is a method on *Magus, not a free function, so it reads m.cfg.DefaultCharms
 // itself rather than taking it as a parameter a caller could pass stale or out of

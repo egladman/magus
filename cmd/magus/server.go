@@ -362,7 +362,7 @@ func serverChildArgs(argv []string) []string {
 // caller asked and not the one they meant. Starting the server from a second worktree returns 0
 // with nothing loaded from THIS tree, and the console then shows the tree it was started in,
 // which reads as the command having worked. The roots are already on the status wire; the message
-// simply never said them.
+// never said them.
 //
 // The workspace this call was made from is not marked, deliberately: a server loads a workspace
 // lazily on first use, so "not listed" means "not loaded yet" far more often than it means
@@ -388,9 +388,9 @@ func servingSuffix(st *proc.StatusReply) string {
 //
 // The invocation ancestry and recursion depth, because A BACKGROUND PROCESS DESCENDS FROM
 // NOBODY: the same rule submitJob already applies to a job's context. A run starts the
-// broker, and a command may start the server, so without this the child's environment
+// broker, and a command may start the server. Without this the child's environment
 // permanently records that one run's ancestry, and every workspace the server serves would
-// read those refs as its own: claims belonging to an invocation that ended hours ago
+// read those refs as its own. Claims belonging to an invocation that ended hours ago
 // would be excused from the budget, and a run with no ancestry of its own would be judged
 // a nested magus that had lost it.
 func detachedChildEnv() []string {
@@ -764,8 +764,8 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 // printJobWatchHint prints a link to watch jobs in the console dashboard.
 //
 // The link is UNAUTHENTICATED and the token stays one shell substitution away, which is the
-// same call liveExplorerLink already made and for the same reason: a fragment is never
-// transmitted on the document GET, so embedding the token read as safe, but the line is
+// same call liveExplorerLink already made and for the same reason. A fragment is never
+// transmitted on the document GET, so embedding the token read as safe. But the line is
 // still a credential written to stdout, and stdout is scrollback, a captured run log, a
 // termcast, and the context of whatever agent ran the command. This repository has already
 // rotated tokens that escaped that way.
@@ -991,7 +991,7 @@ func installDriftHooks(ctx context.Context) {
 //
 // It exists because editing magus.yaml otherwise meant restarting the server: the server
 // keeps a workspace warm across invocations, and each one captured its config when it
-// loaded. Nothing was stale in a way that looked broken: the setting simply had no
+// loaded. Nothing was stale in a way that looked broken: the setting had no
 // effect until something evicted the workspace, which is a TTL away and invisible.
 //
 // Deliberately not a `server job`: a job is dispatched against a workspace, so it would

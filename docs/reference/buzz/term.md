@@ -115,7 +115,7 @@ std\print(term\colorize(choose(), style: term\TermStyle.brightGreen));
 
 Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and no caller has to guard a notification. Log the same fact if it also needs recording. ttl_ms defaults to 5000; a negative ttl_ms pins the notification until newer ones push it out.
 
-**Signature:** `term\notify(message, [level], [ttl_ms])` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L199)
+**Signature:** `term\notify(message, [level], [ttl_ms])` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L196)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |
@@ -147,5 +147,5 @@ term\notify("server unreachable", level: term\LogLevel.error, ttl_ms: -1);
 
 Erase the screen and move the cursor home, the repaint a full-screen refresh loop issues before redrawing. Scrollback is preserved, so a reader who scrolls up after the loop ends still sees what came before. A no-op when there is no terminal, so a watch loop needs no guard.
 
-**Signature:** `term\clearScreen()` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L260)
+**Signature:** `term\clearScreen()` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L257)
 

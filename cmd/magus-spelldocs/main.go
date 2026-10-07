@@ -574,7 +574,7 @@ func sortedCharmNames(charms map[string]spells.Charm) []string {
 }
 
 // readExample reads spells/examples/<name>/<op>.buzz, or "" when absent so a
-// missing example simply skips the Example section (same contract as
+// missing example skips the Example section (same contract as
 // cmd/magus-docs.readExample).
 func readExample(spell, op string) string {
 	data, err := os.ReadFile(filepath.Join(spellsDir, "examples", spell, op+".buzz"))

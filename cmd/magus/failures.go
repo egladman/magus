@@ -71,7 +71,7 @@ const previewRows = 10
 //
 // Called when the selection MOVES, never from the paint path: resolving this
 // opens a file, and the band repaints from a timer. An unreadable log is not an
-// error: the column simply stays empty, and the ref is still printed in the
+// error: the column stays empty, and the ref is still printed in the
 // transcript for anyone who wants the whole thing.
 func loadPreview(f cache.Failure, width int) []string {
 	if f.LogPath == "" {
@@ -406,7 +406,7 @@ func copyFailure(f cache.Failure) {
 }
 
 // showPreview puts the selected failure's output in the band's second column.
-// A band that cannot take one (no previewSetter) simply keeps one column.
+// A band that cannot take one (no previewSetter) keeps one column.
 func showPreview(h failureBand, items []cache.Failure, at int) {
 	if at < 0 || at >= len(items) {
 		return

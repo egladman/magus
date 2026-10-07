@@ -56,10 +56,9 @@ func run(out string) error {
 }
 
 // render builds the manifest source without writing it, so a drift test can compare
-// it against the committed file. The manifest had gone stale by eleven modules with
-// nothing to catch it: completion and hover simply did not know base64, csv, hex,
-// ini, url, log, math, net, sort, term or diff existed, which is what the split is
-// for: the generator and the gate now read the same function.
+// it against the committed file. The generator and that gate read the same function, so
+// a module added without regenerating fails the test instead of leaving completion and
+// hover unaware of it.
 func render() (src []byte, emitted int, err error) {
 	// The list view names every module; the detail view (per name) is the only one
 	// that populates fields and methods, so fetch each module individually.

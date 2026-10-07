@@ -654,7 +654,7 @@ func jobTreeOrder(leases []types.Job) []jobTreeLine {
 // arrival. It prints the criteria, the write paths, the check, the model, the checkpoint, the
 // dependencies, what the workspace itself puts out of reach, the graph's blast radius for
 // each write path, and where each declared goal stands graded against the evidence magus
-// holds now, and it prints no procedure: taking the job is `magus job exec`'s work to DO,
+// holds now. It prints no procedure: taking the job is `magus job exec`'s work to DO,
 // not a paragraph for somebody to follow by hand.
 func describeJob(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("describe job", args, func(fs *flag.FlagSet) {

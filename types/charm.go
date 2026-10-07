@@ -36,7 +36,7 @@ const CharmCD = "cd"
 // table to swap the tool's reporter to that format (so failures surface as inline
 // `::error::` workflow annotations on the PR). Set it in CI via `magus run ci:gha`.
 // Reserved so the typo guard skips it everywhere (a ci run fans out to tools that
-// don't support it, where it is simply a no-op — see undeclaredCharms); the ci gate
+// don't support it, where it is a no-op; see undeclaredCharms); the ci gate
 // does not strip it (unlike rw), so the annotations survive into ci.
 const CharmGHA = "gha"
 
@@ -151,7 +151,7 @@ func CharmsFromContext(ctx context.Context) []string {
 
 // HasCharm reports whether charm is among the active execution charms.
 // This membership test is how a spell opts into a charm's behavior; charms it
-// does not test for are simply ignored. The query is normalized and the active
+// does not test for are ignored. The query is normalized and the active
 // set is already canonical (WithCharms normalizes on store), so a spell that
 // tests has_charm("noCache") matches a "target:no-cache" suffix regardless of
 // casing or separator.

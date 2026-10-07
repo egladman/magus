@@ -827,7 +827,7 @@ func loadKnowledgePackages(ctx context.Context, projects types.ProjectsOutput, l
 
 // loadKnowledgeTimings reads the local timing history (best-effort) into per-target
 // timing inputs for the @runtime shard. A disabled or unreadable history yields no
-// timings, so the performance attrs are simply absent, never an error. The result
+// timings, so the performance attrs are absent, never an error. The result
 // is sorted so assembly stays deterministic regardless of history map order.
 func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.KnowledgeTiming {
 	if cfg.HistoryPath == "" {
@@ -865,24 +865,9 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 	return out
 }
 
-// loadKnowledgeCoverage reads the local Go coverage profile (best-effort) into per-file
-// coverage for the observed @coverage overlay. The profile is .magus/coverage.out at the
-// workspace root (what `magus run test .` writes), and its lines are module-qualified,
-// so the module path from go.mod is stripped to recover the workspace-relative paths the
-// file/symbol nodes use. A missing profile, an unreadable go.mod, or a profile with no
-// data yields no coverage, so the attrs are simply absent, never an error: a workspace
-// that never ran coverage behaves exactly as before. Re-read each build, mirroring the
-// timing/output-ref overlays, so the ratio stays fresh without a schema bump.
-// loadKnowledgeNotes reads the declared notes store and maps each note's anchors to the
-// node IDs the graph uses, so assembly can drop the ones that do not resolve.
-//
-// Best effort by design: an undeclared store, a missing directory, or an unreadable entry
-// yields no notes rather than an error. A note the reader cannot parse is `magus notes
-// verify`'s to report with a repair hint; failing a graph build over it would take the
-// whole workspace down for one bad markdown file.
 // loadKnowledgeNotesAt resolves one of the two declared notes stores and reads it,
-// yielding nothing when that store is not declared. resolve is SharedDir or PrivateDir,
-// which differ in exactly one way: whether the location may sit outside the repository.
+// yielding nothing when that store is not declared. The scopes differ in exactly one
+// way: whether the location may sit outside the repository.
 func loadKnowledgeNotesAt(root, declared string, scope notes.Scope) []types.KnowledgeNote {
 	dir, err := notes.Dir(root, scope, declared)
 	if err != nil {
@@ -891,6 +876,13 @@ func loadKnowledgeNotesAt(root, declared string, scope notes.Scope) []types.Know
 	return loadKnowledgeNotes(root, dir, string(scope))
 }
 
+// loadKnowledgeNotes reads the declared notes store and maps each note's anchors to the
+// node IDs the graph uses, so assembly can drop the ones that do not resolve.
+//
+// Best effort by design: an undeclared store, a missing directory, or an unreadable entry
+// yields no notes rather than an error. A note the reader cannot parse is `magus notes
+// verify`'s to report with a repair hint; failing a graph build over it would take the
+// whole workspace down for one bad markdown file.
 func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
 	found, _, err := notes.Inspect(dir)
 	if err != nil || len(found) == 0 {
@@ -931,6 +923,14 @@ func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
 	return out
 }
 
+// loadKnowledgeCoverage reads the local Go coverage profile (best-effort) into per-file
+// coverage for the observed @coverage overlay. The profile is .magus/coverage.out at the
+// workspace root (what `magus run test .` writes), and its lines are module-qualified,
+// so the module path from go.mod is stripped to recover the workspace-relative paths the
+// file/symbol nodes use. A missing profile, an unreadable go.mod, or a profile with no
+// data yields no coverage, so the attrs are absent, never an error: a workspace
+// that never ran coverage behaves exactly as before. Re-read each build, mirroring the
+// timing/output-ref overlays, so the ratio stays fresh without a schema bump.
 func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	if root == "" {
 		return nil
@@ -1025,7 +1025,7 @@ func declaredSpellSet(projects types.ProjectsOutput) map[string]bool {
 // and last_run_ok onto the target node. The forecast timing history is cache-safety-locked
 // and records no refs, so the output store (which already persists one OutputDescriptor
 // per execution) is the source. A missing or unreadable store yields no refs, so the
-// attrs are simply absent, never an error. The store already sorts by project:target, so
+// attrs are absent, never an error. The store already sorts by project:target, so
 // assembly stays deterministic.
 func loadKnowledgeOutputRefs(cacheDir string) []types.KnowledgeOutputRef {
 	descs := cache.NewOutputStore(cacheDir).LatestRefsByTarget()
@@ -1783,7 +1783,7 @@ const vcsDefaultMaxCommits = 1000
 // (knowledge.vcs.enabled), routed through the VCS abstraction so it is not git-specific:
 // any resolved backend that implements ChurnReporter works, and one that does not is
 // skipped. Best-effort: a disabled/absent VCS or a scan error yields no metadata (the
-// shard is simply absent), never an error. Callers want loadKnowledgeVCSCached; this is the
+// shard is absent), never an error. Callers want loadKnowledgeVCSCached; this is the
 // uncached walk it wraps.
 func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *slog.Logger) []types.KnowledgeVCS {
 	if !cfg.Knowledge.VCS.Enabled {

@@ -16,7 +16,7 @@ import (
 // magusfile at cwd executed on start so its targets and locals are there to poke
 // at. There is no second, magusfile-less REPL and no flag to ask for this one:
 // magus reads its context everywhere else, and a REPL opened inside a workspace is
-// a REPL on that workspace. Outside one there is simply nothing to autoload, which
+// a REPL on that workspace. Outside one there is nothing to autoload, which
 // NewBuzzReplSession already treats as ordinary rather than an error.
 //
 // --no-autoload skips executing the magusfile.

@@ -22,7 +22,7 @@ import (
 // A code in a terminal is something a reader clicks while stuck, so it should land on a
 // styled page with its navigation, search, and cross-links intact, not on a raw file
 // view. It also means the URL survives the source moving, since the site keeps a
-// redirect for a page that relocates and the blob URL would simply 404.
+// redirect for a page that relocates and the blob URL would 404.
 //
 // No ".md": the site serves each code as a directory URL.
 const (

@@ -189,13 +189,10 @@ const defaultNotifyTTL = 5 * time.Second
 
 // TermNotify raises a notification into the process's terminal band.
 //
-// It does NOT take a scope. An earlier shape wrapped the call in a
-// term.withNotify(fn) that reserved the rows for the duration of a callback,
-// which read well in a standalone script and was wrong for the case that
-// matters: a magusfile target notifying in the middle of a run does not own the
-// run, cannot wrap it, and would be nesting its scope inside magus's own. The
-// band is owned by the process and released on the way out (tty.ReleaseStderr),
-// so a caller just says the thing.
+// It does NOT take a scope. A magusfile target notifying in the middle of a run
+// does not own the run, cannot wrap it, and would be nesting its scope inside
+// magus's own. The band is owned by the process and released on the way out
+// (tty.ReleaseStderr), so a caller just says the thing.
 func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 	if types.Tracing(ctx) {
 		// A record pass must not paint: a dry run reports what WOULD happen,
