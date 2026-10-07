@@ -2659,11 +2659,18 @@ func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
 	edit := func(rel string, dryRun bool) Verdict {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), dryRun)
 	}
+	// The two calls may straddle a second, and a lease-write reason says how long ago the
+	// owner was updated.
+	age := regexp.MustCompile(`updated \d+s ago`)
+	withoutAge := func(v Verdict) Verdict {
+		v.Reason = age.ReplaceAllString(v.Reason, "updated <age> ago")
+		return v
+	}
 	for i, rel := range []string{"internal/ledger/store.go", "cmd/magus/main.go"} {
 		preview := edit(rel, true)
 		assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), i, rel)
 		assert.NotContains(t, preview.Reason, verdictRefLine, rel)
-		assert.Equal(t, withoutVerdictRef(edit(rel, false)), preview, rel)
+		assert.Equal(t, withoutAge(withoutVerdictRef(edit(rel, false))), withoutAge(preview), rel)
 	}
 	assert.Len(t, trailEvents(t, cacheDir, trail.KindAgentCommand), 2, "the rename itself is recorded")
 }
