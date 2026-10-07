@@ -373,3 +373,21 @@ func TestReadNavigationAdvisesByDefault(t *testing.T) {
 
 	requireAdvisedOnce(t, Evaluate(deps, `cat internal/store/store.go`), denyRuleReadNavigation)
 }
+
+func TestReadNavigationLinesComeFromTheWorkspace(t *testing.T) {
+	t.Parallel()
+	root := readFixture(t)
+	deps := readDeps(root)
+
+	// No lines declared: every whole read of a mapped file is judged, however short.
+	v, ok := readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, denyRuleReadNavigation, v.Rule.Name)
+
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleReadNavigation): {Decision: builtin.Advise, Lines: 120}}
+	_, ok = readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
+	assert.False(t, ok, "under the declared lines")
+	v, ok = readVerdictAt(deps, root, `cat internal/store/store.go`, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, denyRuleReadNavigation, v.Rule.Name, "past the declared lines")
+}

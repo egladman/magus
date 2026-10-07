@@ -16,7 +16,6 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
@@ -327,7 +326,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		deps.WriteRule = rules.WriteRule()
 		deps.ApprovedWriteRule = rules.ApprovedWriteRule
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
-		deps.Builtins = guardBuiltins(ctx, rules, "")
+		setGuardBuiltins(ctx, &deps, rules, "")
 		return deps
 	}
 	root, err := guardRoot(rootOverride)
@@ -337,7 +336,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
 	deps.LoadFailure = loadErr
-	deps.Builtins = guardBuiltins(ctx, nil, root)
+	setGuardBuiltins(ctx, &deps, nil, root)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		return magus.LoadApprovedSpawnRule(ctx, root)
 	}
@@ -350,24 +349,11 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	return deps
 }
 
-// guardBuiltins is the compiled rules' effective settings for Dependencies.Builtins, nil
-// for the defaults. rules is the working tree's load, nil when it did not load, in which
-// case root's approved sources decide alone, as they do for the function rules.
-//
-// A side that does not resolve leaves the defaults in its place rather than failing: a
-// broken commit must not take down every hook any more than a broken working tree does.
-func guardBuiltins(ctx context.Context, rules *magus.GuardRules, root string) map[string]builtin.Setting {
+// setGuardBuiltins sets deps' compiled-rule settings from magus.GuardBuiltins, traced.
+func setGuardBuiltins(ctx context.Context, deps *guard.Dependencies, rules *magus.GuardRules, root string) {
 	stop := traceFromContext(ctx).phase("guard.builtins_resolve")
 	defer stop()
-	if rules != nil {
-		effective, _ := rules.EffectiveBuiltins(ctx)
-		return effective
-	}
-	approved, err := magus.LoadApprovedBuiltins(ctx, root)
-	if err != nil {
-		return nil
-	}
-	return approved
+	deps.Builtins = magus.GuardBuiltins(ctx, rules, root)
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,

@@ -10,7 +10,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/types"
@@ -79,32 +78,25 @@ func describeRules(args []string) error {
 }
 
 // declaredBuiltins is what the cwd workspace's root magusfile sets through
-// magus\guard.builtins, nil outside a workspace or when it sets nothing. A magusfile whose
-// guard declarations do not load is an error, returned for the caller to report after
-// the catalog: the defaults are still worth printing, and a WORKSPACE column left empty
-// without saying why would read as "this workspace sets nothing".
-func declaredBuiltins() (map[string]builtin.Setting, error) {
+// magus\guard.builtins, rendered per rule, and empty outside a workspace or when it sets
+// nothing. A magusfile whose guard declarations do not load is an error, returned for the
+// caller to report after the catalog: the defaults are still worth printing, and a
+// WORKSPACE column left empty without saying why would read as "this workspace sets
+// nothing".
+func declaredBuiltins() (map[string]string, error) {
 	rules, err := loadGuardRules(context.Background(), "")
 	if err != nil {
-		return nil, fmt.Errorf("magus describe rules: the root magusfile's guard declarations do not load, so no workspace setting is shown: %w", err)
+		return map[string]string{}, fmt.Errorf("magus describe rules: the root magusfile's guard declarations do not load, so no workspace setting is shown: %w", err)
 	}
 	if rules == nil {
-		return nil, nil
+		return map[string]string{}, nil
 	}
-	return rules.Builtins(), nil
+	return rules.DeclaredBuiltinSettings(), nil
 }
 
 // workspaceSetting renders the setting declared for name for RuleDoc.Workspace.
-func workspaceSetting(declared map[string]builtin.Setting, name string) string {
-	s, ok := declared[name]
-	switch {
-	case !ok:
-		return ""
-	case s.Lines != 0:
-		return fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
-	default:
-		return string(s.Decision)
-	}
+func workspaceSetting(declared map[string]string, name string) string {
+	return declared[name]
 }
 
 // appliedDecision is the decision the working tree gives r: its workspace setting's, or
@@ -145,7 +137,7 @@ func emitRuleList(opts OutputOptions, rules []types.RuleDoc) error {
 		return err
 	}
 	fmt.Printf("\n%d refuse, %d explain, %d off. One rule: `%s`\n",
-		counts[string(builtin.Deny)], counts[string(builtin.Advise)], counts[string(builtin.Off)],
+		counts["deny"], counts["advise"], counts["off"],
 		hint.DescribeRule.With("<rule>"))
 	return nil
 }
@@ -177,10 +169,10 @@ func emitRuleDetail(opts OutputOptions, doc types.RuleDoc) error {
 		fmt.Println()
 	}
 	switch appliedDecision(doc) {
-	case string(builtin.Off):
+	case "off":
 		fmt.Println("This workspace turns the rule off, so it says nothing.")
 		return nil
-	case string(builtin.Deny):
+	case "deny":
 		fmt.Println("A deny blocks the call and names what to run instead. Nothing magus")
 		fmt.Println("refuses is a capability it removes: every one has a covered equivalent.")
 		return nil

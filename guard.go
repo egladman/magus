@@ -680,6 +680,39 @@ func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.
 	return builtin.Resolve(declared)
 }
 
+// GuardBuiltins is the compiled rules' effective settings for a hook, nil for the
+// defaults. rules is the working tree's load, nil when it did not load, in which case
+// root's approved sources decide alone, as they do for the function rules.
+//
+// A side that does not resolve leaves the defaults in its place rather than failing: a
+// broken commit must not take down every hook any more than a broken working tree does.
+func GuardBuiltins(ctx context.Context, rules *GuardRules, root string) map[string]builtin.Setting {
+	if rules != nil {
+		effective, _ := rules.EffectiveBuiltins(ctx)
+		return effective
+	}
+	approved, err := LoadApprovedBuiltins(ctx, root)
+	if err != nil {
+		return nil
+	}
+	return approved
+}
+
+// DeclaredBuiltinSettings is each rule the root magusfile sets through
+// magus\guard.builtins, rendered as `magus describe rules` shows it: the decision, then
+// the line limit when one is set.
+func (g *GuardRules) DeclaredBuiltinSettings() map[string]string {
+	declared := g.Builtins()
+	out := make(map[string]string, len(declared))
+	for name, s := range declared {
+		out[name] = string(s.Decision)
+		if s.Lines != 0 {
+			out[name] = fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
+		}
+	}
+	return out
+}
+
 func loadApprovedRegistry(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
 	approved, err := approvalAuthority(ctx, root, types.VCSOptions{})
 	if err != nil || approved == nil {

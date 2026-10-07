@@ -750,7 +750,7 @@ func newRejudge(ctx context.Context, root string) rejudgeFunc {
 			Spells:       project.DefaultSpellRegistry().All,
 			ShellRules:   shellRules,
 			ShellDialect: shellDialect,
-			Builtins:     guardBuiltins(ctx, nil, root),
+			Builtins:     magus.GuardBuiltins(ctx, nil, root),
 		}
 	})
 	return func(text string) (program, verdict, rule string) {
