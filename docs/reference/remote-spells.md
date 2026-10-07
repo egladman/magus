@@ -123,7 +123,7 @@ A spell is a directory holding a `spell.buzz`, committed to a repository. Four v
 take it from there to a registry and back.
 
 **1. Build.** Pack it exactly as a push would, and print the manifest digest the push
-will produce. Nothing touches the network:
+produces. Nothing touches the network:
 
 ```sh
 magus spell build spells/cursor

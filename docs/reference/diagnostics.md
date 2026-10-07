@@ -53,7 +53,7 @@ drifts. A `generate` gate re-runs the generators and checks whether the tree wen
 dirty. When it did, `vcs\diagnoseDrift` names _why_, instead of just failing:
 
 - **[MGS4006](codes/race/MGS4006.md): stale generated output.** A declared input
-  actually changed. Real drift: regenerate and commit.
+  changed. Real drift: regenerate and commit.
 - **[MGS4005](codes/race/MGS4005.md): environmental drift.** The declared inputs are
   byte-identical to what is committed, but a dev build (or a locally installed tool at a
   different version than the pinned release) rendered them differently, the classic

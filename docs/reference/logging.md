@@ -17,7 +17,7 @@ tags:
 # Logging and verbosity
 
 magus has four output modes over three log levels. The flags are cheap to
-remember; what they actually buy you is not obvious from their names, and two of
+remember; what they buy you is not obvious from their names, and two of
 them change behavior beyond filtering.
 
 | Flag             | Level | What you get                                                |
@@ -144,7 +144,7 @@ magus startup trace:
 ```
 
 Trace also stamps source locations on records, but the default pretty output
-does not render them. Pair it with a machine format to actually see them:
+does not render them. Pair it with a machine format to see them:
 
 ```sh
 magus -vvv --log-format=text run build
@@ -217,5 +217,5 @@ event stream and leaves warnings on the terminal, which is usually what you
 want, but it does mean neither stream is the whole picture.
 
 Some output is also TTY-dependent by design. The concurrency pool status line is
-suppressed when output is not a terminal, so a piped or CI log will not contain
+suppressed when output is not a terminal, so a piped or CI log does not contain
 it. That is intentional: it repaints in place and would otherwise flood the log.
