@@ -2065,6 +2065,88 @@ func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
 	assert.Contains(t, err.Error(), "cache replay")
 }
 
+// runCancelledLint runs the root's lint target with write enabled, where lint calls
+// invoke and then cancels the run. leaf, a nested project, holds src/app.ts.
+func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeRequest) error) error {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("lint"),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if err := invoke(req); err != nil {
+				return nil, err
+			}
+			cancel()
+			return nil, ctx.Err()
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "leaf", "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "src", "app.ts"), []byte("x"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	reg.RegisterProject("leaf")
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p)
+
+	ctx = types.WithCharms(types.WithWorkspace(ctx, m), []string{types.CharmReadWrite})
+	return m.runTarget(ctx, p, "lint")
+}
+
+// boundaryMessages returns the message of every MGS3001 error in err's tree.
+func boundaryMessages(err error) []string {
+	var out []string
+	var walk func(error)
+	walk = func(err error) {
+		if de, ok := err.(*types.DiagnosticError); ok && de.Code == types.DescendantBoundaryCrossed { //nolint:errorlint // one node at a time; As would stop at the first match
+			out = append(out, de.Msg)
+		}
+		switch u := err.(type) { //nolint:errorlint // walks the tree itself, one node at a time
+		case interface{ Unwrap() error }:
+			if next := u.Unwrap(); next != nil {
+				walk(next)
+			}
+		case interface{ Unwrap() []error }:
+			for _, next := range u.Unwrap() {
+				walk(next)
+			}
+		}
+	}
+	walk(err)
+	return out
+}
+
+// Ctrl-C during `magus run lint-rules .` reported MGS3001 against lint-rules, listing
+// every console file as removed: the audit's re-walk stopped at the cancellation, and an
+// unfinished listing read as deletions. lint here writes nothing at all.
+func TestCancelledTargetThatWroteNothingReturnsOnlyItsCancellation(t *testing.T) {
+	err := runCancelledLint(t, "zzz-cancelled-quiet-spell", func(spells.InvokeRequest) error { return nil })
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, types.DescendantBoundaryCrossed)
+}
+
+// The same cancellation after a real write into leaf still reports the write, and only it.
+func TestCancelledTargetStillReportsItsWriteIntoADescendant(t *testing.T) {
+	err := runCancelledLint(t, "zzz-cancelled-writer-spell", func(req spells.InvokeRequest) error {
+		return os.WriteFile(filepath.Join(req.Dir, "leaf", "src", "gen.ts"), []byte("y"), 0o644)
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	want := `project "." target "lint" wrote into descendant project "leaf": added=[src/gen.ts]` +
+		"\n" + `fix: move this work to "leaf" or exclude that path from the parent target`
+	assert.Equal(t, []string{want}, boundaryMessages(err))
+}
+
 // The drift gate and the race replay hash a target's outputs through outputGlobsByRoot,
 // and must claim what the cache snapshot claims: nothing inside a nested project that
 // the glob is not rooted in.
