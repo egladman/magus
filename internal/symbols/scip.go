@@ -245,6 +245,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 					}
 					a.sym.SymbolKind = si.Kind.String()
 					a.sym.Signature = renderedSignature(si)
+					a.sym.Doc = docText(si)
 				}
 				byKey[key] = a
 			}
@@ -333,6 +334,36 @@ func renderedSignature(si *scip.SymbolInformation) string {
 		return ""
 	}
 	return strings.TrimSpace(body)
+}
+
+// docText returns a symbol's doc comment: its Documentation entries joined by a blank line,
+// less any entry that is one fenced code block. scip-typescript 0.4.0 renders the declaration
+// that way in Documentation[0] and the doc after it; scip-go 0.2.7 and scip-buzz record the
+// doc alone in one entry. A fence inside a doc entry stays, for the judge to skip as code.
+func docText(si *scip.SymbolInformation) string {
+	var parts []string
+	for _, d := range si.Documentation {
+		d = strings.TrimSpace(d)
+		if d == "" || isFencedBlock(d) {
+			continue
+		}
+		parts = append(parts, d)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+// isFencedBlock reports whether s, already trimmed, is exactly one fenced code block.
+func isFencedBlock(s string) bool {
+	lines := strings.Split(s, "\n")
+	if len(lines) < 2 || !strings.HasPrefix(lines[0], "```") || strings.TrimSpace(lines[len(lines)-1]) != "```" {
+		return false
+	}
+	for _, l := range lines[1 : len(lines)-1] {
+		if strings.HasPrefix(strings.TrimSpace(l), "```") {
+			return false
+		}
+	}
+	return true
 }
 
 // workspacePath rebases an indexer-relative document path onto the workspace by joining

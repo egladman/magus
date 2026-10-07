@@ -177,6 +177,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		if sym.Signature != "" {
 			attrs[AttrSignature] = sym.Signature
 		}
+		if sym.Doc != "" {
+			attrs[AttrDoc] = sym.Doc
+		}
 		if sym.BodyDigest != "" {
 			attrs[AttrBodyDigest] = sym.BodyDigest
 		}

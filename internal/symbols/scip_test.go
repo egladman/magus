@@ -101,6 +101,40 @@ func TestParseIndexSignature(t *testing.T) {
 	}, got)
 }
 
+// The Documentation shapes are the ones each pinned indexer emits: scip-go 0.2.7 and scip-buzz
+// record the doc alone in one entry, scip-typescript 0.4.0 prepends the declaration as a fenced
+// block.
+func TestParseIndexDoc(t *testing.T) {
+	tests := []struct {
+		name string
+		docs []string
+		want string
+	}{
+		{name: "go", docs: []string{"Open reads root.\n\nIt never writes."}, want: "Open reads root.\n\nIt never writes."},
+		{name: "typescript", docs: []string{"```ts\nfunction open(root: string): void\n```", "Opens root."}, want: "Opens root."},
+		{name: "typescript signature only", docs: []string{"```ts\nvar root: HTMLElement\n```"}, want: ""},
+		{name: "buzz", docs: []string{"open reads root.\n"}, want: "open reads root."},
+		{name: "fence inside prose stays", docs: []string{"```ts\ntype Rule\n```", "Rule is a check.\n\n```proto\nmessage Foo {}\n```"}, want: "Rule is a check.\n\n```proto\nmessage Foo {}\n```"},
+		{name: "unclosed fence stays", docs: []string{"```ts\nclass Unclosed"}, want: "```ts\nclass Unclosed"},
+		{name: "entries join by a blank line", docs: []string{"First.", " ", "Second."}, want: "First.\n\nSecond."},
+		{name: "none", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			const sym = "scip-go gomod example.com/foo v1 Open()."
+			idx := &scip.Index{Documents: []*scip.Document{{
+				RelativePath: "a.go",
+				Symbols:      []*scip.SymbolInformation{{Symbol: sym, DisplayName: "Open", Documentation: tt.docs}},
+				Occurrences:  []*scip.Occurrence{{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 0, 1}}},
+			}}}
+			syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+			require.NoError(t, err)
+			require.Len(t, syms, 1)
+			assert.Equal(t, tt.want, syms[0].Doc)
+		})
+	}
+}
+
 // TestParseIndexTypedRange guards the fix for modern indexers: they set the typed
 // range oneof and NOT the deprecated packed `range` field, so reading `range` alone
 // would report line 0 everywhere. SourceRange must resolve the typed form.

@@ -364,6 +364,9 @@ const (
 	AttrBodyDigest = "body_digest"
 )
 
+// AttrDoc is a symbol's doc comment as its indexer recorded it, signature block dropped.
+const AttrDoc = "doc"
+
 // AttrLines and AttrBytes size a file node: its line count as an editor numbers lines, and
 // its length in bytes. Counted only by an extractor that already reads the file, so a file
 // node minted from paths alone (git history, a reference-only SCIP document) omits both

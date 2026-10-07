@@ -232,6 +232,14 @@ var Magus = Module{
 			Impl:    MagusPrecedents,
 		},
 		{
+			Name:    "prose",
+			Doc:     "The prose rules of libs/conventions/prose run over every doc comment and function or method name in the workspace's merged symbol indexes, whatever language indexed them: {findings, judged, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each finding is {node, source, language, rule, message, match}: source is the declaration's path and line, since an index records no position inside a doc, and match is the text the rule fired on. judged maps each language to the symbols read for it; a language missing from it was never read, which is silence rather than a pass. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it. Test files and declared outputs are never judged. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusProse,
+		},
+		{
 			Name: "dir",
 			Doc:  "One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\\project's \"layers\" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{

@@ -87,6 +87,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
+	github.com/egladman/magus/libs/conventions v0.1.0
 	github.com/egladman/magus/libs/diagnostics v0.2.0
 	github.com/egladman/magus/libs/gopherbuzz v0.2.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
@@ -128,14 +129,15 @@ tool (
 
 // These replace directives are LOCAL-DEV ONLY: replace is never transitive, so a
 // downstream `go get` of this module resolves the tagged versions the requires
-// above name (libs/diagnostics/v0.1.0, libs/gopherbuzz/v0.1.0) and never sees
-// them. In this repo they build against the working tree instead, so a change to
+// above name and never sees them. In this repo they build against the working tree instead, so a change to
 // a nested module is exercised by the commit that makes it, with no
 // tag-then-bump round trip. Not something to "clean up": without them every
 // in-repo build (go run ./cmd/magus, magus run build) compiles the last tag, not
 // the code beside it. Their one cost downstream is `go install
 // github.com/egladman/magus/cmd/magus@...`, which refuses any module whose go.mod
 // carries a replace directive (see internal/agent/skills/magus-sdk/SKILL.md).
+replace github.com/egladman/magus/libs/conventions => ./libs/conventions
+
 replace github.com/egladman/magus/libs/diagnostics => ./libs/diagnostics
 
 replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz

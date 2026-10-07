@@ -571,6 +571,9 @@ type KnowledgeSymbol struct {
 	// none. It is compared byte for byte and never parsed: magus models no language, so two
 	// renderings are one signature only when the same indexer produced both.
 	Signature string
+	// Doc is the doc comment the indexer recorded, without any signature it rendered as a
+	// code block, or empty when it recorded none.
+	Doc string
 	// BodyDigest fingerprints the definition's source lines, Source through DefEndLine (the
 	// definition line alone when the indexer emits no extent), read from the tree the index
 	// was built over. Two sides with equal digests defined the symbol identically. Empty when
@@ -1710,4 +1713,29 @@ type Case struct {
 type PrecedentReport struct {
 	Precedents []Precedent         `json:"precedents"`
 	Indexes    []SymbolIndexStatus `json:"indexes"`
+}
+
+// ProseFinding is one prose rule's verdict on a symbol's doc comment or name.
+type ProseFinding struct {
+	// Node is the symbol node the doc was read from.
+	Node string `json:"node"`
+	// Source is the declaration's workspace-relative path and line. An index records no
+	// position inside a doc, so a finding points at the declaration and Match says where.
+	Source   string `json:"source"`
+	Language string `json:"language"`
+	// Rule is one of the rule names libs/conventions/prose reports.
+	Rule    string `json:"rule"`
+	Message string `json:"message"`
+	// Match is the text the rule matched.
+	Match string `json:"match"`
+}
+
+// ProseReport is magus\prose's answer: the findings over the doc comments and callable names
+// in the workspace's merged symbol indexes, how many symbols each language contributed, and
+// the freshness of each declared index judged just before the read. A language missing from
+// Judged was never read, which is silence rather than a pass.
+type ProseReport struct {
+	Findings []ProseFinding      `json:"findings"`
+	Judged   map[string]int      `json:"judged"`
+	Indexes  []SymbolIndexStatus `json:"indexes"`
 }
