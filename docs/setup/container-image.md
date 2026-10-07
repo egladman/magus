@@ -86,12 +86,12 @@ docker run --rm -v "$PWD":/workspace ghcr.io/egladman/magus:a1b2c3d ls
 These are **not releases**. They are GHCR-only (never Docker Hub), static-only (no
 `-dynamic` variant), have no moving tag to follow, are not pruned on any schedule, and
 carry no compatibility promise. They are signed, but by `cd.yaml` rather than the
-release workflow, so the verify command below deliberately rejects them - see
+release workflow, so the verify command below deliberately rejects them; see
 [Verify the signature](#verify-the-signature).
 
 Two images, two channels, and one charm tells them apart: `magus run image-build:cd`
 publishes to the per-commit channel, `magus run image-build:cd,stable` to the stable
-one. Neither word is decoration - `cd` is what makes a build publish at all, and
+one. Neither word is decoration: `cd` is what makes a build publish at all, and
 `stable` is which stream it lands in.
 
 ## Build the image yourself
@@ -115,7 +115,7 @@ so an Apple Silicon machine builds and runs `linux/arm64` natively.
 | `magus run image-build:amd64`   | cgo variant, forced `linux/amd64`               |
 
 The `amd64` and `arm64` charms exist for reproducing a failure that only happens on
-the other architecture. They go through QEMU emulation, so expect them to be slow -
+the other architecture. They go through QEMU emulation, so expect them to be slow:
 they are a debugging tool, not a second default.
 
 Multi-architecture images are built only when publishing, where the result is pushed
@@ -157,7 +157,7 @@ cosign verify ghcr.io/egladman/magus:latest \
 
 **Use cosign v3 or later.** Signatures are written in the Sigstore bundle format that
 v3 made the default. A v3 client verifies both formats, but a v2 client cannot read a
-v3 signature and reports the image as unverified - which looks exactly like a bad
+v3 signature and reports the image as unverified, which looks exactly like a bad
 signature. Check with `cosign version` before concluding anything from a failure.
 
 A missing or mismatched signature means the image is not an official build. Do not
@@ -165,7 +165,7 @@ run it.
 
 A signature lives in the registry beside the image it covers, so it is pushed to
 each registry separately even though the digest is identical. Verify the reference
-you actually pulled - swap `ghcr.io` for `docker.io` above if that is where the
+you actually pulled; swap `ghcr.io` for `docker.io` above if that is where the
 image came from.
 
 The identity regexp pins the release workflow specifically, which is what makes the

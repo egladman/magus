@@ -1,6 +1,6 @@
 ---
 title: Glossary
-description: The core magus vocabulary - workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console's own terms - each defined in one line with a pointer to the page that covers it in full.
+description: The core magus vocabulary (workspace, project, magusfile, target, spell, operation, charm, ward, module, engine, and the console's own terms), each defined in one line with a pointer to the page that covers it in full.
 tags: [glossary, reference, terminology, concepts, console]
 ---
 
@@ -116,7 +116,7 @@ the console, background jobs and the warm knowledge graph, and adopts nested
 
 ### CI
 
-An ordinary magusfile-defined target you compose yourself with `magus\needs` -
+An ordinary magusfile-defined target you compose yourself with `magus\needs`:
 magus does not hardcode its stages. `Magus.RunCI` treats it specially only in
 that it strips the `rw` charm, it is the anchor `magus affected ci` keys off,
 and a selected scope with no project declaring it is a load error rather than
@@ -137,7 +137,7 @@ span beneath it. See [telemetry.md](concepts/telemetry.md).
 
 ### Span
 
-OpenTelemetry's name for one unit of work under a trace - a target execution,
+OpenTelemetry's name for one unit of work under a trace: a target execution,
 whose sub-operations are child spans. An output reference points at a span's
 captured output. See [telemetry.md](concepts/telemetry.md).
 
@@ -188,8 +188,8 @@ remote artifact must be signed by a trusted key. See
 
 ### Snapshot
 
-A point-in-time view of live state - the pool's occupancy or a tick of exported
-metrics - as opposed to accumulated history. See [server.md](guides/integrations/server.md).
+A point-in-time view of live state (the pool's occupancy or a tick of exported
+metrics), as opposed to accumulated history. See [server.md](guides/integrations/server.md).
 
 ### Backfill
 
@@ -202,7 +202,7 @@ last few hundred samples. See [server.md](guides/integrations/server.md).
 ### Latency
 
 How long an operation takes. magus records latency as OpenTelemetry histograms
-per family - target execution, cache op, pool wait, and graph query - and reports
+per family (target execution, cache op, pool wait, and graph query) and reports
 each as a count, sum, and percentiles. See [telemetry.md](concepts/telemetry.md).
 
 ### Percentile
@@ -258,7 +258,7 @@ architectural smell. See [insight.md](concepts/knowledge/insight.md).
 
 ### Ownership
 
-An insight lens: author concentration - the primary author and their share, the
+An insight lens for author concentration: the primary author and their share, the
 distinct-author count (the bus factor), and abandonment. See
 [insight.md](concepts/knowledge/insight.md).
 
@@ -305,8 +305,8 @@ carries says whose account ran it.
 
 ### Invocation
 
-One magus process's recorded facts - the targets it finished, their outcomes,
-the lease it acted as, and the session it ran in when a host delivered one -
+One magus process's recorded facts (the targets it finished, their outcomes,
+the lease it acted as, and the session it ran in when a host delivered one),
 kept in a repo-scoped store every worktree shares. `magus session` lists them;
 the store prunes itself by last-fact age.
 
@@ -319,13 +319,13 @@ gave a session, and is never recorded as a session.
 
 A durable "an agent is blocked" record, opened when a `magus session notify`
 event carries the waiting or permission outcome and held until a person disposes
-it. `magus session attention` lists what is open. Nothing closes one on its own - see
+it. `magus session attention` lists what is open. Nothing closes one on its own; see
 [doctrine.md](doctrine.md).
 
 ### Dispose
 
 The human act of closing an attention request: a judgment rendered, recorded
-with who and why. Distinct from resolving a review thread or a merge conflict -
+with who and why. Distinct from resolving a review thread or a merge conflict:
 a disposition answers a request; it does not merge anything.
 
 ### Job
@@ -368,7 +368,7 @@ What a spawning tool said about itself in the environment: `TRACEPARENT` (the
 W3C trace and the parent span this process runs under) and the
 `magus.spawner` baggage member (a label for whoever spawned it). magus records
 each verbatim beside the invocation's own minted span id, and no verdict reads
-any of them - the ancestry is a relation between recorded invocations, the way
+any of them; the ancestry is a relation between recorded invocations, the way
 a process tree is a relation between pids.
 
 ### Advisor
@@ -386,7 +386,7 @@ console's UI, so they are defined here rather than left to be inferred from it.
 
 The browser app that reads a magus workspace: a tabbed, tiling page hosting the
 log viewer, graph explorer, dashboard, and activity trail. It is a separate
-static app, not something the server serves - the server exposes a loopback API
+static app, not something the server serves; the server exposes a loopback API
 it calls: read-only views plus one bearer-gated job-control service for
 maintenance jobs. See [reference/console.md](reference/console.md).
 
@@ -395,12 +395,12 @@ maintenance jobs. See [reference/console.md](reference/console.md).
 One of the console's applications (Runs, Log Viewer, Graph Explorer, Dashboard,
 Activity Trail, Settings). "App" rather than "page" because one is never a
 document you navigate to: it is mounted into a tab, or into a pane beside
-another one. Each is single-instance - opening one you already have focuses it
+another one. Each is single-instance: opening one you already have focuses it
 instead of duplicating it.
 
 The glossary term is two words on purpose. As a bare "App" the auto-linker
-matched every unrelated "app" in the docs - a ChatGPT desktop app, a Postgres
-app - and pointed each at this definition. See
+matched every unrelated "app" in the docs (a ChatGPT desktop app, a Postgres
+app) and pointed each at this definition. See
 [reference/console.md](reference/console.md).
 
 ### Pane
@@ -412,7 +412,7 @@ with no split is a single pane. Drag the divider to re-weight the split. See
 
 ### Chord
 
-A key combination bound to a console command, written `mod+k` - where `mod` is
+A key combination bound to a console command, written `mod+k`, where `mod` is
 Cmd on macOS and Ctrl elsewhere, so one binding fits both. Every chord is
 rebindable (Settings > Keybindings), and a command remains reachable from the
 command bar whether or not it has one. See [reference/console.md](reference/console.md).
@@ -420,7 +420,7 @@ command bar whether or not it has one. See [reference/console.md](reference/cons
 ### Command bar
 
 The console's runner: one searchable list of every command and its chord,
-opened with `mod+k`. It is the discoverable route to any action - the menus and
+opened with `mod+k`. It is the discoverable route to any action: the menus and
 chords dispatch the same commands it does. See [reference/console.md](reference/console.md).
 
 ### Live link
@@ -430,15 +430,15 @@ from its own loopback origin, so the link is that origin plus the app path and
 a bearer token in the fragment (`http://127.0.0.1:7391/console/graph/#token=...`).
 The server prints it; the console consumes the token, stores it, and strips it from
 the URL, so the secret never lingers in history or a copied link. The origin must be
-literal loopback - `localhost` and hostnames are rejected before any request.
+literal loopback: `localhost` and hostnames are rejected before any request.
 Without one, an app
 reads only what rides in the link itself. See [reference/console.md](reference/console.md).
 
 ## See also
 
-- [Conventions](conventions.md) - how to read the placeholders,
+- [Conventions](conventions.md): how to read the placeholders,
   shell commands, and admonitions used across these pages.
-- [Targets](concepts/targets.md) - the fuller Target-struct glossary (Path, Name, Files)
+- [Targets](concepts/targets.md): the fuller Target-struct glossary (Path, Name, Files)
   for magusfile authors.
   </content>
 

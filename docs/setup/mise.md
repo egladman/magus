@@ -70,19 +70,19 @@ mise use -g go:github.com/egladman/magus/cmd/magus@latest
 ```
 
 `go.mod` requires `github.com/egladman/magus/libs/diagnostics` and
-`.../libs/gopherbuzz` - nested modules with their own `go.mod` - at `v0.0.0`,
+`.../libs/gopherbuzz` (nested modules with their own `go.mod`) at `v0.0.0`,
 resolved only through this repo's own LOCAL `replace` directives; neither nested
 module has ever had a tagged release. `go install pkg@version` (what the `go`
 backend runs under the hood) refuses outright to build any module whose `go.mod`
 contains a `replace` directive, local or not, unless that module is the main
-module of the build - so the install dies on the replace directives themselves,
+module of the build, so the install dies on the replace directives themselves,
 before dependency resolution or compilation ever starts. There is no flag that
 gets around this from the consuming side; it is fixed only by the nested modules
 getting real tags, at which point the `require` lines above would point at a real
 version and the `replace` directives could be dropped for a downstream install.
 
 Even if that were fixed, `go install` still cannot pass the `-ldflags` that stamp
-the version, commit, and build date - a go-backend install would present itself
+the version, commit, and build date; a go-backend install would present itself
 to magus as `unknown (unknown) built unknown`, the dev-build sentinel magus keys
 on internally to fingerprint an unstamped build, rather than the release it came
 from.

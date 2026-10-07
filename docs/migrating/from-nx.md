@@ -7,8 +7,8 @@ tags: [nx, migration, monorepo, terminology, comparison, porting]
 # Coming from Nx
 
 This page is for a team that already knows [Nx](https://nx.dev) and wants to
-map that mental model onto magus. Nx and magus solve the same core problem -
-a task graph, an affected set, and a content-addressed cache for a monorepo -
+map that mental model onto magus. Nx and magus solve the same core problem
+(a task graph, an affected set, and a content-addressed cache for a monorepo)
 with different philosophies: **Nx infers**, reading `package.json`/`project.json`
 and plugin conventions to build its graph; **magus declares**, reading exactly
 what a magusfile says and nothing it guesses. Nothing below is written to make
@@ -21,14 +21,14 @@ plainly, and vice versa.
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | workspace (`nx.json`)                         | workspace (`magus.yaml`)                                                                                                                                                            |
 | project (`project.json` / `package.json`)     | project (a directory whose `magusfile.buzz` registers it)                                                                                                                           |
-| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom - see [targets.md](../concepts/targets.md#the-target-name))                                           |
+| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom; see [targets.md](../concepts/targets.md#the-target-name))                                            |
 | executor / plugin                             | spell op (a [spell](../concepts/spells.md) is a library of tool-native ops)                                                                                                         |
 | `nx:run-commands`                             | `proc\exec(...)` in a target body                                                                                                                                                   |
-| `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering - see [dependencies.md](../concepts/dependencies.md))                   |
+| `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering; see [dependencies.md](../concepts/dependencies.md))                    |
 | `implicitDependencies`                        | `depends_on` in `magus\project`                                                                                                                                                     |
 | `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](../concepts/workspace.md#magusproject-layering-policy)                                                                    |
 | `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
-| `targetDefaults[t].cache: true`               | nothing - caching is already on; see [Caching is on by default](#caching-is-on-by-default-there-is-nothing-to-opt-into)                                                             |
+| `targetDefaults[t].cache: true`               | nothing: caching is already on; see [Caching is on by default](#caching-is-on-by-default-there-is-nothing-to-opt-into)                                                              |
 | `targetDefaults[t].cache: false`              | the `skip_cache` target policy, but only when replay would be _wrong_ (see [cache.md](../concepts/cache.md#opting-out-and-busting))                                                 |
 | `--skip-nx-cache`                             | `--no-cache` (one invocation; still snapshots afterward)                                                                                                                            |
 | `nx affected`                                 | `magus affected`                                                                                                                                                                    |
@@ -47,7 +47,7 @@ are calls you can trace by reading top to bottom.
 
 **Explicit declarations, not plugin inference.** Nx plugins read your
 `package.json`/config files and infer targets, inputs, and dependencies for
-you - powerful, but the inference is only as good as the plugin's
+you, which is powerful, but the inference is only as good as the plugin's
 understanding of your setup. magus caches exactly what you declare: a spell's
 `needs` and a project's `depends_on` are the whole story, and under-declaring
 an input is the one way to get a stale cache hit (see
@@ -68,7 +68,7 @@ The mirror-image trap matters more. `cache: false` in Nx is an ordinary
 performance or correctness dial people reach for freely, and its nearest-looking
 neighbor here is the `skip_cache` target policy. They are not equivalents.
 `skip_cache` is a claim that _replaying this target would produce a wrong
-result_ - it signs a fresh artifact, records a screen capture, mutates
+result_: it signs a fresh artifact, records a screen capture, mutates
 `go.mod`, or never returns. Reaching for it because a target "should feel fresh"
 disables replay permanently, for every user, on every machine.
 
@@ -83,7 +83,7 @@ full set of controls and their scopes.
 whatever string a plugin or `project.json` names them. magus has six
 canonical names (`build`, `test`, `lint`, `format`, `clean`, `generate`)
 plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
-for adding a seventh - custom names are allowed, but the vocabulary is
+for adding a seventh; custom names are allowed, but the vocabulary is
 deliberately small so `magus run lint` means the same thing in every project.
 
 **Read-only by default, not mutate-by-default.** Every magus run is read-only
@@ -105,7 +105,7 @@ Said plainly, no hedging:
 - A large plugin ecosystem and community, covering most popular frameworks
   out of the box.
 - An extensible generator framework (`nx generate`, local generators) for
-  scaffolding new projects and files with custom, pluggable templates - magus
+  scaffolding new projects and files with custom, pluggable templates; magus
   has only the two fixed scaffolds above, not a generator system.
 - First-party editor extensions (Nx Console) with rich UI for running tasks
   and visualizing the graph.
@@ -155,7 +155,7 @@ with declared inputs and outputs:
 }
 ```
 
-The equivalent magusfile, in the same project directory - the upstream
+The equivalent magusfile, in the same project directory: the upstream
 dependency is declared once, at the target that needs it, via a project
 import (see [Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
 
@@ -185,14 +185,14 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 ```
 
 `typescript["tsc-build"]`'s `needs`/`provides` globs and `typescript["eslint"]`'s
-claimed files are already declared by the spell - see the
+claimed files are already declared by the spell; see the
 [`typescript` spell reference](../concepts/spells/typescript.md)
 for the full op list, and [Getting started](../guides/getting-started.md) for a
 from-scratch walkthrough.
 
 ## See also
 
-- [Nx integration](../guides/integrations/nx.md): the other direction, and **experimental** - keep the Nx workspace as it is and let magus adopt its project set through a workspace provider. It ships in no release and is set up by hand.
+- [Nx integration](../guides/integrations/nx.md): the other direction, and **experimental**. Keep the Nx workspace as it is and let magus adopt its project set through a workspace provider. It ships in no release and is set up by hand.
 - [Getting started](../guides/getting-started.md): install to first `ci` pipeline, magus-native.
 - [Dependencies](../concepts/dependencies.md): the `magus\needs` / `depends_on` model this page's `dependsOn` row maps to.
 - [Remote caching](../concepts/cache/remote.md): the signed trust model behind the Nx Cloud comparison row.

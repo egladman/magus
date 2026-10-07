@@ -1,6 +1,6 @@
 ---
 title: Scope
-description: The claim magus is built on - that a correct incremental build already requires a precise model of your repo, and everything else is a read of it. Includes the test for what belongs, the boundaries, and where the claim is strained.
+description: The claim magus is built on: that a correct incremental build already requires a precise model of your repo, and everything else is a read of it. Includes the test for what belongs, the boundaries, and where the claim is strained.
 tags:
   [scope, boundaries, design, philosophy, prior art, nx, dagger, bazel]
 ---
@@ -158,8 +158,8 @@ and it removes an entire category of support burden.
 image fixes what is installed. Inside it, a step can still reach the network,
 read the clock, resolve a floating tag, or depend on filesystem ordering.
 Nothing fails a build there because a step read a file it never declared. That
-is what Bazel's sandbox buys - the undeclared file simply is not there, when the
-sandbox is in use - and containerizing does not supply it. The certainty a
+is what Bazel's sandbox buys (the undeclared file simply is not there, when the
+sandbox is in use), and containerizing does not supply it. The certainty a
 container produces is partly a feeling, and the feeling is
 what makes the runtime dependency seem cheap.
 
@@ -169,7 +169,7 @@ a container runtime, it cannot be used to install or check that runtime; it is
 unavailable on a locked-down laptop, a rootless runner, or an air-gapped
 builder; and when the server is not up, the failure arrives oblique, far from
 the cause, with nowhere sensible to attach an error explaining it. That is the
-same shape as the rule about package managers above - a tool that arrives
+same shape as the rule about package managers above: a tool that arrives
 through the thing it is meant to orchestrate has put itself downstream of it.
 
 So magus pursues determinism without the runtime, through mechanisms that need
@@ -193,8 +193,8 @@ you compare the two.
 
 One thing this page must not imply, because the wording invites it: **magus has
 no opt-in container isolation, and the `container` charm is not it.** In this
-repo `magus run build:container` selects a different _artifact_ - it builds and
-signs an image instead of a host binary - and the build itself still runs on the
+repo `magus run build:container` selects a different _artifact_: it builds and
+signs an image instead of a host binary, and the build itself still runs on the
 host, unconfined. That is container-grade packaging, not container-grade
 isolation. Reading the charm as "the Dagger guarantee, available per run" is a
 misreading this section previously encouraged.
@@ -208,7 +208,7 @@ what ran falls outside what you declared.
 ## The knobs
 
 The test above governs verbs. Options need their own, because they are the other
-way a tool loses its shape, and the cheaper one - nobody blocks a pull request
+way a tool loses its shape, and the cheaper one: nobody blocks a pull request
 over one more setting.
 
 An option is not additive. Each independent switch doubles the number of states
@@ -227,8 +227,8 @@ Each of those removes states rather than adding them.
 
 The honest numbers, because this is the section where a claim like that gets
 tested. `magus.yaml` accepts about a hundred keys, container and leaf together,
-and magus binds 45 of them to command-line flags. Five more globals - `-o`,
-`--tee`, `-v`, `--quiet`, `--silent` - are display switches that answer to no
+and magus binds 45 of them to command-line flags. Five more globals (`-o`,
+`--tee`, `-v`, `--quiet`, `--silent`) are display switches that answer to no
 config key at all, so 50 flags stand in front of any subcommand's own. That is
 not a small surface, and calling it zero configuration would be a lie.
 
@@ -245,7 +245,7 @@ knowledge: { notes: { shared: notes }, vcs: { enabled: true } }
 ```
 
 Four of those five are facts about this repository that no default could
-supply - a trust key, an environment passthrough, a version floor, a notes
+supply: a trust key, an environment passthrough, a version floor, a notes
 directory. Only `default_charms` is a preference. Every other key exists for a
 workspace whose situation we did not anticipate, and the measure of whether that
 is discipline or sprawl is whether we reach for them ourselves.
@@ -257,8 +257,8 @@ is subtly different and nothing says so", that is a trap with a default.
 Where this is strained: an option nobody can find is worse than one that does not
 exist, because the escape hatch is real and the person who needs it is told it is
 not. This section used to name `cache.include.os.enabled` and
-`cache.include.arch.enabled` - the switches deciding whether host OS and
-architecture key every cache entry - as that option, absent from the one page a
+`cache.include.arch.enabled` (the switches deciding whether host OS and
+architecture key every cache entry) as that option, absent from the one page a
 reader would consult. They are documented now.
 [The cache-key reference](concepts/cache.md) carries both, says they default to
 off, and says why: the manifest records the platform an entry was built on and
@@ -299,7 +299,7 @@ those surfaces, the pasted block included:
 magus claims that none of it gates a build: delete every one and `magus run
 build` still works, delete Dagger's bindings and nothing compiles. That
 distinction is thinner than it sounds. Nothing in CI observes the installed
-skills here either - they are gitignored renderings of the binary, invisible to
+skills here either; they are gitignored renderings of the binary, invisible to
 the drift gate, and only `magus doctor`'s agent-skills check reports them stale,
 per workspace. Leaning on build-versus-CI is the move this page exists to catch.
 
@@ -308,7 +308,7 @@ at `spells/<name>/spell.buzz` is a real spell: the contract stubbed, each
 function documented inline, a runnable test block. It satisfies the letter of
 the rule above and is the closest thing in the tool to breaking it. Written
 once, hand-edited from there, never regenerated and never compared against
-anything, so nothing about a build depends on magus having produced it - which
+anything, so nothing about a build depends on magus having produced it, which
 is the whole distinction, and it rests on the word generated.
 
 **The server runs long, and two surfaces do not work without it.** It ships
@@ -317,7 +317,7 @@ sharpest version of this entry has since been retired: `magus doctor` used to
 probe bridge reachability and FAIL when no server was running, which made doctor
 red on every machine in its ordinary state. It reports the bridge as skipped
 now, with the server check immediately above it already saying the server is
-down. What remains is real - the console and the MCP server both need one
+down. What remains is real: the console and the MCP server both need one
 running. "No second toolchain" holds for installation and holds less firmly at
 runtime.
 
@@ -385,8 +385,8 @@ separately once someone looked.
 Some of these projects shaped magus directly. The disagreements are specific.
 
 Mage came first, and the name says so. magus began as something compatible with
-it - magefiles in an adjacent project, exported functions as targets, build
-logic in the language you already write - and evolved from there keeping that
+it (magefiles in an adjacent project, exported functions as targets, build
+logic in the language you already write) and evolved from there keeping that
 shape whole. The divergence is the engine underneath. A magefile runs; a
 magusfile is modeled, so the same declaration that dispatches a target also
 feeds a cache key and an affected set. And Mage arrives through the Go toolchain
@@ -398,12 +398,12 @@ Nx comes up here because of proximity: it is what this project's author has used
 most and most recently, so its edges are the memorable ones. Its project graph is
 the closest prior art for affected sets. The disagreement is surface area. `nx
 release` and `nx generate` do read that graph, but each arrives with its own
-model stacked on top - release groups and version plans for one, a virtual
-filesystem and schema-driven generators for the other - and the CLI registers
+model stacked on top (release groups and version plans for one, a virtual
+filesystem and schema-driven generators for the other), and the CLI registers
 over fifty commands, with forty-odd first-party plugins beside them. Remote
 caching, the capability many teams adopt a monorepo tool for, routes through Nx
-Cloud, a product the same company sells. And every install channel Nx documents -
-npm, Homebrew, apt - puts a Node runtime underneath the tool managing your Node
+Cloud, a product the same company sells. And every install channel Nx documents
+(npm, Homebrew, apt) puts a Node runtime underneath the tool managing your Node
 builds, which is the concrete case behind the rule above.
 
 Dagger's SDK design is excellent and influenced magus's API. It costs a required
@@ -420,8 +420,8 @@ The agent-harness world drew the line at the opposite extreme, and the contrast
 is worth stating because magus keeps being read as a member of that category.
 deepseek-harness's published decision notes sharpened the lease surface's
 checkpoint and release semantics, which is why the architectural disagreement
-deserves stating precisely. It makes every module a plugin - the model adapter,
-the tool registry, the session log, the agent loop itself - so there is no
+deserves stating precisely. It makes every module a plugin (the model adapter,
+the tool registry, the session log, the agent loop itself), so there is no
 privileged core to patch: what remains is a small kernel, Cordis, owning the
 context, the service registry, and plugin lifecycle, with a few services still
 marked core rather than swappable. For a harness that is a defensible bet: a harness is an orchestration shell,
@@ -432,7 +432,7 @@ matches source, `ci` stripping the write charms whether or not anyone remembered
 A verdict a plugin can rewrite proves nothing. So the engine, the cache, the
 graph schema, and the guard's evaluation are sealed on purpose, and every
 extension point magus
-does have - spells, the magusfile, charms, skills, config - is a DECLARATION the
+does have (spells, the magusfile, charms, skills, config) is a DECLARATION the
 sealed engine evaluates, auditable in a diff the way code loaded at startup never
 is. The test for a proposed extension seam: it may change what magus does, never
 what a verdict means. And one seam is absent deliberately rather than sealed:
@@ -492,7 +492,7 @@ Cupcake has no build graph to read.
 The engine carries complexity the constraint camp avoids by limiting their
 configuration language. Starlark forbids unbounded loops so evaluation stays
 deterministic and hermetic; Dhall goes further and guarantees termination. Nix
-made a different trade - its language is Turing-complete, and the containment is
+made a different trade: its language is Turing-complete, and the containment is
 purity and a sandboxed store. The constraint camp's bet is that a language which
 cannot express a footgun never fires one.
 
@@ -500,10 +500,10 @@ magus keeps the full language and bets on legibility instead. The documentation
 was written before the announcement, not after it, and ships from day one. An
 error magus raises is written to be read once and acted on: it carries a
 diagnostic code, the code has a page, and the page says what tripped and what to
-do next - so when the expressive language does something surprising, the way out
+do next, so when the expressive language does something surprising, the way out
 is in front of you rather than in a maintainer's head. The sandbox and the
-content-addressed cache sit under that as the floor - what is enforced stays
-enforced - but they are not the thesis. The bet is that legible failures remove
+content-addressed cache sit under that as the floor (what is enforced stays
+enforced), but they are not the thesis. The bet is that legible failures remove
 footguns without shrinking the language.
 
 Nobody has settled that bet. A large enough body of magusfiles rots the way any
