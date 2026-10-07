@@ -1,6 +1,6 @@
-### Changed
+### Added
 
-- **Comment and name prose rules run from the symbol index, in every language it
-  covers.** They replace the unreleased Vale spell and the doc-comment checks of the
-  `coldread` analyzer; its in-body checks (`restate`, `steps`, `commentedcode`) are
-  gone with it.
+- **`magus\symbols()` returns every symbol's doc comment as data.** Each record
+  carries the node, source, language, name, kind, owner and the whole comment, for
+  every language whose symbol index is declared, beside each index's freshness. A
+  magusfile rule reads it and decides what the text must say; magus judges none of it.

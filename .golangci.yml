@@ -162,6 +162,18 @@ linters:
             - pkg: github.com/egladman/magus/
               desc: types may depend on spells, libs/diagnostics, internal/json and types/enum, nothing else in magus
 
+        # libs/conventions and libs/testlayout are magus-repo policy, never shipped.
+        root-imports-no-repo-policy:
+          list-mode: lax
+          files:
+            - $all
+            - "!$test"
+          deny:
+            - pkg: github.com/egladman/magus/libs/conventions
+              desc: the conventions are magus-repo policy and never ship in the root module
+            - pkg: github.com/egladman/magus/libs/testlayout
+              desc: the conventions are magus-repo policy and never ship in the root module
+
 
     custom:
       testlayout:

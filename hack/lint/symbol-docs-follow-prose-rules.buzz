@@ -2,6 +2,8 @@ namespace symbolprose;
 
 import "assert";
 import "std";
+import "proc";
+import "encoding/json";
 import "magus";
 import "magus/lint";
 
@@ -22,26 +24,48 @@ final THIS = "hack/lint/symbol-docs-follow-prose-rules.buzz";
 
 // reads keys lint-rules on every source the indexes cover: a tree glob stops at a nested
 // project, so each project holding Go or TypeScript is named. proto's Go is all generated.
+// The prose rules are the Go of libs/conventions, so its module files key the rule too.
 export fun reads() > [str] {
-    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+    return ["**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
+        "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
         "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }
 
-// check fails every prose finding that SANCTIONED does not name, read from the live symbol
-// indexes by magus\prose. A missing or stale index, and a language that judged nothing, is a
-// finding, never a pass: a rule reading nothing finds nothing.
+// check fails every prose finding that SANCTIONED does not name. magus\symbols supplies the
+// docs and the indexes; the prose rules are this repository's policy, so the judging runs in
+// libs/conventions/cmd/judge-docs. A missing or stale index, a language that judged nothing
+// and a runner that fails are findings, never a pass: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
-    return judge(magus\prose(), sanctioned: SANCTIONED);
+    final data: {str: any} = magus\symbols();
+    final symbols: [any] = data["symbols"] ?? [<any>];
+    final indexes: [any] = data["indexes"] ?? [<any>];
+    final run = proc\exec("go", args: ["run", "./cmd/judge-docs"], dir: "libs/conventions",
+        opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
+    if (run.code != 0) {
+        return [Finding{ path = "libs/conventions/cmd/judge-docs",
+            message = "the prose runner exited {run.code}, so no doc was judged: " + run.stderr.trim(),
+            fix = "Run `go run ./cmd/judge-docs` in libs/conventions and read why it stopped." }];
+    }
+    final findings: [any] = json\parse(run.stdout);
+    return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
 }
 
-// judge is check over a magus\prose report.
-export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any {
+// judgedCounts is how many symbols each language's index gave the runner.
+fun judgedCounts(symbols: [any]) > {str: int} {
+    final counts = mut {<str: int>};
+    foreach (symbol in symbols) {
+        final lang: str = symbol["language"] ?? "";
+        counts[lang] = (counts[lang] ?? 0) + 1;
+    }
+    return counts;
+}
+
+// judge is check over the runner's findings, the symbols each language judged and the
+// symbol indexes. It reads nothing else, so its tests need no workspace.
+export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {str: str}) > [Finding] !> any {
     final found = mut [<Finding>];
-    final indexes: [any] = report["indexes"] ?? [<any>];
-    final judged: {str: any} = report["judged"] ?? {<str: any>};
-    final rows: [any] = report["findings"] ?? [<any>];
     foreach (lang in LANGUAGES) {
         var declared = false;
         foreach (idx in indexes) {
@@ -63,9 +87,9 @@ export fun judge(report: {str: any}, sanctioned: {str: str}) > [Finding] !> any 
         if (!declared) {
             found.append(Finding{ path = ".", message = "no {lang} symbol index is declared, so no {lang} doc was judged",
                 fix = "A spell binding {lang} declares its indexer; check `magus describe spell`." });
-        } else if (std\toInt(judged[lang] ?? 0) == 0) {
+        } else if ((judged[lang] ?? 0) == 0) {
             found.append(Finding{ path = ".", message = "no {lang} symbol was judged: silence, not a pass",
-                fix = "The indexer emitted no {lang} docs or names; read `magus\\prose()` before dropping the language." });
+                fix = "The indexer emitted no {lang} docs or names; read `magus\\symbols()` before dropping the language." });
         }
     }
     if (found.len() > 0) {
@@ -126,8 +150,8 @@ fun both() > [any] {
     return [fresh("go"), fresh("typescript")];
 }
 
-fun counts() > {str: any} {
-    return {"go": 12.0, "typescript": 7.0};
+fun counts() > {str: int} {
+    return {"go": 12, "typescript": 7};
 }
 
 fun finding(rule: str, node: str, source: str) > {str: any} {
@@ -135,13 +159,14 @@ fun finding(rule: str, node: str, source: str) > {str: any} {
         "message": "the doc opens with filler", "match": "simply"};
 }
 
-fun report(findings: [any]) > {str: any} {
-    return {"findings": findings, "judged": counts(), "indexes": both()};
+fun symbol(language: str) > {str: any} {
+    return {"node": "symbol:x/Run().", "source": "a.go:1", "language": language, "name": "Run",
+        "kind": "function", "owner": "", "doc": "Run runs."};
 }
 
 test "a finding is reported at its declaration with the rule and the match" {
-    final got = judge(report([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")]),
-        sanctioned: {<str: str>});
+    final got = judge([finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41")],
+        judged: counts(), indexes: both(), sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].path, want: "cmd/magus/run.go", message: "file");
     assert\equal(got[0].line, want: 41, message: "line");
@@ -150,33 +175,29 @@ test "a finding is reported at its declaration with the rule and the match" {
 
 test "a sanctioned finding is skipped and a sanction that no longer applies fails" {
     final f = finding("filler", node: "symbol:x/Run().", source: "cmd/magus/run.go:41");
-    final kept = judge(report([f]), sanctioned: {"symbol:x/Run().": "quotes a protocol phrase"});
+    final kept = judge([f], judged: counts(), indexes: both(), sanctioned: {"symbol:x/Run().": "quotes a protocol phrase"});
     assert\equal(kept.len(), want: 0, message: "sanctioned");
-    final stale = judge(report([<any>]), sanctioned: {"symbol:x/Run().": "quotes a protocol phrase"});
+    final stale = judge([<any>], judged: counts(), indexes: both(), sanctioned: {"symbol:x/Run().": "quotes a protocol phrase"});
     assert\equal(stale.len(), want: 1, message: "the list only shrinks");
     assert\equal(stale[0].path, want: THIS, message: "points at the list");
-    final bare = judge(report([f]), sanctioned: {"symbol:x/Run().": " "});
+    final bare = judge([f], judged: counts(), indexes: both(), sanctioned: {"symbol:x/Run().": " "});
     assert\equal(bare.len(), want: 1, message: "a sanction needs a reason");
 }
 
 test "a stale or missing index fails instead of passing on what it lacks" {
     final stale: {str: any} = {"project": {"path": "console"}, "language": "typescript", "freshness": "out-of-date"};
-    final got = judge({"findings": [<any>], "judged": counts(), "indexes": [fresh("go"), stale]},
-        sanctioned: {<str: str>});
+    final got = judge([<any>], judged: counts(), indexes: [fresh("go"), stale], sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "the stale index");
     assert\equal(got[0].path, want: "console", message: "names the project");
-    final none = judge({"findings": [<any>], "judged": counts(), "indexes": [fresh("go")]},
-        sanctioned: {<str: str>});
+    final none = judge([<any>], judged: counts(), indexes: [fresh("go")], sanctioned: {<str: str>});
     assert\equal(none.len(), want: 1, message: "no typescript index at all");
 }
 
 test "a language with no judged symbol is silence, not a pass" {
-    final got = judge({"findings": [<any>], "judged": {"go": 12.0}, "indexes": both()},
-        sanctioned: {<str: str>});
+    final got = judge([<any>], judged: {"go": 12}, indexes: both(), sanctioned: {<str: str>});
     assert\equal(got.len(), want: 1, message: "typescript judged nothing");
     assert\equal(got[0].message.indexOf("no typescript symbol was judged") != null, want: true, message: got[0].message);
-    final zero = judge({"findings": [<any>], "judged": {"go": 0.0, "typescript": 7.0}, "indexes": both()},
-        sanctioned: {<str: str>});
+    final zero = judge([<any>], judged: {"go": 0, "typescript": 7}, indexes: both(), sanctioned: {<str: str>});
     assert\equal(zero.len(), want: 1, message: "go judged zero");
 }
 
@@ -186,7 +207,14 @@ test "the history rule is ignored and every other rule is held" {
     foreach (rule in RULES) {
         rows.append(finding(rule, node: "symbol:x/" + rule + ".", source: "a/" + rule + ".go:1"));
     }
-    final got = judge(report(rows), sanctioned: {<str: str>});
+    final got = judge(rows, judged: counts(), indexes: both(), sanctioned: {<str: str>});
     assert\equal(got.len(), want: RULES.len(), message: "one per held rule, none for history");
     assert\equal(RULES.indexOf("history") == null, want: true, message: "history is not a held rule");
+}
+
+test "symbols are counted per language" {
+    final got = judgedCounts([symbol("go"), symbol("go"), symbol("typescript")]);
+    assert\equal(got["go"], want: 2, message: "go");
+    assert\equal(got["typescript"], want: 1, message: "typescript");
+    assert\equal(judgedCounts([<any>]).len(), want: 0, message: "nothing indexed, nothing counted");
 }
