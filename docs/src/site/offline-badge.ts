@@ -1,4 +1,4 @@
-// offline-badge.ts - shows "offline - everything on this page is local" on the
+// offline-badge.ts shows "offline: everything on this page is local" on the
 // graph and playground pages when navigator.onLine is false, clearing it on the
 // "online" event. Guards on its own #offline-badge element, so importing this
 // unconditionally from main.js (every page) is a no-op everywhere else - the

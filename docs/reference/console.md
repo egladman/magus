@@ -378,7 +378,7 @@ The strongest proof: data cannot leave a machine that has no connection.
    tab set the throttling dropdown from **No throttling** to **Offline**.
 3. Reload. The page comes back, served from your disk. Now load your
    confidential graph (drag the file in) and explore it fully. The page
-   shows an "offline - everything on this page is local" badge while
+   shows an "offline: everything on this page is local" badge while
    disconnected (`docs/src/site/offline-badge.ts`).
 
 ### Claim: we store nothing without asking
