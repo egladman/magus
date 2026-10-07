@@ -1518,12 +1518,11 @@ func atomicRunHolds(t *testing.T, data []byte) {
 	}
 	g := greenRun(run, got)
 	for i := range run[:g] {
-		v := got[run[i].ID]
-		require.Equal(t, types.DecisionMerge, v.Decision)
+		want := validated(run[i], base, "")
 		if i > 0 {
-			require.Equal(t, run[i-1].ID, v.After)
-			require.Equal(t, got[run[i-1].ID].CandidateCommit, v.Onto)
+			want.After, want.Onto = run[i-1].ID, got[run[i-1].ID].CandidateCommit
 		}
+		require.Equal(t, want, got[run[i].ID])
 	}
 	if g < len(run) {
 		v, ok := got[run[g].ID]

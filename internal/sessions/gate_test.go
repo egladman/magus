@@ -58,8 +58,7 @@ func TestGateNewestWins(t *testing.T) {
 	require.NoError(t, err)
 	rec, ok := LatestGate(fold, "b", "ci")
 	require.True(t, ok)
-	assert.Equal(t, OutcomeFail, rec.Outcome)
-	assert.Equal(t, "c2", rec.Commit)
+	assert.Equal(t, GateRecord{GateResult: fail, At: rec.At}, rec)
 }
 
 // TestLatestGateEmptyStore is the inert state: nothing recorded means no

@@ -90,8 +90,11 @@ func TestSnapshotJoinInflight(t *testing.T) {
 	require.NoError(t, WriteSnapshot(root, snapshotOf("main", 200)))
 	got, err = JoinInflight(t.Context(), root, list, job.Identity{Login: "ann"})
 	require.NoError(t, err)
-	assert.Equal(t, &magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3}, got.Fetched)
-	assert.Equal(t, []magustypes.InflightChange{{
-		ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: magustypes.AttentionQueue,
-	}}, got.Changes)
+	assert.Equal(t, magustypes.JobList{
+		Jobs:    list.Jobs,
+		Fetched: &magustypes.InflightFetch{Provider: "github", Host: "github.com", Base: "main", At: 200, ElapsedMS: 3},
+		Changes: []magustypes.InflightChange{{
+			ID: "7", Head: head("7"), Base: "main", Branch: "feat", Author: "ann", Intent: "squash", Mine: true, Attention: magustypes.AttentionQueue,
+		}},
+	}, got)
 }

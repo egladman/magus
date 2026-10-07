@@ -527,18 +527,18 @@ func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	}
 	events := waitTrailCount(t, trailDir, 1)
 	ev := events[0]
-	if ev.Kind != trail.KindTokenLifecycle {
-		t.Fatalf("event kind = %q, want %q", ev.Kind, trail.KindTokenLifecycle)
-	}
-	if ev.Outcome != trail.OutcomeOK {
-		t.Fatalf("event outcome = %q, want %q", ev.Outcome, trail.OutcomeOK)
-	}
-	if ev.UserAgent != ua {
-		t.Fatalf("event user_agent = %q, want %q", ev.UserAgent, ua)
-	}
 	if ev.Preview == "" {
 		t.Fatalf("event preview should carry the remote IP, got empty")
 	}
+	require.Equal(t, trail.Event{
+		Ts:        ev.Ts,
+		Kind:      trail.KindTokenLifecycle,
+		Origin:    ev.Origin,
+		Action:    "share.open",
+		Outcome:   trail.OutcomeOK,
+		UserAgent: ua,
+		Preview:   ev.Preview, // the remote IP, checked non-empty above
+	}, ev)
 
 	// Second request from the same device (same host) records nothing new: the dedupe
 	// decision is synchronous under the lock, so a duplicate never even spawns an append.

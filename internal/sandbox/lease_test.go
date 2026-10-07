@@ -66,7 +66,7 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()
 
-	assert.Equal(t, "fleet/w1", p.Lease)
+	assert.Equal(t, "fleet/w1", p.Lease) //nolint:fieldwise // Policy is a handle: a compiled ruleset, a temp dir and pointers to its own lease state, so no expected value can be built
 	assert.Equal(t, types.LeaseSourceMarker, p.LeaseFrom, "the narrowed policy carries where its lease came from")
 	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "b", "x.txt")))

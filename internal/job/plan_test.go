@@ -71,9 +71,9 @@ func TestJobListFlagsOverdueOrphansAndStaleJobs(t *testing.T) {
 	}
 
 	got := types.NewJobList(rows).Flag(now, 30*time.Minute)
-	assert.Equal(t, []string{"live/overdue"}, got.Overdue)
-	assert.Equal(t, []string{"root/orphan"}, got.Orphans)
-	assert.Equal(t, []string{"live/stale"}, got.Stale)
+	want := types.NewJobList(rows)
+	want.Overdue, want.Orphans, want.Stale = []string{"live/overdue"}, []string{"root/orphan"}, []string{"live/stale"}
+	assert.Equal(t, want, got)
 
 	unset := types.NewJobList(rows).Flag(now, 0)
 	assert.Empty(t, unset.Stale, "an unset stale_after flags nothing")
@@ -480,8 +480,9 @@ func TestApplyLetsAWorkerOnlyReleaseItsOwnPaths(t *testing.T) {
 
 	rows, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a.go"}, rows[0].WritePaths)
-	assert.Equal(t, "goal", rows[0].Criteria)
+	want := shrunk[0].Next.Clone()
+	want.WritePaths, want.Criteria = []string{"a.go"}, "goal"
+	assert.Equal(t, want, rows[0], "the refused writes left the shrunk row as it was")
 }
 
 func TestApplyDryRunWritesNothing(t *testing.T) {
@@ -549,6 +550,13 @@ func TestApplyCreatesANewJob(t *testing.T) {
 	got, err := Apply(t.Context(), s, []types.Declaration{rec}, config.Jobs{}, nil, func() string { return "rev-1" }, false)
 	require.NoError(t, err)
 	require.True(t, got[0].Created)
-	assert.Equal(t, types.StateDeclared, got[0].Next.State)
-	assert.Equal(t, "rev-1", got[0].Next.Checkpoint)
+	assert.Equal(t, stamped(types.Job{
+		ID:         "fresh",
+		Checkpoint: "rev-1",
+		WritePaths: []string{"internal/job/store.go"},
+		Check:      forkCheck(),
+		Validation: forkCheck().String(),
+		State:      types.StateDeclared,
+		WriteProof: got[0].Next.WriteProof, // what the fork could prove is the plan's, not this record's
+	}, got[0].Next), got[0].Next)
 }

@@ -71,7 +71,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"gen/fs.go"}, plan.Keep)
-	assert.Equal(t, []string{"gen/runtime.go"}, plan.Manual)
-	assert.Equal(t, map[string][]string{"generate": {"."}}, plan.Rebuild)
+	assert.Equal(t, Plan{
+		Keep:    []string{"gen/fs.go"},
+		Manual:  []string{"gen/runtime.go"},
+		Rebuild: map[string][]string{"generate": {"."}},
+	}, plan)
 }

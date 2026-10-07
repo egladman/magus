@@ -30,9 +30,13 @@ func TestPromptCacheResolvesEveryWindow(t *testing.T) {
 	clock := PromptCacheAt("s1", last, last.Add(6*time.Minute))
 
 	require.Len(t, clock.Providers, len(PromptCacheProviders))
-	assert.Equal(t, last.UnixMilli(), clock.LastMs)
 	assert.Equal(t, "6m", clock.SinceText())
-	assert.Equal(t, "s1", clock.Session, "the clock is a fact about the session it was computed from")
+	assert.Equal(t, PromptCacheClock{
+		Session:   "s1", // the clock is a fact about the session it was computed from
+		LastMs:    last.UnixMilli(),
+		SinceMs:   (6 * time.Minute).Milliseconds(),
+		Providers: clock.Providers, // asserted below
+	}, clock)
 
 	anthropic := clock.Providers[0]
 	require.Len(t, anthropic.Windows, 2)

@@ -36,20 +36,15 @@ func TestParseExtractsIdentity(t *testing.T) {
 
 func TestParseInlineFlagValues(t *testing.T) {
 	id := Parse(dockerRun("-e=POSTGRES_DB=api", "--publish=8080:5432", "postgres:16").Command)
-	assert.Equal(t, "postgres", id.Image)
-	assert.Equal(t, "16", id.Tag)
-	assert.Equal(t, []string{"POSTGRES_DB=api"}, id.Env)
 	// Container port is the last segment of the publish spec (host binding ignored).
-	assert.Equal(t, []string{"5432"}, id.Ports)
+	assert.Equal(t, Identity{Image: "postgres", Tag: "16", Ports: []string{"5432"}, Env: []string{"POSTGRES_DB=api"}}, id)
 }
 
 func TestParseUnknownValueFlagDoesNotEatImage(t *testing.T) {
 	// Regression: an unknown value-taking flag (--memory) must consume its value, not
 	// let "512m" be mistaken for the image and drop the real one.
 	id := Parse(dockerRun("--memory", "512m", "--cpus", "2", "-e", "POSTGRES_DB=api", "postgres:15").Command)
-	assert.Equal(t, "postgres", id.Image)
-	assert.Equal(t, "15", id.Tag)
-	assert.Equal(t, []string{"POSTGRES_DB=api"}, id.Env)
+	assert.Equal(t, Identity{Image: "postgres", Tag: "15", Env: []string{"POSTGRES_DB=api"}}, id)
 }
 
 func TestParseNonContainer(t *testing.T) {

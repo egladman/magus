@@ -54,10 +54,11 @@ func TestSymbolAnchorMatchesTheChangedSymbolsNodeID(t *testing.T) {
 		nil, []string{cachePutNode})
 
 	require.Len(t, got, 1)
-	assert.Equal(t, MatchSymbol, got[0].Match)
-	assert.Equal(t, cachePutNode, got[0].Matched,
-		"a renderer has to say WHICH changed thing pulled the note in")
-	assert.Equal(t, cachePut, got[0].Target, "the anchor still reads as the author wrote it")
+	assert.Equal(t, AnchorHit{
+		Note: "put-is-not-idempotent", Title: "put-is-not-idempotent title", Pos: 0,
+		Kind: AnchorSymbol, Target: cachePut,
+		Matched: cachePutNode, Match: MatchSymbol,
+	}, got[0], "a renderer has to say WHICH changed thing pulled the note in, and the anchor still reads as the author wrote it")
 }
 
 // TestABareSymbolKeyIsNotANodeID is the regression this join was missing. A diff names its
@@ -90,9 +91,11 @@ func TestNeighborIsReportedAsTheWeakerMatch(t *testing.T) {
 		[]string{cacheFile}, []string{cachePutNode})
 
 	require.Len(t, got, 1)
-	assert.Equal(t, MatchNeighbor, got[0].Match)
-	assert.Equal(t, cacheFile, got[0].Matched, "the FILE is what matched, not the symbol")
-	assert.Equal(t, cacheGet, got[0].Target, "the anchor still names the symbol it is about")
+	assert.Equal(t, AnchorHit{
+		Note: "get-is-hot", Title: "get-is-hot title", Pos: 0,
+		Kind: AnchorSymbol, Target: cacheGet,
+		Matched: cacheFile, Match: MatchNeighbor,
+	}, got[0], "the FILE is what matched, not the symbol, and the anchor still names the symbol it is about")
 }
 
 // TestSymbolWithNoKnownFileHasNoWeakMatch: File is supplied by whoever has the graph, and this

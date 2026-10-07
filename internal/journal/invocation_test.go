@@ -35,7 +35,10 @@ func TestInvocationFromEventsNoFinished(t *testing.T) {
 		{Ts: 500, Kind: KindStarted, Command: &Command{Arguments: []string{"run"}}},
 		{Ts: 560, Kind: KindOutput, Text: "line"},
 	})
-	assert.Equal(t, int64(500), inv.StartedMs)
-	assert.Equal(t, int64(560), inv.FinishedMs, "no finished event: fall back to last event ts")
-	assert.Empty(t, inv.Status)
+	assert.Equal(t, Invocation{
+		ID:         "inv1",
+		StartedMs:  500,
+		FinishedMs: 560, // no finished event: fall back to last event ts
+		Command:    Command{Arguments: []string{"run"}},
+	}, inv, "an unfinished stream has no status")
 }

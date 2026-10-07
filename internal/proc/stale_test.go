@@ -49,8 +49,7 @@ func TestStalePoolsIn(t *testing.T) {
 	got, err := StalePoolsIn(ctx, dir, "current-build")
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, addr, got[0].Addr)
-	assert.Equal(t, "stale-build", got[0].Version)
+	assert.Equal(t, StalePool{Addr: addr, ParentPID: got[0].ParentPID, Version: "stale-build"}, got[0])
 
 	same, err := StalePoolsIn(ctx, dir, "stale-build")
 	require.NoError(t, err)

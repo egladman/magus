@@ -17,11 +17,10 @@ func TestRecorder_IntervalLifecycle(t *testing.T) {
 	snap := r.snapshot()
 	require.Len(t, snap.intervals, 1)
 	iv := snap.intervals[0]
-	assert.Equal(t, "api", iv.Project)
-	assert.Equal(t, "build", iv.Target)
 	assert.False(t, iv.StartedAt.IsZero(), "StartedAt set by startInterval")
 	assert.False(t, iv.EndedAt.IsZero(), "EndedAt set by endInterval")
 	assert.False(t, iv.EndedAt.Before(iv.StartedAt), "EndedAt should not precede StartedAt")
+	assert.Equal(t, interval{Project: "api", Target: "build", StartedAt: iv.StartedAt, EndedAt: iv.EndedAt}, iv)
 }
 
 func TestRecorder_SnapshotSealsUnendedIntervals(t *testing.T) {

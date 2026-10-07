@@ -108,6 +108,13 @@ func recorded(t *testing.T, dir *VerdictDir) map[string]types.Verdict {
 	return out
 }
 
+// recordedAs is want with what every recorded verdict carries beyond the decision: the
+// plan's base commit, the record's schema stamp and the gate's measured wall time.
+func recordedAs(want, got types.Verdict) types.Verdict {
+	want.BaseCommit, want.Schema, want.DurationMS = base, got.Schema, got.DurationMS
+	return want
+}
+
 func TestNewValidatorRefusesAMissingPart(t *testing.T) {
 	d := newDoubles(t)
 	dir := &VerdictDir{Path: t.TempDir()}
@@ -141,17 +148,14 @@ func TestSpeculativeCandidatesStackOntoEachOther(t *testing.T) {
 	c3 := candidateOf(c2, three.Head)
 	got := recorded(t, dir)
 	for id, want := range map[string]types.Verdict{
-		"1": {After: "", Onto: base, CandidateCommit: c1, Depth: 1},
-		"2": {After: "1", Onto: c1, CandidateCommit: c2, Depth: 2},
-		"3": {After: "2", Onto: c2, CandidateCommit: c3, Depth: 3},
+		"1": {Change: one, After: "", Onto: base, CandidateCommit: c1, Depth: 1},
+		"2": {Change: two, After: "1", Onto: c1, CandidateCommit: c2, Depth: 2},
+		"3": {Change: three, After: "2", Onto: c2, CandidateCommit: c3, Depth: 3},
 	} {
 		v := got[id]
-		assert.Equal(t, types.DecisionMerge, v.Decision, id)
-		assert.Equal(t, base, v.BaseCommit, id)
-		assert.Equal(t, want.After, v.After, id)
-		assert.Equal(t, want.Onto, v.Onto, id)
-		assert.Equal(t, want.CandidateCommit, v.CandidateCommit, id)
-		assert.Equal(t, want.Depth, v.Depth, id)
+		want.Decision, want.BaseCommit, want.Method = types.DecisionMerge, base, want.Change.Method
+		want.Schema, want.DurationMS = v.Schema, v.DurationMS // stamped on record and measured by the gate
+		assert.Equal(t, want, v, id)
 	}
 	assert.ElementsMatch(t, []string{"1@" + c1, "2@" + c2, "3@" + c3}, g.runs, "a green candidate costs no gate of its base")
 	assert.Equal(t, []string{"a"}, g.unitsOf("3@"+c3), "a gate runs its change's affected set")
@@ -220,14 +224,15 @@ func TestAVerdictNamesWhatAutoResolutionSettled(t *testing.T) {
 			assert.Equal(t, 1, g.count("1"), "a resolution never skips the gate")
 			assert.Contains(t, events.String(), `"kind":"resolved","change":"1","reason":`+jsonString(t, chNote)+`,"commit":"`+cand+`"`)
 			got := recorded(t, dir)["1"]
+			want := types.Verdict{Change: one, Onto: base, CandidateCommit: cand, Method: one.Method, Depth: 1}
 			if !red {
-				assert.Equal(t, types.DecisionMerge, got.Decision)
-				assert.Equal(t, chNote, got.Reason)
-				return
+				want.Decision, want.Reason = types.DecisionMerge, chNote
+			} else {
+				want.Decision, want.Code, want.Reason = types.DecisionKick, types.CodeKickRed, "the gate exited 1"
+				want.Report = "The merge queue built this change at `" + short(one.Head) + "` onto `main` at `" + short(base) + "`, and the gate exited 1.\n" +
+					"\nBuilding the candidate " + chNote + "; the gate ran on that merge.\n"
 			}
-			assert.Equal(t, types.CodeKickRed, got.Code)
-			assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and the gate exited 1.\n"+
-				"\nBuilding the candidate "+chNote+"; the gate ran on that merge.\n", got.Report)
+			assert.Equal(t, recordedAs(want, got), got)
 		})
 	}
 }
@@ -249,19 +254,22 @@ func TestARedCandidateIsKickedAndWhatWasBuiltOnItIsRebuilt(t *testing.T) {
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.DecisionMerge, got["1"].Decision)
-	assert.Equal(t, types.DecisionKick, got["2"].Decision)
-	assert.Equal(t, types.CodeKickRed, got["2"].Code)
-	assert.Equal(t, "the gate exited 1", got["2"].Reason)
-	assert.Equal(t, "The merge queue built this change at `"+short(two.Head)+"` onto the candidate of #1 (`"+short(c1)+"`), and the gate exited 1.\n",
-		got["2"].Report, "what failed on which commits, and no hook line")
+	// What failed on which commits, and no hook line.
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: two, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, two.Head), Method: two.Method, Depth: 2,
+		Decision: types.DecisionKick, Code: types.CodeKickRed, Reason: "the gate exited 1",
+		Report: "The merge queue built this change at `" + short(two.Head) + "` onto the candidate of #1 (`" + short(c1) + "`), and the gate exited 1.\n",
+		Gate:   `magus run ci`,
+	}, got["2"]), got["2"])
 	for id, vd := range got {
 		assert.Equal(t, `magus run ci`, vd.Gate, "every verdict records the gate it ran: %s", id)
 		assert.Empty(t, vd.Regenerate, id)
 	}
-	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
-	assert.Equal(t, "1", got["3"].After, "rebuilt onto what validated")
-	assert.Equal(t, c1, got["3"].Onto)
-	assert.Equal(t, candidateOf(c1, three.Head), got["3"].CandidateCommit)
+	// Rebuilt onto what validated.
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: three, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
+		Decision: types.DecisionMerge, Gate: `magus run ci`,
+	}, got["3"]), got["3"])
 }
 
 // What is stacked on a red change waits for it and is never gated as though it could
@@ -280,9 +288,10 @@ func TestAChangeStackedOnARedOneWaitsWithoutBlame(t *testing.T) {
 
 	got := recorded(t, dir)
 	assert.Equal(t, types.CodeKickRed, got["1"].Code)
-	assert.Equal(t, types.DecisionWait, got["2"].Decision)
-	assert.Equal(t, types.CodeWaitBelowKicked, got["2"].Code)
-	assert.Equal(t, "#1 was kicked back; this stays queued and is validated again once it returns", got["2"].Reason)
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: two, Decision: types.DecisionWait, Code: types.CodeWaitBelowKicked,
+		Reason: "#1 was kicked back; this stays queued and is validated again once it returns",
+	}, got["2"]), got["2"])
 }
 
 // A red the base carries is nobody's in the queue: every change it reddens waits, what
@@ -351,12 +360,17 @@ func TestAChangeConflictingWithOneAheadWaitsAndTheRestStackPastIt(t *testing.T) 
 	require.NoError(t, v.Run(t.Context(), plan))
 
 	got := recorded(t, dir)
-	assert.Equal(t, types.CodeWaitConflictAhead, got["2"].Code)
-	assert.Equal(t, "conflicts with #1 ahead of it in `a/x.go`; retried once it merges; not auto-resolved: a/x.go#(preamble): not settled",
-		got["2"].Reason, "the reason names the location auto-resolution could not settle")
-	assert.Equal(t, []string{"a/x.go"}, got["2"].Paths)
-	assert.Equal(t, "1", got["3"].After, "stacked past the change that waits")
-	assert.Equal(t, types.DecisionMerge, got["3"].Decision)
+	// The reason names the location auto-resolution could not settle.
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: two, Decision: types.DecisionWait, Code: types.CodeWaitConflictAhead,
+		Reason: "conflicts with #1 ahead of it in `a/x.go`; retried once it merges; not auto-resolved: a/x.go#(preamble): not settled",
+		Paths:  []string{"a/x.go"},
+	}, got["2"]), got["2"])
+	// Stacked past the change that waits.
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: three, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, three.Head), Method: three.Method, Depth: got["3"].Depth,
+		Decision: types.DecisionMerge,
+	}, got["3"]), got["3"])
 }
 
 // A regeneration the change's own code broke refuses the candidate, which is that
@@ -380,11 +394,13 @@ func TestARefusedCandidateIsKickedBackAndTheRestValidate(t *testing.T) {
 	require.NoError(t, v.Run(t.Context(), plan))
 
 	got := recorded(t, dir)
-	assert.Equal(t, types.CodeKickRefused, got["1"].Code)
-	assert.Equal(t, "building its candidate failed: `make gen` exited 2", got["1"].Reason)
-	assert.Equal(t, []string{"gen/x.go"}, got["1"].Paths)
-	assert.Equal(t, "The merge queue built this change at `"+short(one.Head)+"` onto `main` at `"+short(base)+"`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n",
-		got["1"].Report)
+	assert.Equal(t, recordedAs(types.Verdict{
+		Change: one, Onto: base, Method: one.Method, Depth: got["1"].Depth,
+		Decision: types.DecisionKick, Code: types.CodeKickRefused,
+		Reason: "building its candidate failed: `make gen` exited 2",
+		Paths:  []string{"gen/x.go"},
+		Report: "The merge queue built this change at `" + short(one.Head) + "` onto `main` at `" + short(base) + "`, and building its candidate failed: `make gen` exited 2.\n\nRun `make gen` and push.\n",
+	}, got["1"]), got["1"])
 	assert.Equal(t, types.DecisionMerge, got["2"].Decision)
 	assert.Zero(t, g.count("base"), "a refusal is about the change, whatever the base does")
 }
@@ -465,8 +481,9 @@ func TestValidationRegeneratesStaleOutputsAndGatesTheResult(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, batch.Verdicts, 1)
 			verdict := batch.Verdicts[0]
-			assert.Equal(t, types.DecisionMerge, verdict.Decision)
-			assert.Equal(t, want, verdict.CandidateCommit, "the gate ran on what the regeneration committed")
+			assert.Equal(t, recordedAs(types.Verdict{
+				Change: c, Onto: base, CandidateCommit: want, Method: c.Method, Depth: 1, Decision: types.DecisionMerge,
+			}, verdict), verdict, "the gate ran on what the regeneration committed")
 			assert.Equal(t, 1, g.count("1"))
 			assert.Equal(t, []string{"gen/x.go"}, got.Paths)
 			assert.Equal(t, []string{"gen"}, got.Units, "the change's own affected set")
@@ -522,9 +539,15 @@ func TestOnlyBuildsTheChainButGatesTheOneChange(t *testing.T) {
 			require.NoError(t, v.Run(t.Context(), plan))
 			got := recorded(t, dir)
 			require.Len(t, got, 1)
-			assert.Equal(t, tc.want, got["2"].Decision)
-			assert.Equal(t, tc.wantCode, got["2"].Code)
-			assert.Equal(t, "1", got["2"].After)
+			c1 := candidateOf(base, one.Head)
+			wantVerdict := types.Verdict{
+				Change: two, After: "1", Onto: c1, CandidateCommit: candidateOf(c1, two.Head), Method: two.Method, Depth: 2,
+				Decision: tc.want, Code: tc.wantCode,
+			}
+			if tc.wantCode == types.CodeWaitBehind {
+				wantVerdict.Reason = "the gate failed on top of #1, which this run did not validate; retried once it is"
+			}
+			assert.Equal(t, recordedAs(wantVerdict, got["2"]), got["2"])
 			assert.Equal(t, 0, g.count("1"))
 			assert.Equal(t, 1, g.count("2"))
 		})

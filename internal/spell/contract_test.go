@@ -19,9 +19,13 @@ func TestContractFuncsMatchTheContract(t *testing.T) {
 		f := rt.Field(i)
 		name, opts, _ := strings.Cut(f.Tag.Get("mgs"), ",")
 		got := decode.ContractFuncs[i]
-		assert.Equal(t, name, got.Name, "Contract.%s", f.Name)
-		assert.Equal(t, f.Name, got.Field, "Contract.%s", f.Name)
-		assert.Equal(t, strings.Contains(opts, "required"), got.Required, "Contract.%s", f.Name)
+		// Returns is the generator's own reading of the source, which the tag does not carry.
+		assert.Equal(t, decode.ContractFunc{
+			Name:     name,
+			Field:    f.Name,
+			Returns:  got.Returns,
+			Required: strings.Contains(opts, "required"),
+		}, got, "Contract.%s", f.Name)
 	}
 }
 

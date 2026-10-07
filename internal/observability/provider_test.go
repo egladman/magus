@@ -28,10 +28,7 @@ func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 	t.Parallel()
 	got := ConfigFromTelemetry(config.Telemetry{}, "v1.2.3", "")
-	assert.Equal(t, "grpc", got.Protocol)
-	assert.Equal(t, "magus", got.ServiceName)
-	assert.Equal(t, 1.0, got.SampleRatio)
-	assert.Equal(t, "v1.2.3", got.ServiceVersion)
+	assert.Equal(t, Config{Protocol: "grpc", ServiceName: "magus", SampleRatio: 1.0, ServiceVersion: "v1.2.3"}, got)
 }
 
 // recorder implements observability.Provider and captures every call so

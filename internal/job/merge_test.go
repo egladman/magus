@@ -21,9 +21,8 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 
 	base := types.Job{ID: "u1", Criteria: "original goal", Model: "standard"}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
-	assert.Equal(t, types.StateRunning, got.State)
-	assert.Equal(t, "original goal", got.Criteria, "an absent key must not erase what an earlier put set")
-	assert.Equal(t, "standard", got.Model)
+	assert.Equal(t, types.Job{ID: "u1", Criteria: "original goal", Model: "standard", State: types.StateRunning}, got,
+		"an absent key must not erase what an earlier put set")
 }
 
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {

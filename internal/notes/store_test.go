@@ -139,11 +139,11 @@ func TestRoundTrip(t *testing.T) {
 
 	got, err := Get(dir, want.Name)
 	require.NoError(t, err)
-	assert.Equal(t, want.Title, got.Title)
-	assert.Equal(t, want.Tags, got.Tags)
-	assert.Equal(t, want.Anchors, got.Anchors)
-	assert.Equal(t, want.Body, got.Body)
 	assert.False(t, got.Modified.IsZero(), "Modified is observed from the file, not stored")
+	want.ID = want.Name // Save stamps the id a note was written without
+	want.Modified = got.Modified
+	want.Path = filepath.Join(dir, want.Name+".md")
+	assert.Equal(t, want, got)
 }
 
 // TestTimestampsAreNotSerialized: these files are hand-edited, so a stored timestamp is
@@ -284,8 +284,14 @@ func TestInspectReportsInvalidEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, got, 1, "the readable note is still returned")
 	require.Len(t, issues, 1)
-	assert.Equal(t, SeverityError, issues[0].Severity)
-	assert.Equal(t, CodeInvalidEntry, issues[0].Code)
+	assert.Equal(t, Issue{
+		Severity: SeverityError,
+		Code:     CodeInvalidEntry,
+		Path:     filepath.Join(dir, "broken.md"),
+		Note:     "broken",
+		Message:  issues[0].Message,
+		Hint:     issues[0].Hint,
+	}, issues[0])
 
 	_, err = List(dir)
 	assert.Error(t, err, "List refuses to quietly skip a broken entry")
@@ -345,8 +351,14 @@ func TestForeignFilesAreNotNotes(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, issues, "a vault full of someone else's writing is not a pile of errors")
 	require.Len(t, got, 1, "only the file declaring a magus block is a magus note")
-	assert.Equal(t, "Daily Notes/Cache Pairing", got[0].Name, "the name is the path within the store, so nesting cannot collide")
-	assert.Equal(t, "Two caches", got[0].Title)
+	assert.Equal(t, Note{
+		Name:     "Daily Notes/Cache Pairing", // the path within the store, so nesting cannot collide
+		Title:    "Two caches",
+		Anchors:  []Anchor{{Kind: AnchorProject, Target: "."}},
+		Body:     "Prose.",
+		Modified: got[0].Modified,
+		Path:     filepath.Join(dir, "Daily Notes", "Cache Pairing.md"),
+	}, got[0])
 
 	// And it is reachable by that name.
 	n, err := Get(dir, "Daily Notes/Cache Pairing")

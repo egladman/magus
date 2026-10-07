@@ -62,14 +62,21 @@ func TestServiceGraphSkeleton(t *testing.T) {
 	assert.Equal(t, "project", out.Nodes[0].Kind)
 	require.Len(t, out.Links, 1)
 	assert.Equal(t, types.RelationDependsOn, out.Links[0].Relation)
-	assert.True(t, out.Directed)
-	assert.Equal(t, types.KnowledgeSchemaVersion, out.SchemaVersion)
-	// Stamped together or not at all: the schema version is what a consumer reads to decide
-	// whether it can resolve a predicate on its own, so claiming the version while carrying
-	// no vocabulary is the one combination that misleads.
-	assert.Equal(t, types.KnowledgeRelationDefinitions(), out.Relations)
-	assert.Equal(t, types.KnowledgeRelationFingerprint(), out.RelationFingerprint)
 	assert.NotEmpty(t, out.RelationFingerprint)
+	assert.Equal(t, types.KnowledgeGraphOutput{
+		Definition:    out.Definition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Directed:      true,
+		NodeCount:     out.NodeCount,
+		EdgeCount:     out.EdgeCount,
+		// Stamped together or not at all: the schema version is what a consumer reads to decide
+		// whether it can resolve a predicate on its own, so claiming the version while carrying
+		// no vocabulary is the one combination that misleads.
+		Relations:           types.KnowledgeRelationDefinitions(),
+		RelationFingerprint: types.KnowledgeRelationFingerprint(),
+		Nodes:               out.Nodes, // asserted above
+		Links:               out.Links,
+	}, out)
 }
 
 func TestServiceTargetGraph(t *testing.T) {

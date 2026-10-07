@@ -51,10 +51,14 @@ func TestAnchorIssues(t *testing.T) {
 	require.Len(t, issues, 1, "only the unresolved anchor is reported")
 
 	got := issues[0]
-	assert.Equal(t, SeverityWarning, got.Severity,
-		"a symbol disappears for ordinary reasons; the note is still worth reading, just not silently current")
-	assert.Equal(t, CodeDanglingAnchor, got.Code)
-	assert.Equal(t, "pairing", got.Note)
+	assert.Equal(t, Issue{
+		Severity: SeverityWarning,
+		Code:     CodeDanglingAnchor,
+		Path:     got.Path,
+		Note:     "pairing",
+		Message:  got.Message, // asserted below
+		Hint:     got.Hint,
+	}, got, "a symbol disappears for ordinary reasons; the note is still worth reading, just not silently current")
 	assert.Contains(t, got.Message, "m internal/cache/Store#Put().")
 	assert.Contains(t, got.Hint, "magus refs", "the hint routes to the tool that finds the new name")
 	assert.Contains(t, got.Hint, "Do NOT let a tool guess",
@@ -94,8 +98,7 @@ func TestAnchorIssues_NeverRewritesTheStore(t *testing.T) {
 
 	after, err := Get(dir, n.Name)
 	require.NoError(t, err)
-	assert.Equal(t, before.Anchors, after.Anchors, "verify reports; it never re-anchors")
-	assert.Equal(t, before.Modified, after.Modified, "and it does not touch the file at all")
+	assert.Equal(t, before, after, "verify reports; it never re-anchors, and it does not touch the file at all")
 }
 
 func TestDegradeHintNamesTheFallback(t *testing.T) {
@@ -265,8 +268,8 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 	got, err := Get(dir, "stamped")
 	require.NoError(t, err)
 	require.Len(t, got.Anchors, 1)
-	assert.Equal(t, "d1", got.Anchors[0].Digest)
-	assert.Equal(t, "cafe1234", got.Anchors[0].Commit, "the digest's provenance travels with it")
+	assert.Equal(t, Anchor{Kind: AnchorFile, Target: "a.go", Digest: "d1", Commit: "cafe1234"}, got.Anchors[0],
+		"the digest's provenance travels with it")
 
 	// The drift report is what the provenance is FOR: naming the diff turns "something
 	// changed" into something a reader can act on without going looking.
@@ -430,12 +433,17 @@ func TestResolveAnchorsSeesEveryAnchor(t *testing.T) {
 
 	clean := byNote["clean"]
 	require.Len(t, clean, 2)
-	assert.Equal(t, "Still true", clean[0].Title, "a hit renders far from the store, so the title rides along")
+	assert.Equal(t, ResolvedAnchor{
+		Note:   "clean",
+		Title:  "Still true", // a hit renders far from the store, so the title rides along
+		Pos:    0,
+		Anchor: Anchor{Kind: AnchorFile, Target: "clean.go"},
+		File:   "clean.go", // a file anchor already knows its file
+	}, clean[0])
 	for i, r := range clean {
 		assert.Empty(t, r.Status, "an anchor nothing is wrong with reports no code")
 		assert.Equal(t, i, r.Pos, "position is the anchor's index in its own note")
 	}
-	assert.Equal(t, "clean.go", clean[0].File, "a file anchor already knows its file")
 	assert.Empty(t, clean[1].File,
 		"a symbol key names a package and a descriptor, never a path; only the graph knows where it sits")
 }
@@ -481,9 +489,12 @@ func TestResolveAnchorsDrivesTheDiffJoin(t *testing.T) {
 
 	hits := AnchorHits(all, []string{"internal/cache/cache.go"}, nil)
 	require.Len(t, hits, 1)
-	assert.Equal(t, "drifted", hits[0].Note)
-	assert.Equal(t, MatchFile, hits[0].Match)
-	assert.Equal(t, CodeDriftedAnchor, hits[0].Status)
+	assert.Equal(t, AnchorHit{
+		Note: "drifted", Title: "Moved on", Pos: 0,
+		Kind: AnchorFile, Target: "internal/cache/cache.go",
+		Matched: "internal/cache/cache.go", Match: MatchFile,
+		Status: CodeDriftedAnchor,
+	}, hits[0])
 }
 
 // TestResolveAnchorsUngradedWithoutAResolver pins what the nil resolver buys: a caller whose

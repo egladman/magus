@@ -50,18 +50,23 @@ func TestInflightJoinsChangesToJobsAndThePlan(t *testing.T) {
 	t.Parallel()
 	list := Inflight(types.JobList{Jobs: inflightRows()}, inflightInput(Identity{Lease: "fleet/queued", Login: "eli"}))
 
-	assert.Equal(t, &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7}, list.Fetched)
-	assert.Equal(t, []types.InflightChange{
-		{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Jobs: []string{"other/work"}, Intent: "rebase",
-			Partition: 1, Position: 2, Attention: types.AttentionQueue},
-		{ID: "2", Title: "queued", Head: "h2", Branch: "queued", Base: "main", Author: "eli", Jobs: []string{"fleet/queued"}, Intent: "squash",
-			Partition: 1, Position: 1, Mine: true, Attention: types.AttentionQueue},
-		{ID: "4", Head: "h4", Base: "main", Author: "eli", Intent: "squash",
-			Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: types.AttentionReview},
-		{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: types.AttentionAuthor},
-		{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: types.AttentionNone},
-	}, list.Changes, "provider order, another base's change left out, each joined by branch and placed by the plan")
-	assert.Equal(t, []string{"fleet/nopr"}, list.Unproposed, "a live job of the tree on a branch no change carries")
+	assert.Equal(t, types.JobList{
+		Jobs:    inflightRows(),
+		Fetched: &types.InflightFetch{Provider: "github", Host: "github.com", Base: "main", Tip: "tip", At: 100, ElapsedMS: 7},
+		// Provider order, another base's change left out, each joined by branch and placed by the plan.
+		Changes: []types.InflightChange{
+			{ID: "3", Head: "h3", Branch: "theirs", Base: "main", Author: "ann", Jobs: []string{"other/work"}, Intent: "rebase",
+				Partition: 1, Position: 2, Attention: types.AttentionQueue},
+			{ID: "2", Title: "queued", Head: "h2", Branch: "queued", Base: "main", Author: "eli", Jobs: []string{"fleet/queued"}, Intent: "squash",
+				Partition: 1, Position: 1, Mine: true, Attention: types.AttentionQueue},
+			{ID: "4", Head: "h4", Base: "main", Author: "eli", Intent: "squash",
+				Decision: "wait", Code: "WAIT_NOT_APPROVED", Reason: "no approval", Mine: true, Attention: types.AttentionReview},
+			{ID: "1", Head: "h1", Branch: "kick", Base: "main", Jobs: []string{"fleet/kick"}, Mark: "kicked_back", Mine: true, Attention: types.AttentionAuthor},
+			{ID: "6", Head: "h6", Base: "main", Author: "eli", Mine: true, Attention: types.AttentionNone},
+		},
+		// A live job of the tree on a branch no change carries.
+		Unproposed: []string{"fleet/nopr"},
+	}, list)
 }
 
 // The whole tree is the caller's, whichever job it acts under; a login alone claims by

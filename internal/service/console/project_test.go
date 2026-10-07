@@ -23,13 +23,10 @@ func TestStitchDisplayEvents(t *testing.T) {
 	events := StitchDisplayEvents([]byte("lint: undefined symbol foo\n"), d)
 
 	require.Len(t, events, 2, "one output event + one result event")
-	assert.Equal(t, journal.KindOutput, events[0].Kind)
-	assert.Equal(t, journal.StreamStdout, events[0].Stream)
-	assert.Equal(t, "lint: undefined symbol foo", events[0].Text)
-	assert.Equal(t, "svc/api", events[0].Project)
-	assert.Equal(t, "test", events[0].Target)
-	assert.Equal(t, "inv123", events[0].Inv)
-	assert.Equal(t, int64(1_700_000_000_000), events[0].Ts)
+	assert.Equal(t, journal.Event{
+		Kind: journal.KindOutput, Stream: journal.StreamStdout, Text: "lint: undefined symbol foo",
+		Project: "svc/api", Target: "test", Inv: "inv123", Ts: 1_700_000_000_000,
+	}, events[0])
 
 	assert.Equal(t, journal.Event{
 		Kind: journal.KindResult, Project: "svc/api", Target: "test",

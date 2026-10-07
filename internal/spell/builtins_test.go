@@ -130,14 +130,16 @@ func TestBuiltinCommentSyntax(t *testing.T) {
 	goSyn := m["go"].Syntax.Comments
 	require.NotNil(t, goSyn, "the go spell declares its comment syntax")
 	assert.Equal(t, []string{".go"}, m["go"].LanguageExtensions, "only .go: the spell's other claims (.s, .c, .h, .txtar) are not Go")
-	assert.Equal(t, []string{"//"}, goSyn.LineComments)
-	assert.Equal(t, []spells.CommentBlock{{Open: "/*", Close: "*/"}}, goSyn.BlockComments)
-	assert.Equal(t, []spells.Quote{
-		{Open: "`", Close: "`", IgnoreEscape: true},
-		{Open: `"`, Close: `"`},
-		{Open: "'", Close: "'"},
-	}, goSyn.Quotes)
-	assert.Equal(t, []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"}, goSyn.Directives)
+	assert.Equal(t, &spells.CommentSyntax{
+		LineComments:  []string{"//"},
+		BlockComments: []spells.CommentBlock{{Open: "/*", Close: "*/"}},
+		Quotes: []spells.Quote{
+			{Open: "`", Close: "`", IgnoreEscape: true},
+			{Open: `"`, Close: `"`},
+			{Open: "'", Close: "'"},
+		},
+		Directives: []string{"go:", "nolint", "export", "line ", "+build", "sys", "extern"},
+	}, goSyn)
 
 	require.NotNil(t, m["buzz"].Syntax, "the buzz spell declares its syntax")
 	require.NotNil(t, m["buzz"].Syntax.Comments, "the buzz spell declares its comment syntax")
@@ -172,14 +174,17 @@ func TestGoSpell_TidyTarget(t *testing.T) {
 	require.Truef(t, ok, "go spell has no go-mod-tidy target; targets: %v", goSpell.OpNames())
 	// Default (no write charm): check mode via --diff (non-zero exit if changes
 	// are needed — safe for CI gating).
-	assert.Equal(t, "go", tidy.Bin)
-	assert.Equal(t, []string{"mod", "tidy", "--diff"}, tidy.Args)
 	// update, not rw: tidy re-resolves against the proxy, so its result depends on what
 	// upstream serves rather than on this tree. The charm drops --diff (remove /2) so
 	// tidy actually applies the changes.
-	w, ok := tidy.Charms["update"]
-	require.True(t, ok, "tidy has no update charm")
-	assert.Equal(t, []spells.PatchOp{{Op: "remove", Path: "/2"}}, w.Ops)
+	assert.Equal(t, spells.Op{
+		Command: spells.Command{
+			Bin:    "go",
+			Args:   []string{"mod", "tidy", "--diff"},
+			Charms: map[string]spells.Charm{"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}}},
+		},
+		Doc: tidy.Doc,
+	}, tidy)
 	_, hasRW := tidy.Charms["rw"]
 	assert.False(t, hasRW, "tidy must not carry rw: default_charms: [rw] would re-resolve dependencies on unrelated runs")
 }
@@ -415,8 +420,7 @@ func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
 	probe := tool.Ready
 	require.True(t, ok, "docker spell declares no docker tool")
 	require.NotEmpty(t, probe.Bin, "docker declares no readiness probe")
-	assert.Equal(t, "docker", probe.Bin)
-	assert.Equal(t, []string{"info"}, probe.Args,
+	assert.Equal(t, spells.Command{Bin: "docker", Args: []string{"info"}}, probe,
 		"`docker --version` is client-only and cannot detect a stopped daemon")
 
 	gated := d.Tools["hadolint"].Ready.Bin != ""
@@ -527,9 +531,12 @@ func TestGoFuzzMatchesGoTestPolicy(t *testing.T) {
 	ops := Builtins()["go"].Ops
 	fuzz, test := ops["go-fuzz"], ops["go-test"]
 
-	assert.Equal(t, test.EnvKeys, fuzz.EnvKeys, "the same platform env keys the cache key already carries")
-	assert.Equal(t, test.Hints, fuzz.Hints)
-	assert.Equal(t, test.Bin, fuzz.Bin)
+	// The policy fields: the same platform env keys the cache key already carries, and
+	// the same failure advice, under the same binary.
+	policy := func(op spells.Op) spells.Command {
+		return spells.Command{Bin: op.Bin, EnvKeys: op.EnvKeys, Hints: op.Hints}
+	}
+	assert.Equal(t, policy(test), policy(fuzz))
 }
 
 // The records run on their own; a failure here means the generated declarations name a

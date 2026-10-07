@@ -472,7 +472,9 @@ func TestMeasureOverlaps(t *testing.T) {
 	got := MeasureOverlaps(t.Context(), root, rows, overlaps)
 
 	require.NotNil(t, got[0].Footprint)
-	assert.Equal(t, types.FootprintShared, got[0].Footprint.Verdict, got[0].Footprint.Reason)
-	assert.Equal(t, []string{"api/x.go#func X() {"}, got[0].Footprint.Shared)
+	assert.Equal(t, &types.JobOverlapFootprint{
+		Verdict: types.FootprintShared,
+		Shared:  []string{"api/x.go#func X() {"},
+	}, got[0].Footprint, got[0].Footprint.Reason)
 	assert.Empty(t, MeasureOverlaps(t.Context(), "/nonexistent", rows, nil))
 }

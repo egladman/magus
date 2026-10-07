@@ -95,11 +95,15 @@ func TestDetect_OneFinding_TwoConfirmedWriters(t *testing.T) {
 	findings := detect(s, &filter)
 	require.Len(t, findings, 1, "expected 1 finding for two confirmed writers")
 	f := findings[0]
-	assert.Equal(t, sharedPath, f.path)
 	// Canonical order: alphabetical by project.
-	assert.Equal(t, "api", f.projectA)
-	assert.Equal(t, "worker", f.projectB)
-	assert.Equal(t, "build", f.target)
+	assert.Equal(t, finding{
+		path:         sharedPath,
+		projectA:     "api",
+		projectB:     "worker",
+		target:       "build",
+		overlapStart: now.Add(time.Second),
+		overlapEnd:   now.Add(5 * time.Second),
+	}, f)
 }
 
 // TestDetect_NoFinding_CrossTarget: concurrent projects running different targets

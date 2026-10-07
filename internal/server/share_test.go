@@ -94,18 +94,25 @@ func TestShareMintIsAudited(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	e := events[0]
-	assert.Equal(t, "share.mint", e.Action)
-	assert.Equal(t, trail.KindTokenLifecycle, e.Kind)
 	assert.Contains(t, e.Preview, "share link ")
 	assert.Contains(t, e.Preview, "console=read")
 	assert.NotContains(t, e.Preview, secret)
+	assert.Equal(t, trail.Event{
+		Ts:           e.Ts,
+		Kind:         trail.KindTokenLifecycle,
+		Origin:       e.Origin,
+		Action:       "share.mint",
+		Outcome:      trail.OutcomeOK,
+		RequestRef:   e.RequestRef,
+		RequestBytes: e.RequestBytes,
+		Preview:      e.Preview,
+	}, e)
 	blob, err := trail.ReadBlob(trailDir, e.RequestRef)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord
 	require.NoError(t, json.Unmarshal(blob, &rec))
-	assert.Equal(t, types.KindShare, rec.Minted.Kind)
-	assert.Equal(t, types.GrantViewer, rec.Minted.Grant)
 	assert.Len(t, rec.Minted.ID, 8)
+	assert.Equal(t, types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer}, rec.Minted)
 	assert.Equal(t, minter, rec.Minter)
 }

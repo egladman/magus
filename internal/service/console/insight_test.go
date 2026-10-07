@@ -67,14 +67,18 @@ func TestServiceVolatility(t *testing.T) {
 	assert.Equal(t, "proj/b", report.Targets[1].Project)
 
 	got := report.Targets[0]
-	assert.Equal(t, "test", got.Target)
-	assert.Equal(t, 2, got.Pass)
-	assert.Equal(t, 1, got.Fail)
-	assert.Equal(t, 1, got.VolatileCount)
-	assert.Equal(t, 4, got.Samples)
-	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass, "last pass is the most recent pass/volatile outcome")
 	assert.Greater(t, got.Score, 0.0, "4 samples at MinSamples=4 produce a non-zero Wilson score")
-	assert.True(t, got.Volatile, "score exceeds the 0.01 threshold")
+	assert.Equal(t, types.VolatilityTarget{
+		Project:       "proj/a",
+		Target:        "test",
+		Score:         got.Score,
+		Volatile:      true, // score exceeds the 0.01 threshold
+		Pass:          2,
+		Fail:          1,
+		VolatileCount: 1,
+		Samples:       4,
+		LastPass:      now.Add(-1 * time.Hour), // the most recent pass/volatile outcome
+	}, got)
 }
 
 func TestServiceVolatilityNoHistoryPath(t *testing.T) {

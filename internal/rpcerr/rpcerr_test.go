@@ -132,23 +132,32 @@ func TestWriteJSONRendersAIP193(t *testing.T) {
 	assert.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 	assert.Equal(t, "nosniff", rr.Header().Get("X-Content-Type-Options"))
 	var body struct {
-		Error struct {
-			Code    int    `json:"code"`
-			Status  string `json:"status"`
-			Details []struct {
-				Type       string `json:"@type"`
-				Reason     string `json:"reason"`
-				RetryDelay string `json:"retryDelay"`
-			} `json:"details"`
-		} `json:"error"`
+		Error jsonError `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
-	assert.Equal(t, 503, body.Error.Code)
-	assert.Equal(t, "UNAVAILABLE", body.Error.Status)
 	require.Len(t, body.Error.Details, 4)
-	assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", body.Error.Details[0].Type)
-	assert.Equal(t, "MGS3017", body.Error.Details[0].Reason)
-	assert.Equal(t, "2s", body.Error.Details[1].RetryDelay)
+	assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: "MGS3017"}, body.Error.Details[0])
+	assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.RetryInfo", RetryDelay: "2s"}, body.Error.Details[1])
+	assert.Equal(t, jsonError{
+		Code:    503,
+		Message: types.FormatDiagnostic(types.WorkspaceStillLoading, "workspace /repo is still loading; retry shortly"),
+		Status:  "UNAVAILABLE",
+		Details: body.Error.Details, // each asserted above
+	}, body.Error)
+}
+
+// jsonDetail and jsonError are the AIP-193 error body as a client reads it.
+type jsonDetail struct {
+	Type       string `json:"@type"`
+	Reason     string `json:"reason"`
+	RetryDelay string `json:"retryDelay"`
+}
+
+type jsonError struct {
+	Code    int          `json:"code"`
+	Message string       `json:"message"`
+	Status  string       `json:"status"`
+	Details []jsonDetail `json:"details"`
 }
 
 // A 405 has no google.rpc code, so the JSON body and status carry the override while the
@@ -199,26 +208,20 @@ func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
 			rr := httptest.NewRecorder()
 			FormatJSON.Write(rr, httptest.NewRequest(http.MethodGet, "/api/v1/x", nil), tc.err)
 
-			type detail struct {
-				Type   string `json:"@type"`
-				Reason string `json:"reason"`
-			}
 			var body struct {
-				Error struct {
-					Code    int      `json:"code"`
-					Message string   `json:"message"`
-					Status  string   `json:"status"`
-					Details []detail `json:"details"`
-				} `json:"error"`
+				Error jsonError `json:"error"`
 			}
 			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
 			assert.Equal(t, tc.wantStatus, rr.Code)
-			assert.Equal(t, tc.wantStatus, body.Error.Code)
-			assert.Equal(t, tc.wantName, body.Error.Status)
-			assert.Equal(t, types.FormatDiagnostic(tc.wantReason, tc.err.Message), body.Error.Message)
 			require.NotEmpty(t, body.Error.Details)
-			assert.Equal(t, detail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: string(tc.wantReason)},
+			assert.Equal(t, jsonDetail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: string(tc.wantReason)},
 				body.Error.Details[0])
+			assert.Equal(t, jsonError{
+				Code:    tc.wantStatus,
+				Message: types.FormatDiagnostic(tc.wantReason, tc.err.Message),
+				Status:  tc.wantName,
+				Details: body.Error.Details, // the first asserted above
+			}, body.Error)
 		})
 	}
 }
