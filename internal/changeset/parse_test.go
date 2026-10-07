@@ -410,15 +410,13 @@ func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
 	spans := RawLineEmphasis(h)
 	require.Len(t, spans, 2)
 
-	assert.Equal(t, 13, spans[0].Start, "the marker plus five ASCII bytes plus six bytes of Greek")
-	assert.Equal(t, 16, spans[0].End)
+	// The marker plus five ASCII bytes plus six bytes of Greek.
+	assert.Equal(t, Span{Start: 13, End: 16}, spans[0])
 	assert.Equal(t, "one", h.Lines[0][spans[0].Start:spans[0].End])
 
 	// The same change, in the UTF-16 units the browser indexes by: three Greek characters are
 	// one unit each there, so the offset is three smaller and the marker is not counted.
-	require.NotNil(t, h.Rows[0].Emph)
-	assert.Equal(t, 9, h.Rows[0].Emph.Start)
-	assert.Equal(t, 12, h.Rows[0].Emph.End)
+	assert.Equal(t, &Span{Start: 9, End: 12}, h.Rows[0].Emph)
 }
 
 // A thread is anchored to a line of the REVIEW, and the review is not the changeset in front of

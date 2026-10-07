@@ -216,8 +216,7 @@ func TestRunWithholdsReportedError(t *testing.T) {
 	reply = runReply{}
 	s = newJobService(func(context.Context, []string) error { return errors.New("no such target") })
 	require.NoError(t, s.run(runRequest{Args: []string{"run", "nope"}}, &reply))
-	assert.Equal(t, 1, reply.ExitCode)
-	assert.Equal(t, "no such target", reply.Err)
+	assert.Equal(t, runReply{ExitCode: 1, Err: "no such target"}, reply)
 }
 
 // reportedErr stands in for cmd/magus's errSilent, which proc cannot import.
@@ -239,8 +238,8 @@ func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 	var reply runReply
 	s := newJobService(func(context.Context, []string) error { return misuseErr{} })
 	require.NoError(t, s.run(runRequest{Args: []string{"run", "bogus-target"}}, &reply))
-	assert.Equal(t, 2, reply.ExitCode, "a misuse stays a misuse when the server adopts it")
-	assert.Equal(t, "no such target", reply.Err, "and it still says why")
+	assert.Equal(t, runReply{ExitCode: 2, Err: "no such target"}, reply,
+		"a misuse stays a misuse when the server adopts it, and it still says why")
 }
 
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC

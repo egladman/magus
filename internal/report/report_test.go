@@ -66,14 +66,16 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 	sc := bufio.NewScanner(&buf)
 	for sc.Scan() {
 		line := sc.Bytes()
-		var head struct {
-			Schema int    `json:"schema"`
-			Type   string `json:"type"`
-		}
+		var head envelopeHead
 		require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
-		assert.Equal(t, Schema, head.Schema, "schema on line %q", line)
-		assert.Equal(t, TypeTargetResult, head.Type)
+		assert.Equal(t, envelopeHead{Schema: Schema, Type: TypeTargetResult}, head, "line %q", line)
 	}
+}
+
+// envelopeHead is the schema and type every line of a report carries.
+type envelopeHead struct {
+	Schema int    `json:"schema"`
+	Type   string `json:"type"`
 }
 
 // TestRoundTripAllTypes writes one of every registered event type and
@@ -119,13 +121,9 @@ func TestRoundTripAllTypes(t *testing.T) {
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
 		require.Less(t, i, len(wantTypes), "got more lines than expected")
-		var head struct {
-			Schema int    `json:"schema"`
-			Type   string `json:"type"`
-		}
+		var head envelopeHead
 		require.NoError(t, json.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
-		assert.Equal(t, Schema, head.Schema, "line %d schema", i)
-		assert.Equal(t, wantTypes[i], head.Type, "line %d type", i)
+		assert.Equal(t, envelopeHead{Schema: Schema, Type: wantTypes[i]}, head, "line %d", i)
 	}
 }
 
@@ -538,14 +536,10 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			require.NoError(t, recordAny(w, tc.event))
 			require.NoError(t, w.Close())
 
-			var head struct {
-				Schema int    `json:"schema"`
-				Type   string `json:"type"`
-			}
+			var head envelopeHead
 			line := bytes.TrimSpace(buf.Bytes())
 			require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
-			assert.Equal(t, Schema, head.Schema)
-			assert.Equal(t, tc.wantType, head.Type)
+			assert.Equal(t, envelopeHead{Schema: Schema, Type: tc.wantType}, head)
 
 			// Whole-struct: decode the SAME line back into the event's own type
 			// (the envelope's extra "schema"/"type" keys are ignored by the

@@ -162,15 +162,15 @@ func TestWriteJSONHonorsTheHTTPStatusOverride(t *testing.T) {
 	})
 
 	assert.Equal(t, http.StatusMethodNotAllowed, rr.Code)
+	type status struct {
+		Code   int    `json:"code"`
+		Status string `json:"status"`
+	}
 	var body struct {
-		Error struct {
-			Code   int    `json:"code"`
-			Status string `json:"status"`
-		} `json:"error"`
+		Error status `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
-	assert.Equal(t, http.StatusMethodNotAllowed, body.Error.Code)
-	assert.Equal(t, "UNIMPLEMENTED", body.Error.Status)
+	assert.Equal(t, status{Code: http.StatusMethodNotAllowed, Status: "UNIMPLEMENTED"}, body.Error)
 }
 
 // Each constructor pairs one reason with the google.rpc code whose HTTP mapping the /api/
@@ -199,15 +199,16 @@ func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
 			rr := httptest.NewRecorder()
 			FormatJSON.Write(rr, httptest.NewRequest(http.MethodGet, "/api/v1/x", nil), tc.err)
 
+			type detail struct {
+				Type   string `json:"@type"`
+				Reason string `json:"reason"`
+			}
 			var body struct {
 				Error struct {
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-					Status  string `json:"status"`
-					Details []struct {
-						Type   string `json:"@type"`
-						Reason string `json:"reason"`
-					} `json:"details"`
+					Code    int      `json:"code"`
+					Message string   `json:"message"`
+					Status  string   `json:"status"`
+					Details []detail `json:"details"`
 				} `json:"error"`
 			}
 			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
@@ -216,8 +217,8 @@ func TestConstructorsKeepTheLegacyStatus(t *testing.T) {
 			assert.Equal(t, tc.wantName, body.Error.Status)
 			assert.Equal(t, types.FormatDiagnostic(tc.wantReason, tc.err.Message), body.Error.Message)
 			require.NotEmpty(t, body.Error.Details)
-			assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", body.Error.Details[0].Type)
-			assert.Equal(t, string(tc.wantReason), body.Error.Details[0].Reason)
+			assert.Equal(t, detail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: string(tc.wantReason)},
+				body.Error.Details[0])
 		})
 	}
 }

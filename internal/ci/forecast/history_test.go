@@ -697,8 +697,7 @@ func TestUpdate_fitsSetupAndAlpha(t *testing.T) {
 	assert.Equal(t, []int64{30_000}, h.Setup)
 	assert.Equal(t, []int64{15_000}, h.Alpha)
 	// Single-element windows -> percentile returns the lone value.
-	assert.Equal(t, Millis(30_000), h.Constants.SetupP50Ms)
-	assert.Equal(t, Millis(15_000), h.Constants.AlphaMs)
+	assert.Equal(t, Constants{SetupP50Ms: 30_000, AlphaMs: 15_000}, h.Constants)
 }
 
 // TestUpdate_shardSampleNonPositiveResidual verifies that when the computed

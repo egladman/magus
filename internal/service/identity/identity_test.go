@@ -23,12 +23,14 @@ func TestParseExtractsIdentity(t *testing.T) {
 		"postgres", "-c", "max_connections=200",
 	).Command)
 
-	assert.Equal(t, "postgres", id.Image)
-	assert.Equal(t, "15", id.Tag)
-	assert.Equal(t, []string{"5432"}, id.Ports)
 	// Env is sorted; ephemeral --name/--rm/-d dropped; in-container command ignored.
-	assert.Equal(t, []string{"POSTGRES_DB=api", "POSTGRES_PASSWORD=x"}, id.Env)
-	assert.Equal(t, []string{"/var/lib/postgresql/data"}, id.Volumes)
+	assert.Equal(t, Identity{
+		Image:   "postgres",
+		Tag:     "15",
+		Ports:   []string{"5432"},
+		Env:     []string{"POSTGRES_DB=api", "POSTGRES_PASSWORD=x"},
+		Volumes: []string{"/var/lib/postgresql/data"},
+	}, id)
 	assert.True(t, id.IsContainer())
 }
 

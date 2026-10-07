@@ -93,15 +93,14 @@ func TestKeyToolingConsistency(t *testing.T) {
 	km, err := GenerateSigningKey()
 	require.NoError(t, err, "GenerateSigningKey")
 
+	want := KeyInfo{PubB64: km.PubB64, KeyID: km.KeyID}
 	fromPub, err := TrustedKeyInfo(km.PubB64)
 	require.NoError(t, err, "TrustedKeyInfo")
-	assert.Equal(t, km.PubB64, fromPub.PubB64)
-	assert.Equal(t, km.KeyID, fromPub.KeyID)
+	assert.Equal(t, want, fromPub)
 
 	fromSeed, err := SigningKeyInfo(km.SeedB64)
 	require.NoError(t, err, "SigningKeyInfo")
-	assert.Equal(t, km.PubB64, fromSeed.PubB64)
-	assert.Equal(t, km.KeyID, fromSeed.KeyID)
+	assert.Equal(t, want, fromSeed)
 }
 
 // TestKeyToolingValidation: the helpers reject malformed input clearly.

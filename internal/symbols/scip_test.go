@@ -59,10 +59,8 @@ func TestParseIndexDefsRefsAndDedup(t *testing.T) {
 	assert.Equal(t, "pkg/foo/foo.go:11", s.Source, "1-based definition line")
 	assert.Equal(t, []string{"pkg/foo/foo.go"}, s.Defs)
 
-	require.Len(t, s.Refs, 1, "both refs are in one file -> one per-file entry")
-	assert.Equal(t, "pkg/baz/baz.go", s.Refs[0].Path)
-	assert.Equal(t, 2, s.Refs[0].Count, "per-file occurrence count")
-	assert.Equal(t, []int{5, 8}, s.Refs[0].Lines)
+	// Both refs are in one file, so one per-file entry carries the occurrence count.
+	assert.Equal(t, []types.KnowledgeSymbolRef{{Path: "pkg/baz/baz.go", Count: 2, Lines: []int{5, 8}}}, s.Refs)
 }
 
 func TestParseIndexSignature(t *testing.T) {

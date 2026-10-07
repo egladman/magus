@@ -416,13 +416,13 @@ func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
 	f := newSetupFixture(t)
 	out, err := f.run(t, "", "describe", "-o", "json", "--provider", "local.buzz", "--base", "main", "--status-context", "gate")
 	require.NoError(t, err)
-	var doc struct {
+	type capabilities struct {
 		Schema string      `json:"schema"`
 		Setup  types.Setup `json:"setup"`
 	}
+	var doc capabilities
 	require.NoError(t, json.Unmarshal(out, &doc))
-	assert.Equal(t, types.SchemaCapabilities, doc.Schema)
-	assert.Equal(t, types.Setup{
+	assert.Equal(t, capabilities{Schema: types.SchemaCapabilities, Setup: types.Setup{
 		StatusContext: "gate",
 		Credential:    types.Integration{ID: "812"},
 		RequiredChecks: []types.RequiredCheck{
@@ -434,7 +434,7 @@ func TestQueueDescribeJSONCarriesTheSetup(t *testing.T) {
 			{Title: "Allow auto-merge", Command: "gh api -X PATCH repos/acme/widgets -F allow_auto_merge=true"},
 			{Title: "Install it", URL: "https://github.com/apps/q/installations/new"},
 		},
-	}, doc.Setup)
+	}}, doc)
 }
 
 // An empty --status-context asks for no setup: the merge-queue advisor reads the

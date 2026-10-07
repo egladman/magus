@@ -190,8 +190,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	assert.Len(t, rec.misses, 1, "after miss")
 	assert.Len(t, rec.durs, 1, "after miss")
 	require.NotEmpty(t, rec.misses[0].attrs)
-	assert.Equal(t, "outcome", rec.misses[0].attrs[0].Key)
-	assert.Equal(t, "miss", rec.misses[0].attrs[0].Value)
+	assert.Equal(t, Attr{Key: "outcome", Value: "miss"}, rec.misses[0].attrs[0])
 	assert.Empty(t, rec.saved, "a miss ran the work, so it saved nothing")
 
 	// Hit: identical Run, fn not called, OnHit + duration fire.

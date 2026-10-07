@@ -575,10 +575,11 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 		SeedProjects:     []string{"root"},
 		AffectedProjects: []types.ImpactProject{{Path: "root", Seed: true, Files: []string{"a.go", "b.go"}}, {Path: "docs"}},
 	})
-	require.NotNil(t, r)
-	assert.Equal(t, 1, r.Seeds)
-	assert.Equal(t, 2, r.Rebuilds)
-	assert.Equal(t, []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}}, r.Projects)
+	assert.Equal(t, &impactReach{
+		Seeds:    1,
+		Rebuilds: 2,
+		Projects: []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
+	}, r)
 }
 
 // TestDiffSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
@@ -1034,10 +1035,7 @@ func TestCollectRationale(t *testing.T) {
 	}}
 
 	got := collectRationale(root, rev)
-	require.Len(t, got, 1)
-	assert.Equal(t, "a.go", got[0].Path)
-	assert.Equal(t, 3, got[0].Line)
-	assert.Equal(t, "no store holds v1 descriptors", got[0].Until)
+	assert.Equal(t, []rationaleHit{{Path: "a.go", Line: 3, Until: "no store holds v1 descriptors"}}, got)
 }
 
 func TestImpactRationaleLines(t *testing.T) {

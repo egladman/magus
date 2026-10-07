@@ -861,8 +861,7 @@ func TestDrivenCommandAcrossDriverFamilies(t *testing.T) {
 			got, ok := DrivenCommand(tc.cmd)
 			assert.Equal(t, tc.ok, ok, "found a driven command")
 			if tc.ok {
-				assert.Equal(t, tc.want.Name, got.Name, "driven command name")
-				assert.Equal(t, tc.want.Args, got.Args, "driven command args")
+				assert.Equal(t, tc.want, got, "driven command")
 			}
 		})
 	}

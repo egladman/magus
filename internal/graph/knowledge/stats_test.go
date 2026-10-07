@@ -137,11 +137,13 @@ func TestStatsCoverage(t *testing.T) {
 			diag = c
 		}
 	}
-	require.Equal(t, types.KindDiagnostic, diag.Kind)
-	assert.Equal(t, 2, diag.Total)
-	assert.Equal(t, 1, diag.Documented)
-	assert.Equal(t, 50, diag.Percent)
-	assert.Equal(t, []string{"MGS2001"}, diag.Undocumented)
+	assert.Equal(t, types.KnowledgeDocCoverage{
+		Kind:         types.KindDiagnostic,
+		Total:        2,
+		Documented:   1,
+		Percent:      50,
+		Undocumented: []string{"MGS2001"},
+	}, diag)
 }
 
 // TestStatsFileDocCoverage pins the citation layer's reading of doc coverage: a source

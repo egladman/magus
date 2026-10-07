@@ -536,9 +536,7 @@ func TestPathsFromSeedsDirect(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"api"}, "api")
-	require.Len(t, got, 1)
-	assert.Equal(t, "api", got[0].Seed)
-	assert.Equal(t, []string{"api"}, got[0].Chain)
+	assert.Equal(t, []types.AffectedPath{{Seed: "api", Chain: []string{"api"}}}, got)
 }
 
 // TestPathsFromSeedsTransitive: A depends on B depends on C (seed).
@@ -596,11 +594,10 @@ func TestPathsFromSeedsThroughIntermediateSeed(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	got := pathsFromSeeds(t, g, []string{"a", "c"}, "a")
-	require.Len(t, got, 2)
-	assert.Equal(t, "a", got[0].Seed)
-	assert.Equal(t, []string{"a"}, got[0].Chain)
-	assert.Equal(t, "c", got[1].Seed)
-	assert.Equal(t, []string{"c", "b", "a"}, got[1].Chain)
+	assert.Equal(t, []types.AffectedPath{
+		{Seed: "a", Chain: []string{"a"}},
+		{Seed: "c", Chain: []string{"c", "b", "a"}},
+	}, got)
 }
 
 // TestNearCyclesLinearChain: a→b→c→d has no near-cycles because each node
@@ -662,11 +659,7 @@ func TestNearCyclesBackPathShape(t *testing.T) {
 	})
 	g := mustGraph(t, ws)
 	ncs := g.NearCycles(context.Background(), 3)
-	require.Len(t, ncs, 1)
-	nc := ncs[0]
-	assert.Equal(t, "b", nc.From)
-	assert.Equal(t, "a", nc.To)
-	assert.Equal(t, []string{"a", "b"}, nc.BackPath)
+	assert.Equal(t, []types.NearCycle{{From: "b", To: "a", BackPath: []string{"a", "b"}}}, ncs)
 }
 
 // TestBlastRadiusLinearChain: a→b→c. Changing c affects only c (1).
@@ -779,10 +772,7 @@ func TestGraphFailsOnUnregisteredDep(t *testing.T) {
 	assert.ErrorIs(t, err, types.ErrUnregisteredDep)
 	var ude *types.UnregisteredDepError
 	require.ErrorAs(t, err, &ude)
-	require.Len(t, ude.Missing, 1)
-	assert.Equal(t, "api", ude.Missing[0].Consumer)
-	assert.Equal(t, "internal/db-typo", ude.Missing[0].Dep)
-	assert.Equal(t, "internal/db", ude.Missing[0].DidYouMean)
+	assert.Equal(t, []types.UnregisteredDep{{Consumer: "api", Dep: "internal/db-typo", DidYouMean: "internal/db"}}, ude.Missing)
 }
 
 // TestUnregisteredDepErrorAggregates verifies multiple missing deps

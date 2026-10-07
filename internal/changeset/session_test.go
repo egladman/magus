@@ -154,9 +154,8 @@ func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 	s.SetCursor("/w", types.DiffCursor{Path: "where/i/was.go", Hunk: 2})
 	got := s.Suggest("/w", types.DiffSuggestion{Path: "elsewhere.go", Hunk: 0, Reason: "3 callers"})
 
-	assert.Equal(t, "where/i/was.go", got.Cursor.Path,
+	assert.Equal(t, types.DiffCursor{Path: "where/i/was.go", Hunk: 2}, got.Cursor,
 		"an agent suggesting must never move the reader's viewport")
-	assert.Equal(t, 2, got.Cursor.Hunk)
 	require.Len(t, got.Suggestions, 1)
 	assert.False(t, got.Suggestions[0].Accepted)
 }
@@ -168,8 +167,8 @@ func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
 	got := s.AnswerSuggestion("/w", "s1", true)
-	assert.Equal(t, "b.go", got.Cursor.Path, "the human accepting is the only path to the viewport")
-	assert.Equal(t, 3, got.Cursor.Hunk)
+	assert.Equal(t, types.DiffCursor{Path: "b.go", Hunk: 3}, got.Cursor,
+		"the human accepting is the only path to the viewport")
 	assert.True(t, got.Suggestions[0].Accepted)
 }
 

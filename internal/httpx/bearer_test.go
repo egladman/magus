@@ -346,15 +346,17 @@ type wireStatus struct {
 		Message string `json:"message"`
 		Status  string `json:"status"`
 		Details []struct {
-			Type   string `json:"@type"`
-			Reason string `json:"reason"`
-			Domain string `json:"domain"`
-			Links  []struct {
-				Description string `json:"description"`
-				URL         string `json:"url"`
-			} `json:"links"`
+			Type   string     `json:"@type"`
+			Reason string     `json:"reason"`
+			Domain string     `json:"domain"`
+			Links  []wireLink `json:"links"`
 		} `json:"details"`
 	} `json:"error"`
+}
+
+type wireLink struct {
+	Description string `json:"description"`
+	URL         string `json:"url"`
 }
 
 func decodeStatus(t *testing.T, body []byte) wireStatus {
@@ -394,9 +396,7 @@ func TestBearerRefusalIsAIPStatusJSON(t *testing.T) {
 	assert.Equal(t, "MGS9001", info.Reason)
 	assert.Equal(t, "github.com/egladman/magus", info.Domain)
 	assert.Equal(t, "type.googleapis.com/google.rpc.Help", help.Type)
-	require.Len(t, help.Links, 1)
-	assert.Equal(t, "bearer token rejected", help.Links[0].Description)
-	assert.Equal(t, types.CodeURL(types.BearerRejected), help.Links[0].URL)
+	assert.Equal(t, []wireLink{{Description: "bearer token rejected", URL: types.CodeURL(types.BearerRejected)}}, help.Links)
 }
 
 // The Connect cases decode through connect-go's own client, so they prove what a Connect

@@ -1148,8 +1148,9 @@ func TestEnsureSyncRecordsTheEvaluationReadsAndStampsOverThem(t *testing.T) {
 
 	env["REGION"] = "us"
 	_, third := ensureWithReads(t, cacheDir, in, reads, stamper, true)
-	assert.Equal(t, 1, third.stamps, "a moved variable the evaluation read misses the fast stamp and asks the full one")
-	assert.Equal(t, 0, third.gathers, "the full stamp still matches, so nothing is rebuilt")
+	assert.Equal(t, readsRun{stamps: 1, gathers: 0}, third,
+		"a moved variable the evaluation read misses the fast stamp and asks the full one; "+
+			"the full stamp still matches, so nothing is rebuilt")
 	assert.Equal(t, stamper(context.Background(), *reads, true)[ClassDomain], readManifest(t, cacheDir).FastStamps[ClassDomain],
 		"the fast stamp is re-recorded over the new value, so the next read settles fast again")
 
@@ -1169,8 +1170,8 @@ func TestEnsureRecordsReadsForAManifestThatNeverHadThem(t *testing.T) {
 	stamper := readsStamper(&env)
 
 	_, run := ensureWithReads(t, cacheDir, in, reads, stamper, true)
-	assert.Equal(t, 1, run.stamps, "unknown reads match nothing recorded, so the full stamps are asked")
-	assert.Equal(t, 0, run.gathers, "and match, so nothing is rebuilt")
+	assert.Equal(t, readsRun{stamps: 1, gathers: 0}, run,
+		"unknown reads match nothing recorded, so the full stamps are asked, and match, so nothing is rebuilt")
 	after := readManifest(t, cacheDir)
 	assert.Equal(t, *reads, after.Reads, "the repair records the reads the evaluation made")
 	assert.True(t, after.ReadsKnown)
