@@ -453,7 +453,7 @@ func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
 
 	assert.Contains(t, out, "host h1")
 	assert.Contains(t, out, "go ")
-	assert.Contains(t, out, "deny 2")
+	assert.Contains(t, out, "advise 2", "raw-tool advises when the workspace sets nothing")
 	assert.Contains(t, out, "host recorded 1 denied")
 	assert.Contains(t, out, "magus-run")
 	assert.Contains(t, out, "internal/foo.go")

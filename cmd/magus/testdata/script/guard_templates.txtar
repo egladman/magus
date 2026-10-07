@@ -118,8 +118,8 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name codex
 # The Read tool never reaches a shell, so the glue restates it: a whole Read as a whole-file
 # print (`cat`), a ranged one as a ranged print (`sed -n`). The read rules then judge it as
 # the command it replaces. These run the Buzz glue alone, the form the wirings name; the
-# fixture is a Go file over the 120-line threshold, so the whole print is refused and the
-# ranged one is not.
+# fixture workspace sets read-navigation to deny past 120 lines and holds a Go file over
+# that, so the whole print is refused and the ranged one is not.
 cd read-ws
 
 # case: command/deny
@@ -242,7 +242,8 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
 # per-session marker on: that is the same fail-open the flag itself exists for, and a case
-# run at $WORK would pass both ways and pin nothing.
+# run at $WORK would pass both ways and pin nothing. The workspace sets spawn-unbriefed to
+# deny, since it only advises by default.
 cd push-ws
 
 # What varies between the two cases below is only the flag.
@@ -991,6 +992,7 @@ magus\project({
     "sources": ["*.buzz"],
     "no_language": "fixture workspace: only the guard's view of an ungated push matters here",
 });
+magus\guard.builtins({"spawn-unbriefed": "deny"});
 -- push-rules.rules --
 prefix_rule(
     pattern = ["git", "push"],
@@ -1129,6 +1131,7 @@ magus\project({
     "sources": ["*.go"],
     "no_language": "fixture workspace: only the read rule's view of a long Go file matters here",
 });
+magus\guard.builtins({"read-navigation": {"decision": "deny", "lines": 120}});
 -- read-ws/big.go --
 package fixture
 
