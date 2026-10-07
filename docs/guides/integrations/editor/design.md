@@ -148,14 +148,14 @@ document went wrong.
 
 ## What a first implementation covers
 
-1. `types/stream_event.go` - the envelope, the taxonomy, the per-type bodies.
+1. `types/stream_event.go`: the envelope, the taxonomy, the per-type bodies.
    This is the contract, and it is the deliverable that has to be right.
-2. `internal/eventstream` - the adapter mapping journal records onto
+2. `internal/eventstream`: the adapter mapping journal records onto
    `StreamEvent`, plus the cross-process follower over the run-log directory.
    Journal is the ONLY producer adapted; the table above says what the others
    cost. The existing producers keep their on-disk schemas; nothing is rewritten.
-3. `magus events` - replay plus `--follow`, `--type`, `--limit`.
-4. `internal/proc` - the `events.subscribe` frame and the daemon-side bus.
+3. `magus events`: replay plus `--follow`, `--type`, `--limit`.
+4. `internal/proc`: the `events.subscribe` frame and the daemon-side bus.
    NOT built: the run-log directory turned out to serve as the bus without it,
    so this is a latency optimization rather than a requirement.
 5. A reference client living beside `docs/guides/integrations/` the way the

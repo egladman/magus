@@ -53,11 +53,11 @@ else the adapter's built-in default (`origin/main` for git). Two escape hatches:
 
 Four flags reason about the affected set instead of executing the target:
 
-- `--explain <project>` - why a project is in the set (changed file or affected dep).
-- `--graph` - render the affected scope as a dependency graph (`--depth` caps it).
-- `--plan` - emit a provider-neutral JSON CI shard plan for the set. It always keys
+- `--explain <project>`: why a project is in the set (changed file or affected dep).
+- `--graph`: render the affected scope as a dependency graph (`--depth` caps it).
+- `--plan`: emit a provider-neutral JSON CI shard plan for the set. It always keys
   off the `ci` anchor, so a matrix job fans the affected work across shards.
-- `--bisect <project>` - drive VCS bisect using run history to find the commit that
+- `--bisect <project>`: drive VCS bisect using run history to find the commit that
   introduced a regression.
 
 ## CI

@@ -110,7 +110,7 @@ What replaces them is a line saying where you are: a bar, the position, how many
 read, and how many remarks the pass has produced so far. That last number is the one worth
 having. It is the evidence that reading is turning into something.
 
-![The Diff surface in focus mode: the head still names the review and carries Test and Leave focus, and under it one line (a progress bar, "hunk 1 of 14, 0 read, 1 drafted - libs/authkit/claims.go", and the key legend at the far end) over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
+![The Diff surface in focus mode: the head still names the review and carries Test and Leave focus, and under it one line (a progress bar, "hunk 1 of 14, 0 read, 1 drafted" beside the file `libs/authkit/claims.go`, and the key legend at the far end) over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
 
 The toolbar collapses with the rest of it: the counts row goes entirely rather than emptying, and
 the key legend moves onto the progress line, which is the one row a mode about less chrome can

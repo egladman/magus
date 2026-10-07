@@ -81,12 +81,12 @@ searching the [knowledge graph](../knowledge.md). It is a subcommand, not a shap
 positional, so a free-text search term can never collide with a ref id: `magus query
 refactor` always searches the graph.
 
-- `magus query output out1a2b3c` - print the exact output to stdout.
-- `magus query output out1a2b3c -o json` - the descriptor (ref, project, target,
+- `magus query output out1a2b3c`: print the exact output to stdout.
+- `magus query output out1a2b3c -o json`: the descriptor (ref, project, target,
   status, duration) plus the output as one record; `-o yaml` too.
-- `magus query output out1a2b3c --open` - open the output in the browser [log viewer](#the-log-viewer).
-- `magus query output out1a2b3c --attempts` - list the ref's stored executions.
-- `magus query output out1a2b3c --identity` - the run's identity: descriptor, lineage,
+- `magus query output out1a2b3c --open`: open the output in the browser [log viewer](#the-log-viewer).
+- `magus query output out1a2b3c --attempts`: list the ref's stored executions.
+- `magus query output out1a2b3c --identity`: the run's identity: descriptor, lineage,
   cache key, per-class key digests, and the VCS revision its inputs were read at.
 
 Refs prefix-match like a git short hash: type as few characters as are unique, and
