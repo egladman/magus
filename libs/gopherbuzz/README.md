@@ -530,14 +530,14 @@ by executing the differential suite (`TestJITMatchesInterpreter`,
 `TestJITComputesNatively`, `TestJITDeoptsOnRuntimeError`) on the platform in
 question. Where each stands:
 
-| Platform      | Backend        | Executable memory | Status                                                                                  |
-| ------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------- |
-| linux/amd64   | `jit_amd64.go` | mmap              | **Exercised every CI run**: the only platform CI covers.                                |
-| darwin/arm64  | `jit_arm64.go` | mmap              | **Exercised continuously** by hand: primary development platform, not covered by CI.    |
-| linux/arm64   | `jit_arm64.go` | mmap              | **Verified by hand**: suite executed on arm64 hardware, 2026-08-04. Not covered by CI.  |
-| darwin/amd64  | `jit_amd64.go` | mmap              | Not executed here. Same backend and mapping as linux/amd64; only the OS differs.        |
-| windows/amd64 | `jit_amd64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
-| windows/arm64 | `jit_arm64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
+| Platform      | Backend        | Executable memory | Status                                                                                 |
+| ------------- | -------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| linux/amd64   | `jit_amd64.go` | mmap              | **Exercised every CI run**: the only platform CI covers.                               |
+| darwin/arm64  | `jit_arm64.go` | mmap              | **Exercised continuously** by hand: primary development platform, not covered by CI.   |
+| linux/arm64   | `jit_arm64.go` | mmap              | **Verified by hand**: suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
+| darwin/amd64  | `jit_amd64.go` | mmap              | Not executed here. Same backend and mapping as linux/amd64; only the OS differs.       |
+| windows/amd64 | `jit_amd64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                        |
+| windows/arm64 | `jit_arm64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                        |
 
 The two Windows rows are the honest gap, and they are new: the JIT was excluded
 on Windows (`!windows` in every build tag) until it was enabled alongside the
