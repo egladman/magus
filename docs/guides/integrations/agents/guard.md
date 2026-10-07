@@ -1,6 +1,6 @@
 ---
 title: The guard
-description: What magus session hook denies, what it advises by default, and why - the five deny grounds, how a workspace sets a built-in rule, the file-path surface, the verdict contract a host wires into, and the observations magus records.
+description: "What magus session hook denies, what it advises by default, and why: the five deny grounds, how a workspace sets a built-in rule, the file-path surface, the verdict contract a host wires into, and the observations magus records."
 tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ---
 
@@ -46,7 +46,7 @@ the other way: a guard that can prove something is wrong wants to block it.
 A whole-tree `git reset --hard` destroys uncommitted and untracked work,
 including a concurrent agent's, and nothing brings it back. magus denies that.
 A hand-edited generated file only wastes your time, because regenerating erases
-it, so magus explains instead - even though it knows from the target's own
+it, so magus explains instead, even though it knows from the target's own
 declarations that the file is generated. Blocking there would treat you as
 unable to learn something one `magus describe file` away. An agent told why an
 edit was futile does not repeat it; an agent whose call was rejected has only
@@ -70,7 +70,7 @@ side over a conflicted file, a push at a commit the run log shows no green gate
 for, and a backtick substitution, which can pair with a stray backtick and run
 a command nobody wrote.
 
-**It breaks a provenance guarantee.** The first ground judges the write -
+**It breaks a provenance guarantee.** The first ground judges the write:
 whether it can be taken back. This one judges what the write does to the
 checkout: the artifact's value depends on a guarantee about who authored it,
 and undoing the write does not restore the guarantee.
@@ -87,7 +87,7 @@ damages a reader's ability to trust any note without checking blame, and a note
 of uncertain authorship is worthless rather than merely weaker.
 
 That ground licenses less than it might appear. It is not "the file is
-important", and it is not a general provenance rule - source files carry
+important", and it is not a general provenance rule; source files carry
 authorship too, and writing them is the job. It applies only where the artifact
 has no other corroboration, which is what makes authorship its entire value.
 
@@ -143,7 +143,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   surface; `magus notes edit` reading piped prose is a command, so it is caught
   here. The reason names the alternative: `magus notes edit`, for a person to
   write the note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
-  the rule is armed from that moment - before the store holds a single note,
+  the rule is armed from that moment, before the store holds a single note,
   because otherwise an agent could author its first note and the deny would
   switch on afterwards. A declaration made anywhere else (an explicit
   `--config`, user-global config) is in effect in every workspace on the
@@ -270,7 +270,7 @@ same served command.
   reaches through a runner is therefore matched under the runner:
   `uv run pytest` and `pnpm exec eslint .` match, while bare `pytest`, `eslint`
   and `ruff` pass, because no spell renders those as the program. That is
-  silence rather than endorsement - a target still covers the work.
+  silence rather than endorsement; a target still covers the work.
   The reason names the escalation ladder: a top-level target first, then a
   single spell op (`magus run go::go-test <project>`), which still runs through
   magus, and `--dry-run` to see the exact command either would run. Read-only
@@ -281,7 +281,7 @@ same served command.
   with generated files you did not edit; sweeping them into a commit about
   something else is how a focused change becomes unreviewable.
 - **Piping or redirecting magus's own output**: `| tail`, `> file`, `>> file`,
-  `2>&1`. The equivalent is exact - `-o name|json|template=` returns the field
+  `2>&1`. The equivalent is exact: `-o name|json|template=` returns the field
   the filter was reaching for, and every run persists its full log, so a failure
   prints that path with the ref. A pipe additionally replaces the exit status
   with the last stage's, so `magus affected ci | tail` reports tail's success
@@ -310,16 +310,16 @@ same served command.
   A **scripted substitute-and-write** is the same edit by another route and
   is advised with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
   one-liner whose substitution (`re.sub`, `.replace(`) is followed on the line
-  by a `.write(`. Deliberately narrow - an interpreter that only WRITES a file
-  is ordinary authoring and passes - so a one-liner that writes before it
+  by a `.write(`. Deliberately narrow (an interpreter that only WRITES a file
+  is ordinary authoring and passes), so a one-liner that writes before it
   substitutes slips through, and the rule is a habit rail rather than a fence.
 - **Running magus from a copy of the workspace** in a temp or scratchpad
   directory (`cd /tmp/... && magus ...`, including via a variable assigned
   earlier on the same line). The verdict would describe a tree nobody ships:
   generated files land in the copy, the cache splits, and duplicated spell
   sources trip MGS1002. To work on a different workspace, pass `--root <path>`.
-  A magus command relocated into a SIBLING CHECKOUT of this repository - a `cd`
-  into a linked worktree, or into the main checkout reached from inside one - is
+  A magus command relocated into a SIBLING CHECKOUT of this repository (a `cd`
+  into a linked worktree, or into the main checkout reached from inside one) is
   advised on the same ground, recognized by reading the shared git directory
   rather than by the path's name: that tree's `./magus` was linked from ITS
   sources and its cache is keyed to ITS tree, so the verdict describes neither
@@ -438,17 +438,17 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   is a declared target output, and reverting it because you did not hand-edit it
   is what makes CI fail on drift.
 - A repo-wide text search (`grep -r`, `rg`, `find -name`): the graph answers
-  structural questions from declared sources - `magus refs` for a code symbol,
+  structural questions from declared sources: `magus refs` for a code symbol,
   `magus query` for a domain entity.
 - A dependency re-resolution (`go get`, `pnpm add`, `cargo update`, `uv lock`,
   `pip-compile`): the `update` charm is what grants that write inside magus, and
-  it is deliberately not part of `rw` - `rw` covers output reproducible from a
+  it is deliberately not part of `rw`: `rw` covers output reproducible from a
   clean checkout, `update` covers state that depends on what a registry or a
   vulnerability feed serves
   today. Applying a lockfile (`npm ci`, `pnpm install --frozen-lockfile`)
   re-resolves nothing and passes. `go mod tidy` is matched by `raw-tool`
   because a spell op renders it, and its advice carries the same `update`
-  route - routing into magus without naming the charm would send you to a
+  route, since routing into magus without naming the charm would send you to a
   target that refuses the write.
 - A tree-identity read (`git rev-parse HEAD`, `git describe`, `git stash
   create`): `magus vcs checkpoint` prints the revision plus a digest of the
@@ -459,8 +459,8 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
 - `time magus ...`, `timeout 5m magus ...`, and `magus ... && echo done`: magus
   already reports each target's duration and verdict, already takes `--timeout`,
   and already reports success through its exit status.
-- A chained `magus run` - a second `run` or `affected` after any of `;`, `&&` or
-  `||`: targets compose through `ctx.needs`, so running the LAST one usually
+- A chained `magus run` (a second `run` or `affected` after any of `;`, `&&` or
+  `||`): targets compose through `ctx.needs`, so running the LAST one usually
   pulls the rest in, and each extra invocation reloads the workspace. Only the
   dependency graph knows whether the two are genuinely independent, which is why
   this advises rather than denies.
@@ -540,7 +540,7 @@ once per PATH, because a second out-of-focus file is a second fact, and once per
 session for the full explanation, so every firing after the first is one line.
 The second
 identical paragraph teaches nothing, and this page's standard says why that
-matters - a check that is red by default is a check people learn to ignore,
+matters: a check that is red by default is a check people learn to ignore,
 taking the real failures with it.
 
 Denials are never silenced. A refusal explains itself every time it refuses; it
@@ -561,8 +561,8 @@ The ref is stored in the activity trail under the `grd` prefix, and the line is
 a breadcrumb with the id `deny-verdict`, so `magus session hints` counts how
 often it is read.
 
-The advisories that correct the command itself - a `time` wrapper, a chained
-run - are exempt too, because a second firing reports a
+The advisories that correct the command itself (a `time` wrapper, a chained
+run) are exempt too, because a second firing reports a
 second mistake.
 
 A session is identified by the `session_id` your host reports, on the flag or in
@@ -584,7 +584,7 @@ against what concurrent leases declared they own (see
 file is wasteful rather than destructive; the other two deny, on the provenance
 trigger and on a collision no later rule can outrank.
 
-The lease rule denies only what a DECLARATION settles - an enrolled lease writing
+The lease rule denies only what a DECLARATION settles: an enrolled lease writing
 onto another live lease's owned paths, onto its own forbidden paths, outside
 every entry in its own owned paths, at all when its row is `read_only`, or at all
 before it has registered the base it landed on. An empty owned list on a row that
@@ -595,7 +595,7 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
   than blocking on a file it cannot read, because a lease whose boundary
   silently stopped being checked looks exactly like one nobody declared.
 - A write onto another live lease's owned paths by a writer magus cannot
-  attribute to a live lease - naming none, naming an id it cannot parse, or
+  attribute to a live lease: naming none, naming an id it cannot parse, or
   naming a valid id with no live row. That is the same collision the enrolled
   case denies, and it advises because magus cannot tell "not in the fleet" from
   "in it and not saying so", and blocking a person in their own checkout is the
@@ -658,7 +658,7 @@ Wire this to your host's file-editing tool, not its shell tool.
 The input arrives however your host can produce it: as raw text on stdin, or as
 the host's own JSON event. magus reads `tool_input.command`,
 `tool_input.file_path`, `session_id` and `hook_event_name` out of an envelope
-directly, so a host that writes one needs neither `jq` nor `--path` - a payload
+directly, so a host that writes one needs neither `jq` nor `--path`; a payload
 carrying a file path is judged as a write.
 
 The verdict leaves through the standard output arm: `-o json` for a
@@ -763,7 +763,7 @@ review, and no local config edit changes what it runs.
 
 Ask where a config came from rather than who can edit it. One you wrote is
 yours. One that arrived in a cloned repository is a stranger's code your host
-may run - the same standing risk as that repo's `Makefile` or git hooks, and
+may run: the same standing risk as that repo's `Makefile` or git hooks, and
 older than agents. Read it before you run it.
 
 ## What magus records
@@ -772,7 +772,7 @@ Every `magus session hook` invocation with a readable command or path appends on
 `agent_command` event to the local Activity Trail. This is product telemetry for
 improving agent support: which host tool an agent selected, whether it reached a
 magus surface or a raw command, and which guidance would move that workflow onto
-magus. It is not a security feature and never an execution gate - recording is
+magus. It is not a security feature and never an execution gate; recording is
 best effort, local, and cannot change a verdict.
 
 The hook writes a normalized request and response as content-addressed blobs
@@ -803,7 +803,7 @@ attributed from its HTTP `User-Agent` instead.
 
 `agent_command` means observed invocation, not successful execution. A pre-tool
 hook runs before the host decides whether to call the tool, so an `OUTCOME_OK`
-event means magus recorded and evaluated the observation - not that a shell
+event means magus recorded and evaluated the observation, not that a shell
 process started, exited zero, or ran at all. Direct MCP calls stay
 `mcp_tool_call` events for that reason: their wrapper sees the actual result.
 
