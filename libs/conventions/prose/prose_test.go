@@ -96,11 +96,11 @@ func TestProseLinesDropCodeAndKeepListItems(t *testing.T) {
 	}
 }
 
-// TestProseLinesSplitACollapsedList pins the split at a run of blanks before a
-// marker, which is all that is left of a list item's line in a doc whose
-// newlines were collapsed. A single space and a backtick span never split.
-func TestProseLinesSplitACollapsedList(t *testing.T) {
-	doc := "Rules are derived:    - one property;   - the next - here `a  - b`"
+// TestProseLinesOpenAnItemPerMarkerLine pins that each line opening with a
+// marker is its own item, and that a spaced hyphen later in the line, inside a
+// backtick span or not, opens nothing.
+func TestProseLinesOpenAnItemPerMarkerLine(t *testing.T) {
+	doc := "Rules are derived:\n    - one property;\n   - the next - here `a  - b`"
 
 	want := []proseLine{
 		{text: "Rules are derived:", start: 0, opens: true},

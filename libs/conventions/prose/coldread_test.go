@@ -116,9 +116,6 @@ func TestAsideReportsAHyphenEndingALine(t *testing.T) {
 }
 
 // TestAsideLeavesAListItemAlone pins the list items the tree reported as asides.
-// The knowledge graph collapses a doc's newlines to spaces, so each item arrives
-// as a run of blanks and a marker in the middle of the line; the collapsed
-// cases are those docs as the graph stores them.
 func TestAsideLeavesAListItemAlone(t *testing.T) {
 	cases := []judgeCase{
 		{
@@ -131,45 +128,45 @@ func TestAsideLeavesAListItemAlone(t *testing.T) {
 			doc:  "Modes lists the delivery modes -\n  - default: a fragment\n  - upload: a link",
 		},
 		{
-			name: "collapsed: derived",
-			doc: "renderJobSchema renders one record. Every rule it applies is derived:    " +
-				"- one property per json tag, in declaration order and named by the tag;",
+			name: "derived",
+			doc: "renderJobSchema renders one record. Every rule it applies is derived:\n" +
+				"  - one property per json tag, in declaration order and named by the tag;",
 		},
 		{
-			name: "collapsed: modes",
-			doc:  "Two privacy-first delivery modes:   - default: gzip+base64url the graph into a URL fragment.",
+			name: "modes",
+			doc:  "Two privacy-first delivery modes:\n  - default: gzip+base64url the graph into a URL fragment.",
 		},
 		{
-			name: "collapsed: Accepts",
-			doc:  "number scans a numeric literal. Accepts:    - Decimal ints and floats:  42, 1_000_000, 3.14",
+			name: "Accepts",
+			doc:  "number scans a numeric literal. Accepts:\n  - Decimal ints and floats:  42, 1_000_000, 3.14",
 		},
 		{
-			name: "collapsed: levels",
-			doc: "Two namespaces answer, reflecting the two identity levels:    " +
-				"- STEP refs (portable, key-derived): the hex tail prefix-matches a cache key.",
+			name: "levels",
+			doc: "Two namespaces answer, reflecting the two identity levels:\n" +
+				"  - STEP refs (portable, key-derived): the hex tail prefix-matches a cache key.",
 		},
 		{
-			name: "collapsed: them.",
-			doc:  "Notes attach to graph entities without being derived from any of them.    - WHO WRITES. A person.",
+			name: "them.",
+			doc:  "Notes attach to graph entities without being derived from any of them.\n  - WHO WRITES. A person.",
 		},
 		{
-			name: "collapsed: full",
-			doc:  "Layout places a figure in full  - box, edge and label positions.",
+			name: "full",
+			doc:  "Layout places a figure in full\n - box, edge and label positions.",
 		},
 		{
-			name: "collapsed: value",
-			doc:  `Graph returns a knowledge-graph flavor as a domain value:   - "skeleton": project nodes only`,
+			name: "value",
+			doc:  "Graph returns a knowledge-graph flavor as a domain value:\n  - \"skeleton\": project nodes only",
 		},
 		{
-			name: "collapsed: every marker",
-			doc:  "Markers lists:   * a star   + a plus   1. a step   2) a step",
+			name: "every marker but a hyphen",
+			doc:  "Markers lists:\n  * a star\n  + a plus\n  1. a step\n  2) a step",
 		},
 		{
-			name: "collapsed: a hyphen leading into a list",
-			doc:  "Modes lists the delivery modes -   - default: a fragment   - upload: a link",
+			name: "a hyphen leading into a list",
+			doc:  "Modes lists the delivery modes -\n  - default: a fragment\n\n  - upload: a link",
 		},
 		{
-			name: "collapsed: an item in backticks is a literal",
+			name: "two blanks and a hyphen in backticks",
 			doc:  "Flags reads `a  - b` as one argument.",
 		},
 	}
@@ -178,7 +175,7 @@ func TestAsideLeavesAListItemAlone(t *testing.T) {
 }
 
 // TestAsideStillReportsAnAsideBesideAList pins the asides the tree reported
-// correctly, in the collapsed form the graph stores and beside list items.
+// correctly, alone and beside list items.
 func TestAsideStillReportsAnAsideBesideAList(t *testing.T) {
 	cases := []judgeCase{
 		{
@@ -197,18 +194,18 @@ func TestAsideStillReportsAnAsideBesideAList(t *testing.T) {
 			want: []Finding{asideFinding("point - three")},
 		},
 		{
-			name: "a wrapped aside collapsed onto one line",
+			name: "check",
 			doc:  "The lock is taken before the check - which is what makes the fast path safe.",
 			want: []Finding{asideFinding("check - which")},
 		},
 		{
-			name: "collapsed: an aside inside an item",
-			doc:  "Every rule it applies is derived:    - one property per tag - in declaration order",
+			name: "an aside inside an item",
+			doc:  "Every rule it applies is derived:\n  - one property per tag - in declaration order",
 			want: []Finding{asideFinding("tag - in")},
 		},
 		{
-			name: "collapsed: an aside before a list",
-			doc:  "Modes reads the flag - not the env:   - default: a fragment",
+			name: "an aside before a list",
+			doc:  "Modes reads the flag - not the env:\n  - default: a fragment",
 			want: []Finding{asideFinding("flag - not")},
 		},
 		{

@@ -4,8 +4,7 @@
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
-// fenced block is code. Only the prose that remains is judged. A doc whose
-// newlines were collapsed to spaces still splits at its list items.
+// fenced block is code. Only the prose that remains is judged.
 package prose
 
 import (
@@ -154,61 +153,12 @@ func proseLines(doc string) []proseLine {
 			inList = false
 		}
 
-		items := collapsedItems(proseLine{text: text, start: indent + marker, opens: opens, item: marker > 0})
-		if len(items) > 1 {
-			inList = true
-		}
-
-		out = append(out, items...)
+		out = append(out, proseLine{text: text, start: indent + marker, opens: opens, item: marker > 0})
 		opens = false
 	}
 
 	return out
 }
-
-// collapsedItems splits ln before every list item run into it. An index that
-// collapses a doc's newlines to spaces, as the knowledge graph does, leaves an
-// item's indent behind as two or more blanks before its marker, and that run is
-// where the item's line began. A single space before a hyphen is left alone:
-// that is how prose spells an aside.
-func collapsedItems(ln proseLine) []proseLine {
-	masked := blankBackticks(ln.text)
-	out := []proseLine{ln}
-
-	for i := ln.start; i < len(masked); {
-		if !isBlank(masked[i]) {
-			i++
-
-			continue
-		}
-
-		run := i
-		for i < len(masked) && isBlank(masked[i]) {
-			i++
-		}
-
-		if i-run < 2 || i == len(masked) {
-			continue
-		}
-
-		marker := listMarker(masked[i:])
-		if marker == 0 {
-			continue
-		}
-
-		// The run stays on the item as its indent, the way a wrapped item's
-		// continuation line keeps its own.
-		prev := &out[len(out)-1]
-		cut := run - (len(ln.text) - len(prev.text))
-		item := proseLine{text: prev.text[cut:], start: i - run + marker, opens: true, item: true}
-		prev.text = prev.text[:cut]
-		out = append(out, item)
-	}
-
-	return out
-}
-
-func isBlank(b byte) bool { return b == ' ' || b == '\t' }
 
 // unfenced blanks every line of a fenced code block, fences included, so the
 // lines around it still read as separate paragraphs.
