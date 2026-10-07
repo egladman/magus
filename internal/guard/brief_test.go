@@ -91,8 +91,8 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
 	taught := envelope("Agent", "prompt", "Clean up first with `git stash`.")
 	first := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
-	assert.Equal(t, "advise", first.Decision, "by default the brief is advised, not refused")
-	assert.Equal(t, string(denyRuleBriefCommand), first.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(first),
+		"by default the brief is advised, not refused")
 	assert.Contains(t, first.Context, "git stash")
 
 	again := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})

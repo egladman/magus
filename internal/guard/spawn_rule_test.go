@@ -160,9 +160,10 @@ func TestSpawnUnbriefedAdvisesByDefault(t *testing.T) {
 	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
 
 	first := Judge(ctx, Dependencies{}, req)
-	assert.Equal(t, "advise", first.Decision)
-	assert.Equal(t, string(denySpawnUnbriefed), first.Rule)
-	assert.Empty(t, first.Reason)
+	// The context is the advice prose; the reason stays empty, which the comparison pins.
+	got := first
+	got.Context, got.Lease, got.LeaseFrom = "", "", ""
+	assert.Equal(t, verdictWithRule("advise", string(denySpawnUnbriefed)), got)
 
 	again := Judge(ctx, Dependencies{}, req)
 	assert.NotEqual(t, string(denySpawnUnbriefed), again.Rule, "once per session")

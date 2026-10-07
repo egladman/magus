@@ -161,13 +161,17 @@ func TestParseIndexSymbolDefinedPerOSKeepsEachDoc(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, syms, 1, "one key across both files")
 	s := syms[0]
-	assert.Equal(t, "run_unix.go:25", s.Source)
-	assert.Equal(t, "run replaces the process.", s.Doc, "the doc comes from the file Source names")
-	assert.Equal(t, "func run(argv []string) error", s.Signature, "so does the signature")
-	assert.Equal(t, []types.KnowledgeSymbolDefinition{
+	// Identity, size and reference fields come from the parser paths other tests pin; this
+	// one controls where the doc, signature and definitions come from.
+	want := s
+	want.Source = "run_unix.go:25"
+	want.Doc = "run replaces the process."
+	want.Signature = "func run(argv []string) error"
+	want.Definitions = []types.KnowledgeSymbolDefinition{
 		{Source: "run_unix.go:25", Doc: "run replaces the process."},
 		{Source: "run_windows.go:10", Doc: "run starts a child and waits."},
-	}, s.Definitions, "each file's doc travels with its own definition")
+	}
+	assert.Equal(t, want, s, "the doc and signature come from the file Source names; each file's doc travels with its own definition")
 }
 
 // TestParseIndexSymbolDefinedOnceListsNoDefinitions pins that Definitions stays empty for

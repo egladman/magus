@@ -85,9 +85,7 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 	gate := hint.NewGate(t.TempDir(), "s1")
 	first := Verdict{Decision: "pass"}
 	held.speak(gate, &first)
-	assert.Equal(t, "advise", first.Decision)
-	assert.Equal(t, string(rule), first.Rule)
-	assert.Equal(t, v.Context, first.Context)
+	assert.Equal(t, Verdict{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
 
 	again := Verdict{Decision: "pass"}
 	held.speak(gate, &again)

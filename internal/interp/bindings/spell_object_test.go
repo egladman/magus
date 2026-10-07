@@ -106,8 +106,13 @@ func TestSpellHandleRoundTripKeepsTheSymbolIndexer(t *testing.T) {
 
 	got, err := spell.DecodeHandle(h)
 	require.NoError(t, err)
-	assert.Equal(t, indexer, got.SymbolIndexer)
-	assert.Equal(t, tools, got.Tools)
+	// Decoding registers the indexer as the spell's symbol-index op under its own name.
+	assert.Equal(t, spells.Descriptor{
+		Name:          "myspell",
+		Ops:           map[string]spells.Op{"scip-mine": {Kind: spells.OpKindSymbolIndex, Command: indexer.Command}},
+		SymbolIndexer: indexer,
+		Tools:         tools,
+	}, got)
 }
 
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
