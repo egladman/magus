@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/interp"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
@@ -633,6 +634,10 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			"the cache that records whether a symbol index is current could not be opened, so the index of %s cannot be vouched for",
 			strings.Join(projects, ", "))
 	}
+	// The step each probe keyed, so a rebuild inside a run is keyed exactly as the probe
+	// after it reads it back.
+	keyed := map[indexRef]cache.Step{}
+	unkeyable := map[indexRef]error{}
 	probe := func(idxs []projectIndex) map[indexRef]bool {
 		var ps []*types.Project
 		for _, idx := range idxs {
@@ -640,25 +645,42 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 				ps = append(ps, idx.project)
 			}
 		}
-		// An unprobeable project reads as not current; its rebuild runs through m.Run,
-		// which refuses it with the MGS3035 that names the tool.
+		// An unprobeable project reads as not current, and its rebuild is refused with the
+		// MGS3035 that names the tool, as m.Run would refuse it.
 		toolVersions, unprobeable := m.toolVersionsEach(ctx, ps)
 		observations := m.probeObservations(ctx, ps, indexesDriven(idxs))
 		out := map[indexRef]bool{}
 		for _, idx := range idxs {
 			path := idx.project.Path
 			if unprobeable[path] != nil {
+				unkeyable[idx.ref()] = unprobeable[path]
 				out[idx.ref()] = false
 				continue
 			}
-			ok, err := c.IsCached(ctx, m.symbolIndexStep(idx.project, idx.op, toolVersions[path], observations[path]))
+			step := m.symbolIndexStep(idx.project, idx.op, toolVersions[path], observations[path])
+			keyed[idx.ref()] = step
+			ok, err := c.IsCached(ctx, step)
 			out[idx.ref()] = err == nil && ok
 		}
 		return out
 	}
 	return freshenIndexes(touched, probe, func(idx projectIndex) error {
-		return m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}})
+		if err := unkeyable[idx.ref()]; err != nil {
+			return err
+		}
+		return m.buildSymbolIndex(ctx, idx, keyed[idx.ref()])
 	}, m.cfg.Cache.WriteEnabled())
+}
+
+// buildSymbolIndex rebuilds one stale index. A reader inside a target body (the run that
+// owns ctx holds the project's lock for its whole invocation) rebuilds through that run's
+// scheduler, as step: a nested m.Run would be refused MGS3007 for the very project the
+// body runs in. Anywhere else it runs the index op as its own invocation.
+func (m *Magus) buildSymbolIndex(ctx context.Context, idx projectIndex, step cache.Step) error {
+	if ran, err := interp.CrossDispatchFromContext(ctx).DispatchStep(ctx, idx.project, step); ran {
+		return err
+	}
+	return m.Run(ctx, []types.Target{{Path: idx.project.Path, Name: idx.op}})
 }
 
 // installedIndexes drops each index whose indexer is not installed, as long as its project
