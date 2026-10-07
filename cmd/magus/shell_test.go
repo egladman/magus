@@ -20,9 +20,11 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -1553,6 +1555,53 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 			assert.Equal(t, types.GuardVerdict{Decision: types.GuardDeny, Reason: "Not in this repository."}, got)
 		})
 	}
+}
+
+// A command loaded with --root from inside another checkout looks symbols and graph ids up
+// in the guard index of the workspace it loaded, not the cwd's.
+func TestGuardIndexAnswersFromTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	cacheDir, err := magus.ResolveCacheDir(loaded, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	g := knowledge.NewGraph()
+	g.Merge([]types.KnowledgeNode{
+		{ID: "symbol:x loadedOnly().", Kind: types.KindSymbol, Label: "loadedOnly"},
+		{ID: "target:.:build", Kind: types.KindTarget, Label: "build"},
+	}, nil)
+	require.NoError(t, knowledge.WriteGuardIndex(cacheDir, loaded, g, true, knowledge.GuardCheckout{}))
+
+	deps := guardDependencies(t.Context(), loaded)
+	defined, _ := deps.SymbolDefined("loadedOnly")
+	assert.True(t, defined)
+	ids, ok := deps.IndexedIDs(t.Context(), types.KindTarget)
+	assert.True(t, ok)
+	assert.Equal(t, []string{"target:.:build"}, ids)
+}
+
+// The stale-graph advice inspects the loaded workspace. Inspecting the cwd's after loading
+// another panics.
+func TestGuardDependenciesStaleAdviceInspectsTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	_, err := inspectWorkspace(t.Context(), loaded)
+	require.NoError(t, err)
+
+	deps := guardDependencies(t.Context(), loaded)
+	require.NotPanics(t, func() { _ = deps.GraphStaleAdvice(t.Context()) })
+}
+
+// The index cause is diagnosed from the loaded checkout's sync record. Eventually, because
+// the lookup runs under the guard's budget and a cold git can overrun it once.
+func TestIndexCauseNamesTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	dir, err := knowledgeStoreDir(loaded)
+	require.NoError(t, err)
+	require.NoError(t, maintenance.RecordSyncRequest(dir, maintenance.SyncRequest{
+		At: time.Now(), Outcome: maintenance.SyncRefused, Detail: "refused in the loaded checkout",
+	}))
+
+	deps := guardDependencies(t.Context(), loaded)
+	assert.Eventually(t, func() bool { return strings.Contains(deps.IndexCause(), "refused in the loaded checkout") },
+		5*time.Second, 50*time.Millisecond)
 }
 
 // spawnEnvelope is a Claude Code spawn as its hook wiring hands it to `magus shell`.

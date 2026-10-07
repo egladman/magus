@@ -108,6 +108,21 @@ func TestRenameBlindSpotsCountOnlyTheSymbolsLanguage(t *testing.T) {
 // the workspace it loaded. Grading through the cwd asked inspectWorkspace for B after it
 // had loaded A, which panics.
 func TestRenameGradeInspectsTheLoadedRoot(t *testing.T) {
+	loaded := rootElsewhere(t)
+	ws, err := inspectWorkspace(t.Context(), loaded)
+	require.NoError(t, err)
+
+	grade := renameGrade(t.Context(), ws, loaded, true)
+	var rule, reason string
+	require.NotPanics(t, func() { rule, reason = grade("a.go", []byte("package a\n"), []byte("package b\n")) })
+	assert.Empty(t, rule, reason)
+}
+
+// rootElsewhere stands up two workspaces, moves the test into the second, and returns the
+// first: the --root a command loads from inside another checkout. The memoized workspace
+// load is the test's own.
+func rootElsewhere(t *testing.T) string {
+	t.Helper()
 	testkit.Isolate(t)
 	resetWorkspaceMemo(t)
 	checkout := func() string {
@@ -117,13 +132,7 @@ func TestRenameGradeInspectsTheLoadedRoot(t *testing.T) {
 	}
 	loaded := checkout()
 	t.Chdir(checkout())
-	ws, err := inspectWorkspace(t.Context(), loaded)
-	require.NoError(t, err)
-
-	grade := renameGrade(t.Context(), ws, loaded, true)
-	var rule, reason string
-	require.NotPanics(t, func() { rule, reason = grade("a.go", []byte("package a\n"), []byte("package b\n")) })
-	assert.Empty(t, rule, reason)
+	return loaded
 }
 
 // checkDefinitions is what stands between a recorded range and a wrong edit. A file older

@@ -277,6 +277,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	rules, loadErr := loadGuardRules(ctx, rootOverride)
 	stop()
 	shellRules, shellDialect := workspaceShellRules(rules)
+	index := newGuardLookups(rootOverride)
 	deps := guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
@@ -298,14 +299,14 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		NotesShared:      globalCfg.Knowledge.Notes.Shared,
 		ShellRules:       shellRules,
 		ShellDialect:     shellDialect,
-		GraphStaleAdvice: staleGraphAdvice,
+		GraphStaleAdvice: index.staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
-		SymbolDefined:    symbolDefinedForGuard,
-		IndexCause:       indexCauseForGuard,
-		SymbolSites:      symbolSitesForGuard,
+		SymbolDefined:    index.symbolDefined,
+		IndexCause:       index.indexCause,
+		SymbolSites:      index.symbolSites,
 		Revision:         revisionForGuard,
-		GraphIDs:         graphIDsForGuard,
-		IndexedIDs:       indexedIDsForGuard,
+		GraphIDs:         index.graphIDs,
+		IndexedIDs:       index.indexedIDs,
 		TrackedFiles:     trackedFilesForGuard,
 		CheckoutBase:     checkoutBaseForGuard,
 		CheckoutState:    checkoutStateForGuard,
@@ -351,8 +352,8 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 // rules alone rather than by the policy of whichever checkout they happen to run in.
 var guardRoot = magus.FindRoot
 
-// loadGuardRules loads the guard rules of the workspace this process runs in from its
-// root magusfile alone, nil with the reason when that file does not load, and nil with no
+// loadGuardRules loads the guard rules of the workspace found from rootOverride (the cwd's
+// when it is "") from its root magusfile alone, nil with the reason when that file does not load, and nil with no
 // error outside any workspace. Unloadable is not fatal for the reason
 // loadWorkspaceShellRules gives: a magusfile typo must not take down every hook.
 //
@@ -483,33 +484,43 @@ func withinBudget[T any](budget time.Duration, lookup func() T) (T, bool) {
 	}
 }
 
-// guardIndex is the index `magus graph build` wrote for this workspace, read once per
-// process, or nil when there is none. The graph itself is never loaded here: that costs
-// seconds, and the index answers the guard's questions from one file.
-var guardIndex = sync.OnceValue(func() *knowledge.GuardIndex {
-	root, err := guardRoot("")
-	if err != nil {
-		return nil
-	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return nil
-	}
-	idx, err := knowledge.ReadGuardIndex(cacheDir, root)
-	if err != nil {
-		return nil
-	}
-	return idx
-})
+// guardLookups answers the guard's questions about one workspace's graph index: the
+// workspace found from rootOverride, the --root a command loaded as given, or from the cwd
+// when it is "".
+type guardLookups struct {
+	rootOverride string
+	// index is the index `magus graph build` wrote for the workspace, read on the first
+	// question, or nil when there is none. The graph itself is never loaded here: that
+	// costs seconds, and the index answers the guard's questions from one file.
+	index func() *knowledge.GuardIndex
+}
 
-// symbolDefinedForGuard answers the one question that lets the guard deny a symbol
-// search: does refs return the same sites this grep is reaching for. Definitive only when
-// the index's symbols were fresh when it was written and no source has moved since; a
-// deny resting on anything less would take grep away on a lookup that may be wrong.
-func symbolDefinedForGuard(ident string) (defined, definitive bool) {
+func newGuardLookups(rootOverride string) guardLookups {
+	return guardLookups{rootOverride: rootOverride, index: sync.OnceValue(func() *knowledge.GuardIndex {
+		root, err := guardRoot(rootOverride)
+		if err != nil {
+			return nil
+		}
+		cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		if err != nil {
+			return nil
+		}
+		idx, err := knowledge.ReadGuardIndex(cacheDir, root)
+		if err != nil {
+			return nil
+		}
+		return idx
+	})}
+}
+
+// symbolDefined answers the one question that lets the guard deny a symbol search: does
+// refs return the same sites this grep is reaching for. Definitive only when the index's
+// symbols were fresh when it was written and no source has moved since; a deny resting on
+// anything less would take grep away on a lookup that may be wrong.
+func (l guardLookups) symbolDefined(ident string) (defined, definitive bool) {
 	type answer struct{ defined, definitive bool }
 	a, ok := withinBudget(guardLookupBudget, func() answer {
-		idx := guardIndex()
+		idx := l.index()
 		if idx == nil {
 			return answer{}
 		}
@@ -518,15 +529,15 @@ func symbolDefinedForGuard(ident string) (defined, definitive bool) {
 	return a.defined, ok && a.definitive
 }
 
-// symbolSitesForGuard reads ident's sites from the refs file beside the guard index, on
-// the same freshness terms as symbolDefinedForGuard.
-func symbolSitesForGuard(ident string) ([]types.KnowledgeRefSite, bool) {
+// symbolSites reads ident's sites from the refs file beside the guard index, on the same
+// freshness terms as symbolDefined.
+func (l guardLookups) symbolSites(ident string) ([]types.KnowledgeRefSite, bool) {
 	type answer struct {
 		sites      []types.KnowledgeRefSite
 		definitive bool
 	}
 	a, ok := withinBudget(guardLookupBudget, func() answer {
-		idx := guardIndex()
+		idx := l.index()
 		if idx == nil {
 			return answer{}
 		}
@@ -539,15 +550,15 @@ func symbolSitesForGuard(ident string) ([]types.KnowledgeRefSite, bool) {
 	return a.sites, ok && a.definitive
 }
 
-// graphIDsForGuard lists kind's ids from the guard index, definitive only while the
-// sources they came from are unchanged.
-func graphIDsForGuard(_ context.Context, kind string) ([]string, bool) {
+// graphIDs lists kind's ids from the guard index, definitive only while the sources they
+// came from are unchanged.
+func (l guardLookups) graphIDs(_ context.Context, kind string) ([]string, bool) {
 	type answer struct {
 		ids   []string
 		fresh bool
 	}
 	a, ok := withinBudget(guardLookupBudget, func() answer {
-		idx := guardIndex()
+		idx := l.index()
 		if idx == nil {
 			return answer{}
 		}
@@ -559,15 +570,15 @@ func graphIDsForGuard(_ context.Context, kind string) ([]string, bool) {
 	return a.ids, true
 }
 
-// indexedIDsForGuard lists kind's ids from the guard index whether or not its sources have
-// moved since; the rules that call it prove their answer against the disk.
-func indexedIDsForGuard(_ context.Context, kind string) ([]string, bool) {
+// indexedIDs lists kind's ids from the guard index whether or not its sources have moved
+// since; the rules that call it prove their answer against the disk.
+func (l guardLookups) indexedIDs(_ context.Context, kind string) ([]string, bool) {
 	type answer struct {
 		ids   []string
 		found bool
 	}
 	a, ok := withinBudget(guardLookupBudget, func() answer {
-		idx := guardIndex()
+		idx := l.index()
 		if idx == nil {
 			return answer{}
 		}
@@ -587,12 +598,12 @@ func trackedFilesForGuard(ctx context.Context, root string) ([]string, bool) {
 	return files, err == nil && ctx.Err() == nil
 }
 
-// loadWorkspaceShellRules returns additive rules the root magusfile declared via
-// magus\guard.shell, and the last non-empty dialect among them for outer parse.
-// Missing or unloadable is empty so a magusfile typo cannot take down every
-// shell hook (built-ins still apply).
-func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
-	rules, _ := loadGuardRules(ctx, "")
+// loadWorkspaceShellRules returns additive rules the root magusfile of the workspace found
+// from rootOverride declared via magus\guard.shell, and the last non-empty dialect among
+// them for outer parse. Missing or unloadable is empty so a magusfile typo cannot take
+// down every shell hook (built-ins still apply).
+func loadWorkspaceShellRules(ctx context.Context, rootOverride string) ([]guard.WorkspaceShellRule, guard.Dialect) {
+	rules, _ := loadGuardRules(ctx, rootOverride)
 	return workspaceShellRules(rules)
 }
 
