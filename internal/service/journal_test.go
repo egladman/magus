@@ -77,8 +77,7 @@ func TestJournalSweepRunsStopCommands(t *testing.T) {
 	j.record("svc2", spells.Command{})
 
 	res := j.Sweep(context.Background())
-	assert.Equal(t, 1, res.Reaped)
-	assert.Equal(t, 1, res.Unreapable)
+	assert.Equal(t, SweepResult{Reaped: 1, Unreapable: 1}, res)
 
 	_, err = os.Stat(sentinel)
 	require.NoError(t, err, "the recorded stop command ran")

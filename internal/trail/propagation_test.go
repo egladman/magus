@@ -111,11 +111,13 @@ func TestSpawnFromEnv_ReadsTheTwoChannelsIndependently(t *testing.T) {
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/f3,"+BaggageSpawner+"=claude")
 
 	spawn := SpawnFromEnv()
-	assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", spawn.TraceID, "surrounding whitespace is formatting, not part of the value")
-	assert.Equal(t, "00f067aa0ba902b7", spawn.ParentSpanID)
-	assert.Equal(t, "01", spawn.Flags)
-	assert.Equal(t, "fleet/f3", spawn.Lease)
-	assert.Equal(t, "claude", spawn.Spawner)
+	assert.Equal(t, Spawn{
+		TraceID:      "4bf92f3577b34da6a3ce929d0e0e4736",
+		ParentSpanID: "00f067aa0ba902b7",
+		Flags:        "01",
+		Lease:        "fleet/f3",
+		Spawner:      "claude",
+	}, spawn, "surrounding whitespace is formatting, not part of the value")
 	assert.Equal(t, "fleet/f3", LeaseFromEnv())
 
 	t.Setenv(EnvBaggage, "")

@@ -466,8 +466,10 @@ func TestNewCommandRenderer(t *testing.T) {
 		assert.Empty(t, steps[0].Charm)
 		assert.Equal(t, []string{"go", "tool", "golangci-lint", "run", "./..."}, steps[0].Command)
 		assert.Equal(t, "debug", steps[1].Charm) // sorted: debug before write
-		assert.Equal(t, "write", steps[2].Charm)
-		assert.Equal(t, []string{"go", "tool", "golangci-lint", "run", "--fix", "./...", "-v"}, steps[2].Command)
+		assert.Equal(t, spells.CharmTraceStep{
+			Charm:   "write",
+			Command: []string{"go", "tool", "golangci-lint", "run", "--fix", "./...", "-v"},
+		}, steps[2])
 	})
 	t.Run("explainer: no active charms → base-only, still ok", func(t *testing.T) {
 		steps, ok, err := newCommandExplainer(targets)("lint", nil)

@@ -562,8 +562,7 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 			assert.NotEqual(t, denyRuleSymbolSearch, v.Rule.Name, "%q (%s) must run: %s", tt.command, tt.class, v.Deny)
 			continue
 		}
-		require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, "%q (%s): %s", tt.command, tt.class, v.Deny+v.Context)
-		assert.Equal(t, tt.arg, v.Rule.Arg, "%q (%s)", tt.command, tt.class)
+		require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, "%q (%s): %s", tt.command, tt.class, v.Deny+v.Context)
 		assert.Contains(t, v.Deny, "Classified: ", "%q: the deny names what it classified", tt.command)
 	}
 }
@@ -605,8 +604,7 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 			assert.Equal(t, tt.advised, v.Kind == advisoryPrecedent, tt.command)
 			continue
 		}
-		require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, "%q: %s", tt.command, v.Context)
-		assert.Equal(t, tt.arg, v.Rule.Arg, tt.command)
+		require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: tt.arg}, v.Rule, "%q: %s", tt.command, v.Context)
 		require.NotEmpty(t, v.Next, tt.command)
 		assert.Equal(t, hint.GraphBuild.With("--silent"), v.Next[0].Run, "%q: the rebuild comes first", tt.command)
 	}
@@ -652,8 +650,7 @@ func TestBuzzSearchRedirectsOnlyWhatTheIndexHolds(t *testing.T) {
 
 	indexed["splitBranch"] = true
 	v := Evaluate(deps, search)
-	require.Equal(t, denyRuleSymbolSearch, v.Rule.Name, v.Deny)
-	assert.Equal(t, "splitBranch", v.Rule.Arg)
+	require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "splitBranch"}, v.Rule, v.Deny)
 }
 
 // TestMixedSearchServesTheTextOnItsOwn pins the half of a mixed alternation that is not a

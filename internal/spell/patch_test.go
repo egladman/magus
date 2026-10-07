@@ -20,12 +20,11 @@ func TestExplainCharms(t *testing.T) {
 	t.Run("one step per active charm, cumulative, sorted", func(t *testing.T) {
 		steps, err := ExplainCharms(base, charms, []string{"debug", "rw"})
 		require.NoError(t, err)
-		require.Len(t, steps, 2)
 		// Sorted name order: debug before rw.
-		assert.Equal(t, "debug", steps[0].Charm)
-		assert.Equal(t, []string{"tool", "golangci-lint", "run", "./...", "-v"}, steps[0].Command)
-		assert.Equal(t, "rw", steps[1].Charm)
-		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, steps[1].Command)
+		assert.Equal(t, []spells.CharmTraceStep{
+			{Charm: "debug", Command: []string{"tool", "golangci-lint", "run", "./...", "-v"}},
+			{Charm: "rw", Command: []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}},
+		}, steps)
 	})
 
 	t.Run("undeclared or inactive charm contributes no step", func(t *testing.T) {
@@ -771,9 +770,8 @@ func TestConflicts(t *testing.T) {
 	t.Run("destructive overlap is a conflict", func(t *testing.T) {
 		got, err := Conflicts(base, charms, []string{"rw", "fmt"})
 		require.NoError(t, err)
-		require.Len(t, got, 1)
-		assert.Equal(t, "fmt", got[0].Name, "the losing charm is reported")
-		assert.Equal(t, "rw", got[0].OverriddenBy, "the winner is named")
+		// The losing charm is reported, and the winner is named.
+		assert.Equal(t, []spells.CharmConflict{{Name: "fmt", OverriddenBy: "rw"}}, got)
 	})
 
 	t.Run("disjoint appends do not conflict", func(t *testing.T) {
