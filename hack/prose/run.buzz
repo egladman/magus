@@ -1,0 +1,177 @@
+// The prose checks: Vale judges text magus extracts, and every finding names the file and
+// line the text came from.
+//
+//	magus buzz hack/prose/run.buzz                           fixtures, comments and names
+//	magus buzz hack/prose/run.buzz -- comments|names|fixtures [--buzz] [--counts]
+//	magus buzz hack/prose/run.buzz -- commits [<range>]       each commit in range (default <base>..HEAD)
+//	magus buzz hack/prose/run.buzz -- pr-title <title>
+//	magus buzz hack/prose/run.buzz -- pr-description <file>
+//
+// --counts prints how many findings each rule has instead of each finding. --buzz adds
+// the Buzz symbol index to the name ban. It exits 1 on any error-level finding.
+namespace prose;
+
+import "std";
+import "fs";
+import "os";
+import "vcs";
+import "flags";
+import "magus/lint";
+import "hack/prose/vale" as prosevale;
+import "hack/prose/comments" as prosecomments;
+import "hack/prose/names" as prosenames;
+import "hack/prose/messages" as prosemessages;
+
+final USAGE = "usage: magus buzz hack/prose/run.buzz -- [all|comments|names|fixtures|commits [<range>]|pr-title <title>|pr-description <file>] [--buzz] [--counts]";
+
+// FIXTURES holds one directory per rule with a pass.<ext> and a fail.<ext>.
+final FIXTURES = ".vale/fixtures";
+
+// fixtures checks every rule against its fixtures: fail.<ext> raises the rule, pass.<ext>
+// does not. A rule in .vale/styles/Magus with no fixtures is itself a finding.
+export fun fixtures(root: str, vale: fun (paths: [str]) > str !> any) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final paths = mut [<str>];
+    foreach (rule in fs\listDir(root + "/" + FIXTURES)) {
+        foreach (name in fs\listDir(root + "/" + FIXTURES + "/" + rule)) {
+            paths.append(FIXTURES + "/" + rule + "/" + name);
+        }
+    }
+    final report = vale(paths);
+    foreach (p in paths) {
+        final parts = p.split("/");
+        final rule = "Magus." + parts[2];
+        var hits = 0;
+        foreach (a in prosevale\alertsIn(report, file: p)) {
+            if (a.check == rule) {
+                hits = hits + 1;
+            }
+        }
+        if (parts[3].startsWith("fail.") and hits == 0) {
+            found.append(Finding{ path = p, rule = rule, message = "{rule} does not fire on its failing fixture" });
+        }
+        if (parts[3].startsWith("pass.") and hits > 0) {
+            found.append(Finding{ path = p, rule = rule, message = "{rule} fires {hits} time(s) on its passing fixture" });
+        }
+    }
+    foreach (style in fs\listDir(root + "/.vale/styles/Magus")) {
+        final rule = style.replace(".yml", with: "");
+        if (!fs\exists(root + "/" + FIXTURES + "/" + rule + "/pass." + extension(rule, paths: paths))) {
+            found.append(Finding{ path = ".vale/styles/Magus/" + style, rule = "Magus." + rule,
+                message = "Magus.{rule} has no fixtures", fix = "Add {FIXTURES}/{rule}/pass.<ext> and fail.<ext>." });
+        }
+    }
+    return found;
+}
+
+fun extension(rule: str, paths: [str]) > str {
+    foreach (p in paths) {
+        final parts = p.split("/");
+        if (parts[2] == rule and parts[3].startsWith("pass.")) {
+            return parts[3].sub(5);
+        }
+    }
+    return "";
+}
+
+// commits judges each commit message in revs.
+export fun commits(dir: str, revs: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    final docs = mut {<str: prosemessages\Document>};
+    foreach (hash, message in prosemessages\rangeMessages(revs)) {
+        final subject = message.split("\n")[0];
+        if (!prosemessages\exempt(subject)) {
+            docs["{hash}.commit"] = prosemessages\commitDocument(message, label: "commit " + hash);
+        }
+    }
+    return prosemessages\judge(dir, docs: docs, vale: vale);
+}
+
+fun report(blocking: [Finding], advice: [Finding], counts: bool) > void {
+    if (counts) {
+        final tally = mut {<str: int>};
+        foreach (f in blocking) {
+            tally[f.rule] = (tally[f.rule] ?? 0) + 1;
+        }
+        foreach (rule, n in tally) {
+            std\print("{n}\t{rule}");
+        }
+        std\print("{blocking.len()}\ttotal");
+        return;
+    }
+    foreach (f in blocking) {
+        std\print(prosevale\render(f));
+        if (f.fix != "") {
+            std\print("    " + f.fix);
+        }
+    }
+    foreach (f in advice) {
+        std\print("note: " + prosevale\render(f));
+    }
+}
+
+export fun main(args: [str]) > void !> any {
+    // The command's own words follow it, so its switches are read from the tail by hand.
+    final parsed = flags\parse(args, switches: ["--buzz", "--counts", "--help"], valued: [<str>], command: true);
+    if (parsed.values["--help"] != null) {
+        std\print(USAGE);
+        return;
+    }
+    if (parsed.unknown.len() > 0) {
+        throw USAGE;
+    }
+    final switches = mut {<str: bool>};
+    foreach (k, _ in parsed.values) {
+        switches[k] = true;
+    }
+    final words = mut [<str>];
+    foreach (w in parsed.positionals) {
+        if (w == "--buzz" or w == "--counts") {
+            switches[w] = true;
+        } else {
+            words.append(w);
+        }
+    }
+    final root = vcs\root();
+    final dir = root + "/.magus/prose";
+    fs\mkdirAll(dir);
+    final command = if (words.len() > 0) words[0] else "all";
+    final rest = words.sub(if (words.len() > 0) 1 else 0);
+    final blocking = mut [<Finding>];
+    final advice = mut [<Finding>];
+    if (command == "all" or command == "fixtures") {
+        foreach (f in fixtures(root, vale: prosevale\run)) {
+            blocking.append(f);
+        }
+    }
+    if (command == "all" or command == "comments") {
+        final judged = prosecomments\check(dir, vale: prosevale\run);
+        foreach (f in judged.blocking) { blocking.append(f); }
+        foreach (f in judged.advice) { advice.append(f); }
+    }
+    if (command == "all" or command == "names") {
+        final judged = prosenames\check(dir, buzz: switches["--buzz"] ?? false, vale: prosevale\run);
+        foreach (f in judged.blocking) { blocking.append(f); }
+        foreach (f in judged.advice) { advice.append(f); }
+    }
+    if (command == "commits") {
+        final revs = if (rest.len() > 0) rest[0] else vcs\base() + "..HEAD";
+        final judged = commits(dir, revs: revs, vale: prosevale\run);
+        foreach (f in judged.blocking) { blocking.append(f); }
+        foreach (f in judged.advice) { advice.append(f); }
+    }
+    if (command == "pr-title" or command == "pr-description") {
+        if (rest.len() == 0) {
+            throw USAGE;
+        }
+        final doc = if (command == "pr-title") prosemessages\titleDocument(rest.join(" "), label: "pull request title")
+            else prosemessages\descriptionDocument(fs\readFile(rest[0]), label: rest[0]);
+        final name = if (command == "pr-title") "title.prtitle" else "description.pr";
+        final judged = prosemessages\judge(dir, docs: {name: doc}, vale: prosevale\run);
+        foreach (f in judged.blocking) { blocking.append(f); }
+        foreach (f in judged.advice) { advice.append(f); }
+    }
+    report(blocking, advice: advice, counts: switches["--counts"] ?? false);
+    if (blocking.len() > 0) {
+        os\exit(1);
+    }
+}

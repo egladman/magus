@@ -1,0 +1,160 @@
+// What the prose checks share: running Vale on an extracted document and mapping each
+// alert back through the document's position table to the text it was extracted from.
+namespace prosevale;
+
+import "std";
+import "fs";
+import "proc";
+import "vcs";
+import "magus/lint";
+import "encoding/json";
+
+// SourceLine is where one document line came from. A separator line has no path. col is
+// the source column of the document line's first byte, 0 when only the line is known,
+// and -1 for a line rendered behind a `# ` heading marker.
+export object SourceLine {
+    path: str = "",
+    line: int = 0,
+    col: int = 0,
+}
+
+// Alert is one Vale alert at a 1-based document line and column.
+export object Alert {
+    check: str = "",
+    message: str = "",
+    severity: str = "",
+    line: int = 0,
+    col: int = 0,
+}
+
+// run is Vale's JSON report over paths, read with the workspace's .vale.ini. Alerts never
+// fail the run; the caller decides what blocks.
+export fun run(paths: [str]) > str !> any {
+    final root = vcs\root();
+    final args = mut ["--config", root + "/.vale.ini", "--output=JSON", "--no-exit"];
+    foreach (p in paths) {
+        args.append(p);
+    }
+    return proc\exec("vale", args: args, dir: root, opts: {"quiet": true}).stdout;
+}
+
+// available reports whether a vale binary answers, so a hook can say it skipped the
+// checks rather than fail every commit on a machine without it.
+export fun available() > bool {
+    final probe = proc\exec("vale", args: ["--version"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    return probe?.ok ?? false;
+}
+
+// alerts decodes one Vale JSON report, every file's alerts in report order.
+export fun alerts(report: str) > [Alert] !> any {
+    return alertsIn(report, file: "");
+}
+
+// alertsIn is alerts for the one file Vale reported as file, or for every file when file
+// is "".
+export fun alertsIn(report: str, file: str) > [Alert] !> any {
+    final found = mut [<Alert>];
+    if (report.trim() == "") {
+        return found;
+    }
+    final files: {str: any} = json\parse(report);
+    foreach (name, rows in files) {
+        if (file != "" and name != file) {
+            continue;
+        }
+        final list: [any] = rows;
+        foreach (r in list) {
+            final span: [any] = r["Span"] ?? [<any>];
+            final col = if (span.len() > 0) std\toInt(span[0]) else 0;
+            found.append(Alert{ check = r["Check"] ?? "", message = r["Message"] ?? "",
+                severity = r["Severity"] ?? "", line = std\toInt(r["Line"] ?? 0), col = col });
+        }
+    }
+    return found;
+}
+
+// locate maps an alert through origins to the source it names. An alert on a line with
+// no origin keeps the document's own path and line.
+export fun locate(a: Alert, origins: [SourceLine], doc: str) > Finding {
+    if (a.line >= 1 and a.line <= origins.len() and origins[a.line - 1].path != "") {
+        final o = origins[a.line - 1];
+        var col = 0;
+        if (o.col != 0 and a.col > 0 and o.col + a.col - 1 > 0) {
+            col = o.col + a.col - 1;
+        }
+        return Finding{ path = o.path, line = o.line, col = col, rule = a.check, message = a.message };
+    }
+    return Finding{ path = doc, line = a.line, col = a.col, rule = a.check, message = a.message };
+}
+
+// blocking are the alerts at error level, mapped through origins; a warning or
+// suggestion is advice and never fails a check.
+export fun blocking(found: [Alert], origins: [SourceLine], doc: str) > [Finding] {
+    final kept = mut [<Finding>];
+    foreach (a in found) {
+        if (a.severity == "error") {
+            kept.append(locate(a, origins: origins, doc: doc));
+        }
+    }
+    return kept;
+}
+
+// advice are the alerts below error level, mapped the same way.
+export fun advice(found: [Alert], origins: [SourceLine], doc: str) > [Finding] {
+    final kept = mut [<Finding>];
+    foreach (a in found) {
+        if (a.severity != "error") {
+            kept.append(locate(a, origins: origins, doc: doc));
+        }
+    }
+    return kept;
+}
+
+// writeDocument writes text to <dir>/<name> and returns the path, creating dir.
+export fun writeDocument(dir: str, name: str, text: str) > str !> any {
+    fs\mkdirAll(dir);
+    final p = dir + "/" + name;
+    fs\writeFile(p, content: text);
+    return p;
+}
+
+// render is a finding as `path:line:col: message [rule]`, the lint runner's shape.
+export fun render(f: Finding) > str {
+    var at = f.path;
+    if (f.line > 0) {
+        at = at + ":{f.line}";
+        if (f.col > 0) {
+            at = at + ":{f.col}";
+        }
+    }
+    return "{at}: {f.message} [{f.rule}]";
+}
+
+final REPORT = `{"doc.comments":[
+  {"Check":"Magus.CommentBlock","Message":"too long","Severity":"error","Line":1,"Span":[7,9]},
+  {"Check":"Magus.Filler","Message":"drop","Severity":"error","Line":3,"Span":[1,6]},
+  {"Check":"Magus.DescriptionTarget","Message":"aim","Severity":"suggestion","Line":9,"Span":[1,1]}]}`;
+
+test "an alert maps through the position table to its source column" {
+    final origins = [SourceLine{ path = "a.go", line = 3, col = 4 }, SourceLine{}, SourceLine{ path = "b.ts", line = 1, col = 15 }];
+    final found = alerts(REPORT) catch [<Alert>];
+    std\assert(found.len() == 3, message: "three alerts");
+    final errs = blocking(found, origins: origins, doc: "doc.comments");
+    std\assert(errs.len() == 2, message: "the suggestion does not block");
+    std\assert(errs[0].path == "a.go" and errs[0].line == 3 and errs[0].col == 10, message: render(errs[0]));
+    std\assert(errs[1].path == "b.ts" and errs[1].line == 1 and errs[1].col == 15, message: render(errs[1]));
+    final notes = advice(found, origins: origins, doc: "doc.comments");
+    std\assert(notes.len() == 1 and notes[0].path == "doc.comments" and notes[0].line == 9,
+        message: "a line past the table keeps the document position");
+}
+
+test "a line-only origin reports no column" {
+    final f = locate(Alert{ check = "Magus.NameSuffix", message = "rename", line = 1, col = 1 },
+        origins: [SourceLine{ path = "x.go", line = 42 }], doc: "doc.names");
+    std\assert(render(f) == "x.go:42: rename [Magus.NameSuffix]", message: render(f));
+}
+
+test "an empty report has no alerts" {
+    final found = alerts("") catch [<Alert>];
+    std\assert(found.len() == 0, message: "empty");
+}
