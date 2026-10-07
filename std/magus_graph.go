@@ -268,16 +268,20 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 }
 
 // precedentWorkspace is the part of *magus.Magus magus\precedents reads beside the graph:
-// the index freshness verdict `magus status` prints, and which files are declared outputs.
+// a freshen of every index, the freshness verdict `magus status` prints, and which files are
+// declared outputs.
 type precedentWorkspace interface {
+	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
 }
 
 // MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
-// and each declared index's freshness, judged before the graph is read so the verdict covers
-// the index the rows came from. Generated files are never counted. The answer is a
-// PrecedentReport as a map: no Buzz object mirrors it.
+// and each declared index's freshness. Every index is freshened first, as magus\diff does, so a
+// caller never runs a graph build of its own; one that could not be made current reads as
+// stale, the freshen's error in its detail. Freshness is judged before the graph is read, so
+// the verdict covers the index the rows came from. Generated files are never counted. The
+// answer is a PrecedentReport as a map: no Buzz object mirrors it.
 func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
@@ -291,7 +295,15 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	freshErr := pw.FreshenSymbolIndexes(ctx)
 	report := types.PrecedentReport{Indexes: pw.SymbolIndexStatusByStamp(ctx)}
+	if freshErr != nil {
+		for i := range report.Indexes {
+			if idx := &report.Indexes[i]; idx.Freshness != types.SymbolIndexFresh {
+				idx.Detail = strings.TrimSpace(idx.Detail + "\n" + freshErr.Error())
+			}
+		}
+	}
 	kg, err := g.KnowledgeGraphWithSymbols(ctx)
 	if err != nil {
 		return nil, err

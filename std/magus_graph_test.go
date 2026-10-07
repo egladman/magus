@@ -2,6 +2,7 @@ package std
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -209,14 +210,24 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 }
 
 // precedentGraphs is a workspace whose indexes have the given freshness and whose declared
-// outputs are the given paths.
+// outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
+// before the freshness was read.
 type precedentGraphs struct {
 	*fakeGraphWorkspace
-	indexes []types.SymbolIndexStatus
-	outputs map[string]bool
+	indexes    []types.SymbolIndexStatus
+	outputs    map[string]bool
+	freshenErr error
+	freshened  bool
+	readAfter  bool
+}
+
+func (p *precedentGraphs) FreshenSymbolIndexes(context.Context) error {
+	p.freshened = true
+	return p.freshenErr
 }
 
 func (p *precedentGraphs) SymbolIndexStatusByStamp(context.Context) []types.SymbolIndexStatus {
+	p.readAfter = p.freshened
 	return p.indexes
 }
 
@@ -282,4 +293,27 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 
 	_, err = MagusPrecedents(graphContext(t))
 	assert.ErrorContains(t, err, "cannot judge its symbol indexes", "a workspace that cannot say whether its index is current gets no rows")
+}
+
+func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
+	t.Parallel()
+	fresh := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Op: "scip", Language: "go", Freshness: types.SymbolIndexFresh}
+	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "docs"}, Op: "scip-buzz", Language: "buzz",
+		Freshness: types.SymbolIndexStale, Detail: "docs changed"}
+	ws := &precedentGraphs{
+		fakeGraphWorkspace: &fakeGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()},
+		indexes:            []types.SymbolIndexStatus{fresh, stale},
+		freshenErr:         errors.New("scip-buzz is not on PATH"),
+	}
+
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err, "a failed freshen is a verdict on its index, not an error")
+	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
+	b, err := json.Marshal(got)
+	require.NoError(t, err)
+	var report types.PrecedentReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	stale.Detail = "docs changed\nscip-buzz is not on PATH"
+	assert.Equal(t, []types.SymbolIndexStatus{fresh, stale}, report.Indexes,
+		"the freshen's error rides on the index it left stale, and a current index carries none")
 }

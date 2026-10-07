@@ -602,6 +602,20 @@ func (m *Magus) symbolCapableIn(paths []string) []string {
 	return out
 }
 
+// FreshenSymbolIndexes brings every symbol index the workspace declares up to date before a
+// reader mines it. Inside a target the rebuild runs through that target's run, under the lock
+// it holds; outside a run it is a run of its own. The error is freshenSymbolIndexes's MGS7003,
+// naming each index that could not be made current; the others are current regardless.
+func (m *Magus) FreshenSymbolIndexes(ctx context.Context) error {
+	var paths []string
+	for _, idx := range m.workspaceIndexes() {
+		if !slices.Contains(paths, idx.project.Path) {
+			paths = append(paths, idx.project.Path)
+		}
+	}
+	return m.freshenSymbolIndexes(ctx, paths)
+}
+
 // freshenSymbolIndexes brings every symbol index of the symbol-capable projects among paths up
 // to date before a review reads it, by running each index's op: through the run scheduler and
 // the cache, so a current index replays and a stale one rebuilds only itself.
