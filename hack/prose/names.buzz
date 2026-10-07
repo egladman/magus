@@ -65,43 +65,57 @@ fun testFile(path: str) > bool {
     return path.indexOf("/__tests__/") != null;
 }
 
-// STALE prints the projects whose symbol index predates their sources, the caveat every
-// `magus query` answer carries.
-final STALE = `template={{range .answer.stale_indexes}}{{.}}
+// INDEXES prints, per language, each project index a `magus query` answer reports missing
+// (`gap`) or older than its sources (`stale`): the freshness every knowledge answer carries.
+final INDEXES = `template={{range .answer.gaps}}gap	{{.project.path}}	{{.language}}	{{.state}}	{{.hint}}
+{{end}}{{range .answer.stale_index_details}}stale	{{.project}}	{{.language}}	out-of-date
 {{end}}`;
 
-// staleProjects are the projects whose index is older than their sources.
-export fun staleProjects() > [str] !> any {
-    final res = magus\cmd("query", args: ["kind=symbol", "--budget", "1", "-o", STALE],
-        opts: {"quiet": true, "allow_failure": true});
-    final found = mut [<str>];
-    foreach (line in res.stdout.split("\n")) {
-        if (line.trim() != "") {
-            found.append(line.trim());
+// IndexGap is one project's symbol index for one language that is missing or stale.
+export object IndexGap {
+    project: str = "",
+    language: str = "",
+    state: str = "",
+    hint: str = "",
+}
+
+// parseIndexes reads INDEXES output.
+export fun parseIndexes(text: str) > [IndexGap] {
+    final found = mut [<IndexGap>];
+    foreach (row in text.split("\n")) {
+        final cols = row.split("\t");
+        if (cols.len() >= 4 and (cols[0] == "gap" or cols[0] == "stale")) {
+            final hint = if (cols.len() > 4) cols[4].trim() else "";
+            found.append(IndexGap{ project = cols[1], language = cols[2], state = cols[3], hint = hint });
         }
     }
     return found;
 }
 
-// freshness is a finding per index the digest calls missing or stale names out of date,
-// and per language in languages with no function in the export: a ban reading nothing
-// finds nothing.
-export fun freshness(digest: magus\SymbolIndexDigest, stale: [str], names: [Name], languages: [str]) > [Finding] {
+// indexGaps asks the knowledge graph which indexes are missing or stale.
+export fun indexGaps() > [IndexGap] !> any {
+    final res = magus\cmd("query", args: ["kind=symbol", "--budget", "1", "-o", INDEXES],
+        opts: {"quiet": true, "allow_failure": true});
+    return parseIndexes(res.stdout);
+}
+
+// freshness is a finding when no index is built, per missing or stale index of a language
+// in languages, and per such language with no function in the export: a ban reading
+// nothing finds nothing.
+export fun freshness(indexed: bool, gaps: [IndexGap], names: [Name], languages: [str]) > [Finding] {
     final found = mut [<Finding>];
-    if (!digest.indexed) {
+    if (!indexed) {
         found.append(Finding{ path = ".", rule = "prose-names",
             message = "no symbol index is built, so no function name was judged",
             fix = "Build it with `magus graph build`, then rerun." });
     }
-    foreach (gap in digest.gaps) {
-        final detail = if (gap.detail != "") ": " + gap.detail else "";
-        found.append(Finding{ path = gap.project.path, rule = "prose-names",
-            message = "the symbol index of {gap.project.path} is {gap.state.value}{detail}, so its names cannot be judged",
-            fix = "Rebuild it with `magus graph build`, then rerun." });
-    }
-    foreach (project in stale) {
-        found.append(Finding{ path = project, rule = "prose-names",
-            message = "the symbol index of {project} predates its sources, so a name added since is not judged",
+    foreach (gap in gaps) {
+        if (languages.indexOf(gap.language) == null) {
+            continue;
+        }
+        final hint = if (gap.hint != "") "; " + gap.hint else "";
+        found.append(Finding{ path = gap.project, rule = "prose-names",
+            message = "the {gap.language} symbol index of {gap.project} is {gap.state}{hint}, so its names are not all judged",
             fix = "Rebuild it with `magus graph build`, then rerun." });
     }
     foreach (lang in languages) {
@@ -170,7 +184,8 @@ export fun check(dir: str, buzz: bool, vale: fun (paths: [str]) > str !> any) > 
             names.append(n);
         }
     }
-    final stale = freshness(magus\symbolIndexDigest(), stale: staleProjects(), names: names, languages: languages);
+    final stale = freshness(magus\symbolIndexDigest().indexed, gaps: indexGaps(), names: names,
+        languages: languages);
     final doc = prosevale\writeDocument(dir, name: "functions.names", text: document(names).text);
     final found = prosevale\alerts(vale([doc]));
     final table = document(names).table;
@@ -204,14 +219,19 @@ test "only function rows outside tests are kept, in the languages asked for" {
 
 test "a stale or missing index is a finding, never a pass" {
     final names = parseRows(SAMPLE, languages: ["go"]);
-    final fresh = magus\SymbolIndexDigest{ indexed = true };
-    std\assert(freshness(fresh, stale: [<str>], names: names, languages: ["go"]).len() == 0, message: "fresh go index");
-    final none = freshness(fresh, stale: [<str>], names: names, languages: ["go", "buzz"]);
-    std\assert(none.len() == 1 and none[0].fix.indexOf("scip-buzz") != null, message: "no buzz index");
-    final unbuilt = freshness(magus\SymbolIndexDigest{}, stale: [<str>], names: names, languages: ["go"]);
+    final none = [<IndexGap>];
+    std\assert(freshness(true, gaps: none, names: names, languages: ["go"]).len() == 0, message: "fresh go index");
+    final nobuzz = freshness(true, gaps: none, names: names, languages: ["go", "buzz"]);
+    std\assert(nobuzz.len() == 1 and nobuzz[0].fix.indexOf("scip-buzz") != null, message: "no buzz index");
+    final unbuilt = freshness(false, gaps: none, names: names, languages: ["go"]);
     std\assert(unbuilt.len() == 1, message: "nothing indexed");
-    final behind = freshness(fresh, stale: ["console"], names: names, languages: ["go"]);
-    std\assert(behind.len() == 1 and behind[0].path == "console", message: "a stale project");
+    final gaps = parseIndexes("gap\tdocs\tbuzz\tnot-indexed\tscip-buzz is not installed\n"
+        + "gap\tlibs/scipbuzz\tgo\tnot-indexed\t\nstale\tconsole\ttypescript\tout-of-date\t\n");
+    std\assert(gaps.len() == 3 and gaps[0].hint == "scip-buzz is not installed", message: "three rows");
+    final judged = freshness(true, gaps: gaps, names: parseRows(SAMPLE, languages: ["go", "typescript"]),
+        languages: ["go", "typescript"]);
+    std\assert(judged.len() == 2, message: "{judged.len()}: a buzz gap is not judged without --buzz");
+    std\assert(judged[0].path == "libs/scipbuzz" and judged[1].path == "console", message: "go then typescript");
 }
 
 test "each document line maps to its definition" {
