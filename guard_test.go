@@ -12,7 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -340,6 +342,115 @@ func TestWritePendingIsOwnerOnly(t *testing.T) {
 	fi, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+}
+
+// The working tree tightens at once and loosens only as far as the approved declaration,
+// which falls back to the compiled defaults where it says nothing.
+func TestStricterBuiltins(t *testing.T) {
+	defaults := builtin.Defaults()
+	require.Equal(t, builtin.Advise, defaults["capture-filter"], "the cases below assume capture-filter advises by default")
+	require.Equal(t, builtin.Deny, defaults["whole-tree"], "the cases below assume whole-tree denies by default")
+
+	cases := []struct {
+		name     string
+		approved map[string]builtin.Setting
+		working  map[string]builtin.Setting
+		rule     string
+		want     builtin.Setting
+	}{
+		{
+			name:    "a tightening applies before approval",
+			working: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
+			rule:    "capture-filter",
+			want:    builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:    "a loosening below the default waits",
+			working: map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}},
+			rule:    "whole-tree",
+			want:    builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:     "a loosening below the approved setting waits",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}},
+			working:  map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Deny},
+		},
+		{
+			name:     "an approved loosening applies",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			working:  map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Off},
+		},
+		{
+			name:     "dropping an approved loosening restores the default at once",
+			approved: map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}},
+			rule:     "capture-filter",
+			want:     builtin.Setting{Decision: builtin.Advise},
+		},
+		{
+			name:     "fewer lines is stricter",
+			approved: map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}},
+			working:  map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}},
+			rule:     "read-navigation",
+			want:     builtin.Setting{Decision: builtin.Deny, Lines: 120},
+		},
+		{
+			name:     "raising lines waits",
+			approved: map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}},
+			working:  map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}},
+			rule:     "read-navigation",
+			want:     builtin.Setting{Decision: builtin.Deny, Lines: 120},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := stricterBuiltins(tc.approved, tc.working)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got[tc.rule])
+			assert.Len(t, got, len(defaults), "every compiled rule has a setting")
+		})
+	}
+}
+
+// Without an approval authority the working tree is the whole policy, so its loosening
+// applies at once.
+func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
+	disabled := false
+	rules := &GuardRules{root: t.TempDir(), opts: types.VCSOptions{Enabled: &disabled}, registry: workspace.NewWorkspaceRegistry()}
+
+	got, err := rules.EffectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, got, "nothing declared is the defaults")
+
+	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
+	got, err = rules.EffectiveBuiltins(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["whole-tree"])
+	assert.Equal(t, builtin.Setting{Decision: builtin.Advise}, got["capture-filter"])
+}
+
+// A builtins declaration is policy: the digest moves with it, and declaring one alone is
+// enough for there to be one.
+func TestGuardPolicyDigestCoversBuiltins(t *testing.T) {
+	none := buildGuardPolicy(nil, false, false, false, nil, nil)
+	assert.Empty(t, none.Digest)
+
+	off := buildGuardPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil)
+	deny := buildGuardPolicy(nil, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Deny}}, nil)
+	lines := buildGuardPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 120}}, nil)
+	moreLines := buildGuardPolicy(nil, false, false, false, map[string]builtin.Setting{"read-navigation": {Decision: builtin.Deny, Lines: 300}}, nil)
+	assert.NotEmpty(t, off.Digest)
+	assert.Equal(t, 1, off.Builtins)
+	assert.NotEqual(t, off.Digest, deny.Digest)
+	assert.NotEqual(t, lines.Digest, moreLines.Digest)
+
+	shell := []workspace.ShellRule{{Name: "x", Decision: "deny", Program: "curl", Reason: "r"}}
+	assert.NotEqual(t,
+		buildGuardPolicy(shell, false, false, false, nil, nil).Digest,
+		buildGuardPolicy(shell, false, false, false, map[string]builtin.Setting{"capture-filter": {Decision: builtin.Off}}, nil).Digest)
 }
 
 func TestPendingSetCoversFilesUnderAnUntrackedDirectory(t *testing.T) {

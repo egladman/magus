@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
@@ -345,6 +346,26 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps
+}
+
+// guardBuiltins is the compiled rules' effective settings for Dependencies.Builtins, nil
+// for the defaults. rules is the working tree's load, nil when it did not load, in which
+// case root's approved sources decide alone, as they do for the function rules.
+//
+// A side that does not resolve leaves the defaults in its place rather than failing: a
+// broken commit must not take down every hook any more than a broken working tree does.
+func guardBuiltins(ctx context.Context, rules *magus.GuardRules, root string) map[string]builtin.Setting {
+	stop := traceFromContext(ctx).phase("guard.builtins_resolve")
+	defer stop()
+	if rules != nil {
+		effective, _ := rules.EffectiveBuiltins(ctx)
+		return effective
+	}
+	approved, err := magus.LoadApprovedBuiltins(ctx, root)
+	if err != nil {
+		return nil
+	}
+	return approved
 }
 
 // guardRoot finds the workspace whose rules the guard enforces, searching from override,

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -45,6 +47,9 @@ type WorkspaceRegistry struct {
 	commandRule CommandRule
 	// writeRule is the function a magusfile registered via magus\guard.write, or nil.
 	writeRule WriteRule
+	// builtins are the compiled guard rules a magusfile set via magus\guard.builtins, by
+	// name, already validated by builtin.Resolve; nil when it declared none.
+	builtins map[string]builtin.Setting
 	// kept releases what the function rules run on: the Buzz session that
 	// registered each one stays loaded until Close.
 	kept []func()
@@ -226,6 +231,23 @@ func (r *WorkspaceRegistry) CommandRule() CommandRule {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.commandRule
+}
+
+// SetBuiltins records the settings magus\guard.builtins declared, which the caller has
+// validated with builtin.Resolve, on the terms of SetSpawnRule. The map is the registry's
+// afterwards.
+func (r *WorkspaceRegistry) SetBuiltins(declared map[string]builtin.Setting) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.builtins = declared
+}
+
+// Builtins returns the settings magus\guard.builtins declared, only the rules it named, or
+// nil when nothing was declared. The map is the caller's to modify.
+func (r *WorkspaceRegistry) Builtins() map[string]builtin.Setting {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return maps.Clone(r.builtins)
 }
 
 // Keep takes the release of what a function rule runs on, for Close to call:

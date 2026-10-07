@@ -507,8 +507,20 @@ var Magus = Module{
 		},
 		{
 			Name: "guard",
-			Doc:  "Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.",
+			Doc:  "Agent-guard rules for this workspace: additive shell, spawn, command and write rules, and the decision each compiled built-in takes.",
 			Methods: []Method{
+				{
+					Name: "builtins",
+					Doc: "Set compiled guard rules by name: each value is \"off\", \"advise\" or \"deny\", or " +
+						"{\"decision\": ..., \"lines\": int} where the rule takes lines (read-navigation alone). " +
+						"A rule left out keeps the decision `magus describe rules` lists. Declared at the top " +
+						"level of the root magusfile, once. When the magusfile is tracked, each rule takes the " +
+						"stricter of the committed and the working-tree setting, so a loosening applies only " +
+						"once committed. An unknown rule name, an unknown decision, lines on a rule that takes " +
+						"none, declaring twice or from another project is MGS1045.",
+					Args:   []Arg{{Name: "rules", Type: TypeAnyMap}},
+					Extern: true,
+				},
 				{
 					Name:   "shell",
 					Doc:    "Declare one additive shell rule matched on a resolved program name and optional arg subset. Declared at the top level of the root magusfile. decision is deny or advise; optional dialect selects the parser (posix, bash, mksh, zsh, bats).",

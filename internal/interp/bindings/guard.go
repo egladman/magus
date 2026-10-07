@@ -2,12 +2,16 @@ package bindings
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/types"
 )
 
 // buildGuard assembles magus\guard for a magusfile. shell() declares one
@@ -23,19 +27,22 @@ import (
 //	    dialect: "bash",
 //	})
 //
-// Rules are APPEND-ONLY and cannot disable a built-in. Match criteria are the
-// resolved program name plus an optional arg subset, judged by ParseCommands.
+// Shell rules are APPEND-ONLY. Match criteria are the resolved program name plus an
+// optional arg subset, judged by ParseCommands.
 //
 // spawn(), command() and write() each register the one function the guard calls on every
 // agent spawn and continuation, every agent shell command, or every agent file write, with
 // allow/advise/deny to build its answer and once/count for state that lasts the calling
 // session. See registerSpawnRule, registerCommandRule and registerWriteRule.
+//
+// builtins() sets compiled rules by name; see registerBuiltins.
 func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver) vm.Value {
 	guardMap := vm.NewMap()
 	registerVerdictMembers(obs, guardMap)
 	registerSpawnRule(ctx, sess, obs, guardMap)
 	registerCommandRule(ctx, sess, obs, guardMap)
 	registerWriteRule(ctx, sess, obs, guardMap)
+	registerBuiltins(ctx, obs, guardMap)
 	guardMap.MapSet("shell", directVal(obs, "magus.guard.shell", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\guard.shell: expected a rule object`)
@@ -50,6 +57,98 @@ func buildGuard(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		return vm.Null, nil
 	}))
 	return guardMap
+}
+
+// registerBuiltins binds magus\guard.builtins onto guardMap:
+//
+//	magus\guard.builtins({
+//	    "stage-all": "deny",
+//	    "raw-tool": "off",
+//	    "read-navigation": {"decision": "deny", "lines": 120},
+//	});
+//
+// Each key names a compiled rule and each value sets its decision, off, advise or deny,
+// with lines for read-navigation alone. Every misdeclaration is MGS1045 and fails the load:
+// a rule the workspace believes it set and did not reads as enforced when it is not.
+func registerBuiltins(ctx context.Context, obs buzz.DirectObserver, guardMap vm.Value) {
+	// Per session, as registerFunctionRule counts.
+	registered := false
+	guardMap.MapSet("builtins", directVal(obs, "magus.guard.builtins", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		if len(args) != 1 || !args[0].IsMap() {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.builtins: expected one map from rule name to "off", "advise", "deny" or {"decision": ..., "lines": ...}`)
+		}
+		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.builtins: called from the magusfile of %s; the settings apply to the whole workspace, so declare them in the root magusfile`, path)
+		}
+		if registered {
+			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.builtins: already declared in this magusfile; fold the second map into the first`)
+		}
+		declared, parseErr := parseBuiltins(args[0])
+		_, resolveErr := builtin.Resolve(declared)
+		if err := errors.Join(parseErr, resolveErr); err != nil {
+			return vm.Null, err
+		}
+		registered = true
+		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil {
+			reg.SetBuiltins(declared)
+		}
+		return vm.Null, nil
+	}))
+}
+
+// parseBuiltins decodes the declared map: the settings that decode, and every malformed
+// value as one error, so the caller can report those beside what builtin.Resolve finds
+// wrong with the rest. Names and decisions are left to Resolve, which owns what a valid
+// one is.
+func parseBuiltins(m vm.Value) (map[string]builtin.Setting, error) {
+	out := make(map[string]builtin.Setting, len(m.MapKeys()))
+	var errs []error
+	for _, name := range m.MapKeys() {
+		v, _ := m.MapGet(name)
+		s, err := parseBuiltinSetting(v)
+		if err != nil {
+			errs = append(errs, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				`magus\guard.builtins: %q: %v`, name, err))
+			continue
+		}
+		out[name] = s
+	}
+	return out, errors.Join(errs...)
+}
+
+func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
+	if v.IsStr() {
+		return builtin.Setting{Decision: builtin.Decision(v.AsString())}, nil
+	}
+	if !v.IsMap() {
+		return builtin.Setting{}, errors.New(`want "off", "advise", "deny" or {"decision": ..., "lines": ...}`)
+	}
+	var s builtin.Setting
+	for _, k := range v.MapKeys() {
+		field, _ := v.MapGet(k)
+		switch k {
+		case "decision":
+			if !field.IsStr() {
+				return s, errors.New(`"decision" must be "off", "advise" or "deny"`)
+			}
+			s.Decision = builtin.Decision(field.AsString())
+		case "lines":
+			// Resolve reads 0 as unset, so a declared 0 must not reach it as one.
+			if !field.IsInt() || field.AsInt() < 1 {
+				return s, errors.New(`"lines" must be an int of 1 or more`)
+			}
+			s.Lines = int(field.AsInt())
+		default:
+			return s, fmt.Errorf(`unknown field %q; a setting takes "decision" and "lines"`, k)
+		}
+	}
+	if s.Decision == "" {
+		return s, errors.New(`"decision" is required`)
+	}
+	return s, nil
 }
 
 func parseShellRule(m vm.Value, apiName string) (workspace.ShellRule, error) {
