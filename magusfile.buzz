@@ -2159,9 +2159,10 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go");
-    // code-follows-mined-precedents reads the symbol index and fails on a stale one, so the
-    // index is brought current first; a cached index replays.
-    magus\cmd("graph", args: ["build", "--no-sessions"], opts: {"quiet": true});
+    // code-follows-mined-precedents fails on a stale symbol index. magus\precedents freshens
+    // every index here, under this run's lock, so the rule run below finds them current; read
+    // from that child process instead, a rebuild would be refused the lock (MGS3007).
+    _ = magus\precedents();
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 
