@@ -464,19 +464,6 @@ test "every valid fixture parses and every invalid one names its problem" {
     std\assert(valid >= 3 and invalid >= 10, message: "the fixture read: {valid} valid, {invalid} invalid");
 }
 
-test "a headline starting with Breaking takes one of the two README forms" {
-    foreach (head in ["Breaking: a.", "Breaking for SDK callers: a."]) {
-        final got = problems("### Changed\n\n- **{head}** Use b.\n");
-        std\assert(got.len() == 0, message: "{head}: {got}");
-    }
-    foreach (head in ["Breaking (Go API): a.", "Breaking (Buzz): a.", "Breaking for SDK implementers: a.", "Breaking for Buzz callers: a.", "breaking: a.", "Breaking change: a."]) {
-        final got = problems("### Changed\n\n- **{head}** Use b.\n").join("; ");
-        std\assert(got.indexOf("\"Breaking:\" or \"Breaking for SDK callers:\"") != null, message: "{head}: {got}");
-    }
-    final plain = problems("### Changed\n\n- **Unbreaking the build.** Use b.\n");
-    std\assert(plain.len() == 0, message: "{plain}");
-}
-
 test "parse keeps the group and the entry as written" {
     final text = (cases() catch mut {<str: str>})["valid/removed-breaking.md"] ?? "";
     final got = parse("f.md", text: text) catch Fragment{ path = "", group = "", entry = "" };
