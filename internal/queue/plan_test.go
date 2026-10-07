@@ -307,10 +307,11 @@ func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
 		byID[v.Change.ID] = v
 	}
 	assert.Equal(t, types.CodeWaitNotApproved, byID["1"].Code)
-	assert.Equal(t, types.CodeWaitBelow, byID["2"].Code, "held on the change beneath, never blamed")
 	wantChild := child
 	wantChild.StackBase, wantChild.Below = top, "1"
-	assert.Equal(t, wantChild, byID["2"].Change)
+	wantHeld := byID["2"]
+	wantHeld.Code, wantHeld.Change = types.CodeWaitBelow, wantChild
+	assert.Equal(t, wantHeld, byID["2"], "held on the change beneath, never blamed")
 }
 
 // mergeOfBaseOnto says head is a merge of the base, at onBase, into top, and top sits on

@@ -184,7 +184,7 @@ func TestBuiltinTypescriptInstallSplitsByBinary(t *testing.T) {
 
 	npm, ok := spec.Ops["npm-ci"]
 	require.True(t, ok)
-	require.Equal(t, "npm", npm.Command.Bin)
+	require.Equal(t, "npm", npm.Bin)
 	// The command and install spec are the spell's own data, checked below.
 	require.Equal(t, spells.Op{Kind: spells.OpKindInstall, Command: npm.Command, Install: npm.Install}, npm)
 	man := npm.Install.Manifests[0]

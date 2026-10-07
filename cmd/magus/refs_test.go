@@ -402,13 +402,17 @@ func TestReportRefsMissCarriesTheIndexCause(t *testing.T) {
 	require.NoError(t, err)
 	var record types.KnowledgeRefsOutput
 	require.NoError(t, json.Unmarshal([]byte(stdout), &record), "stdout: %q", stdout)
-	assert.Equal(t, "Foo", record.Symbol)
-	assert.Equal(t, types.KnowledgeAnswer{
-		Verdict:    types.VerdictUnknown,
-		Reason:     types.ReasonSymbolIndexMissing,
-		Gaps:       record.Answer.Gaps, // the gap's own wire form is pinned by the stderr block below
-		IndexCause: ans.IndexCause,
-	}, record.Answer)
+	assert.Equal(t, types.KnowledgeRefsOutput{
+		Definition:    record.Definition,    // the noun's prose, which the describe catalog pins
+		SchemaVersion: record.SchemaVersion, // the wire version, pinned by its own test
+		Symbol:        "Foo",
+		Answer: types.KnowledgeAnswer{
+			Verdict:    types.VerdictUnknown,
+			Reason:     types.ReasonSymbolIndexMissing,
+			Gaps:       record.Answer.Gaps, // the gap's own wire form is pinned by the stderr block below
+			IndexCause: ans.IndexCause,
+		},
+	}, record)
 	assert.Contains(t, stdout, `"index_cause"`)
 	assert.Contains(t, stderr.String(), "why: "+ans.IndexCause.Why+"\n")
 	assert.Contains(t, stderr.String(), "fix: "+ans.IndexCause.Fix+"\n")

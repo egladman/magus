@@ -53,7 +53,7 @@ func TestHintUptakeCountsFollowedRejectedAndReflex(t *testing.T) {
 
 	explain := rows["query-explain"]
 	assert.InDelta(t, 1.0, explain.Rate, 0.001)
-	assert.Equal(t, hintUptakeRow{ID: "query-explain", Served: 1, Followed: 1, Rate: explain.Rate}, explain)
+	assert.Equal(t, hintUptakeRow{ID: "query-explain", Served: 1, Followed: 1, Reflex: 1, Rate: explain.Rate}, explain)
 
 	// A magus verb that was not the hinted one is a rejection, and the same command ran again
 	// inside the window.

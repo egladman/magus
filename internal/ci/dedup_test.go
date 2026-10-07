@@ -66,7 +66,7 @@ func TestDedup_MixedHashCoarsensToApprox(t *testing.T) {
 		// Coarsened to (project, target).
 		UniqueKeys:      1,
 		RedundantBuilds: 1,
-		// 100+200 - max(200) = 100.
+		// `100+200 - max(200)` = 100.
 		RedundantMs: 100,
 		Approx:      true,
 		Top:         []DedupEntry{{Project: "web", Target: "test", ExtraBuilds: 1, ExtraMs: 100}},

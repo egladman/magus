@@ -113,6 +113,9 @@ func TestShareMintIsAudited(t *testing.T) {
 	var rec trail.MintRecord
 	require.NoError(t, json.Unmarshal(blob, &rec))
 	assert.Len(t, rec.Minted.ID, 8)
-	assert.Equal(t, types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer}, rec.Minted)
-	assert.Equal(t, minter, rec.Minter)
+	assert.Equal(t, trail.MintRecord{
+		Minted:  types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer},
+		Expires: rec.Expires, // stamped at mint time
+		Minter:  minter,
+	}, rec)
 }

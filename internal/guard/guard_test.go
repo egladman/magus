@@ -105,9 +105,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 		`"tool_input":{"command":"magus run ci | tail"}}`
 	req, ok := decodeHookEnvelope(cmdPayload)
 	require.True(t, ok)
-	assert.Equal(t, "magus run ci | tail", req.Value)
-	assert.False(t, req.IsPath)
-	assert.Equal(t, hookAttribution{Session: "s1", Event: "PreToolUse"}, req.Who)
+	assert.Equal(t, hookRequest{Value: "magus run ci | tail", Who: hookAttribution{Session: "s1", Event: "PreToolUse"}}, req)
 
 	// A file_path payload is a WRITE, so the envelope decides the --path question too.
 	writePayload := `{"hook_event_name":"PreToolUse","tool_input":{"file_path":"MAGUS.md"}}`

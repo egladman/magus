@@ -80,6 +80,9 @@ func TestExchangeTradesACodeOnceForItsToken(t *testing.T) {
 	}
 	var rec trail.MintRecord
 	require.NoError(t, json.Unmarshal(blob, &rec))
-	assert.Equal(t, types.Credential{Kind: types.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant}, rec.Minted)
-	assert.Equal(t, types.Credential{Kind: types.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant}, rec.Minter)
+	assert.Equal(t, trail.MintRecord{
+		Minted:  types.Credential{Kind: types.KindStored, ID: cred.ID, Name: cred.Name, Grant: cred.Grant},
+		Expires: rec.Expires, // stamped at mint time
+		Minter:  types.Credential{Kind: types.KindExchange, ID: auth.TokenID(code), Name: cred.Name, Grant: cred.Grant},
+	}, rec)
 }
