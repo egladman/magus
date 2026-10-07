@@ -50,7 +50,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := denyBriefCommand(testDependencies(), tt.brief)
+		v := denyBriefCommand(strict(testDependencies()), tt.brief)
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
@@ -88,11 +88,12 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	assert.NotEqual(t, "deny", v.Decision)
 
 	ctx, _ = spawnFixture(t)
-	taught := envelope("Agent", "prompt", "Build with `MAGUS_NO_WAIT=1 ./magus run go-build .` first.")
+	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
+	taught := envelope("Agent", "prompt", "Clean up first with `git stash`.")
 	first := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
 	assert.Equal(t, "advise", first.Decision, "by default the brief is advised, not refused")
 	assert.Equal(t, string(denyRuleBriefCommand), first.Rule)
-	assert.Contains(t, first.Context, "MAGUS_NO_WAIT")
+	assert.Contains(t, first.Context, "git stash")
 
 	again := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
 	assert.NotEqual(t, string(denyRuleBriefCommand), again.Rule, "once per session")

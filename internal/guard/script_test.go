@@ -71,7 +71,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 		// A variable nobody assigned names no file.
 		{`bash "$UNSET/retry.sh"`, ""},
 	} {
-		v := denyScriptContent(Dependencies{}, dir, tt.command, DialectBash)
+		v := denyScriptContent(strict(Dependencies{}), dir, tt.command, DialectBash)
 		if tt.rule == "" {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -105,7 +105,7 @@ func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
 	}
-	deps := Dependencies{scope: workspaceScope{root: dir}}
+	deps := strict(Dependencies{scope: workspaceScope{root: dir}})
 	for _, tt := range []struct {
 		command string
 		denied  bool
@@ -147,7 +147,7 @@ func TestGuardJudgesTheBuzzScriptUnderItsWorkDir(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "internal/x.go"), []byte("package x\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "rewrite.buzz"),
 		[]byte("fs\\writeFileAtomic(\"internal/x.go\", content: body);\n"), 0o644))
-	deps := Dependencies{scope: workspaceScope{root: dir}}
+	deps := strict(Dependencies{scope: workspaceScope{root: dir}})
 	for _, command := range []string{
 		"magus buzz -C .. rewrite.buzz",
 		"magus buzz -C " + dir + " -s rewrite.buzz",
@@ -194,7 +194,7 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 			writeFields{OldText: "#!/usr/bin/env bash", NewText: "#!/usr/bin/env bash\nset -e"}, ""},
 		{"edit whose old text is not there", path("ok.sh"), writeFields{OldText: "absent", NewText: "until x; do sleep 1; done"}, ""},
 	} {
-		v := denyScriptWrite(Dependencies{}, tt.file, tt.write)
+		v := denyScriptWrite(strict(Dependencies{}), tt.file, tt.write)
 		if tt.rule == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
