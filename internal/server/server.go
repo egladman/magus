@@ -2,7 +2,7 @@
 // Streamable-HTTP handler, the k8s health routes, and the browser Graph
 // Explorer console onto one loopback listener, applying the shared bearer
 // guard (and the DNS-rebind guard to the console routes; /mcp trusts the token
-// alone), and mounts /mcp and the Connect services onto the
+// alone). It mounts /mcp and the Connect services onto the
 // server's unix socket as well. It is the composition point that ties together
 // internal/handler/mcp, internal/httpx, and internal/service/console so
 // neither the handler/mcp package nor the root magus package has to.
