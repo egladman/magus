@@ -183,8 +183,8 @@ final SHELL_LANGS = ["sh", "bash", "shell", "zsh"];
 final PATH_EXTS = [".go", ".md", ".buzz", ".ts", ".tsx", ".js", ".yaml", ".yml", ".json",
     ".toml", ".css", ".html", ".svg", ".png", ".sh", ".mod", ".sum", ".lock", ".txt"];
 
-// runOf returns the leading run of byte `ch` in s ("```buzz" -> "```").
-fun runOf(s: str, ch: int) > str {
+// leadingRun returns the leading run of byte `ch` in s ("```buzz" -> "```").
+fun leadingRun(s: str, ch: int) > str {
     var n = 0;
     while (n < s.len() and s.byte(n) == ch) { n = n + 1; }
     return s.sub(0, len: n);
@@ -197,8 +197,8 @@ fun runOf(s: str, ch: int) > str {
 // every rule after it.
 fun fenceMarker(line: str) > str {
     final t = line.trim();
-    if (t.startsWith("```")) { return runOf(t, 96); }    // 96 = backtick
-    if (t.startsWith("~~~")) { return runOf(t, 126); }   // 126 = tilde
+    if (t.startsWith("```")) { return leadingRun(t, 96); }    // 96 = backtick
+    if (t.startsWith("~~~")) { return leadingRun(t, 126); }   // 126 = tilde
     return "";
 }
 
@@ -214,7 +214,7 @@ fun fenceLang(line: str, marker: str) > str {
 // character, at least as long, and nothing else on the line.
 fun closesFence(line: str, openMarker: str) > bool {
     final t = line.trim();
-    final run = runOf(t, openMarker.byte(0));
+    final run = leadingRun(t, openMarker.byte(0));
     return run.len() >= openMarker.len() and run.len() == t.len();
 }
 
