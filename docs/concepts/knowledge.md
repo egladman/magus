@@ -57,9 +57,9 @@ distance is the point.
 
 ## The two-concept model
 
-- **query / explain / path READ the graph**: daily retrieval.
-- **`magus graph` IS the graph**: emit it (`deps`), export it (`export`), or
-  measure its shape (`stats`).
+- `query`, `explain` and `path` READ the graph, for daily retrieval.
+- `magus graph` IS the graph: it emits it (`deps`), exports it (`export`) and
+  measures its shape (`stats`).
 
 ```sh
 magus query "<terms>"       # ranked node matches plus their neighborhood
@@ -112,7 +112,7 @@ cannot pull in the whole graph.
 Recipes for the graph as a lens on the workspace. Rebuild first with `magus graph
 build` if you want it fresh; combine field filters freely.
 
-**What programs does the workspace actually run?** magus owns the task layer, so it
+**What programs does the workspace run?** magus owns the task layer, so it
 knows the concrete tool behind every operation, not just the source.
 
 ```sh
@@ -525,7 +525,7 @@ run of that index just fails and backs off, while the project's other indexes ke
 running; install it, or run `magus run <project>::scip` yourself, or index in CI.
 `magus status` and the gaps a lookup reports name a missing indexer and where to get it.
 
-An index that has not been built yet is simply skipped, so symbols appear once its op
+An index that has not been built yet is skipped, so symbols appear once its op
 has run. To point a project at indexes your own build already emits somewhere in the
 tree instead, override it:
 
@@ -590,14 +590,14 @@ Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the def
 `magus query`/`magus graph stats`/`magus graph export --open`/warm graph never touch them. They load only when a query is
 symbol-seeded: `kind:symbol`, a `symbol:` ID,
 `relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
-referencing file (`client` calling `magus\refs`). At very large scale a derived
+referencing file (`client` calling `magus\refs`). At large scale a derived
 `shards/@symbols.routing.json` (symbol hash to referencing shard names, rebuilt with
 the shards) lets an exact-ID lookup load only the shards that mention the symbol
 rather than all of them; a missing routing file just falls back to loading all.
 
 ## The third verdict: when an empty answer is not a fact
 
-A lookup that returns nothing has two very different meanings, and collapsing them is
+A lookup that returns nothing has two different meanings, and collapsing them is
 how a blind spot gets recorded as a fact. `magus query`, `magus explain`, and
 `magus refs` all say which one they mean:
 
@@ -645,7 +645,7 @@ symbol layer was irrelevant to the question: `kind:author` returning nothing has
 to do with a missing symbol index, so nothing about one is reported. The probe
 deliberately does not decode each index to check it parses: that is a full unmarshal per
 lookup to catch a case the graph build already logs, while a never-built index is the case
-that actually occurs.
+that occurs.
 
 ## Citations (@links)
 
@@ -711,8 +711,8 @@ The values are EXTRACTED from git and deterministic per commit, so the shard is
 remote-shareable like the other extracted shards. The `git log` walk is bounded by
 `max_commits` and keyed by an input fingerprint (schema, HEAD, the window, the dirty-file
 set, and the `authorship` flag), so the standard shard store reuses it whole and it
-re-runs only when one of those actually moves, never on the query path. A non-git
-workspace or a git error simply yields no shard. Because the `vcs_*` attrs vary by commit,
+re-runs only when one of those moves, never on the query path. A non-git
+workspace or a git error yields no shard. Because the `vcs_*` attrs vary by commit,
 `magus graph diff` strips them from both sides, so a file node is not reported as changed just
 because its last commit moved; the diff stays structural.
 
@@ -742,7 +742,7 @@ meaning what the note said, and git is how the person who left it has their name
 
 There is one question that matters to a reader: **may I act on this without checking it?**
 The answer the store gives is that **somebody accountable pressed commit**. An agent may
-never write a note, but the rule is not really "a human typed this": a person pasting an
+never write a note, but the rule is not "a human typed this": a person pasting an
 agent's prose into `$EDITOR` always passed it. What git records is who stood behind it.
 
 `magus notes edit` opens a scaffold and gets out of the way. `magus notes capture` files the
@@ -757,10 +757,10 @@ knowledge:
 
 One sentence each, and the whole surface follows from them:
 
-- **`notes.shared`**: a person stands behind it, the team has it, git says who. Must live
+- `notes.shared`: a person stands behind it, the team has it, git says who. Must live
   inside the checkout; outside it there is no commit to attribute a note to and no review to
   have seen it, so "shared" would be a claim the location cannot back.
-- **`knowledge.notes.private`**: **superseded, still read.** A second notes location, yours
+- `knowledge.notes.private`: **superseded, still read.** A second notes location, yours
   rather than the team's, anywhere on disk. It is no longer the recommended shape: a private
   note is uncommitted, unattributed, unreviewed and unrecoverable, so nothing a reader can
   check stands behind it. Existing stores keep working; new workspaces should not declare one.
@@ -792,7 +792,7 @@ Nothing in the code says these must be cleared together.
 
 **That key is also the opt-in.** A file with no `magus:` block is not a magus note, no
 matter what else is in it. This is what makes pointing `notes.private` at an Obsidian vault
-work: a vault of a few thousand files contributes only the handful you actually anchored,
+work: a vault of a few thousand files contributes only the handful you anchored,
 and the rest are read past in silence rather than reported as malformed notes.
 
 Three consequences worth knowing:
