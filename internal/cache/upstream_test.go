@@ -419,7 +419,7 @@ func TestUpstreamRunsWaitSucceedsOnPassedUpstream(t *testing.T) {
 	b.complete(stepRef(steps[1]), nil)
 
 	err := b.waitForUpstreams(context.Background(), steps[0])
-	assert.NoError(t, err, "a successful upstream must still unblock its dependent")
+	require.NoError(t, err, "a successful upstream must still unblock its dependent")
 }
 
 // TestUpstreamRunsReleasesADependentWhoseOwnDeadlineExpired pins the invariant the
@@ -440,7 +440,7 @@ func TestUpstreamRunsReleasesADependentWhoseOwnDeadlineExpired(t *testing.T) {
 
 		err := b.waitForUpstreams(ctx, steps[0])
 
-		assert.NoError(t, err, "a settled upstream must release a dependent whose ceiling already fired")
+		require.NoError(t, err, "a settled upstream must release a dependent whose ceiling already fired")
 	}
 }
 

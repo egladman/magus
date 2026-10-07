@@ -949,7 +949,7 @@ func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 		"faketool": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}},
 	}
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
-	assert.NoError(t, checkReady(context.Background(), readiness, op, t.TempDir()))
+	require.NoError(t, checkReady(context.Background(), readiness, op, t.TempDir()))
 }
 
 // An op whose tool declares no probe is never gated: the hadolint-beside-docker case.
@@ -959,7 +959,7 @@ func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
 		"docker": {Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 1"}}},
 	}
 	lint := spells.Op{Command: spells.Command{Bin: "hadolint"}}
-	assert.NoError(t, checkReady(context.Background(), readiness, lint, t.TempDir()),
+	require.NoError(t, checkReady(context.Background(), readiness, lint, t.TempDir()),
 		"linting a Dockerfile must not wait on the docker daemon")
 }
 
@@ -975,7 +975,7 @@ func TestReadinessProbeIsMemoized(t *testing.T) {
 	op := spells.Op{Command: spells.Command{Bin: "faketool"}}
 
 	require.NoError(t, checkReady(context.Background(), readiness, op, dir))
-	assert.NoError(t, checkReady(context.Background(), readiness, op, dir),
+	require.NoError(t, checkReady(context.Background(), readiness, op, dir),
 		"probe re-ran; a forked check must be memoized per (bin, dir)")
 }
 
@@ -1032,7 +1032,7 @@ func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
 	// A later call with a live context must re-probe rather than return the stale
 	// cancellation; swap in a passing probe to prove the probe actually re-ran.
 	readiness["faketool"] = spells.Tool{Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}}
-	assert.NoError(t, checkReady(context.Background(), readiness, op, dir))
+	require.NoError(t, checkReady(context.Background(), readiness, op, dir))
 }
 
 // A failed probe quotes the tool's own reason. The exit status alone was the whole

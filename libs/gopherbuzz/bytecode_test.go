@@ -348,7 +348,7 @@ func TestEval_TargetNew(t *testing.T) {
 	require.NoError(t, sess.Exec(context.Background(), `target_new("build", fun() > void {});`))
 	require.Contains(t, targets, "build", "build target was not registered")
 	_, err := targets["build"](context.Background(), nil)
-	assert.NoError(t, err, "invoke build")
+	require.NoError(t, err, "invoke build")
 }
 
 func TestEval_MagusfilePattern(t *testing.T) {
@@ -419,7 +419,7 @@ test "failing" { boom(); }
 	// Running the blocks: the first two pass, the third surfaces its error.
 	for _, tc := range tests[:2] {
 		_, err := sess.CallValue(ctx, tc.Fn, nil)
-		assert.NoErrorf(t, err, "test %q unexpectedly failed", tc.Name)
+		require.NoErrorf(t, err, "test %q unexpectedly failed", tc.Name)
 	}
 	_, err := sess.CallValue(ctx, tests[2].Fn, nil)
 	assert.Error(t, err, "failing test returned nil error, want failure")

@@ -141,7 +141,7 @@ func TestEvalMemoComputesOncePerKey(t *testing.T) {
 	for range 8 {
 		wg.Go(func() {
 			v, err := m.Do("graph", compute)
-			assert.NoError(t, err)
+			assert.NoError(t, err) //nolint:testifylint // a wg.Go goroutine, where require's FailNow cannot stop the test
 			assert.Equal(t, 1, v)
 		})
 	}

@@ -92,12 +92,12 @@ func TestTargetHandler_NormalizesVariantSpellings(t *testing.T) {
 	// target silently runs ungated.
 	for _, in := range []string{"preflight", "Preflight", "PREFLIGHT"} {
 		parsed, err := types.ParseTarget(in)
-		assert.NoErrorf(t, err, "ParseTarget(%q)", in)
+		require.NoErrorf(t, err, "ParseTarget(%q)", in)
 		assert.Equalf(t, "preflight", parsed.Name, "ParseTarget(%q).Name", in)
 	}
 	for _, in := range []string{"generate", "Generate", "GENERATE"} {
 		parsed, err := types.ParseTarget(in)
-		assert.NoErrorf(t, err, "ParseTarget(%q)", in)
+		require.NoErrorf(t, err, "ParseTarget(%q)", in)
 		assert.Equalf(t, "generate", parsed.Name, "ParseTarget(%q).Name", in)
 	}
 
@@ -699,7 +699,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
 
 	_, err := Open(context.Background(), root)
-	assert.NoError(t, err, "a computed ctx.withEnv must not be a load error")
+	require.NoError(t, err, "a computed ctx.withEnv must not be a load error")
 }
 
 func TestDiagCollectorCollects(t *testing.T) {
@@ -726,7 +726,7 @@ func TestWithTargetDeadlineIsOffByDefault(t *testing.T) {
 
 	_, ok := ctx.Deadline()
 	assert.False(t, ok, "no timeout configured means no deadline")
-	assert.NoError(t, ctx.Err())
+	require.NoError(t, ctx.Err())
 }
 
 // assertDeadlineBudget asserts ctx's deadline encodes exactly want, given instants
@@ -1113,7 +1113,7 @@ func TestRedactError(t *testing.T) {
 	})
 
 	t.Run("nil in, nil out", func(t *testing.T) {
-		assert.NoError(t, m.redactError(nil))
+		require.NoError(t, m.redactError(nil))
 	})
 }
 
@@ -1292,7 +1292,7 @@ func TestToolWindowIntersectsSpellAndProject(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, types.ToolTooOld)
 
-	assert.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{key(".", "go", "go"): "v1.26.5"}))
+	require.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{key(".", "go", "go"): "v1.26.5"}))
 }
 
 // Every violation is reported, not just the first: a toolchain mismatch usually has more
@@ -1340,13 +1340,13 @@ func TestToolWindowCodeDoesNotTurnOnProjectOrder(t *testing.T) {
 // could not make.
 func TestToolWindowSkipsUnreadVersions(t *testing.T) {
 	p := projectWith("console", map[string]spells.VersionBounds{"node": {Min: "99"}}, tsSpell("node", spells.VersionBounds{}))
-	assert.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{}))
+	require.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{}))
 }
 
 // A tool nobody constrained is never probed against anything.
 func TestToolWindowIgnoresUnconstrainedTools(t *testing.T) {
 	p := projectWith("console", nil, tsSpell("node", spells.VersionBounds{}))
-	assert.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{key("console", "typescript", "node"): "v26.5.0"}))
+	require.NoError(t, checkToolWindows([]*types.Project{p}, map[string]string{key("console", "typescript", "node"): "v26.5.0"}))
 }
 
 // probedSpell is tsSpell with the version prober injected, so these tests exercise the
@@ -1423,7 +1423,7 @@ func TestProbeToolsLeavesAnAbsentToolOutOfTheGate(t *testing.T) {
 
 	assert.Equal(t, []string{"typescript:node:UNPROBED"}, got["console"])
 	assert.Empty(t, full)
-	assert.NoError(t, checkToolWindows([]*types.Project{p}, full), "an absent tool is not a version violation")
+	require.NoError(t, checkToolWindows([]*types.Project{p}, full), "an absent tool is not a version violation")
 }
 
 // A tool that is there and still cannot say which build it is gets no key at all. Its
@@ -1518,7 +1518,7 @@ func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, got)
 	assert.Equal(t, 0, calls)
-	assert.NoError(t, checkToolWindows([]*types.Project{p}, full))
+	require.NoError(t, checkToolWindows([]*types.Project{p}, full))
 }
 
 // mode=workspace probes once at the root instead of per project dir. The gate still keys
@@ -1959,8 +1959,8 @@ func TestCheckUndeclaredCharms(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	require.ErrorIs(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{}), types.CharmRenamed)
-	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{"relock": {}}))
-	assert.NoError(t, checkUndeclaredCharms(ctx, []string{"typo", types.CharmUpdate}, map[string]struct{}{}))
+	require.NoError(t, checkUndeclaredCharms(ctx, []string{"relock"}, map[string]struct{}{"relock": {}}))
+	require.NoError(t, checkUndeclaredCharms(ctx, []string{"typo", types.CharmUpdate}, map[string]struct{}{}))
 }
 
 // TestCharmsForCI: both write-granting charms come off a ci run. rw so a

@@ -566,7 +566,7 @@ func TestNonLoopbackBindWithoutOptInIsAnError(t *testing.T) {
 	cfg.MCP.InsecureBind = true
 	d = New(mcp.Options{Version: "test", HTTPAddr: netip.MustParseAddrPort("0.0.0.0:0"), Config: cfg})
 	_, _, err = d.prepare(context.Background())
-	assert.NoError(t, err, "the opt-in is honored")
+	require.NoError(t, err, "the opt-in is honored")
 }
 
 func sha256Hex(s string) string {

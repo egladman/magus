@@ -11,7 +11,7 @@ func TestValidate_ValidMinimal(t *testing.T) {
 	// ci.max_shards must be -1 (unlimited) or in [1,256]; use -1 for a minimal valid config.
 	// The duplication thresholds have no valid zero, so they carry their defaults.
 	cfg := Config{CI: CI{MaxShards: -1}, Knowledge: Knowledge{Duplication: Defaults().Knowledge.Duplication}}
-	assert.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
+	require.NoError(t, Validate(cfg), "Validate(minimal valid Config)")
 }
 
 func TestValidate_InvalidConcurrency(t *testing.T) {
@@ -26,7 +26,7 @@ func TestValidate_LogFormatRefusesJSONL(t *testing.T) {
 	cfg.Log.Format = "jsonl"
 	require.ErrorContains(t, Validate(cfg), "log.format")
 	cfg.Log.Format = "json"
-	assert.NoError(t, Validate(cfg))
+	require.NoError(t, Validate(cfg))
 }
 
 func TestValidationError_Error(t *testing.T) {
@@ -179,7 +179,7 @@ func TestValidate_CacheTierWrites(t *testing.T) {
 
 			err := Validate(cfg)
 			if tc.wantFailures == nil {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				return
 			}
 			var ve *ValidationError
@@ -214,7 +214,7 @@ func TestValidate_MCPHTTP(t *testing.T) {
 
 			err := Validate(cfg)
 			if !tc.wantFailure {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				return
 			}
 			var ve *ValidationError

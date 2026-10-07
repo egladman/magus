@@ -2290,7 +2290,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         final root = magus\describe.project().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
             proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testlayout,testpair"],
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair"],
                       fs\dirname(mod.value));
         }
     });

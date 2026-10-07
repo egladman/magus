@@ -311,7 +311,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			}}
 		}
 		_, err := ParseMerge(map[string]any{field: value})
-		assert.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
+		require.NoError(t, err, "magus\\job.put rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
 	for _, field := range jsonFields(types.Declaration{}) {

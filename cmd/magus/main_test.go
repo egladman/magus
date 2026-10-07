@@ -572,7 +572,7 @@ func TestUsagePrintersThatReturnAnExitPath(t *testing.T) {
 	t.Run("merge driver usage succeeds", func(t *testing.T) {
 		var err error
 		out := captureStderr(t, func() { err = mergeDriverUsage() })
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Contains(t, out, "magus vcs merge-driver %O %A %B %L %P")
 		assert.Contains(t, out, "magus init")
 		assert.Contains(t, out, "magus vcs resolve")

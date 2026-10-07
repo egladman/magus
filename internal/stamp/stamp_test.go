@@ -80,5 +80,5 @@ func TestCheckNamesBothBuildsAndTheFix(t *testing.T) {
 		"newer than this binary, magus v0.4.3 (commit aaaaaaa1, 2026-09-01T00:00:00Z), and replacing it would undo what the newer one wrote. "+
 		"Update this binary to at least v0.5.0 (`magus self update` for a release, or bring a checkout of magus up to commit bbbbbbb2 and rebuild it), "+
 		"or rerun this command with a magus at least that new", err.Error())
-	assert.NoError(t, Judge{Self: newer}.Check("x", older))
+	require.NoError(t, Judge{Self: newer}.Check("x", older))
 }

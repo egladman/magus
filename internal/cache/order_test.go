@@ -382,7 +382,7 @@ func TestCrossProjectConflictAdvisesInsteadOfRefusing(t *testing.T) {
 	for _, c := range conflicts {
 		assert.False(t, c.SameProject())
 	}
-	assert.NoError(t, conflicts.Refusal(), "cross-project pairs do not refuse")
+	require.NoError(t, conflicts.Refusal(), "cross-project pairs do not refuse")
 	assert.Contains(t, conflicts.Advice(), "MGS4008")
 	assert.Empty(t, FindSameStepConflicts(badgeFixture(false), nil).Advice(),
 		"a same-project pair is refused, not advised")
@@ -482,7 +482,7 @@ func TestSameStepRefusalNamesBothFixes(t *testing.T) {
 		assert.Contains(t, msg, want)
 	}
 
-	assert.NoError(t, SameStepConflicts(nil).Refusal(), "no conflicts is not an error")
+	require.NoError(t, SameStepConflicts(nil).Refusal(), "no conflicts is not an error")
 }
 
 // TestOrderingIsNotInheritedAcrossComposers: composer A fans the reader and the writer

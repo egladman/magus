@@ -396,7 +396,9 @@ func TestEndpointStreamsWithoutBuffering(t *testing.T) {
 	release := make(chan struct{})
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {
 		fl, ok := w.(http.Flusher)
-		require.True(t, ok)
+		if !assert.True(t, ok) {
+			return
+		}
 		_, _ = io.WriteString(w, "data: first\n\n")
 		fl.Flush()
 		<-release // hold the response open, as a streaming completion does

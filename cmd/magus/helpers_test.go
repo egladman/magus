@@ -751,12 +751,12 @@ func TestOpenedRootAcceptsEverySpellingOfItsWorkspace(t *testing.T) {
 	opened := openedRoot{override: "", root: a}
 
 	for _, override := range []string{"", a, filepath.Join(a, "sub")} {
-		assert.NoError(t, opened.check("loadMagus", override), "%q names the loaded workspace", override)
+		require.NoError(t, opened.check("loadMagus", override), "%q names the loaded workspace", override)
 	}
 	assert.PanicsWithValue(t, "loadMagus: asked for the workspace at "+b+" after loading "+a,
 		func() { _ = opened.check("loadMagus", b) }, "a second workspace in one process is a bug")
 	assert.Error(t, opened.check("loadMagus", filepath.Join(t.TempDir(), "gone")),
 		"an override that no longer resolves is the caller's error, not a panic")
-	assert.NoError(t, openedRoot{override: ""}.check("loadMagus", b),
+	require.NoError(t, openedRoot{override: ""}.check("loadMagus", b),
 		"a load that failed to resolve keeps its own error")
 }

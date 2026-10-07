@@ -369,7 +369,7 @@ func TestTierPromotionEvicts(t *testing.T) {
 	// The promoted entry's CreatedAt is the producer's, older than the big entry's, so
 	// ordering by creation would have evicted it first: the entry this run just used.
 	_, err = consumer.readManifest("test/pkg", r.Hash)
-	assert.NoError(t, err, "the freshly promoted entry was evicted")
+	require.NoError(t, err, "the freshly promoted entry was evicted")
 }
 
 // Eviction orders by last use: an old entry that just hit outlives a newer one that
@@ -394,7 +394,7 @@ func TestTierEvictionOrdersByLastUse(t *testing.T) {
 	total, _ := c.scanManifests()
 	c.evictOldest(t.Context(), total-1)
 	_, err = c.readManifest("test/pkg", old.Hash)
-	assert.NoError(t, err, "the entry that just hit was evicted before one unused since it was written")
+	require.NoError(t, err, "the entry that just hit was evicted before one unused since it was written")
 	_, err = c.readManifest("test/pkg", rn.Hash)
 	assert.Error(t, err, "the least recently used entry survived")
 }

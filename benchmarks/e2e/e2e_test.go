@@ -64,7 +64,7 @@ export fun beta(ctx: magus\Context, args: [str]) > void !> any {
 		for _, tgt := range []string{"alpha", "beta"} {
 			p := filepath.Join(root, svc, "ran-"+tgt)
 			_, err := os.Stat(p)
-			assert.NoErrorf(t, err, "expected %s:%s to have run (missing %s)", svc, tgt, p)
+			require.NoErrorf(t, err, "expected %s:%s to have run (missing %s)", svc, tgt, p)
 		}
 	}
 }

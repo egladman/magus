@@ -90,7 +90,7 @@ func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
 	assert.NotContains(t, mdChild, "GOCACHE=")
 
 	cached := filepath.Join(gocache, "ab", "tool")
-	assert.NoError(t, p.Scoped([]string{"go"}, nil).CheckExec(t.Context(), cached))
+	require.NoError(t, p.Scoped([]string{"go"}, nil).CheckExec(t.Context(), cached))
 	assert.ErrorIs(t, p.Scoped([]string{"markdown"}, nil).CheckRead(t.Context(), cached), filesystem.ErrDenied)
 }
 

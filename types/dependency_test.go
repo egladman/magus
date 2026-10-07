@@ -49,7 +49,7 @@ func TestDependencyWaitDoTimesTheWorkItRuns(t *testing.T) {
 
 	did, err := w.Do(context.Background())
 	assert.False(t, did, "nothing requested")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Zero(t, w.Elapsed())
 
 	w.Request(func(context.Context) error {
@@ -58,7 +58,7 @@ func TestDependencyWaitDoTimesTheWorkItRuns(t *testing.T) {
 	})
 	did, err = w.Do(context.Background())
 	assert.True(t, did)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Positive(t, w.Elapsed(), "Do must book the time it spent")
 
 	// The request is consumed, so a second Do finds nothing rather than re-running it.

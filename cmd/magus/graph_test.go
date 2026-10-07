@@ -148,14 +148,14 @@ func TestOpenViaBrowserEnv(t *testing.T) {
 	// `true` exists on the PATH of every supported unix; it launches (Start succeeds),
 	// which is all openViaBrowserEnv needs to consider the browser opened.
 	t.Setenv("BROWSER", "true")
-	assert.NoError(t, openViaBrowserEnv("http://x"))
+	require.NoError(t, openViaBrowserEnv("http://x"))
 
 	t.Setenv("BROWSER", "true %s")
-	assert.NoError(t, openViaBrowserEnv("http://x"), "the URL is substituted for %s")
+	require.NoError(t, openViaBrowserEnv("http://x"), "the URL is substituted for %s")
 
 	// The first launchable entry wins even if an earlier one is missing.
 	t.Setenv("BROWSER", "magus-no-such-browser-xyz:true")
-	assert.NoError(t, openViaBrowserEnv("http://x"))
+	require.NoError(t, openViaBrowserEnv("http://x"))
 }
 
 // TestEncodeFragmentDeterminism confirms that render.EncodeFragmentRaw produces
@@ -185,7 +185,7 @@ func TestEncodeFragmentDeterminism(t *testing.T) {
 func TestProbeLiveBridge(t *testing.T) {
 	t.Run("401 is reachable", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			require.Equal(t, "/api/v1/graph", r.URL.Path)
+			assert.Equal(t, "/api/v1/graph", r.URL.Path)
 			w.WriteHeader(http.StatusUnauthorized)
 		}))
 		defer srv.Close()
@@ -255,7 +255,7 @@ func TestGraphBuildFailsOnlyOnALockRefusal(t *testing.T) {
 		"project . is locked by the magus run this one is nested inside"))
 	missing := errors.New("docs: exit status 127; install scip-typescript")
 
-	assert.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
+	require.NoError(t, reindexRefusals(missing), "a missing indexer stays a warning")
 
 	got := reindexRefusals(errors.Join(missing, refusal))
 	require.ErrorIs(t, got, types.ProjectLockHeldByAncestor)

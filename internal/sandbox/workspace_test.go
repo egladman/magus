@@ -32,7 +32,7 @@ func TestFromConfigFlowsAllowIntoPolicy(t *testing.T) {
 	withAllow := fromConfig(t, root, cacheDir, config.SandboxConfig{
 		Allow: []spells.SandboxAllow{{Path: extra, Mode: "rw"}},
 	})
-	assert.NoError(t, withAllow.CheckWrite(t.Context(), filepath.Join(extra, "out")))
+	require.NoError(t, withAllow.CheckWrite(t.Context(), filepath.Join(extra, "out")))
 	assert.Error(t, withAllow.CheckExec(t.Context(), filepath.Join(extra, "tool")), "rw grants no exec")
 	assert.Error(t, fromConfig(t, root, cacheDir, config.SandboxConfig{}).CheckWrite(t.Context(), filepath.Join(extra, "out")))
 }
@@ -48,12 +48,12 @@ func TestFromConfigResolvesTheSpellShape(t *testing.T) {
 		{Name: "mise", Env: "MAGUS_TEST_MISE_DATA_DIR", Base: "xdgData", Path: "mise", Mode: spells.SandboxAccessRX},
 	}}
 	tool := filepath.Join(data, "mise", "installs", "go", "bin", "go")
-	assert.NoError(t, fromConfig(t, root, "", cfg).CheckExec(t.Context(), tool))
+	require.NoError(t, fromConfig(t, root, "", cfg).CheckExec(t.Context(), tool))
 
 	moved := filesystem.ResolveRulePath(t.TempDir())
 	t.Setenv("MAGUS_TEST_MISE_DATA_DIR", moved)
 	p := fromConfig(t, root, "", cfg)
-	assert.NoError(t, p.CheckExec(t.Context(), filepath.Join(moved, "shims", "go")))
+	require.NoError(t, p.CheckExec(t.Context(), filepath.Join(moved, "shims", "go")))
 	assert.Error(t, p.CheckExec(t.Context(), tool), "the variable replaces the default")
 
 	cache := filesystem.ResolveRulePath(t.TempDir())
@@ -64,7 +64,7 @@ func TestFromConfigResolvesTheSpellShape(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
-	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(cache, "x")))
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(cache, "x")))
 	assert.Contains(t, p.BaseEnv, "MAGUS_TEST_TOOL_CACHE="+cache)
 }
 
@@ -112,7 +112,7 @@ func TestFromConfigGivesChildrenAPrivateTempDir(t *testing.T) {
 	assert.Equal(t, os.FileMode(0o700), info.Mode().Perm())
 	assert.False(t, filesystem.Under(filesystem.ResolveRulePath(p.TempDir), filesystem.ResolveRulePath(root)))
 	assert.Contains(t, p.BaseEnv, "TMPDIR="+p.TempDir)
-	assert.NoError(t, p.CheckExec(t.Context(), filepath.Join(p.TempDir, "go-build1", "a.test")))
+	require.NoError(t, p.CheckExec(t.Context(), filepath.Join(p.TempDir, "go-build1", "a.test")))
 	assert.Equal(t, p.TempDir, fromConfig(t, root, cacheDir, config.SandboxConfig{}).TempDir)
 	assert.NotEqual(t, p.TempDir, fromConfig(t, t.TempDir(), cacheDir, config.SandboxConfig{}).TempDir)
 }
@@ -139,9 +139,9 @@ func TestFromConfigBoxedResolvesWritesInTheBoxAndToolsOnTheHost(t *testing.T) {
 	assert.Contains(t, p.BaseEnv, "HOME="+home)
 	ctx := t.Context()
 	for _, path := range []string{filepath.Join(tmp, "x"), filepath.Join(home, ".cache", "tool", "x"), filepath.Join(home, "notes", "x")} {
-		assert.NoError(t, p.CheckWrite(ctx, path), path)
+		require.NoError(t, p.CheckWrite(ctx, path), path)
 	}
-	assert.NoError(t, p.CheckExec(ctx, filepath.Join(runner, "tool", "bin", "tool")))
+	require.NoError(t, p.CheckExec(ctx, filepath.Join(runner, "tool", "bin", "tool")))
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(runner, "tool", "x")), filesystem.ErrDenied)
 	assert.ErrorIs(t, p.CheckWrite(ctx, filepath.Join(runner, "cache", "x")), filesystem.ErrDenied)
 	assert.Empty(t, p.WritesOutside(root, home, tmp))

@@ -21,7 +21,7 @@ func TestRetiredEnvNamesEachReplacement(t *testing.T) {
 		"MAGUS_DAEMON_ADDRESS was renamed to MAGUS_SERVER_ADDRESS in v0.5.0; magus no longer reads it\n"+
 			"MAGUS_DAEMON_WORKSPACES was renamed to MAGUS_SERVER_WORKSPACES in v0.5.0; magus no longer reads it")
 
-	assert.NoError(t, RetiredEnv(func(string) string { return "" }))
+	require.NoError(t, RetiredEnv(func(string) string { return "" }))
 }
 
 // Every replacement a retired variable names is one magus reads, so the error never

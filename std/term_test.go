@@ -120,7 +120,7 @@ func TestTermNotifyNeverRaises(t *testing.T) {
 		{name: "a recording pass paints nothing", ctx: types.WithTrace(ctx), message: "built", level: "info"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.NoError(t, TermNotify(tc.ctx, tc.message, tc.level, tc.ttlMs))
+			require.NoError(t, TermNotify(tc.ctx, tc.message, tc.level, tc.ttlMs))
 		})
 	}
 }

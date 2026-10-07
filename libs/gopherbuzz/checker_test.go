@@ -1245,7 +1245,7 @@ fun main() > void {
 }
 `)
 	// Both halves resolve. Either would fail with "no member" if the other had won.
-	assert.NoError(t, err, "both owners' declarations must survive")
+	require.NoError(t, err, "both owners' declarations must survive")
 
 	// A surviving declaration also carries its parameter types, in both halves: a
 	// merge that kept the NAME but lost the signature reads as untyped, which is the
@@ -1408,7 +1408,7 @@ func TestCheck_DeclaredGlobalNamespace(t *testing.T) {
 	t.Run("a correct call still resolves", func(t *testing.T) {
 		sess := newSess(t)
 		_, err := sess.Compile(`final _b = host\hasCharm(name: "rw");`)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 

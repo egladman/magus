@@ -125,7 +125,7 @@ func TestRegionReleaseOnDisabledIsNoOp(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
 	r := newRegion(&buf, 5+borderRows, notATerminal())
-	assert.NoError(t, r.release(), "Release on disabled must not error")
+	require.NoError(t, r.release(), "Release on disabled must not error")
 	assert.Empty(t, buf.String(), "Release on disabled must not write anything")
 }
 

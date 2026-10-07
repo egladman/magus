@@ -89,9 +89,9 @@ func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
 	assert.Equal(t, errSilent{exitCode: 1},
 		exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, types.ReasonIndexStale, nil)}),
 		"unknown is exit 1: magus could not search what the question was about")
-	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
+	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{Answer: types.ClassifyAnswer(false, "", nil)}),
 		"absent is exit 0: an empty result set is a legitimate answer to a search")
-	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
+	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 3, Answer: types.ClassifyAnswer(true, "", nil)}))
 }
 
 // The condition that keeps the rule usable. A bare free-text query never loads the symbol
@@ -100,7 +100,7 @@ func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
 func TestExitForQueryIgnoresUnknownWhenSomethingMatched(t *testing.T) {
 	ans := knowledge.Answer("lint", true, knowledge.Coverage{Probed: true})
 	require.Equal(t, types.VerdictUnknown, ans.Verdict)
-	assert.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
+	require.NoError(t, exitForQuery(types.KnowledgeQueryOutput{MatchCount: 12, Answer: ans}))
 }
 
 // A gap whose index exists but will not decode reads differently from one never built,

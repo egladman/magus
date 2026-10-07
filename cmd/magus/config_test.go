@@ -50,7 +50,7 @@ func TestRunConfigSet_Local(t *testing.T) {
 
 	path := filepath.Join(dir, config.Filename)
 	_, err := os.Stat(path)
-	assert.NoError(t, err, "expected %s to exist", path)
+	require.NoError(t, err, "expected %s to exist", path)
 
 	cfg, err := config.Load(path)
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestRunConfigSet_Global(t *testing.T) {
 
 	path := filepath.Join(dir, "magus", config.Filename)
 	_, err := os.Stat(path)
-	assert.NoError(t, err, "expected %s to exist", path)
+	require.NoError(t, err, "expected %s to exist", path)
 
 	cfg, err := config.Load(path)
 	require.NoError(t, err)

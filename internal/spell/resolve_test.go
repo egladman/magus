@@ -603,8 +603,8 @@ func TestGoSpellDeclaresTheToolchainsGrants(t *testing.T) {
 	cached := filepath.Join(gocache, "ab", "tool")
 
 	withGo := p.Scoped([]string{"go"}, nil)
-	assert.NoError(t, withGo.CheckExec(t.Context(), cached))
-	assert.NoError(t, withGo.CheckWrite(t.Context(), cached))
+	require.NoError(t, withGo.CheckExec(t.Context(), cached))
+	require.NoError(t, withGo.CheckWrite(t.Context(), cached))
 	assert.Subset(t, withGo.BaseEnv, []string{"GOCACHE=" + gocache, "GOFLAGS=-mod=mod", "GOEXPERIMENT=jsonv2", "CGO_ENABLED=0"})
 
 	without := p.Scoped([]string{"markdown"}, nil)
@@ -632,7 +632,7 @@ func TestGoSpellGrantsTheChecksumDatabaseWhereGoKeepsIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c.opts.GOOS, c.opts.Spells = "linux", map[string]spells.Sandbox{"go": *sb}
 			p := sandbox.BuildPolicy(c.opts).Scoped([]string{"go"}, nil)
-			assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(c.gopath, "pkg", "sumdb", "sum.golang.org", "latest")))
+			require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(c.gopath, "pkg", "sumdb", "sum.golang.org", "latest")))
 		})
 	}
 }

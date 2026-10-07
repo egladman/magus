@@ -129,6 +129,10 @@ linters:
     - testisolation
     - providerio
 
+    # A NoError that continues past a failure reads a nil result and panics, burying
+    # the error that explains it; go-require keeps require's FailNow off goroutines.
+    - testifylint
+
     # types is the near-leaf domain package; see the rule below.
     - depguard
 
@@ -429,6 +433,15 @@ linters:
               reason: downloads a validation run's CI artifacts by the URL a Buzz provider listing returns; a pre-existing exception, not yet a spell
             - file: cmd/magus/queue.go
               reason: CLI wiring for internal/queue/artifacts.go's client; see that entry
+
+    testifylint:
+      disable-all: true
+      enable:
+        - require-error
+        - go-require
+      require-error:
+        # NoError only: the other error assertions are often the expected outcome.
+        fn-pattern: ^NoErrorf?$
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a

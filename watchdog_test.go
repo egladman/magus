@@ -82,8 +82,8 @@ func TestStallWatchdogLeavesAProgressingRunAlone(t *testing.T) {
 		}
 	}
 
-	assert.NoError(t, ctx.Err(), "a beating heartbeat is not a stall")
-	assert.NoError(t, stall.verdict(nil), "and nothing is reported")
+	require.NoError(t, ctx.Err(), "a beating heartbeat is not a stall")
+	require.NoError(t, stall.verdict(nil), "and nothing is reported")
 }
 
 // TestStallWatchdogOffDoesNotFire is the fails-without-the-fix proof for the test above
@@ -98,8 +98,8 @@ func TestStallWatchdogOffDoesNotFire(t *testing.T) {
 	defer stall.close()
 
 	time.Sleep(300 * time.Millisecond) // five times the window the armed test trips on
-	assert.NoError(t, ctx.Err(), "a disabled watchdog cancels nothing")
-	assert.NoError(t, stall.verdict(nil), "and reports nothing")
+	require.NoError(t, ctx.Err(), "a disabled watchdog cancels nothing")
+	require.NoError(t, stall.verdict(nil), "and reports nothing")
 }
 
 // TestStallWatchdogDefaultsToOn keeps the net universal: an unset stall_timeout must arm
@@ -108,7 +108,7 @@ func TestStallWatchdogDefaultsToOn(t *testing.T) {
 	m := &Magus{}
 	ctx, stall := m.watchForStall(t.Context(), cache.NewProgress(), nil)
 	defer stall.close()
-	assert.NoError(t, ctx.Err())
+	require.NoError(t, ctx.Err())
 	assert.NotEqual(t, t.Context(), ctx, "an armed watchdog hands back its own cancellable context")
 	assert.Equal(t, time.Minute, stallPollInterval(defaultStallTimeout), "a long window is polled at the ceiling")
 }
@@ -224,8 +224,8 @@ func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
 	requestYieldFrom(t, hold, "app")
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, ctx.Err(), "a non-gate holder is never aborted by a marker")
-	assert.NoError(t, watch.verdict(nil))
+	require.NoError(t, ctx.Err(), "a non-gate holder is never aborted by a marker")
+	require.NoError(t, watch.verdict(nil))
 }
 
 // TestSupersedeWatchIgnoresADeadRequester: a later gate killed while parked leaves its
@@ -245,7 +245,7 @@ func TestSupersedeWatchIgnoresADeadRequester(t *testing.T) {
 	defer watch.close()
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, ctx.Err(), "a request nobody is waiting on stops nothing")
+	require.NoError(t, ctx.Err(), "a request nobody is waiting on stops nothing")
 	_, err := os.Stat(hold.locker.yieldPath("app"))
 	assert.True(t, os.IsNotExist(err), "and is swept, so the next holder does not read it either")
 }
@@ -262,6 +262,6 @@ func TestSupersedeWatchDoesNotCancelAfterClose(t *testing.T) {
 	requestYieldFrom(t, hold, "app")
 	time.Sleep(80 * time.Millisecond)
 
-	assert.NoError(t, watch.verdict(nil), "a stopped watch must never trip")
+	require.NoError(t, watch.verdict(nil), "a stopped watch must never trip")
 	assert.ErrorIs(t, context.Cause(ctx), context.Canceled, "close cancels plainly, never with a verdict")
 }

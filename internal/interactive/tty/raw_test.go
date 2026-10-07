@@ -36,5 +36,5 @@ func TestMakeRawRoundTripsOnARealTerminal(t *testing.T) {
 	restore, err := MakeRaw(os.Stdin.Fd())
 	require.NoError(t, err)
 	require.NotNil(t, restore)
-	assert.NoError(t, restore(), "the terminal must be restorable")
+	require.NoError(t, restore(), "the terminal must be restorable")
 }

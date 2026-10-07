@@ -313,7 +313,7 @@ func TestLimiterYieldNoOverReleaseOnCancel(t *testing.T) {
 	}
 	assert.Equal(t, 0, l.Snapshot().Running, "running after balanced acquire/yield/release cycles")
 	// Full capacity must still be acquirable — no permits leaked or lost.
-	assert.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
+	require.NoError(t, l.AcquireN(context.Background(), 2), "capacity shrank after yield cycles")
 }
 
 // Yield's floor of 1 reads like dead defensive code and is not: proc's server takes its

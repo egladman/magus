@@ -414,7 +414,7 @@ func TestCacheSizeCapAccepted(t *testing.T) {
 		t.Run(env, func(t *testing.T) {
 			t.Setenv("MAGUS_CACHE_SIZE", env)
 			_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".cap"))
-			assert.NoErrorf(t, err, "Open with MAGUS_CACHE_SIZE=%q", env)
+			require.NoErrorf(t, err, "Open with MAGUS_CACHE_SIZE=%q", env)
 		})
 	}
 }
@@ -797,7 +797,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", out)
 	// Successful-run log is retained (replayable).
 	_, statErr := os.Stat(lp)
-	assert.NoError(t, statErr)
+	require.NoError(t, statErr)
 }
 
 func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
@@ -825,7 +825,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	assert.NotContains(t, out, "line 0\n")                              // earliest line trimmed
 	// Failure log is retained in silent mode so the printed path resolves.
 	_, statErr := os.Stat(lp)
-	assert.NoError(t, statErr)
+	require.NoError(t, statErr)
 }
 
 // In quiet-but-not-silent mode the failure output is fully dumped to stderr; the
@@ -1194,7 +1194,7 @@ func TestSharedStepSurvivesTheDeadlineOfTheParentThatAskedFirst(t *testing.T) {
 	}, WithLimiter(NewLimiter(2)))
 
 	require.NoError(t, err, "the shared step outlives one parent's ceiling")
-	assert.NoError(t, sawErr, "the parent's expired ceiling is not the step's cancellation")
+	require.NoError(t, sawErr, "the parent's expired ceiling is not the step's cancellation")
 	assert.Equal(t, "security", sawValue, "the step still reads the dispatching parent's values")
 
 	_, hasDeadline := SharedStepContext(timed).Deadline()

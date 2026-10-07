@@ -227,7 +227,7 @@ func TestMetricsCollectionYieldsAReadableSnapshot(t *testing.T) {
 	require.NotNil(t, collector)
 
 	_, err = collector.Collect(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // TestSecretProviderNamesTheSpellOnly. There is deliberately no accessor for the

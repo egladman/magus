@@ -72,7 +72,7 @@ func TestTargetRunsWaitHonorsItsOwnContext(t *testing.T) {
 	cancel()
 	assert.ErrorIs(t, runs.Once(ctx, ref, func() error { return nil }), context.Canceled)
 	run.Complete(nil)
-	assert.NoError(t, runs.Once(t.Context(), ref, func() error { return errors.New("not run") }))
+	require.NoError(t, runs.Once(t.Context(), ref, func() error { return errors.New("not run") }))
 }
 
 // MarkDone records a pass that already ran a target and never overrides a run already

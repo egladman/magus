@@ -173,7 +173,7 @@ func TestSpawnRuleMisdeclarationIsCoded(t *testing.T) {
 		assert.ErrorContains(t, err, "register it in the root magusfile")
 	})
 	t.Run("the root project registers", func(t *testing.T) {
-		assert.NoError(t, callVoidDirect(t, register(interp.WithProjectPath(t.Context(), ".")), fn))
+		require.NoError(t, callVoidDirect(t, register(interp.WithProjectPath(t.Context(), ".")), fn))
 	})
 }
 

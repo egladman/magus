@@ -405,7 +405,7 @@ func TestFileAttentionRefusesAnEventWithNoSourceID(t *testing.T) {
 	ev.Source.ID = ""
 	logged := captureWarnings(t, func() {
 		held, err := fileAttention(root, ev)
-		assert.NoError(t, err, "a missing source.id must not fail the notification")
+		require.NoError(t, err, "a missing source.id must not fail the notification")
 		assert.False(t, held, "no row holds it, so the notification must still fire")
 	})
 
@@ -420,7 +420,7 @@ func TestFileAttentionSkipsWhenThereIsNoRepository(t *testing.T) {
 	// request has nowhere durable to live rather than landing in a store keyed on "".
 	t.Chdir(t.TempDir())
 	held, err := fileAttention("", blockedEvent("needs a decision"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, held)
 }
 

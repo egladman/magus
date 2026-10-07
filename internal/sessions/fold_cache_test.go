@@ -158,7 +158,7 @@ func TestReadAgentEventsUnderConcurrentReadersAndWriters(t *testing.T) {
 	for i := range writers {
 		wg.Go(func() {
 			w, err := Open(dir, fmt.Sprintf("w%d", i), InvocationStart{})
-			if !assert.NoError(t, err) {
+			if !assert.NoError(t, err) { //nolint:testifylint // a wg.Go goroutine, where require's FailNow cannot stop the test
 				return
 			}
 			for j := range appends {

@@ -425,42 +425,42 @@ func TestNewCommandRenderer(t *testing.T) {
 
 	t.Run("base, no charms", func(t *testing.T) {
 		cmd, args, ok, err := render("lint", nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"tool", "golangci-lint", "run", "./..."}, args)
 	})
 	t.Run("charms applied", func(t *testing.T) {
 		cmd, args, ok, err := render("lint", []string{"write", "debug"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"tool", "golangci-lint", "run", "--fix", "./...", "-v"}, args)
 	})
 	t.Run("charmless target", func(t *testing.T) {
 		cmd, args, ok, err := render("build", []string{"write"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, "go", cmd)
 		assert.Equal(t, []string{"build"}, args)
 	})
 	t.Run("no-op (empty cmd) → none", func(t *testing.T) {
 		cmd, args, ok, err := render("noop", nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, cmd)
 		assert.Nil(t, args)
 	})
 	t.Run("unknown target → none", func(t *testing.T) {
 		cmd, args, ok, err := render("missing", nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, ok)
 		assert.Empty(t, cmd)
 		assert.Nil(t, args)
 	})
 	t.Run("explainer traces base then each charm with the bin prefixed", func(t *testing.T) {
 		steps, ok, err := newCommandExplainer(targets)("lint", []string{"write", "debug"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 		require.Len(t, steps, 3) // base + write + debug
 		assert.Empty(t, steps[0].Charm)
@@ -471,7 +471,7 @@ func TestNewCommandRenderer(t *testing.T) {
 	})
 	t.Run("explainer: no active charms → base-only, still ok", func(t *testing.T) {
 		steps, ok, err := newCommandExplainer(targets)("lint", nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 		require.Len(t, steps, 1)
 		assert.Empty(t, steps[0].Charm)

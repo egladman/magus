@@ -447,8 +447,8 @@ func TestPlanSkillTreeWritesNothing(t *testing.T) {
 func TestCheckDestinationRefusesEscapes(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.NoError(t, checkDestination(dir, ".claude/skills"))
-	assert.NoError(t, checkDestination(dir, "nested/deeper/skills"))
+	require.NoError(t, checkDestination(dir, ".claude/skills"))
+	require.NoError(t, checkDestination(dir, "nested/deeper/skills"))
 
 	assert.Error(t, checkDestination(dir, "/etc/skills"), "an absolute path is outside the tree")
 	assert.Error(t, checkDestination(dir, "~/skills"), "a home-relative path is outside the tree")
@@ -489,7 +489,7 @@ func TestSkillTreeRefusesASymlinkedDestination(t *testing.T) {
 	assert.DirExists(t, victim, "nothing outside the tree may be removed")
 
 	// A destination with no symlink in it still resolves.
-	assert.NoError(t, checkDestination(dir, ".claude/skills"))
+	require.NoError(t, checkDestination(dir, ".claude/skills"))
 }
 
 func TestInstalledSkillNamesListsOnlyMagusDirs(t *testing.T) {

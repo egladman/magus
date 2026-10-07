@@ -39,7 +39,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	manifest := []byte(`{"projectPath":"test/pkg","hash":"abc123","outputs":[]}`)
 	sig, err := s.sign(domainArtifact, manifest, nil)
 	require.NoError(t, err, "sign")
-	assert.NoError(t, v.verify(domainArtifact, sig, manifest, nil), "verify valid signature")
+	require.NoError(t, v.verify(domainArtifact, sig, manifest, nil), "verify valid signature")
 	assert.Equal(t, s.keyid, keyID(pub), "signer keyid must match derived keyid")
 }
 
@@ -360,7 +360,7 @@ func TestVerifyRejectsCrossDomainSignature(t *testing.T) {
 	sig, err := s.sign(domainBundle, meta, nil)
 	require.NoError(t, err)
 
-	assert.NoError(t, v.verify(domainBundle, sig, meta, nil), "a bundle signature verifies in its own domain")
+	require.NoError(t, v.verify(domainBundle, sig, meta, nil), "a bundle signature verifies in its own domain")
 	assert.Error(t, v.verify(domainArtifact, sig, meta, nil), "a bundle signature must NOT verify as a cache artifact")
 }
 

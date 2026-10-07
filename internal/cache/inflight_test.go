@@ -104,7 +104,7 @@ func TestInflightConcurrentEdges(t *testing.T) {
 	assert.Empty(t, f.Running(), "every edge closed")
 	if b, err := os.ReadFile(f.path); err == nil {
 		var got []inflightTarget
-		assert.NoError(t, json.Unmarshal(b, &got), "the file must never be left torn")
+		require.NoError(t, json.Unmarshal(b, &got), "the file must never be left torn")
 	}
 	// No stray temp files: a failed write must clean up after itself.
 	entries, err := os.ReadDir(dir)
