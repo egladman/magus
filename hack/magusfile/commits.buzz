@@ -4,8 +4,9 @@
 //
 // Squash merges make a pull request's title the subject that lands on main, so the title
 // is the enforcement point. Branch commits are squashed away and keep the repository's
-// lowercase imperative style with no prefix; the hook checks only commits made directly on
-// the base branch, which land as written.
+// lowercase imperative style with no prefix; the hook holds only commits made directly on
+// the base branch, which land as written, to this rule. Brevity is Vale's, on every
+// branch (hack/prose).
 namespace commits;
 
 import "std";
