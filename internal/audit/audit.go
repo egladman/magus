@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"path/filepath"
 	"sort"
@@ -23,16 +22,20 @@ import (
 // cache replay does on APFS: it removes the file and clonefile(2)s the blob, carrying the
 // blob's mtime. It comes from the lstat the walk already makes, so it costs no syscall and
 // no read; zero means the platform reports none, and then mtime and size decide alone.
+//
+// An unreadable entry is a directory the walk could not list, keyed by the directory's own
+// path. Its other fields are zero.
 type fileState struct {
-	modTimeNs int64
-	size      int64
-	ino       uint64
-	seen      bool
+	modTimeNs  int64
+	size       int64
+	ino        uint64
+	unreadable bool
+	seen       bool
 }
 
 // changed reports whether cur differs from s in any recorded property.
 func (s fileState) changed(cur fileState) bool {
-	return s.modTimeNs != cur.modTimeNs || s.size != cur.size || s.ino != cur.ino
+	return s.modTimeNs != cur.modTimeNs || s.size != cur.size || s.ino != cur.ino || s.unreadable != cur.unreadable
 }
 
 type snapshot map[string]fileState
@@ -44,6 +47,7 @@ const (
 	changeAdded changeKind = iota + 1
 	changeRemoved
 	changeModified
+	changeUnreadable
 )
 
 // change is a per-path diff result.
@@ -53,7 +57,7 @@ type change struct {
 }
 
 type changeBucket struct {
-	added, modified, removed []string
+	added, modified, removed, unreadable []string
 }
 
 // Audit carries the pre-snapshot needed to detect descendant writes
@@ -102,11 +106,18 @@ func Begin(ctx context.Context, p *types.Project, write bool) *Audit {
 }
 
 // Finish diffs descendant trees against the snapshot and rejects cross-project writes. Nil-safe.
+//
+// The re-walk ignores ctx's cancellation: it is bounded local I/O, and a walk cut short
+// would read every file it never reached as removed. A target interrupted after it wrote
+// into a descendant is still judged, and one that wrote nothing gets no error from here.
 func (a *Audit) Finish(ctx context.Context, target string) error {
 	if a == nil {
 		return nil
 	}
-	changes := diff(ctx, a.snap, a.roots)
+	changes, err := diff(context.WithoutCancel(ctx), a.snap, a.roots)
+	if err != nil {
+		return err
+	}
 	if len(changes) == 0 {
 		return nil
 	}
@@ -187,6 +198,9 @@ outer:
 
 // walkFiles iterates regular files under root; buf passed to fn is reused (callers must copy to retain).
 // Skips tool/VCS metadata dirs (see isMetaDir); no symlink follow; checks ctx cancellation between directories.
+//
+// A directory it cannot list reaches fn as an unreadable entry, and the walk goes on to its
+// siblings. The only error is ctx's, and it stops the walk where it is.
 func walkFiles(ctx context.Context, root string, fn func(buf []byte, st fileState)) error {
 	// 256 B handles paths up to /tmp/... TempDir + small subtree without
 	// realloc; longer paths grow naturally via append.
@@ -224,9 +238,7 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, st fileState))
 		buf = ensureSpare(buf, 1)
 		switch kind {
 		case dentDir:
-			if err := walkDir(ctx, buf, fn); err != nil {
-				errAcc = err
-			}
+			errAcc = walkDir(ctx, buf, fn)
 		case dentRegular:
 			if st, ok := lstatFile(buf); ok {
 				fn(buf, st)
@@ -234,10 +246,13 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, st fileState))
 		}
 		buf = buf[:base]
 	})
-	if err != nil {
-		return err
+	if errAcc != nil {
+		return errAcc
 	}
-	return errAcc
+	if err != nil {
+		fn(buf, fileState{unreadable: true})
+	}
+	return nil
 }
 
 // isMetaDir reports whether name is a tool or VCS metadata directory the audit
@@ -257,51 +272,74 @@ func isMetaDir(name []byte) bool {
 }
 
 // take walks each descendant root once and records (mtime, size, inode) per
-// regular file. Tool/VCS metadata dirs are skipped wholesale; symlinks are not followed.
-// Missing roots are tolerated. roots must already be deduped against
-// nesting via topmostRoots so each file is walked exactly once.
+// regular file, plus each directory it could not list. Tool/VCS metadata dirs are
+// skipped wholesale; symlinks are not followed. Missing roots are tolerated. roots
+// must already be deduped against nesting via topmostRoots so each file is walked
+// exactly once. Like diff, it fails only on ctx.
 func take(ctx context.Context, roots []descendant) (snapshot, error) {
 	snap := make(snapshot, 256)
-	var errs []error
 	for _, d := range roots {
 		err := walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
 			// Map insertion requires a stable key; copy buf into a new string.
 			snap[string(buf)] = st
 		})
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			errs = append(errs, err)
+		if err != nil {
+			return nil, err
 		}
-	}
-	if len(errs) > 0 {
-		return snap, errors.Join(errs...)
 	}
 	return snap, nil
 }
 
-// diff re-walks roots and compares each regular file against pre.
-func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
+// diff re-walks roots and compares each regular file and unreadable directory against
+// pre. Like take, it fails only on ctx.
+//
+// A directory that turned unreadable since pre is a change of its own, and the files pre
+// holds beneath it count as seen: the walk cannot tell what happened to them, and reading
+// them as removed blamed the target for deleting what it may only have hidden.
+func diff(ctx context.Context, pre snapshot, roots []descendant) ([]change, error) {
 	var out []change
 	for _, d := range roots {
-		_ = walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
+		err := walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
 			key := string(buf)
+			if st.unreadable {
+				markSeenUnder(pre, key)
+			}
 			prev, existed := pre[key]
-			if !existed {
-				out = append(out, change{path: string(buf), kind: changeAdded})
-				return
+			switch {
+			case st.unreadable && !prev.unreadable:
+				out = append(out, change{path: key, kind: changeUnreadable})
+			case !existed:
+				out = append(out, change{path: key, kind: changeAdded})
+			case prev.changed(st):
+				out = append(out, change{path: key, kind: changeModified})
 			}
-			if prev.changed(st) {
-				out = append(out, change{path: string(buf), kind: changeModified})
+			if existed {
+				prev.seen = true
+				pre[key] = prev
 			}
-			prev.seen = true
-			pre[key] = prev
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	for path, st := range pre {
-		if !st.seen {
+		// A directory unreadable in pre and listable now shows up as the files under it.
+		if !st.seen && !st.unreadable {
 			out = append(out, change{path: path, kind: changeRemoved})
 		}
 	}
-	return out
+	return out, nil
+}
+
+// markSeenUnder marks every entry of pre beneath dir as seen.
+func markSeenUnder(pre snapshot, dir string) {
+	prefix := dir + string(filepath.Separator)
+	for path, st := range pre {
+		if strings.HasPrefix(path, prefix) {
+			st.seen = true
+			pre[path] = st
+		}
+	}
 }
 
 // reportCap bounds each reported path list.
@@ -324,7 +362,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 	for _, c := range changes {
 		bestIdx, bestLen := -1, -1
 		for i, d := range descs {
-			if !strings.HasPrefix(c.path, d.dir+string(filepath.Separator)) {
+			if c.path != d.dir && !strings.HasPrefix(c.path, d.dir+string(filepath.Separator)) {
 				continue
 			}
 			if len(d.dir) > bestLen {
@@ -352,6 +390,8 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 			b.modified = append(b.modified, rel)
 		case changeRemoved:
 			b.removed = append(b.removed, rel)
+		case changeUnreadable:
+			b.unreadable = append(b.unreadable, rel)
 		}
 	}
 	descPaths := make([]string, 0, len(by))
@@ -430,7 +470,7 @@ func outputClaim(p *types.Project, desc string, b *changeBucket) (target, glob s
 }
 
 func changeSummary(b *changeBucket) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 4)
 	if len(b.modified) > 0 {
 		parts = append(parts, changePart("modified", b.modified))
 	}
@@ -439,6 +479,9 @@ func changeSummary(b *changeBucket) string {
 	}
 	if len(b.removed) > 0 {
 		parts = append(parts, changePart("removed", b.removed))
+	}
+	if len(b.unreadable) > 0 {
+		parts = append(parts, changePart("unreadable", b.unreadable))
 	}
 	return strings.Join(parts, " ")
 }

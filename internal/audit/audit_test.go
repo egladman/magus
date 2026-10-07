@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -110,7 +111,8 @@ func TestSnapshotAndDiff(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "modify.txt"), "bb", t2)
 	require.NoError(t, os.Remove(filepath.Join(dir, "remove.txt")), "remove")
 
-	got := diff(context.Background(), pre, descs)
+	got, err := diff(context.Background(), pre, descs)
+	require.NoError(t, err, "diff")
 	want := map[string]changeKind{
 		filepath.Join(dir, "added.txt"):  changeAdded,
 		filepath.Join(dir, "modify.txt"): changeModified,
@@ -366,7 +368,11 @@ func BenchmarkSnapshotAndDiff(b *testing.B) {
 		if err := os.WriteFile(mutateTarget, []byte(fmt.Sprintf("v%d", i)), 0o644); err != nil {
 			b.Fatal(err)
 		}
-		if d := diff(ctx, snap, descs); len(d) == 0 {
+		d, err := diff(ctx, snap, descs)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(d) == 0 {
 			b.Fatal("expected at least one change")
 		}
 	}
@@ -481,4 +487,90 @@ func TestFinishCatchesAReplacementThatKeepsMtimeAndSize(t *testing.T) {
 	err := a.Finish(ctx, "generate")
 	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
 	assert.Contains(t, err.Error(), "modified=[gen/gate.go]")
+}
+
+// auditTree lays out api with descendants api/<name>, each holding src/guide.md, and
+// returns api and a context whose workspace holds every project.
+func auditTree(t *testing.T, names ...string) (*types.Project, context.Context) {
+	t.Helper()
+	parent := &types.Project{Path: "api", Dir: filepath.Join(t.TempDir(), "api")}
+	projects := []*types.Project{parent}
+	for _, name := range names {
+		dir := filepath.Join(parent.Dir, name)
+		writeFile(t, filepath.Join(dir, "src", "guide.md"), "# guide", time.Unix(1_700_000_000, 0))
+		projects = append(projects, &types.Project{Path: "api/" + name, Dir: dir})
+	}
+	return parent, types.WithWorkspace(t.Context(), &fakeWS{projects: projects})
+}
+
+// crossed renders the MGS3001 error Finish returns for api's lint target and desc.
+func crossed(desc, summary string) error {
+	return types.DiagnosticErrorf(types.DescendantBoundaryCrossed,
+		"project %q target %q wrote into descendant project %q: %s\nfix: move this work to %q or exclude that path from the parent target",
+		"api", "lint", desc, summary, desc)
+}
+
+// chmodUnreadable makes dir unlistable until the test ends.
+func chmodUnreadable(t *testing.T, dir string) {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root lists a mode 000 directory")
+	}
+	require.NoError(t, os.Chmod(dir, 0))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+}
+
+// Ctrl-C landed after the target wrote into a descendant. The re-walk stopped at the
+// cancellation, so the write went unseen and every file it never reached read as removed.
+func TestFinishJudgesAWriteMadeBeforeACancellation(t *testing.T) {
+	parent, wsCtx := auditTree(t, "docs")
+	a := Begin(wsCtx, parent, true)
+	require.NotNil(t, a)
+	writeFile(t, filepath.Join(parent.Dir, "docs", "src", "gen.md"), "# gen", time.Unix(1_700_000_100, 0))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := a.Finish(ctx, "lint")
+	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
+	require.NotErrorIs(t, err, context.Canceled)
+	assert.Equal(t, crossed("api/docs", "added=[src/gen.md]").Error(), err.Error())
+}
+
+func TestFinishPassesACancelledTargetThatWroteNothing(t *testing.T) {
+	parent, wsCtx := auditTree(t, "docs")
+	a := Begin(wsCtx, parent, true)
+	require.NotNil(t, a)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.NoError(t, a.Finish(ctx, "lint"))
+}
+
+// A directory that turns unlistable during the run is reported itself, its files are not
+// read as removed, and the walk goes on to its siblings and to the other descendants.
+func TestFinishReportsADirectoryThatTurnedUnreadable(t *testing.T) {
+	parent, ctx := auditTree(t, "docs", "web")
+	a := Begin(ctx, parent, true)
+	require.NotNil(t, a)
+	chmodUnreadable(t, filepath.Join(parent.Dir, "docs", "src"))
+	writeFile(t, filepath.Join(parent.Dir, "docs", "notes.md"), "# notes", time.Unix(1_700_000_100, 0))
+	writeFile(t, filepath.Join(parent.Dir, "web", "src", "gen.md"), "# gen", time.Unix(1_700_000_100, 0))
+
+	err := a.Finish(ctx, "lint")
+	want := errors.Join(
+		crossed("api/docs", "added=[notes.md] unreadable=[src]"),
+		crossed("api/web", "added=[src/gen.md]"),
+	)
+	require.Error(t, err)
+	assert.Equal(t, want.Error(), err.Error())
+}
+
+// A directory already unlistable when the window opens is part of the snapshot, so the
+// audit still runs and the same unreadable directory at the end is no change.
+func TestBeginRecordsAnUnreadableDirectory(t *testing.T) {
+	parent, ctx := auditTree(t, "docs")
+	chmodUnreadable(t, filepath.Join(parent.Dir, "docs", "src"))
+	a := Begin(ctx, parent, true)
+	require.NotNil(t, a, "an unreadable directory does not skip the audit")
+	assert.NoError(t, a.Finish(ctx, "lint"))
 }
