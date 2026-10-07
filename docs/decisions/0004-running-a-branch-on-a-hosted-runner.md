@@ -92,15 +92,15 @@ reads a secret beyond `GITHUB_TOKEN` (`release.yaml` and `release-index.yaml` ca
 
 ### Beside ADR 0003
 
-| | `--platform` (0003) | a dispatched run (this page) |
-|---|---|---|
-| runs where | this machine, a VM kernel | GitHub's runner, CI's own machine |
-| what runs | your working tree, mounted read-only, dirty allowed | HEAD of a pushed branch, clean unless `--head` |
-| reproduces | the kernel: landlock, `/proc`, seccomp | 0003's "not reproduced" column: CI's kernel build, the mise toolchain, HOME and uid, CPU count, linux/amd64 |
-| results land | the local platform store; `query output` names it | a run log and artifacts; an output ref is a citation, not a replay |
-| round trip | seconds once the image is warm | minutes: every run builds magus from source |
-| machine budget | yours | GitHub's, free on a public repository with standard runners |
-| network | none without `--fetch` | every step, named by the step |
+|                | `--platform` (0003)                                 | a dispatched run (this page)                                                                                |
+| -------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| runs where     | this machine, a VM kernel                           | GitHub's runner, CI's own machine                                                                           |
+| what runs      | your working tree, mounted read-only, dirty allowed | HEAD of a pushed branch, clean unless `--head`                                                              |
+| reproduces     | the kernel: landlock, `/proc`, seccomp              | 0003's "not reproduced" column: CI's kernel build, the mise toolchain, HOME and uid, CPU count, linux/amd64 |
+| results land   | the local platform store; `query output` names it   | a run log and artifacts; an output ref is a citation, not a replay                                          |
+| round trip     | seconds once the image is warm                      | minutes: every run builds magus from source                                                                 |
+| machine budget | yours                                               | GitHub's, free on a public repository with standard runners                                                 |
+| network        | none without `--fetch`                              | every step, named by the step                                                                               |
 
 Use `--platform` for the inner loop. Dispatch for the proof, and to move work off a busy
 laptop.

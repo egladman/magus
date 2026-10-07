@@ -35,14 +35,14 @@ Every dependency system surveyed separates three things: a manifest declares a n
 version, a tool-written lock beside it pins the exact bytes, and code imports a NAME. None
 puts a URL in the import.
 
-| System | Declared in | Locked in | Code refers to |
-|---|---|---|---|
-| Go | `go.mod` | `go.sum` | the module path, which is the repository location |
-| Dagger | `dagger.toml` (formerly `dagger.json`) | its lock | a generated name, `dag.hello()` |
-| Cargo | `Cargo.toml` | `Cargo.lock` | the crate name |
-| Helm | `Chart.yaml` (OCI repositories allowed) | `Chart.lock` | the chart name or alias |
-| Nix | `flake.nix` inputs | `flake.lock` | the input name |
-| Deno | `deno.json` imports | `deno.lock` | a bare specifier |
+| System | Declared in                             | Locked in    | Code refers to                                    |
+| ------ | --------------------------------------- | ------------ | ------------------------------------------------- |
+| Go     | `go.mod`                                | `go.sum`     | the module path, which is the repository location |
+| Dagger | `dagger.toml` (formerly `dagger.json`)  | its lock     | a generated name, `dag.hello()`                   |
+| Cargo  | `Cargo.toml`                            | `Cargo.lock` | the crate name                                    |
+| Helm   | `Chart.yaml` (OCI repositories allowed) | `Chart.lock` | the chart name or alias                           |
+| Nix    | `flake.nix` inputs                      | `flake.lock` | the input name                                    |
+| Deno   | `deno.json` imports                     | `deno.lock`  | a bare specifier                                  |
 
 Go also supplies the rule that tells a reader, without looking anything up, whether an
 import is local: a path whose first element contains a dot (`github.com/...`) is a module
