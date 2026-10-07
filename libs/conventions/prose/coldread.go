@@ -26,12 +26,13 @@ const docStubMessage = "Doc comment only repeats the name %s; state the contract
 // comparable to a grep over the same text. A doc-list bullet, a preformatted
 // line and a backtick span are exempt: gofmt writes the first, and the other
 // two hold literals.
-func aside(_ Symbol, prose []proseLine) []Finding {
+func aside(in input) []Finding {
 	var out []Finding
 
-	for i, ln := range prose {
-		itemFollows := i+1 < len(prose) && prose[i+1].item
+	for i, ln := range in.prose {
+		itemFollows := i+1 < len(in.prose) && in.prose[i+1].item
 		if f, ok := scanAside(ln.text, ln.start, itemFollows); ok {
+			f.Line = ln.line
 			out = append(out, f)
 		}
 	}
@@ -249,16 +250,16 @@ var historyPatterns = []*regexp.Regexp{
 var purposeLead = wordSet("is", "are", "was", "were", "be", "been", "being", "get", "gets", "got", "getting")
 
 // history reports the first history phrase on each prose line.
-func history(s Symbol, prose []proseLine) []Finding {
-	if marked(s.Doc) {
+func history(in input) []Finding {
+	if marked(in.symbol.Doc) {
 		return nil
 	}
 
 	var out []Finding
 
-	for _, ln := range prose {
+	for _, ln := range in.prose {
 		if at, phrase := historyPhrase(ln.text); at >= 0 {
-			out = append(out, Finding{Message: fmt.Sprintf(historyMessage, phrase), Match: phrase})
+			out = append(out, Finding{Message: fmt.Sprintf(historyMessage, phrase), Match: phrase, Line: ln.line})
 		}
 	}
 
@@ -306,7 +307,8 @@ func prevWord(s string, at int) string {
 // docStub reports a one-line doc that says nothing but the symbol's name and
 // stub vocabulary, the shape gocritic's docStub targets: "Foo is a Foo",
 // "NewFoo creates a new Foo", "Foo ...".
-func docStub(s Symbol, _ []proseLine) []Finding {
+func docStub(in input) []Finding {
+	s := in.symbol
 	if s.Name == "" || marked(s.Doc) {
 		return nil
 	}

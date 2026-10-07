@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -13,7 +15,7 @@ func runJudge(t *testing.T, stdin string) (code int, stdout, stderr string) {
 
 	var out, errOut bytes.Buffer
 
-	code = run(strings.NewReader(stdin), &out, &errOut)
+	code = run(nil, strings.NewReader(stdin), &out, &errOut)
 
 	return code, out.String(), errOut.String()
 }
@@ -73,6 +75,67 @@ func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
 			in := `[{"node":"n","name":"configFor","kind":"` + tc.kind + `","doc":""}]`
 
 			assertRun(t, in, 0, tc.want, "")
+		})
+	}
+}
+
+func TestRunJudgesMarkdownFilesInArgumentOrder(t *testing.T) {
+	dir := t.TempDir()
+	a, b := filepath.Join(dir, "a.md"), filepath.Join(dir, "b.md")
+
+	if err := os.WriteFile(a, []byte("# A\n\nIt simply works.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(b, []byte("- **Cache:** on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-surface", "markdown", b, a}, strings.NewReader(""), &out, &errOut)
+
+	want := `[` +
+		`{"node":"` + b + `","source":"` + b + `:1","language":"markdown","rule":"reply-voice","message":"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.","match":"**Cache:**"},` +
+		`{"node":"` + a + `","source":"` + a + `:3","language":"markdown","rule":"filler","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
+func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-surface", "pull-request"}, strings.NewReader("fix: pin the key\n## Summary\n"), &out, &errOut)
+
+	want := `[{"node":"pull-request","source":"pull-request:2","language":"pull-request","rule":"lead-context",` +
+		`"message":"It opens with a heading: open the description with a paragraph naming the goal behind the change ` +
+		`and why this code stands in its way, then the bullets.","match":"## Summary"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
+func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
+	cases := []struct {
+		name       string
+		args       []string
+		wantStderr string
+	}{
+		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown or pull-request\n"},
+		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -surface markdown\n"},
+		{"a path for a pull request", []string{"-surface", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
+		{"a missing file", []string{"-surface", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+
+			code := run(tc.args, strings.NewReader("[]"), &out, &errOut)
+			if code != 1 || out.String() != "" || errOut.String() != tc.wantStderr {
+				t.Errorf("run: got code %d stdout %q stderr %q, want code 1 stderr %q", code, out.String(), errOut.String(), tc.wantStderr)
+			}
 		})
 	}
 }
