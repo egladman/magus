@@ -1,0 +1,17 @@
+extends: existence
+message: "Drop '%s': say what changed."
+level: error
+ignorecase: true
+tokens:
+  - comprehensive
+  - robust
+  - seamless
+  - seamlessly
+  - powerful
+  - elegant
+  - elegantly
+  - cutting-edge
+  - state-of-the-art
+  - world-class
+  - effortless
+  - effortlessly

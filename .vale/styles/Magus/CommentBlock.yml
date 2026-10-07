@@ -1,0 +1,7 @@
+# Measured 2026-10-06 over 46664 comment blocks: p50 25 words, p90 72, p99 168.
+extends: occurrence
+message: "Keep a comment block under 250 words: say why, and move the rest to docs."
+level: error
+scope: paragraph
+max: 250
+token: '[^\s]+'

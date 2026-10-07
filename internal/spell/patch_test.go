@@ -630,6 +630,14 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			{Bin: "bun", Args: []string{"run"}},
 		},
 	},
+	"vale": {
+		Name:  "vale",
+		Tools: map[string]spells.Tool{"vale": {Probe: spells.Command{Bin: "vale", Args: []string{"--version"}}}},
+		Ops: map[string]spells.Op{
+			"vale": {Command: spells.Command{Bin: "vale", Args: []string{"--output=JSON", "--no-exit"},
+				NeedsArgs: "vale: pass the documents to judge after the op's args", Capture: true}, Capture: true},
+		},
+	},
 }
 
 // installOp is the op Decode synthesizes from a spell's manifest installs: the first

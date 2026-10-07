@@ -10,11 +10,12 @@ import "magus";
 import "./hack/policy/helpers" as helpers;
 import "./hack/magusfile/commits" as conventional;
 
-final plainFix = "Write one subject line, lowercase and imperative, in plain ASCII, with clauses joined "
-    + "by `;` and at most 150 characters: no body, no area prefix, no trailing period and no "
-    + "attribution. Detail belongs in the pull request description.";
+// One subject cap everywhere: pr-title, the commit-msg hook and Vale read the same one.
+final maxSubject = conventional\maxLength();
 
-final maxSubject = 150;
+final plainFix = "Write one subject line, lowercase and imperative, in plain ASCII, with clauses joined "
+    + "by `;` and at most {maxSubject} characters: no body, no area prefix, no trailing period and no "
+    + "attribution. Detail belongs in the pull request description.";
 
 final attribution = $"(?i)co-authored-by|generated with";
 final nonASCII = $"[^ -~\n\t]";
@@ -321,8 +322,8 @@ test "each subject rule is named when broken" {
         std\assert(v.decision == "deny", message: subject);
         std\assert(v.reason.indexOf(want) != null, message: "{subject}: {v.reason}");
     }
-    std\assert(askReason(["git", "commit", "-m", "x".repeat(151)]).indexOf("151 characters, past 150") != null, message: "too long");
-    std\assert(ask(["git", "commit", "-m", "x".repeat(150)]).decision == "allow", message: "150 is the cap");
+    std\assert(askReason(["git", "commit", "-m", "x".repeat(101)]).indexOf("101 characters, past 100") != null, message: "too long");
+    std\assert(ask(["git", "commit", "-m", "x".repeat(100)]).decision == "allow", message: "100 is the cap");
 }
 
 test "a body, a second -m and an attribution are denied" {

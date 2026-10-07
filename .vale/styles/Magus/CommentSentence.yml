@@ -1,0 +1,7 @@
+# Measured 2026-10-06 over the repository's comment sentences: p50 17 words, p90 34, p99 50.
+extends: occurrence
+message: "Keep a comment sentence under 60 words: split it."
+level: error
+scope: sentence
+max: 60
+token: '[^\s]+'

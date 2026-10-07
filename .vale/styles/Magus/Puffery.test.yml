@@ -1,0 +1,8 @@
+- name: "a selling adjective"
+  format: commit
+  input: "# add a robust vale spell\n"
+  contains: "Magus.Puffery"
+- name: "a plain subject"
+  format: commit
+  input: "# add a vale spell\n"
+  absent: ["Magus.Puffery"]

@@ -1,0 +1,9 @@
+# A name that ends in Of or For describes its argument, not what it returns: parseX,
+# newX, fetchX, or a noun for the result.
+extends: existence
+message: "Rename '%s': no function or method name ends in the word Of or For."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '\b(?:\w*[a-z0-9](?:Of|For)|\w+_(?:of|for))\b'

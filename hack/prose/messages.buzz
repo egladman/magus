@@ -1,0 +1,170 @@
+// Commit messages and pull request text for the prose check. Each is written as a small
+// document whose extension picks its rules in .vale.ini, with a table mapping each
+// document line back to the message line it came from.
+namespace prosemessages;
+
+import "std";
+import "vcs";
+import "magus/lint";
+import "hack/prose/vale" as prosevale;
+
+// Document is text for Vale and the table back to the message it renders.
+export object Document {
+    text: str = "",
+    table: [prosevale\SourceLine] = [<prosevale\SourceLine>],
+}
+
+// commitDocument renders a commit message as its subject in a heading and the rest as
+// body. git's comment lines are dropped, and with them any line under a scissors line.
+// label names the message in findings.
+export fun commitDocument(message: str, label: str) > Document {
+    return headed(message, label: label, comments: true);
+}
+
+// titleDocument renders a pull request title as a heading.
+export fun titleDocument(title: str, label: str) > Document {
+    return headed(title.trim(), label: label, comments: false);
+}
+
+// descriptionDocument renders a pull request description line for line.
+export fun descriptionDocument(body: str, label: str) > Document {
+    final lines = body.replace("\r", with: "").split("\n");
+    final table = mut [<prosevale\SourceLine>];
+    foreach (i, _ in lines) {
+        table.append(prosevale\SourceLine{ path = label, line = i + 1, col = 1 });
+    }
+    return Document{ text = lines.join("\n") + "\n", table = table };
+}
+
+fun headed(message: str, label: str, comments: bool) > Document {
+    final text = mut [<str>];
+    final table = mut [<prosevale\SourceLine>];
+    var subject = true;
+    foreach (i, raw in message.replace("\r", with: "").split("\n")) {
+        if (comments and raw.startsWith("# ------------------------ >8")) {
+            break;
+        }
+        if (comments and raw.startsWith("#")) {
+            continue;
+        }
+        if (subject) {
+            if (raw.trim() == "") {
+                continue;
+            }
+            text.append("# " + raw.trim());
+            table.append(prosevale\SourceLine{ path = label, line = i + 1, col = -1 });
+            subject = false;
+            continue;
+        }
+        text.append(raw.trim());
+        table.append(prosevale\SourceLine{ path = label, line = i + 1, col = 1 });
+    }
+    while (text.len() > 1 and text[text.len() - 1] == "") {
+        text.pop();
+        table.pop();
+    }
+    return Document{ text = text.join("\n") + "\n", table = table };
+}
+
+// exempt reports a subject git writes itself, or that an autosquash rebase rewrites away.
+export fun exempt(subject: str) > bool {
+    foreach (prefix in ["Merge ", "Revert ", "fixup! ", "squash! ", "amend! "]) {
+        if (subject.startsWith(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// judge runs vale over docs, each written under dir as <name>.<ext> for its key, and
+// returns the error-level findings and the rest as advice. vale is prosevale\run, or a
+// magusfile's call of the vale spell's op.
+export fun judge(dir: str, docs: {str: Document}, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    final paths = mut [<str>];
+    foreach (name, d in docs) {
+        paths.append(prosevale\writeDocument(dir, name: name, text: d.text));
+    }
+    final blocking = mut [<Finding>];
+    final advice = mut [<Finding>];
+    if (paths.len() == 0) {
+        return .{ blocking = blocking, advice = advice };
+    }
+    final report = vale(paths);
+    foreach (name, d in docs) {
+        final mine = mut [<prosevale\Alert>];
+        foreach (a in prosevale\alertsIn(report, file: dir + "/" + name)) {
+            mine.append(a);
+        }
+        foreach (f in prosevale\blocking(mine, origins: d.table, doc: name)) {
+            blocking.append(f);
+        }
+        foreach (f in prosevale\advice(mine, origins: d.table, doc: name)) {
+            advice.append(f);
+        }
+    }
+    return .{ blocking = blocking, advice = advice };
+}
+
+// rangeMessages are the full messages of the commits in a git revision range, oldest
+// first, keyed by abbreviated hash.
+export fun rangeMessages(revs: str) > {str: str} !> any {
+    final hashes = vcs\cmd(["rev-list", "--reverse", "--no-merges", revs], opts: {"quiet": true}).stdout.split("\n");
+    final found = mut {<str: str>};
+    foreach (h in hashes) {
+        if (h.trim() == "") {
+            continue;
+        }
+        final short = h.trim().sub(0, len: 12);
+        found[short] = vcs\cmd(["log", "-1", "--format=%B", h.trim()], opts: {"quiet": true}).stdout;
+    }
+    return found;
+}
+
+// commits judges each commit message in revs, a git revision range.
+export fun commits(dir: str, revs: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    final docs = mut {<str: Document>};
+    foreach (hash, message in rangeMessages(revs)) {
+        if (!exempt(message.split("\n")[0])) {
+            docs["{hash}.commit"] = commitDocument(message, label: "commit " + hash);
+        }
+    }
+    return judge(dir, docs: docs, vale: vale);
+}
+
+// title judges a pull request title's wording; pr-title's conventional rule owns its
+// form, case and length.
+export fun title(dir: str, title: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    return judge(dir, docs: {"title.prtitle": titleDocument(title, label: "pull request title")}, vale: vale);
+}
+
+// description judges a pull request description's wording; the guard's pull request
+// rules own its budget and shape.
+export fun description(dir: str, body: str, label: str, vale: fun (paths: [str]) > str !> any) > obj{ blocking: [Finding], advice: [Finding] } !> any {
+    return judge(dir, docs: {"description.pr": descriptionDocument(body, label: label)}, vale: vale);
+}
+
+test "a commit message renders its subject as a heading and maps each line back" {
+    final doc = commitDocument("# a git comment\nadd a vale spell\n\nwhy it exists\n\n# Please enter\n", label: "COMMIT_EDITMSG");
+    std\assert(doc.text == "# add a vale spell\n\nwhy it exists\n", message: doc.text);
+    std\assert(doc.table[0].line == 2 and doc.table[0].col == -1, message: "subject sits on message line 2");
+    std\assert(doc.table[2].line == 4, message: "body line");
+    final f = prosevale\locate(prosevale\Alert{ check = "Magus.Puffery", message = "m", line = 1, col = 9 },
+        origins: doc.table, doc: "x");
+    std\assert(f.path == "COMMIT_EDITMSG" and f.line == 2 and f.col == 7, message: prosevale\render(f));
+}
+
+test "the scissors line ends a verbose commit message" {
+    final doc = commitDocument("add x\n# ------------------------ >8 ------------------------\ndiff --git a b\n", label: "m");
+    std\assert(doc.text == "# add x\n", message: doc.text);
+}
+
+test "a title is a heading and a description keeps its lines" {
+    std\assert(titleDocument(" feat: add x ", label: "t").text == "# feat: add x\n", message: "title");
+    final d = descriptionDocument("Lead.\r\n\r\n- one\n", label: "d");
+    std\assert(d.text == "Lead.\n\n- one\n\n", message: d.text);
+    std\assert(d.table[2].line == 3, message: "bullet line");
+}
+
+test "subjects git writes are exempt" {
+    std\assert(exempt("Merge branch 'x'") and exempt("fixup! add x") and !exempt("add x"), message: "exempt");
+}

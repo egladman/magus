@@ -1,0 +1,8 @@
+- name: "a subject over 100 characters"
+  format: commit
+  input: "# add a vale spell and wire the prose check into lint add a vale spell and wire the prose check into lint \n"
+  contains: "Magus.SubjectLength"
+- name: "a subject within 100 characters"
+  format: commit
+  input: "# add a vale spell and wire the prose check into lint\n"
+  absent: ["Magus.SubjectLength"]

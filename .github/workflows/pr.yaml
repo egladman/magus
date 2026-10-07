@@ -1,12 +1,12 @@
 name: PR
 
-# Checks the pull request itself rather than the code in it: the title, and whether a
-# shipped change carries a changelog entry. Its own workflow rather than a ci.yaml job
+# Checks the pull request itself rather than the code in it: the title, the description's
+# wording, and whether a shipped change carries a changelog entry. Its own workflow rather than a ci.yaml job
 # because it must rerun when the title changes, and ci.yaml rerunning its whole
 # shard matrix on a title edit would buy nothing.
 #
-# Both rules live in the root magusfile (pr-title, pr-changelog) and run by hand the same
-# way; this file only supplies the event.
+# The rules live in the root magusfile (pr-title, pr-changelog, pr-description) and run by
+# hand the same way; this file only supplies the event.
 
 on:
   pull_request:
@@ -66,3 +66,7 @@ jobs:
       - name: Shipped feat, fix and perf changes carry a changelog entry
         if: ${{ !cancelled() }}
         run: magus run pr-changelog:gha .
+
+      - name: Description wording passes Vale
+        if: ${{ !cancelled() }}
+        run: magus run pr-description:gha .

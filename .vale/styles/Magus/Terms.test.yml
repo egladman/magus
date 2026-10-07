@@ -1,0 +1,8 @@
+- name: "a hyphenated subagent"
+  format: comments
+  input: "It hands the work to a sub-agent.\n"
+  contains: "Magus.Terms"
+- name: "the one spelling"
+  format: comments
+  input: "It hands the work to subagents.\n"
+  absent: ["Magus.Terms"]

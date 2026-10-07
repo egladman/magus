@@ -1,0 +1,8 @@
+- name: "a body under the subject"
+  format: commit
+  input: "# add a vale spell\n\nIt wires the prose check into lint.\n"
+  contains: "Magus.CommitBody"
+- name: "the subject alone"
+  format: commit
+  input: "# add a vale spell\n"
+  absent: ["Magus.CommitBody"]

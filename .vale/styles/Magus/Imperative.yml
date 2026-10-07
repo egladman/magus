@@ -1,0 +1,7 @@
+extends: existence
+message: "Write the subject in the imperative: 'add', not 'added' or 'adds'."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '\A# (?:[a-z]+(?:\([^)\n]*\))?!?: )?(?i:added|adds|adding|fixed|fixes|fixing|updated|updates|updating|removed|removes|removing|changed|changes|changing|implemented|implements|implementing|refactored|refactors|refactoring|improved|improves|improving|created|creates|creating|introduced|introduces|introducing|renamed|renames|renaming|moved|moves|moving|made|makes|making)\b'
