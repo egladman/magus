@@ -297,7 +297,7 @@ func TestWithInterruptPrefersASpecificCode(t *testing.T) {
 		"a usage error keeps its own code rather than being flattened to 143")
 
 	// A command that RETURNS the cancellation instead of swallowing it (awaitInvocation
-	// returns ctx.Err()) reached exitCodeOf as a generic failure and reported 1, which
+	// returns ctx.Err()) reached mapExitCode as a generic failure and reported 1, which
 	// says the work failed about a run the user stopped.
 	cancelled := fmt.Errorf("--wait: %w", context.Canceled)
 	assert.Equal(t, 130, withInterrupt(1, cancelled, intr), "a surfaced cancellation is the signal")

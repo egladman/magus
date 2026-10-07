@@ -793,10 +793,10 @@ func loadedKeys(fold Fold) map[string]AgentEvent {
 // is one-shot and unrecoverable: every later journal line about that call would be
 // permanently uncountable.
 func addsNext(stored, next AgentEvent) bool {
-	return !subsetOf(next.NextServed, stored.NextServed) || !subsetOf(next.NextFollowed, stored.NextFollowed)
+	return !isSubset(next.NextServed, stored.NextServed) || !isSubset(next.NextFollowed, stored.NextFollowed)
 }
 
-func subsetOf(ids, of []string) bool {
+func isSubset(ids, of []string) bool {
 	for _, id := range ids {
 		if !slices.Contains(of, id) {
 			return false

@@ -106,21 +106,21 @@ func TestRunConfigCmd_NoArgs(t *testing.T) {
 
 	var usage errUsage
 	require.ErrorAs(t, err, &usage, "should be errUsage so it exits %d", exitUsage)
-	assert.Equal(t, exitUsage, exitCodeOf(err))
+	assert.Equal(t, exitUsage, mapExitCode(err))
 }
 
 // TestUsageErrorsExitTwo pins the exit-code contract itself: an explicit help request
 // is a satisfied request (0), a misuse is 2, and a genuine runtime failure stays 1.
 func TestUsageErrorsExitTwo(t *testing.T) {
-	assert.Equal(t, 0, exitCodeOf(nil), "success")
-	assert.Equal(t, 0, exitCodeOf(flag.ErrHelp), "an explicit -h is a request that was satisfied")
-	assert.Equal(t, exitUsage, exitCodeOf(usagef("bad invocation")), "misuse")
-	assert.Equal(t, 1, exitCodeOf(errors.New("the work failed")), "runtime failure")
+	assert.Equal(t, 0, mapExitCode(nil), "success")
+	assert.Equal(t, 0, mapExitCode(flag.ErrHelp), "an explicit -h is a request that was satisfied")
+	assert.Equal(t, exitUsage, mapExitCode(usagef("bad invocation")), "misuse")
+	assert.Equal(t, 1, mapExitCode(errors.New("the work failed")), "runtime failure")
 }
 
 // selfStatusErr is any failure that names its own process status, the shape a contended
 // workspace lock arrives in. Declared here rather than imported because the package that
-// returns it keeps the type unexported; what exitCodeOf reads is the method.
+// returns it keeps the type unexported; what mapExitCode reads is the method.
 type selfStatusErr struct{ code int }
 
 func (selfStatusErr) Error() string   { return "the machine is busy" }
@@ -131,8 +131,8 @@ func (e selfStatusErr) ExitCode() int { return e.code }
 // lock exits 75 (EX_TEMPFAIL); collapsing it to 1 is what made a busy machine read as a
 // broken build.
 func TestSelfDescribedExitStatusSurvives(t *testing.T) {
-	assert.Equal(t, 75, exitCodeOf(selfStatusErr{code: 75}))
-	assert.Equal(t, 75, exitCodeOf(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
+	assert.Equal(t, 75, mapExitCode(selfStatusErr{code: 75}))
+	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", selfStatusErr{code: 75})), "survives wrapping")
 }
 
 // runOnlyFlags lists flags that intentionally exist on `magus run` but not

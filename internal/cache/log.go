@@ -497,7 +497,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// run holding half its state each, so failures pinned by one were
 	// unreachable from the other.
 	//
-	// Keyed on w being standard error, the same identity check tty.ZoneOf
+	// Keyed on w being standard error, the same identity check tty.ResolveZone
 	// makes, so a handler pointed at a log file or test buffer is its own.
 	if w != os.Stderr {
 		return newPrettyHandler(w, level, tty.SystemProbe)
@@ -505,7 +505,7 @@ func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	stderrPrettyMu.Lock()
 	defer stderrPrettyMu.Unlock()
 	if stderrPretty == nil {
-		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ZoneOf(w))
+		stderrPretty = newPrettyHandlerZone(w, level, tty.SystemProbe, tty.ResolveZone(w))
 		return stderrPretty
 	}
 	// The level comes from the most recent caller. In the CLI both callers read

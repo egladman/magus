@@ -82,8 +82,8 @@ func emphasize(before, after string) (Span, Span) {
 		return Span{}, Span{}
 	}
 
-	b, bOff := runesOf(before)
-	a, aOff := runesOf(after)
+	b, bOff := runeOffsets(before)
+	a, aOff := runeOffsets(after)
 	limit := min(len(b), len(a))
 
 	p := 0
@@ -168,9 +168,9 @@ func forwardToBoundary(s []rune, i int) int {
 	return n
 }
 
-// runesOf returns s as runes alongside each rune's byte offset, with a trailing entry for
+// runeOffsets returns s as runes alongside each rune's byte offset, with a trailing entry for
 // len(s) so a half-open range ending past the last rune resolves.
-func runesOf(s string) ([]rune, []int) {
+func runeOffsets(s string) ([]rune, []int) {
 	rs := make([]rune, 0, len(s))
 	off := make([]int, 0, len(s)+1)
 	for i, r := range s {

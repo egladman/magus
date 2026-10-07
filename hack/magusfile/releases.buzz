@@ -420,22 +420,22 @@ export fun currentVersion(prefix: str) > str !> any {
     return best;
 }
 
-// nextFor returns the three legal next versions for a module currently at cur.
+// nextVersions returns the three legal next versions for a module currently at cur.
 // An unreleased module is treated as sitting at 0.0.0, so its candidates fall out
 // of the same rule as everyone else's (0.0.1 | 0.1.0 | 1.0.0) rather than being a
 // special case someone has to remember.
-export fun nextFor(cur: str) > SemverNext !> any {
+export fun nextVersions(cur: str) > SemverNext !> any {
     if (cur == "") { return semver\next("0.0.0"); }
     return semver\next(cur);
 }
 
-// isCandidate reports whether v is one of the three versions nextFor offers,
+// isCandidate reports whether v is one of the three versions nextVersions offers,
 // comparing the RELEASE part only - so v0.4.0-rc1 and v0.4.0+ci both count as the
 // minor candidate. A prerelease of a legal next version is itself legal; that is
 // how you cut an rc without first inventing a version nobody agreed to.
 export fun isCandidate(v: str, cur: str) > bool !> any {
     final want = semver\parse(v);
-    final n = nextFor(cur);
+    final n = nextVersions(cur);
     foreach (c in [n.patch, n.minor, n.major]) {
         final cv = semver\parse(c);
         if (cv.major == want.major and cv.minor == want.minor and cv.patch == want.patch) {

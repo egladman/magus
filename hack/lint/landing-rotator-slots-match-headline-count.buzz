@@ -75,7 +75,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             durationLine = n;
         }
     }
-    final firstRule = support\lineOf(styles, needle: ".landing-rotate:nth-child(");
+    final firstRule = support\findLine(styles, needle: ".landing-rotate:nth-child(");
 
     final found = mut [<Finding>];
     final uncovered = mut [<str>];

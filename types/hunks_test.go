@@ -10,23 +10,23 @@ import (
 
 func TestDiffDriverFor(t *testing.T) {
 	for path, want := range map[string]string{"a/b.go": "golang", "x.tsx": "typescript", "docs/CHANGELOG.md": "markdown", "f.buzz": "buzz"} {
-		d, ok := DiffDriverFor(path)
+		d, ok := MatchDiffDriver(path)
 		require.True(t, ok, path)
 		assert.Equal(t, want, d.Name, path)
 	}
-	_, ok := DiffDriverFor("notes.txt")
+	_, ok := MatchDiffDriver("notes.txt")
 	assert.False(t, ok)
 }
 
 // A declaration names every line from it down to the next one, as git's hunk header
 // does: group 1 when the pattern has one, trailing space trimmed, cut at 80 bytes.
 func TestDeclarations(t *testing.T) {
-	golang, _ := DiffDriverFor("a.go")
+	golang, _ := MatchDiffDriver("a.go")
 	long := "func F(" + strings.Repeat("a int, ", 20) + ") {\n"
 	lines := []string{"package a\n", "\n", "func A() {  \n", "\treturn\n", "}\n", long, "\tx()\n"}
 	assert.Equal(t, []string{"", "", "func A() {", "func A() {", "func A() {", long[:80], long[:80]}, golang.Declarations(lines))
 
-	ts, _ := DiffDriverFor("a.ts")
+	ts, _ := MatchDiffDriver("a.ts")
 	assert.Equal(t, []string{"function f() {", "function f() {"}, ts.Declarations([]string{"function f() {\n", "  if (x) {\n"}),
 		"a rejecting pattern names nothing, so the declaration above stands")
 
@@ -36,7 +36,7 @@ func TestDeclarations(t *testing.T) {
 // Buzz or Go held in a raw string, or in a block comment, is text: its column-0 `var` and
 // `func` lines declare nothing, so the lines stay with the Go declaration around them.
 func TestDeclarationsSkipGoStringsAndComments(t *testing.T) {
-	golang, _ := DiffDriverFor("a.go")
+	golang, _ := MatchDiffDriver("a.go")
 	lines := SplitLines([]byte("package a\n" +
 		"\n" +
 		"const script = `\n" +
@@ -65,7 +65,7 @@ func TestDeclarationsSkipGoStringsAndComments(t *testing.T) {
 }
 
 func TestHunks(t *testing.T) {
-	golang, _ := DiffDriverFor("a.go")
+	golang, _ := MatchDiffDriver("a.go")
 	old := "package a\n\nfunc A() {\n\treturn\n}\n\nfunc B() {\n\treturn\n}\n"
 	cur := "package a\n\nfunc A() {\n\tx()\n\treturn\n}\n\nfunc B() {\n}\n"
 	got, ok := Hunks("a.go", []byte(old), []byte(cur), golang)

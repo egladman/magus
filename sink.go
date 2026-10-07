@@ -328,9 +328,9 @@ type terminal interface {
 	EndRun(ctx context.Context, footer string) error
 }
 
-// terminalFor draws through the process's display handler when w is standard error and
+// pickTerminal draws through the process's display handler when w is standard error and
 // one paints there: writing past it would scroll lines through its band.
-func terminalFor(w io.Writer) terminal {
+func pickTerminal(w io.Writer) terminal {
 	if w == os.Stderr {
 		if h := cache.StderrHandler(); h != nil {
 			return h
@@ -341,7 +341,7 @@ func terminalFor(w io.Writer) terminal {
 
 // textSink is the sink a run reports through when its caller passed none.
 func (m *Magus) textSink() *Sink {
-	return sinkOver(textEncoder{term: terminalFor(os.Stderr), level: m.cfg.Log.SlogLevel()})
+	return sinkOver(textEncoder{term: pickTerminal(os.Stderr), level: m.cfg.Log.SlogLevel()})
 }
 
 // plainTerminal writes uncolored lines to w.
@@ -370,7 +370,7 @@ type textEncoder struct {
 }
 
 func newTextEncoder(env sinkEnv) encoder {
-	return textEncoder{term: terminalFor(env.stderr), level: env.level}
+	return textEncoder{term: pickTerminal(env.stderr), level: env.level}
 }
 
 func (t textEncoder) enabled(level slog.Level) bool { return level >= t.level }

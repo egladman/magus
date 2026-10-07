@@ -96,13 +96,13 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if g, err = knowledgeGraphForRefsOf(ctx, ws, globalCfg, rf.Refresh, pos[0]); err != nil {
+		if g, err = loadRefsGraph(ctx, ws, globalCfg, rf.Refresh, pos[0]); err != nil {
 			return err
 		}
 		if rf.Rename != "" {
 			return refsRenameCmd(ctx, root, opts, g, pos[0], rf.Rename, globalCfg.DryRun)
 		}
-		res = refsOf(ctx, ws, globalCfg, g, read)
+		res = lookupRefs(ctx, ws, globalCfg, g, read)
 	}
 	if len(res.Ambiguous) > 0 {
 		return refuseAmbiguous(os.Stderr, pos[0], res.Ambiguous)
@@ -312,8 +312,8 @@ type refsResult struct {
 	coverage knowledge.Coverage
 }
 
-// refsOf looks ref up in g, a graph with ref's symbol shards merged, under cfg.
-func refsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read graphRead) refsResult {
+// lookupRefs looks ref up in g, a graph with ref's symbol shards merged, under cfg.
+func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config, g *knowledge.Graph, read graphRead) refsResult {
 	symbol, ambiguous := pickSymbol(g, read.Input)
 	if len(ambiguous) > 0 {
 		return refsResult{Ambiguous: ambiguous}
@@ -323,7 +323,7 @@ func refsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config
 	// being asked about existed. Passing HasSymbols() would also be wrong: an exact symbol
 	// ID routes to a subset of shards, so it answers about the subset, not the workspace.
 	// The declared-index probe is the authority.
-	cov := symbolCoverageOf(ctx, ws, cfg, read.Input, true)
+	cov := measureSymbolCoverage(ctx, ws, cfg, read.Input, true)
 	out, ok := g.Refs(symbol)
 	if !ok {
 		// This is the miss where a stale index IS the explanation. A name refs cannot
@@ -337,13 +337,13 @@ func refsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config
 	// answer as StaleIndexes either way and only downgrades the empty case. Only the indexes
 	// of the symbol's own language could hold its sites, so only they qualify the answer.
 	language := g.SymbolLanguage(out.Symbol)
-	cov = cov.For(language)
+	cov = cov.Narrow(language)
 	out.Answer = knowledge.Answer(read.Input, len(out.Refs) > 0, cov)
 	res := refsResult{Found: true, Out: out, coverage: cov}
 	if read.Occurrences {
 		key := strings.TrimPrefix(out.Symbol, types.KindSymbol+":")
 		if occ, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), cfg, slog.Default(), key); probed {
-			occ.Unreadable = knowledge.GapsFor(occ.Unreadable, language)
+			occ.Unreadable = knowledge.NarrowGaps(occ.Unreadable, language)
 			res.Occurrences = &occ
 		}
 	}
@@ -844,7 +844,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 	if !probed {
 		return refuse(append(blind, types.EditRefusal{Reason: "cannot read the symbol indexes"})...)
 	}
-	for _, gap := range knowledge.GapsFor(read.Unreadable, language) {
+	for _, gap := range knowledge.NarrowGaps(read.Unreadable, language) {
 		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; rebuild it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
 	}
 	if len(read.Names) > 0 {
@@ -917,7 +917,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 // sites the occurrence list never names, and no per-site check sees a site that is not
 // listed. An index of another language holds none of them, so it refuses nothing.
 func renameBlindSpots(id, language string, cov knowledge.Coverage) []types.EditRefusal {
-	answer := knowledge.Answer(id, true, cov.For(language))
+	answer := knowledge.Answer(id, true, cov.Narrow(language))
 	blind := make([]types.EditRefusal, 0, len(answer.Gaps)+len(answer.StaleIndexDetails))
 	for _, gap := range answer.Gaps {
 		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; build it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})

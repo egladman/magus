@@ -1425,8 +1425,8 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
     return acc;
 }
 
-// annotationsFor reads the failure annotations of p's failing check runs, one request each.
-fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
+// fetchAnnotations reads the failure annotations of p's failing check runs, one request each.
+fun fetchAnnotations(p: Pull) > {str: [Annotation]} !> any {
     final acc = mut{<str: [Annotation]>};
     foreach (c in failing(p.checks)) {
         if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
@@ -1437,8 +1437,8 @@ fun annotationsFor(p: Pull) > {str: [Annotation]} !> any {
     return acc;
 }
 
-// failedStepsFor reads the failed step names of p's failing check jobs, one request each.
-fun failedStepsFor(p: Pull) > {str: [str]} !> any {
+// fetchFailedSteps reads the failed step names of p's failing check jobs, one request each.
+fun fetchFailedSteps(p: Pull) > {str: [str]} !> any {
     final acc = mut{<str: [str]>};
     foreach (c in failing(p.checks)) {
         if (c.job == "" or c.conclusion != "FAILURE" or c.name == HYGIENE) {
@@ -1510,13 +1510,13 @@ fun records(sel: Selector) > [Record] !> any {
                 baseline = mainBaseline();
             }
             if (inheritedChecks(p, baseline: baseline!)) {
-                tests = failingTestsFor(p);
+                tests = fetchFailingTests(p);
             }
         }
         var facts = Facts{ conflicts = conflicts[p.number] ?? [<Conflict>], baseline = baseline, failingTests = tests };
         final verdict = judge(p, facts: facts);
         if (verdict.state == "red" and MERGE_READY_STAGES.indexOf(stage) != null) {
-            facts = Facts{ annotations = annotationsFor(p), failedSteps = failedStepsFor(p), baseline = baseline, failingTests = tests };
+            facts = Facts{ annotations = fetchAnnotations(p), failedSteps = fetchFailedSteps(p), baseline = baseline, failingTests = tests };
         } else if (stage == "kicked-back" and p.kick != null) {
             facts = Facts{ generated = findGenerated(p.kick!.paths), baseline = baseline, failingTests = tests };
         }
@@ -1553,8 +1553,8 @@ fun mainBaseline() > Baseline !> any {
     return Baseline{ url = run!.q("url").stringValue(), failingChecks = failing, failingTests = tests };
 }
 
-// failingTestsFor reads the Go tests p's failing runs report failing, one log per run.
-fun failingTestsFor(p: Pull) > [str] !> any {
+// fetchFailingTests reads the Go tests p's failing runs report failing, one log per run.
+fun fetchFailingTests(p: Pull) > [str] !> any {
     final acc = mut [<str>];
     final read = mut [<str>];
     foreach (c in failing(p.checks)) {

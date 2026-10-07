@@ -493,10 +493,10 @@ func compilerStamp() string {
 	if err != nil {
 		return ""
 	}
-	return compilerStampOf(exe)
+	return readCompilerStamp(exe)
 }
 
-func compilerStampOf(exe string) string {
+func readCompilerStamp(exe string) string {
 	id := goBuildID(exe)
 	if id == "" {
 		return ""
@@ -792,7 +792,7 @@ type magusfileFacts struct {
 	Replacement   string            `json:"replacement,omitempty"`
 }
 
-func factsOf(code string) magusfileFacts {
+func computeMagusfileFacts(code string) magusfileFacts {
 	f := magusfileFacts{
 		Imports:       importBoundNames(code),
 		SpellHandles:  spellImportNames(code),
@@ -803,7 +803,7 @@ func factsOf(code string) magusfileFacts {
 	return f
 }
 
-// magusfileFactsOf returns code's facts, kept in store beside the compiled chunks when
+// loadMagusfileFacts returns code's facts, kept in store beside the compiled chunks when
 // there is one.
 //
 // optimization: a guard hook whose chunk is stored never parses the entry magusfile
@@ -814,9 +814,9 @@ func factsOf(code string) magusfileFacts {
 //	  (benchstat, n=10).
 //	trade-off: one more file per magusfile version in the guard's chunk store.
 //	assumes:  store is scoped to one compiler build, as guardBytecodeStore's is.
-func magusfileFactsOf(store buzz.BytecodeStore, code string) magusfileFacts {
+func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 	if store == nil {
-		return factsOf(code)
+		return computeMagusfileFacts(code)
 	}
 	sum := sha256.Sum256([]byte(code))
 	key := "facts-" + hex.EncodeToString(sum[:])
@@ -826,7 +826,7 @@ func magusfileFactsOf(store buzz.BytecodeStore, code string) magusfileFacts {
 			return f
 		}
 	}
-	f := factsOf(code)
+	f := computeMagusfileFacts(code)
 	if blob, err := json.Marshal(f); err == nil {
 		_ = store.Store(key, blob)
 	}
@@ -1057,7 +1057,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			return nil, fmt.Errorf("magusfile: read %s: %w", rel, err)
 		}
 		code := string(data)
-		facts := magusfileFactsOf(store, code)
+		facts := loadMagusfileFacts(store, code)
 		maps.Copy(importNames, facts.Imports)
 		for _, key := range facts.CtxForm {
 			ctxForm[key] = true

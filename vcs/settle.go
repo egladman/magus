@@ -34,7 +34,7 @@ var SettleHooks = []string{HookPreMergeCommit, HookPreCommit, HookPostCommit, Ho
 // magus-regenerate section, in SettleHooks order; none when every one is installed.
 // Outside a git repository nothing is missing, since nothing could be installed.
 func SettleHooksMissing(ctx context.Context, root string) ([]string, error) {
-	paths, ok, err := gitRepoPathsOf(ctx, root)
+	paths, ok, err := resolveGitRepoPaths(ctx, root)
 	if err != nil || !ok {
 		return nil, err
 	}

@@ -263,7 +263,7 @@ fun footprint(rules: [Rule], files: [str]) > [Finding] !> any {
         return [Finding{ path = "magusfile.buzz", rule = FOOTPRINT, message = "declares no lint-rules target",
             fix = "hack/lint/run.buzz is what lint-rules runs; update this check if the target was renamed." }];
     }
-    final line = support\lineOf(fs\readFile("magusfile.buzz"), needle: "export fun lint_rules(");
+    final line = support\findLine(fs\readFile("magusfile.buzz"), needle: "export fun lint_rules(");
     return footprintFindings(read, declared: declared!, nested: nested, line: line);
 }
 

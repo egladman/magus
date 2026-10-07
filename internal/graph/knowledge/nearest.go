@@ -108,7 +108,7 @@ func nameForms(id, label string) []string {
 	}
 	for _, s := range []string{trimKind(id), label} {
 		add(s)
-		add(leafOf(s))
+		add(lastSegment(s))
 	}
 	return forms
 }
@@ -121,9 +121,9 @@ func trimKind(id string) string {
 	return id
 }
 
-// leafOf is the last path or qualifier segment of a node name: "build" out of
+// lastSegment is the last path or qualifier segment of a node name: "build" out of
 // ".:build", "guard_shell.go" out of "cmd/magus/guard_shell.go".
-func leafOf(s string) string {
+func lastSegment(s string) string {
 	if i := strings.LastIndexAny(s, "/:"); i >= 0 {
 		return s[i+1:]
 	}

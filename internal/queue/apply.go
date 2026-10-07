@@ -377,7 +377,7 @@ func (r *applyRun) settle(ctx context.Context, v types.Verdict) error {
 		r.mergedEvent(ctx, c, Event{Kind: EventMerged, Change: c.ID, Commit: c.Head, Reason: v.Reason})
 		return nil
 	case types.DecisionKick:
-		k := kickOf(r.plan.Base, v)
+		k := newKick(r.plan.Base, v)
 		// An admitted change's kick is validation's, so its hooks reproduce it.
 		if _, _, admitted := find(r.plan, c.ID); admitted && r.Reproduce.Gate != "" {
 			k.Reproduce = &types.Reproduction{Gate: r.Reproduce.Gate, Regenerate: r.Reproduce.Regenerate}

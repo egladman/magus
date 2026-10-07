@@ -91,9 +91,9 @@ func TestInflightAttention(t *testing.T) {
 		types.AttentionQueue:  {Intent: "squash", Decision: "wait", Code: "WAIT_CHECKS"},
 		types.AttentionNone:   {Mark: "queued"},
 	} {
-		assert.Equal(t, want, attentionOf(ch), "%+v", ch)
+		assert.Equal(t, want, changeAttention(ch), "%+v", ch)
 	}
-	assert.Equal(t, types.AttentionAuthor, attentionOf(types.InflightChange{Mark: "needs_regeneration"}))
+	assert.Equal(t, types.AttentionAuthor, changeAttention(types.InflightChange{Mark: "needs_regeneration"}))
 }
 
 // A plan for another base, or for a head that has moved, places nothing.

@@ -335,7 +335,7 @@ func TestDiagramFigureOfIsData(t *testing.T) {
 		UnscopedWhy: "served from the workspace graph: focus app, depth 1",
 		Boxes:       []figure.Box{{Actor: app}, {Actor: lib}},
 		Flows:       []figure.Flow{{Src: figure.End{Actor: app}, Dst: figure.End{Actor: lib}}},
-	}, figureOf(g, "focus app, depth 1", "/code/{path}"))
+	}, buildFigure(g, "focus app, depth 1", "/code/{path}"))
 
 	g.claim = KindImports
 	assert.Equal(t, figure.Figure{
@@ -345,7 +345,7 @@ func TestDiagramFigureOfIsData(t *testing.T) {
 			{Label: "app", Dir: &figure.Dir{Path: "app", ID: "dir:app", Language: "go", Imports: []string{"libs/lib"}, ImportsIndexed: true, Files: 1}},
 			{Label: "lib", Dir: &figure.Dir{Path: "libs/lib", ID: "dir:libs/lib", Language: "go", ImportsIndexed: true, Files: 1}},
 		},
-	}, figureOf(g, "", "/code/{path}"))
+	}, buildFigure(g, "", "/code/{path}"))
 }
 
 func anchors(nodes []Node) []string {

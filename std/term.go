@@ -61,7 +61,7 @@ var Term = Module{
 			Name:    "size",
 			Doc:     "Return the terminal's {width, height} in character cells. Both are 0 when there is no terminal to measure - piped output, no controlling terminal - so check width rather than expecting a raise. Use it to wrap or truncate output to the reader's actual window instead of assuming 80 columns.",
 			Returns: []Ret{{Type: TypeAnyMap, Object: "TermSize"}},
-			Impl:    TermSizeOf,
+			Impl:    TermSize,
 		},
 		{
 			Name: "colorize",
@@ -123,8 +123,8 @@ func TermWantsColor(_ context.Context) (bool, error) {
 	return tty.WantsColor(os.Stderr, tty.SystemProbe), nil
 }
 
-// TermSizeOf returns the terminal's dimensions, or zeroes when unmeasurable.
-func TermSizeOf(_ context.Context) (types.TermSize, error) {
+// TermSize returns the terminal's dimensions, or zeroes when unmeasurable.
+func TermSize(_ context.Context) (types.TermSize, error) {
 	fd, ok := tty.Fd(os.Stderr)
 	if !ok {
 		return types.TermSize{}, nil

@@ -898,11 +898,11 @@ func TestUncoveredProjectsAreTheOnesTheChecksCannotSee(t *testing.T) {
 }
 
 func TestDiagnosticOfKeepsTheCode(t *testing.T) {
-	d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale"))
+	d := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale"))
 	assert.Equal(t, "MGS7003", d.Code)
 	assert.Equal(t, "stale", d.Message)
 	assert.NotEmpty(t, d.URL)
-	assert.Equal(t, types.Diagnostic{Message: "plain"}, diagnosticOf(errors.New("plain")))
+	assert.Equal(t, types.Diagnostic{Message: "plain"}, toDiagnostic(errors.New("plain")))
 }
 
 // The index lives in the cache dir, where no replay restores it, so an entry for sources

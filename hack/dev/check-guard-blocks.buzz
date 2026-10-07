@@ -155,7 +155,7 @@ export fun matcherMatches(matcher: str, tool: str) > bool !> str {
     return body.split("|").indexOf(tool) != null;
 }
 
-fun handlerOf(h: any, event: str, matcher: str) > HookCommand? !> any {
+fun findHandler(h: any, event: str, matcher: str) > HookCommand? !> any {
     final m = h as? {str: any};
     if (m == null) {
         return null;
@@ -189,7 +189,7 @@ export fun hooksAt(config: str, key: str) > [HookCommand] !> any {
         final nested = (group!["hooks"]) as? [any];
         final handlers = nested ?? [g];
         foreach (h in handlers) {
-            final cmd = handlerOf(h, event: event, matcher: matcher);
+            final cmd = findHandler(h, event: event, matcher: matcher);
             if (cmd != null) {
                 found.append(cmd!);
             }
@@ -198,10 +198,10 @@ export fun hooksAt(config: str, key: str) > [HookCommand] !> any {
     return found;
 }
 
-// argvOf splits a hook command into the words a host that runs an argv runs. A command
+// splitArgv splits a hook command into the words a host that runs an argv runs. A command
 // that needs a shell to mean anything is refused: replaying it word by word would judge a
 // different call.
-export fun argvOf(command: str) > [str] !> str {
+export fun splitArgv(command: str) > [str] !> str {
     foreach (ch in ["\"", "'", "$", "|", ";", "&", "<", ">", "`", "\\", "(", ")"]) {
         if (command.indexOf(ch) != null) {
             throw "hook command `{command}` uses `{ch}`, which needs a shell; replay it by hand";
@@ -219,8 +219,8 @@ export fun argvOf(command: str) > [str] !> str {
     return words;
 }
 
-// ruleOf names the rule a reply cites: its reference page, else a `[rule]` tag.
-export fun ruleOf(text: str) > str {
+// citedRule names the rule a reply cites: its reference page, else a `[rule]` tag.
+export fun citedRule(text: str) > str {
     final marker = "/reference/rules/";
     final at = text.indexOf(marker);
     if (at != null) {
@@ -255,7 +255,7 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
         return Observed{ verdict = "dead", rule = "", note = "ran past its timeout, so the host kills it and runs the call" };
     }
     if (code == 2) {
-        return Observed{ verdict = "deny", rule = ruleOf(stderr), note = "exit 2" };
+        return Observed{ verdict = "deny", rule = citedRule(stderr), note = "exit 2" };
     }
     if (code != 0) {
         final said = firstLine(stderr);
@@ -272,20 +272,20 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
     }
     if ((reply!["decision"] ?? "") == "block") {
         final why = reply!["reason"] ?? "";
-        return Observed{ verdict = "deny", rule = ruleOf(why), note = "" };
+        return Observed{ verdict = "deny", rule = citedRule(why), note = "" };
     }
     final specific = reply!["hookSpecificOutput"] ?? {<str: any>};
     final decision = specific["permissionDecision"] ?? "";
     final reason = specific["permissionDecisionReason"] ?? "";
     final context = specific["additionalContext"] ?? "";
     if (decision == "deny" or decision == "ask") {
-        return Observed{ verdict = decision, rule = ruleOf(reason), note = "" };
+        return Observed{ verdict = decision, rule = citedRule(reason), note = "" };
     }
     if (context.startsWith(DEAD_NOTICE)) {
         return Observed{ verdict = "dead", rule = "", note = firstLine(context) };
     }
     if (context != "") {
-        return Observed{ verdict = "advise", rule = ruleOf(context), note = "" };
+        return Observed{ verdict = "advise", rule = citedRule(context), note = "" };
     }
     if (specific["updatedInput"] != null) {
         return Observed{ verdict = "pass", rule = "", note = "rewritten, so magus judged it" };
@@ -318,7 +318,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
         return Observed{ verdict = "dead", rule = "", note = "{what}, which Cursor reads as a hook failure and runs the call{tail}" };
     }
     if (code == 2) {
-        return Observed{ verdict = "deny", rule = ruleOf(stderr), note = "exit 2" };
+        return Observed{ verdict = "deny", rule = citedRule(stderr), note = "exit 2" };
     }
     var permission = "";
     var reason = "";
@@ -331,7 +331,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
         reason = "{reply!["agent_message"] ?? (reply!["user_message"] ?? "")}";
     }
     if (permission == "deny" or permission == "ask") {
-        return Observed{ verdict = permission, rule = ruleOf(reason), note = "" };
+        return Observed{ verdict = permission, rule = citedRule(reason), note = "" };
     }
     final notice = deadNoticeIn(stderr);
     if (notice != "") {
@@ -340,7 +340,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
     return Observed{ verdict = "pass", rule = "", note = "" };
 }
 
-export fun classifyFor(host: str, h: HookCommand, code: int, stdout: str, stderr: str, overran: bool) > Observed {
+export fun classifyHost(host: str, h: HookCommand, code: int, stdout: str, stderr: str, overran: bool) > Observed {
     if (host == "cursor") {
         return classifyCursor(code, stdout: stdout, stderr: stderr, overran: overran, failClosed: h.failClosed);
     }
@@ -500,7 +500,7 @@ fun runHook(host: str, h: HookCommand, root: str, payload: str) > Observed !> an
     final started = os\time();
     var r: proc\ExecResult? = null;
     if (host == "cursor") {
-        final argv = argvOf(h.command);
+        final argv = splitArgv(h.command);
         var bin = argv[0];
         if (bin.indexOf("/") == null) {
             bin = proc\which(bin) catch "";
@@ -519,7 +519,7 @@ fun runHook(host: str, h: HookCommand, root: str, payload: str) > Observed !> an
         r = proc\exec("sh", args: ["-c", prefix + h.command], dir: root, opts: opts);
     }
     final overran = os\time() - started > std\toDouble(h.timeout) * 1000.0;
-    return classifyFor(host, h: h, code: r!.code, stdout: r!.stdout, stderr: r!.stderr, overran: overran);
+    return classifyHost(host, h: h, code: r!.code, stdout: r!.stdout, stderr: r!.stderr, overran: overran);
 }
 
 // ask sends r through every entry for its event whose matcher selects its tool, and folds
@@ -759,7 +759,7 @@ test "a nested settings file parses in file order, the other events left out" {
     final hooks = hooksAt(fs\readFile("hack/testdata/guard-health-settings.json"), key: "hooks.PreToolUse");
     final got = mut [<str>];
     foreach (h in hooks) {
-        got.append("{h.event} {h.matcher} {h.timeout} {argvOf(h.command)[3]}");
+        got.append("{h.event} {h.matcher} {h.timeout} {splitArgv(h.command)[3]}");
     }
     assert\equal(got, want: [
         "PreToolUse Bash 10 docs/guides/integrations/agents/magus-command.buzz",
@@ -782,9 +782,9 @@ test "Cursor's flat handlers parse with their event, matcher and failClosed" {
 }
 
 test "a command that needs a shell is refused as an argv" {
-    final got = argvOf("MAGUS=1 magus buzz x.buzz | tee log") catch ["refused"];
+    final got = splitArgv("MAGUS=1 magus buzz x.buzz | tee log") catch ["refused"];
     assert\equal(got, want: ["refused"], message: "pipe");
-    assert\equal(argvOf("magus buzz -s h.buzz -- --agent-name cursor"), want: ["magus", "buzz", "-s", "h.buzz", "--", "--agent-name", "cursor"], message: "words");
+    assert\equal(splitArgv("magus buzz -s h.buzz -- --agent-name cursor"), want: ["magus", "buzz", "-s", "h.buzz", "--", "--agent-name", "cursor"], message: "words");
 }
 
 test "Claude Code and Codex replies classify the way the host reads them" {

@@ -548,9 +548,9 @@ func TestForkOf(t *testing.T) {
 	commit := func(id string, parents ...string) magustypes.Commit {
 		return magustypes.Commit{ID: id, Parents: parents}
 	}
-	assert.Equal(t, "x", forkOf("x", nil), "a commit the base carries forked from itself")
-	assert.Equal(t, "B", forkOf("2", []magustypes.Commit{commit("2", "1"), commit("1", "B")}))
-	assert.Equal(t, "", forkOf("m", []magustypes.Commit{commit("m", "1", "B2"), commit("1", "B")}), "merged the base's history in twice")
+	assert.Equal(t, "x", ownForkPoint("x", nil), "a commit the base carries forked from itself")
+	assert.Equal(t, "B", ownForkPoint("2", []magustypes.Commit{commit("2", "1"), commit("1", "B")}))
+	assert.Equal(t, "", ownForkPoint("m", []magustypes.Commit{commit("m", "1", "B2"), commit("1", "B")}), "merged the base's history in twice")
 }
 
 func TestFetchHeadFallsBackToTheCommitWhenTheRefMoved(t *testing.T) {

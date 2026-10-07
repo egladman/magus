@@ -54,7 +54,7 @@ export fun check(files: [Path]) > [Finding] !> any {
 // findings grades the root project's resolved source globs against CONFIGS.
 export fun findings(sources: [str], magusfile: str) > [Finding] !> any {
     final found = mut [<Finding>];
-    final line = support\lineOf(magusfile, needle: "\"sources\":");
+    final line = support\findLine(magusfile, needle: "\"sources\":");
     foreach (p in support\sorted(CONFIGS.keys())) {
         if (path\matchesAny(sources, path: p)) {
             continue;

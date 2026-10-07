@@ -45,12 +45,12 @@ func MagusTrailRead(ctx context.Context, opts map[string]any) (types.FeedbackTra
 	if rel, err := filepath.Rel(root, cacheDir); err == nil && filepath.IsLocal(rel) {
 		cacheRel = rel
 	}
-	return trail.ReadFeedback(trail.FeedbackBases(checkoutsOf(ctx, root), cacheRel, w.Since), w)
+	return trail.ReadFeedback(trail.FeedbackBases(listCheckouts(ctx, root), cacheRel, w.Since), w)
 }
 
-// checkoutsOf is root and every other checkout of its repository. A repository whose
+// listCheckouts is root and every other checkout of its repository. A repository whose
 // version control cannot list checkouts is root alone.
-func checkoutsOf(ctx context.Context, root string) []string {
+func listCheckouts(ctx context.Context, root string) []string {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	if err != nil || res.VCS == nil {
 		return []string{root}

@@ -648,7 +648,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// Nor does it wait on the installs of the projects p depends on: a package manager
 	// reads a dependency project's manifest, never its installed tree, so each install
 	// level the scheduler walked was pure latency.
-	if len(installOpsOf(p, target)) > 0 {
+	if len(findInstallOps(p, target)) > 0 {
 		step.Sources, step.Outputs, step.RequiredOutputs, step.BeforeKey = nil, nil, nil, nil
 		step.DependsOn = nil
 	}
@@ -826,7 +826,7 @@ func keysTools(p *types.Project, target string) bool {
 // alwaysRuns reports whether target's step on p is never replayed or snapshotted: an
 // author's skip_cache, a service, or a step that only runs installs.
 func alwaysRuns(p *types.Project, target string) bool {
-	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(installOpsOf(p, target)) > 0
+	return p.TargetPolicies[target].SkipCache || servesTarget(p.ResolvedSpells, target) || len(findInstallOps(p, target)) > 0
 }
 
 // applyRunKeying stamps the key-relevant fields the RUN SCHEDULER adds on top of
@@ -996,9 +996,9 @@ func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dir
 	return res.Name, meta.ID, meta.IsDirty
 }
 
-// toolWindowOf is the version window p holds tool to: its own bound intersected with
+// resolveToolWindow is the version window p holds tool to: its own bound intersected with
 // what spell s requires. Zero means nothing constrains the tool.
-func toolWindowOf(p *types.Project, s *spells.Spell, tool string) spells.VersionBounds {
+func resolveToolWindow(p *types.Project, s *spells.Spell, tool string) spells.VersionBounds {
 	t, _ := s.Tool(tool)
 	return t.Supported.Intersect(p.ToolBounds[tool])
 }
@@ -1006,7 +1006,7 @@ func toolWindowOf(p *types.Project, s *spells.Spell, tool string) spells.Version
 // hasToolWindow reports whether p's spell named spell constrains tool to a window.
 func hasToolWindow(p *types.Project, spell, tool string) bool {
 	for _, s := range p.ResolvedSpells {
-		if s.Name() == spell && !toolWindowOf(p, s, tool).IsZero() {
+		if s.Name() == spell && !resolveToolWindow(p, s, tool).IsZero() {
 			return true
 		}
 	}
@@ -1034,7 +1034,7 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 	for _, p := range projects {
 		for _, s := range p.ResolvedSpells {
 			for _, tool := range s.ToolNames() {
-				window := toolWindowOf(p, s, tool)
+				window := resolveToolWindow(p, s, tool)
 				if window.IsZero() {
 					continue
 				}
@@ -2089,7 +2089,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// stage observer: it prints a progress line as each magus.needs sub-target
 			// completes, giving the reader a checklist of what ran in place of the wall.
 			if m.cache.Collapsing() {
-				spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: policiesOf(p)})
+				spanCtx = buzz.WithObserver(spanCtx, stageObserver{out: out, label: s.Label, policies: targetPolicies(p)})
 			}
 			if s.NoCache {
 				// An uncached composer still executes its body, so this is the runtime
@@ -2170,10 +2170,10 @@ type stageObserver struct {
 	policies map[string]types.Target
 }
 
-// policiesOf is p's per-target policy map, nil-safe for a step whose project did not
+// targetPolicies is p's per-target policy map, nil-safe for a step whose project did not
 // resolve: a missing policy reads as the default one, which is what a target with no
 // magusfile entry has.
-func policiesOf(p *types.Project) map[string]types.Target {
+func targetPolicies(p *types.Project) map[string]types.Target {
 	if p == nil {
 		return nil
 	}
@@ -2471,7 +2471,7 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 	// evaluating the file and its imports to make them costs more than a warm install
 	// (docs/magusfile.buzz: ~35ms idle, ~230ms beside three installs starting).
 	if slices.Contains(p.DispatchOnlyTargets, name) {
-		if ops := installOpsOf(p, name); len(ops) > 0 {
+		if ops := findInstallOps(p, name); len(ops) > 0 {
 			for _, so := range ops {
 				if err := invokeSpell(ctx, p, so.name, so.spell); err != nil {
 					return errors.Join(spellErr(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), a.Finish(ctx, name))

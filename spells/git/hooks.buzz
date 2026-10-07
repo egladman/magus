@@ -53,8 +53,8 @@ object Layout {
     prefix: str = "",
 }
 
-// scriptOf returns the script a shim runs, or null when body is not a shim install wrote.
-export fun scriptOf(body: str) > str? {
+// shimScript returns the script a shim runs, or null when body is not a shim install wrote.
+export fun shimScript(body: str) > str? {
     final lines = body.split("\n");
     if (lines.len() < 2 or !lines[1].startsWith(marker())) { return null; }
     return lines[1].sub(marker().len());
@@ -139,7 +139,7 @@ fun installSteps(at: Layout, dir: str) > [Step] !> any {
             continue;
         }
         final have = fs\readFile(path);
-        if (scriptOf(have) == null) {
+        if (shimScript(have) == null) {
             throw "git hooks: {path} exists and magus did not write it; delete it, or call {script} from it";
         }
         if (have != want) {
@@ -157,7 +157,7 @@ fun removeSteps(at: Layout, dir: str) > [Step] !> any {
     foreach (hook in fs\listDir(at.hooksDir)) {
         final path = "{at.hooksDir}/{hook}";
         if (!fs\isFile(path)) { continue; }
-        final script = scriptOf(fs\readFile(path));
+        final script = shimScript(fs\readFile(path));
         if ((script ?? "").startsWith(base)) {
             steps.append(Step{hook = hook, path = path, change = Change.remove});
         }
@@ -229,9 +229,9 @@ export fun remove(ctx: magus\Context, dir: str) > void !> any {
 
 test "a shim names its script on the marker line" {
     final body = shim("commit-msg", script: "hack/git-hooks/commit-msg.buzz", include: "");
-    std\assert(scriptOf(body) == "hack/git-hooks/commit-msg.buzz", message: "marker round trip");
-    std\assert(scriptOf("#!/bin/sh\necho mine\n") == null, message: "a person's hook is not ours");
-    std\assert(scriptOf("") == null, message: "an empty hook is not ours");
+    std\assert(shimScript(body) == "hack/git-hooks/commit-msg.buzz", message: "marker round trip");
+    std\assert(shimScript("#!/bin/sh\necho mine\n") == null, message: "a person's hook is not ours");
+    std\assert(shimScript("") == null, message: "an empty hook is not ours");
 }
 
 test "the shim runs the checkout's copy with the project as the include path" {

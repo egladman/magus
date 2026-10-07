@@ -839,11 +839,11 @@ func forkPoint(ctx context.Context, v types.ReadVCS, root, tip, x string) (strin
 	if err != nil {
 		return "", err
 	}
-	return forkOf(x, own), nil
+	return ownForkPoint(x, own), nil
 }
 
-// forkOf is forkPoint over own, x's own commits with their parents.
-func forkOf(x string, own []magustypes.Commit) string {
+// ownForkPoint is forkPoint over own, x's own commits with their parents.
+func ownForkPoint(x string, own []magustypes.Commit) string {
 	if len(own) == 0 {
 		return x
 	}

@@ -55,7 +55,7 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	sink, err := NewSink(FormatText, io.Discard, &out)
 	require.NoError(t, err, "NewSink")
 
-	obs := stageObserver{out: sink, label: "fixture", policies: policiesOf(p)}
+	obs := stageObserver{out: sink, label: "fixture", policies: targetPolicies(p)}
 	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
 	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
 
@@ -1095,7 +1095,7 @@ func TestRedactError(t *testing.T) {
 	})
 
 	t.Run("preserves the chain so errors.As still classifies it", func(t *testing.T) {
-		// exitCodeOf relies on errors.As to recognise ExitError; a redaction that broke
+		// mapExitCode relies on errors.As to recognise ExitError; a redaction that broke
 		// unwrapping would silently turn every exit code into 1.
 		wrapped := fmt.Errorf("target failed with ghp_thrown_from_a_magusfile: %w",
 			types.ExitError{Code: 42})

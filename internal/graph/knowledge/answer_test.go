@@ -160,16 +160,16 @@ func TestCoverageForNarrowsToTheSymbolsLanguage(t *testing.T) {
 		Seeded: true, Probed: true,
 		Gaps:  []types.KnowledgeSymbolGap{missingAny},
 		Stale: []types.KnowledgeStaleIndex{staleGo, staleAny},
-	}, cov.For("go"))
+	}, cov.Narrow("go"))
 	assert.Equal(t, Coverage{
 		Seeded: true, Probed: true,
 		Gaps:  []types.KnowledgeSymbolGap{missingBuzz, missingAny},
 		Stale: []types.KnowledgeStaleIndex{staleBuzz, staleAny},
-	}, cov.For("Buzz"), "languages compare without case")
-	assert.Equal(t, cov, cov.For(""), "no single symbol, no narrowing")
+	}, cov.Narrow("Buzz"), "languages compare without case")
+	assert.Equal(t, cov, cov.Narrow(""), "no single symbol, no narrowing")
 
 	assert.Equal(t, types.KnowledgeAnswer{Verdict: types.VerdictAbsent},
-		Answer("probeTimeoutFrom", false, Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{staleBuzz}}.For("go")),
+		Answer("probeTimeoutFrom", false, Coverage{Seeded: true, Probed: true, Stale: []types.KnowledgeStaleIndex{staleBuzz}}.Narrow("go")),
 		"a miss beside only another language's stale index is a verified absence")
 }
 

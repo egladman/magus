@@ -168,7 +168,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 
 	// A trailing list of project paths scopes the graph to those projects.
 	if len(pos) > 0 {
-		known := namesOf(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
+		known := collectNames(out.Projects, func(p types.TargetGraphProject) string { return p.Path })
 		for _, a := range pos {
 			if !slices.Contains(known, a) {
 				return unknownEntity("project", a, known)
@@ -268,8 +268,8 @@ func filterByName[T any](items []T, name string, nameOf func(T) string) []T {
 	return nil
 }
 
-// namesOf projects each item to its name, for typo suggestions.
-func namesOf[T any](items []T, nameOf func(T) string) []string {
+// collectNames projects each item to its name, for typo suggestions.
+func collectNames[T any](items []T, nameOf func(T) string) []string {
 	out := make([]string, len(items))
 	for i, it := range items {
 		out[i] = nameOf(it)
@@ -322,7 +322,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		names := namesOf(inventory, func(s types.Spell) string { return s.Name })
+		names := collectNames(inventory, func(s types.Spell) string { return s.Name })
 		inventory = filterByName(inventory, pos[0], func(s types.Spell) string { return s.Name })
 		if len(inventory) == 0 {
 			return unknownEntity("spell", pos[0], names)
@@ -536,7 +536,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 	detail := len(pos) > 0
 	if detail {
 		name := types.Normalize(pos[0])
-		names := namesOf(charms, func(c types.CharmEntry) string { return c.Name })
+		names := collectNames(charms, func(c types.CharmEntry) string { return c.Name })
 		charms = filterByName(charms, name, func(c types.CharmEntry) string { return c.Name })
 		if len(charms) == 0 {
 			return unknownEntity("charm", pos[0], names)
@@ -1118,7 +1118,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		if len(pos) > 0 {
-			names := namesOf(out.Projects, func(p types.EvaluatedProject) string { return p.Path })
+			names := collectNames(out.Projects, func(p types.EvaluatedProject) string { return p.Path })
 			out.Projects = filterByName(out.Projects, pos[0], func(p types.EvaluatedProject) string { return p.Path })
 			out.Count = len(out.Projects)
 			if out.Count == 0 {
@@ -1196,7 +1196,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) > 0 {
-		names := namesOf(out.Projects, func(p types.ProjectEntry) string { return p.Path })
+		names := collectNames(out.Projects, func(p types.ProjectEntry) string { return p.Path })
 		out.Projects = filterByName(out.Projects, pos[0], func(p types.ProjectEntry) string { return p.Path })
 		out.Count = len(out.Projects)
 		if out.Count == 0 {
@@ -1519,7 +1519,7 @@ func describeMCPTools(args []string) error {
 
 	out := mcp.DescribeTools()
 	if len(pos) > 0 {
-		names := namesOf(out.MCPTools, func(t types.MCPTool) string { return t.Name })
+		names := collectNames(out.MCPTools, func(t types.MCPTool) string { return t.Name })
 		out.MCPTools = filterByName(out.MCPTools, pos[0], func(t types.MCPTool) string { return t.Name })
 		out.Count = len(out.MCPTools)
 		if out.Count == 0 {

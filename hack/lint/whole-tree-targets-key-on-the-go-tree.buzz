@@ -70,7 +70,7 @@ export fun findings(footprints: {str: [str]}, magusfile: str) > [Finding] {
         if (declared!.len() == 0) {
             continue;
         }
-        final line = support\lineOf(magusfile, needle: "export fun " + target + "(");
+        final line = support\findLine(magusfile, needle: "export fun " + target + "(");
         foreach (glob in WHOLE_TREE[target]!) {
             if (declared!.indexOf(glob) != null) {
                 continue;

@@ -317,7 +317,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose row in the store is simply stale.
-	owner, owned, err := ownerOf(owningLeases(leases, live), rel, "")
+	owner, owned, err := findOwner(owningLeases(leases, live), rel, "")
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -456,7 +456,7 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		}
 		return writeGrade{}
 	}
-	owner, owned, err := ownerOf(owners, rel, me.ID)
+	owner, owned, err := findOwner(owners, rel, me.ID)
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -694,13 +694,13 @@ func liveLease(live []types.Job, id string) (types.Job, bool) {
 	return live[i], true
 }
 
-// ownerOf finds the live lease whose write paths cover rel, skipping the id in exclude.
+// findOwner finds the live lease whose write paths cover rel, skipping the id in exclude.
 //
 // Store order breaks ties. Two leases declaring one path is an overlap the store already
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file: an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
+func findOwner(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 	now := time.Now().Unix()
 	for _, u := range live {
 		// An overdue lease's own writes are denied, so its write paths would otherwise block
@@ -811,7 +811,7 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 	if lease == "" || !filepath.IsAbs(writePath) {
 		return writeGrade{}
 	}
-	other := magusCheckoutOf(filepath.Dir(writePath))
+	other := findMagusCheckout(filepath.Dir(writePath))
 	if other == "" || samePath(other, checkout) {
 		return writeGrade{}
 	}
@@ -821,9 +821,9 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 		filepath.Base(writePath), checkout, lease, writePath, other)}
 }
 
-// magusCheckoutOf is the nearest directory at or above dir holding a magusfile, "" when
+// findMagusCheckout is the nearest directory at or above dir holding a magusfile, "" when
 // none does. dir need not exist yet: a write may create it.
-func magusCheckoutOf(dir string) string {
+func findMagusCheckout(dir string) string {
 	for d := filepath.Clean(dir); ; d = filepath.Dir(d) {
 		if info, err := os.Stat(filepath.Join(d, "magusfile.buzz")); err == nil && info.Mode().IsRegular() {
 			return d

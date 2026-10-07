@@ -1346,7 +1346,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return usagef("magus job wait: %s", err)
 	}
 	if rows, err := store.List(); err == nil {
-		status.Entries = job.EntriesOf(rows, status.Job)
+		status.Entries = job.Entries(rows, status.Job)
 	}
 
 	opts, err := outputOptionsOrDefault()

@@ -1891,7 +1891,7 @@ func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
 	}
 }
 
-// RevTime is what cmd/magus/diff.go's impactAdvisorBaseOf reads to date a base ref: a
+// RevTime is what cmd/magus/diff.go's resolveImpactAdvisorBase reads to date a base ref: a
 // backend that satisfies types.RevTimeReporter but reports a bogus or zero time would leave
 // the "BASE:" line silently wrong instead of silently absent, which is worse. All four
 // backends implement it as of this test.
@@ -1913,7 +1913,7 @@ func TestParityRevTimeReportsCommitDate(t *testing.T) {
 }
 
 // A revision this clone does not have answers found=false, not an error: the ordinary shape
-// a fresh clone gives for a base branch it has never fetched. impactAdvisorBaseOf treats an
+// a fresh clone gives for a base branch it has never fetched. resolveImpactAdvisorBase treats an
 // error the same as "no VCS" and drops the BASE: line entirely, so a backend that returned
 // one here instead of found=false would make "never fetched" indistinguishable from "this
 // backend is broken".

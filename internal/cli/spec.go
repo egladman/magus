@@ -193,18 +193,18 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 	for _, f := range flags {
 		switch f.Kind {
 		case FlagBool:
-			fs.Bool(f.Name, defaultOf[bool](f.Default), f.Doc)
+			fs.Bool(f.Name, decodeDefault[bool](f.Default), f.Doc)
 		case FlagString:
-			fs.String(f.Name, defaultOf[string](f.Default), f.Doc)
+			fs.String(f.Name, decodeDefault[string](f.Default), f.Doc)
 		case FlagInt:
-			fs.Int(f.Name, defaultOf[int](f.Default), f.Doc)
+			fs.Int(f.Name, decodeDefault[int](f.Default), f.Doc)
 		case FlagDuration:
-			fs.Duration(f.Name, defaultOf[time.Duration](f.Default), f.Doc)
+			fs.Duration(f.Name, decodeDefault[time.Duration](f.Default), f.Doc)
 		case FlagCustom:
 			// Registered as a string for RENDERING only: this FlagSet is the one the
 			// man-page and docs generators walk, never the one the command parses
 			// with, so this decides how the flag is printed and nothing else.
-			fs.String(f.Name, defaultOf[string](f.Default), f.Doc)
+			fs.String(f.Name, decodeDefault[string](f.Default), f.Doc)
 		default:
 			// No silent fallback. An unset or misspelled Kind used to land on the
 			// string case, which binds a flag that parses but never means what it
@@ -215,11 +215,11 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 	}
 }
 
-// defaultOf reads a Flag.Default of the expected type, falling back to the zero
+// decodeDefault reads a Flag.Default of the expected type, falling back to the zero
 // value. A mismatched type is treated as unset rather than panicking: a wrong
 // default is a documentation bug, and failing the whole CLI over one would be a
 // worse outcome than binding the zero the field would have had anyway.
-func defaultOf[T any](v any) T {
+func decodeDefault[T any](v any) T {
 	if t, ok := v.(T); ok {
 		return t
 	}

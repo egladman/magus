@@ -42,10 +42,10 @@ var kindPrefixes = map[types.CredentialKind]string{
 	types.KindExchange: prefixExchange,
 }
 
-// kindOf reads a token's kind from its prefix and checks its length, alphabet and
+// credentialKind reads a token's kind from its prefix and checks its length, alphabet and
 // checksum. It touches no store: a string that fails here is refused before any work is done
 // on it, and one that passes is only well-formed, not valid.
-func kindOf(token string) (types.CredentialKind, bool) {
+func credentialKind(token string) (types.CredentialKind, bool) {
 	for kind, prefix := range kindPrefixes {
 		if rest, ok := strings.CutPrefix(token, prefix); ok {
 			return kind, validBody(rest)

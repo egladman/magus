@@ -83,7 +83,7 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 	return best, types.AnchorMoved
 }
 
-// DeclarationOf is the enclosing declaration git named in a hunk header line: everything after
+// HunkDeclaration is the enclosing declaration git named in a hunk header line: everything after
 // the second @@. Empty where git named none, which is ordinary: the top of a file, a language with
 // no funcname pattern, or a hunk that spans a declaration boundary.
 //
@@ -91,7 +91,7 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 // wire syntax: the console already prints line numbers in its gutters, so they are redundant there,
 // and they are unreadable everywhere. What a reader wants from a hunk heading is where they are and
 // what they are inside of.
-func DeclarationOf(header string) string {
+func HunkDeclaration(header string) string {
 	_, after, ok := strings.Cut(header, "@@")
 	if !ok {
 		return ""

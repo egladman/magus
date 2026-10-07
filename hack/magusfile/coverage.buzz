@@ -216,9 +216,9 @@ export fun goModules(dir: str) > {str: str} !> any {
     return found;
 }
 
-// importPathFor names a file the way a coverage profile does: the import path of the
+// coverageImportPath names a file the way a coverage profile does: the import path of the
 // innermost module containing it, then the path within that module.
-export fun importPathFor(rel: str, modules: {str: str}) > str !> str {
+export fun coverageImportPath(rel: str, modules: {str: str}) > str !> str {
     var dir = fs\dirname(rel);
     while (true) {
         final mod = modules[dir];
@@ -315,7 +315,7 @@ export fun staticBlockTables() > {str: [str]} !> any {
     foreach (rel in goSourceFiles(".")) {
         final body = fs\readFile(rel);
         if (isGeneratedSource(body) or isBuildIgnored(body)) { continue; }
-        tables[importPathFor(rel, modules: modules)] = blockTableForFile(rel, scratch: scratch);
+        tables[coverageImportPath(rel, modules: modules)] = blockTableForFile(rel, scratch: scratch);
     }
     fs\remove(scratch);
     return tables;
@@ -370,9 +370,9 @@ export fun treeTotals(tables: {str: [str]}, blocks: {str: bool}) > any !> any {
     return {"covered": covered, "statements": statements};
 }
 
-// percentOf renders the badge figure, truncated to a whole percent so it matches what
+// formatPercent renders the badge figure, truncated to a whole percent so it matches what
 // `go tool cover -func` plus split(".")[0] produced before.
-export fun percentOf(covered: int, statements: int) > str !> str {
+export fun formatPercent(covered: int, statements: int) > str !> str {
     if (statements <= 0) { throw "coverage: nothing to measure; the denominator is empty"; }
     return "{covered * 100 / statements}";
 }
@@ -467,13 +467,13 @@ test "parseHex decodes cover's packed column word" {
     assert\throws(fun () > void !> str { final _ = parseHex("0xzz"); }, message: "non-hex errors");
 }
 
-test "importPathFor picks the innermost module" {
+test "coverageImportPath picks the innermost module" {
     final modules = {"." : "github.com/egladman/magus", "libs/gopherbuzz": "github.com/egladman/magus/libs/gopherbuzz"};
-    assert\equal(importPathFor("magus.go", modules: modules),
+    assert\equal(coverageImportPath("magus.go", modules: modules),
         want: "github.com/egladman/magus/magus.go", message: "root file");
-    assert\equal(importPathFor("internal/cache/hash.go", modules: modules),
+    assert\equal(coverageImportPath("internal/cache/hash.go", modules: modules),
         want: "github.com/egladman/magus/internal/cache/hash.go", message: "root package");
-    assert\equal(importPathFor("libs/gopherbuzz/vm/value.go", modules: modules),
+    assert\equal(coverageImportPath("libs/gopherbuzz/vm/value.go", modules: modules),
         want: "github.com/egladman/magus/libs/gopherbuzz/vm/value.go", message: "nested module wins over the root");
 }
 
@@ -511,10 +511,10 @@ test "treeTotals counts a file this platform never compiled at zero" {
     assert\equal(totals, want: {"covered": 3, "statements": 9}, message: "win.go counts against; gen.go is not in the denominator");
 }
 
-test "percentOf truncates to a whole percent" {
-    assert\equal(percentOf(5, statements: 9), want: "55", message: "truncated");
+test "formatPercent truncates to a whole percent" {
+    assert\equal(formatPercent(5, statements: 9), want: "55", message: "truncated");
 }
 
-test "percentOf refuses an empty denominator" {
-    assert\throws(fun () > void !> str { final _ = percentOf(0, statements: 0); }, message: "no statements");
+test "formatPercent refuses an empty denominator" {
+    assert\throws(fun () > void !> str { final _ = formatPercent(0, statements: 0); }, message: "no statements");
 }

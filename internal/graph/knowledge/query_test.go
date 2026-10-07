@@ -746,7 +746,7 @@ func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
 	}
 	imports := []types.RelationID{types.RelationImports}
 
-	out, ok := g.NeighborhoodOf("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports})
+	out, ok := g.FocusNeighborhood("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports})
 	require.True(t, ok)
 	assert.Equal(t, "dir:internal/handler/mcp", out.Focus)
 	assert.Equal(t, types.ResolvedPath, out.Resolution)
@@ -755,22 +755,22 @@ func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
 	require.Len(t, out.Links, 1)
 	assert.Equal(t, types.RelationImports, out.Links[0].Relation)
 
-	in, ok := g.NeighborhoodOf("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports, Direction: types.EdgeIn})
+	in, ok := g.FocusNeighborhood("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports, Direction: types.EdgeIn})
 	require.True(t, ok)
 	assert.Equal(t, []string{"dir:internal/handler/mcp"}, nodeIDs(in), "nothing imports mcp")
 
-	deep, ok := g.NeighborhoodOf("dir:internal", types.KnowledgeNeighborhoodOptions{Depth: 2, Relations: []types.RelationID{types.RelationContains}, Direction: types.EdgeOut})
+	deep, ok := g.FocusNeighborhood("dir:internal", types.KnowledgeNeighborhoodOptions{Depth: 2, Relations: []types.RelationID{types.RelationContains}, Direction: types.EdgeOut})
 	require.True(t, ok)
 	assert.Contains(t, nodeIDs(deep), "dir:internal/handler/mcp")
 	assert.NotContains(t, nodeIDs(deep), "file:internal/handler/mcp/t.go", "three hops out")
 
-	_, ok = g.NeighborhoodOf("nonesuch-xyz", types.KnowledgeNeighborhoodOptions{})
+	_, ok = g.FocusNeighborhood("nonesuch-xyz", types.KnowledgeNeighborhoodOptions{})
 	assert.False(t, ok)
 }
 
 func TestNeighborhoodOfCollapsesByPrefix(t *testing.T) {
 	g := dirFixture()
-	out, ok := g.NeighborhoodOf("internal/httpx", types.KnowledgeNeighborhoodOptions{
+	out, ok := g.FocusNeighborhood("internal/httpx", types.KnowledgeNeighborhoodOptions{
 		Depth: 2, Collapse: []string{"internal/handler", "internal/httpx/"},
 	})
 	require.True(t, ok)

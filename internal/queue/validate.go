@@ -197,7 +197,7 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 		for len(inflight) < r.plan.Depth && len(pending) > 0 {
 			c := pending[0]
 			pending = pending[1:]
-			if h, ok := r.holdFor(c, held, inflight); ok {
+			if h, ok := r.stackedHold(c, held, inflight); ok {
 				held[c.ID] = h
 				if h.code != types.CodeWaitBelowKicked {
 					held[c.ID] = waitingBelow(c.ID)
@@ -263,9 +263,9 @@ func (r *validation) pipeline(ctx context.Context, group int, pending []types.Ch
 	}
 }
 
-// holdFor is the wait of c when the change it is stacked on is held this run, or is in
+// stackedHold is the wait of c when the change it is stacked on is held this run, or is in
 // flight with no candidate to build c onto.
-func (r *validation) holdFor(c types.Change, held map[string]stackHold, inflight []*flight) (stackHold, bool) {
+func (r *validation) stackedHold(c types.Change, held map[string]stackHold, inflight []*flight) (stackHold, bool) {
 	if c.Below == "" {
 		return stackHold{}, false
 	}
@@ -438,7 +438,7 @@ func (r *validation) release() { <-r.slots }
 func (r *validation) start(ctx context.Context, group int, f *flight) {
 	fctx, cancel := context.WithCancel(ctx)
 	f.cancel = cancel
-	r.Events.Emit(Event{Kind: EventGate, Change: f.change.ID, Partition: partitionOf(group), Commit: f.cand.Commit, Depth: f.depth})
+	r.Events.Emit(Event{Kind: EventGate, Change: f.change.ID, Partition: partitionPtr(group), Commit: f.cand.Commit, Depth: f.depth})
 	go func() {
 		defer r.release()
 		start := time.Now()

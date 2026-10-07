@@ -451,9 +451,9 @@ func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
 	long := time.Now().Add(-48 * time.Hour)
 	require.NoError(t, os.Chtimes(fresh, long, long))
 
-	stamp := compilerStampOf(exe)
+	stamp := readCompilerStamp(exe)
 	require.NotEmpty(t, stamp)
-	assert.Equal(t, stamp, compilerStampOf(fresh))
+	assert.Equal(t, stamp, readCompilerStamp(fresh))
 
 	id := goBuildID(exe)
 	require.NotEmpty(t, id, "the test binary carries a Go build ID")
@@ -464,7 +464,7 @@ func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
 	rebuilt := filepath.Join(t.TempDir(), "magus")
 	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
 	assert.Equal(t, string(replacement), goBuildID(rebuilt))
-	assert.NotEqual(t, stamp, compilerStampOf(rebuilt), "another build is another compiler")
+	assert.NotEqual(t, stamp, readCompilerStamp(rebuilt), "another build is another compiler")
 }
 
 // A chunk is code the next load runs. One that does not verify is compiled over,
@@ -526,11 +526,11 @@ export fun plain(args: [str]) > void {}
 		RemovedCall:   "magus.needs",
 		Replacement:   "call ctx.needs(<target>)",
 	}
-	assert.Equal(t, want, magusfileFactsOf(nil, code))
+	assert.Equal(t, want, loadMagusfileFacts(nil, code))
 
 	store := buzz.NewDiskBytecodeStore(t.TempDir())
-	assert.Equal(t, want, magusfileFactsOf(store, code), "computed on a miss")
-	assert.Equal(t, want, magusfileFactsOf(store, code), "read back on a hit")
+	assert.Equal(t, want, loadMagusfileFacts(store, code), "computed on a miss")
+	assert.Equal(t, want, loadMagusfileFacts(store, code), "read back on a hit")
 }
 
 // A stored copy that does not decode is recomputed, never trusted as empty.
@@ -540,7 +540,7 @@ func TestRuntimeMagusfileFactsIgnoreAnUnreadableCopy(t *testing.T) {
 	store := buzz.NewDiskBytecodeStore(t.TempDir())
 	sum := sha256.Sum256([]byte(code))
 	require.NoError(t, store.Store("facts-"+hex.EncodeToString(sum[:]), []byte("{not json")))
-	assert.Equal(t, []string{"go"}, magusfileFactsOf(store, code).SpellHandles)
+	assert.Equal(t, []string{"go"}, loadMagusfileFacts(store, code).SpellHandles)
 }
 
 // BenchmarkMagusfileFacts is the guard hook's pre-Exec cost for this repo's root
@@ -555,15 +555,15 @@ func BenchmarkMagusfileFacts(b *testing.B) {
 		i := 0
 		for b.Loop() {
 			i++
-			magusfileFactsOf(nil, code+"\n// "+strconv.Itoa(i)+"\n")
+			loadMagusfileFacts(nil, code+"\n// "+strconv.Itoa(i)+"\n")
 		}
 	})
 	b.Run("stored", func(b *testing.B) {
 		b.ReportAllocs()
 		store := buzz.NewDiskBytecodeStore(b.TempDir())
-		magusfileFactsOf(store, code)
+		loadMagusfileFacts(store, code)
 		for b.Loop() {
-			magusfileFactsOf(store, code)
+			loadMagusfileFacts(store, code)
 		}
 	})
 }

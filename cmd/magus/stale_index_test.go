@@ -43,22 +43,22 @@ func TestStaleIndexNoticeFromProjectsAlone(t *testing.T) {
 // A graph read mid-rebase is told why the graph is stale before anything else, and when
 // rebuilding it is worth it.
 func TestStaleGraphAdviceLeadsWithWhy(t *testing.T) {
-	underway := staleGraphAdviceFor("a rebase is in progress", nil)
+	underway := renderStaleGraphAdvice("a rebase is in progress", nil)
 	assert.True(t, strings.HasPrefix(underway,
 		"magus workspace: the graph is stale, a rebase is in progress. Run `magus graph build` once any merge or rebase is finished, then ask again."), underway)
 
 	api := []types.KnowledgeStaleIndex{{Project: "libs/api"}}
-	both := staleGraphAdviceFor("the index was built at 0123456789ab and the checkout is at fedcba9", api)
+	both := renderStaleGraphAdvice("the index was built at 0123456789ab and the checkout is at fedcba9", api)
 	assert.True(t, strings.HasPrefix(both, "magus workspace: the graph is stale, the index was built at 0123456789ab and the checkout is at fedcba9."), both)
 	assert.Contains(t, both, "One project changed since magus graph build last indexed it: libs/api.")
 
-	projects := staleGraphAdviceFor("", api)
+	projects := renderStaleGraphAdvice("", api)
 	assert.True(t, strings.HasPrefix(projects, "magus workspace: run `magus graph build` first, then ask again."), projects)
 
-	root := staleGraphAdviceFor("", []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz"}, {Project: ".", Language: "go"}})
+	root := renderStaleGraphAdvice("", []types.KnowledgeStaleIndex{{Project: ".", Language: "buzz"}, {Project: ".", Language: "go"}})
 	assert.Contains(t, root, "One project changed since magus graph build last indexed it: . (buzz index), . (go index).", root)
 
-	assert.Empty(t, staleGraphAdviceFor("", nil))
+	assert.Empty(t, renderStaleGraphAdvice("", nil))
 }
 
 // The contradiction this closes: query printed "verdict: absent (magus searched everything

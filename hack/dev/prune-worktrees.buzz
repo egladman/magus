@@ -323,9 +323,9 @@ fun gitOk(dir: str, args: [str]) > bool !> any {
     return vcs\cmd(args, opts: {"dir": dir, "quiet": true, "allow_failure": true}).code == 0;
 }
 
-// gitDirOf is a linked worktree's administrative directory, from the gitdir line of its
+// readGitDir is a linked worktree's administrative directory, from the gitdir line of its
 // .git file.
-fun gitDirOf(path: str) > str !> any {
+fun readGitDir(path: str) > str !> any {
     final dotgit = path + "/.git";
     if (!fs\isFile(dotgit)) { return dotgit; }
     final line = fs\readFile(dotgit).trim();
@@ -346,7 +346,7 @@ fun touchedAt(path: str, gitdir: str) > double !> any {
     return newest;
 }
 
-fun lockOf(gitdir: str) > str? !> any {
+fun readLock(gitdir: str) > str? !> any {
     final f = gitdir + "/locked";
     if (gitdir == "" or !fs\isFile(f)) { return null; }
     return fs\readFile(f).trim();
@@ -462,8 +462,8 @@ export fun survey(base: str, now: double, keepRecent: double, goCache: bool) > S
         var touched = 0.0;
         var locked: str? = null;
         if (t.path != main) {
-            gitdir = gitDirOf(t.path);
-            locked = lockOf(gitdir);
+            gitdir = readGitDir(t.path);
+            locked = readLock(gitdir);
         }
         if (dirty >= 0) { touched = touchedAt(t.path, gitdir: if (gitdir == "") t.path + "/.git" else gitdir); }
         final o = Observed{ path = t.path, branch = t.branch, dirty = dirty, unique = unique, locked = locked, touched = touched };

@@ -1177,7 +1177,7 @@ type symbolIndexCache struct {
 	occPath    string
 }
 
-func symbolIndexCacheFor(in symbolIngestInputs, decl resolvedSymbolIndex) symbolIndexCache {
+func newSymbolIndexCache(in symbolIngestInputs, decl resolvedSymbolIndex) symbolIndexCache {
 	var c symbolIndexCache
 	h := knowledge.NewInputHash("symbol index caches")
 	if foldBinary(h) {
@@ -1228,7 +1228,7 @@ func parseSymbolIndexCached(ctx context.Context, in symbolIngestInputs, decl res
 	if _, err := os.Stat(decl.path); err != nil {
 		return nil, err
 	}
-	c := symbolIndexCacheFor(in, decl)
+	c := newSymbolIndexCache(in, decl)
 	if c.key != "" {
 		if syms, ok := readParsedSymbolIndex(c.parsedPath, c.key); ok {
 			return syms, nil
@@ -1244,7 +1244,7 @@ func symbolKeyOccurrences(ctx context.Context, in symbolIngestInputs, decl resol
 	if _, err := os.Stat(decl.path); err != nil {
 		return symbols.KeyOccurrences{}, err
 	}
-	c := symbolIndexCacheFor(in, decl)
+	c := newSymbolIndexCache(in, decl)
 	if c.key != "" {
 		occ, err := symbols.ReadKeyOccurrences(c.occPath, c.key, key)
 		if err == nil {

@@ -46,7 +46,7 @@ export fun check(files: [Path]) > [Finding] !> any {
             targets.append(InstallTarget{ project = p.path, name = n.name,
                 declaredAs = if (n.declared != "") n.declared else n.name,
                 skipsCache = skips["{p.path}:{n.name}"] ?? false });
-            final magusfile = support\named(files, p: support\magusfileOf(p.path));
+            final magusfile = support\named(files, p: support\magusfilePath(p.path));
             if (magusfile != null) {
                 sources[magusfile!.value] = support\read(magusfile!);
             }
@@ -67,9 +67,9 @@ export fun findings(targets: [InstallTarget], sources: {str: str}) > [Finding] {
         if (t.skipsCache) {
             continue;
         }
-        final magusfile = support\magusfileOf(t.project);
+        final magusfile = support\magusfilePath(t.project);
         found.append(Finding{ path = magusfile,
-            line = support\lineOf(sources[magusfile] ?? "", needle: "export fun " + t.declaredAs + "("),
+            line = support\findLine(sources[magusfile] ?? "", needle: "export fun " + t.declaredAs + "("),
             message = "target \"{t.name}\" installs packages but may replay",
             fix = "Its effect is node_modules, which no cache entry records, so a hit on a fresh checkout\n"
                 + "restores nothing. Declare \"{t.name}\": \{\"skip_cache\": \"<why>\"} in the project's targets." });

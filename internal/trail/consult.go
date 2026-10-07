@@ -149,7 +149,7 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 				leases[e.Lease] = true
 			}
 		case toolShell:
-			if verb, subject, ok := consultationOf(req.Command); ok {
+			if verb, subject, ok := parseConsultation(req.Command); ok {
 				asked = append(asked, question{e.Lease, verb, subject})
 			}
 		}
@@ -193,9 +193,9 @@ func Consulted(root, base string, paths []string, limit int) ([]Consultation, Co
 	}
 }
 
-// consultationOf reads a recorded command line as a magus consultation, reporting false when it is
+// parseConsultation reads a recorded command line as a magus consultation, reporting false when it is
 // not one. Leading VAR=value assignments are skipped for the reason [CommandProgram] skips them.
-func consultationOf(cmd string) (verb, subject string, ok bool) {
+func parseConsultation(cmd string) (verb, subject string, ok bool) {
 	fields := strings.Fields(cmd)
 	i := 0
 	for i < len(fields) && isEnvAssignment(fields[i]) {

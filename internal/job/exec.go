@@ -169,7 +169,7 @@ func BaseAdvice(row types.Job) string {
 			" The digest cannot give the patch back, so there is nothing here to restore from:"+
 			" have the orchestrator commit the work the job was cut against, or re-cut the checkpoint"+
 			" against the tree you are on.",
-			row.ID, checkpointRevision(row.ReportedBase), patchDigestOf(row.Checkpoint), patchDigestOf(row.ReportedBase))
+			row.ID, checkpointRevision(row.ReportedBase), describePatchDigest(row.Checkpoint), describePatchDigest(row.ReportedBase))
 
 	case types.BaseDiverged:
 		return fmt.Sprintf("recorded job %s's base, and it DIVERGED: your base %s is not the checkpoint %s the job was handed."+
@@ -190,11 +190,11 @@ func BaseAdvice(row types.Job) string {
 	}
 }
 
-// patchDigestOf is the dirty-patch half of a checkpoint token, or "none (clean tree)" when
+// describePatchDigest is the dirty-patch half of a checkpoint token, or "none (clean tree)" when
 // the token carries no "+". Spelled out rather than left empty: the revision-match reading
 // names both digests, and an empty one there reads as a rendering bug instead of as the
 // clean tree it is.
-func patchDigestOf(token string) string {
+func describePatchDigest(token string) string {
 	_, digest := types.ParseCheckpointToken(token)
 	if digest == "" {
 		return "none (clean tree)"

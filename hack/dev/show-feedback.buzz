@@ -69,7 +69,7 @@ export fun rowID(section: str, key: str) > str {
     return "fb" + crypto\sha256Hex("{section}|{key}").sub(0, len: 12);
 }
 
-fun agentOf(o: FeedbackObservation) > str {
+fun observationAgent(o: FeedbackObservation) > str {
     return if (o.agent == "") "main" else o.agent;
 }
 
@@ -82,7 +82,7 @@ export fun nextRun(obs: [FeedbackObservation], i: int) > bool {
     while (j < obs.len()) {
         final later = obs[j];
         j = j + 1;
-        if (agentOf(later) != agentOf(o)) {
+        if (observationAgent(later) != observationAgent(o)) {
             continue;
         }
         if (later.rule == o.rule and later.decision == o.decision) {
@@ -160,7 +160,7 @@ export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
     foreach (i, o in obs) {
         final what = if (o.command != "") o.command else o.path;
         if (o.decision == "deny") {
-            final g = bump(bySection[0], key: o.rule, rule: o.rule, shape: "", agent: agentOf(o), example: clip(what));
+            final g = bump(bySection[0], key: o.rule, rule: o.rule, shape: "", agent: observationAgent(o), example: clip(what));
             if (o.nexts.len() > 0) {
                 g.offered = g.offered + 1;
                 if (nextRun(obs, i: i)) {
@@ -168,19 +168,19 @@ export fun rows(t: FeedbackTrail, marks: [FeedbackMark]) > [Row] {
                 }
             }
         } else if (o.decision == "advise") {
-            bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: agentOf(o), example: clip(what));
+            bump(bySection[1], key: o.rule, rule: o.rule, shape: "", agent: observationAgent(o), example: clip(what));
         } else if (o.decision == "pass" and o.tool == "shell.command" and o.rule == "" and o.preauthorizedBy == "") {
             final seen = mut [<str>];
             foreach (shape in o.shapes) {
                 if (seen.indexOf(shape) == null) {
                     seen.append(shape);
-                    bump(bySection[2], key: shape, rule: "", shape: shape, agent: agentOf(o), example: clip(o.command));
+                    bump(bySection[2], key: shape, rule: "", shape: shape, agent: observationAgent(o), example: clip(o.command));
                 }
             }
         }
         if (o.nexts.len() > 0 and !nextRun(obs, i: i)) {
             final shape = magus\trail.shape(o.nexts[0]);
-            bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: agentOf(o),
+            bump(bySection[3], key: "{o.rule} -> {shape}", rule: o.rule, shape: shape, agent: observationAgent(o),
                 example: clip("served `{o.nexts[0]}` after `{what}`"));
         }
     }

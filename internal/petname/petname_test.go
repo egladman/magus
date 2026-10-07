@@ -27,11 +27,11 @@ func TestOfDeterminism(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got := Of(c.seed)
+		got := Generate(c.seed)
 		if got != c.want {
 			t.Errorf("Of(%q) = %q, want %q", c.seed, got, c.want)
 		}
-		if again := Of(c.seed); again != got {
+		if again := Generate(c.seed); again != got {
 			t.Errorf("Of(%q) = %q then %q; not stable across calls", c.seed, got, again)
 		}
 	}
@@ -40,7 +40,7 @@ func TestOfDeterminism(t *testing.T) {
 func TestOfShape(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		seed := fmt.Sprintf("shape-seed-%d", i)
-		if name := Of(seed); !nameShape.MatchString(name) {
+		if name := Generate(seed); !nameShape.MatchString(name) {
 			t.Errorf("Of(%q) = %q, does not match %s", seed, name, nameShape)
 		}
 	}
@@ -84,7 +84,7 @@ func TestOfDistribution(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		seed := fmt.Sprintf("dist-seed-%d", i)
-		name := Of(seed)
+		name := Generate(seed)
 		nameCounts[name]++
 
 		adjIdx := hash(adjTag+seed) % uint64(len(adjectives))

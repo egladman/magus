@@ -98,15 +98,15 @@ func TestQuantile(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := quantileOf(tc.q, tc.buckets)
+			got := estimateQuantile(tc.q, tc.buckets)
 			if tc.wantNaN {
 				if !math.IsNaN(got) {
-					t.Fatalf("quantileOf(%v) = %v, want NaN", tc.q, got)
+					t.Fatalf("estimateQuantile(%v) = %v, want NaN", tc.q, got)
 				}
 				return
 			}
 			if got != tc.want {
-				t.Fatalf("quantileOf(%v) = %v, want %v", tc.q, got, tc.want)
+				t.Fatalf("estimateQuantile(%v) = %v, want %v", tc.q, got, tc.want)
 			}
 		})
 	}
@@ -120,7 +120,7 @@ func TestQuantileDoesNotMutateInput(t *testing.T) {
 		{UpperBound: 2, CumulativeCount: 10},
 		{UpperBound: 1, CumulativeCount: 0},
 	}
-	_ = quantileOf(0.5, in)
+	_ = estimateQuantile(0.5, in)
 	if in[0].UpperBound != inf() || in[1].UpperBound != 2 || in[2].UpperBound != 1 {
 		t.Fatalf("Quantile mutated its input slice: %+v", in)
 	}

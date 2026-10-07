@@ -95,7 +95,7 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 	}
 
 	// Past here this caller is queued behind somebody. Report it once, by name.
-	holder := k.holderOf(key)
+	holder := k.currentHolder(key)
 	if onBlock != nil {
 		done := onBlock(holder)
 		defer done()
@@ -118,7 +118,7 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
 				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is still waiting for a cache lock held by %s (%s so far)",
-					displayLockParty(waiter), displayLockParty(k.holderOf(key)), elapsed.Round(time.Second)))
+					displayLockParty(waiter), displayLockParty(k.currentHolder(key)), elapsed.Round(time.Second)))
 			}
 		case <-ctx.Done():
 			abandon()
@@ -127,9 +127,9 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 	}
 }
 
-// holderOf names whoever holds key right now, empty when nobody does or the holder went
+// currentHolder names whoever holds key right now, empty when nobody does or the holder went
 // unnamed. Racy by nature, and only ever used in a message.
-func (k *keyedLock) holderOf(key string) string {
+func (k *keyedLock) currentHolder(key string) string {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if e, ok := k.entries[key]; ok {

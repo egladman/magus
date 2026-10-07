@@ -141,7 +141,7 @@ func TestErrSilentIsAlreadyReported(t *testing.T) {
 	assert.True(t, reported.AlreadyReported())
 }
 
-// TestCLIErrorsCarryTheirExitCode pins the method the SERVER reads. exitCodeOf sees the
+// TestCLIErrorsCarryTheirExitCode pins the method the SERVER reads. mapExitCode sees the
 // concrete types and could go on reading the fields; a forwarded run cannot, so without
 // the method `magus run bogus-target` exited 2 alone and 1 under a server.
 func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
@@ -164,7 +164,7 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 }
 
 // TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
-// branch of its own in exitCodeOf. The local path and the server now ask the error the
+// branch of its own in mapExitCode. The local path and the server now ask the error the
 // same question, so the refusal must answer it rather than be recognised by type or by
 // diagnostic code, which is what lets one seam serve both this and a contended lock.
 func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
@@ -175,21 +175,21 @@ func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	code, ok := proc.ExitCode(busy)
 	require.True(t, ok, "the server must be able to read the code off a forwarded refusal")
 	assert.Equal(t, cache.ExitCodeMachineBusy, code)
-	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(busy), "and the local path must agree")
-	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", busy)),
+	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(busy), "and the local path must agree")
+	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", busy)),
 		"through every layer between the step and main")
 
 	// A run where real targets ALSO failed is a broken build, not a scheduling problem:
 	// errSilent is matched first and keeps 1, so a peer being busy cannot rewrite the
 	// verdict on work that actually ran.
-	assert.Equal(t, 1, exitCodeOf(errors.Join(errSilent{exitCode: 1}, busy)))
+	assert.Equal(t, 1, mapExitCode(errors.Join(errSilent{exitCode: 1}, busy)))
 }
 
 type machineBusyStub struct{ error }
 
 func (machineBusyStub) ExitCode() int { return cache.ExitCodeMachineBusy }
 
-// TestExitCodeOfPrintsWhatNoOneElseDid pins which of the two exit-75 refusals exitCodeOf
+// TestExitCodeOfPrintsWhatNoOneElseDid pins which of the two exit-75 refusals mapExitCode
 // prints. A contended workspace lock is refused before any step exists, so this line is
 // the only place it is ever said. A machine refusal is an ExitError the cache already
 // logged beside the step it refused (cache's TestRunAllReportsAMachineRefusal), so
@@ -201,13 +201,13 @@ func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	lock := lockContendedStub{errors.New("magus: project . is locked by another magus process (held by pid 41221 magus run test in /elsewhere); not waiting")}
-	assert.Equal(t, 75, exitCodeOf(fmt.Errorf("run: %w", lock)))
+	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", lock)))
 	assert.Contains(t, logged.String(), "held by pid 41221 magus run test in /elsewhere")
 
 	logged.Reset()
 	refused := types.ExitError{Code: cache.ExitCodeMachineBusy,
 		Err: types.DiagnosticErrorf(types.MachineBudgetExhausted, "not starting (root) test")}
-	assert.Equal(t, cache.ExitCodeMachineBusy, exitCodeOf(fmt.Errorf("run: %w", refused)))
+	assert.Equal(t, cache.ExitCodeMachineBusy, mapExitCode(fmt.Errorf("run: %w", refused)))
 	assert.Empty(t, logged.String())
 }
 
@@ -243,10 +243,10 @@ func TestIsFlagNamedAndFlagValueOf(t *testing.T) {
 	assert.False(t, isFlagNamed("-explain=web", "explain"))
 	assert.False(t, isFlagNamed("--explains", "explain"))
 
-	assert.Equal(t, "web", flagValueOf("-explain=web", "explain"))
-	assert.Equal(t, "web", flagValueOf("--explain=web", "explain"))
-	assert.Equal(t, "", flagValueOf("--explain", "explain"))
-	assert.Equal(t, "", flagValueOf("--base=main", "explain"))
+	assert.Equal(t, "web", parseFlagValue("-explain=web", "explain"))
+	assert.Equal(t, "web", parseFlagValue("--explain=web", "explain"))
+	assert.Equal(t, "", parseFlagValue("--explain", "explain"))
+	assert.Equal(t, "", parseFlagValue("--base=main", "explain"))
 }
 
 func TestOutputOptionsOrDefault(t *testing.T) {
@@ -365,8 +365,8 @@ func TestFilterByNameAndNamesOf(t *testing.T) {
 
 	assert.Equal(t, []types.SpellVersion{{Tool: "node"}}, filterByName(items, "node", nameOf))
 	assert.Nil(t, filterByName(items, "rustc", nameOf))
-	assert.Equal(t, []string{"go", "node"}, namesOf(items, nameOf))
-	assert.Empty(t, namesOf(nil, nameOf))
+	assert.Equal(t, []string{"go", "node"}, collectNames(items, nameOf))
+	assert.Empty(t, collectNames(nil, nameOf))
 }
 
 // TestUnknownEntitySuggestsAndExitsTwo pins both halves: a near miss earns a suggestion,

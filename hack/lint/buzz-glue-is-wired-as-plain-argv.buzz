@@ -70,7 +70,7 @@ export fun check(files: [Path]) > [Finding] !> any {
                         continue;
                     }
                     final name = words[0].sub(0, len: eq!);
-                    found.append(Finding{ path = p, line = support\lineOf(raw, needle: words[0]),
+                    found.append(Finding{ path = p, line = support\findLine(raw, needle: words[0]),
                         message = "wires the Buzz glue on {event} \"{matcher}\" behind a {name}= prefix",
                         fix = "A Buzz hook command is a plain argv: {host} runs magus buzz [-C <root>] -s <file> [-- flags].\n"
                             + "The glue reads the raw-event question off the event itself and takes its\n"

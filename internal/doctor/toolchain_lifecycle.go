@@ -66,7 +66,7 @@ func lifecycleFindings(projects []*types.Project, answer workspace.LifecycleAnsw
 		if i < 0 {
 			return spells.ReleaseCycle{}, false
 		}
-		c, s := answer.Lifecycles[i].SupportOf(version, now)
+		c, s := answer.Lifecycles[i].PlaceVersion(version, now)
 		return c, s == spells.SupportEOL
 	}
 	var out []string

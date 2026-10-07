@@ -356,15 +356,15 @@ func TestLayerFor(t *testing.T) {
 		"cmd/magus":            "cli",
 		"internal":             "engine",
 	} {
-		got, ok := LayerFor(layers, dir)
+		got, ok := ResolveLayer(layers, dir)
 		assert.Truef(t, ok, dir)
 		assert.Equalf(t, want, got, dir)
 	}
 	for _, dir := range []string{"cmd", "cmd/magus/sub", "types", "."} {
-		_, ok := LayerFor(layers, dir)
+		_, ok := ResolveLayer(layers, dir)
 		assert.Falsef(t, ok, "%s is covered by no declaration", dir)
 	}
-	_, ok := LayerFor(map[string]string{"internal": "engine"}, "internal/cache")
+	_, ok := ResolveLayer(map[string]string{"internal": "engine"}, "internal/cache")
 	assert.False(t, ok, "an exact path names one directory, not its subtree")
 }
 

@@ -141,7 +141,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 			continue
 		}
 
-		yamlTag := yamlTagOf(field)
+		yamlTag := fieldYAMLTag(field)
 		if yamlTag == "-" {
 			continue
 		}
@@ -157,7 +157,7 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 		thisYAML := append(append([]string{}, yamlPath...), yamlTag)
 		goSel := goBase + "." + name
 
-		typeName := typeIdentOf(field.Type)
+		typeName := exprTypeIdent(field.Type)
 		kind := scalarKind(typeName)
 
 		if kind == "" {
@@ -197,8 +197,8 @@ func walkStruct(st *ast.StructType, structs map[string]*ast.StructType, yamlPath
 	}
 }
 
-// typeIdentOf returns the type name; "" for unsupported forms.
-func typeIdentOf(expr ast.Expr) string {
+// exprTypeIdent returns the type name; "" for unsupported forms.
+func exprTypeIdent(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name
@@ -247,7 +247,7 @@ func scalarKind(t string) string {
 	return ""
 }
 
-func yamlTagOf(f *ast.Field) string {
+func fieldYAMLTag(f *ast.Field) string {
 	if f.Tag == nil {
 		return ""
 	}

@@ -492,7 +492,7 @@ func TestMethodKind(t *testing.T) {
 // one-hop walk would leave undocumented while linking to it.
 func TestReachableFromWalksTransitivelyWithinOnePackage(t *testing.T) {
 	a := fixtureAPI(t)
-	msgs, enums := a.reachableFrom("magus.token.v1", seedsOf(a.services[1]))
+	msgs, enums := a.reachableFrom("magus.token.v1", serviceSeeds(a.services[1]))
 
 	assert.Contains(t, msgs, "magus.token.v1.Token")
 	assert.Contains(t, msgs, "magus.token.v1.ListTokensRequest")
@@ -637,9 +637,9 @@ func TestPageAndPackageOf(t *testing.T) {
 	_, ok = a.page("google.protobuf")
 	assert.False(t, ok)
 
-	assert.Equal(t, "magus.token.v1", a.packageOf("magus.token.v1.Token"))
-	assert.Equal(t, "magus.token.v1", a.packageOf("magus.token.v1.TokenScope"))
-	assert.Equal(t, "", a.packageOf("google.protobuf.Timestamp"))
+	assert.Equal(t, "magus.token.v1", a.typePackage("magus.token.v1.Token"))
+	assert.Equal(t, "magus.token.v1", a.typePackage("magus.token.v1.TokenScope"))
+	assert.Equal(t, "", a.typePackage("google.protobuf.Timestamp"))
 }
 
 func TestSourceLink(t *testing.T) {

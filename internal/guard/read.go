@@ -532,9 +532,9 @@ func baseNames(paths ...string) map[string]bool {
 	return set
 }
 
-// mapFor maps rel by its kind, or reports false for a kind with no parser here. TypeScript
+// buildFileMap maps rel by its kind, or reports false for a kind with no parser here. TypeScript
 // has none, so it stays silent.
-func mapFor(deps Dependencies, abs, rel string) (fileMap, bool) {
+func buildFileMap(deps Dependencies, abs, rel string) (fileMap, bool) {
 	switch path.Ext(rel) {
 	case ".go":
 		return goFileMap(deps, abs, rel)
@@ -582,7 +582,7 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 		if !ok || wholeReadFiles[path.Base(rel)] {
 			continue
 		}
-		m, ok := mapFor(deps, abs, rel)
+		m, ok := buildFileMap(deps, abs, rel)
 		if !ok {
 			continue
 		}

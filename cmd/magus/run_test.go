@@ -596,7 +596,7 @@ func TestDecodeSavedPlan(t *testing.T) {
 			_, err := decodeSavedPlan([]byte(tt.input))
 			require.ErrorIs(t, err, types.SavedPlanRefused)
 			assert.ErrorContains(t, err, tt.want)
-			assert.Equal(t, exitUsage, exitCodeOf(err))
+			assert.Equal(t, exitUsage, mapExitCode(err))
 		})
 	}
 }

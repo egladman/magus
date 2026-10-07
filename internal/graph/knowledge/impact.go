@@ -56,7 +56,7 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 	var ff FileFacts
 	fid := fileID(relPath)
 	if fn, ok := g.node(fid); ok {
-		ff.Coverage = coverageOf(fn)
+		ff.Coverage = readCoverage(fn)
 	}
 	for _, e := range g.out[fid] {
 		if e.Relation != types.RelationDefines {
@@ -66,7 +66,7 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 		if !ok || sn.Kind != types.KindSymbol {
 			continue
 		}
-		sf := SymbolFacts{ID: sn.ID, Label: sn.Label, Coverage: coverageOf(sn)}
+		sf := SymbolFacts{ID: sn.ID, Label: sn.Label, Coverage: readCoverage(sn)}
 		for _, in := range g.in[sn.ID] {
 			if in.Relation != types.RelationReferences {
 				continue
@@ -92,10 +92,10 @@ func (g *Graph) FileFacts(relPath string) FileFacts {
 	return ff
 }
 
-// coverageOf reads the covered/total ratio the @coverage overlay folded onto a node,
+// readCoverage reads the covered/total ratio the @coverage overlay folded onto a node,
 // returning nil when the node carries no coverage attr (the file/symbol was not in the
 // profile). It is the read counterpart to coverageAttrs.
-func coverageOf(n types.KnowledgeNode) *CoverageFacts {
+func readCoverage(n types.KnowledgeNode) *CoverageFacts {
 	raw, ok := n.Attrs[attrCoverage]
 	if !ok {
 		return nil

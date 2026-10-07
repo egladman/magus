@@ -141,7 +141,7 @@ export fun tree(t: FeedbackTrail, jobs: [magus\Job], all: bool, start: int) > Jo
     return JobTree{ session = t.session, root = root, nodes = nodes, spawns = spawns, depends = depends };
 }
 
-fun subOf(n: JobBox) > str {
+fun boxSubtitle(n: JobBox) > str {
     final parts = mut [<str>];
     if (n.model != "") { parts.append(n.model); }
     parts.append("{n.paths} path" + (if (n.paths == 1) "" else "s"));
@@ -149,16 +149,16 @@ fun subOf(n: JobBox) > str {
     return parts.join(", ");
 }
 
-// figureOf draws tr: the session focal, a box per job zoned by state, solid spawn edges and
+// drawJobTree draws tr: the session focal, a box per job zoned by state, solid spawn edges and
 // dashed dependency edges. Nothing sets a coordinate; the zones, the direction and the two
 // strokes are the whole of its shape.
-export fun figureOf(tr: JobTree) > figure\Figure !> any {
+export fun drawJobTree(tr: JobTree) > figure\Figure !> any {
     final root = figure\external(tr.root, sub: "the orchestrating session", look: figure\Look.focal);
     final actors = mut {<str: figure\Actor>};
     actors[tr.root] = root;
     foreach (n in tr.nodes) {
         final unfinished = n.state == "running" or n.state == "declared";
-        actors[n.id] = figure\external(n.id, sub: subOf(n), tag: n.state, look: if (unfinished) figure\Look.optional else figure\Look.plain);
+        actors[n.id] = figure\external(n.id, sub: boxSubtitle(n), tag: n.state, look: if (unfinished) figure\Look.optional else figure\Look.plain);
     }
     final f = figure\of("session-{shortSession(tr.session)}",
             title: "Session {shortSession(tr.session)}: {tr.nodes.len()} jobs",
@@ -252,7 +252,7 @@ export fun main(args: [str]) > void !> any {
 // else a one-line summary and the console link that explores the tree.
 export fun rendered(tr: JobTree, format: str, theme: figure\Theme, console: str) > str !> any {
     if (format == "svg") {
-        return figure\draw(figureOf(tr), theme: theme);
+        return figure\draw(drawJobTree(tr), theme: theme);
     }
     final url = link(tr, base: console);
     return "read-only: {tr.nodes.len()} jobs ({counts(tr)}), {tr.spawns.len()} spawn and {tr.depends.len()} dependency edges, session {tr.session}\n"

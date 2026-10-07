@@ -155,8 +155,8 @@ func (c *cacheState) sweep(store string, man *manifest) {
 	}
 }
 
-// mergedFor returns the merged graph cached for store under key, or nil.
-func (c *cacheState) mergedFor(store, key string) *Graph {
+// cachedMerge returns the merged graph cached for store under key, or nil.
+func (c *cacheState) cachedMerge(store, key string) *Graph {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	e := c.merged[store]

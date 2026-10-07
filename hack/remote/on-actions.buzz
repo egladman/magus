@@ -668,7 +668,7 @@ fun exec(s: Stub) > fun (cmd: str, args: [str]) > Reply !> any {
     };
 }
 
-fun sessionOf(s: Stub, outcome: Outcome) > Session {
+fun stubSession(s: Stub, outcome: Outcome) > Session {
     return Session{
         exec = exec(s),
         fetch = fun (id: str) > Outcome !> any {
@@ -766,7 +766,7 @@ test "a run pushes HEAD, waits, prints the output, exits with its code, then del
     on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "in_progress", conclusion: null, branch: "run-0123456789ab", sha: SHA)));
     on(s, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "run-0123456789ab", sha: SHA)));
     on(s, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    final code = run(parse(["magus", "run", "lint", "."]), head: Head{ sha = SHA, clean = true }, s: sessionOf(s, outcome: Outcome{ output = "lint: 2 findings\n", code = 3 }));
+    final code = run(parse(["magus", "run", "lint", "."]), head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = "lint: 2 findings\n", code = 3 }));
     assert\equal(code, want: 3, message: "the remote exit code");
     assert\equal(s.calls, want: [
         "git push origin {SHA}:refs/heads/run-0123456789ab",
@@ -788,7 +788,7 @@ test "--keep leaves the run and the branch, and --ref deletes only the run" {
     on(kept, words: ["git", "push"], reply: ok(""));
     on(kept, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
     on(kept, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "run-0123456789ab", sha: SHA)));
-    final code = run(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(kept, outcome: Outcome{ output = "", code = 0 }));
+    final code = run(parse(["--keep", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(kept, outcome: Outcome{ output = "", code = 0 }));
     assert\equal([code, kept.calls.len()], want: [0, 4], message: "nothing deleted");
     assert\equal(kept.said[kept.said.len() - 1], want: "on-actions: kept run 42 and branch run-0123456789ab; {SCRIPT} --delete 42 removes them", message: "says how to delete them");
 
@@ -797,7 +797,7 @@ test "--keep leaves the run and the branch, and --ref deletes only the run" {
     on(named, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
     on(named, words: ["gh", "api", "repos/"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
     on(named, words: ["gh", "api", "--method", "DELETE"], reply: ok(""));
-    run(parse(["--ref", "wip", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(named, outcome: Outcome{ output = "", code = 0 }));
+    run(parse(["--ref", "wip", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(named, outcome: Outcome{ output = "", code = 0 }));
     assert\equal(named.calls[named.calls.len() - 1], want: "gh api --method DELETE repos/\{owner\}/\{repo\}/actions/runs/42", message: "a branch this script did not push is kept");
 }
 
@@ -805,7 +805,7 @@ test "--detach prints the run id and returns without waiting" {
     final s = stub();
     on(s, words: ["git", "push"], reply: ok(""));
     on(s, words: ["gh", "workflow", "run"], reply: ok(RUNS + "\n"));
-    final code = run(parse(["--detach", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: sessionOf(s, outcome: Outcome{ output = null, code = null }));
+    final code = run(parse(["--detach", "magus", "run", "test"]), head: Head{ sha = SHA, clean = true }, s: stubSession(s, outcome: Outcome{ output = null, code = null }));
     assert\equal([code, s.calls.len(), s.sleeps.len()], want: [0, 2, 0], message: "no wait");
     assert\equal(s.emitted, want: ["42\n"], message: "the id on stdout");
 }
@@ -844,10 +844,10 @@ test "a wait survives a failed poll, and gives up after a few in a row" {
     final s = stub();
     on(s, words: ["gh", "api"], reply: failed("timeout"));
     on(s, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA)));
-    assert\equal(wait("42", s: sessionOf(s, outcome: Outcome{ output = null, code = null })).status, want: "completed", message: "one miss");
+    assert\equal(wait("42", s: stubSession(s, outcome: Outcome{ output = null, code = null })).status, want: "completed", message: "one miss");
     final down = stub();
     on(down, words: ["gh", "api"], reply: failed("timeout"));
-    assert\equal(refusal(fun () > void !> any { wait("42", s: sessionOf(down, outcome: Outcome{ output = null, code = null })); }), want: true, message: "down");
+    assert\equal(refusal(fun () > void !> any { wait("42", s: stubSession(down, outcome: Outcome{ output = null, code = null })); }), want: true, message: "down");
     assert\equal(down.calls.len(), want: POLL_MISSES, message: "gives up");
 }
 
@@ -855,7 +855,7 @@ test "a run whose command never ran prints the failed steps' log and exits 1" {
     final s = stub();
     on(s, words: ["gh", "run", "view"], reply: ok("run\tsetup\tbuild failed\n"));
     final r = readRun(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: SHA));
-    final code = finish(r, s: sessionOf(s, outcome: Outcome{ output = null, code = null }));
+    final code = finish(r, s: stubSession(s, outcome: Outcome{ output = null, code = null }));
     assert\equal([code, s.calls[1]], want: [1, "gh run view 42 --log-failed"], message: "the log instead");
     assert\equal(s.emitted, want: ["run\tsetup\tbuild failed\n"], message: "printed");
     assert\equal(exitCode(Outcome{ output = null, code = null }, r: readRun(runBody(WORKFLOW, status: "completed", conclusion: "success", branch: "wip", sha: SHA))), want: 0, message: "success with no record");
@@ -866,11 +866,11 @@ test "--result answers from one request, and exits with the command's code once 
     final head = Head{ sha = SHA, clean = true };
     final queued = stub();
     on(queued, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "queued", conclusion: null, branch: "wip", sha: SHA)));
-    assert\equal(result("42", head: head, s: sessionOf(queued, outcome: Outcome{ output = null, code = null })), want: UNFINISHED, message: "unfinished");
+    assert\equal(result("42", head: head, s: stubSession(queued, outcome: Outcome{ output = null, code = null })), want: UNFINISHED, message: "unfinished");
     assert\equal(queued.calls, want: ["gh api repos/\{owner\}/\{repo\}/actions/runs/42"], message: "one request");
     final done = stub();
     on(done, words: ["gh", "api"], reply: ok(runBody(WORKFLOW, status: "completed", conclusion: "failure", branch: "wip", sha: "fedcba9876543210")));
-    assert\equal(result("42", head: head, s: sessionOf(done, outcome: Outcome{ output = "x\n", code = 2 })), want: 2, message: "the command's code");
+    assert\equal(result("42", head: head, s: stubSession(done, outcome: Outcome{ output = "x\n", code = 2 })), want: 2, message: "the command's code");
     assert\equal([done.said[1], done.emitted[0]], want: ["on-actions: it ran fedcba987654; this checkout is at 0123456789ab", "x\n"], message: "names the commit, prints the output");
 }
 

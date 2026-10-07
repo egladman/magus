@@ -45,7 +45,7 @@ type histBucket struct {
 // implied +Inf bucket, fewer than two buckets, or zero observations) yields NaN. A
 // rank that falls in the final +Inf bucket clamps to the largest finite upper bound,
 // since that overflow bucket has no finite boundary to interpolate toward.
-func quantileOf(q float64, buckets []histBucket) float64 {
+func estimateQuantile(q float64, buckets []histBucket) float64 {
 	switch {
 	case math.IsNaN(q):
 		return math.NaN()

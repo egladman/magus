@@ -121,7 +121,7 @@ func LoadOperator() (string, error) {
 		return "", fmt.Errorf("auth: read token: %w", err)
 	}
 	tok := strings.TrimSpace(string(raw))
-	if kind, ok := kindOf(tok); !ok || kind != types.KindOperator {
+	if kind, ok := credentialKind(tok); !ok || kind != types.KindOperator {
 		return "", types.DiagnosticErrorf(types.OperatorTokenFormat,
 			"auth: the operator token at %s is not an mgo_ token (it predates the kind prefix); re-issue it with `%s`", path, hint.MCPTokenGenerate.With("--force"))
 	}

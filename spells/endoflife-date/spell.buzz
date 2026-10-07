@@ -47,14 +47,14 @@ export fun list_lifecycles(target: Target, cb: fun(any)) > [Lifecycle] !> any {
         if (res["status"] != 200) {
             throw "endoflife-date: GET {url}: HTTP {res["status"]}";
         }
-        answers.append(lifecycleOf(product, url: url, body: "{res["body"]}"));
+        answers.append(parseLifecycle(product, url: url, body: "{res["body"]}"));
     }
     return answers;
 }
 
-// lifecycleOf reads one v1 product response. Upstream's last_modified is the as-of time,
+// parseLifecycle reads one v1 product response. Upstream's last_modified is the as-of time,
 // never the clock: a fetch of stale data is still stale.
-fun lifecycleOf(product: str, url: str, body: str) > Lifecycle !> any {
+fun parseLifecycle(product: str, url: str, body: str) > Lifecycle !> any {
     final doc = (json\parse(body) as? {str: any}) ?? {<str: any>};
     final result = (doc["result"] as? {str: any}) ?? {<str: any>};
     final cycles = mut [<ReleaseCycle>];
@@ -83,7 +83,7 @@ test "a v1 product response reads into cycles, keeping a null end date empty" {
         {"name":"1.27","releaseDate":"2026-08-19","isLts":false,"eolFrom":null,"latest":{"name":"1.27.1"}},
         {"name":"1.25","releaseDate":"2025-08-12","isLts":false,"eolFrom":"2026-08-19","latest":{"name":"1.25.14"}}
     ]}}`;
-    final l = lifecycleOf("go", url: "https://endoflife.date/api/v1/products/go", body: body);
+    final l = parseLifecycle("go", url: "https://endoflife.date/api/v1/products/go", body: body);
     assert\equal(l.key, want: "go", message: "the key asked is the key answered");
     assert\equal(l.asOf, want: "2026-09-24T07:44:41+00:00", message: "as-of is upstream's last_modified");
     assert\equal(l.cycles.len(), want: 2, message: "every release line");
@@ -96,7 +96,7 @@ test "an lts cycle says so" {
     final body = `{"last_modified":"2026-09-01T00:00:00+00:00","result":{"releases":[
         {"name":"22","releaseDate":"2024-04-24","isLts":true,"eolFrom":"2027-04-30","latest":{"name":"22.19.0"}}
     ]}}`;
-    final l = lifecycleOf("nodejs", url: "https://endoflife.date/api/v1/products/nodejs", body: body);
+    final l = parseLifecycle("nodejs", url: "https://endoflife.date/api/v1/products/nodejs", body: body);
     assert\equal(l.cycles[0].lts, want: true, message: "isLts reads through");
     assert\equal(l.cycles[0].cycle, want: "22", message: "the cycle is the release name");
 }

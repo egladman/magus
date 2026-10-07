@@ -72,7 +72,7 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 		}
 		ch.Mine = (in.Me.Login != "" && ch.Author == in.Me.Login) ||
 			slices.ContainsFunc(ch.Jobs, func(id string) bool { return tree[id] })
-		ch.Attention = attentionOf(ch)
+		ch.Attention = changeAttention(ch)
 		list.Changes = append(list.Changes, ch)
 	}
 	for _, c := range in.Changes.Changes {
@@ -106,9 +106,9 @@ func Inflight(list types.JobList, in InflightInput) types.JobList {
 	return list
 }
 
-// attentionOf is whose turn ch is. A kick-back outranks intent: a change still carrying
+// changeAttention is whose turn ch is. A kick-back outranks intent: a change still carrying
 // intent after the queue kicked it is waiting on its author, not on the queue.
-func attentionOf(ch types.InflightChange) types.InflightAttention {
+func changeAttention(ch types.InflightChange) types.InflightAttention {
 	switch {
 	case ch.Mark == string(qtypes.MarkKickedBack), ch.Mark == string(qtypes.MarkNeedsRegeneration),
 		ch.Decision == string(qtypes.DecisionKick):

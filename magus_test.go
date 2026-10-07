@@ -1580,7 +1580,7 @@ func TestReviewOriginReadsRefWithoutMetadata(t *testing.T) {
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("https://example.com/o/r.git", nil).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
 
-	got := m.reviewOriginOf(t.Context(), d)
+	got := m.resolveReviewOrigin(t.Context(), d)
 
 	assert.Equal(t, types.ReviewOrigin{Branch: "feat/x", Remote: "https://example.com/o/r.git"}, got)
 	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
@@ -1594,7 +1594,7 @@ func TestReviewOriginRefErrorLeavesBranchEmpty(t *testing.T) {
 	d.EXPECT().RemoteURL(mock.Anything, root, "").Return("", errors.New("no remote")).Once()
 	m := &Magus{ws: &types.Workspace{Root: root}}
 
-	assert.Equal(t, types.ReviewOrigin{}, m.reviewOriginOf(t.Context(), d))
+	assert.Equal(t, types.ReviewOrigin{}, m.resolveReviewOrigin(t.Context(), d))
 	d.AssertNotCalled(t, "Metadata", mock.Anything, mock.Anything)
 }
 

@@ -1202,10 +1202,10 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 	if err != nil || res.VCS == nil {
 		return types.ReviewOrigin{}
 	}
-	return m.reviewOriginOf(ctx, res.VCS)
+	return m.resolveReviewOrigin(ctx, res.VCS)
 }
 
-func (m *Magus) reviewOriginOf(ctx context.Context, driver types.VCSDriver) types.ReviewOrigin {
+func (m *Magus) resolveReviewOrigin(ctx context.Context, driver types.VCSDriver) types.ReviewOrigin {
 	var out types.ReviewOrigin
 	if ref, err := driver.Ref(ctx, m.ws.Root); err == nil {
 		out.Branch = ref
@@ -1486,10 +1486,10 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	switch {
 	case freshErr != nil:
-		d := diagnosticOf(freshErr)
+		d := toDiagnostic(freshErr)
 		out.ConformanceError = &d
 	case !indexed && len(m.symbolCapableIn(touched)) > 0:
-		d := diagnosticOf(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
+		d := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 			"no symbol index loaded for %s, so the conformance checks could not run; build it with `magus graph build`",
 			strings.Join(m.symbolCapableIn(touched), ", ")))
 		out.ConformanceError = &d

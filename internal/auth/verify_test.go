@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Every kind mints a 53-character token with a base62 body and a valid checksum, so kindOf
-// accepts it offline, and flipping any one character makes kindOf refuse it.
+// Every kind mints a 53-character token with a base62 body and a valid checksum, so credentialKind
+// accepts it offline, and flipping any one character makes credentialKind refuse it.
 func TestEveryKindHasOneFormat(t *testing.T) {
 	t.Parallel()
 	for kind, prefix := range kindPrefixes {
@@ -26,7 +26,7 @@ func TestEveryKindHasOneFormat(t *testing.T) {
 		assert.Len(t, secret, tokenLen, kind)
 		assert.True(t, strings.HasPrefix(secret, prefix), kind)
 		assert.True(t, isBase62(strings.TrimPrefix(secret, prefix)), kind)
-		got, ok := kindOf(secret)
+		got, ok := credentialKind(secret)
 		require.True(t, ok, kind)
 		assert.Equal(t, kind, got)
 		for i := len(prefix); i < len(secret); i++ {
@@ -36,12 +36,12 @@ func TestEveryKindHasOneFormat(t *testing.T) {
 			} else {
 				flipped[i] = 'A'
 			}
-			_, ok := kindOf(string(flipped))
+			_, ok := credentialKind(string(flipped))
 			assert.False(t, ok, "%s with byte %d flipped", kind, i)
 		}
 	}
 	for _, s := range []string{"", "mgo_", "mgz_" + strings.Repeat("0", 49), "dGhpcyBpcyAzMiBieXRlcyBvZiBiYXNlNjR1cmwgZGF0YQ"} {
-		_, ok := kindOf(s)
+		_, ok := credentialKind(s)
 		assert.False(t, ok, s)
 	}
 	_, err := mintSecret("unknown")

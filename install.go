@@ -38,11 +38,11 @@ type spellOp struct {
 	op    spells.Op
 }
 
-// installOpsOf returns the spell installs target's step on p runs when running them is
+// findInstallOps returns the spell installs target's step on p runs when running them is
 // ALL the step does, and nil otherwise: the synthesized install op itself, or a magusfile
 // target whose body provably only calls install ops (types.TargetGraphNode.DispatchOnly),
 // the way a conventional `install` target composes its spell's.
-func installOpsOf(p *types.Project, target string) []spellOp {
+func findInstallOps(p *types.Project, target string) []spellOp {
 	if isSpellInstall(p, target) {
 		var out []spellOp
 		for _, s := range p.ResolvedSpells {
@@ -131,7 +131,7 @@ func (m *Magus) installRunner(k installKeying) types.InstallRunner {
 func (m *Magus) prewarmInstallProbes(ctx context.Context, prober *toolProber, stages []stage) {
 	for _, st := range stages {
 		for _, p := range st.projects {
-			for _, so := range installOpsOf(p, st.target) {
+			for _, so := range findInstallOps(p, st.target) {
 				choice, found, err := spell.ResolveInstall(so.op.Install, p.Dir, m.ws.Root)
 				if err != nil || !found {
 					continue
@@ -235,7 +235,7 @@ func (m *Magus) probeAbsence(s *spells.Spell, probe spells.Command, dir string, 
 	if strings.Contains(err.Error(), "No version is set for shim") {
 		return fmt.Sprintf("mise selects no version of %s here: declare one in mise.toml", probe.Bin), true
 	}
-	spec, _ := probeSpecFor(probe)
+	spec, _ := lookupProbeSpec(probe)
 	if spec.execs == "" || execPresent(spec.execs, dir) {
 		return "", false
 	}

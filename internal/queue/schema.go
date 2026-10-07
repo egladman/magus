@@ -187,11 +187,11 @@ func find(p types.Plan, id string) (partition, pos int, ok bool) {
 	return 0, 0, false
 }
 
-// kickOf is the kick-back v, read from a plan or a validation run, decides on base.
+// newKick is the kick-back v, read from a plan or a validation run, decides on base.
 // Whatever wrote v may have run a change's code, so v's words reach the author only as
 // the Claim, and the Report is the queue's own, from facts apply checked against the
 // plan and commit ids [types.Verdict.Check] vouched for.
-func kickOf(base string, v types.Verdict) types.Kick {
+func newKick(base string, v types.Verdict) types.Kick {
 	c := v.Change
 	k := types.Kick{Code: v.Code, Paths: v.Paths, With: v.With, CandidateCommit: v.CandidateCommit}
 	switch {

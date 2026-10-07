@@ -43,7 +43,7 @@ func (s *TokenSuite) TestRoundTrip() {
 
 	tok, err := GenerateOperator()
 	require.NoError(t, err)
-	kind, ok := kindOf(tok)
+	kind, ok := credentialKind(tok)
 	require.True(t, ok, "GenerateOperator must mint a well-formed token")
 	assert.Equal(t, types.KindOperator, kind)
 

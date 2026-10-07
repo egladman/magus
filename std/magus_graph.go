@@ -385,7 +385,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 	if err != nil {
 		return types.KnowledgeNeighborhoodOutput{}, err
 	}
-	out, ok := kg.NeighborhoodOf(focus, no)
+	out, ok := kg.FocusNeighborhood(focus, no)
 	if !ok {
 		return types.KnowledgeNeighborhoodOutput{}, fmt.Errorf("magus\\neighborhood: no node matches %q", focus)
 	}

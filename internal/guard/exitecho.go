@@ -28,7 +28,7 @@ const (
 		"The echo exits 0, so the line reads as passing whatever the pipeline did."
 )
 
-func denyExitStatusEchoFor(echo exitEcho) string {
+func exitEchoDenial(echo exitEcho) string {
 	if echo == exitEchoPipeStatus {
 		return denyPipeStatusEcho
 	}

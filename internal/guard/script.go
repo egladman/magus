@@ -60,7 +60,7 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 		}
 		lang := run.lang
 		if lang == scriptNone {
-			lang = langOf(file, body)
+			lang = detectScriptLang(file, body)
 		}
 		if v := judgeScript(deps, lang, body); v.Deny != "" {
 			v.Deny += "\nJudged from the content of " + run.path + ", which this line runs: a script gets the verdict its lines would get typed inline."
@@ -88,7 +88,7 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 	// is not read at all; only an extensionless one needs its shebang. A .buzz file is as
 	// often a magusfile, spell or module that magus loads as a script someone runs, so it
 	// is judged when `magus buzz` runs it.
-	lang := langOf(file, w.Content)
+	lang := detectScriptLang(file, w.Content)
 	if file == "" || lang == scriptBuzz || (lang == scriptNone && filepath.Ext(file) != "") {
 		return ShellVerdict{}
 	}
@@ -100,7 +100,7 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 		}
 		after = strings.Replace(before, w.OldText, w.NewText, 1)
 	}
-	lang = langOf(file, after)
+	lang = detectScriptLang(file, after)
 	v := judgeScript(deps, lang, after)
 	if v.Deny == "" || judgeScript(deps, lang, before).Rule.Name == v.Rule.Name {
 		return ShellVerdict{}
@@ -147,8 +147,8 @@ func readScript(file string) (string, bool) {
 	return string(body), true
 }
 
-// langOf reads a script's language from its shebang, else its extension.
-func langOf(file, body string) scriptLang {
+// detectScriptLang reads a script's language from its shebang, else its extension.
+func detectScriptLang(file, body string) scriptLang {
 	if first, _, _ := strings.Cut(body, "\n"); strings.HasPrefix(first, "#!") {
 		fields := strings.Fields(strings.TrimPrefix(first, "#!"))
 		if len(fields) > 0 {
@@ -221,7 +221,7 @@ func scriptRunsAt(command string, d Dialect, depth int) []scriptRun {
 			out = append(out, scriptRunsAt(script, d, depth+1)...)
 			return true
 		}
-		if run, ok := scriptRunOf(words); ok {
+		if run, ok := parseScriptRun(words); ok {
 			out = append(out, run)
 		}
 		return true
@@ -229,7 +229,7 @@ func scriptRunsAt(command string, d Dialect, depth int) []scriptRun {
 	return out
 }
 
-func scriptRunOf(words []string) (scriptRun, bool) {
+func parseScriptRun(words []string) (scriptRun, bool) {
 	for len(words) > 0 {
 		first := words[0]
 		if strings.HasPrefix(first, unresolved) {

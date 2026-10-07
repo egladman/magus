@@ -130,7 +130,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 		if !ok {
 			continue
 		}
-		if _, driven := types.DiffDriverFor(file); !driven {
+		if _, driven := types.MatchDiffDriver(file); !driven {
 			continue
 		}
 		for _, holder := range rows {

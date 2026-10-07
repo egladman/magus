@@ -76,7 +76,7 @@ export fun pick(listing: str, trees: [str], here: str, host: str, id: str) > Ses
     return best;
 }
 
-fun textOf(content: any) > str {
+fun contentText(content: any) > str {
     if (content is str) {
         return content;
     }
@@ -90,7 +90,7 @@ fun textOf(content: any) > str {
     return parts.join("\n").trim();
 }
 
-fun lastOf(items: [str], n: int) > [str] {
+fun takeLast(items: [str], n: int) > [str] {
     if (items.len() <= n) {
         return items;
     }
@@ -113,7 +113,7 @@ export fun readClaude(lines: [str]) > Transcript !> any {
         if (msg == null) {
             continue;
         }
-        final text = textOf(msg["content"]);
+        final text = contentText(msg["content"]);
         if (rec["isApiErrorMessage"] == true) {
             ending = "API error {std\toInt(rec["apiErrorStatus"] ?? 0)} ({rec["error"] ?? "unknown"}): {text}";
         } else if (rec["type"] == "user" and text != "" and !text.startsWith("<")) {
@@ -124,7 +124,7 @@ export fun readClaude(lines: [str]) > Transcript !> any {
             ending = "the last record is the agent's message: it may have been waiting on the person";
         }
     }
-    return Transcript{ cwd = cwd, asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+    return Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
 }
 
 // readCodex reads a Codex rollout. A task ends with task_complete, whose error says why it
@@ -164,7 +164,7 @@ export fun readCodex(lines: [str]) > Transcript !> any {
             }
         }
     }
-    return Transcript{ cwd = cwd, asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+    return Transcript{ cwd = cwd, asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
 }
 
 // readCursor reads a Cursor agent transcript, which records roles and text but no ending
@@ -175,7 +175,7 @@ export fun readCursor(lines: [str]) > Transcript !> any {
     var ending = "no ending recorded";
     foreach (line in lines) {
         final rec = json\parse(line);
-        final text = textOf(rec["message"]?["content"]);
+        final text = contentText(rec["message"]?["content"]);
         if (text == "") {
             continue;
         }
@@ -187,7 +187,7 @@ export fun readCursor(lines: [str]) > Transcript !> any {
             ending = "the last record is the agent's message";
         }
     }
-    return Transcript{ asks = asks, replies = lastOf(replies, n: REPLIES), ending = ending };
+    return Transcript{ asks = asks, replies = takeLast(replies, n: REPLIES), ending = ending };
 }
 
 export fun readTranscript(host: str, file: str) > Transcript !> any {

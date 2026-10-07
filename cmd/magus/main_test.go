@@ -306,22 +306,22 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 // past, and 1 for work that ran and failed. 75 is not in this table: it is never
 // recognised here by type or code, only read off an error that states it.
 func TestExitCodeOf(t *testing.T) {
-	assert.Equal(t, 0, exitCodeOf(nil))
-	assert.Equal(t, 1, exitCodeOf(errors.New("go exited 1")))
-	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
-	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
+	assert.Equal(t, 0, mapExitCode(nil))
+	assert.Equal(t, 1, mapExitCode(errors.New("go exited 1")))
+	assert.Equal(t, 1, mapExitCode(errors.Join(errors.New("go exited 1"), nil)))
+	assert.Equal(t, exitUsage, mapExitCode(usagef("no such target")))
 
 	// A diagnostic that names no exit code is ordinary work that failed. 75 is carried
 	// by the error's own ExitCode(), never by its diagnostic code, so the two errors
 	// that claim it are pinned where they are built: TestMachineBusyRidesTheExitCodeSeam
 	// and lock_test.go's contention case.
-	assert.Equal(t, 1, exitCodeOf(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
+	assert.Equal(t, 1, mapExitCode(types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")))
 
 	// An ExitError keeps its code whether or not it wraps a diagnostic. It logs
 	// NOTHING either way: a diagnostic-carrying one is logged where it is raised, so
 	// that a reader sees it when the run stops rather than only at the end.
-	assert.Equal(t, 3, exitCodeOf(types.ExitError{Code: 3}))
-	assert.Equal(t, 70, exitCodeOf(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
+	assert.Equal(t, 3, mapExitCode(types.ExitError{Code: 3}))
+	assert.Equal(t, 70, mapExitCode(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do

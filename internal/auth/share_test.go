@@ -14,7 +14,7 @@ func TestMintShareVerifiesOnlyItsOwnSecret(t *testing.T) {
 	t.Parallel()
 	secret, tok, err := MintShare(types.GrantConsole, 10*time.Minute)
 	require.NoError(t, err)
-	kind, ok := kindOf(secret)
+	kind, ok := credentialKind(secret)
 	require.True(t, ok)
 	assert.Equal(t, types.KindShare, kind)
 

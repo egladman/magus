@@ -1120,7 +1120,7 @@ func TestEnterAdmitsAnOrchestratorIntoALiveJobsWritePath(t *testing.T) {
 
 	rows, err := store.List()
 	require.NoError(t, err)
-	entries := job.EntriesOf(rows, "orch/worker")
+	entries := job.Entries(rows, "orch/worker")
 	require.Len(t, entries, 1)
 	assert.NotZero(t, entries[0].Consumed)
 	assert.Equal(t, "deny", gradeLeasedWrite(ctx, Dependencies{}, "orch", target).Decision, "the entry is single-use")
@@ -1172,7 +1172,7 @@ func TestEnterRefuses(t *testing.T) {
 
 	rows, err := store.List()
 	require.NoError(t, err)
-	assert.Len(t, job.EntriesOf(rows, "orch/worker"), job.MaxJobEntries)
+	assert.Len(t, job.Entries(rows, "orch/worker"), job.MaxJobEntries)
 }
 
 // storeAt is the job store the fixture's context pins.

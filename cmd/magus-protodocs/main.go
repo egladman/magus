@@ -231,7 +231,7 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 				})
 			}
 			a.services = append(a.services, svc)
-			a.svcOfPkg[pkg] = a.pagePathOf(svc)
+			a.svcOfPkg[pkg] = a.servicePagePath(svc)
 		}
 	}
 
@@ -804,7 +804,7 @@ func pagePath(protoFile string) string {
 	return strings.TrimPrefix(strings.TrimSuffix(protoFile, ".proto"), "magus/")
 }
 
-func (a api) pagePathOf(s service) string { return pagePath(s.File) }
+func (a api) servicePagePath(s service) string { return pagePath(s.File) }
 
 // page returns the output path of the page that canonically documents a magus package,
 // and whether one exists (it does for every magus.* package that declares a service or a
@@ -846,7 +846,7 @@ func (a api) typeLink(disp, full, fromPkg, fromPath string) string {
 	if full == "" {
 		return disp
 	}
-	pkg := a.packageOf(full)
+	pkg := a.typePackage(full)
 	if pkg == fromPkg {
 		return fmt.Sprintf("[%s](#%s)", disp, anchor(full))
 	}
@@ -856,7 +856,7 @@ func (a api) typeLink(disp, full, fromPkg, fromPath string) string {
 	return "`" + disp + "`"
 }
 
-func (a api) packageOf(full string) string {
+func (a api) typePackage(full string) string {
 	if m, ok := a.messages[full]; ok {
 		return m.Package
 	}
@@ -887,7 +887,7 @@ func writeAll(a api, outDir string) (int, error) {
 	// would leave the committed tree half old and half new, with nothing to say which is which.
 	pages := map[string]string{"index.md": renderIndex(a)}
 	for _, s := range a.services {
-		pages[a.pagePathOf(s)+".md"] = renderService(a, s, usedBy)
+		pages[a.servicePagePath(s)+".md"] = renderService(a, s, usedBy)
 	}
 	for _, p := range a.packages {
 		pages[pagePath(p.File)+".md"] = renderPackage(a, p, usedBy)
@@ -952,7 +952,7 @@ type usage struct {
 func (a api) computeUsedBy() map[string][]usage {
 	out := map[string][]usage{}
 	for _, s := range a.services {
-		path := a.pagePathOf(s)
+		path := a.servicePagePath(s)
 		for _, m := range s.Methods {
 			record := func(root, kind string) {
 				u := usage{label: fmt.Sprintf("%s (%s)", m.Name, kind), pagePath: path, anchor: anchor(m.Name)}
@@ -1006,7 +1006,7 @@ func renderIndex(a api) string {
 	services := make([][]string, 0, len(a.services))
 	for _, s := range a.services {
 		services = append(services, []string{
-			md.Link(s.Name, a.pagePathOf(s)+".md"), strconv.Itoa(len(s.Methods)), md.Code(s.Package),
+			md.Link(s.Name, a.servicePagePath(s)+".md"), strconv.Itoa(len(s.Methods)), md.Code(s.Package),
 		})
 	}
 	b.WriteString(md.Table([]string{"Service", "Methods", "Package"}, nil, services))
@@ -1060,7 +1060,7 @@ func streamingMethods(a api) []string {
 	for _, s := range a.services {
 		for _, m := range s.Methods {
 			if m.ClientStreaming || m.ServerStreaming {
-				out = append(out, fmt.Sprintf("[%s.%s](%s.md#%s) (%s)", s.Name, m.Name, a.pagePathOf(s), anchor(m.Name), m.kind()))
+				out = append(out, fmt.Sprintf("[%s.%s](%s.md#%s) (%s)", s.Name, m.Name, a.servicePagePath(s), anchor(m.Name), m.kind()))
 			}
 		}
 	}
@@ -1142,7 +1142,7 @@ func sourceLink(file string, line int32) string {
 }
 
 func renderService(a api, s service, usedBy map[string][]usage) string {
-	path := a.pagePathOf(s)
+	path := a.servicePagePath(s)
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
 		Title:       s.Name,
@@ -1177,7 +1177,7 @@ func renderService(a api, s service, usedBy map[string][]usage) string {
 			a.typeLink(leafName(m.Output), m.Output, s.Package, path))
 	}
 
-	msgNames, enumNames := a.reachableFrom(s.Package, seedsOf(s))
+	msgNames, enumNames := a.reachableFrom(s.Package, serviceSeeds(s))
 
 	if len(msgNames) > 0 {
 		b.WriteString("## Messages\n\n")
@@ -1228,7 +1228,7 @@ func renderPackage(a api, p pkgPage, usedBy map[string][]usage) string {
 	return b.String()
 }
 
-func seedsOf(s service) []string {
+func serviceSeeds(s service) []string {
 	seeds := make([]string, 0, 2*len(s.Methods))
 	for _, m := range s.Methods {
 		seeds = append(seeds, m.Input, m.Output)

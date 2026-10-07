@@ -65,12 +65,12 @@ func TestAccountOfNeverReadsTheEnvironment(t *testing.T) {
 	failing := func(string) (*user.User, error) { return nil, errors.New("no passwd entry") }
 	current := func() (*user.User, error) { return &user.User{Username: "forged", Uid: "0"}, nil }
 
-	name, uid := accountOf(4242, failing, current)
+	name, uid := lookupAccount(4242, failing, current)
 	assert.Empty(t, name)
 	assert.Equal(t, "4242", uid)
 
 	found := func(id string) (*user.User, error) { return &user.User{Username: "eli", Uid: id}, nil }
-	name, uid = accountOf(501, found, current)
+	name, uid = lookupAccount(501, found, current)
 	assert.Equal(t, "eli", name)
 	assert.Equal(t, "501", uid)
 }

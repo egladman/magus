@@ -54,7 +54,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any { typescript["pnp
 		spells.WithOps(map[string]spells.Op{"pnpm-install": {Kind: spells.OpKindInstall}}))}
 
 	assert.Equal(t, []string{"install"}, web.DispatchOnlyTargets)
-	ops := installOpsOf(web, "install")
+	ops := findInstallOps(web, "install")
 	require.Len(t, ops, 1)
 	assert.Equal(t, "pnpm-install", ops[0].name)
 	assert.Equal(t, "typescript", ops[0].spell.Name())
@@ -65,7 +65,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any { typescript["pnp
 	assert.Empty(t, install.Sources)
 	assert.Empty(t, install.DependsOn, "an install reads its dependencies' manifests, never their installed trees")
 
-	assert.Nil(t, installOpsOf(web, "lint"), "a body doing anything else is not an install")
+	assert.Nil(t, findInstallOps(web, "lint"), "a body doing anything else is not an install")
 	assert.Equal(t, []string{"lib"}, m.buildStep(web, "lint").DependsOn)
 	assert.True(t, keysTools(web, "lint"))
 }

@@ -640,7 +640,7 @@ func TestSelfUpdate_ConfirmPromptNamesHostBeforeAsking(t *testing.T) {
 // TestSelfUpdate_ConfirmDeclinedExitsNonzero proves a declined prompt is a non-nil
 // error, not the old "print aborted, return nil" behavior. selfUpdateCmd forwards
 // this error straight to its caller, and any non-nil, non-usage error maps to a
-// nonzero process exit (exitCodeOf in main.go), so a script driving `magus self
+// nonzero process exit (mapExitCode in main.go), so a script driving `magus self
 // update` sees failure whenever nothing was installed.
 func TestSelfUpdate_ConfirmDeclinedExitsNonzero(t *testing.T) {
 	for _, answer := range []string{"n\n", "no\n", "\n", ""} {

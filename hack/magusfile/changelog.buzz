@@ -293,7 +293,7 @@ export fun problem(title: str, changed: [str], added: [str]) > str {
 // the shipped ones when the title's type is feat, fix or perf or it is marked breaking,
 // and none otherwise.
 export fun owed(title: str, changed: [str]) > [str] {
-    if (!commits\isBreaking(title) and ["feat", "fix", "perf"].indexOf(commits\typeOf(title)) == null) {
+    if (!commits\isBreaking(title) and ["feat", "fix", "perf"].indexOf(commits\commitType(title)) == null) {
         return [<str>];
     }
     var shipped = mut [<str>];

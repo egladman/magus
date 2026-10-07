@@ -349,10 +349,10 @@ linters:
           module: github.com/egladman/magus
           package: github.com/egladman/magus/cmd/magus
           case-ident: outputName
-          emitters: [emitNames, emitNamesOf, outputDst]
+          emitters: [emitNames, emitItemNames, outputDst]
           hint: >-
             the destination is --tee's; a single value is emitNames([]string{v}), a slice of
-            records is emitNamesOf(records, func(r T) string { return r.Field })
+            records is emitItemNames(records, func(r T) string { return r.Field })
 
       testisolation:
         type: module
@@ -614,7 +614,7 @@ linters:
       # sloglint's context rule is scoped to where a resolved secret can actually
       # travel. These paths are exempt because no run context exists to pass:
       #
-      #   cmd/magus       - argument parsing, version, and the final exitCodeOf line all
+      #   cmd/magus       - argument parsing, version, and the final mapExitCode line all
       #                     run outside any workspace Open, so there is no resolver to
       #                     reach. A run error is redacted at the SDK boundary instead
       #                     (Magus.redactError), which is why that line is safe without

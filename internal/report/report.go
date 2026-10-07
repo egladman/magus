@@ -366,8 +366,8 @@ var registry = map[reflect.Type]string{ // populated at init; read-only in the h
 	reflect.TypeOf(Notice{}):                TypeNotice,
 }
 
-// TypeOf returns the record type e is written as, or "" for an unregistered event.
-func TypeOf(e any) string { return registry[reflect.TypeOf(e)] }
+// RecordType returns the record type e is written as, or "" for an unregistered event.
+func RecordType(e any) string { return registry[reflect.TypeOf(e)] }
 
 // RegisteredTypes returns every event type [Record] accepts, in no fixed order.
 func RegisteredTypes() []reflect.Type {

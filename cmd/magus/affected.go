@@ -861,7 +861,7 @@ func emitPlan(opts OutputOptions, out planOutput) error {
 	case outputText, outputJSON:
 		return emitFormatted(OutputOptions{Format: outputJSON}, out)
 	case outputName:
-		return emitNamesOf(out.Matrix, func(s planShard) string { return s.Shard })
+		return emitItemNames(out.Matrix, func(s planShard) string { return s.Shard })
 	default:
 		if opts.Format == outputTemplate {
 			out.Summary = planSummaryMarkdown(out)
@@ -1312,13 +1312,13 @@ func parseExplainArgs(args []string) (project, base string, ok bool) {
 				project = args[i+1]
 			}
 			ok = true
-		case flagValueOf(a, "explain") != "":
-			project = flagValueOf(a, "explain")
+		case parseFlagValue(a, "explain") != "":
+			project = parseFlagValue(a, "explain")
 			ok = true
 		case isFlagNamed(a, "base") && i+1 < len(args):
 			base = args[i+1]
-		case flagValueOf(a, "base") != "":
-			base = flagValueOf(a, "base")
+		case parseFlagValue(a, "base") != "":
+			base = parseFlagValue(a, "base")
 		}
 	}
 	return project, base, ok

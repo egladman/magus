@@ -127,10 +127,10 @@ fun endpoint() > str {
     return "https://s3." + region() + ".amazonaws.com";
 }
 
-// hostOf extracts the Host header value (authority) from a base URL. SigV4 signs
+// urlHost extracts the Host header value (authority) from a base URL. SigV4 signs
 // the host header, and the server recomputes the signature against the Host it
 // receives — which Go derives from the URL — so this must equal the URL authority.
-fun hostOf(url: str) > str {
+fun urlHost(url: str) > str {
     final afterScheme = url.split("://");
     var rest = url;
     if (afterScheme.len() > 1) { rest = afterScheme[1]; }
@@ -162,7 +162,7 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     final reg = region();
     final amzdate = amzTimestamp();
     final datestamp = amzdate.sub(0, 8);
-    final host = hostOf(endpoint());
+    final host = urlHost(endpoint());
     final scope = datestamp + "/" + reg + "/s3/aws4_request";
     final tok = token();
 

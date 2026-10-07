@@ -181,7 +181,7 @@ func PipeNext(ctx context.Context) (types.PipeRecord, error) {
 	if !ok {
 		return types.PipeRecord{}, errors.New("pipe.next: the upstream stage ended and every record is read; ask pipe.more first")
 	}
-	return pipeRecordOf(line)
+	return parsePipeRecord(line)
 }
 
 // PipeAll implements pipe.all.
@@ -196,7 +196,7 @@ func PipeAll(ctx context.Context) ([]types.PipeRecord, error) {
 	}
 	out := make([]types.PipeRecord, 0, len(lines))
 	for _, line := range lines {
-		rec, err := pipeRecordOf(line)
+		rec, err := parsePipeRecord(line)
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +211,7 @@ func PipeEmit(ctx context.Context, record map[string]any) error {
 	if p.Out == nil {
 		return errors.New("pipe.emit: this script is not a pipe stage; run it with `magus buzz <script>`")
 	}
-	line, err := pipeLineOf(record)
+	line, err := encodePipeLine(record)
 	if err != nil {
 		return fmt.Errorf("pipe.emit: %w", err)
 	}
@@ -228,7 +228,7 @@ type pipeWorkspace interface {
 	GetArtifact(ctx context.Context, v cache.ArtifactVersion, dst string) error
 }
 
-func pipeWorkspaceOf(ctx context.Context, member string) (pipeWorkspace, error) {
+func resolvePipeWorkspace(ctx context.Context, member string) (pipeWorkspace, error) {
 	ws, ok := types.WorkspaceFromContext(ctx).(pipeWorkspace)
 	if !ok {
 		return nil, fmt.Errorf("pipe.%s reads the workspace's outputs and cache, and no workspace is attached; run the script inside one", member)
@@ -243,7 +243,7 @@ func PipeOutputs(ctx context.Context, record map[string]any) ([]types.TargetArti
 	if target == "" {
 		return nil, errors.New("pipe.outputs: the record names no target; pass a run.target.result")
 	}
-	ws, err := pipeWorkspaceOf(ctx, "outputs")
+	ws, err := resolvePipeWorkspace(ctx, "outputs")
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +267,8 @@ func PipeOutputs(ctx context.Context, record map[string]any) ([]types.TargetArti
 	return artifacts, nil
 }
 
-// artifactOf reads an Artifact argument, which must name a path.
-func artifactOf(member string, artifact map[string]any) (types.TargetArtifact, error) {
+// parseArtifact reads an Artifact argument, which must name a path.
+func parseArtifact(member string, artifact map[string]any) (types.TargetArtifact, error) {
 	a := types.TargetArtifact{}
 	a.Path, _ = artifact["path"].(string)
 	a.Glob, _ = artifact["glob"].(string)
@@ -281,14 +281,14 @@ func artifactOf(member string, artifact map[string]any) (types.TargetArtifact, e
 
 // PipeExport implements pipe.export_to.
 func PipeExport(ctx context.Context, artifact map[string]any, dest string) (string, error) {
-	a, err := artifactOf("export_to", artifact)
+	a, err := parseArtifact("export_to", artifact)
 	if err != nil {
 		return "", err
 	}
 	if dest == "" {
 		return "", errors.New("pipe.export_to: dest is empty")
 	}
-	ws, err := pipeWorkspaceOf(ctx, "export_to")
+	ws, err := resolvePipeWorkspace(ctx, "export_to")
 	if err != nil {
 		return "", err
 	}
@@ -325,11 +325,11 @@ func exportArtifact(src, dst string) error {
 
 // PipeHistory implements pipe.history.
 func PipeHistory(ctx context.Context, artifact map[string]any) ([]types.ArtifactVersion, error) {
-	a, err := artifactOf("history", artifact)
+	a, err := parseArtifact("history", artifact)
 	if err != nil {
 		return nil, err
 	}
-	ws, err := pipeWorkspaceOf(ctx, "history")
+	ws, err := resolvePipeWorkspace(ctx, "history")
 	if err != nil {
 		return nil, err
 	}
@@ -350,11 +350,11 @@ func PipeHistory(ctx context.Context, artifact map[string]any) ([]types.Artifact
 // PipeDiff implements pipe.diff. A symlink version, or one matching the file on disk,
 // leaves nothing to compare, and it says so rather than running a differ over nothing.
 func PipeDiff(ctx context.Context, artifact map[string]any) error {
-	a, err := artifactOf("diff", artifact)
+	a, err := parseArtifact("diff", artifact)
 	if err != nil {
 		return err
 	}
-	ws, err := pipeWorkspaceOf(ctx, "diff")
+	ws, err := resolvePipeWorkspace(ctx, "diff")
 	if err != nil {
 		return err
 	}
@@ -459,7 +459,7 @@ type pipeFields struct {
 	Projects []string `json:"projects"`
 }
 
-func pipeRecordOf(line report.Line) (types.PipeRecord, error) {
+func parsePipeRecord(line report.Line) (types.PipeRecord, error) {
 	var f pipeFields
 	if err := line.Decode(&f); err != nil {
 		return types.PipeRecord{}, fmt.Errorf("pipe: %s record: %w", line.Type, err)
@@ -471,9 +471,9 @@ func pipeRecordOf(line report.Line) (types.PipeRecord, error) {
 	}, nil
 }
 
-// pipeLineOf is the line a record crosses back out as: its body when it has one, so a
+// encodePipeLine is the line a record crosses back out as: its body when it has one, so a
 // record passed through loses nothing, else the envelope written from its fields.
-func pipeLineOf(record map[string]any) (report.Line, error) {
+func encodePipeLine(record map[string]any) (report.Line, error) {
 	if body, _ := record["body"].(string); body != "" {
 		return report.ParseLine([]byte(body))
 	}

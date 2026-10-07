@@ -76,7 +76,7 @@ func TestShareMintIsAudited(t *testing.T) {
 	defer cancel()
 	mgr := share.NewManager(ctx, slog.New(slog.DiscardHandler), share.WithListenAddr(netip.MustParseAddr("127.0.0.1")))
 	defer mgr.Close()
-	routes := map[string]share.Route{"/api/v1/events": {Handler: http.NotFoundHandler(), Format: rpcerr.FormatJSON, Needs: apiNeedsFor("/api/v1/events")}}
+	routes := map[string]share.Route{"/api/v1/events": {Handler: http.NotFoundHandler(), Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")}}
 	h := (&Server{}).newShareHandler(mgr, consoleDir, routes, trailDir, slog.New(slog.DiscardHandler))
 
 	minter := types.Credential{Kind: types.KindStored, ID: "3fa9c1d2", Name: "laptop", Grant: types.GrantConsole}

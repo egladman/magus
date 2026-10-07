@@ -57,10 +57,10 @@ export fun lineAt(src: str, off: int) > int {
     return line;
 }
 
-// lineOf returns the line of the first occurrence of needle in src, or 0. A needle may
+// findLine returns the line of the first occurrence of needle in src, or 0. A needle may
 // lead with newlines to anchor at a line start; the line reported is the one its text
 // starts on.
-export fun lineOf(src: str, needle: str) > int {
+export fun findLine(src: str, needle: str) > int {
     final i = src.indexOf(needle);
     if (i == null) {
         return 0;
@@ -135,8 +135,8 @@ export fun pointer(key: str) > str {
     return key.replace("~", with: "~0").replace("/", with: "~1");
 }
 
-// magusfileOf is the workspace path of the magusfile declaring project.
-export fun magusfileOf(project: str) > str {
+// magusfilePath is the workspace path of the magusfile declaring project.
+export fun magusfilePath(project: str) > str {
     if (project == ".") {
         return "magusfile.buzz";
     }
@@ -181,12 +181,12 @@ export fun messages(found: [Finding]) > [str] {
     return acc;
 }
 
-test "lineAt and lineOf count from 1 and anchor a leading newline" {
+test "lineAt and findLine count from 1 and anchor a leading newline" {
     final src = "a\nb\n  c: 1\n";
     assert\equal(lineAt(src, off: 0), want: 1, message: "first byte");
     assert\equal(lineAt(src, off: 2), want: 2, message: "after a newline");
-    assert\equal(lineOf(src, needle: "\n  c:"), want: 3, message: "anchored needle");
-    assert\equal(lineOf(src, needle: "zz"), want: 0, message: "absent");
+    assert\equal(findLine(src, needle: "\n  c:"), want: 3, message: "anchored needle");
+    assert\equal(findLine(src, needle: "zz"), want: 0, message: "absent");
 }
 
 test "scalar reads a YAML scalar as its text" {

@@ -257,7 +257,7 @@ func TestTypeIdentOf(t *testing.T) {
 		{"unsupported form", &ast.MapType{Key: &ast.Ident{Name: "string"}, Value: &ast.Ident{Name: "string"}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, typeIdentOf(tc.expr))
+			assert.Equal(t, tc.want, exprTypeIdent(tc.expr))
 		})
 	}
 }
@@ -323,8 +323,8 @@ func TestFloorReachesOnlyTextKindsAndTheEnvTemplate(t *testing.T) {
 }
 
 func TestYamlTagOf(t *testing.T) {
-	assert.Equal(t, "", yamlTagOf(&ast.Field{}))
-	assert.Equal(t, "dir", yamlTagOf(&ast.Field{Tag: &ast.BasicLit{Value: "`yaml:\"dir\"`"}}))
+	assert.Equal(t, "", fieldYAMLTag(&ast.Field{}))
+	assert.Equal(t, "dir", fieldYAMLTag(&ast.Field{Tag: &ast.BasicLit{Value: "`yaml:\"dir\"`"}}))
 }
 
 func TestFirstDocLine(t *testing.T) {

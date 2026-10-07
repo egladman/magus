@@ -184,11 +184,11 @@ func TestOutputPipeLeavesCompositionAlone(t *testing.T) {
 // TestPipeRecordForRefsModes pins that only refs' default listing is the refs record:
 // --text prints grep lines that -o template does not shape.
 func TestPipeRecordForRefsModes(t *testing.T) {
-	rec, ok := pipeRecordFor([]string{"refs", "Open"})
+	rec, ok := parsePipeRecord([]string{"refs", "Open"})
 	assert.True(t, ok)
 	assert.Equal(t, pipeRecord{list: "refs", id: "file"}, rec)
 	for _, mode := range []string{"--text", "--occurrences", "--definition", "--source"} {
-		_, ok := pipeRecordFor([]string{"refs", "Open", mode})
+		_, ok := parsePipeRecord([]string{"refs", "Open", mode})
 		assert.False(t, ok, mode)
 	}
 }

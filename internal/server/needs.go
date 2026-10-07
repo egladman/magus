@@ -100,8 +100,8 @@ var apiNeeds = map[string]types.Need{
 	"/api/":                 needConsoleRead,
 }
 
-// apiNeedsOf is the one-entry needs map a guard over the JSON route at path takes.
-func apiNeedsOf(path string) (map[string]types.Need, error) {
+// lookupAPINeeds is the one-entry needs map a guard over the JSON route at path takes.
+func lookupAPINeeds(path string) (map[string]types.Need, error) {
 	need, ok := apiNeeds[path]
 	if !ok {
 		return nil, fmt.Errorf("server: route %s has no Need", path)
@@ -109,10 +109,10 @@ func apiNeedsOf(path string) (map[string]types.Need, error) {
 	return map[string]types.Need{path: need}, nil
 }
 
-// apiNeedsFor is apiNeedsOf for the share listener, which refuses to guard a route whose
+// requireAPINeeds is lookupAPINeeds for the share listener, which refuses to guard a route whose
 // Needs are empty, so an unlisted route cannot be served there.
-func apiNeedsFor(path string) map[string]types.Need {
-	needs, _ := apiNeedsOf(path)
+func requireAPINeeds(path string) map[string]types.Need {
+	needs, _ := lookupAPINeeds(path)
 	return needs
 }
 

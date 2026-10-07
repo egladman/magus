@@ -114,8 +114,8 @@ var miseDirInputs = []string{
 // does, so an older entry is never read under a new meaning.
 const probeCacheFormat = "probe-cache/3"
 
-// probeSpecFor returns what decides probe's answer, and false for a probe never cached.
-func probeSpecFor(probe spells.Command) (probeRecipe, bool) {
+// lookupProbeSpec returns what decides probe's answer, and false for a probe never cached.
+func lookupProbeSpec(probe spells.Command) (probeRecipe, bool) {
 	recipe, ok := probeInputs[strings.Join(append([]string{probe.Bin}, probe.Args...), " ")]
 	return recipe, ok
 }
@@ -128,7 +128,7 @@ func probeSpecFor(probe spells.Command) (probeRecipe, bool) {
 // the same version, so they share one answer; a file created in either adds a line and
 // moves its key, which is what an absent-file line used to catch.
 func probeCacheKey(probe spells.Command, dir string) (string, bool) {
-	recipe, ok := probeSpecFor(probe)
+	recipe, ok := lookupProbeSpec(probe)
 	if !ok || !filepath.IsAbs(dir) {
 		return "", false
 	}

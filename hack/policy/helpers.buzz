@@ -35,11 +35,11 @@ final magusValueFlags = [
 // magusOperands are a magus command line's operands: `affected ci` from
 // `magus -j 4 affected ci`.
 export fun magusOperands(args: [str]) > [str] {
-    return operandsOf(args, valueFlags: magusValueFlags);
+    return stripFlags(args, valueFlags: magusValueFlags);
 }
 
-// operandsOf are args with every flag, and the value of each flag in valueFlags, left out.
-export fun operandsOf(args: [str], valueFlags: [str]) > [str] {
+// stripFlags are args with every flag, and the value of each flag in valueFlags, left out.
+export fun stripFlags(args: [str], valueFlags: [str]) > [str] {
     final ops = mut [<str>];
     var skip = false;
     foreach (arg in args) {

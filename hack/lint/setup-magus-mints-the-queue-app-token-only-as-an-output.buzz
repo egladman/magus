@@ -175,7 +175,7 @@ export fun applyFindings(raw: str) > [Finding] !> any {
         "|| secrets.GITHUB_TOKEN": "The queue writes only as its app: a run or a merge the job's own token makes starts no workflow.",
     }) {
         if (raw.indexOf(banned) != null) {
-            found.append(at(QUEUE_APPLY, line: support\lineOf(raw, needle: banned), message: "names " + banned, fix: fix));
+            found.append(at(QUEUE_APPLY, line: support\findLine(raw, needle: banned), message: "names " + banned, fix: fix));
         }
     }
 

@@ -435,8 +435,8 @@ func EntryAdvice(row types.Job, rel string) string {
 		rel, row.ID, len(row.Entries), MaxJobEntries)
 }
 
-// EntriesOf is the entries recorded on job id in rows, nil when rows holds no such job.
-func EntriesOf(rows []types.Job, id string) []types.JobEntry {
+// Entries is the entries recorded on job id in rows, nil when rows holds no such job.
+func Entries(rows []types.Job, id string) []types.JobEntry {
 	if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id }); i >= 0 {
 		return rows[i].Entries
 	}

@@ -100,7 +100,7 @@ func newWriter(f *os.File, dst io.Writer, opts ...Option) *Writer {
 }
 
 func (w *Writer) record(e any) error {
-	typ := TypeOf(e)
+	typ := RecordType(e)
 	if typ == "" {
 		return fmt.Errorf("report: unregistered event type %T", e)
 	}
@@ -273,7 +273,7 @@ func NewLineEncoder(w io.Writer) *LineEncoder {
 // Encode writes e as one record. An unregistered event type is an error and writes
 // nothing; a body that fails to encode is written as a run.notice naming the failure.
 func (l *LineEncoder) Encode(e any) error {
-	typ := TypeOf(e)
+	typ := RecordType(e)
 	if typ == "" {
 		return fmt.Errorf("report: unregistered event type %T", e)
 	}

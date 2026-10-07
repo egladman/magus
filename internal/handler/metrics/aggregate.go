@@ -90,26 +90,26 @@ func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot 
 		for _, m := range sm.Metrics {
 			switch m.Name {
 			case instTargetDuration:
-				snap.Target = latencyOf(m.Data)
+				snap.Target = rollLatency(m.Data)
 			case instCacheDuration:
-				snap.Cache = latencyOf(m.Data)
+				snap.Cache = rollLatency(m.Data)
 			case instPoolWait:
-				snap.PoolWait = latencyOf(m.Data)
+				snap.PoolWait = rollLatency(m.Data)
 			case instGraphQuery:
-				snap.GraphQuery = latencyOf(m.Data)
+				snap.GraphQuery = rollLatency(m.Data)
 			case instRemoteHits:
-				snap.Remote.Hits = counterOf(m.Data)
+				snap.Remote.Hits = sumCounter(m.Data)
 			case instRemoteMisses:
-				snap.Remote.Misses = counterOf(m.Data)
+				snap.Remote.Misses = sumCounter(m.Data)
 			case instRemoteErrors:
-				snap.Remote.Errors = counterOf(m.Data)
+				snap.Remote.Errors = sumCounter(m.Data)
 			case instRemoteDuration:
-				lat := latencyOf(m.Data)
+				lat := rollLatency(m.Data)
 				snap.Remote.DurationP50Seconds = lat.P50Seconds
 				snap.Remote.DurationP95Seconds = lat.P95Seconds
 				snap.Remote.IoCount = lat.Count
 			case instRemoteIOSize:
-				snap.Remote.TransferredBytes = int64(latencyOf(m.Data).SumSeconds)
+				snap.Remote.TransferredBytes = int64(rollLatency(m.Data).SumSeconds)
 			}
 		}
 	}
@@ -133,8 +133,8 @@ func findMetric(rm metricdata.ResourceMetrics, name string) (metricdata.Aggregat
 	return nil, false
 }
 
-// attrOf reads a string attribute off a data point's set, or "" when absent.
-func attrOf(set attribute.Set, key string) string {
+// readAttr reads a string attribute off a data point's set, or "" when absent.
+func readAttr(set attribute.Set, key string) string {
 	if v, ok := set.Value(attribute.Key(key)); ok {
 		return v.String()
 	}
@@ -174,9 +174,9 @@ func targetStats(rm metricdata.ResourceMetrics) []*metricsv1.TargetStat {
 	var order []key
 	for _, dp := range h.DataPoints {
 		k := key{
-			project: attrOf(dp.Attributes, attrProject),
-			spell:   attrOf(dp.Attributes, attrSpell),
-			target:  attrOf(dp.Attributes, attrTarget),
+			project: readAttr(dp.Attributes, attrProject),
+			spell:   readAttr(dp.Attributes, attrSpell),
+			target:  readAttr(dp.Attributes, attrTarget),
 		}
 		a := groups[k]
 		if a == nil {
@@ -186,12 +186,12 @@ func targetStats(rm metricdata.ResourceMetrics) []*metricsv1.TargetStat {
 		}
 		a.dps = append(a.dps, dp)
 		a.count += dp.Count
-		if attrOf(dp.Attributes, attrOutcome) == "error" {
+		if readAttr(dp.Attributes, attrOutcome) == "error" {
 			a.errs += dp.Count
 		} else {
 			a.success += dp.Count
 		}
-		if attrOf(dp.Attributes, attrCacheHit) == "true" {
+		if readAttr(dp.Attributes, attrCacheHit) == "true" {
 			a.hits += dp.Count
 		}
 	}
@@ -242,9 +242,9 @@ func mcpToolStats(rm metricdata.ResourceMetrics) []*metricsv1.MCPToolStat {
 	errsByTool := map[string]int64{}
 	tools := map[string]struct{}{}
 	forEachInt64DP(callsAgg, func(set attribute.Set, v int64) {
-		tool := attrOf(set, attrTool)
+		tool := readAttr(set, attrTool)
 		callsByTool[tool] += v
-		if attrOf(set, attrOutcome) == "error" {
+		if readAttr(set, attrOutcome) == "error" {
 			errsByTool[tool] += v
 		}
 		tools[tool] = struct{}{}
@@ -299,46 +299,46 @@ func mcpToolStats(rm metricdata.ResourceMetrics) []*metricsv1.MCPToolStat {
 func buzzStats(rm metricdata.ResourceMetrics) *metricsv1.Buzz {
 	b := &metricsv1.Buzz{}
 	if agg, ok := findMetric(rm, instBuzzExec); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.ExecCount, b.ExecP50Seconds, b.ExecP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzCompile); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.CompileCount, b.CompileP50Seconds, b.CompileP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzHostCallDur); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.HostCallP50Seconds, b.HostCallP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzHostCallCount); ok {
-		b.HostCallCount = counterOf(agg)
+		b.HostCallCount = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionReuse); ok {
-		b.SessionPoolReuse = counterOf(agg)
+		b.SessionPoolReuse = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionIdle); ok {
-		b.SessionPoolIdle = counterOf(agg)
+		b.SessionPoolIdle = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionEvict); ok {
-		b.SessionPoolEvictions = counterOf(agg)
+		b.SessionPoolEvictions = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionWarm); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.SessionWarmP50Seconds, b.SessionWarmP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzImport); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.ImportCount, b.ImportP50Seconds, b.ImportP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzSpellResolve); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		b.SpellResolveCount, b.SpellResolveP50Seconds, b.SpellResolveP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzJITRuns); ok {
-		b.JitRuns = counterOf(agg)
+		b.JitRuns = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instBuzzVMFaults); ok {
-		b.VmFaults = counterOf(agg)
+		b.VmFaults = sumCounter(agg)
 	}
 	return b
 }
@@ -347,12 +347,12 @@ func buzzStats(rm metricdata.ResourceMetrics) *metricsv1.Buzz {
 func sandboxStats(rm metricdata.ResourceMetrics) *metricsv1.Sandbox {
 	s := &metricsv1.Sandbox{}
 	if agg, ok := findMetric(rm, instSandboxApply); ok {
-		lat := latencyOf(agg)
+		lat := rollLatency(agg)
 		s.ApplyP50Seconds, s.ApplyP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instSandboxRules); ok {
 		forEachInt64DP(agg, func(set attribute.Set, v int64) {
-			switch attrOf(set, attrAccess) {
+			switch readAttr(set, attrAccess) {
 			case "read":
 				s.RulesRead += v
 			case "write":
@@ -363,11 +363,11 @@ func sandboxStats(rm metricdata.ResourceMetrics) *metricsv1.Sandbox {
 		})
 	}
 	if agg, ok := findMetric(rm, instSandboxEnvRules); ok {
-		s.EnvRules = counterOf(agg)
+		s.EnvRules = sumCounter(agg)
 	}
 	if agg, ok := findMetric(rm, instSandboxChecks); ok {
 		forEachInt64DP(agg, func(set attribute.Set, v int64) {
-			switch attrOf(set, attrDecision) {
+			switch readAttr(set, attrDecision) {
 			case "allow":
 				s.ChecksAllow += v
 			case "deny":
@@ -376,7 +376,7 @@ func sandboxStats(rm metricdata.ResourceMetrics) *metricsv1.Sandbox {
 		})
 	}
 	if agg, ok := findMetric(rm, instSandboxEnvDropped); ok {
-		s.EnvDropped = counterOf(agg)
+		s.EnvDropped = sumCounter(agg)
 	}
 	return s
 }
@@ -397,7 +397,7 @@ func latencyByAttr(agg metricdata.Aggregation, key string) map[string]*metricsv1
 func foldByAttr[N int64 | float64](dps []metricdata.HistogramDataPoint[N], key string) map[string]*metricsv1.Latency {
 	groups := map[string][]metricdata.HistogramDataPoint[N]{}
 	for _, dp := range dps {
-		v := attrOf(dp.Attributes, key)
+		v := readAttr(dp.Attributes, key)
 		groups[v] = append(groups[v], dp)
 	}
 	out := make(map[string]*metricsv1.Latency, len(groups))
@@ -430,20 +430,20 @@ func counters(rm metricdata.ResourceMetrics) counterTotals {
 		for _, m := range sm.Metrics {
 			switch m.Name {
 			case instCacheHits:
-				t.cacheHits = counterOf(m.Data)
+				t.cacheHits = sumCounter(m.Data)
 			case instCacheMisses:
-				t.cacheMisses = counterOf(m.Data)
+				t.cacheMisses = sumCounter(m.Data)
 			case instTargetRuns:
-				t.targetRuns = counterOf(m.Data)
+				t.targetRuns = sumCounter(m.Data)
 			}
 		}
 	}
 	return t
 }
 
-// latencyOf rolls a histogram Aggregation into a Latency, summing across every data point
+// rollLatency rolls a histogram Aggregation into a Latency, summing across every data point
 // (attribute set) in the family. A non-histogram or absent Aggregation yields a zero Latency.
-func latencyOf(agg metricdata.Aggregation) *metricsv1.Latency {
+func rollLatency(agg metricdata.Aggregation) *metricsv1.Latency {
 	switch h := agg.(type) {
 	case metricdata.Histogram[float64]:
 		return foldHistogram(h.DataPoints)
@@ -454,9 +454,9 @@ func latencyOf(agg metricdata.Aggregation) *metricsv1.Latency {
 	}
 }
 
-// counterOf totals a monotonic Sum Aggregation across its data points as an int64. A
+// sumCounter totals a monotonic Sum Aggregation across its data points as an int64. A
 // non-Sum or absent Aggregation reads as zero.
-func counterOf(agg metricdata.Aggregation) int64 {
+func sumCounter(agg metricdata.Aggregation) int64 {
 	switch s := agg.(type) {
 	case metricdata.Sum[int64]:
 		var total int64
@@ -520,9 +520,9 @@ func foldHistogram[N int64 | float64](dps []metricdata.HistogramDataPoint[N]) *m
 	}
 
 	buckets := cumulativeBuckets(bounds, bucketCounts)
-	lat.P50Seconds = sanitize(quantileOf(0.50, buckets))
-	lat.P95Seconds = sanitize(quantileOf(0.95, buckets))
-	lat.P99Seconds = sanitize(quantileOf(0.99, buckets))
+	lat.P50Seconds = sanitize(estimateQuantile(0.50, buckets))
+	lat.P95Seconds = sanitize(estimateQuantile(0.95, buckets))
+	lat.P99Seconds = sanitize(estimateQuantile(0.99, buckets))
 	if haveMax {
 		lat.MaxSeconds = maxObserved
 	} else {
@@ -532,7 +532,7 @@ func foldHistogram[N int64 | float64](dps []metricdata.HistogramDataPoint[N]) *m
 }
 
 // cumulativeBuckets converts OTel explicit bounds plus per-bucket counts into the ascending
-// cumulative buckets quantileOf expects, appending the implied +Inf overflow bucket.
+// cumulative buckets estimateQuantile expects, appending the implied +Inf overflow bucket.
 // bucketCounts has one more entry than bounds (the final +Inf bucket).
 func cumulativeBuckets(bounds []float64, bucketCounts []uint64) []histBucket {
 	buckets := make([]histBucket, 0, len(bucketCounts))

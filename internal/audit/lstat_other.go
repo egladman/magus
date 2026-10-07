@@ -16,5 +16,5 @@ func lstatFile(pathBuf []byte) (fileState, bool) {
 	if err != nil {
 		return fileState{}, false
 	}
-	return fileState{modTimeNs: info.ModTime().UnixNano(), size: info.Size(), ino: inodeOf(info)}, true
+	return fileState{modTimeNs: info.ModTime().UnixNano(), size: info.Size(), ino: fileInode(info)}, true
 }
