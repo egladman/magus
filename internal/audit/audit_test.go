@@ -110,7 +110,8 @@ func TestSnapshotAndDiff(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "modify.txt"), "bb", t2)
 	require.NoError(t, os.Remove(filepath.Join(dir, "remove.txt")), "remove")
 
-	got := diff(context.Background(), pre, descs)
+	got, err := diff(context.Background(), pre, descs)
+	require.NoError(t, err)
 	want := map[string]changeKind{
 		filepath.Join(dir, "added.txt"):  changeAdded,
 		filepath.Join(dir, "modify.txt"): changeModified,
@@ -366,7 +367,7 @@ func BenchmarkSnapshotAndDiff(b *testing.B) {
 		if err := os.WriteFile(mutateTarget, []byte(fmt.Sprintf("v%d", i)), 0o644); err != nil {
 			b.Fatal(err)
 		}
-		if d := diff(ctx, snap, descs); len(d) == 0 {
+		if d, err := diff(ctx, snap, descs); err != nil || len(d) == 0 {
 			b.Fatal("expected at least one change")
 		}
 	}
@@ -481,4 +482,40 @@ func TestFinishCatchesAReplacementThatKeepsMtimeAndSize(t *testing.T) {
 	err := a.Finish(ctx, "generate")
 	require.ErrorIs(t, err, types.DescendantBoundaryCrossed)
 	assert.Contains(t, err.Error(), "modified=[gen/gate.go]")
+}
+
+// auditFixture opens an audit over api with one descendant, api/docs, holding
+// src/guide.md.
+func auditFixture(t *testing.T, ctx context.Context) (*Audit, string) {
+	t.Helper()
+	parentDir := filepath.Join(t.TempDir(), "api")
+	childDir := filepath.Join(parentDir, "docs")
+	writeFile(t, filepath.Join(childDir, "src", "guide.md"), "# guide", time.Unix(1_700_000_000, 0))
+	parent := &types.Project{Path: "api", Dir: parentDir}
+	child := &types.Project{Path: "api/docs", Dir: childDir}
+	a := Begin(types.WithWorkspace(ctx, &fakeWS{projects: []*types.Project{parent, child}}), parent, true)
+	require.NotNil(t, a)
+	return a, childDir
+}
+
+// A re-walk that stops early has not seen the files it never reached, and reading them as
+// removed blamed an interrupted target for emptying a project it never touched.
+func TestAuditFinishReturnsTheCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	a, _ := auditFixture(t, ctx)
+	cancel()
+	err := a.Finish(ctx, "lint")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.NotErrorIs(t, err, types.DescendantBoundaryCrossed)
+}
+
+func TestAuditSkipsAnUnreadableDescendantDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode 000 directory")
+	}
+	a, childDir := auditFixture(t, t.Context())
+	src := filepath.Join(childDir, "src")
+	require.NoError(t, os.Chmod(src, 0))
+	t.Cleanup(func() { _ = os.Chmod(src, 0o755) })
+	assert.NoError(t, a.Finish(t.Context(), "lint"), "a walk that cannot list src judges nothing")
 }

@@ -1,6 +1,6 @@
 ### Fixed
 
-- **An interrupted run no longer reports MGS3001 for writes it did not make.** Ctrl+C
-  cut the descendant write audit's re-walk short, and every file it never reached read
-  as removed, so a target that wrote nothing was blamed for emptying a nested project.
-  The audit now finishes its walk, and the step reports its cancellation.
+- **MGS3001 no longer reports writes a run did not make.** An audit re-walk cut short by
+  Ctrl+C or an unreadable directory read every file it never reached as removed, so a
+  target that wrote nothing was blamed for emptying a nested project. An interrupted step
+  now reports its cancellation, and an unreadable tree skips the audit with a warning.

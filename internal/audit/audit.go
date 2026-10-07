@@ -102,11 +102,24 @@ func Begin(ctx context.Context, p *types.Project, write bool) *Audit {
 }
 
 // Finish diffs descendant trees against the snapshot and rejects cross-project writes. Nil-safe.
+//
+// A re-walk that does not finish judges nothing, since every file it never reached would
+// read as removed. A cancelled ctx returns the cancellation; any other walk failure is
+// logged and the window passes unjudged, as a failed snapshot in Begin does.
 func (a *Audit) Finish(ctx context.Context, target string) error {
 	if a == nil {
 		return nil
 	}
-	changes := diff(ctx, a.snap, a.roots)
+	changes, err := diff(ctx, a.snap, a.roots)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		slog.WarnContext(ctx, "magus: audit re-walk failed",
+			slog.String("project", a.project.Path),
+			slog.Any("err", err))
+		return nil
+	}
 	if len(changes) == 0 {
 		return nil
 	}
@@ -278,11 +291,12 @@ func take(ctx context.Context, roots []descendant) (snapshot, error) {
 	return snap, nil
 }
 
-// diff re-walks roots and compares each regular file against pre.
-func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
+// diff re-walks roots and compares each regular file against pre. A walk error returns
+// no changes: the files it never reached are not removals.
+func diff(ctx context.Context, pre snapshot, roots []descendant) ([]change, error) {
 	var out []change
 	for _, d := range roots {
-		_ = walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
+		err := walkFiles(ctx, d.dir, func(buf []byte, st fileState) {
 			key := string(buf)
 			prev, existed := pre[key]
 			if !existed {
@@ -295,13 +309,16 @@ func diff(ctx context.Context, pre snapshot, roots []descendant) []change {
 			prev.seen = true
 			pre[key] = prev
 		})
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
 	}
 	for path, st := range pre {
 		if !st.seen {
 			out = append(out, change{path: path, kind: changeRemoved})
 		}
 	}
-	return out
+	return out, nil
 }
 
 // reportCap bounds each reported path list.
