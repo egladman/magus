@@ -1,0 +1,89 @@
+namespace agentpolicy\builtins;
+
+// BUILTINS is this repository's own declaration for the compiled guard rules: every rule
+// that advises by default is set back to deny, and read-navigation carries the line limit
+// this tree uses. The binary ships neither. The figures beside each rule are what
+// justified it here, kept where a workspace can reread them rather than in the rule's
+// shipped text.
+export final BUILTINS: {str: any} = {
+    // 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable.
+    "brief-command": "deny",
+    "busy-wait": "deny",
+    // Six errors in one session, by an agent with this repository open throughout.
+    "buzz-unbriefed": "deny",
+    // 2026-09-27: every such chain was `generate:rw docs` then `generate:rw .`.
+    "chained-run": "deny",
+    // 2026-09-24: 508 lines ended this way against 2 denies, when only a bare trailing
+    // `echo $?` fired.
+    "exit-status-echo": "deny",
+    // One such grep held a subagent for two hours. A recursive grep with no path passes:
+    // measured 2026-09-26, those were all five of the rule's measured denies.
+    "filter-without-input": "deny",
+    // 2026-09-29, audit transcripts from three hosts: 1,456 context-flag definition
+    // lookups, 16 of them denied by any rule. A hand-read sample of 39 held 33 (85%)
+    // where the served command answered what the grep asked; the 6 misses filtered the
+    // body through a second grep for a few lines.
+    "grep-reader": "deny",
+    "interpreter-rewrite": "deny",
+    "magus-timeout": "deny",
+    "output-pipe": "deny",
+    // 2026-09-26: 556 of 841 denies were stderr-only.
+    "output-redirect": "deny",
+    "process-poll": "deny",
+    // It was an advisory first and changed behavior zero times over a long session,
+    // while uninstrumented runs left the Go build cache poisoned.
+    "raw-tool": "deny",
+    // 120 lines is the p90 of a bounded read. 2026-09-26, 66,548 Bash reads: 8,394
+    // dumped a whole Go, Buzz or Markdown file, and 3.6% of whole reads were followed by
+    // an edit of that file.
+    // 2026-09-29, audit transcripts: 657 whole reads of Go or Markdown files over 120
+    // lines ran, 3 denied, most on a stale index or a multi-file cat (63). About 90% were
+    // reads a map serves; the rest a read before an edit (~38), the reader's own new file
+    // (2) and a skill read whole (~17). 299 came through the host read tool, which
+    // nothing judged.
+    // Buzz: 125 whole reads over 120 lines, 5 denied by any rule; a hand-read sample of 35
+    // held 29 (83%), the misses a read right before an edit and a review of the reader's
+    // own diff.
+    "read-navigation": {"decision": "deny", "lines": 120},
+    "scripted-rewrite": "deny",
+    // 2026-09-26, 89,116 searches in 1,441 transcripts: 8,500 looked for a symbol, 1,389
+    // listed a file's declarations, 369 its headings, 319 diagnostic codes, 176 target
+    // declarations, 1,366 were a `find -name`.
+    // 2026-09-30, `git ls-files`: the graph indexes 2,689 of 4,940 tracked files, the rest
+    // mostly Markdown under changes/ and docs/.
+    "search-translation": "deny",
+    "sed-in-place": "deny",
+    "sibling-checkout": "deny",
+    // Across 2,147 session transcripts: zero loads of the multi-agent skill, under every
+    // name and variant, while the two skills a hook demands loaded 415 times.
+    "spawn-unbriefed": "deny",
+    // One call put 69 files, a whole regenerated docs site plus five untouched source
+    // files, into a commit about four collection methods.
+    "stage-all": "deny",
+    // 2026-09-24, 14,773 search patterns: 45% were alternations and 13% definition
+    // lookups. 2026-09-30: of the 1,211 distinct search lines the guard recorded that
+    // week, the old rule refused one, because a stale index's fail-open advice let every
+    // symbol search through.
+    "symbol-search": "deny",
+    "throwaway-copy": "deny",
+    // 2026-09-24: the day MAGUS_NO_WAIT was removed, agents prefixed 462 commands with it,
+    // copied from 33 briefs.
+    "unknown-env": "deny",
+};
+
+// Figures for rules this table leaves at their defaults, kept with the rest of the
+// evidence:
+//   capture-filter (advise): 2026-09-26, about three in four denies of a filter over a
+//     capture were a search the reader needed, and the refused agent then read the whole
+//     file into context.
+//   graph-pipe (advise): 2026-09-26, 819 output-pipe denies landed on read-only graph
+//     verbs, and the refused agent went back to `grep -rn`.
+//   leased-path (advise): 8,419 servings in one audit, 52% of every advisory the guard
+//     served, for a fact the writer had after the first.
+//   precedent-search (advise): over 1,499 sessions, 42% of new files were preceded by a
+//     hunt for one name, 71% in subagent sessions, where only 12.9% reached for a magus
+//     verb at all.
+//   stdin-closed (advise): 2026-09-29, a grep whose file operands expanded to nothing read
+//     stdin for 3.5 hours.
+//   worker-check-only (deny): 2026-09-29, briefs told six workers they "may also run"
+//     `magus run lint docs`, and two ran it at the same moment from two worktrees.
