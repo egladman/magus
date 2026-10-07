@@ -12,7 +12,8 @@ import vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 // CType is a C type from the zdef() declaration subset.
 type CType = vmpackage.CType
 
-// C type constants.
+// The CType values a zdef() declaration can resolve to. CUnsupported marks a
+// type the declaration parser cannot map to a Buzz value.
 const (
 	CVoid        = vmpackage.CVoid
 	CBool        = vmpackage.CBool

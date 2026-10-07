@@ -1898,7 +1898,7 @@ func hasErasedType(t types.Type) bool {
 //
 // Deliberately keyed on the exact parameter name: this is an opt-in convention, not
 // a general rule about type arguments, and a callee that wants nothing to do with it
-// simply does not declare one.
+// does not declare one.
 func (c *checker) bindTypeArgToName(v *ast.CallExpr, ft *types.FuncType) {
 	if v.TypeArg == "" {
 		return

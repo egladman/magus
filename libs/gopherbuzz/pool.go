@@ -322,7 +322,8 @@ func (r *PoolRegistry) Get(key string, newSession WorkerFunc) *Pool {
 	return p
 }
 
-// Close closes every Pool in the registry.
+// Close closes every Pool in the registry, attempting all of them when one
+// fails, and returns the joined errors.
 func (r *PoolRegistry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -623,10 +624,10 @@ type buzzAncestorKey struct{}
 
 // WithAncestors installs stack as the dispatch ancestor stack. The pool maintains it
 // itself while dispatching; it is exported for the two boundaries the pool cannot
-// see: the entry target (invoked directly rather than dispatched, so it must seed the
-// stack with its own name or a dependency can cycle back into it undetected) and a
-// cross-project dispatch (which enters a project where these names mean nothing, and
-// passes nil to clear them).
+// see. The entry target is invoked directly rather than dispatched, so it must seed
+// the stack with its own name or a dependency can cycle back into it undetected. A
+// cross-project dispatch enters a project where these names mean nothing, and
+// passes nil to clear them.
 func WithAncestors(ctx context.Context, stack []string) context.Context {
 	return context.WithValue(ctx, buzzAncestorKey{}, stack)
 }

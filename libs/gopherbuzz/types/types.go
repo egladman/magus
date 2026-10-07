@@ -80,7 +80,8 @@ func mutPrefix(mut bool) string {
 	return ""
 }
 
-// FuncType is a function type.
+// FuncType is the type of a function value: its parameter types, return type
+// and the optional variadic, yield and raises markers.
 type FuncType struct {
 	Params   []Type
 	Ret      Type

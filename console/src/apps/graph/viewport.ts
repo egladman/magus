@@ -29,8 +29,8 @@ export const NO_INSETS: Insets = { left: 0, right: 0, top: 0, bottom: 0 };
  * scrolling behind it. Everything that is not a touch does: a wheel, a mouse drag, a trackpad
  * pinch have no scroll to compete with here.
  *
- * A touch is shared. Where the canvas is a block in a scrolling column - the stacked narrow
- * layout - one finger has to be able to scroll straight past it, or half the screen is a dead
+ * A touch is shared. Where the canvas is a block in a scrolling column (the stacked narrow
+ * layout), one finger has to be able to scroll straight past it, or half the screen is a dead
  * zone the reader cannot swipe out of. Two fingers are unambiguous and drive the graph.
  *
  * `touchAction` is the canvas's computed touch-action, and it is the source of that distinction:
@@ -113,7 +113,7 @@ export interface FitOptions {
  * viewport that `insets` leaves visible, centered in that usable box rather than in the
  * viewport. Scale is clamped to [minScale, maxScale] (default 0.1 to 8).
  *
- * A degenerate box - one point, or a span of zero on an axis - frames at maxScale rather than
+ * A degenerate box (one point, or a span of zero on an axis) frames at maxScale rather than
  * dividing by zero. Insets larger than the viewport collapse to a minimum usable span instead
  * of going negative, so a narrow pane still produces a usable transform rather than a mirrored
  * one.
@@ -154,7 +154,7 @@ export function fitTransform(
 }
 
 /**
- * usableCenter returns the center of the visible box in viewport pixels - where the force
+ * usableCenter returns the center of the visible box in viewport pixels, where the force
  * simulation should settle so the cold, un-fitted view lands beside the chrome rather than
  * under it. The initial transform is the identity, so viewport pixels and world units coincide.
  */

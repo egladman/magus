@@ -52,8 +52,8 @@ export function dependencyDegrees(
  * mostDependedOn returns up to `limit` node ids ranked by how many nodes depend on them,
  * highest first, dropping anything nothing depends on. Ties break by id so the answer is
  * stable across reloads of the same graph. Fewer than `limit` ids come back when fewer
- * qualify - and none at all for a graph with no dependency edges, which is the honest answer
- * rather than an arbitrary top slice of an unranked list.
+ * qualify, and none at all for a graph with no dependency edges: an empty answer beats an
+ * arbitrary top slice of an unranked list.
  */
 export function mostDependedOn(
   nodes: readonly GNode[],
@@ -70,14 +70,14 @@ export function mostDependedOn(
 }
 
 /**
- * disconnected returns the ids with no dependency edge in either direction - nothing depends on
- * them and they depend on nothing - among the kinds that carry dependencies AT ALL in this
+ * disconnected returns the ids with no dependency edge in either direction (nothing depends on
+ * them and they depend on nothing), among the kinds that carry dependencies AT ALL in this
  * graph. These are the dead-or-unconfigured candidates.
  *
  * Two structural traps sit either side of this answer, and the kind filter is what threads
  * between them. Testing raw degree instead finds almost nothing, because in a knowledge graph
  * every target carries a `contains` edge to its project. Dropping the kind filter finds far too
- * much, because whole kinds - diagnostics, directories, methods, rationales - never sit on a
+ * much, because whole kinds (diagnostics, directories, methods, rationales) never sit on a
  * dependency edge in the first place, and reporting each of them as dead code says nothing
  * about the workspace.
  *
@@ -103,7 +103,7 @@ export function disconnected(nodes: readonly GNode[], links: readonly GLink[]): 
 
 /**
  * projectOwners maps each node to the project that CONTAINS it, following `contains` edges.
- * Nodes no project contains - workspace-global things like spells, diagnostics and modules -
+ * Nodes no project contains (workspace-global things like spells, diagnostics and modules)
  * are absent from the result rather than attributed to a root project that merely sits above
  * them in the tree.
  *
@@ -117,7 +117,7 @@ export function disconnected(nodes: readonly GNode[], links: readonly GLink[]): 
  * the dirs, docs and functions that make up the rest of it.
  *
  * Cost is O(projects x containsEdges) in the worst case. Projects are the coarsest entity a
- * workspace has - tens, not thousands - so the product stays small.
+ * workspace has (tens, not thousands), so the product stays small.
  */
 export function projectOwners(
   nodes: readonly GNode[],
