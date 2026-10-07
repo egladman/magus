@@ -103,7 +103,7 @@ fun ms(stamp: str) > int {
     return std\toInt(parsed);
 }
 
-fun kindOf(name: str) > str? {
+fun toolKind(name: str) > str? {
     if (name == "Bash") { return "shell.command"; }
     if (name == "Read" or name == "NotebookRead") { return "file.read"; }
     if (name == "Edit" or name == "Write" or name == "MultiEdit" or name == "NotebookEdit") { return "file.write"; }
@@ -113,7 +113,7 @@ fun kindOf(name: str) > str? {
     return null;
 }
 
-fun textOf(name: str, input: any?) > str {
+fun toolText(name: str, input: any?) > str {
     if (name == "Bash") { return hook\field(input, dotPath: "command"); }
     if (name == "Skill") {
         final skill = hook\field(input, dotPath: "skill");
@@ -125,7 +125,7 @@ fun textOf(name: str, input: any?) > str {
     return hook\field(input, dotPath: "file_path");
 }
 
-fun eventOf(r: any?, kind: str, ref: str, text: str) > Event {
+fun newEvent(r: any?, kind: str, ref: str, text: str) > Event {
     return Event{
         session = hook\field(r, dotPath: "sessionId"),
         ts = ms(hook\field(r, dotPath: "timestamp")),
@@ -169,11 +169,11 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
             foreach (item in listAt(r, dotPath: "message.content")) {
                 if (hook\field(item, dotPath: "type") != "tool_use") { continue; }
                 final name = hook\field(item, dotPath: "name");
-                final eventKind = kindOf(name);
+                final eventKind = toolKind(name);
                 if (eventKind == null) { continue; }
                 final id = hook\field(item, dotPath: "id");
                 if (parked[id] == null) { order.append(id); }
-                parked[id] = eventOf(r, kind: eventKind!, ref: id, text: textOf(name, input: hook\dig(item, dotPath: "input")));
+                parked[id] = newEvent(r, kind: eventKind!, ref: id, text: toolText(name, input: hook\dig(item, dotPath: "input")));
             }
         } else if (kind == "user") {
             foreach (item in listAt(r, dotPath: "message.content")) {
@@ -195,7 +195,7 @@ fun extract(lines: [str], transcript: str, root: str) > [str] {
             if (ref == "") { ref = hook\field(r, dotPath: "uuid"); }
             var text = hook\field(r, dotPath: "attachment.content");
             if (text == "") { text = hook\field(r, dotPath: "attachment.stdout"); }
-            emitted.append(render(eventOf(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
+            emitted.append(render(newEvent(r, kind: "hook.output", ref: ref, text: text), transcript: transcript));
         }
     }
     foreach (id in order) {
@@ -218,7 +218,7 @@ fun wholeLines(chunk: str) > str {
     return chunk.sub(0, len: end);
 }
 
-fun offsetOf(mark: str) > int {
+fun parseOffset(mark: str) > int {
     final text = (fs\readFile(mark) catch "").trim();
     if (text == "") { return 0; }
     return std\parseInt(text) ?? 0;
@@ -299,7 +299,7 @@ fun main(args: [str]) > int {
             final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
             final content = fs\readFile(transcript) catch null;
             if (content == null) { continue; }
-            var offset = offsetOf(mark);
+            var offset = parseOffset(mark);
             // A file smaller than its checkpoint was rotated or replaced, so the offset
             // describes bytes that no longer exist and reading from it would land mid-record.
             if (content!.len() < offset) { offset = 0; }

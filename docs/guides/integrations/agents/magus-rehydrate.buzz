@@ -63,10 +63,10 @@ fun warn(message: str) > void {
     io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
 }
 
-// optionsOf reads the two flags and reports every other argument: an argument arriving
+// parseOptions reads the two flags and reports every other argument: an argument arriving
 // here means the wiring meant something by it, and reading none at all accepted that
 // silently. An unreadable argv falls back to the defaults rather than to no brief.
-fun optionsOf(args: [str]) > {str: str} {
+fun parseOptions(args: [str]) > {str: str} {
     final parsed = flags\parse(args, switches: [<str>], valued: [RULES_FLAG, FORMAT_FLAG]) catch null;
     if (parsed == null) {
         warn("could not read the arguments {args}; using the defaults. Fix the hook command in your host config.");
@@ -80,7 +80,7 @@ fun optionsOf(args: [str]) > {str: str} {
 }
 
 fun main(args: [str]) > void {
-    final options = optionsOf(args);
+    final options = parseOptions(args);
     final rules = options[RULES_FLAG] ?? "CLAUDE.md";
     final format = options[FORMAT_FLAG] ?? "";
     if (format != "" and format != "json") {

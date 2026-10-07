@@ -278,7 +278,7 @@ fun warn(message: str) > void {
     io\stderr.write("cursor-hook.buzz: {message}\n") catch void;
 }
 
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
@@ -471,7 +471,7 @@ fun mcpPayload(event: any?) > str {
     final envelope = {
         "tool_name": tool,
         "tool_input": input ?? {<str: any>},
-        "session_id": sessionOf(event),
+        "session_id": readSession(event),
         "cwd": firstField(event, keys: ["cwd"]),
         "hook_event_name": "beforeMCPExecution",
     };
@@ -525,7 +525,7 @@ fun sessionStartReply(bin: str) > str {
     return json\stringify(reply) catch EMPTY;
 }
 
-fun eventNameOf(event: any?) > str {
+fun readEventName(event: any?) > str {
     final named = hook\field(event, dotPath: "hook_event_name");
     if (named != "") { return named; }
     // A payload naming no event is judged by shape, so a Cursor that stopped
@@ -574,7 +574,7 @@ fun unnamed(eventName: str) > void {
     if (eventName == "subagentStart") { io\stdout.write(ALLOW) catch void; }
 }
 
-fun sessionOf(event: any?) > str {
+fun readSession(event: any?) > str {
     return firstField(event, keys: ["session_id", "conversation_id"]);
 }
 
@@ -594,7 +594,7 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
     final scope = Scope{
         bin = bin,
         agent = agent,
-        session = sessionOf(event),
+        session = readSession(event),
         transcript = hook\field(event, dotPath: "transcript_path"),
     };
     if (eventName == "sessionStart") {
@@ -654,15 +654,15 @@ fun main(args: [str]) > void {
         io\stdout.write(ALLOW) catch void;
         return;
     }
-    final eventName = eventNameOf(event);
-    final agent = agentNameOf(args);
+    final eventName = readEventName(event);
+    final agent = readAgentName(args);
     if (agent == "") {
         unnamed(eventName);
         return;
     }
     final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"));
     if (bin == "" or !hook\isExecutable(bin)) {
-        if (hook\noticeOnce(sessionOf(event), family: "unavailable", file: "cursor-hook.buzz")) {
+        if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
         }
         if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }

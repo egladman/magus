@@ -118,7 +118,7 @@ fun wholeLines(chunk: str) > str {
     return chunk.sub(0, len: end);
 }
 
-fun offsetOf(mark: str) > int {
+fun parseOffset(mark: str) > int {
     final text = (fs\readFile(mark) catch "").trim();
     if (text == "") { return 0; }
     return std\parseInt(text) ?? 0;
@@ -169,7 +169,7 @@ fun main(args: [str]) > int {
         final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
         final content = fs\readFile(transcript) catch null;
         if (content == null) { continue; }
-        var offset = offsetOf(mark);
+        var offset = parseOffset(mark);
         if (content!.len() < offset) { offset = 0; }
         if (content!.len() <= offset) { continue; }
 

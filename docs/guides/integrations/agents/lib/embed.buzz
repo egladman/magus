@@ -15,9 +15,9 @@ import "assert";
 final EMBED_PREFIX = "<!-- embed: ";
 final EMBED_SUFFIX = " -->";
 
-// fenceFor picks the info string from the extension, so the marker names one thing and
+// fenceInfo picks the info string from the extension, so the marker names one thing and
 // nothing has to be kept in step with it.
-export fun fenceFor(name: str) > str {
+export fun fenceInfo(name: str) > str {
     if (name.endsWith(".buzz")) { return "buzz"; }
     return "text";
 }
@@ -65,7 +65,7 @@ export fun render(tmpl: str, files: {str: str}) > str !> str {
         if (body == null) {
             throw "guard-templates.md.tmpl embeds {name}, which was not read";
         }
-        rendered.append("```{fenceFor(name)}");
+        rendered.append("```{fenceInfo(name)}");
         rendered.append(trimTrailingNewlines(body!));
         rendered.append("```");
     }
@@ -79,8 +79,8 @@ test "a marker becomes a fenced block carrying the whole file" {
 }
 
 test "the fence follows the extension" {
-    assert\equal(fenceFor("magus-command.buzz"), "buzz", "a Buzz template");
-    assert\equal(fenceFor("notes.txt"), "text", "anything else is plain text");
+    assert\equal(fenceInfo("magus-command.buzz"), "buzz", "a Buzz template");
+    assert\equal(fenceInfo("notes.txt"), "text", "anything else is plain text");
 }
 
 test "a file's trailing newline does not open a blank line" {

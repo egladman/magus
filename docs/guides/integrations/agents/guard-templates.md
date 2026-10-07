@@ -347,10 +347,10 @@ fun findUp(relative: str, start: str) > str {
     return "";
 }
 
-// pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything
+// codexPushRule names the Codex prefix rule a bare push reaches, or null for anything
 // else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex
 // would run them unprompted and no answer here may assume it prompts.
-fun pushRuleFor(line: str) > str? {
+fun codexPushRule(line: str) > str? {
     foreach (meta in SHELL_METACHARACTERS) {
         if (line.indexOf(meta) != null) { return null; }
     }
@@ -430,9 +430,9 @@ fun shellFlags(args: [str]) > [str] {
     return supported;
 }
 
-// agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
+// readAgentName is the host this entry names on its argv, or "" when it names none. Empty is
 // not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -604,7 +604,7 @@ fun main(args: [str]) > void {
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     // Overridable alongside the other dot-paths rather than fixed: a host that points
     // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
     // otherwise, and gets that field judged as a shell command.
@@ -622,7 +622,7 @@ fun main(args: [str]) > void {
     final toolName = hook\field(event, dotPath: toolPath);
 
     var pushRule: str? = null;
-    if (!rawEvent) { pushRule = pushRuleFor(hook\field(event, dotPath: eventPath)); }
+    if (!rawEvent) { pushRule = codexPushRule(hook\field(event, dotPath: eventPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
@@ -872,7 +872,7 @@ fun warn(message: str) > void {
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// readAgentName reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument. Empty is not defaulted: `magus shell` refuses installed
 // glue that names no host (MGS3024).
 //
@@ -880,7 +880,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
@@ -891,7 +891,7 @@ fun agentNameOf(args: [str]) > str {
 }
 
 fun main(args: [str]) > void {
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
@@ -1072,10 +1072,10 @@ fun warn(message: str) > void {
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// readAgentName reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument: an argument arriving here means the wiring meant
 // something by it, and reading none at all accepted that silently.
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
@@ -1088,7 +1088,7 @@ fun agentNameOf(args: [str]) > str {
 fun main(args: [str]) > void {
     // No host, no record, and a coded line on stderr rather than a guess: an observation
     // filed under the wrong host is wrong, and a silent gap is invisible.
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     if (agentName == "") {
         warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
             + "Merge what `magus describe harness` prints into the host's hook configuration; "
@@ -1258,10 +1258,10 @@ fun warn(message: str) > void {
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// readAgentName reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument: an argument arriving here means the wiring meant
 // something by it, and reading none at all accepted that silently.
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
@@ -1273,7 +1273,7 @@ fun agentNameOf(args: [str]) > str {
 
 fun main(args: [str]) > void {
     // No host, no record, and a coded line on stderr rather than a guess.
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     if (agentName == "") {
         warn("[MGS3024] this hook was not given --agent-name, so nothing was recorded. "
             + "Merge what `magus describe harness` prints into the host's hook configuration; "
@@ -1405,10 +1405,10 @@ fun warn(message: str) > void {
     io\stderr.write("magus-rehydrate.buzz: {message}\n") catch void;
 }
 
-// optionsOf reads the two flags and reports every other argument: an argument arriving
+// parseOptions reads the two flags and reports every other argument: an argument arriving
 // here means the wiring meant something by it, and reading none at all accepted that
 // silently. An unreadable argv falls back to the defaults rather than to no brief.
-fun optionsOf(args: [str]) > {str: str} {
+fun parseOptions(args: [str]) > {str: str} {
     final parsed = flags\parse(args, switches: [<str>], valued: [RULES_FLAG, FORMAT_FLAG]) catch null;
     if (parsed == null) {
         warn("could not read the arguments {args}; using the defaults. Fix the hook command in your host config.");
@@ -1422,7 +1422,7 @@ fun optionsOf(args: [str]) > {str: str} {
 }
 
 fun main(args: [str]) > void {
-    final options = optionsOf(args);
+    final options = parseOptions(args);
     final rules = options[RULES_FLAG] ?? "CLAUDE.md";
     final format = options[FORMAT_FLAG] ?? "";
     if (format != "" and format != "json") {
@@ -1518,7 +1518,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-session.buzz: {message}\n") catch void;
 }
 
-fun envFileOf(args: [str]) > str {
+fun envFilePath(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [ENV_FILE_FLAG]) catch null;
     if (parsed == null) {
         warn("could not read the arguments {args}; PATH is unchanged. Fix the hook command in your host config.");
@@ -1532,7 +1532,7 @@ fun envFileOf(args: [str]) > str {
 }
 
 fun main(args: [str]) > void {
-    final envFile = envFileOf(args);
+    final envFile = envFilePath(args);
     if (envFile == "") { return; }
     final root = path\abs(".") catch "";
     if (root == "") { return; }

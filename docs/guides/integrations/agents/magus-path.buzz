@@ -129,7 +129,7 @@ fun warn(message: str) > void {
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// agentNameOf reads the host off this script's argv, "" when the entry names none, and
+// readAgentName reads the host off this script's argv, "" when the entry names none, and
 // reports every other argument. Empty is not defaulted: `magus shell` refuses installed
 // glue that names no host (MGS3024).
 //
@@ -137,7 +137,7 @@ final AGENT_NAME_FLAG = "--agent-name";
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
@@ -148,7 +148,7 @@ fun agentNameOf(args: [str]) > str {
 }
 
 fun main(args: [str]) > void {
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");

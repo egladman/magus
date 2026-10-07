@@ -224,10 +224,10 @@ fun findUp(relative: str, start: str) > str {
     return "";
 }
 
-// pushRuleFor names the Codex prefix rule a bare push reaches, or null for anything
+// codexPushRule names the Codex prefix rule a bare push reaches, or null for anything
 // else: a compound line, `git -C dir push`, an MCP call. Those reach no rule, so Codex
 // would run them unprompted and no answer here may assume it prompts.
-fun pushRuleFor(line: str) > str? {
+fun codexPushRule(line: str) > str? {
     foreach (meta in SHELL_METACHARACTERS) {
         if (line.indexOf(meta) != null) { return null; }
     }
@@ -307,9 +307,9 @@ fun shellFlags(args: [str]) > [str] {
     return supported;
 }
 
-// agentNameOf is the host this entry names on its argv, or "" when it names none. Empty is
+// readAgentName is the host this entry names on its argv, or "" when it names none. Empty is
 // not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
-fun agentNameOf(args: [str]) > str {
+fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -481,7 +481,7 @@ fun main(args: [str]) > void {
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
     final transcriptPath = hook\envOr("HOST_TRANSCRIPT_PATH", fallback: "transcript_path");
-    final agentName = agentNameOf(args);
+    final agentName = readAgentName(args);
     // Overridable alongside the other dot-paths rather than fixed: a host that points
     // HOST_EVENT_PATH at a field it DOES populate for MCP calls loses the namespace test
     // otherwise, and gets that field judged as a shell command.
@@ -499,7 +499,7 @@ fun main(args: [str]) > void {
     final toolName = hook\field(event, dotPath: toolPath);
 
     var pushRule: str? = null;
-    if (!rawEvent) { pushRule = pushRuleFor(hook\field(event, dotPath: eventPath)); }
+    if (!rawEvent) { pushRule = codexPushRule(hook\field(event, dotPath: eventPath)); }
 
     // Codex is the host the entry names, never one the event's shape suggests: see
     // AGENT_NAME_FLAG. An entry that names no host gets MGS3024 from magus, whatever arm
