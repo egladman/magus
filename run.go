@@ -2495,6 +2495,10 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 	}
 	ctx = sandbox.WithStep(ctx, scope, p.TargetPolicies[name].Sandbox)
 	a := audit.Begin(ctx, p, types.HasCharm(ctx, types.CharmReadWrite))
+	// The re-walk outlives a cancellation. Finish discards the walk's error, so a walk
+	// a Ctrl-C cut short read every file it never reached as removed, and a target that
+	// wrote nothing was reported as MGS3001 instead of as cancelled.
+	finish := func() error { return a.Finish(context.WithoutCancel(ctx), name) }
 	// A magusfile target whose body is provably only these calls runs them directly:
 	// evaluating the file and its imports to make them costs more than a warm install
 	// (docs/magusfile.buzz: ~35ms idle, ~230ms beside three installs starting).
@@ -2502,10 +2506,10 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		if ops := findInstallOps(p, name); len(ops) > 0 {
 			for _, so := range ops {
 				if err := invokeSpell(ctx, p, so.name, so.spell); err != nil {
-					return errors.Join(spellErr(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), a.Finish(ctx, name))
+					return errors.Join(spellErr(p, name, types.SpellFailure{Spell: so.spell.Name(), Err: err}), finish())
 				}
 			}
-			return a.Finish(ctx, name)
+			return finish()
 		}
 	}
 	err := forEachSpell(ctx, p, name, func(ctx context.Context, s *spells.Spell) error {
@@ -2518,7 +2522,7 @@ func (m *Magus) runTarget(ctx context.Context, p *types.Project, name string) er
 		}
 		return invokeSpell(ctx, p, name, s)
 	})
-	return errors.Join(err, a.Finish(ctx, name))
+	return errors.Join(err, finish())
 }
 
 // invokeSpell executes one spell; when a volatility.Runtime is present, failures are eligible for auto-retry.

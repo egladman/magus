@@ -2065,6 +2065,45 @@ func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
 	assert.Contains(t, err.Error(), "cache replay")
 }
 
+// Ctrl-C during `magus run lint-rules .` reported MGS3001 against lint-rules, listing
+// every console file as removed: the audit's re-walk stopped at the cancellation, and an
+// unfinished listing read as deletions. The target here writes nothing at all.
+func TestDescendantAuditReportsAnInterruptedRunAsCancelled(t *testing.T) {
+	const spellName = "zzz-interrupted-audit-spell"
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("lint"),
+		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
+			cancel()
+			return nil, ctx.Err()
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "leaf", "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "src", "app.ts"), []byte("x"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	reg.RegisterProject("leaf")
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	var out bytes.Buffer
+	sink, err := NewSink(FormatJSONL, &out, &out)
+	require.NoError(t, err)
+	_ = m.Run(ctx, []types.Target{{Path: ".", Name: "lint"}}, WithWrite(), WithSink(sink))
+	require.NoError(t, sink.Close())
+	assert.Contains(t, out.String(), context.Canceled.Error(), "the step reports its cancellation")
+	assert.NotContains(t, out.String(), string(types.DescendantBoundaryCrossed), "nothing wrote into leaf")
+}
+
 // The drift gate and the race replay hash a target's outputs through outputGlobsByRoot,
 // and must claim what the cache snapshot claims: nothing inside a nested project that
 // the glob is not rooted in.
