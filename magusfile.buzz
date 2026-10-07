@@ -1976,7 +1976,8 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 // imports this project, so it cannot be a need.
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // test reads every module's Go files, which each library test's own format rewrites.
-    ctx.needs(libs_format);
+    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+        testlayout\format, scipbuzz\format);
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
         conventions\test, testlayout\test, scipbuzz\test, buzz_test);
@@ -2247,21 +2248,13 @@ export fun format(ctx: magus\Context, args: [str]) > void {
         "./internal/agent/agents-section.md"]});
 }
 
-// Formats every nested Go module, for a composer to need in a step ahead of the root
-// targets that read `**/*.go` (MGS4008). A composer reaches the modules through this
-// target, never by import member: ctx.needs hands a same-project target no args, but a
-// member called directly gets the composer's own `--` args, and gofmt reads them as paths.
-export fun libs_format(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
-        testlayout\format, scipbuzz\format);
-}
-
 // Runs the CI gates through their declared dependencies.
 // Under `--inherited=fatal` security runs in the body: ctx.needs hands a dependency no args.
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
-    // lint and test read libs/gopherbuzz (the go.mod replace compiles it, lint runs in each
-    // module), which build's gopherbuzz\format rewrites (MGS4008).
-    ctx.needs(libs_format);
+    // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
+    // rewrites (MGS4008).
+    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+        testlayout\format, scipbuzz\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);
         return;

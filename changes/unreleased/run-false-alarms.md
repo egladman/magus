@@ -1,6 +1,7 @@
 ### Fixed
 
-- **This repo's `ci` and `coverage-render` format the nested Go modules before reading
-  them.** Root lint and test read every module's Go files while a library's `format`
-  rewrote them in the same step (MGS4008). A new `libs-format` target runs those formats
-  first, reached as a same-project need so `ci`'s own `--` args never reach gofmt.
+- **A project import member reached through `ctx.needs` no longer receives the caller's
+  `--` args.** A same-project dependency already dropped them; a cross-project one
+  passed them on, so the merge queue's `--inherited=fatal` reached gofmt as a path.
+  This repo's `ci` and `coverage-render` now format every nested Go module before root
+  lint and test read it (MGS4008).
