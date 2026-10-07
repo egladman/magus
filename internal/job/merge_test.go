@@ -73,7 +73,7 @@ func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
 	assert.Contains(t, err.Error(), "write_paths", "the message names what a put does carry")
 
 	_, err = ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running"})
-	assert.NoError(t, err, "op and id name the call rather than a field")
+	require.NoError(t, err, "op and id name the call rather than a field")
 }
 
 func TestMergeRejectsAListElementOfTheWrongType(t *testing.T) {

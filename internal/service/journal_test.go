@@ -81,7 +81,7 @@ func TestJournalSweepRunsStopCommands(t *testing.T) {
 	assert.Equal(t, 1, res.Unreapable)
 
 	_, err = os.Stat(sentinel)
-	assert.NoError(t, err, "the recorded stop command ran")
+	require.NoError(t, err, "the recorded stop command ran")
 
 	files, _ := os.ReadDir(dir)
 	assert.Empty(t, files, "sweep clears every record")

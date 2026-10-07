@@ -25,7 +25,7 @@ func TestModuleDeclsParse(t *testing.T) {
 		src, ok := ModuleDecls(mod.Name)
 		require.Truef(t, ok, "no declarations generated for the %s module", mod.Name)
 		_, err := buzz.Parse(src)
-		assert.NoErrorf(t, err, "the generated %s declarations must parse", mod.Name)
+		require.NoErrorf(t, err, "the generated %s declarations must parse", mod.Name)
 	}
 }
 

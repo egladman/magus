@@ -187,7 +187,7 @@ func TestConcurrentWrites(t *testing.T) {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		var m map[string]any
-		assert.NoError(t, json.Unmarshal(sc.Bytes(), &m), "corrupt line %d: %q", count+1, sc.Bytes())
+		require.NoError(t, json.Unmarshal(sc.Bytes(), &m), "corrupt line %d: %q", count+1, sc.Bytes())
 		count++
 	}
 	assert.Equal(t, want, uint64(count))
@@ -293,7 +293,7 @@ func TestRecordUnregisteredType(t *testing.T) {
 
 func TestRecordNilWriterIsNoop(t *testing.T) {
 	t.Parallel()
-	assert.NoError(t, Record(nil, TargetResult{Status: "ok", CacheHit: true, Project: "p"}), "Record on nil Writer should be a no-op")
+	require.NoError(t, Record(nil, TargetResult{Status: "ok", CacheHit: true, Project: "p"}), "Record on nil Writer should be a no-op")
 }
 
 func TestCacheRunOptions(t *testing.T) {

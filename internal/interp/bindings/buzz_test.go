@@ -42,7 +42,7 @@ func TestBuzzEngine_NewSession(t *testing.T) {
 	require.NoError(t, err)
 	defer s.Close()
 
-	assert.NoError(t, s.DoString(`var x: int = 1;`))
+	require.NoError(t, s.DoString(`var x: int = 1;`))
 }
 
 func TestBuzzEngine_GetSetGlobal(t *testing.T) {

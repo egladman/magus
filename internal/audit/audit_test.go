@@ -203,7 +203,7 @@ func TestFinishSilentOnNoChanges(t *testing.T) {
 	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
 	a := Begin(ctx, parent, true)
-	assert.NoError(t, a.Finish(ctx, "format"), "expected no boundary failure when descendant tree unchanged")
+	require.NoError(t, a.Finish(ctx, "format"), "expected no boundary failure when descendant tree unchanged")
 }
 
 func TestFinishNilReceiverNoop(t *testing.T) {
@@ -400,7 +400,7 @@ func TestMarkedMidRunIsNotAViolation(t *testing.T) {
 	dispatch.Mark("api/docs")
 	require.NoError(t, os.WriteFile(filepath.Join(childDir, "MAGUS.md"), []byte("generated"), 0o644))
 
-	assert.NoError(t, a.Finish(ctx, "build"),
+	require.NoError(t, a.Finish(ctx, "build"),
 		"a descendant that ran its own target mid-run owns its writes; the parent must not be blamed")
 }
 

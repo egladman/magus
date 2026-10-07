@@ -155,10 +155,10 @@ func foreignScriptsIndex(t *testing.T, root string) string {
 
 func TestScriptsForRejectsUnknownSituations(t *testing.T) {
 	for _, s := range AllEvents {
-		assert.NoError(t, ValidateSituation(s), s)
+		require.NoError(t, ValidateSituation(s), s)
 	}
 	for _, s := range []string{"rule:stage-all", "mgs:MGS3009", "doctor:stale-worktrees", "next:jobs-exited"} {
-		assert.NoError(t, ValidateSituation(s), s)
+		require.NoError(t, ValidateSituation(s), s)
 	}
 	for _, s := range []string{"event:disk-full", "event:", "rule:", "stage-all", "", "Event:pre-pr"} {
 		_, err := MatchScripts(t.TempDir(), s, nil)

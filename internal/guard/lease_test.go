@@ -610,9 +610,9 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 // on every backend.
 func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepo(t)
-	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt))
-	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main))
-	assert.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main))
 	for _, c := range []struct {
 		backend string
 		args    []string

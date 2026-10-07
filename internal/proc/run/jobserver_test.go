@@ -52,7 +52,7 @@ func TestOpenJobserverRefusesAPoolWithNoTokens(t *testing.T) {
 
 func TestJobserverCloseIsSafeOnNil(t *testing.T) {
 	var j *Jobserver
-	assert.NoError(t, j.Close())
+	require.NoError(t, j.Close())
 }
 
 func TestJobserverMakeflagsReplacesOnlyTheJobFlags(t *testing.T) {

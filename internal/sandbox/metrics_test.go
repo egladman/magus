@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -55,7 +56,7 @@ func TestChecksRecordAllowAndDeny(t *testing.T) {
 	rec := &fakeRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 
-	assert.NoError(t, policy.CheckRead(ctx, filepath.Join(dir, "f")))
+	require.NoError(t, policy.CheckRead(ctx, filepath.Join(dir, "f")))
 	assert.Error(t, policy.CheckRead(ctx, "/definitely/not/allowed/f"))
 	assert.Error(t, policy.CheckExec(ctx, filepath.Join(dir, "f")))
 
@@ -68,7 +69,7 @@ func TestChecksRecordAllowAndDeny(t *testing.T) {
 
 func TestChecksWithoutARecorderStillCheck(t *testing.T) {
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: "/", Read: true}}}}
-	assert.NoError(t, policy.CheckRead(context.Background(), "/etc"))
+	require.NoError(t, policy.CheckRead(context.Background(), "/etc"))
 }
 
 func TestRecordEnvDropped(t *testing.T) {

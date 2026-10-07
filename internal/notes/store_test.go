@@ -116,7 +116,7 @@ func TestValidate(t *testing.T) {
 			tc.mutate(&n)
 			err := Validate(n)
 			if tc.wantErr == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				return
 			}
 			require.Error(t, err)

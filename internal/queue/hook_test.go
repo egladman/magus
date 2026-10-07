@@ -335,7 +335,7 @@ func TestABoxedHooksPolicyCarriesATargetsGrantAndNothingMore(t *testing.T) {
 
 	ctx, status := t.Context(), "/proc/1/status"
 	assert.ErrorIs(t, before.CheckRead(ctx, status), filesystem.ErrDenied)
-	assert.NoError(t, after.CheckRead(ctx, status))
+	require.NoError(t, after.CheckRead(ctx, status))
 	assert.ErrorIs(t, after.CheckWrite(ctx, status), filesystem.ErrDenied)
 	assert.ErrorIs(t, after.CheckExec(ctx, status), filesystem.ErrDenied)
 	added := slices.DeleteFunc(slices.Clone(after.FS.Rules), func(r filesystem.Rule) bool { return slices.Contains(before.FS.Rules, r) })
@@ -377,10 +377,10 @@ func TestABoxedHooksPolicyGrantsItsBoxAndNotTheRunnersCaches(t *testing.T) {
 		filepath.Join(home, "go", "pkg", "mod", "cache", "x"),
 		filepath.Join(tmp, "go-build1", "b001", "exe", "main"),
 	} {
-		assert.NoError(t, p.CheckWrite(ctx, path), path)
-		assert.NoError(t, p.CheckExec(ctx, path), path)
+		require.NoError(t, p.CheckWrite(ctx, path), path)
+		require.NoError(t, p.CheckExec(ctx, path), path)
 	}
-	assert.NoError(t, p.CheckExec(ctx, filepath.Join(goroot, "bin", "go")))
+	require.NoError(t, p.CheckExec(ctx, filepath.Join(goroot, "bin", "go")))
 	for _, path := range []string{
 		filepath.Join(runner, "gocache", "ab", "x-d"),
 		filepath.Join(runner, "gomod", "cache", "x"),
@@ -574,8 +574,8 @@ func TestAHookCannotWriteTheSharedObjectStore(t *testing.T) {
 	p, err := hookCommand{Dir: cand.Dir, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir, "")}.policy()
 	require.NoError(t, err)
 	assert.ErrorIs(t, p.CheckWrite(t.Context(), filepath.Join(objects, "ab", "cd")), filesystem.ErrDenied)
-	assert.NoError(t, p.CheckRead(t.Context(), filepath.Join(objects, "ab", "cd")))
-	assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(own, "index")))
+	require.NoError(t, p.CheckRead(t.Context(), filepath.Join(objects, "ab", "cd")))
+	require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(own, "index")))
 	assert.Empty(t, p.WritesOutside(cand.Dir, cand.Home, cand.TempDir), "the checkout's own git directory is its to write")
 
 	if abi, err := sandbox.ABI(); err != nil || abi < 1 {
@@ -639,13 +639,13 @@ func TestAHookGetsEverySpellTheBaseLoaded(t *testing.T) {
 	assert.Equal(t, tool+"\n", string(seen))
 	gate, err := hookCommand{Dir: dir, Spells: env.Spells, Home: cand.Home, TempDir: cand.TempDir, Env: boxEnv(cand.Home, cand.TempDir, "")}.policy()
 	require.NoError(t, err)
-	assert.NoError(t, gate.CheckExec(context.Background(), filepath.Join(tool, "bin", "tool")))
+	require.NoError(t, gate.CheckExec(context.Background(), filepath.Join(tool, "bin", "tool")))
 	assert.ErrorIs(t, gate.CheckWrite(context.Background(), filepath.Join(cache, "x")), filesystem.ErrDenied, "the runner's cache is not the box's")
 
 	p, err := hookCommand{Dir: dir, Spells: env.Spells}.policy()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(p.TempDir) })
-	assert.NoError(t, p.CheckWrite(context.Background(), filepath.Join(cache, "x")))
+	require.NoError(t, p.CheckWrite(context.Background(), filepath.Join(cache, "x")))
 	withoutSpells, err := hookCommand{Dir: dir}.policy()
 	require.NoError(t, err)
 	assert.ErrorIs(t, withoutSpells.CheckWrite(context.Background(), filepath.Join(cache, "x")), filesystem.ErrDenied)
@@ -1089,8 +1089,8 @@ func TestTheCacheDirCarriesOnlyTheSpellsCachesOutOfTheBox(t *testing.T) {
 	assert.Empty(t, after.WritesOutside(with.Dir, home, tmp, dir))
 
 	ctx := t.Context()
-	assert.NoError(t, after.CheckExec(ctx, filepath.Join(gocache, "29", "29d7-d", "magus-utils")))
-	assert.NoError(t, after.CheckWrite(ctx, filepath.Join(gomodcache, "cache", "x")))
+	require.NoError(t, after.CheckExec(ctx, filepath.Join(gocache, "29", "29d7-d", "magus-utils")))
+	require.NoError(t, after.CheckWrite(ctx, filepath.Join(gomodcache, "cache", "x")))
 	for _, path := range []string{filepath.Join(gomodcache, "cache", "x"), filepath.Join(dir, "cas", "x"), filepath.Join(dir, "spell-caches", "x")} {
 		assert.ErrorIs(t, after.CheckExec(ctx, path), filesystem.ErrDenied, path)
 	}

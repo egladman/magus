@@ -68,15 +68,15 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Equal(t, types.LeaseSourceMarker, p.LeaseFrom, "the narrowed policy carries where its lease came from")
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "b", "x.txt")))
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "x.txt")))
-	assert.NoError(t, p.CheckRead(ctx, filepath.Join(root, "pkg", "b", "x.txt")),
+	require.NoError(t, p.CheckRead(ctx, filepath.Join(root, "pkg", "b", "x.txt")),
 		"a worker has to read the tree it is changing")
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(cacheDir, "out")),
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(cacheDir, "out")),
 		"a target that cannot write the cache dir produces nothing")
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(p.TempDir, "scratch")))
-	assert.NoError(t, p.CheckWrite(ctx, "/dev/null"), "grants outside the checkout keep their writes")
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(p.TempDir, "scratch")))
+	require.NoError(t, p.CheckWrite(ctx, "/dev/null"), "grants outside the checkout keep their writes")
 }
 
 // TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne pins the allowlist's consequence.
@@ -92,8 +92,8 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 	ctx := t.Context()
 
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "gen", "x.txt")))
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "keep", "x.txt")))
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "b", "x.txt")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "keep", "x.txt")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "b", "x.txt")))
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "new.txt")),
 		"pkg/a cannot be granted without granting the forbidden pkg/a/gen with it")
 }
@@ -123,8 +123,8 @@ func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
 	p := narrowed(t, root, cacheDir, "fleet/w1")
 	ctx := t.Context()
 
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "new.go")))
-	assert.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "sibling.go")),
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "new.go")))
+	require.NoError(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "sibling.go")),
 		"the grant is the directory the file lands in, which is what landlock can express")
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "b", "x.txt")))
 	assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "nowhere", "x.txt")), "a glob that matches nothing still grants nothing")
@@ -165,8 +165,8 @@ func TestNarrowToLeaseGrantsAReadOnlyRowNoWrites(t *testing.T) {
 
 			assert.Equal(t, row.ID, p.Lease)
 			assert.Error(t, p.CheckWrite(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
-			assert.NoError(t, p.CheckRead(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
-			assert.NoError(t, p.CheckWrite(ctx, filepath.Join(cacheDir, "out")))
+			require.NoError(t, p.CheckRead(ctx, filepath.Join(root, "pkg", "a", "x.txt")))
+			require.NoError(t, p.CheckWrite(ctx, filepath.Join(cacheDir, "out")))
 		})
 	}
 }
@@ -194,7 +194,7 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 			p := NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, tc.acted, types.LeaseSourceMarker)
 
 			assert.Same(t, base, p)
-			assert.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "x.txt")))
+			require.NoError(t, p.CheckWrite(t.Context(), filepath.Join(root, "pkg", "b", "x.txt")))
 		})
 	}
 }

@@ -704,7 +704,7 @@ func TestCheckCacheWritable(t *testing.T) {
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 		assert.Contains(t, got.Message, root)
 		_, err := os.Stat(filepath.Join(root, ".magus"))
-		assert.NoError(t, err, "cache dir not created")
+		require.NoError(t, err, "cache dir not created")
 	})
 
 	t.Run("absolute cache dir override", func(t *testing.T) {

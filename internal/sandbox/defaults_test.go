@@ -119,7 +119,7 @@ func TestBuildPolicyGrants(t *testing.T) {
 	} {
 		err := check(p, tc.access, tc.path)
 		if tc.want {
-			assert.NoError(t, err, "%s %s", tc.access, tc.path)
+			require.NoError(t, err, "%s %s", tc.access, tc.path)
 		} else {
 			assert.ErrorIs(t, err, filesystem.ErrDenied, "%s %s", tc.access, tc.path)
 		}
@@ -209,7 +209,7 @@ func TestBuildPolicyKeepsUserRulesAndPassthrough(t *testing.T) {
 	}
 	p := BuildPolicy(o)
 
-	assert.NoError(t, check(p, filesystem.Write, filepath.Join(extra, "out")))
+	require.NoError(t, check(p, filesystem.Write, filepath.Join(extra, "out")))
 	assert.ErrorIs(t, check(p, filesystem.Exec, filepath.Join(extra, "tool")), filesystem.ErrDenied,
 		"a rw entry grants no exec")
 	assert.True(t, p.AllowsEnv("MISE_DATA_DIR"))
@@ -224,7 +224,7 @@ func TestBuildPolicyResolvesRulePaths(t *testing.T) {
 	require.NoError(t, os.Symlink(realDir, link))
 
 	p := BuildPolicy(PolicyOptions{Workspace: link})
-	assert.NoError(t, check(p, filesystem.Read, filepath.Join(realDir, "file.txt")))
+	require.NoError(t, check(p, filesystem.Read, filepath.Join(realDir, "file.txt")))
 }
 
 func TestBuildPolicyMergesDuplicatePaths(t *testing.T) {
@@ -388,29 +388,29 @@ func TestScopedCutsTheSpellLayer(t *testing.T) {
 	registry := filepath.Join(o.Home, ".cargo/registry/x.crate")
 
 	goOnly := p.Scoped([]string{"go"}, nil)
-	assert.NoError(t, check(goOnly, filesystem.Exec, gocache))
+	require.NoError(t, check(goOnly, filesystem.Exec, gocache))
 	assert.ErrorIs(t, check(goOnly, filesystem.Write, registry), filesystem.ErrDenied)
 	assert.True(t, goOnly.AllowsEnv("GOFLAGS"))
-	assert.NoError(t, check(goOnly, filesystem.Exec, "/opt/mise/installs/x"), "the workspace layer stays")
+	require.NoError(t, check(goOnly, filesystem.Exec, "/opt/mise/installs/x"), "the workspace layer stays")
 
 	rustOnly := p.Scoped([]string{"rust"}, nil)
 	assert.ErrorIs(t, check(rustOnly, filesystem.Read, gocache), filesystem.ErrDenied)
-	assert.NoError(t, check(rustOnly, filesystem.Write, registry))
+	require.NoError(t, check(rustOnly, filesystem.Write, registry))
 	assert.False(t, rustOnly.AllowsEnv("GOFLAGS"))
 	assert.NotContains(t, rustOnly.BaseEnv, "GOCACHE="+root+"/gocache")
 
 	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
 	withTarget := p.Scoped([]string{"rust"}, target)
-	assert.NoError(t, check(withTarget, filesystem.Write, filepath.Join(root, "fixtures/x")))
-	assert.NoError(t, check(withTarget, filesystem.Write, registry))
+	require.NoError(t, check(withTarget, filesystem.Write, filepath.Join(root, "fixtures/x")))
+	require.NoError(t, check(withTarget, filesystem.Write, registry))
 	assert.ErrorIs(t, check(p, filesystem.Write, filepath.Join(root, "fixtures/x")), filesystem.ErrDenied,
 		"a target's declaration is its own")
 
 	assert.Same(t, goOnly, p.Scoped([]string{"go", "go"}, nil), "memoized by the sorted names")
 	assert.Same(t, goOnly, rustOnly.Scoped([]string{"go"}, nil), "built from every spell, whatever the receiver kept")
 	all := p.Scoped(nil, nil)
-	assert.NoError(t, check(all, filesystem.Exec, gocache))
-	assert.NoError(t, check(all, filesystem.Write, registry))
+	require.NoError(t, check(all, filesystem.Exec, gocache))
+	require.NoError(t, check(all, filesystem.Write, registry))
 }
 
 // A lease-narrowed policy stays narrowed through Scoped.
@@ -420,7 +420,7 @@ func TestScopedKeepsTheLeaseBoundary(t *testing.T) {
 	p := b.apply(BuildPolicy(o))
 	scoped := p.Scoped([]string{"go"}, nil)
 	assert.ErrorIs(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/main.go")), filesystem.ErrDenied)
-	assert.NoError(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/pkg/x.go")))
+	require.NoError(t, check(scoped, filesystem.Write, filepath.Join(root, "ws/pkg/x.go")))
 	assert.Equal(t, "l1", scoped.Lease)
 }
 
@@ -436,14 +436,14 @@ func TestScopeToSpellNarrowsOnlyUnderAStep(t *testing.T) {
 	assert.Same(t, p, PolicyFromContext(ScopeToSpell(ctx, "rust")), "no step, no narrowing")
 
 	step := WithStep(ctx, []string{"rust"}, nil)
-	assert.NoError(t, check(PolicyFromContext(step), filesystem.Exec, gocache), "the step's own processes keep every spell")
+	require.NoError(t, check(PolicyFromContext(step), filesystem.Exec, gocache), "the step's own processes keep every spell")
 	assert.ErrorIs(t, check(PolicyFromContext(ScopeToSpell(step, "rust")), filesystem.Read, gocache), filesystem.ErrDenied)
-	assert.NoError(t, check(PolicyFromContext(ScopeToSpell(step, "go")), filesystem.Exec, gocache), "an op gets its own spell")
+	require.NoError(t, check(PolicyFromContext(ScopeToSpell(step, "go")), filesystem.Exec, gocache), "an op gets its own spell")
 
 	target := &spells.Sandbox{Allow: []spells.SandboxAllow{{Path: filepath.Join(root, "fixtures"), Mode: spells.SandboxAccessRW}}}
 	targetStep := WithStep(ctx, []string{"rust"}, target)
 	for _, q := range []*Policy{PolicyFromContext(targetStep), PolicyFromContext(ScopeToSpell(targetStep, "rust"))} {
-		assert.NoError(t, check(q, filesystem.Write, filepath.Join(root, "fixtures/x")), "the target layer reaches both")
+		require.NoError(t, check(q, filesystem.Write, filepath.Join(root, "fixtures/x")), "the target layer reaches both")
 	}
 	inner := WithStep(targetStep, []string{"go"}, nil)
 	assert.ErrorIs(t, check(PolicyFromContext(inner), filesystem.Write, filepath.Join(root, "fixtures/x")), filesystem.ErrDenied,
@@ -488,7 +488,7 @@ func TestCheckDeclarationRefuses(t *testing.T) {
 			assert.Error(t, CheckDeclaration(sb))
 		})
 	}
-	assert.NoError(t, CheckDeclaration(spells.Sandbox{
+	require.NoError(t, CheckDeclaration(spells.Sandbox{
 		Allow: []spells.SandboxAllow{
 			{Env: "GOROOT", Mode: spells.SandboxAccessRX},
 			{Env: "GOMODCACHE", Base: "$GOPATH", Path: "pkg/mod", Mode: spells.SandboxAccessRW},

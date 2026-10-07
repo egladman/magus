@@ -32,6 +32,6 @@ func TestRequireReasonRefusesABareOverride(t *testing.T) {
 // prose was given, or the override was never asked for.
 func TestRequireReasonAdmitsTheReasonedForm(t *testing.T) {
 	t.Parallel()
-	assert.NoError(t, RequireReason(testOverride, true, "the generator writes these and no target claims them"))
-	assert.NoError(t, RequireReason(testOverride, false, ""), "an override nobody set has nothing to explain")
+	require.NoError(t, RequireReason(testOverride, true, "the generator writes these and no target claims them"))
+	require.NoError(t, RequireReason(testOverride, false, ""), "an override nobody set has nothing to explain")
 }

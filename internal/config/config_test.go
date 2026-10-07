@@ -85,5 +85,5 @@ func TestSave_Concurrent(t *testing.T) {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var m map[string]interface{}
-	assert.NoError(t, yaml.Unmarshal(data, &m), "final file is not valid YAML:\n%s", data)
+	require.NoError(t, yaml.Unmarshal(data, &m), "final file is not valid YAML:\n%s", data)
 }

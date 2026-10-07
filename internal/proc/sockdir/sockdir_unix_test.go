@@ -38,7 +38,7 @@ func TestVerifySockDirAcceptsPrivateOwnDir(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Chmod(dir, 0o700))
 
-	assert.NoError(t, verifySockDir(dir))
+	require.NoError(t, verifySockDir(dir))
 }
 
 // TestVerifySockDirRejectsSymlink covers the other attacker move: standing a
@@ -62,7 +62,7 @@ func TestVerifySockDirRejectsSymlink(t *testing.T) {
 // as it did before this check existed.
 func TestVerifySockDirMissingIsNotAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
-	assert.NoError(t, verifySockDir(dir))
+	require.NoError(t, verifySockDir(dir))
 }
 
 // TestDirStaysOutOfTMPDIR: with no runtime dir the sockets go to the user cache dir, not

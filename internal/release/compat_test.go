@@ -98,7 +98,7 @@ func TestJudge(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.report.Judge(tc.bump, tc.announced)
 			if tc.want == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				return
 			}
 			assert.EqualError(t, err, tc.want)

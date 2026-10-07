@@ -57,7 +57,7 @@ func TestChangeCheckRefusesWhatGitCouldReadAsAnOption(t *testing.T) {
 // "HEAD" passed.
 func TestCheckBranchFollowsGitsRules(t *testing.T) {
 	for _, ok := range []string{"main", "feat/x", "release-1.2", "a.b/c", "HEADS"} {
-		assert.NoError(t, checkBranch(ok), ok)
+		require.NoError(t, checkBranch(ok), ok)
 	}
 	for _, bad := range []string{"", "-x", "a..b", "a:b", "a b", "a/", "/a", "a//b", "x.lock", "a.lock/b", "refs/heads/main",
 		"a/.b", ".a", "@", "a@{b", "a.", "a~b", "a^b", "a?b", "a*b", "a[b", `a\b`, "a\x7fb", "HEAD"} {

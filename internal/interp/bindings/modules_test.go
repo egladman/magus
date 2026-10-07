@@ -1717,7 +1717,7 @@ func assertMirrorReadsField(t *testing.T, object, field string) {
 	t.Cleanup(func() { _ = s.Close() })
 	s.SetModuleDecls(testBoundaryTypesPath, testBoundaryTypesSource)
 	err := s.Exec(ctx, `import "`+testBoundaryTypesPath+`"; final __r = `+object+`{}.`+field+`;`)
-	assert.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
+	require.NoError(t, err, "%s has no field %q, but %s's BuzzObject emits that key: the mirror and the boundary map disagree", object, field, object)
 }
 
 // TestEveryEncodedTypeIsMirrored guards the LIST above rather than the mirrors. An
@@ -1799,7 +1799,7 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 			dir := t.TempDir()
 			writeMagusfile(t, dir, "import \"magus\";\n"+tc.decl+
 				"\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
-			assert.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
+			require.NoError(t, runTargetIn(t, dir, "build"), "mirror must resolve in an annotation")
 		})
 	}
 }

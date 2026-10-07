@@ -260,7 +260,7 @@ func TestOptions_Accessors(t *testing.T) {
 
 	// validate: Magus is the one required field.
 	assert.Error(t, Options{}.validate())
-	assert.NoError(t, Options{Magus: &magus.Magus{}}.validate())
+	require.NoError(t, Options{Magus: &magus.Magus{}}.validate())
 
 	// logger falls back to slog.Default() when unset, returns the given one otherwise.
 	assert.NotNil(t, Options{}.logger())

@@ -89,5 +89,5 @@ func TestExplainImplicitMagus(t *testing.T) {
 
 	other := errors.New("undefined: magusfile")
 	assert.Same(t, other, ExplainImplicitMagus(other), "a longer identifier is not the module")
-	assert.NoError(t, ExplainImplicitMagus(nil))
+	require.NoError(t, ExplainImplicitMagus(nil))
 }

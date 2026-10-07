@@ -1675,7 +1675,7 @@ func TestConfigFilePaths(t *testing.T) {
 	// and a missing one would be reported as a config problem the user does not have.
 	for _, p := range got {
 		_, err := os.Stat(p)
-		assert.NoError(t, err, p)
+		require.NoError(t, err, p)
 	}
 
 	// An empty root is the server's path, where the workspace arrives through r.ws.

@@ -189,7 +189,7 @@ func TestZoneReleasingTheLastLeaseHandsTheTerminalBack(t *testing.T) {
 	rendered, err := l.Set([]Line{{Text: "late"}})
 	require.NoError(t, err)
 	assert.False(t, rendered)
-	assert.NoError(t, l.Release())
+	require.NoError(t, l.Release())
 }
 
 func TestZoneCloseReleasesEveryLease(t *testing.T) {
