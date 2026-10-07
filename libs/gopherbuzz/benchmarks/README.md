@@ -2,7 +2,7 @@
 
 Microbenchmarks for the gopherbuzz VM. The benchmark code lives in `bench_test.go`
 (and `vm/*_test.go`); this directory holds the optimization analysis and the
-cross-language comparison. Result dumps are not committed - regenerate them.
+cross-language comparison. Result dumps are not committed; regenerate them.
 
 ## Run
 
@@ -49,8 +49,8 @@ interpreter.)
 ## Cross-language comparison
 
 `comparison/` is a separate module benchmarking gopherbuzz against gopher-lua,
-tengo, and goja. Every engine runs under the same two protocols - `Warm` (reused VM)
-and `Fresh` (new VM per iteration) - so the field is level; sub-benchmarks are
+tengo, and goja. Every engine runs under the same two protocols: `Warm` (reused VM)
+and `Fresh` (new VM per iteration), so the field is level; sub-benchmarks are
 named `Workload/Protocol/Engine`. See `comparison/README.md`.
 
 ```sh

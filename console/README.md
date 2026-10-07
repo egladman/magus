@@ -1,7 +1,7 @@
 # The console
 
 The native console PWA: a standalone pnpm project, built and served independently of the
-docs site. This file is the conventions the rest of the console's source cites by name -
+docs site. This file is the conventions the rest of the console's source cites by name:
 the stylesheet stack, the token map, and the naming rules every authored class follows.
 
 ## Where code goes
@@ -33,24 +33,24 @@ disagrees with the directories, in either direction.
 
 ## PatternFly
 
-`@patternfly/patternfly@6.5.2` (devDependency, exact pin). PatternFly Core - CSS only, no
-JS runtime - which is the documented path for non-React consumers. Prefix `pf-v6`; expect a
+`@patternfly/patternfly@6.5.2` (devDependency, exact pin). PatternFly Core (CSS only, no
+JS runtime), which is the documented path for non-React consumers. Prefix `pf-v6`; expect a
 `pf-v6 -> pf-v7` churn at the next major, contained to the class strings and `tokens.css`.
 
 PatternFly is the console's ONLY design system. The stylesheet stack, in load order:
 
-1. `patternfly.css` - PF Core base + the per-component sheets we render.
-2. `tokens.css` - the console's PF-native token layer (squares corners, system fonts, `--console-*` slots).
-3. `console.css` - the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
+1. `patternfly.css`: PF Core base + the per-component sheets we render.
+2. `tokens.css`: the console's PF-native token layer (squares corners, system fonts, `--console-*` slots).
+3. `console.css`: the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
    launcher, layout).
-4. `overrides.css` - the small ID/class-scoped escape hatch for PF-less shell chrome.
+4. `overrides.css`: the small ID/class-scoped escape hatch for PF-less shell chrome.
 5. Per surface, lazily: `logs/logs.css`, `graph/graph.css`, `dashboard/dashboard.css`.
 
 ### How it is bundled
 
 - `src/styles/patternfly.css` @imports the PF **base** plus only the **per-component** sheets
   we render (Button, Tabs, Card, Gallery). esbuild `--bundle --minify` inlines them into
-  `gen/patternfly.css`. Add a component's sheet here when a surface starts using it - that is
+  `gen/patternfly.css`. Add a component's sheet here when a surface starts using it; that is
   the whole opt-in surface. Do NOT import the 1.8MB monolith `patternfly.min.css`.
 - Font/image `url()` assets are marked `--external` in the build script so esbuild leaves the
   urls instead of inlining PF's ~10MB `assets/`. All such urls live in `patternfly-base.css`
@@ -58,7 +58,7 @@ PatternFly is the console's ONLY design system. The stylesheet stack, in load or
   overrides the RedHat body/heading/mono font tokens to a system stack, so those `@font-face`
   rules are never referenced and never fetched. If a later surface renders pficon glyphs or a
   masthead background, it must ship a trimmed `assets/` subset or override those tokens too.
-- `gen/patternfly.css` (~683KB minified) is the dominant CSS cost - the full `--pf-t-*` palette
+- `gen/patternfly.css` (~683KB minified) is the dominant CSS cost: the full `--pf-t-*` palette
   for both themes plus the imported component sheets. It is a fixed base cost independent of
   how few components we render. Running PurgeCSS over the built bundle is the single biggest
   remaining precache win, and is deliberately not done yet.
@@ -75,8 +75,8 @@ The ONE file adapting PF tokens to the console.
 | `--console-status-ok`      | `--pf-t--global--icon--color--status--success--default` | healthy (green)       |
 | `--console-status-warn`    | `--pf-t--global--icon--color--status--warning--default` | caution (gold)        |
 
-These PF status tokens are **theme-aware** - they resolve to the right value in light and
-dark - so charts that read `--console-status-*` at runtime via `getComputedStyle` color
+These PF status tokens are **theme-aware**: they resolve to the right value in light and
+dark, so charts that read `--console-status-*` at runtime via `getComputedStyle` color
 correctly in both themes with no per-theme code.
 
 ### Surface chrome (one bar, one head, one gutter)
@@ -100,7 +100,7 @@ and the row comes out taller than every other bar again.
 tile and Big Picture narrow `--log-pad` for a preview that is not a whole page.
 
 A strip's hairline must reach both edges of the region it heads. That means the CHILD spends the
-gutter, not the container - a container's inline padding holds the child's `border-block-end` short
+gutter, not the container; a container's inline padding holds the child's `border-block-end` short
 at each end, which is how the diff's head hairline came to stop 8px before the rail and 8px before
 the sidebar/stream seam while its comment claimed a straight line across the surface.
 
@@ -120,12 +120,12 @@ to. A container declares its tier once with `data-control-size`; `tokens.css` th
 | `default` | 37px   | 14px | a surface BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff's remark composer, the dashboard's own control row |
 | `compact` | 29px   | 12px | an in-panel RAIL, HEAD or card: the graph sidebar, the log viewer's run index, the diff file index and the diff head's own actions, a dashboard card's own controls, the title bar's tray |
 
-Neither number is picked - both restate PatternFly's own button formula (one line box plus its
+Neither number is picked; both restate PatternFly's own button formula (one line box plus its
 vertical control spacer) at the default and compact steps.
 
 The tier APPLIES the size rather than only publishing it. Publishing it was not enough: the token
 reached five containers and every control inside still had to opt in by hand, so the log viewer's
-filter row ran a 37px input beside 29px buttons - one row's controls disagreeing with each other.
+filter row ran a 37px input beside 29px buttons, one row's controls disagreeing with each other.
 Text inputs are in the set for that reason; a `textarea` is excluded (its height is its rows), and
 so is `pf-m-inline`, which is a link inside a sentence rather than a control on a row.
 
@@ -140,16 +140,16 @@ still lands on a tiered control without being caught. The tiers are the fix; the
 
 The console has exactly two uppercase voices, and `magus/label-token` (stylelint, tested in
 `scripts/stylelint-label-token.test.mjs`) fails the build on a third. Written out by hand this ran
-to 35 near-misses across seven sheets - six font sizes between 0.62 and 0.72rem, six tracking values
-between 0.04 and 0.09em, three weights - with adjacent labels on one surface disagreeing.
+to 35 near-misses across seven sheets: six font sizes between 0.62 and 0.72rem, six tracking values
+between 0.04 and 0.09em, three weights, with adjacent labels on one surface disagreeing.
 
-- **`--console-label-size` / `-weight` / `-tracking`** - a section, column, facet, stat or panel
+- **`--console-label-size` / `-weight` / `-tracking`**: a section, column, facet, stat or panel
   label. Case and colour are all that separate it from the content around it.
-- **`--console-chip-size` / `-weight` / `-tracking`** - the run inside a chip: a status badge on a
+- **`--console-chip-size` / `-weight` / `-tracking`**: the run inside a chip: a status badge on a
   log line, a scope pill, a run's verdict. Smaller and heavier, because the fill or outline it sits
   on already does the separating.
 
-Write `text-transform: uppercase` yourself - it is the label's defining property, and the rule keys
+Write `text-transform: uppercase` yourself; it is the label's defining property, and the rule keys
 on it to require the three tokens. Which recipe an element takes is the author's call; what is not
 optional is taking one of them.
 
@@ -158,7 +158,7 @@ optional is taking one of them.
 PF builds every radius from global primitives `--pf-t--global--border--radius--{100..500}`
 plus semantic/role aliases. `tokens.css` overrides the primitives AND the aliases (small/
 medium/large/tiny/pill + action/control roles) to **2px**, once, so the whole component set
-(cards, buttons, inputs, tabs, chips) squares up together - no per-component CSS, and it
+(cards, buttons, inputs, tabs, chips) squares up together: no per-component CSS, and it
 survives version bumps.
 
 ### Diagram figures (`--magus-diagram-*`)
@@ -210,12 +210,12 @@ skips until `magus run build_playground docs` has run.
 - **Escape hatch:** one small audited `overrides.css` for a genuinely PF-less bit. Prefer a
   `pf-v6-u-*` utility or an ID-scoped rule first.
 
-## Naming methodology (strict - the formula for every class we author)
+## Naming methodology (strict: the formula for every class we author)
 
 PatternFly owns the `pf-v6-*` vocabulary; we consume it as-is and invent NOTHING that overlaps
 it. But some bits have no PF component (the status bar, the ANSI log body, the graph stage, the
 gantt, the keybinding table, ...) and we must author classes for them. Every such class MUST
-follow the formula below - as disciplined, prefixed, and greppable as PatternFly's own names -
+follow the formula below, as disciplined, prefixed, and greppable as PatternFly's own names,
 so the custom surface stays tiny, self-documenting, collision-proof, and mechanically
 maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors PF's
 `pf-v6-c-<block>__<element>` + `pf-m-<modifier>` BEM structure.
@@ -226,11 +226,11 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
 console-<area>-<block>[__<element>][--<modifier>]
 ```
 
-- **`console-`** - the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
+- **`console-`**: the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
   A bare class like `.badge` or `.qchip` is forbidden; `grep -r "class=" | grep -v "pf-v6-\|console-"`
   must eventually return nothing but real HTML attributes.
-- **`<area>`** - the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
-  The allowed areas are a CLOSED set - pick exactly one:
+- **`<area>`**: the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
+  The allowed areas are a CLOSED set: pick exactly one:
   - `console-shell-*` the app frame: title bar, tab strip, left navigation rail, status bar,
     floating gear + settings popover, command palette, keybindings overlay, tiling.
   - `console-dashboard-*` the dashboard surface (hero, tiles, gantt, pool, stat strips, tables).
@@ -246,14 +246,14 @@ console-<area>-<block>[__<element>][--<modifier>]
     the graph stage: PF has no component for a laid-out node/edge drawing, and the node geometry
     is shared with the layout that places it.
   - `console-render-*` the SHARED render model reused by log + activity (foldable sections,
-    status badges, ANSI spans) - one home so both surfaces stay in lockstep.
-- **`<block>`** - the component/thing, kebab-case, verbose and explicit. Prefer a full word to an
+    status badges, ANSI spans); one home so both surfaces stay in lockstep.
+- **`<block>`**: the component/thing, kebab-case, verbose and explicit. Prefer a full word to an
   abbreviation: `console-log-filter`, `console-shell-statusbar`, `console-dashboard-gantt`,
   `console-graph-nodelist`, `console-render-badge`, `console-render-ansi`.
-- **`__<element>`** - a PART of the block (BEM double-underscore): `console-shell-statusbar__dot`,
+- **`__<element>`**: a PART of the block (BEM double-underscore): `console-shell-statusbar__dot`,
   `console-log-filter__chip`, `console-dashboard-gantt__bar`, `console-graph-nodelist__pill`.
   Elements do NOT nest in the name (never `__row__cell`); flatten to `__cell` under the block.
-- **`--<modifier>`** - a fixed structural/categorical VARIANT (BEM double-hyphen), used ONLY for a
+- **`--<modifier>`**: a fixed structural/categorical VARIANT (BEM double-hyphen), used ONLY for a
   closed enumerated set: `console-render-ansi__fg--red`, `console-render-badge--pass`,
   `console-dashboard-gantt__bar--failed`. Do NOT use `--modifier` for transient STATE.
 
@@ -261,22 +261,22 @@ console-<area>-<block>[__<element>][--<modifier>]
 
 This is what keeps the closed convention closed. Transient/boolean state (active, collapsed,
 focused, capturing, hidden, selected, a live/health value) is a `data-*` attribute on the
-element, styled as an attribute selector - NEVER a `--modifier` class. This matches the existing
+element, styled as an attribute selector, NEVER a `--modifier` class. This matches the existing
 app-hook convention (`data-state`, `data-health`, `data-collapsed`, `data-focus`). So:
 `console-shell-statusbar__dot[data-state="connected"]`, `console-dashboard-tile[data-collapsed]`.
 Reserve `--modifier` for the fixed vocabularies where an enumerated class reads better (the 6
 ANSI colors, the badge kinds, the gantt bar kinds).
 
-### IDs, data-* hooks, and PF classes are already fine - do not rename them
+### IDs, data-* hooks, and PF classes are already fine; do not rename them
 
 `#console-titlebar`, `#console-statusbar`, `#console-tabs`, `#console-outlet`, `data-tab-id`,
-`data-pane-id`, `data-open`, `data-card`, every `pf-v6-*` - all stay. The formula governs only
+`data-pane-id`, `data-open`, `data-card`, every `pf-v6-*`: all stay. The formula governs only
 the custom CSS CLASSES we author. A JS "hook" that carries no styling should be a `data-*`
 attribute, not a class, wherever practical.
 
 `data-surface` is SPOKEN FOR: it marks a mounted surface ROOT, and `console.css` styles several by
 value (`[data-surface="home"]`, `[data-surface="shortcuts"]`, ...). Chrome that lives inside
-`#console-outlet` but is not a surface must pick its own hook - the navigation rail uses
+`#console-outlet` but is not a surface must pick its own hook: the navigation rail uses
 `data-rail-surface` for exactly this reason, having first been written with `data-surface` and
 silently inherited the Shortcuts surface's layout. Check a new hook against the existing selectors
 before reusing a name that reads as generic.

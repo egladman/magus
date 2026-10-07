@@ -73,7 +73,7 @@ wrong in the way that does the most damage: it told the next reader not to look.
 
 `@cursor/sdk` 1.0.31 declares `types: ./dist/esm/index.d.ts` and ships 120 exported zod schemas under
 `dist/esm/vendor/cursor-sdk-shared/`, including `ShellArgsSchema`, `ShellToolCallSchema`, `EditArgsSchema` and
-`EditToolCallSchema` -- the payload shapes behind the two events magus wires here. The search that produced the old claim
+`EditToolCallSchema`, the payload shapes behind the two events magus wires here. The search that produced the old claim
 looked for the word `hook`. Cursor's vocabulary is `*Schema`, so it found nothing and the nothing got written down as a
 fact.
 
@@ -91,7 +91,7 @@ makes the payloads derivable and leaves the envelope a tripwire.
 ### Codex publishes 23 of these; we take 6
 
 `codex-rs/hooks/schema/generated/` in openai/codex holds a generated input AND output schema for each of its 12 hook
-events. The six rows above are the three events magus wires -- `PreToolUse`, `SessionStart`, `Stop` -- in both
+events. The six rows above are the three events magus wires (`PreToolUse`, `SessionStart`, `Stop`) in both
 directions. The other sixteen are not taken, deliberately: they describe events magus does not wire, so nothing here
 would grade anything against them, and a vendored schema no test reads is a file that rots.
 
@@ -99,7 +99,7 @@ Recorded rather than left to be rediscovered, because that is the failure this f
 directory is real, first-party, machine-generated, and complete, so wiring a new Codex event starts by taking its two
 rows from there, never by reading prose. It also answers capability questions outright. `pre-compact.command.output` is
 `additionalProperties: false` over `continue`, `stopReason`, `suppressOutput` and `systemMessage` with no
-`hookSpecificOutput`, which is why magus does not try to steer compaction on Codex -- proven from OpenAI's own artifact
+`hookSpecificOutput`, which is why magus does not try to steer compaction on Codex, proven from OpenAI's own artifact
 rather than inferred from a docs page.
 
 The `*.input` rows are new in kind. Every other schema here grades what magus WRITES; these grade what a host SENDS it,
@@ -109,7 +109,7 @@ which nothing checked on any host before.
 
 `testdata/hosts/cursor/gen/` holds twelve schemas emitted from the zod `@cursor/sdk` exports at its package root,
 by `magus run cursor-schemas-generate docs/guides/integrations/agents`. They are the SDK's conversation, message and
-delta shapes, and they are NOT the hook config or the hook stdout envelope -- Cursor exports no schema for either, so
+delta shapes, and they are NOT the hook config or the hook stdout envelope; Cursor exports no schema for either, so
 those two stay `derived` from the validator binary above. Read the generated files for what the SDK sends, never for
 what a hook receives.
 

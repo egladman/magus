@@ -159,7 +159,7 @@ Remote caching is most of why anyone adopts a monorepo build tool, and it keeps
 moving. Community task runners, then caching behind a paid Powerpack license in
 v20, then free self-hosted plugins again in 20.8, then those deprecated in May
 2026 over a cache-poisoning vulnerability (CVE-2025-36852)[^cve] that Nx says is in
-the packages' design and cannot be patched - and which, to be fair to Nx, they
+the packages' design and cannot be patched, and which, to be fair to Nx, they
 note affects self-hosted cache plugins across many build systems, not only
 theirs. Today the guidance
 points at Nx Cloud, an Enterprise plan, or writing your own server against their
@@ -579,7 +579,7 @@ that there are two hard things in computer science[^karlton],
 cache invalidation and naming things, has been a joke for decades precisely because
 it keeps being true. These are old, hard problems with a lot of prior art behind
 them, not new categories that showed up with agents. I am not trying to talk down to
-anyone who reaches for one of these terms - I am saying, plainly, that I do not
+anyone who reaches for one of these terms; I am saying, plainly, that I do not
 understand why we need them.
 
 Someone is going to point out that magus has its own vocabulary, and they are right

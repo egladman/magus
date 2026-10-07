@@ -99,7 +99,7 @@ regeneration.
 **The fourth surface has no gate: `std/` host-module method names.** A whole-tree
 review in August 2026 established this, and it is worth knowing before you touch a
 descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
-becomes the identifier every magusfile calls, so renaming it breaks them - and
+becomes the identifier every magusfile calls, so renaming it breaks them, and
 nothing catches it:
 
 - MGS1025's removed-API table covers only the `magus.*` namespace, so it cannot
@@ -110,7 +110,7 @@ nothing catches it:
 
 So a std rename is a silent break that review has to catch by eye. If you make one
 deliberately, it belongs under **Breaking** in the changelog with the old and new
-spellings, and every in-repo caller must move with it - `magusfile.buzz`,
+spellings, and every in-repo caller must move with it: `magusfile.buzz`,
 `spells/`, `docs/**/*.buzz`, `hack/`, testdata scripts, and the `.txtar` fixtures
 under `cmd/magus/testdata/`.
 
@@ -151,7 +151,7 @@ first, which reads as a typo rather than a version problem.
 **Before 1.0, renaming is on the table; after, it is not.** magus is pre-1.0, so a
 badly chosen name can still be fixed, and the changelog records it under
 **Breaking**. That window closes at 1.0. If you are adding a name you are not sure
-about, say so in the pull request - it is much cheaper to argue about it now than
+about, say so in the pull request; it is much cheaper to argue about it now than
 to keep it forever.
 
 **Deprecating** means "there is a better way now", not "this stops working". Keep
@@ -200,8 +200,8 @@ magus run serve .
 ```
 
 `serve` is the workspace-root loop for both deployables at once. It hosts one
-server with the GitHub Pages layout - `/` is `docs/gen`, `/console/` is
-`console/gen` - and re-renders the affected tree when you edit a source, so a
+server with the GitHub Pages layout: `/` is `docs/gen`, `/console/` is
+`console/gen`, and re-renders the affected tree when you edit a source, so a
 reload shows the change with no restart. It refuses to start until both `gen/`
 trees exist, which is what the two builds above are for; a docs-only change
 still needs the console one, once.
@@ -253,7 +253,7 @@ CI runs the pipeline twice, in series, because there are two questions.
 
 **From source, and it gates.** The `plan` job and the `ci` shards build magus from the
 commit under test and run the workspace with it. Only this pass can answer "does this
-change work" - a magusfile needing a new host binding has no released binary able to
+change work", because a magusfile needing a new host binding has no released binary able to
 load it. A failure blocks the PR.
 
 **From the previous release, and it informs.** The `compat` job runs the newest
@@ -264,7 +264,7 @@ it would redden every such change until an unrelated release happened.
 
 Expect `compat` to fail when you add a flag, target, or host-binding shape the
 magusfile uses. That is the release-first signal working. Do not move a job off the
-released binary to clear it - that deletes the check instead of answering it.
+released binary to clear it; that deletes the check instead of answering it.
 
 A source build resolving a `git-ref` must be reachable from `main`; an unverified build
 would otherwise run with the job's permissions. `source-path` skips that gate by
@@ -289,8 +289,8 @@ under a second. Worse, it was silent: git reads a driver that exits non-zero as
 
 Nothing to run. A workspace that has built its own `./magus` registers that as
 its driver, and `magus doctor` fails if the registered one cannot read this
-workspace. To pin a specific build instead - so a long rebase cannot have the
-driver rebuilt under it - register one by hand and it will stick:
+workspace. To pin a specific build instead (so a long rebase cannot have the
+driver rebuilt under it), register one by hand and it will stick:
 
 ```sh
 git config --worktree merge.magus.driver "$PWD/magus vcs merge-driver %O %A %B %L %P"
@@ -304,8 +304,8 @@ them at one checkout's binary.
 
 Names are the API most people meet first, so they get decided deliberately
 rather than by whatever the file was called. From the outside the results can
-look arbitrary - `go` lives in `spells/golang/`, `ls` and `describe` both list
-things - so here is the reasoning, which is not arbitrary.
+look arbitrary (`go` lives in `spells/golang/`, `ls` and `describe` both list
+things), so here is the reasoning, which is not arbitrary.
 
 ### Source layout and registered identity are independent
 
@@ -322,7 +322,7 @@ spells/golang/          <- idiomatic directory name for Go source
 
 Both are right. `golang` is the conventional directory spelling; `go` is what
 the language is called. Forcing one to match the other would make one of them
-wrong. Do not "fix" a mismatch on sight - check which question each is
+wrong. Do not "fix" a mismatch on sight; check which question each is
 answering first.
 
 ### A registered name has to stand alone
@@ -335,7 +335,7 @@ be unambiguous on its own:
   `aws-s3`, not `s3-cache`. Its siblings are named for products, and a
   capability name reads as a different kind of entity in the same list.
 - **Qualify when the bare word names nothing.** `spells/github/actions/`
-  registers `github-actions`, not `actions` - "GitHub Actions" is the product's
+  registers `github-actions`, not `actions`: "GitHub Actions" is the product's
   real name, and `actions` alone identifies nothing.
 - **Never take a word the core model already owns.** `spells/gitlab/ci/` used to
   register `ci`, which collides with the `ci` _target_ that `magus affected ci`
@@ -361,8 +361,8 @@ rather than `magus targets`, because the latter invites `magus spells`, then
 `magus charms`, and the surface becomes a pile of noun-commands with no rule to
 learn. One verb, a noun that says what.
 
-Enumeration is spelled `ls` everywhere - `magus ls`, `magus run ls`,
-`magus notes ls` - never `list`.
+Enumeration is spelled `ls` everywhere: `magus ls`, `magus run ls`,
+`magus notes ls`, never `list`.
 
 ### Package names mirror the contract they serve
 
@@ -377,7 +377,7 @@ proto/magus/status/v1    <->  internal/handler/status
 proto/magus/viewer/v1    <->  internal/handler/viewer
 ```
 
-Adding `proto/magus/foo/v1` means adding `internal/handler/foo` - same name, no
+Adding `proto/magus/foo/v1` means adding `internal/handler/foo`, same name, no
 exceptions for the wire packages. Two subpackages there are deliberately not
 proto-backed and so are not part of the mapping: `mcp` is a protocol adapter and
 `trailrpc` is a transport concern.
@@ -577,7 +577,7 @@ pkg/foo               # a nested project, measured from the workspace root
 ```
 
 Every project-arg surface takes those, and every surface that prints a project
-prints the bare path - rendered via `types.ProjectLabel`, which reads the root
+prints the bare path, rendered via `types.ProjectLabel`, which reads the root
 as the workspace directory's name rather than a bare `.`. What magus prints is
 what magus takes, so nothing has to be rewritten between the two.
 
@@ -617,7 +617,7 @@ SHA-256), never written down, so an entry cannot name a key it does not hold.
 **A planned rotation, which is why the ring exists.** The old procedure was a
 chain: ship a compatibility release signed by the current key that embeds the
 replacement. It only worked for someone who passed THROUGH that release, and
-`SelectRelease` takes the newest by default - so anyone a version or two behind
+`SelectRelease` takes the newest by default, so anyone a version or two behind
 jumped straight to a signature their binary had never been told to trust and was
 stranded with no in-band way back. The rotation was correct on paper and skipped
 exactly the people who most needed it.
@@ -648,7 +648,7 @@ fingerprint is published in the signed index's `revoked[]`, and a client refuses
 any signature from a listed key.
 
 This is worth stating precisely, because it is easy to overclaim. Revocation only
-works because the revoking index is signed by a DIFFERENT key - the standby one -
+works because the revoking index is signed by a DIFFERENT key (the standby one)
 which an attacker holding the compromised key does not have. Signing a revocation
 with the revoked key would prove nothing, so the client refuses an index that
 revokes its own signer.
@@ -656,7 +656,7 @@ revokes its own signer.
 What it does NOT fix: an attacker holding the `active` key signs whatever they
 like, and binaries trusting that key accept it until they see a revocation. The
 residual hole is that the attacker can keep serving an OLD index carrying no
-revocation. `expires_at` is what bounds that - past it the client refuses the file
+revocation. `expires_at` is what bounds that: past it the client refuses the file
 rather than trusting a stale one, converting an indefinite compromise into a
 denial of service, which is the right trade. It is 180 days, and nothing
 republishes on a timer: `magus doctor` warns as the deadline approaches and the

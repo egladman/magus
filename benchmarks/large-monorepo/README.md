@@ -75,15 +75,15 @@ The perf comparison above needs only apps and feature libs. The agent benchmark
 (`../agent/`) needs a workspace with something to reason ABOUT, so `setup.sh` also
 overlays, from `enrich/`:
 
-1. **`packages/platform/{logging,config,http,metrics}`** - four small plain-ESM
+1. **`packages/platform/{logging,config,http,metrics}`**: four small plain-ESM
    packages with real cross-imports (`config` and `metrics` use `logging`; `http`
    uses both) and `node --test` suites that need no dependencies.
-2. **One bridge module per feature library named in `enrich/bridges.tsv`** - ten of
+2. **One bridge module per feature library named in `enrich/bridges.tsv`**: ten of
    the hundred, each importing exactly ONE platform package. The edges are
    deliberately non-uniform: `packages/platform/config` reaches four of the five
    apps and not the fifth, which is what makes "what breaks if I change this" a
    question with a wrong answer.
-3. **A generated `gen/api.md` per package with modules in it** - exported names plus
+3. **A generated `gen/api.md` per package with modules in it**: exported names plus
    the names imported from each sibling package, written by `tools/gen-api.mjs`. The
    `generate` target writes it and the read-only `verify` target fails on drift, so
    a rename in `logging` goes stale in six summaries at once.
