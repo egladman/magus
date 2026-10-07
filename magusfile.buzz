@@ -10,6 +10,8 @@ import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
+import "./hack/policy/builtins" as agentbuiltins;
+magus\guard.builtins(agentbuiltins\BUILTINS);
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);

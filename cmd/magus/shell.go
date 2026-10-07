@@ -327,6 +327,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		deps.WriteRule = rules.WriteRule()
 		deps.ApprovedWriteRule = rules.ApprovedWriteRule
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
+		deps.Builtins = guardBuiltins(ctx, rules, "")
 		return deps
 	}
 	root, err := guardRoot(rootOverride)
@@ -336,6 +337,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
 	deps.LoadFailure = loadErr
+	deps.Builtins = guardBuiltins(ctx, nil, root)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		return magus.LoadApprovedSpawnRule(ctx, root)
 	}
