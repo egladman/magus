@@ -41,6 +41,13 @@ func TestExplainText(t *testing.T) {
 	assert.NotContains(t, got, "out edges")
 }
 
+func TestExplainTextIndentsAMultiLineAttr(t *testing.T) {
+	out := types.KnowledgeExplainOutput{
+		Node: types.KnowledgeNode{ID: "symbol:x", Kind: "symbol", Attrs: map[string]string{"doc": "Open reads it.\n\n- first\n- second"}},
+	}
+	assert.Equal(t, "symbol:x   symbol\ndoc: Open reads it.\n  \n  - first\n  - second\n", ExplainText(out))
+}
+
 // TestExplainTextPrintsPackageDocs: a package card prints its docs URL, one per version
 // when projects pin it at several, and none when the card carries none.
 func TestExplainTextPrintsPackageDocs(t *testing.T) {
