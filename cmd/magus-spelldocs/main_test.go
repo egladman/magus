@@ -262,7 +262,7 @@ func TestWriteArgsSectionNamesTheInvoker(t *testing.T) {
 	assert.Contains(t, got, docs.RepoBlob+"/"+spellOptsSource, "each key links to the line that parses it")
 }
 
-// TestReadExampleReturnsNothingForAMissingFile: a missing example simply skips
+// TestReadExampleReturnsNothingForAMissingFile: a missing example skips
 // the Example section rather than failing the page.
 func TestReadExampleReturnsNothingForAMissingFile(t *testing.T) {
 	useRepoSpells(t)
