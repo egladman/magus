@@ -283,12 +283,12 @@ func docStub(group *ast.CommentGroup, sym symbol) bool {
 
 // stubWords is the vocabulary a stub pads a name with, stemmed. "implement" is
 // absent on purpose: "String implements fmt.Stringer" names the contract.
-var stubWords = setOf("return", "create", "new", "instance", "function", "func", "method",
+var stubWords = wordSet("return", "create", "new", "instance", "function", "func", "method",
 	"type", "struct", "constructor", "represent", "define", "get", "set", "value", "object",
 	"variable", "constant", "const", "var", "given", "specified", "provided", "construct",
 	"build", "make", "initialize", "init")
 
-var stopWords = setOf("a", "an", "the", "this", "that", "these", "those", "to", "of", "for",
+var stopWords = wordSet("a", "an", "the", "this", "that", "these", "those", "to", "of", "for",
 	"in", "on", "at", "by", "with", "from", "into", "onto", "and", "or", "is", "are", "be",
 	"it", "its", "as", "we", "our", "then", "here", "there", "all", "each", "every", "if",
 	"so", "any", "some", "just")
@@ -527,7 +527,7 @@ var historyPatterns = []*regexp.Regexp{
 
 // purposeLead is the word before a "used to" that states a purpose ("is used to
 // sign") rather than a past habit ("it used to sign").
-var purposeLead = setOf("is", "are", "was", "were", "be", "been", "being", "get", "gets", "got", "getting")
+var purposeLead = wordSet("is", "are", "was", "were", "be", "been", "being", "get", "gets", "got", "getting")
 
 // historyPhrase returns the offset and text of the first history phrase in text,
 // or -1. Backtick spans are literals and never match.
@@ -662,7 +662,7 @@ func parsesAsGo(code string) bool {
 	return err == nil
 }
 
-func setOf(words ...string) map[string]bool {
+func wordSet(words ...string) map[string]bool {
 	m := make(map[string]bool, len(words))
 	for _, w := range words {
 		m[w] = true
