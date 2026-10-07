@@ -396,7 +396,7 @@ const (
 	AttrMarkerFamily = "family" // marker: a MarkerFamily
 	AttrMarkerVerb   = "verb"   // marker: a MarkerVerb
 	AttrMarkerArgs   = "args"   // marker: the raw argument text after the token
-	AttrLine         = "line"   // marker: the 1-based line of the token, or of :begin
+	AttrLine         = "line"   // marker: the 1-based line of the token, or of :begin; defines edge: of the definition
 	AttrEndLine      = "end_line"
 	AttrTransport    = "transport" // dir->dir calls edge: how the call travels (http, grpc, exec, ...)
 	AttrLayer        = "layer"     // dir: the layer magus.project's "layers" key declares for it
@@ -526,6 +526,11 @@ type KnowledgeSymbol struct {
 	SourceLines int
 	SourceBytes int
 	Defs        []string
+	// Definitions holds each defining file's first definition with that file's own doc, in
+	// Defs order, when Defs names more than one file: a function written once per GOOS has
+	// one key and a doc per file. It lists the file Source names too, so a reader walks one
+	// list. Empty for a symbol defined in one file, where Source and Doc already say it.
+	Definitions []KnowledgeSymbolDefinition
 	Refs        []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
@@ -533,6 +538,15 @@ type KnowledgeSymbol struct {
 	// callee yields one entry per caller, never one per call site. Empty when the indexer
 	// emits no enclosing ranges, which is the honest answer rather than a guess.
 	Calls []KnowledgeSymbolCall
+}
+
+// KnowledgeSymbolDefinition is one file's definition of a symbol. SCIP records a symbol's
+// doc once per document, so a file is the finest grain a doc has.
+type KnowledgeSymbolDefinition struct {
+	// Source is "<path>:<line>" of the file's first definition of the symbol.
+	Source string
+	// Doc is the doc comment the indexer recorded in that file, as KnowledgeSymbol.Doc.
+	Doc string
 }
 
 // CountLines reports how many lines b holds, the number an editor or `sed -n 'N,Mp'`

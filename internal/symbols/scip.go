@@ -174,17 +174,24 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	// the version-stripped KEY (not the raw moniker) so a symbol whose definition and
 	// first-seen reference carry different-version monikers is still named.
 	infoByKey := map[string]*scip.SymbolInformation{}
+	// A symbol defined once per build configuration (a function in foo_unix.go and
+	// foo_windows.go) has one key and a SymbolInformation in each defining document, each
+	// with that file's own doc and signature. infoIn keeps them apart so a definition's doc
+	// is read from the document that holds it.
+	type docKey struct{ doc, key string }
+	infoIn := map[docKey]*scip.SymbolInformation{}
 	for _, doc := range idx.Documents {
 		for _, si := range doc.Symbols {
 			if info, ok := parseMoniker(si.Symbol); ok {
 				infoByKey[info.Key] = si
+				infoIn[docKey{doc.RelativePath, info.Key}] = si
 			}
 		}
 	}
 
 	type acc struct {
 		sym  types.KnowledgeSymbol
-		defs map[string]bool                      // set of defining files
+		defs map[string]types.KnowledgeSymbolDefinition // defining file -> its first definition
 		refs map[string]*types.KnowledgeSymbolRef // ref file -> tally
 	}
 	byKey := map[string]*acc{}
@@ -236,7 +243,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 			if a == nil {
 				a = &acc{
 					sym:  types.KnowledgeSymbol{Key: key, Moniker: moniker, Label: info.Label, Language: docLanguage, Namespace: info.Namespace},
-					defs: map[string]bool{},
+					defs: map[string]types.KnowledgeSymbolDefinition{},
 					refs: map[string]*types.KnowledgeSymbolRef{},
 				}
 				if si := infoByKey[key]; si != nil {
@@ -251,11 +258,21 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 			}
 			line := occurrenceLine(occ)
 			if occ.SymbolRoles&int32(scip.SymbolRole_Definition) != 0 {
-				a.defs[docPath] = true
+				if _, seen := a.defs[docPath]; seen {
+					continue
+				}
+				source := docPath + ":" + strconv.Itoa(line)
+				def := types.KnowledgeSymbolDefinition{Source: source}
+				si := infoIn[docKey{doc.RelativePath, key}]
+				if si != nil {
+					def.Doc = docText(si)
+				}
+				a.defs[docPath] = def
 				// First definition seen (in document then occurrence order, both stable
-				// slices) wins the Source; later defs still add their defines edge.
+				// slices) wins the Source, and its own document's doc and signature come
+				// with it; later defs still add their defines edge.
 				if a.sym.Source == "" {
-					a.sym.Source = docPath + ":" + strconv.Itoa(line)
+					a.sym.Source = source
 					// The body's extent, from the same occurrence, so the pair bounds the
 					// definition. EnclosingSourceRange (not the EnclosingRange field) for
 					// the reason given at sortedEnclosing: scip-go emits only the
@@ -263,6 +280,10 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 					// range, and 0 is how that says so.
 					if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
 						a.sym.DefEndLine = int(r.End.Line) + 1
+					}
+					if si != nil {
+						a.sym.Signature = renderedSignature(si)
+						a.sym.Doc = def.Doc
 					}
 				}
 			} else {
@@ -292,6 +313,11 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	out := make([]types.KnowledgeSymbol, 0, len(byKey))
 	for _, a := range byKey {
 		a.sym.Defs = sortedKeys(a.defs)
+		if len(a.sym.Defs) > 1 {
+			for _, file := range a.sym.Defs {
+				a.sym.Definitions = append(a.sym.Definitions, a.defs[file])
+			}
+		}
 		a.sym.Refs = sortedRefs(a.refs)
 		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
 		out = append(out, a.sym)
@@ -464,7 +490,7 @@ func occurrenceLine(occ *scip.Occurrence) int {
 	return int(r.Start.Line) + 1
 }
 
-func sortedKeys(m map[string]bool) []string {
+func sortedKeys[V any](m map[string]V) []string {
 	if len(m) == 0 {
 		return nil
 	}

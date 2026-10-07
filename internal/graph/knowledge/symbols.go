@@ -192,7 +192,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		})
 		for _, def := range sym.Defs {
 			noteFile(def, sym.Language)
-			s.Edges = append(s.Edges, extractedEdge(fileID(def), sID, types.RelationDefines, def))
+			s.Edges = append(s.Edges, definesEdge(def, sID, sym.Definitions))
 		}
 		for _, ref := range sym.Refs {
 			noteFile(ref.Path, sym.Language)
@@ -203,6 +203,25 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		}
 	}
 	return s
+}
+
+// definesEdge is file -defines-> sID. A symbol defined in several files has a doc per file
+// and its node holds one, so when defs lists file the edge carries that definition's line and
+// doc, and a reader of the doc names the file that holds it.
+func definesEdge(file, sID string, defs []types.KnowledgeSymbolDefinition) types.KnowledgeEdge {
+	e := extractedEdge(fileID(file), sID, types.RelationDefines, file)
+	for _, def := range defs {
+		path, line, ok := strings.Cut(def.Source, ":")
+		if !ok || path != file {
+			continue
+		}
+		e.Attrs = map[string]string{types.AttrLine: line}
+		if def.Doc != "" {
+			e.Attrs[AttrDoc] = def.Doc
+		}
+		break
+	}
+	return e
 }
 
 // assembleSymbolShards builds one symbol shard per project in symbols, in sorted project

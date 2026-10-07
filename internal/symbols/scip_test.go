@@ -135,6 +135,58 @@ func TestParseIndexDoc(t *testing.T) {
 	}
 }
 
+// TestParseIndexSymbolDefinedPerOSKeepsEachDoc pins the merged per-GOOS index: one key
+// defined in two files, each document holding its own SymbolInformation. The windows
+// document comes last, as MergeIndexes appends it, so a last-wins read would pair its doc
+// with the unix Source.
+func TestParseIndexSymbolDefinedPerOSKeepsEachDoc(t *testing.T) {
+	const sym = "scip-go gomod example.com/foo v1 run()."
+	doc := func(path string, line int32, text, signature string) *scip.Document {
+		return &scip.Document{
+			RelativePath: path,
+			Symbols: []*scip.SymbolInformation{{
+				Symbol: sym, DisplayName: "run", Documentation: []string{text},
+				SignatureDocumentation: &scip.Signature{Text: signature},
+			}},
+			Occurrences: []*scip.Occurrence{{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{line, 5, 8}}},
+		}
+	}
+	idx := &scip.Index{Documents: []*scip.Document{
+		doc("run_unix.go", 24, "run replaces the process.", "func run(argv []string) error"),
+		doc("run_windows.go", 9, "run starts a child and waits.", "func run(args []string) error"),
+	}}
+
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+
+	require.NoError(t, err)
+	require.Len(t, syms, 1, "one key across both files")
+	s := syms[0]
+	assert.Equal(t, "run_unix.go:25", s.Source)
+	assert.Equal(t, "run replaces the process.", s.Doc, "the doc comes from the file Source names")
+	assert.Equal(t, "func run(argv []string) error", s.Signature, "so does the signature")
+	assert.Equal(t, []types.KnowledgeSymbolDefinition{
+		{Source: "run_unix.go:25", Doc: "run replaces the process."},
+		{Source: "run_windows.go:10", Doc: "run starts a child and waits."},
+	}, s.Definitions, "each file's doc travels with its own definition")
+}
+
+// TestParseIndexSymbolDefinedOnceListsNoDefinitions pins that Definitions stays empty for
+// the common case, so a single-file symbol costs the graph nothing new.
+func TestParseIndexSymbolDefinedOnceListsNoDefinitions(t *testing.T) {
+	const sym = "scip-go gomod example.com/foo v1 Open()."
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "a.go",
+		Symbols:      []*scip.SymbolInformation{{Symbol: sym, DisplayName: "Open", Documentation: []string{"Open reads."}}},
+		Occurrences:  []*scip.Occurrence{{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{0, 0, 1}}},
+	}}}
+
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+
+	require.NoError(t, err)
+	require.Len(t, syms, 1)
+	assert.Empty(t, syms[0].Definitions)
+}
+
 // TestParseIndexTypedRange guards the fix for modern indexers: they set the typed
 // range oneof and NOT the deprecated packed `range` field, so reading `range` alone
 // would report line 0 everywhere. SourceRange must resolve the typed form.

@@ -81,3 +81,26 @@ func TestSymbolDeclsCarryTheWholeDoc(t *testing.T) {
 func TestSymbolDeclsEmptyGraph(t *testing.T) {
 	assert.Empty(t, NewGraph().SymbolDecls(SymbolDeclOptions{}))
 }
+
+// TestSymbolDeclsNameTheFileEachDocCameFrom pins a function written once per GOOS: one node,
+// a doc per file. Each doc is listed with its own file, so a rule flagging the windows doc
+// names the windows file, and a generated definition is still dropped.
+func TestSymbolDeclsNameTheFileEachDocCameFrom(t *testing.T) {
+	sym := goSym("a", "run().", "run", "Function", "func run() error", "a/run_unix.go")
+	sym.Source, sym.Doc = "a/run_unix.go:25", "run replaces the process."
+	sym.Defs = []string{"a/run_gen.go", "a/run_unix.go", "a/run_windows.go"}
+	sym.Definitions = []types.KnowledgeSymbolDefinition{
+		{Source: "a/run_gen.go:3", Doc: "run is generated."},
+		{Source: "a/run_unix.go:25", Doc: "run replaces the process."},
+		{Source: "a/run_windows.go:10", Doc: "run starts a child and waits."},
+	}
+	g := namingGraph(t, []types.KnowledgeSymbol{sym})
+
+	got := g.SymbolDecls(SymbolDeclOptions{Generated: map[string]bool{"a/run_gen.go": true}})
+
+	node := symbolID(goNS("a") + "run().")
+	assert.Equal(t, []types.SymbolDecl{
+		{Node: node, Source: "a/run_unix.go:25", Language: "go", Name: "run", Kind: "function", Doc: "run replaces the process."},
+		{Node: node, Source: "a/run_windows.go:10", Language: "go", Name: "run", Kind: "function", Doc: "run starts a child and waits."},
+	}, got)
+}
