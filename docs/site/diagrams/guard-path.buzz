@@ -7,6 +7,7 @@ import "site/diagrams/packages" as _;
 export fun guardPathFigure() > figure\Figure !> any {
     final shell = magus\dir("cmd/magus");
     final guard = magus\dir("internal/guard");
+    final grades = magus\dir("internal/guard/builtin");
     final jobs = magus\dir("internal/job");
     final hint = magus\dir("internal/hint");
     final hook = figure\external("Host hook", sub: "PreToolUse, stdin JSON", tag: "settings");
@@ -24,6 +25,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .actor(hook)
         .box(shell, label: "magus shell", sub: "the guard with one door")
         .box(guard, label: "Built-in rules", sub: "catalogued, run first")
+        .box(grades, label: "Rule grades", sub: "deny, advise or off per rule")
         .box(jobs, label: "Job store", sub: "leases, write paths", look: figure\Look.store)
         .actor(policy)
         .actor(verdict)
@@ -34,6 +36,7 @@ export fun guardPathFigure() > figure\Figure !> any {
         .hideEdges([jobs], dst: [hint],
             why: "job results carry their own next: steps; the guard's comes from the verdict")
         .markEdge(shell, dst: guard, label: "judges")
+        .markEdge(guard, dst: grades, label: "grade")
         .markEdge(guard, dst: jobs, label: "lease")
         .markEdge(guard, dst: hint, label: "next")
         .flowIn(hook, dst: shell, label: "argv + stdin")
