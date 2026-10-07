@@ -696,8 +696,8 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 }
 
 // localSpellBaseOptions builds the SpellOptions common to every workspace-local
-// spell registration (cache metadata, command renderer, charm/doc discovery),
-// minus the invoker, which each registration path supplies itself.
+// spell registration (cache metadata, command renderer, charm/doc discovery, language,
+// syntax, symbol indexer, sandbox), minus the invoker, which each registration path supplies itself.
 func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	opts := []spells.Option{
 		spells.WithSources(m.Needs...),
@@ -726,6 +726,9 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	}
 	if m.Syntax != nil {
 		opts = append(opts, spells.WithSyntax(m.Syntax))
+	}
+	if m.SymbolIndexer != nil {
+		opts = append(opts, spells.WithSymbolIndexer(m.SymbolIndexer))
 	}
 	if m.Sandbox != nil {
 		opts = append(opts, spells.WithSandbox(m.Sandbox))
