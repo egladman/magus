@@ -1,6 +1,6 @@
 ---
 title: Console API
-description: Loopback JSON API the console reads your live workspace through - the graph, insight, diff, run-output, plan and ledger routes. Loopback only, bearer token, GET except where named. Mutation sits on a few bounded surfaces beside it, none of which touches your working tree.
+description: Loopback JSON API the console reads your live workspace through (the graph, insight, diff, run-output, plan and ledger routes). Loopback only, bearer token, GET except where named. Mutation sits on a few bounded surfaces beside it, none of which touches your working tree.
 tags: [console, graph, privacy]
 aliases: [console, browser-bridge]
 ---
@@ -12,8 +12,8 @@ exposes so the hosted [console](https://eli.gladman.cc/magus/console/) (the
 Graph Explorer and the surfaces beside it) can display your current workspace.
 
 The console holds no privileged access: it is one client of the same contract
-anyone can code against. The full schema - every service, method, message, and
-enum, generated from the `.proto` files - is the [server API reference](api/index.md).
+anyone can code against. The full schema (every service, method, message, and
+enum, generated from the `.proto` files) is the [server API reference](api/index.md).
 
 **Most of these routes cannot change your workspace.** They read what the server
 already knows: they cannot edit a file or change configuration. Most of the
@@ -21,7 +21,7 @@ table below answers GET only and rejects any other method with a 405, with two
 named exceptions. `POST /api/v1/diff/session` records a person's own review
 state (where they are looking, which hunks they have read, what they said) in
 the cache directory and touches no source file. `POST /api/v1/diff/run` starts
-a run - the one read-surface route that is genuinely mutating, bounded to
+a run, the one read-surface route that is genuinely mutating, bounded to
 whatever targets the magusfile declares. This is a design decision, not just a
 security posture (see section 0.3 of the PWA plan).
 
@@ -63,8 +63,8 @@ Every route on the console's `/api/v1/` surface, enumerated:
 
 One more route sits under `/api/v1/` without belonging to this read surface:
 `POST /api/v1/share`, described below. The server's typed Connect
-services - status, activity, metrics, insight, viewer, notes, tool, and
-[job control](#job-control) - are mounted at their own
+services (status, activity, metrics, insight, viewer, notes, tool, and
+[job control](#job-control)) are mounted at their own
 `magus.<service>.v1alpha1.<Service>/` prefixes rather than here, and the
 [server API reference](api/index.md) is their schema. The console mounts at
 `/api/v1/` on the same port as the MCP server (`127.0.0.1:7391` by default).
@@ -77,7 +77,7 @@ console reads it there.
 **Who may write to a review session.** `POST /api/v1/diff/session` is reachable
 only from the console and the CLI, so every write on it is stamped as the
 person's. An agent reaches the same session through the `diff` MCP tool on
-`/mcp` - whose `comment`, `suggest` and `resolve` ops are writes too - and those
+`/mcp` (whose `comment`, `suggest` and `resolve` ops are writes too) and those
 are stamped as the agent's. Authorship is decided by which route the write
 arrived on and never by the payload, which is what makes it unforgeable: an
 agent cannot reach the human route, so it cannot post as the person.
@@ -87,7 +87,7 @@ on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
 watch a run from a phone. It serves only the plain-JSON `events` and `insight`
 routes, plus the metrics, activity, status, insight, and viewer Connect
 services (`internal/server/server.go`'s `shareGuarded` map is the exact list).
-The viewer service is the typed twin of the run browser - a past run's journal
+The viewer service is the typed twin of the run browser: a past run's journal
 holds the captured output plus the command that produced it, which a
 `magus query output --open` link has always carried in its fragment; the
 plain-JSON `outputs`/`output`/`runs`/`run` routes it replaced are retired (see
@@ -123,8 +123,8 @@ serialization). This is a known limitation; memoization per variant is deferred.
 Separate from the read routes above, the server hosts a **mutating** Connect
 service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
 background maintenance without an open action endpoint. It is the only surface
-that changes anything magus computed - the others record a person's own review
-state or open a share listener - and it is bounded:
+that changes anything magus computed (the others record a person's own review
+state or open a share listener) and it is bounded:
 it submits a fixed set of named jobs, never an arbitrary command.
 
 The service exposes two RPCs, not one per job: `RunJob(name)` submits any
@@ -142,7 +142,7 @@ a NotFound error rather than a third RPC.
 | `check-drift`       | Notice, without blocking, a commit that left generated output or formatting stale |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not
-started twice) and returns a metadata snapshot - the job's last run and the
+started twice) and returns a metadata snapshot: the job's last run and the
 current size of what it maintains. The service is mounted behind the same loopback
 bind and bearer token as everything else here; it is never served unauthenticated.
 
@@ -230,7 +230,7 @@ The console serves your workspace graph over loopback. It does not:
 - Store anything beyond what the server already caches on disk, plus the review
   state a person records through `POST /api/v1/diff/session`
 - Accept a write into your working tree, or edit a file or change
-  configuration. It CAN run a target - `POST /api/v1/diff/run` - but only one
+  configuration. It CAN run a target (`POST /api/v1/diff/run`) but only one
   the magusfile declares, the same as `magus run` at a terminal
 - Expose any path outside the routes listed above
 
@@ -281,7 +281,7 @@ The explorer has exactly two source states:
 | snapshot | `snapshot: <provenance>` | Data from fragment/file/demo/--serve; frozen at load time |
 | live     | `live: <workspace>`      | Data from the server; refreshes on file changes           |
 
-"Connected but stale" is impossible: when the SSE stream disconnects, a banner appears ("disconnected - showing workspace as of HH:MM, reconnecting...") and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.
+"Connected but stale" is impossible: when the SSE stream disconnects, a banner appears ("disconnected: showing workspace as of HH:MM, reconnecting...") and auto-reconnect runs with exponential backoff (1s to 30s). The data stays visible while reconnecting.
 
 ### Safari limitation
 
@@ -296,7 +296,7 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 
 When the server has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1alpha1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
 
-## Verify our claims - don't take our word for it
+## Verify our claims: don't take our word for it
 
 Your dependency graph may be confidential. Every claim below is either
 enforced by your browser or checkable by you. Nothing on this page asks for
@@ -305,14 +305,14 @@ trust.
 ### Claim: this page cannot send your graph or source code anywhere
 
 Every page on this site carries a Content-Security-Policy that your browser
-enforces - a `<meta>` tag near the top of the document that is the page's
+enforces: a `<meta>` tag near the top of the document that is the page's
 complete network permission, in one line.
 
 1. Press `Ctrl+U` (macOS: `Cmd+Option+U`) to view the page source. Find the
    `<meta http-equiv="Content-Security-Policy" ...>` tag (it sits right after
-   `<meta name="generator" content="magus">`). Its `connect-src` clause -
-   the directive that governs `fetch`/`XMLHttpRequest`/SSE, the ways a page
-   could actually exfiltrate data - reads
+   `<meta name="generator" content="magus">`). Its `connect-src` clause (the
+   directive that governs `fetch`/`XMLHttpRequest`/SSE, the ways a page
+   could actually exfiltrate data) reads
    `connect-src 'self' http://127.0.0.1:* http://[::1]:*`: this page's own
    origin, plus your machine's loopback address, and nothing else.
    `default-src 'self'` closes the same same-origin-only gap for anything not
@@ -321,8 +321,8 @@ complete network permission, in one line.
    `img-src` is a narrower, deliberately scoped exception, and it is not the
    same on every page: an `img-src` GET can technically carry data baked
    into its URL (unlike `connect-src`, the browser does not refuse it), so
-   the graph and playground pages - the only pages that ever hold your
-   dependency graph or source code - carry `img-src 'self' data:` with no
+   the graph and playground pages (the only pages that ever hold your
+   dependency graph or source code) carry `img-src 'self' data:` with no
    external host at all. There is no image-URL channel on those pages for
    your data to ride out on. Only the home page's `img-src` also allows
    `https://github.com` and `https://pkg.go.dev`, for two static status
@@ -339,7 +339,7 @@ complete network permission, in one line.
    browser, not our code.
 3. One deliberate narrowing this policy causes: the graph page's `#src=<url>`
    loader and the playground's `#src=<url>` loader can both point at an
-   arbitrary CORS-enabled address (e.g. a colleague's raw GitHub link) - that
+   arbitrary CORS-enabled address (e.g. a colleague's raw GitHub link); that
    fetch is refused by the same `connect-src` for any host that is not this
    site or your loopback. Both loaders already handle a fetch failure
    gracefully (a status message, not a crash); use `#data=` (a local file,
@@ -349,7 +349,7 @@ complete network permission, in one line.
 ### Claim: your graph never appears in any network request
 
 When you use `magus graph export --open`, your graph travels in the URL **fragment**
-(the part after `#`). Browsers never include fragments in HTTP requests -
+(the part after `#`). Browsers never include fragments in HTTP requests;
 that's the HTTP standard, not our promise.
 
 1. Open DevTools (`F12`) -> **Network** tab. Tick **Preserve log**.
@@ -357,14 +357,14 @@ that's the HTTP standard, not our promise.
    `graph.json` onto the [console's Graph Explorer](https://eli.gladman.cc/magus/console/).
 3. Read the request list. Every row is a `GET` for a static file from this
    site's own origin (or, in live mode, your own loopback address). Click any
-   row - the **Payload** tab is absent (no request carries a body). Compare
+   row: the **Payload** tab is absent (no request carries a body). Compare
    any request's URL against your address bar: the `#data=...` portion
    appears in none of them.
 4. Type `method:POST` into the Network filter box: zero results for the
    snapshot flow these steps describe. In live mode there is one exception, and
    it goes to your own machine: the typed server services (status, activity,
    metrics) are Connect RPCs, and Connect sends a read as a POST. Those requests
-   are addressed to `127.0.0.1` and carry a request message, never your graph -
+   are addressed to `127.0.0.1` and carry a request message, never your graph;
    the same `connect-src` policy above is what confines them to loopback.
 
 ### Claim: everything works with your network unplugged
@@ -372,11 +372,11 @@ that's the HTTP standard, not our promise.
 The strongest proof: data cannot leave a machine that has no connection.
 
 1. Visit the graph or playground page once while online (the service worker
-   caches it - see DevTools -> **Application** -> **Service workers** and
+   caches it; see DevTools -> **Application** -> **Service workers** and
    **Cache storage**).
 2. Go offline for real (Wi-Fi off / cable out), or in DevTools -> **Network**
    tab set the throttling dropdown from **No throttling** to **Offline**.
-3. Reload. The page comes back - served from your disk. Now load your
+3. Reload. The page comes back, served from your disk. Now load your
    confidential graph (drag the file in) and explore it fully. The page
    shows an "offline - everything on this page is local" badge while
    disconnected (`docs/src/site/offline-badge.ts`).
@@ -384,25 +384,25 @@ The strongest proof: data cannot leave a machine that has no connection.
 ### Claim: we store nothing without asking
 
 DevTools -> **Application** tab -> **Cookies**: none. **Local storage** /
-**Session storage**: empty, unless you used live mode - the server token is
+**Session storage**: empty, unless you used live mode: the server token is
 kept in session storage under the `magus-live-token` key for the tab's
 lifetime, or promoted to local storage only after you tick "Remember this
 workspace" (see "Live mode pairing" above). Ticking it also sets a second
 local-storage key, `magus-live-remember`, so the explorer knows to keep
-reading from local storage on your next visit - two keys once you tick it,
+reading from local storage on your next visit: two keys once you tick it,
 zero before that and zero if you never use live mode. Clear either with one
 click, right there.
 
 ### The deep audit: record every byte Chrome sends
 
-For a security review, don't sample - record. `chrome://net-export` captures
+For a security review, don't sample; record. `chrome://net-export` captures
 a log of _all_ network activity in the browser, below the page's ability to
 hide anything.
 
 1. Open `chrome://net-export`, choose a log file, press **Start Logging to
    Disk**.
 2. In another tab, load this page and your graph; explore for a minute.
-3. Stop logging. The log is a local JSON file on your disk - search it for
+3. Stop logging. The log is a local JSON file on your disk; search it for
    any project or target name from your graph. For sensitive graphs, grep the
    file locally rather than uploading it to a log viewer.
 
@@ -410,8 +410,8 @@ hide anything.
 
 This site is generated from the open [magus repository](https://github.com/egladman/magus)
 by a CI-checked build; the served bytes are not, themselves, committed.
-`console/gen/` (the console's build output) is entirely gitignored - `git
-ls-files console/gen` lists nothing - and `docs/gen/` (the docs site) commits
+`console/gen/` (the console's build output) is entirely gitignored (`git
+ls-files console/gen` lists nothing) and `docs/gen/` (the docs site) commits
 only a handful of carve-outs (the installer script, the signed release and
 registry manifests), not the rendered HTML/JS. So "compare against the repo's
 committed copy" is not something you can do against a checkout as it sits;
@@ -435,7 +435,7 @@ curl -s <asset-url> | sha256sum
 ```
 
 The JavaScript is unminified enough to read; start at the console's
-`console/src/apps/graph/main.ts` - `loadGraph` and `readGraphFile` are the
+`console/src/apps/graph/main.ts`: `loadGraph` and `readGraphFile` are the
 functions that ingest a graph (the `#data=`/`#src=`/demo fallback chain, and
 drag-drop/file-input/`launchQueue` respectively), and there is no function
 that sends it out.
@@ -452,7 +452,7 @@ prebuilt one.
 
 A `<meta>`-delivered Content-Security-Policy governs the _page's own_
 requests. It does not govern requests the service worker (`sw.js`) makes on
-the page's behalf while intercepting `fetch` events - that is a documented
+the page's behalf while intercepting `fetch` events; that is a documented
 gap in the CSP spec, not a bug in this implementation. The mitigation is that
 the service worker's source, `docs/sw.js.tmpl`, is about 60 lines total,
 committed, and its `fetch` handler returns early on any cross-origin request
@@ -462,7 +462,7 @@ before it ever considers serving or caching one:
 if (url.origin !== self.location.origin) return;
 ```
 
-(`sw.js.tmpl` line 42.) Read the whole file - it precaches a fixed list of
+(`sw.js.tmpl` line 42.) Read the whole file: it precaches a fixed list of
 same-origin assets, serves HTML network-first, and serves everything else
 cache-first. There is nothing else in it. If this site ever moves to a host
 that supports real HTTP response headers, the CSP (and a policy that also

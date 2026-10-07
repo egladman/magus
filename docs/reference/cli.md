@@ -61,7 +61,7 @@ targets (44):
   build  [custom - projects: console]
 ```
 
-The bracket suffix tells you where each came from - a spell, a custom
+The bracket suffix tells you where each came from: a spell, a custom
 magusfile function, or the canonical set. `describe` accepts `spell`,
 `charm`, `target`, `graph`, `project`, `workspace`, `module`, `mcp-tool`,
 `file`, and `tool` (singular or plural).
@@ -79,7 +79,7 @@ cd "$(magus where console)"
 everywhere the target is defined; naming projects narrows it.
 
 `magus affected <target>` runs only what a VCS diff says changed. It is not a
-filter over `run` - it walks the dependency closure, so a project you did not
+filter over `run`: it walks the dependency closure, so a project you did not
 touch is included when something it depends on moved.
 
 One thing to know: **`affected ci` errors when no project in scope declares a
@@ -104,7 +104,7 @@ For a tight loop, pipe the watcher into it:
 magus watch | magus affected --stdin build
 ```
 
-`magus x` is the interactive shorthand - pick a project and target from a
+`magus x` is the interactive shorthand: pick a project and target from a
 picker. It requires a TTY and will not work in a pipeline.
 
 ![The magus x picker: a filter line narrowing the project list as it is typed, the highlighted row a click or Enter would take, and the way out on the bottom rule](../../assets/gen/terminal-picker.svg)
@@ -138,7 +138,7 @@ failure adds the reproduce command and an inspect hint:
 References are **portable**: the same inputs mint the same ref on every machine,
 so one pasted from CI or a teammate resolves in your checkout once your cache
 holds a run of those exact inputs. The inline `inspect:` hint above is still
-suppressed when magus detects CI, but that is about the runner, not the ref -
+suppressed when magus detects CI, but that is about the runner, not the ref:
 by the time anyone reads the log, the ephemeral job that printed it is usually
 gone, and the failing output is already inline above it. If a ref resolves
 nowhere locally, `magus query output <ref>` sweeps the workspace for a target
@@ -156,12 +156,12 @@ output printed outside a target are `run.notice` records on stderr.
 For structural questions, the knowledge graph commands answer different shapes
 of "why":
 
-- `magus query <term>` - search, and show a node's neighborhood
-- `magus explain <node>` - one node: its edges, provenance, blast radius
-- `magus path <a> <b>` - the shortest path between two nodes
-- `magus refs <symbol>` - where an ingested code symbol is defined and used, and
+- `magus query <term>`: search, and show a node's neighborhood
+- `magus explain <node>`: one node: its edges, provenance, blast radius
+- `magus path <a> <b>`: the shortest path between two nodes
+- `magus refs <symbol>`: where an ingested code symbol is defined and used, and
   what calls it
-- `magus graph stats` - where the workspace concentrates and where it is neglected
+- `magus graph stats`: where the workspace concentrates and where it is neglected
 
 `graph stats` is the one to run when you have inherited a repository:
 
@@ -176,7 +176,7 @@ god nodes (most connected):
 ```
 
 A high-degree node is a structural risk: everything depends on it, so changing
-it touches everything. Isolated nodes are the opposite problem - something the
+it touches everything. Isolated nodes are the opposite problem: something the
 builder never linked up.
 
 The insight lenses (hotspots, change affinity, ownership, trend, volatility)
@@ -198,7 +198,7 @@ warm and serves MCP. Starting one when it is already running is a no-op that
 still exits 0, so it chains safely in scripts. `magus server stop` exits
 non-zero when it found nothing to stop.
 
-`magus status` inspects the concurrency pool of a running parent magus - what
+`magus status` inspects the concurrency pool of a running parent magus: what
 is executing, what is queued, and what is waiting on a slot.
 
 ## Verbosity

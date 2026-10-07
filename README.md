@@ -115,7 +115,7 @@ the same way.
 <p align="center"><em>A run pins its progress, failures group by project beside their output, and the picker searches the graph as you type.</em></p>
 
 The band at the bottom holds still while your output scrolls past it. Nothing is
-cleared, the alternate screen is never touched, and your scrollback survives -
+cleared, the alternate screen is never touched, and your scrollback survives,
 so selection, copy and paste keep working the way they always did. Every one of
 these surfaces degrades to plain text when there is no terminal to draw on.
 

@@ -15,7 +15,7 @@ be resolved to stored output.
 ## Codes
 
 - [MGS8001](MGS8001.md): the ref is well-formed but no stored output exists for
-  it - it aged out of the cache, or the ref is mistyped.
+  it; it aged out of the cache, or the ref is mistyped.
 - [MGS8002](MGS8002.md): a shortened ref prefix matches more than one stored
   output, so the lookup is ambiguous.
 - [MGS8003](MGS8003.md): `magus query output` was given an argument that is not a

@@ -1,13 +1,13 @@
 ---
 title: The Go SDK
-description: Use magus as a Go library instead of the CLI - Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet.
+description: Use magus as a Go library instead of the CLI (Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet).
 tags: [go, sdk, library, api, embedding, import, package, reference]
 ---
 
 # The Go SDK
 
 This page is for a Go developer who wants to call magus from their own
-program - `import "github.com/egladman/magus"` - rather than shelling out to
+program (`import "github.com/egladman/magus"`) rather than shelling out to
 the `magus` binary. If you have never run `magus` and do not care to, this is
 the page for you; the [CLI reference](cli.md) describes the same domain from
 the other side.
@@ -19,9 +19,9 @@ the other side.
 > tagged version. Read this section before filing that as your own bug.
 
 As of this writing, `go get github.com/egladman/magus` does not resolve on
-its own. The module's `go.mod` requires two nested modules -
+its own. The module's `go.mod` requires two nested modules:
 `github.com/egladman/magus/libs/gopherbuzz` and
-`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod` - and
+`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod`, and
 neither has a tagged release (`libs/gopherbuzz/vX.Y.Z` /
 `libs/diagnostics/vX.Y.Z`) yet. The root repository resolves them with local
 `replace` directives, which are not transitive, so a downstream consumer
@@ -59,7 +59,7 @@ ws, err := magus.Inspect(ctx, "/path/to/workspace")
 m, err := magus.Open(ctx, "/path/to/workspace")
 ```
 
-`Inspect` returns `types.WorkspaceRepository`, an interface - a signal that
+`Inspect` returns `types.WorkspaceRepository`, an interface: a signal that
 an introspection-only caller should keep coding against the interface rather
 than assume a concrete type. `Open` returns `*magus.Magus`, which also
 satisfies `types.WorkspaceRepository` and additionally has `Run`.
@@ -102,13 +102,13 @@ workspace root: /path/to/workspace
 project . (spell="", resolved spells=0)
 ```
 
-`resolved spells=0` is not a bug in the example - see
+`resolved spells=0` is not a bug in the example; see
 [what this SDK does not give you](#what-this-sdk-does-not-give-you) before
 you go looking for why `build` never runs.
 
 ## The interface hierarchy: depend on the narrowest role
 
-`types.WorkspaceRepository` - what `Open` and `Inspect` both satisfy - is an
+`types.WorkspaceRepository` (what `Open` and `Inspect` both satisfy) is an
 embedding of four smaller interfaces, and `types/repository.go` states the
 house rule outright: prefer the narrowest one your code actually uses.
 
@@ -132,15 +132,15 @@ printProjectCount(ws)
 ```
 
 Widening a parameter to `types.WorkspaceRepository` because that happens to
-be what you have on hand forces every future caller - including a test - to
+be what you have on hand forces every future caller, including a test, to
 construct or stub the whole repository just to satisfy a signature that only
 calls `Root()` and `All()`.
 
 ## The `List` / `Evaluate` / `Classify` axis
 
 This is the organizing idea of the `Inspector` interface. `List*` enumerates
-a declaration - cheap, no resolution. `Evaluate*` resolves one - spells
-bound, charms patched in - and costs more. `ClassifyFiles`
+a declaration: cheap, no resolution. `Evaluate*` resolves one (spells
+bound, charms patched in) and costs more. `ClassifyFiles`
 and `TargetGraph` are their own verbs because neither is a natural fit for
 either half.
 
@@ -168,7 +168,7 @@ for _, proj := range graph.Projects {
 
 One naming trap on this axis: `ProjectEntry.Sources` (from `ListProjects`)
 and `EvaluatedProject.Sources` (from `EvaluateProjects`) are the same field
-name carrying different representations - declared, project-relative globs
+name carrying different representations: declared, project-relative globs
 in the first case, resolved and workspace-rooted (joined against the project
 path, magusfile globs folded in) in the second. Reading one where you meant
 the other silently feeds every glob-matching call the wrong pattern.
@@ -183,7 +183,7 @@ scheduling or impact analysis typically holds both.
 
 Every `Inspector` method takes `ctx` first and returns `error` last,
 including the read-only `List*` calls. A cancelled walk returns an error
-rather than a truncated result - a partial count is indistinguishable from a
+rather than a truncated result: a partial count is indistinguishable from a
 workspace that genuinely has that many projects, so magus treats a
 cancellation as failure, not as "here is what I got so far":
 
@@ -207,8 +207,8 @@ without checking the error first.
 > SDK. Read this before you build anything that depends on dispatching one.
 
 **Buzz magusfile evaluation is not reachable from outside this module.**
-Evaluating a `magusfile.buzz` - running `magus\project(...)`, discovering
-`export fun` targets, binding spells - requires the Buzz interpreter engine
+Evaluating a `magusfile.buzz` (running `magus\project(...)`, discovering
+`export fun` targets, binding spells) requires the Buzz interpreter engine
 to be linked in, and that link only happens through two `internal/` packages
 (`internal/interp/engine/buzz`, `internal/interp/bindings`) that only
 `cmd/magus`, built inside this repository, blank-imports. `internal/`
@@ -216,14 +216,14 @@ packages are unreachable from any other module's import graph, so a program
 that imports `github.com/egladman/magus` as a dependency can discover
 projects and read a magusfile's static target graph
 (`Inspector.TargetGraph`, which parses source without executing it), but it
-cannot make magus dispatch a target that magusfile declares - `ListTargets`
+cannot make magus dispatch a target that magusfile declares: `ListTargets`
 will not list it, no spell gets attached, and attempting to run it is a
 silent no-op rather than an error. There is currently no exported way to
-even ask "is magusfile evaluation available in this process" - you have to
+even ask "is magusfile evaluation available in this process"; you have to
 know this limitation going in.
 
 The escape hatch: build the workspace programmatically instead of authoring
-a magusfile, using the exported wire API in the root package -
+a magusfile, using the exported wire API in the root package:
 `WithRegisteredSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
 a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
