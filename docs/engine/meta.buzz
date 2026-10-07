@@ -150,6 +150,63 @@ test "insertSinceBadge is a no-op without a since value or without an h1" {
     assert\equal(insertSinceBadge("<p>no heading</p>", "v1.0.0"), "<p>no heading</p>", "no h1 leaves html untouched");
 }
 
+// codeSpans escapes s for HTML text and turns each backticked run into <code>, the one piece
+// of Markdown a front matter value carries. An unpaired backtick stays literal.
+fun codeSpans(s: str) > str {
+    final parts = s.split("`");
+    var res = "";
+    var i = 0;
+    while (i < parts.len()) {
+        final text = escapeAttr(parts[i]).replace(">", with: "&gt;");
+        if (i % 2 == 0) {
+            res = res + text;
+        } else if (i < parts.len() - 1) {
+            res = res + "<code>" + text + "</code>";
+        } else {
+            res = res + "`" + text;
+        }
+        i = i + 1;
+    }
+    return res;
+}
+
+// insertAdrMeta places an ADR's status, date and what it supersedes under the H1, in the
+// muted line style the blog byline uses, so a reader sees where the decision stands before
+// the first section. Pages that carry no `status:` and `date:` (every page but an ADR)
+// pass through untouched, as does one with no H1 to anchor to.
+export fun insertAdrMeta(html: str, status: str, date: str, supersedes: str) > str {
+    if (status == "" or date == "") { return html; }
+    final marker = html.indexOf("</h1>");
+    if (marker == null) { return html; }
+    // Frontmatter dates decode as full RFC3339; the calendar day is all an ADR records.
+    final day = date.split("T")[0];
+    var meta = "\n<p class=\"adr-meta\">Status: <strong>" + escapeAttr(status) + "</strong> &middot; Date: <time datetime=\""
+        + escapeAttr(day) + "\">" + escapeAttr(day) + "</time>";
+    if (supersedes != "") { meta = meta + "<br>Supersedes: " + codeSpans(supersedes); }
+    meta = meta + "</p>";
+    return html.sub(0, marker + 5) + meta + html.sub(marker + 5);
+}
+
+test "insertAdrMeta places status and date right after the h1" {
+    final got = insertAdrMeta("<h1 id=\"t\">Title</h1>\n<p>body</p>", "accepted (partly built)", "2026-09-22T00:00:00Z", "");
+    assert\equal(got.indexOf("Status: <strong>accepted (partly built)</strong>") != null, true, "status");
+    assert\equal(got.indexOf("<time datetime=\"2026-09-22\">2026-09-22</time>") != null, true, "the calendar day");
+    assert\equal(got.indexOf("Supersedes") == null, true, "no supersedes line without a value");
+    assert\equal(got.indexOf("adr-meta") < got.indexOf("<p>body"), true, "between the h1 and the body");
+}
+
+test "insertAdrMeta shows what the page supersedes, with its code spans" {
+    final got = insertAdrMeta("<h1>T</h1>", "accepted", "2026-09-22", "the `import \"x\" as <y>;` form, `unpaired");
+    assert\equal(got.indexOf("Supersedes: the <code>import &quot;x&quot; as &lt;y&gt;;</code> form, `unpaired") != null, true,
+        "escaped, code span, literal backtick");
+}
+
+test "insertAdrMeta leaves a page without status and date, or without an h1, untouched" {
+    assert\equal(insertAdrMeta("<h1>X</h1>", "", "", ""), "<h1>X</h1>", "no status");
+    assert\equal(insertAdrMeta("<h1>X</h1>", "accepted", "", ""), "<h1>X</h1>", "no date");
+    assert\equal(insertAdrMeta("<p>no heading</p>", "accepted", "2026-09-22", ""), "<p>no heading</p>", "no h1");
+}
+
 // insertSizeRatio places a size comparison under the H1 of an agent-skill page: how
 // much smaller the short form is, as a number and as a bar.
 //

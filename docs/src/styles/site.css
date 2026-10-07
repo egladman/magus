@@ -1596,8 +1596,10 @@ a code {
 }
 
 /* Post byline under the <h1>: date, author, and permalink on one muted line,
-   set just below the title so it reads as the post's metadata. */
-.blog-post-meta {
+   set just below the title so it reads as the post's metadata. An ADR's status, date
+   and supersedes line takes the same style. */
+.blog-post-meta,
+.adr-meta {
   margin: -0.25rem 0 1.5rem;
   color: var(--pico-muted-color);
   font-size: 0.9rem;
