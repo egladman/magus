@@ -116,7 +116,7 @@ func TestOutputPipeRewrites(t *testing.T) {
 		{"magus describe file a.go | grep output", "`-o name` prints each path"},
 		{"magus ls | cut -d' ' -f1", "{{range .projects}}{{.path}}"},
 	} {
-		v := Evaluate(testDependencies(), tc.command)
+		v := Evaluate(strict(testDependencies()), tc.command)
 		got := v.Deny + v.Context
 		assert.Contains(t, got, tc.want, tc.command)
 		assert.Contains(t, got, "magus answers this without the pipe", tc.command)
@@ -154,7 +154,7 @@ func TestOutputPipeKeepsTheGenericAnswerWithoutARecord(t *testing.T) {
 		{"magus ls | tr 'a' 'b'", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 		{"magus agent install | sort", "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record"},
 	} {
-		v := Evaluate(testDependencies(), tc.command)
+		v := Evaluate(strict(testDependencies()), tc.command)
 		got := v.Deny + v.Context
 		assert.Contains(t, got, tc.want, tc.command)
 		assert.NotContains(t, got, "slice .", tc.command)
@@ -175,7 +175,7 @@ func TestOutputPipeLeavesCompositionAlone(t *testing.T) {
 		"magus refs TODO --text | tr ':' '\\t'",
 		"magus ls --help | tr -s ' '",
 	} {
-		v := Evaluate(testDependencies(), command)
+		v := Evaluate(strict(testDependencies()), command)
 		assert.Empty(t, v.Deny, command)
 		assert.NotEqual(t, advisoryGraphPipe, v.Kind, command)
 	}

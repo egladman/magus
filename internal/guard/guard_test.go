@@ -669,7 +669,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			name: "a denied command",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
 				testkit.Isolate(t)
-				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), Dependencies{}, Request{Input: "magus run ci | tail", Session: "s1"}
+				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
 			},
 			want: Verdict{Decision: "deny"},
 		},
@@ -737,7 +737,7 @@ func TestDryRunRefusesASpawn(t *testing.T) {
 func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	cacheDir := ctx.Value(locationKey{}).(location).cacheDir
-	deps := testDependencies()
+	deps := strict(testDependencies())
 
 	v := Judge(ctx, deps, Request{Input: "./magus ls jobs -o json > f"})
 	want := hint.Next{
@@ -769,7 +769,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	worker := narrowLease()
 	ctx, _ := fleetFixture(t, worker)
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	const piped = "magus affected ci | tail -5"
 
 	// The worker first: its firing is the one worded in full.
@@ -866,7 +866,7 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 	dir := t.TempDir()
 	ctx := WithLocation(t.Context(), dir, "/repo", "")
 	judge := func(input string, rewrites bool) Verdict {
-		return Judge(ctx, Dependencies{}, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
+		return Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
 	}
 
 	first := judge("ls -la", true)

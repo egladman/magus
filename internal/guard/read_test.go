@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
@@ -135,6 +136,13 @@ func readDeps(root string) Dependencies {
 	}
 }
 
+// pastLines is deps with read-navigation set to judge a whole read only past lines; the
+// binary carries no length of its own.
+func pastLines(deps Dependencies, lines int) Dependencies {
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleReadNavigation): {Decision: builtin.Advise, Lines: lines}}
+	return deps
+}
+
 func TestReadNavigationDeniesWholeReads(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
@@ -191,7 +199,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 			"What the file holds (2 declarations):\n  1-2: fun run\n  4-133: test \"gate\"",
 		}, []string{"refs"}},
 		// Several files: each is judged, and the first mapped one over the threshold answers.
-		{`cat internal/store/small.go docs/a.md`, deps, []string{pageMap}, nil},
+		{`cat internal/store/small.go docs/a.md`, pastLines(deps, 120), []string{pageMap}, nil},
 		{`cat CLAUDE.md internal/store/store.go`, deps, []string{storeMap}, nil},
 	} {
 		v, ok := readVerdictAt(tt.deps, root, tt.command, DialectBash)
@@ -221,7 +229,7 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 		deps    Dependencies
 	}{
 		// Under the threshold.
-		{`cat internal/store/small.go`, deps},
+		{`cat internal/store/small.go`, pastLines(deps, 120)},
 		// A kind with no parser here.
 		{`cat console/x.ts`, deps},
 		// Written to be read whole.
@@ -335,4 +343,12 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 		assert.Contains(t, v.Context, tt.lines, tt.command)
 		assert.Contains(t, v.Context, hint.Refs.With(tt.name, "--definition", "--source"), tt.command)
 	}
+}
+
+func TestReadNavigationAdvisesByDefault(t *testing.T) {
+	root := readFixture(t)
+	deps := readDeps(root)
+	deps.callDir = root
+
+	requireAdvisedOnce(t, Evaluate(deps, `cat internal/store/store.go`), denyRuleReadNavigation)
 }

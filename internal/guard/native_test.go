@@ -43,7 +43,7 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 		"internal/api/handler.go":     "package api\n\nfunc HandleRequest() {}\n",
 		"internal/api/gen/handler.go": "package gen\n",
 	})
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	deps.SymbolDefined = func(name string) (bool, bool) { return name == "HandleRequest", true }
 	deps.GraphIDs = graphOf(map[string][]string{types.KindFile: {"file:internal/api/handler.go", "file:internal/api/gen/handler.go"}})
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})

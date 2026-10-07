@@ -16,9 +16,9 @@ import (
 // name lets the search run, and only a workspace with no index at all is advised.
 func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	verdict := func(defined, definitive bool) ShellVerdict {
-		return Evaluate(Dependencies{
+		return Evaluate(strict(Dependencies{
 			SymbolDefined: func(string) (bool, bool) { return defined, definitive },
-		}, "grep -r HandleRequest internal/")
+		}), "grep -r HandleRequest internal/")
 	}
 
 	denied := verdict(true, true)
@@ -40,7 +40,7 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	assert.Empty(t, absent.Deny, "nothing replaces a search for a name the current index does not hold")
 	assert.Empty(t, absent.Context)
 
-	unwired := Evaluate(Dependencies{}, "grep -r HandleRequest internal/")
+	unwired := Evaluate(strict(Dependencies{}), "grep -r HandleRequest internal/")
 	assert.Empty(t, unwired.Deny, "with no index at all a deny would route nowhere")
 	assert.Equal(t, advisoryPrecedent, unwired.Kind)
 	assert.Contains(t, unwired.Brief, "no symbol index exists yet")
@@ -65,9 +65,36 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	// The deny arm reads Deny, which no gate call touches; a Kind on a deny would be a
 	// contradiction, so this also asserts the verdict carries none.
 	for _, command := range []string{"git stash", "go build ./...", "magus ls | head -5"} {
-		v := Evaluate(testDependencies(), command)
+		v := Evaluate(strict(testDependencies()), command)
 		require.NotEmpty(t, v.Deny, "fixture %q must deny", command)
 		assert.Empty(t, v.Kind, "a deny carries no advisory kind, so nothing can hold it to one firing")
 		assert.Empty(t, v.Brief, "a deny has no degraded form: the caller cannot see past a refusal")
 	}
+}
+
+// requireAdvisedOnce pins what a rule that once refused does with the default settings: v
+// refuses nothing, it is an advisory keyed on rule, and a session hears it once.
+func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
+	t.Helper()
+	require.Empty(t, v.Deny, "the default does not refuse")
+	require.True(t, v.demoted, "the default advises")
+	assert.Equal(t, hint.MarkerKind(rule), v.Kind)
+	assert.NotEmpty(t, v.Context)
+
+	held := heldAdvice{v: v}
+	gate := hint.NewGate(t.TempDir(), "s1")
+	first := Verdict{Decision: "pass"}
+	held.speak(gate, &first)
+	assert.Equal(t, "advise", first.Decision)
+	assert.Equal(t, string(rule), first.Rule)
+	assert.Equal(t, v.Context, first.Context)
+
+	again := Verdict{Decision: "pass"}
+	held.speak(gate, &again)
+	assert.Equal(t, "pass", again.Decision, "once per session")
+}
+
+func TestSymbolSearchAdvisesByDefault(t *testing.T) {
+	deps := Dependencies{SymbolDefined: func(string) (bool, bool) { return true, true }}
+	requireAdvisedOnce(t, Evaluate(deps, "grep -r HandleRequest internal/"), denyRuleSymbolSearch)
 }

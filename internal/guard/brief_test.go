@@ -78,14 +78,24 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 		envelope("SendMessage", "message", "Now run `MAGUS_NO_WAIT=1 ./magus run lint .` again."),
 	} {
 		ctx, _ := spawnFixture(t)
-		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code"})
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(v), input)
 		assert.Contains(t, v.Reason, "MAGUS_NO_WAIT")
 	}
 
 	ctx, _ := spawnFixture(t)
-	v := Judge(ctx, Dependencies{}, Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
+	v := Judge(ctx, strict(Dependencies{}), Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
 	assert.NotEqual(t, "deny", v.Decision)
+
+	ctx, _ = spawnFixture(t)
+	taught := envelope("Agent", "prompt", "Build with `MAGUS_NO_WAIT=1 ./magus run go-build .` first.")
+	first := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	assert.Equal(t, "advise", first.Decision, "by default the brief is advised, not refused")
+	assert.Equal(t, string(denyRuleBriefCommand), first.Rule)
+	assert.Contains(t, first.Context, "MAGUS_NO_WAIT")
+
+	again := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	assert.NotEqual(t, string(denyRuleBriefCommand), again.Rule, "once per session")
 }
 
 // TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"

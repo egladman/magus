@@ -37,7 +37,7 @@ func TestAdvisoriesStayInsideTheWorkspace(t *testing.T) {
 		assert.Equal(t, tt.outside, scope.lineOutside(tt.command, DialectBash), tt.command)
 	}
 
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	deps.scope = scope
 	assert.Empty(t, Evaluate(deps, "cat /work/other/main.go").Context, "an outside read is advised nothing")
 	assert.Contains(t, Evaluate(deps, "cat internal/guard/shell.go").Context, "refs", "the same read inside still is")

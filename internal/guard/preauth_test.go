@@ -302,7 +302,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 
 	grade := func(t *testing.T, id, run, role, lease string) {
 		t.Helper()
-		if deny := Evaluate(testDependencies(), run).Deny; deny != "" {
+		if deny := Evaluate(strict(testDependencies()), run).Deny; deny != "" {
 			t.Errorf("the %q breadcrumb serves %q, which the guard denies for every role:\n%s", id, run, deny)
 		}
 		for _, rule := range []func(context.Context, Dependencies, string, string) string{
@@ -352,7 +352,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		for _, f := range denyRemedyFixtures() {
 			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
 				command, want := f.setup(t, root)
-				deps := testDependencies()
+				deps := strict(testDependencies())
 				deps.GraphIDs = diagnosticGraph
 				v := Judge(ctx, deps, Request{Input: command, Lease: role.lease})
 				shape := verdictWithRule("deny", string(f.rule))

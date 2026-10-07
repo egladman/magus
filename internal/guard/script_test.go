@@ -218,7 +218,7 @@ func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: dir})
 	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + dir + `","tool_input":{"command":"bash retry.sh"}}`
 
-	v := Judge(ctx, testDependencies(), Request{Input: envelope})
+	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(v))
 	assert.Contains(t, v.Reason, "retry.sh")
