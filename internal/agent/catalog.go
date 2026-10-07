@@ -272,7 +272,9 @@ import (
 // through the typed magus\describe.<noun> methods.
 // 108: magus-multi-agent asks a plan's claims to cite the output ref of a run;
 // magus-buzz-lang points at its built-in methods table in prose rather than an anchor.
-const SkillVersion = 108
+// 109: headings across the skills read in sentence case, as the repo's Markdown rules
+// now require.
+const SkillVersion = 109
 
 const skillLicense = "GPL-3.0-or-later"
 
