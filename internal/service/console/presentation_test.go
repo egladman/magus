@@ -12,10 +12,13 @@ func TestPresent(t *testing.T) {
 
 	got, err := Present("127.0.0.1:7391", "", "  inspect the jobs  ")
 	require.NoError(t, err)
-	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/", got.URL)
-	assert.Equal(t, "dashboard", got.Surface)
-	assert.Equal(t, "inspect the jobs", got.Reason)
 	assert.Contains(t, got.OpenCommand, `"http://127.0.0.1:7391/console/dashboard/#code=$(magus config console token create --code --expires 12h)"`)
+	assert.Equal(t, Presentation{
+		URL:         "http://127.0.0.1:7391/console/dashboard/",
+		Surface:     "dashboard",
+		Reason:      "inspect the jobs",
+		OpenCommand: got.OpenCommand, // asserted above
+	}, got)
 	assert.NotContains(t, got.URL, "token=")
 }
 

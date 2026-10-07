@@ -126,8 +126,7 @@ func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
 	got := checkCheckpointWiring(harnessProbeCtx(), t.TempDir())
 
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+	assert.Equal(t, types.Check{Status: types.CheckOK, Evidence: types.EvidenceUnknown}, withoutWording(got))
 	assert.Contains(t, got.Message, "skipped")
 }
 

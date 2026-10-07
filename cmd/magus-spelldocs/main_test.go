@@ -82,9 +82,12 @@ func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 
 			fm, ok := docs.ParseFrontmatter(body)
 			require.True(t, ok, "the page has no parsable frontmatter")
-			assert.Equal(t, name+" spell", fm.Title)
-			assert.Equal(t, meta.description, fm.Description)
-			assert.Equal(t, "spells/"+meta.dir+"/spell.buzz", fm.GeneratedFrom)
+			assert.Equal(t, docs.Frontmatter{
+				Title:         name + " spell",
+				Description:   meta.description,
+				GeneratedFrom: "spells/" + meta.dir + "/spell.buzz",
+				Tags:          fm.Tags, // the two assertions below pin them
+			}, fm)
 			assert.Equal(t, fm.Tags[0], name, "the spell's own name leads its tags")
 			assert.Equal(t, len(fm.Tags), len(slices.Compact(slices.Sorted(slices.Values(fm.Tags)))), "tags are deduped: %v", fm.Tags)
 

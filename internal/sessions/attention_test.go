@@ -121,11 +121,21 @@ func TestAttentionDisposeEmptiesTheQueue(t *testing.T) {
 
 	all := Attention(fold)
 	require.Len(t, all, 1, "a disposed request is closed, never deleted")
-	assert.True(t, all[0].Disposed)
-	assert.Equal(t, int64(200), all[0].DisposedMs)
-	assert.Equal(t, "human1", all[0].DisposedBy)
-	assert.Equal(t, "approved by hand", all[0].Note)
-	assert.Equal(t, 1, all[0].Disposes)
+	assert.Equal(t, AttentionRequest{
+		ID:         "att-1",
+		Invocation: "agent1",
+		OpenedMs:   100,
+		Outcome:    "waiting",
+		Severity:   "warning",
+		Source:     "agent/claude",
+		Where:      "/repo",
+		Message:    "waiting on a decision",
+		Disposed:   true,
+		DisposedMs: 200,
+		DisposedBy: "human1",
+		Note:       "approved by hand",
+		Disposes:   1,
+	}, all[0])
 }
 
 func TestAttentionCollapsesARepeatedOpenIntoOneRequest(t *testing.T) {
@@ -153,10 +163,21 @@ func TestAttentionFirstDisposeWins(t *testing.T) {
 
 	all := Attention(fold)
 	require.Len(t, all, 1)
-	assert.Equal(t, "sessA", all[0].DisposedBy)
-	assert.Equal(t, int64(200), all[0].DisposedMs)
-	assert.Equal(t, "first", all[0].Note)
-	assert.Equal(t, 2, all[0].Disposes, "the second dispose is recorded, so a reader can see two people answered one request")
+	assert.Equal(t, AttentionRequest{
+		ID:         "att-1",
+		Invocation: "agent1",
+		OpenedMs:   100,
+		Outcome:    "waiting",
+		Severity:   "warning",
+		Source:     "agent/claude",
+		Where:      "/repo",
+		Message:    "waiting on a decision",
+		Disposed:   true,
+		DisposedMs: 200,
+		DisposedBy: "sessA",
+		Note:       "first",
+		Disposes:   2, // the second dispose is recorded, so a reader can see two people answered one request
+	}, all[0])
 	assert.Empty(t, AttentionQueue(fold))
 }
 
@@ -323,10 +344,21 @@ func TestDisposeRequestClosesItAndReportsWhatTheStoreRecorded(t *testing.T) {
 
 	req, err := DisposeRequest(dir, id, "approved by hand", InvocationStart{Workspace: "/repo"})
 	require.NoError(t, err)
-	assert.Equal(t, id, req.ID)
-	assert.True(t, req.Disposed)
-	assert.Equal(t, "approved by hand", req.Note)
 	assert.NotEmpty(t, req.DisposedBy, "the disposing session is read back off the store, not assumed")
+	assert.Equal(t, AttentionRequest{
+		ID:         id,
+		Invocation: req.Invocation, // a generated invocation id, not the session name
+		OpenedMs:   req.OpenedMs,
+		Outcome:    "waiting",
+		Source:     "agent/claude",
+		Where:      "/repo",
+		Message:    "needs a decision",
+		Disposed:   true,
+		DisposedMs: req.DisposedMs,
+		DisposedBy: req.DisposedBy,
+		Note:       "approved by hand",
+		Disposes:   1,
+	}, req)
 	assert.Empty(t, queueIDs(t, dir))
 }
 

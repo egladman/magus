@@ -128,6 +128,7 @@ linters:
     - nameoutput
     - testisolation
     - providerio
+    - fieldwise
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -433,6 +434,14 @@ linters:
               reason: downloads a validation run's CI artifacts by the URL a Buzz provider listing returns; a pre-existing exception, not yet a spell
             - file: cmd/magus/queue.go
               reason: CLI wiring for internal/queue/artifacts.go's client; see that entry
+
+      # A test that pins a struct field by field still passes when the struct grows one.
+      fieldwise:
+        type: module
+        description: reports a test asserting a struct one field at a time
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          report-partial: true
 
     testifylint:
       disable-all: true

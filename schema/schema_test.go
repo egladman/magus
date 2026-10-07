@@ -66,7 +66,9 @@ func TestFields_boolPtrHasNoFlagName(t *testing.T) {
 func TestFieldByEnv_found(t *testing.T) {
 	f, ok := FieldByEnv("MAGUS_CACHE_DIR")
 	require.True(t, ok, "FieldByEnv(MAGUS_CACHE_DIR) not found")
-	assert.Equal(t, "Cache.Dir", f.GoPath)
+	byPath, ok := FieldByGoPath("Cache.Dir")
+	require.True(t, ok, "FieldByGoPath(Cache.Dir) not found")
+	assert.Equal(t, byPath, f, "the env and Go-path lookups reach one field")
 	assert.Equal(t, KindString, f.Kind)
 }
 

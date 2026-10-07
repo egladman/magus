@@ -57,10 +57,14 @@ func TestLoadMagusfile_graph(t *testing.T) {
 	g := LoadMagusfile(context.Background(), sampleMagusfile)
 	require.True(t, g.OK, "load failed: %+v", g.Diag)
 	require.Len(t, g.Projects, 1)
-	assert.Equal(t, ".", g.Projects[0].Path)
-	assert.Equal(t, []string{"regen-pgo"}, g.Projects[0].NoCache)
-	assert.Equal(t, []string{"lint=4"}, g.Projects[0].Slots)
-	assert.Equal(t, []string{"go"}, g.Projects[0].Spells)
+	wantProject := Project{
+		Path:    ".",
+		Outputs: []string{"bin/**"},
+		Spells:  []string{"go"},
+		NoCache: []string{"regen-pgo"},
+		Slots:   []string{"lint=4"},
+	}
+	assert.Equal(t, wantProject, g.Projects[0])
 
 	gotTargets := map[string]bool{}
 	for _, tg := range g.Targets {
@@ -256,8 +260,8 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any { magus\run(["
 	r := Run(context.Background(), src, "release", nil)
 	require.True(t, r.OK, "dry-run failed: %+v", r.Diag)
 	require.Len(t, r.Trace, 1, "release should trace exactly the recursive invocation")
-	assert.Equal(t, "run", r.Trace[0].Kind)
-	assert.Equal(t, "image-build:cd", r.Trace[0].Name, "the traced invocation keeps the :charm suffix")
+	// The traced invocation keeps the :charm suffix.
+	assert.Equal(t, Op{Target: "release", Kind: "run", Name: "image-build:cd"}, r.Trace[0])
 }
 
 func TestRun_targetNameCasing(t *testing.T) {
@@ -326,9 +330,8 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }
 	r := Eval(context.Background(), src, WithTracer())
 	require.True(t, r.OK, "eval failed: %+v", r.Diag)
 	require.Len(t, r.Trace, 1, "the go-build op should trace exactly one host op")
-	assert.Equal(t, "build", r.Trace[0].Target, "op attributes to the target whose body invoked it")
-	assert.Equal(t, "spell", r.Trace[0].Kind)
-	assert.Equal(t, "go-build", r.Trace[0].Name)
+	// The op attributes to the target whose body invoked it.
+	assert.Equal(t, Op{Target: "build", Kind: "spell", Name: "go-build"}, r.Trace[0])
 }
 
 // TestEval_tracerMultiTarget checks the trace flattens every target's ops in

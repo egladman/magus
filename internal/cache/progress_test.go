@@ -92,10 +92,12 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 		}
 	}
 	require.Len(t, results, 1, "one journal result event for the off-batch step")
-	assert.Equal(t, "test/pkg", results[0].Project)
-	assert.Equal(t, "settle", results[0].Target)
-	assert.Equal(t, journal.StatusPass, results[0].Status)
 	assert.NotEmpty(t, results[0].Ref, "the event carries the output ref its log is stored under")
+	assert.Equal(t, journal.Event{
+		Ts: results[0].Ts, Inv: results[0].Inv, // the clock and the run's id
+		Project: "test/pkg", Target: "settle", Kind: journal.KindResult, Level: "info", Status: journal.StatusPass,
+		Ref: results[0].Ref, DurationMs: results[0].DurationMs, CacheKey: results[0].CacheKey,
+	}, results[0])
 }
 
 // TestRunAsideReportsFailureLikeABatchStep pins the other half: a failing off-batch step

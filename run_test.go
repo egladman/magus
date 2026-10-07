@@ -69,8 +69,7 @@ func TestDiagEventFromError(t *testing.T) {
 	de := types.DiagnosticErrorf(types.ExecDenied, "exec denied: /bin/x")
 	ev, ok := diagEventFromError("pkg/foo", "build", de)
 	assert.True(t, ok)
-	assert.Equal(t, types.ExecDenied, ev.Code)
-	assert.Equal(t, "pkg/foo:build", ev.Unit)
+	assert.Equal(t, types.DiagnosticEvent{Code: types.ExecDenied, Message: de.Msg, Unit: "pkg/foo:build"}, ev)
 
 	// A wrapped diagnostic error is still recognized (errors.As unwraps).
 	wrapped := fmt.Errorf("run failed: %w", de)
@@ -227,8 +226,11 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	}
 	assert.Equal(t, "failed", result.Status, "stream:\n%s", stream.String())
 	assert.Contains(t, result.Error, holder)
-	assert.Equal(t, string(types.MachineBudgetExhausted), diag.Code, "stream:\n%s", stream.String())
-	assert.Equal(t, ".:build", diag.Unit)
+	assert.Equal(t, report.DiagnosticEmitted{
+		Unit:    ".:build",
+		Code:    string(types.MachineBudgetExhausted),
+		Message: diag.Message, // the text is checked for the holder below
+	}, diag, "stream:\n%s", stream.String())
 	assert.Contains(t, diag.Message, holder)
 }
 
@@ -1186,10 +1188,14 @@ func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 	evs := recordOutputOverlapEvents(t, steps)
 
 	require.Len(t, evs, 1)
-	assert.Equal(t, "a", evs[0].ProjectA)
-	assert.Equal(t, "b", evs[0].ProjectB)
-	assert.Equal(t, "build", evs[0].Target, "must carry the steps' real target, not an invocation-wide scope label")
-	assert.Equal(t, []string{"dist/**"}, evs[0].Overlapping)
+	// The target is the steps' real one, not an invocation-wide scope label.
+	assert.Equal(t, recordedOutputOverlap{
+		Type:        report.TypeOutputOverlapDetected,
+		ProjectA:    "a",
+		ProjectB:    "b",
+		Target:      "build",
+		Overlapping: []string{"dist/**"},
+	}, evs[0])
 }
 
 // TestCheckOutputOverlap_DifferingTargetsReportsBoth covers the case that made a
@@ -1251,9 +1257,14 @@ func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	}
 
 	require.Len(t, evs, 1)
-	assert.Equal(t, "consumer", evs[0].Consumer)
-	assert.Equal(t, "producer", evs[0].Producer)
-	assert.Equal(t, "3 projects", evs[0].Target, "scope label is the best available identifier and must still reach the report")
+	// The scope label is the best available identifier and must still reach the report.
+	assert.Equal(t, recordedMissingDependency{
+		Type:     report.TypeMissingDependency,
+		Consumer: "consumer",
+		Producer: "producer",
+		Path:     "/ws/consumer/generated.go",
+		Target:   "3 projects",
+	}, evs[0])
 }
 
 // key mirrors how probeTools records a version, so the tests exercise the real lookup
@@ -1865,9 +1876,12 @@ func TestApplyRunKeyingCarriesObservations(t *testing.T) {
 	step := cache.Step{Target: "go-build", Observations: []string{"schema-rev=a1b2c3"}}
 	applyRunKeying(&step, &types.Project{Path: "."}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
 
-	assert.Equal(t, []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"}, step.Observations)
-	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
-	assert.Equal(t, []string{"rw"}, step.Charms)
+	assert.Equal(t, cache.Step{
+		Target:       "go-build",
+		Observations: []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"},
+		ToolVersions: []string{"go:go:1.25"},
+		Charms:       []string{"rw"},
+	}, step)
 }
 
 // The one place an indexer op sheds the spell's tool versions is applyRunKeying itself, so

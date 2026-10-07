@@ -46,8 +46,10 @@ func TestLoadSpell_services(t *testing.T) {
 	r := Run(ctx, src, "serve", nil)
 	require.True(t, r.OK, "dry-run of serve failed: %+v", r.Diag)
 	require.NotEmpty(t, r.Trace, "serve dry-run should trace the service op")
-	assert.Equal(t, "service", r.Trace[0].Kind, "serve returns a Service, so it is a service op")
-	assert.Equal(t, "serve", r.Trace[0].Name)
+	// serve returns a Service, so it is a service op; the declared command is pinned by
+	// substring below.
+	want := Op{Target: "serve", Kind: "service", Name: "serve", Detail: r.Trace[0].Detail}
+	assert.Equal(t, want, r.Trace[0])
 	assert.Contains(t, r.Trace[0].Detail, "docker", "the op detail carries the declared command")
 	// A clean service op raises no ward.
 	for _, op := range r.Trace {
@@ -73,8 +75,7 @@ export fun mgs_listTargets() > any { return {"machine": machine}; }
 	r := Run(context.Background(), src, "machine", nil)
 	require.True(t, r.OK, "dry-run of machine failed: %+v", r.Diag)
 	require.NotEmpty(t, r.Trace)
-	assert.Equal(t, "service", r.Trace[0].Kind)
-	assert.Equal(t, "podman machine start", r.Trace[0].Detail)
+	assert.Equal(t, Op{Target: "machine", Kind: "service", Name: "machine", Detail: "podman machine start"}, r.Trace[0])
 }
 
 // TestLoadSpell_wardMGS5002 loads the ward fixture (10-wards.buzz, a service whose
@@ -160,8 +161,8 @@ func TestLoadSpell_customCharms(t *testing.T) {
 			r := Run(ctx, src, "lint", c.charms)
 			require.True(t, r.OK, "dry-run of lint failed: %+v", r.Diag)
 			require.NotEmpty(t, r.Trace, "lint dry-run should trace the command op")
-			assert.Equal(t, "command", r.Trace[0].Kind, "lint returns a Command")
-			assert.Equal(t, c.want, r.Trace[0].Detail, "charm-applied argv")
+			// lint returns a Command, so it is a command op carrying the charm-applied argv.
+			assert.Equal(t, Op{Target: "lint", Kind: "command", Name: "lint", Detail: c.want}, r.Trace[0])
 		})
 	}
 }

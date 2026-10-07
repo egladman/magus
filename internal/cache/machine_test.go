@@ -29,7 +29,7 @@ func testBudget(t *testing.T, mb, slots int) (*MachineBudget, *time.Time) {
 }
 
 func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 8)
+	b, now := testBudget(t, 10_000, 8)
 
 	first := b.Request(types.MachineClaim{Project: ".", Target: "test", MemoryMB: 8000, Slots: 4, PID: 100})
 	require.True(t, first.Granted, "an empty machine seats the first claim")
@@ -40,9 +40,9 @@ func TestMachineBudgetAdmitsUntilFull(t *testing.T) {
 	assert.False(t, second.Granted, "the machine cannot seat both")
 	assert.True(t, second.Fits, "it would fit on an idle machine, so the refusal is temporary")
 	assert.False(t, second.OwnRun, "what fills the machine is another process's run")
-	require.Len(t, second.Holders, 1, "the refusal names who holds the budget")
-	assert.Equal(t, 100, second.Holders[0].PID)
-	assert.Equal(t, "test", second.Holders[0].Target)
+	assert.Equal(t, []types.MachineClaimant{
+		{Project: ".", Target: "test", PID: 100, MemoryMB: 8000, Slots: 4, Since: *now},
+	}, second.Holders, "the refusal names who holds the budget")
 
 	b.Release(first.ID)
 	third := b.Request(types.MachineClaim{Project: ".", Target: "ci", MemoryMB: 8000, Slots: 4, PID: 200})
@@ -80,9 +80,12 @@ func TestMachineBudgetAssertRecordsWhatDoesNotFit(t *testing.T) {
 
 	id := b.Assert(types.MachineClaim{Project: "docs", Target: "ci", MemoryMB: 9000, PID: 200})
 	require.NotEmpty(t, id)
+	// An asserted claim counts even over the budget, and takes the one slot every step spends.
 	snap := b.Snapshot()
-	assert.Equal(t, 18_000, snap.HeldMB, "an asserted claim counts even over the budget")
-	assert.Equal(t, 2, snap.HeldSlots, "and takes the one slot every step spends")
+	assert.Equal(t, types.MachineSnapshot{
+		BudgetMB: 10_000, HeldMB: 18_000, BudgetSlots: 8, HeldSlots: 2,
+		Holders: snap.Holders, // the two claimants are asserted by the releases below
+	}, snap)
 
 	v := b.Request(types.MachineClaim{Project: "x", Target: "lint", MemoryMB: 500, PID: 300})
 	assert.False(t, v.Granted, "new work is not admitted against memory a running step holds")
@@ -243,17 +246,18 @@ func TestMachineBudgetFreeSeatIsNotABypassForWhatCanNeverFit(t *testing.T) {
 }
 
 func TestMachineSnapshotReportsHolders(t *testing.T) {
-	b, _ := testBudget(t, 10_000, 8)
+	b, now := testBudget(t, 10_000, 8)
 	require.True(t, b.Request(types.MachineClaim{
 		Project: ".", Target: "test", MemoryMB: 9000, Slots: 2, PID: 100, Dir: "/tree/a",
 	}).Granted)
 
-	snap := b.Snapshot()
-	assert.Equal(t, 10_000, snap.BudgetMB)
-	assert.Equal(t, 9000, snap.HeldMB)
-	assert.Equal(t, 2, snap.HeldSlots)
-	require.Len(t, snap.Holders, 1)
-	assert.Equal(t, "/tree/a", snap.Holders[0].Dir, "a holder names the tree to go and look at")
+	// A holder names the tree to go and look at.
+	assert.Equal(t, types.MachineSnapshot{
+		BudgetMB: 10_000, HeldMB: 9000, BudgetSlots: 8, HeldSlots: 2,
+		Holders: []types.MachineClaimant{
+			{Project: ".", Target: "test", PID: 100, MemoryMB: 9000, Slots: 2, Dir: "/tree/a", Since: *now},
+		},
+	}, b.Snapshot())
 }
 
 // fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
@@ -291,7 +295,7 @@ func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
 }
 
 func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
-	budget, _ := testBudget(t, 1000, 2)
+	budget, now := testBudget(t, 1000, 2)
 	adm := &fakeAdmitter{budget: budget}
 	release, err := AdmitMachine(t.Context(), adm, types.MachineClaim{
 		Project: ".", Target: "session-brief", MemoryMB: 512,
@@ -300,11 +304,13 @@ func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 
 	holders := budget.Snapshot().Holders
 	require.Len(t, holders, 1)
-	assert.Equal(t, "session-brief", holders[0].Target)
-	assert.Equal(t, 512, holders[0].MemoryMB)
-	assert.Equal(t, 1, holders[0].Slots)
-	assert.Equal(t, os.Getpid(), holders[0].PID)
 	assert.NotEmpty(t, holders[0].Dir)
+	assert.Equal(t, types.MachineClaimant{
+		Project: ".", Target: "session-brief", PID: os.Getpid(), MemoryMB: 512, Slots: 1,
+		Dir:     holders[0].Dir,     // where the test binary runs
+		Command: holders[0].Command, // the test binary's argv
+		Since:   *now,
+	}, holders[0])
 
 	other := budget.Request(types.MachineClaim{Project: ".", Target: "build", MemoryMB: 600, PID: os.Getpid() + 1})
 	assert.False(t, other.Granted, "the brief's claim must count against another invocation")

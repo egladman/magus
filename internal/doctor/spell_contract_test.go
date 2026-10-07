@@ -13,8 +13,7 @@ import (
 func TestCheckSpellContract(t *testing.T) {
 	t.Run("no spells", func(t *testing.T) {
 		got := checkSpellContract(nil)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no spells registered", got.Message)
+		assert.Equal(t, types.Check{Name: "spell-contract", Status: types.CheckOK, Message: "no spells registered"}, got)
 	})
 
 	// The one thing no spell can function without, and the only required half of the

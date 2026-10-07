@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
 )
 
 func TestCommandShape(t *testing.T) {
@@ -70,17 +72,26 @@ func TestReadFeedbackFoldsOneSessionAcrossCheckouts(t *testing.T) {
 	assert.ElementsMatch(t, []string{main, worktree}, got.Checkouts)
 	require.Len(t, got.Observations, 2)
 	deny := got.Observations[0]
-	assert.Equal(t, "deny", deny.Decision)
-	assert.Equal(t, "grep-reader", deny.Rule)
-	assert.Equal(t, "a1", deny.Agent)
-	assert.Equal(t, "job-1", deny.Lease)
-	assert.Equal(t, []string{"sed -n 1,9p a.go"}, deny.Nexts)
-	assert.Equal(t, "grep -A<n> <arg> <path>", deny.Shape)
+	assert.Equal(t, types.FeedbackObservation{
+		At:       deny.At, // wall-clock stamp
+		Agent:    "a1",
+		Lease:    "job-1",
+		Tool:     "shell.command",
+		Command:  "grep -A5 'func X' a.go",
+		Decision: "deny",
+		Rule:     "grep-reader",
+		Nexts:    []string{"sed -n 1,9p a.go"},
+		Shape:    "grep -A<n> <arg> <path>",
+		Shapes:   deny.Shapes, // pinned by the CommandShapes tests
+	}, deny)
 	assert.Equal(t, "deny-grep-reader", got.Observations[1].PreauthorizedBy)
 	require.Len(t, got.Spawns, 1, "a continuation starts no subagent")
-	assert.Equal(t, "worker", got.Spawns[0].Child)
-	assert.Equal(t, "job-1", got.Spawns[0].Lease)
-	assert.Equal(t, "opus", got.Spawns[0].Model)
+	assert.Equal(t, types.FeedbackSpawn{
+		At:    got.Spawns[0].At, // wall-clock stamp
+		Child: "worker",
+		Lease: "job-1",
+		Model: "opus",
+	}, got.Spawns[0])
 }
 
 func TestReadFeedbackDefaultsToTheNewestSession(t *testing.T) {

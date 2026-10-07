@@ -9,23 +9,20 @@ import (
 )
 
 func TestParseFrontmatterRoundTrip(t *testing.T) {
-	var b strings.Builder
-	WriteFrontmatter(&b, Frontmatter{
+	want := Frontmatter{
 		Title:       "Charms: argv edits",
 		PageType:    "overview",
 		Aliases:     []string{"/old-charms"},
 		Description: "How charms work.",
 		Tags:        []string{"reference", "argv"},
-	})
+	}
+	var b strings.Builder
+	WriteFrontmatter(&b, want)
 	b.WriteString("Body text.\n")
 
 	f, ok := ParseFrontmatter(b.String())
 	require.True(t, ok)
-	assert.Equal(t, "Charms: argv edits", f.Title)
-	assert.Equal(t, "overview", f.PageType)
-	assert.Equal(t, []string{"/old-charms"}, f.Aliases)
-	assert.Equal(t, "How charms work.", f.Description)
-	assert.Equal(t, []string{"reference", "argv"}, f.Tags)
+	assert.Equal(t, want, f)
 }
 
 // TestParseFrontmatterRoundTripHazardousTitles pins that titles YAML would read as a flow
@@ -45,13 +42,13 @@ func TestParseFrontmatterRoundTripHazardousTitles(t *testing.T) {
 	} {
 		t.Run(title, func(t *testing.T) {
 			var b strings.Builder
-			WriteFrontmatter(&b, Frontmatter{Title: title, Description: "d", Tags: []string{"t"}})
+			want := Frontmatter{Title: title, Description: "d", Tags: []string{"t"}}
+			WriteFrontmatter(&b, want)
 			b.WriteString("Body.\n")
 
 			f, ok := ParseFrontmatter(b.String())
 			require.True(t, ok, "block did not parse - frontmatter would be dropped")
-			assert.Equal(t, title, f.Title)
-			assert.Equal(t, []string{"t"}, f.Tags)
+			assert.Equal(t, want, f)
 		})
 	}
 }

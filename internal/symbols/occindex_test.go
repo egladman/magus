@@ -60,8 +60,7 @@ func TestOccurrenceFileRoundTripsOneKeyAtATime(t *testing.T) {
 	for key, want := range all {
 		got, err := ReadKeyOccurrences(path, "stamp-1", key)
 		require.NoError(t, err)
-		assert.Equalf(t, want.Names, got.Names, "names of %s", key)
-		assert.Equalf(t, want.Files, got.Files, "files of %s", key)
+		assert.Equalf(t, want, got, "occurrences of %s", key)
 	}
 
 	missing, err := ReadKeyOccurrences(path, "stamp-1", "gomod example.com/foo Absent#")

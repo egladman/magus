@@ -167,8 +167,8 @@ func TestAttachAPIDeltaLikelyOnlyFromSignatures(t *testing.T) {
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	require.NotNil(t, out.API)
-	assert.Equal(t, types.DiffBumpPatch, out.API.Floor, "nothing was added or removed, so the floor is a patch")
-	assert.Equal(t, types.DiffBumpMajor, out.API.Likely)
+	// Nothing was added or removed, so the floor is a patch.
+	assert.Equal(t, types.DiffAPI{Base: "main", Floor: types.DiffBumpPatch, Likely: types.DiffBumpMajor, Signature: 1}, *out.API)
 }
 
 // TestAttachAPIDeltaMembersClassifyThemselves guards the container rule: scip-go renders a
@@ -194,9 +194,11 @@ func TestAttachAPIDeltaMembersClassifyThemselves(t *testing.T) {
 		diffConfig{baseline: &base, baselineLabel: "main"}, noExternals)
 
 	require.NotNil(t, out.API)
-	assert.Equal(t, 0, out.API.Signature, "the type defers to its members")
-	assert.Equal(t, 1, out.API.Added, "the new field is the change")
-	assert.Equal(t, types.DiffBumpMinor, out.API.Likely)
+	// The type defers to its members, so no signature moved, and the new field is the change.
+	assert.Equal(t, types.DiffAPI{
+		Base: "main", Floor: types.DiffBumpMinor, Likely: types.DiffBumpMinor,
+		Added: 1, Body: out.API.Body,
+	}, *out.API)
 }
 
 func TestAttachAPIDeltaRefusesABaselineWithoutSymbols(t *testing.T) {
@@ -281,12 +283,28 @@ func TestAttachConformanceFindsANewNameWithoutABaseline(t *testing.T) {
 
 	require.Len(t, out.Files[0].Symbols, 1, "Trail's definition line is unchanged, so only EntryPointFrom is a subject")
 	got := out.Files[0].Symbols[0]
-	assert.Equal(t, trailID("EntryPointFrom"), got.ID)
-	assert.Equal(t, "EntryPointFrom", got.Qualified)
-	assert.Equal(t, types.DiffChangeAdded, got.Change, "the patch added its definition")
 	require.Len(t, got.Checks, 1)
-	assert.Equal(t, types.CheckNamingAffix, got.Checks[0].Name)
-	assert.Equal(t, types.CheckAdvice, got.Checks[0].Status)
+	check := got.Checks[0]
+	// The patch added its definition. The exposure counts and signature are the index's, and
+	// the check's wording and counts are pinned where the check is tested.
+	assert.Equal(t, types.DiffSymbol{
+		ID:                    trailID("EntryPointFrom"),
+		Label:                 got.Label,
+		RefCount:              got.RefCount,
+		FileCount:             got.FileCount,
+		PublicTo:              got.PublicTo,
+		PublicFileCount:       got.PublicFileCount,
+		PublicBeyondWorkspace: got.PublicBeyondWorkspace,
+		Change:                types.DiffChangeAdded,
+		Qualified:             "EntryPointFrom",
+		Signature:             got.Signature,
+		BaseSignature:         got.BaseSignature,
+		Checks: []types.Check{{
+			Name: types.CheckNamingAffix, Status: types.CheckAdvice,
+			Message: check.Message, Details: check.Details, Evidence: check.Evidence, Fix: check.Fix,
+		}},
+		PublicThrough: got.PublicThrough,
+	}, got)
 }
 
 // A symbol whose definition moved, or whose signature changed, has its old line removed in the

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
@@ -75,6 +77,14 @@ func getPlan(t *testing.T, h *Handler, url string) (*httptest.ResponseRecorder, 
 	return w, out
 }
 
+// wantAnchor checks which target the plan was anchored on and why, comparing the whole
+// response with its nodes and edges set aside: the structure tests pin those.
+func wantAnchor(t *testing.T, out planResponse, target, anchor, why string) {
+	t.Helper()
+	out.Nodes, out.Edges = nil, nil
+	assert.Equal(t, planResponse{Target: target, Anchor: anchor}, out, "want %s/%s (%s)", target, anchor, why)
+}
+
 func planStates(p planResponse) map[string]planNode {
 	byID := make(map[string]planNode, len(p.Nodes))
 	for _, n := range p.Nodes {
@@ -102,9 +112,7 @@ func TestPlanHandler_DerivesTheAnchorClosureFromTheTargetGraph(t *testing.T) {
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("want no-store, got %q", got)
 	}
-	if out.Target != "ci" || out.Anchor != planAnchorExplicit {
-		t.Errorf("want ci/explicit, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "ci", planAnchorExplicit, "the named target")
 	byID := planStates(out)
 	for _, want := range []string{"app:ci", "app:build", "libs/api:ci", "libs/api:test"} {
 		if _, ok := byID[want]; !ok {
@@ -115,8 +123,8 @@ func TestPlanHandler_DerivesTheAnchorClosureFromTheTargetGraph(t *testing.T) {
 	if _, ok := byID["app:docs"]; ok {
 		t.Error("app:docs is outside the ci closure and must not be served")
 	}
-	if n := byID["app:build"]; n.Project != "app" || n.Target != "build" {
-		t.Errorf("node must carry its project and target split out, got %+v", n)
+	if want, n := (planNode{ID: "app:build", Project: "app", Target: "build", State: planStateIdle}), byID["app:build"]; want != n {
+		t.Errorf("node must carry its project and target split out, want %+v, got %+v", want, n)
 	}
 }
 
@@ -166,11 +174,11 @@ func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
 	h := NewHandler(fakePlanSource{graph: planFixture()}, outputs, "", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	byID := planStates(out)
-	if n := byID["app:build"]; n.State != planStateFail || n.Ref != "aa11" {
-		t.Errorf("want fail/aa11 from the newest descriptor (charm suffix cut), got %+v", n)
+	if want, n := (planNode{ID: "app:build", Project: "app", Target: "build", State: planStateFail, Ref: "aa11"}), byID["app:build"]; want != n {
+		t.Errorf("want fail/aa11 from the newest descriptor (charm suffix cut), want %+v, got %+v", want, n)
 	}
-	if n := byID["libs/api:test"]; n.State != planStatePass || n.Ref != "cc33" {
-		t.Errorf("want pass/cc33, got %+v", n)
+	if want, n := (planNode{ID: "libs/api:test", Project: "libs/api", Target: "test", State: planStatePass, Ref: "cc33"}), byID["libs/api:test"]; want != n {
+		t.Errorf("want pass/cc33, want %+v, got %+v", want, n)
 	}
 	if n := byID["app:ci"]; n.State != planStateIdle {
 		t.Errorf("a node with no descriptor stays idle, got %+v", n)
@@ -249,9 +257,7 @@ func TestPlanHandler_AnchorFollowsTheInFlightRun(t *testing.T) {
 	}
 	outputs := fakePlanOutputs{{Ref: "cc33", Project: "libs/api", Target: "test", TimestampMs: 100}}
 	_, out := getPlan(t, NewHandler(src, outputs, "/w", nil), "/api/v1/plan")
-	if out.Target != "build" || out.Anchor != planAnchorRunning {
-		t.Errorf("want build/running (charms stripped, running beats recent), got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "build", planAnchorRunning, "charms stripped, running beats recent")
 }
 
 func TestPlanHandler_AnchorPrefersTheMostRecentlyStartedRun(t *testing.T) {
@@ -263,9 +269,7 @@ func TestPlanHandler_AnchorPrefersTheMostRecentlyStartedRun(t *testing.T) {
 		}}},
 	}
 	_, out := getPlan(t, NewHandler(src, fakePlanOutputs{}, "/w", nil), "/api/v1/plan")
-	if out.Target != "ci" || out.Anchor != planAnchorRunning {
-		t.Errorf("want ci/running from the newest start, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "ci", planAnchorRunning, "the newest start")
 }
 
 func TestPlanHandler_AnchorFallsBackToTheMostRecentOutput(t *testing.T) {
@@ -274,16 +278,12 @@ func TestPlanHandler_AnchorFallsBackToTheMostRecentOutput(t *testing.T) {
 		{Ref: "bb22", Project: "app", Target: "ci", TimestampMs: 200},
 	}
 	_, out := getPlan(t, NewHandler(fakePlanSource{graph: planFixture()}, outputs, "", nil), "/api/v1/plan")
-	if out.Target != "test" || out.Anchor != planAnchorRecent {
-		t.Errorf("want test/recent, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "test", planAnchorRecent, "the most recent output")
 }
 
 func TestPlanHandler_AnchorDefaultsToCI(t *testing.T) {
 	_, out := getPlan(t, NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil), "/api/v1/plan")
-	if out.Target != planDefaultTarget || out.Anchor != planAnchorDefault {
-		t.Errorf("want ci/default, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, planDefaultTarget, planAnchorDefault, "nothing has run")
 }
 
 // `magus x <ref>` is in the pool but is not a target, so it must not serve an empty plan
@@ -297,9 +297,7 @@ func TestPlanHandler_UndefinedDerivedAnchorFallsThrough(t *testing.T) {
 	}
 	outputs := fakePlanOutputs{{Ref: "bb22", Project: "app", Target: "build", TimestampMs: 200}}
 	_, out := getPlan(t, NewHandler(src, outputs, "/w", nil), "/api/v1/plan")
-	if out.Target != "build" || out.Anchor != planAnchorRecent {
-		t.Errorf("want build/recent, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "build", planAnchorRecent, "the derived candidate falls through")
 }
 
 func TestPlanHandler_ExplicitTargetOverridesTheRunningOne(t *testing.T) {
@@ -310,9 +308,7 @@ func TestPlanHandler_ExplicitTargetOverridesTheRunningOne(t *testing.T) {
 		}}},
 	}
 	_, out := getPlan(t, NewHandler(src, fakePlanOutputs{}, "/w", nil), "/api/v1/plan?target=ci")
-	if out.Target != "ci" || out.Anchor != planAnchorExplicit {
-		t.Errorf("want ci/explicit, got %q/%q", out.Target, out.Anchor)
-	}
+	wantAnchor(t, out, "ci", planAnchorExplicit, "the named target beats the running one")
 }
 
 // --- errors and empties ---

@@ -135,7 +135,7 @@ func TestWithSpellAddsLanguage(t *testing.T) {
 	require.NoError(t, err)
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not discovered")
-	assert.Equal(t, "go", p.Spell)
+	assert.Equal(t, "go", p.Spell) //nolint:fieldwise // an Inspect-built Project carries resolved spells, bindings and discovery state this test cannot construct
 	assert.Equal(t, []string{"go"}, p.Spells)
 }
 
@@ -151,7 +151,7 @@ func TestWithSpellMultipleTools(t *testing.T) {
 	require.NoError(t, err, "Open")
 	p := ws.Get(".")
 	require.NotNil(t, p, "project . not found")
-	assert.Equal(t, "go", p.Spell, "Spell (primary)")
+	assert.Equal(t, "go", p.Spell, "Spell (primary)") //nolint:fieldwise // an Inspect-built Project carries resolved spells, bindings and discovery state this test cannot construct
 	assert.Equal(t, []string{"go", "rust"}, p.Spells)
 	assert.Len(t, p.ResolvedSpells, 2)
 }
@@ -283,7 +283,7 @@ func TestProvidedProjectIsAFullProject(t *testing.T) {
 
 	foo := ws.Get("libs/foo")
 	require.NotNil(t, foo, "a provided project must be addressable like any other")
-	assert.Equal(t, "@acme/foo", foo.Name)
+	assert.Equal(t, "@acme/foo", foo.Name) //nolint:fieldwise // an Inspect-built Project carries resolved spells, bindings and discovery state this test cannot construct
 	assert.Equal(t, types.ProvidedBy("nx"), foo.Origin)
 	assert.Equal(t, []string{"ts"}, foo.Spells)
 	assert.Equal(t, []string{"libs/shared"}, foo.DependsOn)

@@ -54,9 +54,19 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 
 	m, logPath, err := c.LastEntry("myservice")
 	require.NoError(t, err)
-	assert.Equal(t, "myservice", m.ProjectPath)
 	assert.NotEmpty(t, logPath, "expected non-empty log path")
-	assert.Equal(t, "build", m.Target)
+	// The hash, the snapshot, the clock and the platform are the run's own and pinned elsewhere.
+	assert.Equal(t, &Manifest{
+		ProjectPath: "myservice",
+		Hash:        m.Hash,
+		Target:      "build",
+		Outputs:     m.Outputs,
+		CreatedAt:   m.CreatedAt,
+		Platform:    m.Platform,
+		DurationMs:  m.DurationMs,
+		Return:      m.Return,
+		Stamps:      m.Stamps,
+	}, m)
 }
 
 // TestLastRecordedRun_NothingRecorded: with no entry there is no comparison to make,

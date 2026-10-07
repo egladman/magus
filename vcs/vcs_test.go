@@ -206,8 +206,10 @@ func TestDiffCommandsGit(t *testing.T) {
 	hints, err := res.VCS.DiffCommands(t.Context(), dir, "origin/main")
 	require.NoError(t, err, "DiffCommands")
 
-	assert.Equal(t, "git diff origin/main..."+wantSHA, hints.CLI)
-	assert.Equal(t, "git difftool origin/main..."+wantSHA, hints.GUI)
+	assert.Equal(t, types.DiffCommandHints{
+		CLI: "git diff origin/main..." + wantSHA,
+		GUI: "git difftool origin/main..." + wantSHA,
+	}, hints)
 }
 
 // TestDiffGitIncludesWorkingTree reproduces the "0 projects affected" bug: with
@@ -277,10 +279,14 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 
 	c, err := res.VCS.FindCommit(context.Background(), dir, "")
 	require.NoError(t, err, "FindCommit")
-	assert.Equal(t, "second line", c.Subject)
-	assert.Equal(t, "body text", c.Body)
-	assert.Equal(t, "Alice", c.Author.Name)
-	assert.Equal(t, "alice@example.com", c.Author.Email)
+	// The revision's identity, date and parents are git's to stamp; the Date, ID and Short are
+	// checked below.
+	assert.Equal(t, types.Commit{
+		ID: c.ID, Short: c.Short, Date: c.Date, Parents: c.Parents,
+		Author:  types.Person{Name: "Alice", Email: "alice@example.com"},
+		Subject: "second line",
+		Body:    "body text",
+	}, c)
 	assert.False(t, c.Date.IsZero(), "Date is zero; expected a parsed RFC3339 record date")
 	assert.NotEmpty(t, c.ID)
 	assert.NotEmpty(t, c.Short)

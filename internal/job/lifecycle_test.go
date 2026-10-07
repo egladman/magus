@@ -385,15 +385,14 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			for _, want := range tt.rows {
 				row := got[want.ID]
 				reason, ended := tt.ended[want.ID]
+				wantRow := want
+				wantRow.Schema = row.Schema // the envelope is the store's, stamped on read
 				if !ended {
-					assert.Equal(t, want.State, row.State, "%s stays as it was", want.ID)
-					assert.Empty(t, row.EndReason, want.ID)
-					assert.Equal(t, want.Updated, row.Updated, want.ID)
+					assert.Equal(t, wantRow, row, "%s stays as it was", want.ID)
 					continue
 				}
-				assert.Equal(t, types.StateNoReturn, row.State, want.ID)
-				assert.Equal(t, reason, row.EndReason, want.ID)
-				assert.Equal(t, now, row.Updated, "ending a row is its own transition")
+				wantRow.State, wantRow.EndReason, wantRow.Updated = types.StateNoReturn, reason, now
+				assert.Equal(t, wantRow, row, "%s ends as no_return with its reason, and ending a row is its own transition", want.ID)
 				lines = append(lines, "ended "+want.ID+": "+reason)
 			}
 			gotLines := strings.Split(strings.TrimSuffix(notices.String(), "\n"), "\n")
@@ -446,8 +445,17 @@ func TestExecRecordsTheCheckoutAndItsRemovalEndsTheJob(t *testing.T) {
 	require.NoError(t, os.RemoveAll(checkout))
 
 	rows := states(t, s)
-	assert.Equal(t, abs, rows["w"].CheckoutRoot, "a declaration carries the store's record forward")
-	assert.Equal(t, types.StateNoReturn, rows["w"].State)
+	assert.Equal(t, stamped(types.Job{
+		ID:           "w",
+		Criteria:     "rewritten",
+		Checkpoint:   "abc",
+		State:        types.StateNoReturn,
+		ReportedBase: "abc",
+		BaseVerdict:  taken.BaseVerdict,
+		Registered:   taken.Registered,
+		CheckoutRoot: abs,
+		EndReason:    "taken in " + abs + ", which no longer exists",
+	}, rows["w"]), rows["w"], "a declaration carries the store's record forward")
 	assert.Equal(t, "ended w: taken in "+abs+", which no longer exists\n", notices.String())
 }
 
@@ -534,8 +542,10 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 
 	got := states(t, s)
 	assert.Equal(t, []string{"landed", "busy", "pending"}, probed, "only exited rows with changed paths in a checkout are probed")
-	assert.Equal(t, types.StateNoReturn, got["landed"].State)
-	assert.Equal(t, "its work landed on origin/main at base1", got["landed"].EndReason)
+	landed := exited("landed")
+	landed.Schema = got["landed"].Schema // the envelope is the store's, stamped on read
+	landed.State, landed.EndReason, landed.Updated = types.StateNoReturn, "its work landed on origin/main at base1", 100_000
+	assert.Equal(t, landed, got["landed"])
 	for _, id := range []string{"busy", "pending", "reader"} {
 		assert.Equal(t, types.StateExited, got[id].State, id)
 	}

@@ -234,8 +234,7 @@ func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...
 // allow. A caller that does not declare it renders ask gets a deny that says why.
 func TestAskReachesOnlyACallerThatRendersIt(t *testing.T) {
 	v := judgePushFrom(t, false, "", "")
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Equal(t, verdictWithRule("deny", string(denyRulePushUngated)), unworded(v))
 	assert.Contains(t, v.Reason, "predates approval prompts")
 	assert.Contains(t, v.Reason, "magus describe harness")
 	assert.Contains(t, v.Reason, "abc1234", "the refusal still names what it refused")
@@ -249,8 +248,7 @@ func TestAskReachesOnlyACallerThatRendersIt(t *testing.T) {
 // replaced promised exactly that escape without implementing it.
 func TestUngatedPushAsksTheOrchestrator(t *testing.T) {
 	v := judgePush(t, "", "")
-	assert.Equal(t, "ask", v.Decision)
-	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Equal(t, verdictWithRule("ask", string(denyRulePushUngated)), unworded(v))
 	assert.Contains(t, v.Reason, "abc1234", "the prompt names the commit it publishes")
 	assert.Contains(t, v.Reason, "no `ci` run is recorded")
 	assert.Contains(t, v.Reason, "Approving publishes")
@@ -275,8 +273,7 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 	line := "git push -q -u origin topic && gh pr merge topic --squash --admin"
 
 	v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, "queue it", v.Reason)
+	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "queue it", Rule: workspaceCommandRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 	require.Len(t, probe.asked, 1)
 	assert.Equal(t, []string{"git", "gh"}, []string{probe.asked[0].Commands[0].Program, probe.asked[0].Commands[1].Program})
 
@@ -294,8 +291,7 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	lease := narrowLease()
 	v := judgePush(t, "", lease.ID, lease)
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRuleLeaseVCS), v.Rule)
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseVCS)), unworded(v))
 	assert.Contains(t, v.Reason, lease.ID)
 	assert.Contains(t, v.Reason, "Pushing, stashing")
 	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
@@ -316,8 +312,7 @@ func TestUngatedPushAsksARootSessionHoldingItsOwnLease(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
 	v := Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true, Host: "claude-code", Session: "root-session"})
-	assert.Equal(t, "ask", v.Decision)
-	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Equal(t, verdictWithRule("ask", string(denyRulePushUngated)), unworded(v))
 	assert.Contains(t, v.Reason, "Approving publishes")
 }
 
@@ -477,8 +472,7 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 
 	t.Run("an ungated checkout is asked about, though the hook's own is gated", func(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, dashC)
-		assert.Equal(t, "ask", v.Decision)
-		assert.Equal(t, string(denyRulePushUngated), v.Rule)
+		assert.Equal(t, verdictWithRule("ask", string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 		assert.NotContains(t, v.Reason, "abc1234")
 	})
@@ -504,21 +498,18 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 		v := judgeRelocatedPush(t, true, false, func(b string) string {
 			return "git --no-pager -c color.ui=never -C " + b + " -P push origin HEAD:refs/heads/x"
 		})
-		assert.Equal(t, "ask", v.Decision)
-		assert.Equal(t, string(denyRulePushUngated), v.Rule)
+		assert.Equal(t, verdictWithRule("ask", string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "def5678")
 	})
 
 	t.Run("a pager option does not hide a push from the hook's checkout", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, true, func(string) string { return "git -P push" })
-		assert.Equal(t, "ask", v.Decision)
-		assert.Equal(t, string(denyRulePushUngated), v.Rule)
+		assert.Equal(t, verdictWithRule("ask", string(denyRulePushUngated)), unworded(v))
 		assert.Contains(t, v.Reason, "abc1234")
 	})
 
 	t.Run("a directory only the shell knows keeps the advisory", func(t *testing.T) {
 		v := judgeRelocatedPush(t, false, false, func(string) string { return `git -C "$T" push` })
-		assert.Equal(t, "advise", v.Decision)
-		assert.Equal(t, string(advisoryPushGate), v.Rule)
+		assert.Equal(t, verdictWithRule("advise", string(advisoryPushGate)), unworded(v))
 	})
 }

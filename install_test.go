@@ -92,21 +92,29 @@ func TestInstallStepKeysOnlyWhatDecidesTheInstall(t *testing.T) {
 	tools := []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0", "typescript:tsc:UNPROBED", "go:go:1.26"}
 
 	step := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw"})
-	assert.Equal(t, "pnpm-install", step.Target)
-	assert.Equal(t, "typescript", step.Spell)
-	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml", "web/.npmrc"), step.Sources)
-	assert.Equal(t, []string{"web/node_modules/.pnpm/lock.yaml"}, step.Stamps)
-	assert.Equal(t, []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0"}, step.ToolVersions)
-	assert.Empty(t, step.Charms)
-	assert.True(t, step.IncludeOS)
-	assert.True(t, step.IncludeArch)
-	assert.False(t, step.NoCache)
-	assert.Empty(t, step.Outputs)
+	base := m.baseStep(p)
+	want := cache.Step{
+		ProjectPath:     p.Path,
+		Sources:         types.MustParseGlobs("web/package.json", "pnpm-lock.yaml", "web/.npmrc"),
+		IgnoreDirs:      base.IgnoreDirs,
+		WorkspaceRoot:   root,
+		Target:          "pnpm-install",
+		Spell:           "typescript",
+		SpellDefVersion: base.SpellDefVersion,
+		ToolVersions:    []string{"typescript:node:v24.19.0", "typescript:pnpm:10.33.0"},
+		IncludeOS:       true,
+		IncludeArch:     true,
+		Stamps:          []string{"web/node_modules/.pnpm/lock.yaml"},
+		Label:           base.Label,
+	}
+	assert.Equal(t, want, step)
 
 	update := m.installStep(p, "typescript", "pnpm-install", choice, tools, []string{"rw", types.CharmUpdate})
-	assert.Equal(t, []string{types.CharmUpdate}, update.Charms)
-	assert.True(t, update.NoCache, "a replayed update is an update that never happened")
-	assert.Equal(t, types.MustParseGlobs("web/package.json", "pnpm-lock.yaml"), update.Updates)
+	// A replayed update is an update that never happened.
+	want.Charms = []string{types.CharmUpdate}
+	want.NoCache = true
+	want.Updates = types.MustParseGlobs("web/package.json", "pnpm-lock.yaml")
+	assert.Equal(t, want, update)
 
 	choice.Install.Stamps = nil
 	assert.True(t, m.installStep(p, "typescript", "pnpm-install", choice, tools, nil).NoCache,

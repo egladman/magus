@@ -21,8 +21,13 @@ func TestConsoleTool(t *testing.T) {
 	require.NoError(t, err)
 	got, ok := resp.Data.(console.Presentation)
 	require.True(t, ok)
-	assert.Equal(t, "http://127.0.0.1:7391/console/activity/", got.URL)
-	assert.Equal(t, "show the completed run", got.Reason)
+	// The open command is built from the signed-in link, which this test does not pin.
+	assert.Equal(t, console.Presentation{
+		URL:         "http://127.0.0.1:7391/console/activity/",
+		Surface:     "activity",
+		Reason:      "show the completed run",
+		OpenCommand: got.OpenCommand,
+	}, got)
 }
 
 func TestConsoleToolRejectsDisabledConsole(t *testing.T) {

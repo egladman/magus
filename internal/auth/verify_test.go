@@ -91,8 +91,12 @@ func TestVerifyRoutesByKind(t *testing.T) {
 	plantRecord(t, "real", stored, types.GrantViewer)
 	cred, ok := Verify(stored)
 	require.True(t, ok)
-	assert.Equal(t, types.KindStored, cred.Kind)
-	assert.Equal(t, types.GrantViewer, cred.Grant, "an mgs_ string is never matched against the operator file")
+	assert.Equal(t, types.Credential{
+		Kind:  types.KindStored,
+		ID:    digest(stored)[:8],
+		Name:  "real",
+		Grant: types.GrantViewer, // an mgs_ string is never matched against the operator file
+	}, cred)
 
 	// A share secret with a planted record still fails on loopback.
 	share, _, err := MintShare(types.GrantOperator, time.Hour)

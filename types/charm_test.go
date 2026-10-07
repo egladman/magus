@@ -82,8 +82,7 @@ func TestParseTargetNormalizesCharms(t *testing.T) {
 func TestParseTargetRecordsNonCanonicalCharmSpelling(t *testing.T) {
 	got, err := ParseTarget("format:UPDATE")
 	require.NoError(t, err)
-	assert.Equal(t, []string{CharmUpdate}, got.Charms)
-	assert.Equal(t, []string{"UPDATE"}, got.DeclaredCharms)
+	assert.Equal(t, Target{Name: "format", Charms: []string{CharmUpdate}, DeclaredCharms: []string{"UPDATE"}}, got)
 
 	// The canonical spelling teaches nothing, so it must leave DeclaredCharms empty:
 	// a hint that fires on correct input is a hint everyone learns to ignore.

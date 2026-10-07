@@ -102,7 +102,7 @@ func TestReviewsDismissesWhatDoesNotCarryNamingTheFiles(t *testing.T) {
 	ann, cy := want, want
 	ann.Reviewer, ann.ReviewID, cy.Reviewer, cy.ReviewID = "ann", "12", "cy", "14"
 	assert.Equal(t, []types.ReviewVerdict{ann, cy}, got.Reviews)
-	assert.Equal(t, []string{"12: magus queue: " + reason + ". Review the head again.", "14: magus queue: " + reason + ". Review the head again."}, prov.dismissed)
+	assert.Equal(t, []string{"12: magus queue: " + reason + ". Review the head again.", "14: magus queue: " + reason + ". Review the head again."}, prov.dismissed) //nolint:fieldwise // reviewing is a provider fake wrapping a mock; its call log is not a value to compare whole
 	assert.Equal(t, 2, prov.nreads, "the head is read again before dismissing")
 	d.vcs.AssertNumberOfCalls(t, "MergeTrees", 1)
 

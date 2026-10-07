@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
@@ -73,7 +75,7 @@ func postDispose(t *testing.T, h *Handler, payload string) *httptest.ResponseRec
 
 func TestAttentionHandler_ServesTheOpenQueue(t *testing.T) {
 	root, dir := plantStore(t)
-	raise(t, dir, "agent-1", "needs the deploy key")
+	id := raise(t, dir, "agent-1", "needs the deploy key")
 
 	h := NewHandler(root, "v0.0.0-test", nil, nil)
 	code, out := getQueue(t, h)
@@ -87,9 +89,18 @@ func TestAttentionHandler_ServesTheOpenQueue(t *testing.T) {
 		t.Fatalf("want the one open request, got %+v", out.Requests)
 	}
 	// The fields a row cannot be acted on without: what to close, and what it is about.
-	if out.Requests[0].Message != "needs the deploy key" || out.Requests[0].Outcome != "waiting" {
-		t.Errorf("want the raised block verbatim, got %+v", out.Requests[0])
+	got := out.Requests[0]
+	// The invocation id and the open time are stamped by the store; the time is checked below.
+	want := sessions.AttentionRequest{
+		ID:         id,
+		Invocation: got.Invocation,
+		OpenedMs:   got.OpenedMs,
+		Outcome:    "waiting",
+		Source:     "claude/Notification",
+		Where:      "/repo",
+		Message:    "needs the deploy key",
 	}
+	assert.Equal(t, want, got, "want the raised block verbatim")
 	if out.Requests[0].OpenedMs == 0 {
 		t.Error("want the open timestamp on the wire; the queue is ordered and aged by it")
 	}

@@ -81,10 +81,13 @@ func TestBuildMergeRecordsTheStackBaseOfASquashedChangeBeneath(t *testing.T) {
 
 	b, err := buildMerge(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: onto, change: c, scratch: t.TempDir(), date: when})
 	require.NoError(t, err)
-	assert.Equal(t, head("cand"), b.Commit)
-	assert.Equal(t, []string{"lib/x.txt"}, b.touched)
 	box := filepath.Dir(b.Dir)
-	assert.Equal(t, types.Candidate{Commit: head("cand"), Change: "2", Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")}, b.Candidate)
+	assert.Equal(t, built{
+		Candidate: types.Candidate{Commit: head("cand"), Change: "2", Dir: filepath.Join(box, "checkout"), Home: filepath.Join(box, "home"), TempDir: filepath.Join(box, "tmp")},
+		touched:   []string{"lib/x.txt"},
+		date:      when,
+		changed:   []string{"lib/x.txt"},
+	}, b)
 	for _, dir := range []string{box, b.Dir, b.Home, b.TempDir} {
 		info, err := os.Stat(dir)
 		require.NoError(t, err)
@@ -295,8 +298,7 @@ func TestMergeInLeavesWhatAutoResolutionDoesNotSettle(t *testing.T) {
 			_, _, err := mergeIn(t.Context(), d.vcs, candidateSpec{clone: clone, facts: d.facts, onto: base, change: c}, "/co", base)
 			conf, ok := asConflict(err)
 			require.True(t, ok, "%v", err)
-			assert.Equal(t, []string{"CHANGELOG.md"}, conf.paths)
-			assert.Equal(t, tc.declined, conf.declined)
+			assert.Equal(t, sourceConflict{change: c, paths: []string{"CHANGELOG.md"}, declined: tc.declined}, conf)
 		})
 	}
 }
@@ -426,8 +428,7 @@ func TestRegenerateInCommitsOnlyDeclaredWrites(t *testing.T) {
 			if tc.wantErr != "" {
 				var refused *types.RefusedError
 				require.ErrorAs(t, err, &refused)
-				assert.Equal(t, tc.wantErr, refused.Reason)
-				assert.Equal(t, []string{"a.go"}, refused.Paths)
+				assert.Equal(t, &types.RefusedError{Reason: tc.wantErr, Paths: []string{"a.go"}}, refused)
 				return
 			}
 			require.NoError(t, err)

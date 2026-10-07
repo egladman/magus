@@ -355,8 +355,9 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				deps := testDependencies()
 				deps.GraphIDs = diagnosticGraph
 				v := Judge(ctx, deps, Request{Input: command, Lease: role.lease})
-				require.Equal(t, "deny", v.Decision, command)
-				require.Equal(t, string(f.rule), v.Rule, command)
+				shape := verdictWithRule("deny", string(f.rule))
+				shape.Next = v.Next // graded one by one below, as this role is served them
+				require.Equal(t, shape, unworded(v), command)
 				if role.lease == "" {
 					require.Len(t, v.Next, 1, "unbound, %q serves its remedy", command)
 					assert.Equal(t, want, v.Next[0].Run)

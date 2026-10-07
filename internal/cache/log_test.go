@@ -977,9 +977,8 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 
 	got, ok := h.HitFailure(22)
 	require.True(t, ok)
-	assert.Equal(t, "build", got.Target)
-	assert.Equal(t, "api", got.Project)
-	assert.Equal(t, "out-build", got.OutputRef, "the ref travels with the row, so the output is one click away")
+	// The ref travels with the row, so the output is one click away.
+	assert.Equal(t, Failure{Project: "api", Target: "build", OutputRef: "out-build", Dur: 250 * time.Millisecond}, got)
 
 	got, ok = h.HitFailure(23)
 	require.True(t, ok)
@@ -1033,8 +1032,7 @@ func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
 	require.NoError(t, h.Handle(ctx, buildRecord("cache.hit",
 		slog.String("project", "api"), slog.String("target", "build"),
 		slog.Int64("duration", int64(time.Millisecond)))))
-	assert.Equal(t, 1, h.status.cached)
-	assert.Equal(t, 0, h.status.failed)
+	assert.Equal(t, statusLine{cached: 1, start: h.status.start}, h.status) // the first event starts the clock
 }
 
 // TestNoEscapeSequencesEverReachAPipe is the CI persona's one demand, as a
@@ -1153,9 +1151,8 @@ func TestClickCoordinatesMatchWhereTheBandActuallyDrew(t *testing.T) {
 
 		got, ok := h.HitFailure(drawn)
 		require.True(t, ok, "row %d shows %q but hit-testing claims nothing is there", drawn, target)
-		assert.Equal(t, target, got.Target,
+		assert.Equal(t, Failure{Project: "api", Target: target, OutputRef: "out-" + target, Dur: time.Second}, got,
 			"clicking the row that displays %q must rerun %q, not %q", target, target, got.Target)
-		assert.Equal(t, "out-"+target, got.OutputRef)
 	}
 
 	// And the rows above the band, where the transcript lives, belong to the

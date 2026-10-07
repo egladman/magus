@@ -33,11 +33,9 @@ func TestFileHotspots(t *testing.T) {
 	// Constant complexity isolates the churn ranking: api/a.go (2 commits) leads.
 	out := FileHotspots(scanFixture(), func(string) int { return 10 })
 	require.NotEmpty(t, out)
-	assert.Equal(t, "api/a.go", out[0].Path)
-	assert.Equal(t, 2, out[0].Commits)
-	assert.Equal(t, 10, out[0].Complexity)
-	assert.Equal(t, 20, out[0].Score)
-	assert.Equal(t, 2, out[0].Authors)
+	assert.Equal(t, types.FileHotspot{
+		Path: "api/a.go", Commits: 2, Complexity: 10, Score: 20, Authors: 2, LastCommit: day(3),
+	}, out[0])
 }
 
 // TestFileHotspotsFollowsRenames is the regression this lineage work exists for.
@@ -63,11 +61,11 @@ func TestFileHotspotsFollowsRenames(t *testing.T) {
 	assert.NotContains(t, byPath, "old.go", "an earlier name is folded away, not ranked separately")
 	assert.NotContains(t, byPath, "mid.go")
 
-	got := byPath["new.go"]
-	assert.Equal(t, 4, got.Commits, "every commit under every name counts once, against the final name")
-	assert.Equal(t, 2, got.Authors, "authors merge across the lineage too")
-	assert.Equal(t, 2, got.Moves, "three names means it moved twice")
-	assert.Equal(t, day(9), got.LastCommit)
+	// Every commit under every name counts once, against the final name; authors merge across
+	// the lineage too; three names means it moved twice.
+	assert.Equal(t, types.FileHotspot{
+		Path: "new.go", Commits: 4, Complexity: 1, Score: 4, Authors: 2, LastCommit: day(9), Moves: 2,
+	}, byPath["new.go"])
 	assert.Equal(t, "new.go", out[0].Path, "and it now outranks the file it was losing to")
 }
 
@@ -104,10 +102,11 @@ func TestOwnership(t *testing.T) {
 		byPath[o.Path] = o
 	}
 	api := byPath["api"]
-	assert.Equal(t, 2, api.Authors)
-	assert.Equal(t, 50, api.PrimaryShare, "ada and lin each have one of api's two commits")
-	assert.False(t, api.BusFactor1)
-	assert.True(t, api.Stale, "api's last commit (day 3) predates the day-4 cutoff")
+	// ada and lin each have one of api's two commits, so Primary is a tie broken by the
+	// ranking; its last commit (day 3) predates the day-4 cutoff.
+	assert.Equal(t, types.OwnershipEntry{
+		Path: "api", Commits: 2, Authors: 2, Primary: api.Primary, PrimaryShare: 50, Stale: true, LastCommit: day(3),
+	}, api)
 	assert.False(t, byPath["web/studio"].Stale)
 }
 

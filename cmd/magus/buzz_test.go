@@ -604,9 +604,9 @@ func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
 				return
 			}
 			require.Len(t, diags, 1)
-			assert.Equal(t, lib, diags[0].File)
-			assert.Equal(t, 1, diags[0].Line)
-			assert.Contains(t, diags[0].Msg, "no import binds magus")
+			got := diags[0]
+			assert.Contains(t, got.Msg, "no import binds magus")
+			assert.Equal(t, buzz.Diagnostic{Line: 1, Col: got.Col, Code: got.Code, Msg: got.Msg, File: lib}, got)
 		})
 	}
 }

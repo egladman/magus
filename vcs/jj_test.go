@@ -128,8 +128,14 @@ func TestParseJJHistory(t *testing.T) {
 	}
 	got := parseJJHistory(rec("abcd", "docs/a.md", "Fnamed") + rec("ef01"))
 	require.Len(t, got, 2)
-	assert.Equal(t, "Fix the F key", got[0].Subject)
-	assert.Equal(t, []string{"docs/a.md", "Fnamed"}, got[0].Files)
+	assert.Equal(t, types.Commit{
+		ID:      "abcd",
+		Short:   "ab",
+		Author:  types.Person{Name: "n", Email: "e"},
+		Date:    got[0].Date, // the record's timestamp, parsed by parseCommit's own tests
+		Subject: "Fix the F key",
+		Files:   []string{"docs/a.md", "Fnamed"},
+	}, got[0])
 	assert.Equal(t, "ef01", got[1].ID)
 	assert.Nil(t, got[1].Files)
 }

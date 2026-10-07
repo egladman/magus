@@ -79,8 +79,8 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 				assert.Empty(t, got.Decision, got.Reason)
 				return
 			}
-			require.Equal(t, "deny", got.Decision)
-			assert.Equal(t, string(denyRuleClaimedDeclaration), got.Rule)
+			// The reason is checked by substring below, so it is copied across.
+			require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleClaimedDeclaration)}, got)
 			assert.Contains(t, got.Reason, "which lease own-a (work on own-a) claims as run.go#A")
 			assert.Contains(t, got.Reason, "This edit changes func A() {")
 			assert.Contains(t, got.Reason, "`magus job exit own-a`")
@@ -101,8 +101,7 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	}
 
 	v := judge(map[string]any{"file_path": run, "old_string": "a()", "new_string": "a2()"})
-	require.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRuleClaimedDeclaration), v.Rule)
+	require.Equal(t, verdictWithRule("deny", string(denyRuleClaimedDeclaration)), unworded(v))
 	assert.Contains(t, v.Reason, "claims as run.go#A")
 
 	multi := judge(map[string]any{"file_path": run, "edits": []any{

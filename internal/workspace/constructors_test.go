@@ -97,8 +97,7 @@ func TestWithTarget_Drift(t *testing.T) {
 	// Off carries its reason, which is the half a bare policy cannot state.
 	q := &types.Project{Path: "."}
 	require.NoError(t, WithTarget("image", Drift(types.DriftOff, "bakes a build timestamp"))(q))
-	assert.Equal(t, types.DriftOff, q.TargetPolicies["image"].Drift)
-	assert.Equal(t, "bakes a build timestamp", q.TargetPolicies["image"].DriftReason)
+	assert.Equal(t, types.Target{Drift: types.DriftOff, DriftReason: "bakes a build timestamp"}, q.TargetPolicies["image"])
 }
 
 func TestWithTarget_TrackVolatile(t *testing.T) {

@@ -162,8 +162,10 @@ func TestCheckSpellDocs_Details(t *testing.T) {
 		spells.WithDocRequiredTargets("build", "lint", "test"),
 	)
 	got := (&runner{}).checkSpellDocs([]*spells.Spell{s})
-	require.Equal(t, types.CheckAdvice, got.Status)
-	assert.Equal(t, []string{"local:lint", "local:test"}, got.Details)
+	require.Equal(t, types.Check{
+		Status:  types.CheckAdvice,
+		Details: []string{"local:lint", "local:test"},
+	}, withoutWording(got))
 }
 
 func TestCheckTargetNameConventions(t *testing.T) {
@@ -607,8 +609,7 @@ func TestCheckEnvVars(t *testing.T) {
 				t.Setenv(k, v)
 			}
 			got := (&runner{}).checkEnvVars()
-			assert.Equal(t, tc.status, got.Status, got.Details)
-			assert.Equal(t, tc.detail, got.Details)
+			assert.Equal(t, types.Check{Status: tc.status, Details: tc.detail}, withoutWording(got))
 		})
 	}
 }
@@ -918,8 +919,10 @@ func TestCheckGraphBounds(t *testing.T) {
 		// The overlay shards (@coverage, @vcs) mint partial nodes with no Source, so a
 		// check reading Source alone would wave these through.
 		got := checkGraphBounds([]types.KnowledgeNode{{ID: "file:../escape.go", Kind: "file", Label: "../escape.go"}})
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Equal(t, []string{"file:../escape.go"}, got.Details)
+		assert.Equal(t, types.Check{
+			Status:  types.CheckFail,
+			Details: []string{"file:../escape.go"},
+		}, withoutWording(got))
 	})
 
 	t.Run("import specifiers are exempt", func(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -19,9 +20,8 @@ func TestAttributeWriteNamesTheOneWritePathThatCoversIt(t *testing.T) {
 
 	got, ok := AttributeWrite(rows, "internal/trail/trail.go")
 	assert.True(t, ok)
-	assert.Equal(t, "pwa/job-watch", got.Job)
-	assert.Equal(t, "internal/trail", got.WritePath, "the reader wants the DECLARATION that covered it, not just the job")
-	assert.Empty(t, got.Ambiguous)
+	assert.Equal(t, Attribution{Job: "pwa/job-watch", WritePath: "internal/trail"}, got,
+		"the reader wants the DECLARATION that covered it, not just the job, and no ambiguity")
 
 	got, ok = AttributeWrite(rows, "console/src/console/plan/jobs.ts")
 	assert.True(t, ok)
@@ -121,9 +121,14 @@ func TestFeedFilterMatchesAContestedPathForEveryClaimant(t *testing.T) {
 
 	require.Len(t, events, 1)
 	got := events[0]
-	assert.Empty(t, got.Job, "nothing can say which of them wrote it")
-	assert.Equal(t, []string{"pwa/job-watch", "pwa/turns-capture"}, got.Contested)
-	assert.Equal(t, "contested: pwa/job-watch and pwa/turns-capture both declare this path", got.Note)
+	assert.Equal(t, FeedEvent{
+		Ts:        5,
+		Kind:      FeedFile,
+		Action:    "internal/trail/trail.go",
+		Outcome:   trail.OutcomeOK,
+		Note:      "contested: pwa/job-watch and pwa/turns-capture both declare this path",
+		Contested: []string{"pwa/job-watch", "pwa/turns-capture"},
+	}, got, "nothing can say which of them wrote it")
 
 	assert.True(t, FeedFilter{Jobs: []string{"pwa/job-watch"}}.Match(got))
 	assert.True(t, FeedFilter{Jobs: []string{"pwa/turns-capture"}}.Match(got))

@@ -110,10 +110,8 @@ func TestNestedExecOptionsCarriesStdin(t *testing.T) {
 	ctx := WithCwd(context.Background(), "/ws/api")
 
 	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
-	assert.Equal(t, "ghp_token", fed.Stdin)
-	assert.True(t, fed.Quiet)
-	assert.Equal(t, "/ws/api", fed.Dir)
-	assert.True(t, fed.Capture, "a nested magus is always captured; the caller reads its output")
+	// A nested magus is always captured; the caller reads its output.
+	assert.Equal(t, run.ExecOptions{Dir: "/ws/api", Capture: true, Quiet: true, Stdin: "ghp_token"}, fed)
 
 	bare := nestedExecOptions(ctx, nil, nil)
 	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
@@ -352,8 +350,7 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	// A Buzz number arrives as float64; an int is what a Go caller would pass.
 	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
 	require.NoError(t, err)
-	assert.Equal(t, 42, a.got.Commits)
-	assert.Equal(t, "90d", a.got.Since)
+	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d", Files: true}, a.got) // Files defaults on, as the CLI did
 
 	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
 	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.
@@ -404,7 +401,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 	report, err := MagusListJob(ctx)
 	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
 	require.Len(t, report.Jobs, 1)
-	assert.Equal(t, "u1", report.Jobs[0].ID)
+	assert.Equal(t, "u1", report.Jobs[0].ID) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
 	assert.Equal(t, types.StateRunning, report.Jobs[0].State)
 }
 
@@ -543,7 +540,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	got, err := MagusPutJob(ctx, "u1", map[string]any{"state": "pass"})
 	require.NoError(t, err)
-	assert.Equal(t, types.StatePass, got.State)
+	assert.Equal(t, types.StatePass, got.State) //nolint:fieldwise // a stored job row carries store-stamped schema, origin, checkout root and timestamps this test does not construct
 	assert.Equal(t, "the declared goal", got.Criteria, "the state advance must not erase the row")
 	assert.Equal(t, []string{"internal/job"}, got.WritePaths)
 	require.NotNil(t, got.Check, "the state advance must not erase the check")
@@ -742,8 +739,18 @@ func TestRefsWindowsSitesAndKeepsTheTotals(t *testing.T) {
 
 	r, err := MagusRefs(ctx, graphSymbol, map[string]any{"offset": int64(1), "limit": int64(1)})
 	require.NoError(t, err)
-	assert.Equal(t, 3, r.FileCount)
-	assert.Equal(t, []types.KnowledgeRefSite{{File: "pkg/b.go", Count: 1, Lines: []int{3}}}, r.Refs)
+	// The counts keep describing the whole set; only Refs is windowed. The answer's coverage is
+	// the fixture's, not this test's to pin.
+	assert.Equal(t, types.KnowledgeRefsOutput{
+		Definition:    types.KnowledgeRefsDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        graphSymbol,
+		Label:         "Foo",
+		FileCount:     3,
+		RefCount:      3,
+		Refs:          []types.KnowledgeRefSite{{File: "pkg/b.go", Count: 1, Lines: []int{3}}},
+		Answer:        r.Answer,
+	}, r)
 
 	absent, err := MagusRefs(ctx, "symbol:example.com/x Missing#", nil)
 	require.NoError(t, err, "a symbol nothing defines is an answer, not a raise")

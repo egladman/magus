@@ -774,9 +774,8 @@ func TestApplyStatusPools(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
 		applyStatusPools(ctx, &snapshot, []string{sockA}, fakeProcServers(servers))
 		require.NotNil(t, snapshot.Pool)
-		assert.Equal(t, 111, snapshot.Pool.ParentPID)
-		assert.Equal(t, sockA, snapshot.Pool.Socket)
-		assert.Equal(t, 5, snapshot.Pool.Available, "8 capacity less 3 running")
+		// Available is 8 capacity less 3 running.
+		assert.Equal(t, types.StatusOutput{ParentPID: 111, Socket: sockA, Capacity: 8, Running: 3, Available: 5}, *snapshot.Pool)
 		assert.Empty(t, snapshot.Pools, "a single server is not repeated as a list")
 		assert.Empty(t, snapshot.PoolError)
 	})
@@ -869,8 +868,8 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("MAGUS_CONCURRENCY", tc.env)
 			got := buildConfigStatus(config.Config{Concurrency: tc.configured})
-			assert.Equal(t, tc.want, got.Concurrency.Effective)
-			assert.Equal(t, tc.configured, got.Concurrency.Configured, "the configured value is kept alongside")
+			// The configured value is kept alongside the effective one.
+			assert.Equal(t, types.StatusConcurrency{Configured: tc.configured, Effective: tc.want}, got.Concurrency)
 		})
 	}
 }

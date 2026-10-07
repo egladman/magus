@@ -28,10 +28,7 @@ func TestCacheRunOptions_NilProviderReturnsNil(t *testing.T) {
 func TestConfigFromTelemetry_AppliesFallbacks(t *testing.T) {
 	t.Parallel()
 	got := ConfigFromTelemetry(config.Telemetry{}, "v1.2.3", "")
-	assert.Equal(t, "grpc", got.Protocol)
-	assert.Equal(t, "magus", got.ServiceName)
-	assert.Equal(t, 1.0, got.SampleRatio)
-	assert.Equal(t, "v1.2.3", got.ServiceVersion)
+	assert.Equal(t, Config{Protocol: "grpc", ServiceName: "magus", SampleRatio: 1.0, ServiceVersion: "v1.2.3"}, got)
 }
 
 // recorder implements observability.Provider and captures every call so
@@ -190,8 +187,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 	assert.Len(t, rec.misses, 1, "after miss")
 	assert.Len(t, rec.durs, 1, "after miss")
 	require.NotEmpty(t, rec.misses[0].attrs)
-	assert.Equal(t, "outcome", rec.misses[0].attrs[0].Key)
-	assert.Equal(t, "miss", rec.misses[0].attrs[0].Value)
+	assert.Equal(t, Attr{Key: "outcome", Value: "miss"}, rec.misses[0].attrs[0])
 	assert.Empty(t, rec.saved, "a miss ran the work, so it saved nothing")
 
 	// Hit: identical Run, fn not called, OnHit + duration fire.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -134,8 +135,11 @@ func TestProbeBridgeReachability(t *testing.T) {
 		got := probeBridgeReachability(t.Context(), &ServerInfo{
 			BridgeEnabled: true, MCPEnabled: true, Reachable: true, MCPAddr: "127.0.0.1:1",
 		})
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+		assert.Equal(t, types.Check{
+			Status:   types.CheckOK,
+			Evidence: types.EvidenceUnknown,
+			Details:  []string{"start it to serve the console: " + hint.ServerStart.String()},
+		}, withoutWording(got))
 		assert.Contains(t, got.Message, "no persistent server")
 	})
 

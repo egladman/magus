@@ -50,17 +50,14 @@ func TestPullAnonymouslyFromGHCR(t *testing.T) {
 func TestParseReference(t *testing.T) {
 	ref, err := ParseReference("ghcr.io/egladman/magus/knowledge-graph:v1")
 	require.NoError(t, err)
-	assert.Equal(t, "ghcr.io", ref.Registry)
-	assert.Equal(t, "egladman/magus/knowledge-graph", ref.Repository)
-	assert.Equal(t, "v1", ref.Tag)
+	assert.Equal(t, Reference{Registry: "ghcr.io", Repository: "egladman/magus/knowledge-graph", Tag: "v1"}, ref)
 	assert.Equal(t, "ghcr.io/egladman/magus/knowledge-graph:v1", ref.String())
 
 	// localhost is a registry host without a dot, the one exception every container
 	// runtime makes, so a local registry is reachable by the name people actually type.
 	local, err := ParseReference("localhost:5000/egladman/magus:v1")
 	require.NoError(t, err)
-	assert.Equal(t, "localhost:5000", local.Registry)
-	assert.Equal(t, "v1", local.Tag)
+	assert.Equal(t, Reference{Registry: "localhost:5000", Repository: "egladman/magus", Tag: "v1"}, local)
 
 	for _, bad := range []string{
 		"ghcr.io/egladman/magus",  // no tag
@@ -384,7 +381,7 @@ func TestPushWritesEveryTagFromOneUpload(t *testing.T) {
 
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each")
+	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each") //nolint:fieldwise // fakeRegistry holds a server, a mutex and counters; its state is not a value to compare whole
 	assert.Equal(t, map[string][]byte{"v1": raw, "latest": raw, "stable": raw, pushed.String(): raw}, reg.tags)
 }
 
@@ -466,7 +463,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:s3cret-token"))
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, []string{"", basic}, reg.tokenAuth)
+	assert.Equal(t, []string{"", basic}, reg.tokenAuth) //nolint:fieldwise // fakeRegistry holds a server, a mutex and counters; its state is not a value to compare whole
 	assert.Equal(t, 2, reg.pings, "one challenge per client")
 }
 

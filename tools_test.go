@@ -128,9 +128,10 @@ func TestJoinLifecycle(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			row := tc.row
 			joinLifecycle(&row, tc.state, tc.lifecycle, now)
-			assert.Equal(t, tc.cycle, row.Cycle)
-			assert.Equal(t, tc.eol, row.EOL)
-			assert.Equal(t, tc.support, row.Support)
+			// The join fills the three columns and touches nothing else on the row.
+			want := tc.row
+			want.Cycle, want.EOL, want.Support = tc.cycle, tc.eol, tc.support
+			assert.Equal(t, want, row)
 		})
 	}
 }

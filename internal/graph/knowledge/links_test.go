@@ -25,8 +25,8 @@ func TestParseCitationAccepts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c, ok := parseCitation(tc.in)
 			require.True(t, ok, "%q should be citable", tc.in)
-			assert.Equal(t, tc.want, c.URL)
-			assert.Equal(t, tc.wantFrag, c.Fragment)
+			// Host and Path are read by resolution, which its own tests pin; identity is the URL.
+			assert.Equal(t, citation{URL: tc.want, Host: c.Host, Path: c.Path, Fragment: tc.wantFrag}, c)
 		})
 	}
 }

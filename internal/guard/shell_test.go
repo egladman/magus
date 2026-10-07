@@ -1446,9 +1446,8 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
 		case "advise":
 			assert.Empty(t, v.Deny, tc.command)
-			assert.Equal(t, advisoryGraphPipe, v.Kind, tc.command)
+			assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
 			assert.Contains(t, v.Context, "magus answers this without the pipe", tc.command)
-			assert.Equal(t, graphPipeBrief, v.Brief, tc.command)
 		default:
 			assert.Empty(t, v.Deny, tc.command)
 			assert.NotEqual(t, advisoryGraphPipe, v.Kind, tc.command)
@@ -1943,8 +1942,8 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		require.NotEmpty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
 		require.Len(t, v.Next, 1, tc.command)
-		assert.Equal(t, tc.pipe, v.Next[0].Run, tc.command)
-		assert.Equal(t, "deny-chained-run", v.Next[0].ID)
+		// Argv and Why are the remedy's stage-split form and its prose, which this test does not pin.
+		assert.Equal(t, hint.Next{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
 		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
 		assert.Contains(t, v.Lead, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
 		assert.Contains(t, v.Lead, "exits red", tc.command)
@@ -2255,8 +2254,7 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
-		assert.Equal(t, advisoryCaptureFilter, v.Kind, cmd)
-		assert.Equal(t, captureFilterBrief, v.Brief, cmd)
+		assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
 	}
 
 	// A deny elsewhere on the line still outranks the advice.

@@ -42,8 +42,10 @@ func TestCheckToolchainLifecycleNeverFetches(t *testing.T) {
 
 	t.Run("no spell names a product", func(t *testing.T) {
 		got := (&runner{ws: lifecycleWorkspace{provider: "endoflife-date", root: t.TempDir()}}).checkToolchainLifecycle(nil)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no spell names a lifecycle product", got.Message)
+		assert.Equal(t, types.Check{
+			Name: "toolchain-lifecycle", Status: types.CheckOK,
+			Message: "no spell names a lifecycle product",
+		}, got)
 	})
 
 	// Nothing stored is unknown, not fine, and the remedy is the command that asks.
@@ -88,8 +90,10 @@ func TestCheckToolchainLifecycleReadsTheStoredAnswer(t *testing.T) {
 		[]workspace.InstalledTool{{Project: ".", Bin: "go", Lifecycle: "go", Version: "v1.20.14"}})
 
 	got := (&runner{ws: ws, root: ""}).checkToolchainLifecycle(projects)
-	assert.Equal(t, types.CheckAdvice, got.Status)
-	assert.Equal(t, []string{"./go: installed v1.20.14 is in go 1.20, past end of life since 2024-02-06"}, got.Details)
+	assert.Equal(t, types.Check{
+		Status:  types.CheckAdvice,
+		Details: []string{"./go: installed v1.20.14 is in go 1.20, past end of life since 2024-02-06"},
+	}, withoutWording(got))
 	assert.Contains(t, got.Message, "1 past end of life, per endoflife-date as fetched ")
 }
 

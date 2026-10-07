@@ -105,6 +105,10 @@ func TestEveryRunCheckStatesItsEvidence(t *testing.T) {
 // returning the bare CheckOK the ok count would then absorb.
 func TestSkippedCheckReportsUnknown(t *testing.T) {
 	got := (&runner{}).checkCITarget(nil)
-	assert.Equal(t, types.CheckOK, got.Status)
-	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
+	assert.Equal(t, types.Check{
+		Name:     "ci-target",
+		Status:   types.CheckOK,
+		Evidence: types.EvidenceUnknown,
+		Message:  "no projects; skipped",
+	}, got)
 }

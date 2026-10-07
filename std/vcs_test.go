@@ -122,8 +122,11 @@ func TestVcsHistoryPassesPathsAndLimitThrough(t *testing.T) {
 	got, err := VcsHistory(WithCwd(context.Background(), dir), 0, []string{"docs"}, true)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "both", got[0].Subject)
-	assert.Equal(t, []string{"docs/a.md"}, got[0].Files)
+	// The revision's identity, author, date and parents are git's to stamp, not this test's to pin.
+	assert.Equal(t, types.Commit{
+		ID: got[0].ID, Short: got[0].Short, Author: got[0].Author, Date: got[0].Date, Parents: got[0].Parents,
+		Subject: "both", Files: []string{"docs/a.md"},
+	}, got[0])
 
 	all, err := VcsHistory(WithCwd(context.Background(), dir), 0, nil, false)
 	require.NoError(t, err)

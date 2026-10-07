@@ -235,14 +235,19 @@ func TestBuildReport(t *testing.T) {
 	assert.Equal(t, "proj/b", report.Targets[1].Project)
 
 	got := report.Targets[0]
-	assert.Equal(t, "test", got.Target)
-	assert.Equal(t, 2, got.Pass)
-	assert.Equal(t, 1, got.Fail)
-	assert.Equal(t, 1, got.VolatileCount)
-	assert.Equal(t, 4, got.Samples)
-	assert.Equal(t, now.Add(-1*time.Hour), got.LastPass)
 	assert.Greater(t, got.Score, 0.0, "4 samples at MinSamples=4 produce a non-zero Wilson score")
-	assert.True(t, got.Volatile, "score exceeds the 0.01 threshold")
+	want := types.VolatilityTarget{
+		Project:       "proj/a",
+		Target:        "test",
+		Score:         got.Score, // the Wilson value is asserted above, not recomputed here
+		Volatile:      true,      // score exceeds the 0.01 threshold
+		Pass:          2,
+		Fail:          1,
+		VolatileCount: 1,
+		Samples:       4,
+		LastPass:      now.Add(-1 * time.Hour),
+	}
+	assert.Equal(t, want, got)
 }
 
 // TestRuntimeRecordsWithoutRetryingWhenNotOptedIn pins the separation this type
@@ -320,15 +325,13 @@ func TestRecordOutcomeFeedsTheDurationModel(t *testing.T) {
 func TestRecordOutcomeIgnoresAnUnmeasuredRun(t *testing.T) {
 	h := forecast.History{}
 	rt := NewRuntime(&h, "", Config{Enabled: true}, nil, false)
-	rt.Record("libs/foo", "test", forecast.Outcome{Result: "fail", DurationMs: 0, At: time.Now()})
+	outcome := forecast.Outcome{Result: "fail", DurationMs: 0, At: time.Now()}
+	rt.Record("libs/foo", "test", outcome)
 
 	st := h.Projects["libs/foo"]["test"]
-	if st.Samples != 0 || st.P75Ms != 0 {
-		t.Fatalf("Samples=%d P75Ms=%d, want an unmeasured run to contribute neither", st.Samples, st.P75Ms)
-	}
-	if st.FailCount != 1 {
-		t.Fatalf("FailCount = %d, want the volatility counter still updated", st.FailCount)
-	}
+	// An unmeasured run contributes no duration sample, yet the volatility counter still moves.
+	want := forecast.Stats{FailCount: 1, RecentOutcomes: []forecast.Outcome{outcome}}
+	assert.Equal(t, want, st)
 }
 
 // Merge resolves collisions on LastUpdated, which recordOutcome never set, so every

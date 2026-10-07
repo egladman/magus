@@ -33,10 +33,13 @@ func TestExecEmitsExecEventWithinStep(t *testing.T) {
 	got, _, cancel := rec.Subscribe()
 	defer cancel()
 	require.Len(t, got, 1)
-	assert.Equal(t, journal.KindExec, got[0].Kind)
-	assert.Equal(t, "web", got[0].Project)
-	assert.Equal(t, "build", got[0].Target)
-	assert.Equal(t, `echo "hello world"`, got[0].Text, "args with spaces are quoted")
+	assert.Equal(t, journal.Event{
+		Ts:      got[0].Ts,
+		Kind:    journal.KindExec,
+		Project: "web",
+		Target:  "build",
+		Text:    `echo "hello world"`, // args with spaces are quoted
+	}, got[0])
 
 	// No step on ctx: no exec event (internal probes stay silent).
 	noStep := journal.NewBroadcaster()

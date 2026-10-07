@@ -22,8 +22,8 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	}
 
 	denied := verdict(true, true)
-	assert.Equal(t, denyRuleSymbolSearch, denied.Rule.Name)
-	assert.Equal(t, "HandleRequest", denied.Rule.Arg, "the deny names the symbol so the trail can count it")
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "HandleRequest"}, denied.Rule,
+		"the deny names the symbol so the trail can count it")
 	assert.Contains(t, denied.Deny, "refs HandleRequest --occurrences", "a deny that does not carry the replacement is a lost turn")
 	assert.Contains(t, denied.Deny, "Classified: `HandleRequest` is a name (an identifier's shape, defined in the index)")
 	assert.NotContains(t, denied.Deny, "graph build")

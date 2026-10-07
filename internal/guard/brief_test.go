@@ -79,8 +79,7 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 	} {
 		ctx, _ := spawnFixture(t)
 		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision, input)
-		assert.Equal(t, string(denyRuleBriefCommand), v.Rule, input)
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(v), input)
 		assert.Contains(t, v.Reason, "MAGUS_NO_WAIT")
 	}
 

@@ -518,8 +518,15 @@ func TestSnapshotStateTransitions(t *testing.T) {
 	r.Release("pg") // last dependent: kept warm at zero refs
 	s := r.Snapshot()
 	require.Len(t, s, 1)
-	assert.Equal(t, 0, s[0].Dependents)
-	assert.Equal(t, "idle", s[0].State)
+	assert.Equal(t, ServiceStatus{
+		ID:         "pg",
+		Label:      "postgres:15",
+		Command:    "docker run -p 5432:5432 postgres:15",
+		Ports:      []string{"5432"},
+		State:      "idle",
+		Dependents: 0,
+		StartedAt:  s[0].StartedAt, // the registry's clock
+	}, s[0])
 }
 
 func TestSnapshotStartingEntry(t *testing.T) {
@@ -546,9 +553,16 @@ func TestSnapshotNonContainerLabel(t *testing.T) {
 
 	s := r.Snapshot()
 	require.Len(t, s, 1)
-	assert.Equal(t, "myserver", s[0].Label, "non-container label falls back to the binary basename")
-	assert.Equal(t, "/usr/local/bin/myserver --port 8080", s[0].Command)
 	assert.Empty(t, s[0].Ports, "a non-container command has no derived ports")
+	assert.Equal(t, ServiceStatus{
+		ID:         "local",
+		Label:      "myserver", // non-container label falls back to the binary basename
+		Command:    "/usr/local/bin/myserver --port 8080",
+		Ports:      s[0].Ports, // empty, asserted above
+		State:      "running",
+		Dependents: 1,
+		StartedAt:  s[0].StartedAt,
+	}, s[0])
 }
 
 func TestSnapshotSortedByID(t *testing.T) {

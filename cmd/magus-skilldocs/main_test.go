@@ -92,9 +92,12 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok, "the page has no parsable frontmatter")
-	assert.Equal(t, "magus-query", fm.Title)
-	assert.Equal(t, "internal/agent/skills/magus-query/SKILL.md", fm.GeneratedFrom)
-	assert.Equal(t, []string{"agents", "skills", "magus-query"}, fm.Tags)
+	assert.Equal(t, docs.Frontmatter{
+		Title:         "magus-query",
+		GeneratedFrom: "internal/agent/skills/magus-query/SKILL.md",
+		Description:   fm.Description, // checked below
+		Tags:          []string{"agents", "skills", "magus-query"},
+	}, fm)
 	assert.True(t, strings.HasSuffix(fm.Description, "."), "the description is trimmed to its opening claim: %q", fm.Description)
 	assert.NotContains(t, fm.Description, "Use INSTEAD of Grep", "the trigger text does not belong in a frontmatter description")
 

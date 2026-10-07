@@ -212,8 +212,20 @@ func TestDuplicatesPlacesTheFoldWithoutAnImportCycle(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			group := placementFixture(t, tc.imports)
-			assert.Equal(t, tc.placement, group.Placement)
-			assert.Equal(t, tc.home, group.Home)
+			// Only the placement is under test; the ranking and fold evidence are carried over.
+			want := types.DuplicationGroup{
+				Members:   group.Members,
+				Score:     group.Score,
+				Shared:    group.Shared,
+				Packages:  group.Packages,
+				Placement: tc.placement,
+				Home:      tc.home,
+				Shape:     group.Shape,
+				Removable: group.Removable,
+				Siblings:  group.Siblings,
+				History:   group.History,
+			}
+			assert.Equal(t, want, group)
 		})
 	}
 }
@@ -278,8 +290,20 @@ func TestDuplicatesSaysWhatAFoldWouldCost(t *testing.T) {
 		byFirst[group.Members[0].ID] = group
 	}
 	copies := byFirst["load1"]
-	assert.Equal(t, types.ShapeParameterize, copies.Shape)
-	assert.Equal(t, 31+31-31-2*foldedMemberLines, copies.Removable)
+	// The fold's shape and saving are under test here; the members are pinned just below and
+	// the rest is the ranking evidence, carried over.
+	wantCopies := types.DuplicationGroup{
+		Members:   copies.Members,
+		Score:     copies.Score,
+		Shared:    copies.Shared,
+		Packages:  copies.Packages,
+		Placement: copies.Placement,
+		Home:      copies.Home,
+		Shape:     types.ShapeParameterize,
+		Removable: 31 + 31 - 31 - 2*foldedMemberLines,
+		History:   copies.History,
+	}
+	assert.Equal(t, wantCopies, copies)
 	assert.Equal(t, types.DuplicationSite{
 		ID: "load1", Label: "load1", Source: "a/x.go:10", EndLine: 40,
 		Distinct: []string{}, Callers: 1, ForeignFiles: 1, Tested: true,

@@ -91,8 +91,16 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	require.NoError(t, err)
 	rec, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	require.True(t, ok)
-	assert.Equal(t, sessions.OutcomePass, rec.Outcome, "the deferral does not shadow the green verdict")
-	assert.Equal(t, "c1", rec.Commit)
+	// The deferral does not shadow the green verdict.
+	assert.Equal(t, sessions.GateRecord{
+		GateResult: sessions.GateResult{
+			Target: types.TargetCI, Ref: "b", Commit: "c1",
+			Outcome: sessions.OutcomePass, Fingerprint: "fp-1",
+			Projects: []string{"."}, Charms: []string{"quiet"},
+			Inv: "inv123",
+		},
+		At: rec.At,
+	}, rec)
 
 	// The deferral itself is on record, interrogable after the fact.
 	var deferred *sessions.GateResult
@@ -107,8 +115,13 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 		}
 	}
 	require.NotNil(t, deferred, "the refusal persisted a deferred gate record")
-	assert.Equal(t, "c1", deferred.DeferredTo, "pointing at the green gate it deferred to")
-	assert.Equal(t, "c2", deferred.Commit, "at the commit the refused run was at")
+	// It points at the green gate it deferred to, from the commit the refused run was at.
+	assert.Equal(t, sessions.GateResult{
+		Target: types.TargetCI, Ref: "b", Commit: "c2",
+		Outcome: sessions.OutcomeDeferred, Fingerprint: "fp-1",
+		Projects:   []string{"."},
+		DeferredTo: "c1",
+	}, *deferred)
 
 	require.Error(t, g.evaluate(context.Background(), false), "still refuses after its own deferral record")
 }

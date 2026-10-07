@@ -565,10 +565,18 @@ func TestRunCut_PrereleaseKeepsFragmentsForTheFinalCut(t *testing.T) {
 	manifests, err := loadManifests(relDir)
 	require.NoError(t, err)
 	require.Len(t, manifests, 2)
-	require.Equal(t, "v0.5.0", manifests[0].Version)
-	require.Equal(t, "### Added\n\n- **Early.**\n\n### Fixed\n\n- **Late.**", manifests[0].Body, "the final notes are whole")
-	require.Equal(t, "v0.5.0-rc.1", manifests[1].Version)
-	require.Equal(t, "### Added\n\n- **Early.**", manifests[1].Body, "the candidate records its notes")
+	// The cut stamps the date, the structured notes and the artifact checksums itself.
+	final, candidate := manifests[0], manifests[1]
+	require.Equal(t, []ReleaseManifest{
+		{
+			Version: "v0.5.0", Date: final.Date, Notes: final.Notes, Artifacts: final.Artifacts,
+			Body: "### Added\n\n- **Early.**\n\n### Fixed\n\n- **Late.**", // the final notes are whole
+		},
+		{
+			Version: "v0.5.0-rc.1", Date: candidate.Date, Notes: candidate.Notes, Artifacts: candidate.Artifacts,
+			Body: "### Added\n\n- **Early.**", // the candidate records its notes
+		},
+	}, manifests)
 }
 
 // TestRunCut_ImmutabilityGuard covers all three things runCut does when the manifest is

@@ -3,6 +3,7 @@ package knowledge
 import (
 	"maps"
 	"path"
+	"regexp"
 	"slices"
 	"testing"
 
@@ -43,12 +44,16 @@ func TestSeedsLazyLayer(t *testing.T) {
 }
 
 func TestParseQuery(t *testing.T) {
-	q := parseQuery(`kind:spell project:pkg/foo build -kind:op -legacy`)
-	assert.Equal(t, []string{"build"}, q.terms)
-	assert.Equal(t, []string{"legacy"}, q.negTerms)
-	assert.Equal(t, []string{"spell"}, q.fields["kind"])
-	assert.Equal(t, []string{"pkg/foo"}, q.fields["project"])
-	assert.Equal(t, []string{"op"}, q.negFields["kind"])
+	const input = `kind:spell project:pkg/foo build -kind:op -legacy`
+	want := parsedQuery{
+		terms:     []string{"build"},
+		negTerms:  []string{"legacy"},
+		fields:    map[string][]string{"kind": {"spell"}, "project": {"pkg/foo"}},
+		negFields: map[string][]string{"kind": {"op"}},
+		reFields:  map[string][]*regexp.Regexp{},
+		raw:       input,
+	}
+	assert.Equal(t, want, parseQuery(input))
 }
 
 func TestParseQueryPhrase(t *testing.T) {
@@ -257,8 +262,20 @@ func TestQueryPagePaginatesMatches(t *testing.T) {
 	limit := 2
 	for offset := 0; offset < all.MatchCount; offset += limit {
 		page := g.QueryPage("kind:target", 50, offset, limit)
-		assert.Equal(t, all.MatchCount, page.MatchCount, "total is stable across pages")
-		assert.Equal(t, offset, page.Offset)
+		// The total is stable across pages. The window and its neighborhood are what the next
+		// assertions and the neighborhood tests pin, so they are carried over.
+		want := types.KnowledgeQueryOutput{
+			Definition:    types.KnowledgeQueryDefinition,
+			SchemaVersion: types.KnowledgeSchemaVersion,
+			Query:         "kind:target",
+			Budget:        50,
+			MatchCount:    all.MatchCount,
+			Offset:        offset,
+			Matches:       page.Matches,
+			Nodes:         page.Nodes,
+			Links:         page.Links,
+		}
+		assert.Equal(t, want, page)
 		assert.LessOrEqual(t, len(page.Matches), limit)
 		paged = append(paged, matchIDs(page.Matches)...)
 	}
@@ -621,9 +638,17 @@ func TestDirRecord(t *testing.T) {
 
 	mcp, err := g.Dir("dir:internal/handler/mcp", fixtureLayers)
 	require.NoError(t, err)
-	assert.Equal(t, "handler", mcp.Layer, "an unstamped dir takes the declared layer")
-	assert.Equal(t, []string{"internal/httpx"}, mcp.Imports)
-	assert.Len(t, mcp.CalledBy, 2, "one DirCall per declaring marker")
+	// An unstamped dir takes the declared layer, and gets one DirCall per declaring marker.
+	assert.Equal(t, types.Dir{
+		Path: "internal/handler/mcp", ID: "dir:internal/handler/mcp", Layer: "handler", Language: "go",
+		Imports: []string{"internal/httpx"}, ImportedBy: []string{}, ImportsIndexed: true,
+		Calls: []types.DirCall{},
+		CalledBy: []types.DirCall{
+			{Dir: "internal/httpx", Transport: "http", Marker: "marker:internal/httpx/a.go:12", Source: "internal/httpx/a.go:12"},
+			{Dir: "internal/httpx", Transport: "grpc", Marker: "marker:internal/httpx/b.go:40", Source: "internal/httpx/b.go:40"},
+		},
+		Children: []string{}, Files: 1,
+	}, mcp)
 
 	root, err := g.Dir("internal", nil)
 	require.NoError(t, err)
@@ -685,8 +710,8 @@ func TestLayer(t *testing.T) {
 	g := dirFixture()
 	l, err := g.Layer("handler", fixtureLayers)
 	require.NoError(t, err)
-	assert.Equal(t, "handler", l.Name)
-	assert.Equal(t, []string{"internal/handler/**"}, l.Declared)
+	// The covered directories are Dir records, which TestDirRecord pins, so they are carried over.
+	assert.Equal(t, types.Layer{Name: "handler", Declared: []string{"internal/handler/**"}, Dirs: l.Dirs}, l)
 	require.Len(t, l.Dirs, 2)
 	assert.Equal(t, "internal/handler/mcp", l.Dirs[1].Path)
 
@@ -748,9 +773,17 @@ func TestNeighborhoodOfWalksDepthRelationsAndDirection(t *testing.T) {
 
 	out, ok := g.FocusNeighborhood("internal/handler/mcp", types.KnowledgeNeighborhoodOptions{Relations: imports})
 	require.True(t, ok)
-	assert.Equal(t, "dir:internal/handler/mcp", out.Focus)
-	assert.Equal(t, types.ResolvedPath, out.Resolution)
-	assert.Equal(t, 1, out.Options.Depth, "0 means 1")
+	// A depth of 0 means 1. The nodes and links are pinned just below, by id and relation.
+	wantOut := types.KnowledgeNeighborhoodOutput{
+		Definition:    types.KnowledgeNeighborhoodDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Focus:         "dir:internal/handler/mcp",
+		Resolution:    types.ResolvedPath,
+		Options:       types.KnowledgeNeighborhoodOptions{Depth: 1, Relations: imports},
+		Nodes:         out.Nodes,
+		Links:         out.Links,
+	}
+	assert.Equal(t, wantOut, out)
 	assert.Equal(t, []string{"dir:internal/handler/mcp", "dir:internal/httpx"}, nodeIDs(out))
 	require.Len(t, out.Links, 1)
 	assert.Equal(t, types.RelationImports, out.Links[0].Relation)

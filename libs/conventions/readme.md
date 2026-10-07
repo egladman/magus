@@ -16,6 +16,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
+| `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 
 Every path, word list, host name, ceiling and exemption lives in the root
@@ -52,6 +53,14 @@ every package name of three bytes or more.
 `testisolation` carries reach as a package fact along imports, which needs type
 information; the rest load types only because golangci-lint leaves the package
 unset without them.
+
+`fieldwise` reads test files only. Its zero settings report a value whose
+assertions name every field its struct declares, which one comparison of the
+whole value replaces exactly. `report-partial` adds a value asserted on two or
+more of its fields: that fix compares fields the test never looked at, so it may
+need volatile fields normalized first. This tree turns it on: once a struct grows
+a field, a test that named every field asserts only some, and only
+`report-partial` still reports it.
 
 ## Not here
 

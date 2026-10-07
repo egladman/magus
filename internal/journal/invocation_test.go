@@ -17,12 +17,15 @@ func TestInvocationFromEvents(t *testing.T) {
 		{Ts: 230, Kind: KindFinished, Status: StatusFail},
 	}
 	inv := InvocationFromEvents("inv42", events)
-	assert.Equal(t, "inv42", inv.ID)
-	assert.Equal(t, int64(100), inv.StartedMs)
-	assert.Equal(t, int64(230), inv.FinishedMs, "finish is the finished event's timestamp")
-	assert.Equal(t, StatusFail, inv.Status, "overall outcome comes from the finished event")
-	assert.Equal(t, "v2", inv.MagusVersion)
-	assert.Equal(t, Command{Arguments: []string{"affected", "ci"}, Trigger: TriggerCI}, inv.Command)
+	// Finish is the finished event's timestamp, and the overall outcome comes from it too.
+	assert.Equal(t, Invocation{
+		ID:           "inv42",
+		StartedMs:    100,
+		FinishedMs:   230,
+		Status:       StatusFail,
+		MagusVersion: "v2",
+		Command:      Command{Arguments: []string{"affected", "ci"}, Trigger: TriggerCI},
+	}, inv)
 }
 
 // TestInvocationFromEventsNoFinished confirms an interrupted stream (no finished event)
@@ -32,7 +35,10 @@ func TestInvocationFromEventsNoFinished(t *testing.T) {
 		{Ts: 500, Kind: KindStarted, Command: &Command{Arguments: []string{"run"}}},
 		{Ts: 560, Kind: KindOutput, Text: "line"},
 	})
-	assert.Equal(t, int64(500), inv.StartedMs)
-	assert.Equal(t, int64(560), inv.FinishedMs, "no finished event: fall back to last event ts")
-	assert.Empty(t, inv.Status)
+	assert.Equal(t, Invocation{
+		ID:         "inv1",
+		StartedMs:  500,
+		FinishedMs: 560, // no finished event: fall back to last event ts
+		Command:    Command{Arguments: []string{"run"}},
+	}, inv, "an unfinished stream has no status")
 }

@@ -53,20 +53,18 @@ func TestStripRuntimeAttrs(t *testing.T) {
 
 	stripUnreproducible(&out)
 
-	var build types.KnowledgeNode
-	for _, n := range out.Nodes {
-		if n.ID == "target:pkg/a:build" {
-			build = n
+	// Every observed attr is stripped and the static one is kept, only the static edge
+	// survives with EdgeCount tracking it, and no node goes (NodeCount holds at 2).
+	want := runtimeGraph().Output()
+	for i := range want.Nodes {
+		if want.Nodes[i].ID == "target:pkg/a:build" {
+			want.Nodes[i].Attrs = map[string]string{knowledge.AttrEngine: "buzz"}
 		}
 	}
-	require.NotEmpty(t, build.ID, "target node survives")
-	assert.Equal(t, map[string]string{knowledge.AttrEngine: "buzz"}, build.Attrs,
-		"every observed attr is stripped and the static one is kept")
-
-	require.Len(t, out.Links, 1)
-	assert.Equal(t, types.RelationDocuments, out.Links[0].Relation, "only the static edge survives")
-	assert.Equal(t, 1, out.EdgeCount, "EdgeCount tracks the kept links")
-	assert.Equal(t, 2, out.NodeCount, "stripping removes attrs, never nodes")
+	require.Equal(t, types.RelationDocuments, want.Links[0].Relation, "the links sort the static edge first")
+	want.Links = want.Links[:1]
+	want.EdgeCount = 1
+	assert.Equal(t, want, out)
 }
 
 // TestStripRuntimeAttrsLeavesGraphIntact is why stripRuntimeAttrs copies instead of

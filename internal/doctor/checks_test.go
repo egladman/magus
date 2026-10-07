@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -191,11 +192,10 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
-	assert.Equal(t, types.CheckFail, got.Status)
-	assert.Equal(t,
-		[]string{`console: output glob "dist/**" matched no files while the project's other outputs did`},
-		got.Details,
-		"only dist/** is dead; gen/** is built and src/gen/** is committed")
+	assert.Equal(t, types.Check{
+		Status:  types.CheckFail,
+		Details: []string{`console: output glob "dist/**" matched no files while the project's other outputs did`},
+	}, withoutWording(got), "only dist/** is dead; gen/** is built and src/gen/** is committed")
 }
 
 // TestDeadOutputGlobsWithoutTrackedReporter pins the degrade path: with no VCS to ask, presence
@@ -209,10 +209,10 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
 
-	assert.Equal(t, types.CheckFail, got.Status)
-	assert.Equal(t,
-		[]string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
-		got.Details)
+	assert.Equal(t, types.Check{
+		Status:  types.CheckFail,
+		Details: []string{`console: output glob "gen/**" matched no files while the project's other outputs did`},
+	}, withoutWording(got))
 }
 
 // TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave: an exclusion matches nothing by
@@ -249,10 +249,10 @@ func TestOutputOwnedByTwoTargets(t *testing.T) {
 				"format":   {{Glob: "gen/**"}},
 			},
 		}})
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Equal(t,
-			[]string{`docs: output glob "gen/**" is declared by format and generate`},
-			got.Details, "owners are sorted so the message is stable")
+		assert.Equal(t, types.Check{
+			Status:  types.CheckFail,
+			Details: []string{`docs: output glob "gen/**" is declared by format and generate`},
+		}, withoutWording(got), "owners are sorted so the message is stable")
 	})
 
 	t.Run("one owner per glob is fine", func(t *testing.T) {
@@ -408,8 +408,10 @@ func TestLanguageCoverageRespectsNoLanguage(t *testing.T) {
 			{Path: "evals", NoLanguage: "polyglot harness; no single pack describes it"},
 			{Path: "forgot-the-import"},
 		})
-		assert.Equal(t, types.CheckAdvice, got.Status)
-		assert.Equal(t, []string{"forgot-the-import"}, got.Details)
+		assert.Equal(t, types.Check{
+			Status:  types.CheckAdvice,
+			Details: []string{"forgot-the-import"},
+		}, withoutWording(got))
 	})
 }
 
@@ -587,9 +589,10 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
-	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
-	assert.Equal(t, []string{".golangci.yml"}, got.Details,
-		"main.go is declared, and the untracked coverage.out is a different problem")
+	require.Equal(t, types.Check{
+		Status:  types.CheckAdvice,
+		Details: []string{".golangci.yml"},
+	}, withoutWording(got), "main.go is declared, and the untracked coverage.out is a different problem")
 	assert.Contains(t, got.Message, "MGS1028")
 }
 
@@ -702,8 +705,13 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		require.Equal(t, types.CheckFail, got.Status)
-		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
+		want := types.Check{
+			Status: types.CheckFail,
+			// One line per install location; what they say is internal/agent's to test.
+			Details: got.Details,
+			Fix:     []string{"agent", "harness", "install", "--id", "test-host"},
+		}
+		require.Equal(t, want, withoutWording(got))
 	})
 
 	t.Run("stamped orphan -> the reinstall is the fix, since install prunes it", func(t *testing.T) {
@@ -721,9 +729,15 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Equal(t, "installed skills are behind this binary: .agents/skills", got.Message)
-		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
+		want := types.Check{
+			Name:    "agent-skills",
+			Status:  types.CheckFail,
+			Message: "installed skills are behind this binary: .agents/skills",
+			// One line per install location; what they say is internal/agent's to test.
+			Details: got.Details,
+			Fix:     []string{"agent", "harness", "install", "--id", "test-host"},
+		}
+		assert.Equal(t, want, got)
 	})
 
 	t.Run("empty leftover directory -> stale, named with the command that removes it", func(t *testing.T) {
@@ -738,10 +752,14 @@ func TestCheckAgentSkills(t *testing.T) {
 
 		got := r.checkAgentSkills()
 
-		assert.Equal(t, types.CheckFail, got.Status, "misconfiguration is a failure, not a warning")
-		assert.Equal(t, "installed skills are behind this binary: .agents/skills; a reinstall leaves these directories, remove them by hand: .agents/skills/magus-retired", got.Message)
-		assert.Equal(t, []string{".agents/skills: magus-retired: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir .agents/skills/magus-retired"}, got.Details)
-		assert.Empty(t, got.Fix, "a reinstall changes nothing here, so --fix has nothing to run")
+		// Misconfiguration is a failure, not a warning, and a reinstall changes nothing here,
+		// so --fix has nothing to run.
+		assert.Equal(t, types.Check{
+			Name:    "agent-skills",
+			Status:  types.CheckFail,
+			Message: "installed skills are behind this binary: .agents/skills; a reinstall leaves these directories, remove them by hand: .agents/skills/magus-retired",
+			Details: []string{".agents/skills: magus-retired: empty directory left behind by a skill this magus does not ship; a reinstall leaves it, so remove it: rmdir .agents/skills/magus-retired"},
+		}, got)
 	})
 }
 
@@ -757,8 +775,10 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 
 	got := r.checkOutputIsAnotherProjectsSource(projects)
 
-	require.Equal(t, types.CheckAdvice, got.Status, got.Message)
-	assert.Equal(t, []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"}, got.Details)
+	require.Equal(t, types.Check{
+		Status:  types.CheckAdvice,
+		Details: []string{"libs/leaf/MAGUS.md is libs/leaf's output and .'s source"},
+	}, withoutWording(got), got.Message)
 }
 
 // A project claiming its OWN output is not the finding: writing what you declared you write is what
@@ -1016,14 +1036,12 @@ func (g graphStubWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
 
 func TestCheckGraphCycles(t *testing.T) {
 	ok := (&runner{ws: graphStubWorkspace{}}).checkGraphCycles()
-	assert.Equal(t, types.CheckOK, ok.Status)
-	assert.Equal(t, "no cycles detected", ok.Message)
+	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckOK, Message: "no cycles detected"}, ok)
 
 	// The graph builder is what detects a cycle, so its error IS the finding and has
 	// to reach the report rather than being replaced with a generic message.
 	bad := (&runner{ws: graphStubWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
-	assert.Equal(t, types.CheckFail, bad.Status)
-	assert.Equal(t, "cycle: a -> b -> a", bad.Message)
+	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckFail, Message: "cycle: a -> b -> a"}, bad)
 }
 
 // TestCheckConcurrencySizing pins the machine's size through MAGUS_CONCURRENCY so the
@@ -1051,20 +1069,26 @@ func TestCheckConcurrencySizing(t *testing.T) {
 	// cannot tell it apart from a stale one.
 	t.Run("undersized", func(t *testing.T) {
 		got := sized(2)
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, types.Check{
+			Status:  types.CheckAdvice,
+			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
+			Fix:     []string{"config", "set", "key=concurrency,value=4"},
+		}, withoutWording(got))
 		assert.Contains(t, got.Message, "undersized")
 		assert.Contains(t, got.Message, "leaves capacity idle")
-		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
 	})
 
 	// The worse direction: the work still completes, just slower, so nothing ever
 	// points at the cause.
 	t.Run("oversized", func(t *testing.T) {
 		got := sized(16)
-		assert.Equal(t, types.CheckAdvice, got.Status)
+		assert.Equal(t, types.Check{
+			Status:  types.CheckAdvice,
+			Details: []string{fmt.Sprintf("%d cpu(s) detected", runtime.NumCPU())},
+			Fix:     []string{"config", "set", "key=concurrency,value=4"},
+		}, withoutWording(got))
 		assert.Contains(t, got.Message, "oversized")
 		assert.Contains(t, got.Message, "contend rather than finish sooner")
-		assert.Equal(t, []string{"config", "set", "key=concurrency,value=4"}, got.Fix)
 	})
 }
 
@@ -1073,8 +1097,10 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	t.Run("no server", func(t *testing.T) {
 		got := (&runner{}).checkWorkspaceRegistration()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no loaded workspaces in server", got.Message)
+		assert.Equal(t, types.Check{
+			Name: "workspace-registration", Status: types.CheckOK,
+			Message: "no loaded workspaces in server",
+		}, got)
 	})
 
 	t.Run("server reachable but holding nothing", func(t *testing.T) {
@@ -1160,15 +1186,13 @@ func TestIsSocketAlive(t *testing.T) {
 func TestCheckStaleSockets(t *testing.T) {
 	t.Run("no socket directory configured", func(t *testing.T) {
 		got := (&runner{}).checkStaleSockets()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no socket directory", got.Message)
+		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
 	})
 
 	t.Run("socket directory does not exist", func(t *testing.T) {
 		r := &runner{opts: options{serverInfo: &ServerInfo{SockDir: filepath.Join(t.TempDir(), "absent")}}}
 		got := r.checkStaleSockets()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no socket directory", got.Message)
+		assert.Equal(t, types.Check{Name: "sockets", Status: types.CheckOK, Message: "no socket directory"}, got)
 	})
 
 	// named is a ServerInfo carrying the socket names the CLI passes, over dir.
@@ -1247,8 +1271,10 @@ func TestCheckStaleSockets(t *testing.T) {
 		listenUnix(t, filepath.Join(dir, "magus-41221-abc.sock"))
 
 		got := (&runner{opts: options{serverInfo: named(dir)}}).checkStaleSockets()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "server live, broker not running, 1 per-process pool(s)", got.Message)
+		assert.Equal(t, types.Check{
+			Name: "sockets", Status: types.CheckOK,
+			Message: "server live, broker not running, 1 per-process pool(s)",
+		}, got)
 	})
 
 	// A live pool that answers with another build is the leftover magus mcp case:
@@ -1271,9 +1297,13 @@ func TestCheckStaleSockets(t *testing.T) {
 		si := named(dir)
 		si.ClientVersion = "current-build"
 		got := (&runner{opts: options{serverInfo: si}}).checkStaleSockets()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, types.Check{
+			Status: types.CheckFail,
+			// The pool's pid, version and address, which the proc package owns.
+			Details: got.Details,
+			Fix:     []string{"server", "stop", "--pools"},
+		}, withoutWording(got))
 		assert.Contains(t, got.Message, "from another build")
-		assert.Equal(t, []string{"server", "stop", "--pools"}, got.Fix)
 	})
 }
 
@@ -1285,14 +1315,18 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 
 	t.Run("nothing acknowledged", func(t *testing.T) {
 		got := (&runner{}).checkStaleShadowAcks()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no allow_shadow entries", got.Message)
+		assert.Equal(t, types.Check{
+			Name: "stale-spell-shadow-acknowledgments", Status: types.CheckOK,
+			Message: "no allow_shadow entries",
+		}, got)
 	})
 
 	t.Run("workspace not loaded", func(t *testing.T) {
 		got := (&runner{opts: options{cfg: acks}}).checkStaleShadowAcks()
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "workspace not loaded", got.Message)
+		assert.Equal(t, types.Check{
+			Name: "stale-spell-shadow-acknowledgments", Status: types.CheckOK,
+			Message: "workspace not loaded",
+		}, got)
 	})
 
 	// An acknowledgment whose shadow is gone is dead config: the reason it carries no
@@ -1408,9 +1442,11 @@ func TestCheckGuardBinary(t *testing.T) {
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
 		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
-		assert.Equal(t, types.CheckFail, got.Status)
+		assert.Equal(t, types.Check{
+			Status:  types.CheckFail,
+			Details: []string{"build one: magus run build ."},
+		}, withoutWording(got))
 		assert.Contains(t, got.Message, "a guard hook is unenforced")
-		assert.Equal(t, []string{"build one: magus run build ."}, got.Details)
 	})
 
 	// A non-executable ./magus is not a binary a hook can run, so resolution has to
@@ -1802,4 +1838,11 @@ func TestGuardTemplateBasenamesAreShipped(t *testing.T) {
 		assert.FileExistsf(t, filepath.Join(dir, base),
 			"guardTemplateBasenames names %q, which this repo does not ship; a config can never carry that name, so the check silently matches nothing", base)
 	}
+}
+
+// withoutWording blanks the name and message of c, the two fields a test leaves to the check or
+// pins by substring, so the rest of the Check compares whole and a field added later is covered.
+func withoutWording(c types.Check) types.Check {
+	c.Name, c.Message = "", ""
+	return c
 }

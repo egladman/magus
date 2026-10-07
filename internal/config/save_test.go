@@ -69,8 +69,8 @@ func TestSave_AllValueTypes(t *testing.T) {
 		}
 	}
 	require.NotNil(t, got, "sandbox.allow homebin entry not found")
-	assert.Equal(t, "/home/user/.local/bin", got.Path)
-	assert.Equal(t, spells.SandboxAccessRO, got.Mode)
+	want := spells.SandboxAllow{Name: "homebin", Path: "/home/user/.local/bin", Mode: spells.SandboxAccessRO}
+	assert.Equal(t, want, *got)
 }
 
 // TestKnownKeys checks that the reflection-derived key set is well-formed: non-empty,

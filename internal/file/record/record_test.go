@@ -61,10 +61,10 @@ func TestRoundTrip(t *testing.T) {
 
 	var got owner
 	require.NoError(t, Read(dir, &got))
-	assert.Equal(t, want.PID, got.PID)
-	assert.Equal(t, want.Command, got.Command)
-	assert.Equal(t, want.Inv, got.Inv)
 	assert.True(t, want.Started.Equal(got.Started), "started: want %s got %s", want.Started, got.Started)
+	// The instant round-tripped; the location it comes back in need not match.
+	got.Started = want.Started
+	assert.Equal(t, want, got)
 }
 
 // An untagged field never reaches disk, so renaming a Go field cannot silently

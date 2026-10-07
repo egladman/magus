@@ -139,8 +139,7 @@ func TestApply_AppliesRegisteredOptions(t *testing.T) {
 	r.RegisterProject("api", WithOutputs("dist/**"), WithName("API"))
 
 	require.NoError(t, r.Apply(w))
-	assert.Equal(t, types.MustParseGlobs("dist/**"), p.Outputs)
-	assert.Equal(t, "API", p.Name)
+	assert.Equal(t, &types.Project{Path: "api", Name: "API", Outputs: types.MustParseGlobs("dist/**")}, p)
 }
 
 func TestApply_UnknownProjectErrorsWithHint(t *testing.T) {

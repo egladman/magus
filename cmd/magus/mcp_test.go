@@ -74,19 +74,19 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"config","arguments":{}}}`,
 	}
+	type reply struct {
+		JSONRPC string          `json:"jsonrpc"`
+		ID      int             `json:"id"`
+		Result  json.RawMessage `json:"result"`
+	}
 	for i, frame := range frames {
 		_, err := io.WriteString(inW, frame+"\n")
 		require.NoError(t, err)
 		require.True(t, wire.Scan(), "no reply to %s", frame)
-		var got struct {
-			JSONRPC string          `json:"jsonrpc"`
-			ID      int             `json:"id"`
-			Result  json.RawMessage `json:"result"`
-		}
+		var got reply
 		require.NoError(t, json.Unmarshal(wire.Bytes(), &got), "the wire carried a line that is not JSON-RPC: %q", wire.Text())
-		assert.Equal(t, "2.0", got.JSONRPC)
-		assert.Equal(t, i+1, got.ID)
 		assert.NotEmpty(t, got.Result)
+		assert.Equal(t, reply{JSONRPC: "2.0", ID: i + 1, Result: got.Result}, got)
 		if i == 0 {
 			fmt.Println("stray")
 		}

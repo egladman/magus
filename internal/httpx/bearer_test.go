@@ -341,20 +341,26 @@ func built(h http.Handler, err error) http.Handler {
 
 // wireStatus is the AIP-193 HTTP/1.1+JSON body, decoded the way a client would.
 type wireStatus struct {
-	Error struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Status  string `json:"status"`
-		Details []struct {
-			Type   string `json:"@type"`
-			Reason string `json:"reason"`
-			Domain string `json:"domain"`
-			Links  []struct {
-				Description string `json:"description"`
-				URL         string `json:"url"`
-			} `json:"links"`
-		} `json:"details"`
-	} `json:"error"`
+	Error wireError `json:"error"`
+}
+
+type wireError struct {
+	Code    int          `json:"code"`
+	Message string       `json:"message"`
+	Status  string       `json:"status"`
+	Details []wireDetail `json:"details"`
+}
+
+type wireDetail struct {
+	Type   string     `json:"@type"`
+	Reason string     `json:"reason"`
+	Domain string     `json:"domain"`
+	Links  []wireLink `json:"links"`
+}
+
+type wireLink struct {
+	Description string `json:"description"`
+	URL         string `json:"url"`
 }
 
 func decodeStatus(t *testing.T, body []byte) wireStatus {
@@ -385,18 +391,18 @@ func TestBearerRefusalIsAIPStatusJSON(t *testing.T) {
 	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
 	assert.Equal(t, `Bearer realm="magus", error="invalid_token"`, rr.Header().Get("WWW-Authenticate"))
 	got := decodeStatus(t, rr.Body.Bytes())
-	assert.Equal(t, http.StatusUnauthorized, got.Error.Code)
-	assert.Equal(t, "UNAUTHENTICATED", got.Error.Status)
-	assert.Equal(t, types.FormatDiagnostic(types.BearerRejected, bearerRejected.Message), got.Error.Message)
-	require.Len(t, got.Error.Details, 2)
-	info, help := got.Error.Details[0], got.Error.Details[1]
-	assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", info.Type)
-	assert.Equal(t, "MGS9001", info.Reason)
-	assert.Equal(t, "github.com/egladman/magus", info.Domain)
-	assert.Equal(t, "type.googleapis.com/google.rpc.Help", help.Type)
-	require.Len(t, help.Links, 1)
-	assert.Equal(t, "bearer token rejected", help.Links[0].Description)
-	assert.Equal(t, types.CodeURL(types.BearerRejected), help.Links[0].URL)
+	assert.Equal(t, wireError{
+		Code:    http.StatusUnauthorized,
+		Message: types.FormatDiagnostic(types.BearerRejected, bearerRejected.Message),
+		Status:  "UNAUTHENTICATED",
+		Details: []wireDetail{
+			{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: "MGS9001", Domain: "github.com/egladman/magus"},
+			{
+				Type:  "type.googleapis.com/google.rpc.Help",
+				Links: []wireLink{{Description: "bearer token rejected", URL: types.CodeURL(types.BearerRejected)}},
+			},
+		},
+	}, got.Error)
 }
 
 // The Connect cases decode through connect-go's own client, so they prove what a Connect

@@ -119,8 +119,13 @@ func TestAddProvidedProjectsFirstProviderOwnsThePath(t *testing.T) {
 	require.NoError(t, addProvided(context.Background(), ws, "nx", "cargo"))
 
 	require.Len(t, ws.Projects, 1)
-	assert.Equal(t, types.ProvidedBy("nx"), ws.Projects["libs/foo"].Origin, "wiring order breaks the tie")
-	assert.Equal(t, "nx", ws.Projects["libs/foo"].Name)
+	// Wiring order breaks the tie: nx claimed the path first, so its name and origin stand.
+	assert.Equal(t, &types.Project{
+		Path:   "libs/foo",
+		Name:   "nx",
+		Origin: types.ProvidedBy("nx"),
+		Dir:    filepath.Join(ws.Root, "libs", "foo"),
+	}, ws.Projects["libs/foo"])
 }
 
 func TestAddProvidedProjectsOneProviderRepeatingAPath(t *testing.T) {

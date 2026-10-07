@@ -1,6 +1,10 @@
 package ci
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestDedup_CrossShardRedundancy(t *testing.T) {
 	// key A built on 3 shards (durations 100/200/300) -> 2 extra builds, waste =
@@ -17,30 +21,18 @@ func TestDedup_CrossShardRedundancy(t *testing.T) {
 	}
 	res := Dedup(misses)
 
-	if res.TotalMisses != 7 {
-		t.Errorf("TotalMisses = %d, want 7", res.TotalMisses)
+	want := DedupResult{
+		TotalMisses:     7,
+		UniqueKeys:      3,
+		RedundantBuilds: 3,
+		RedundantMs:     350,
+		Approx:          false, // all hashes present
+		Top: []DedupEntry{
+			{Project: "web", Target: "test", Hash: "aaaa", ExtraBuilds: 2, ExtraMs: 300},
+			{Project: "api", Target: "build", Hash: "bbbb", ExtraBuilds: 1, ExtraMs: 50},
+		},
 	}
-	if res.UniqueKeys != 3 {
-		t.Errorf("UniqueKeys = %d, want 3", res.UniqueKeys)
-	}
-	if res.RedundantBuilds != 3 {
-		t.Errorf("RedundantBuilds = %d, want 3", res.RedundantBuilds)
-	}
-	if res.RedundantMs != 350 {
-		t.Errorf("RedundantMs = %d, want 350", res.RedundantMs)
-	}
-	if res.Approx {
-		t.Error("Approx = true, want false (all hashes present)")
-	}
-	if len(res.Top) != 2 {
-		t.Fatalf("len(Top) = %d, want 2", len(res.Top))
-	}
-	if res.Top[0].Hash != "aaaa" || res.Top[0].ExtraMs != 300 || res.Top[0].ExtraBuilds != 2 {
-		t.Errorf("Top[0] = %+v, want aaaa/300/2", res.Top[0])
-	}
-	if res.Top[1].Hash != "bbbb" || res.Top[1].ExtraMs != 50 {
-		t.Errorf("Top[1] = %+v, want bbbb/50", res.Top[1])
-	}
+	assert.Equal(t, want, res)
 }
 
 func TestDedup_EmptyHashIsApproximate(t *testing.T) {
@@ -58,9 +50,7 @@ func TestDedup_EmptyHashIsApproximate(t *testing.T) {
 
 func TestDedup_NoMisses(t *testing.T) {
 	res := Dedup(nil)
-	if res.TotalMisses != 0 || res.RedundantBuilds != 0 || len(res.Top) != 0 {
-		t.Errorf("empty input gave %+v", res)
-	}
+	assert.Equal(t, DedupResult{}, res, "empty input")
 }
 
 func TestDedup_MixedHashCoarsensToApprox(t *testing.T) {
@@ -71,18 +61,17 @@ func TestDedup_MixedHashCoarsensToApprox(t *testing.T) {
 		{Project: "web", Target: "test", Hash: "aaaa", DurationMs: 100, File: "s1"},
 		{Project: "web", Target: "test", Hash: "", DurationMs: 200, File: "s2"},
 	})
-	if !res.Approx {
-		t.Error("Approx = false, want true (one event lacks a hash)")
+	want := DedupResult{
+		TotalMisses: 2,
+		// Coarsened to (project, target).
+		UniqueKeys:      1,
+		RedundantBuilds: 1,
+		// `100+200 - max(200)` = 100.
+		RedundantMs: 100,
+		Approx:      true,
+		Top:         []DedupEntry{{Project: "web", Target: "test", ExtraBuilds: 1, ExtraMs: 100}},
 	}
-	if res.UniqueKeys != 1 {
-		t.Errorf("UniqueKeys = %d, want 1 (coarsened to project,target)", res.UniqueKeys)
-	}
-	if res.RedundantBuilds != 1 {
-		t.Errorf("RedundantBuilds = %d, want 1", res.RedundantBuilds)
-	}
-	if res.RedundantMs != 100 { // `100+200 - max(200) = 100`
-		t.Errorf("RedundantMs = %d, want 100", res.RedundantMs)
-	}
+	assert.Equal(t, want, res)
 }
 
 func TestDedup_TopOrderStableOnTies(t *testing.T) {

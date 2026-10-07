@@ -161,9 +161,16 @@ func TestBuiltinTypescriptInstall(t *testing.T) {
 	steps, err := ExplainCharms(in.Command.Args, in.Command.Charms, []string{"update"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"update"}, steps[len(steps)-1].Command)
-	assert.True(t, in.Relocatable)
-	assert.Equal(t, []string{"node_modules/.pnpm/lock.yaml", "node_modules/.modules.yaml"}, in.Stamps)
-	assert.Equal(t, []string{"node", "pnpm"}, in.Tools)
+	assert.Equal(t, spells.Install{
+		Name: "pnpm-install",
+		// The hints and charms are the spell's own advice; the argv and update charm are pinned above.
+		Command:     in.Command,
+		Dir:         "node_modules",
+		Relocatable: true,
+		Stamps:      []string{"node_modules/.pnpm/lock.yaml", "node_modules/.modules.yaml"},
+		Inputs:      []string{".npmrc", "pnpm-workspace.yaml"},
+		Tools:       []string{"node", "pnpm"},
+	}, in)
 }
 
 // TestBuiltinTypescriptInstallSplitsByBinary pins the naming rename: one op per
@@ -177,8 +184,9 @@ func TestBuiltinTypescriptInstallSplitsByBinary(t *testing.T) {
 
 	npm, ok := spec.Ops["npm-ci"]
 	require.True(t, ok)
-	require.Equal(t, spells.OpKindInstall, npm.Kind)
 	require.Equal(t, "npm", npm.Bin)
+	// The command and install spec are the spell's own data, checked below.
+	require.Equal(t, spells.Op{Kind: spells.OpKindInstall, Command: npm.Command, Install: npm.Install}, npm)
 	man := npm.Install.Manifests[0]
 	assert.ElementsMatch(t, []string{"package-lock.json", "npm-shrinkwrap.json"}, man.LockCandidates)
 	for _, lock := range man.LockCandidates {

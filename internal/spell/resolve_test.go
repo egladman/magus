@@ -202,8 +202,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 	spec, err := resolve(t, src)
 	require.NoError(t, err)
 	b := spec.Ops["build"]
-	assert.Equal(t, "go", b.Bin)
-	assert.Equal(t, []string{"build"}, b.Args)
+	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "go", Args: []string{"build"}}}, b)
 
 	f := spec.Ops["fmt"]
 	assert.Equal(t, "gofmt", f.Bin)
@@ -246,9 +245,8 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 
 	build := spec.Ops["build"]
 	assert.Equal(t, spells.OpKindCommand, build.OpKind())
-	assert.Equal(t, "npm", build.Bin)
-	assert.Equal(t, []string{"run", "build"}, build.Args)
-	assert.Nil(t, build.Service, "a command op has no Service")
+	// The want has no Service: a command op has none.
+	assert.Equal(t, spells.Op{Command: spells.Command{Bin: "npm", Args: []string{"run", "build"}}}, build)
 
 	// Only the service op is reported as a service target (drives uncached-at-run).
 	assert.Equal(t, []string{"serve"}, spec.ServiceOpNames())
@@ -256,16 +254,18 @@ export fun mgs_listTargets() > any { return {"build": nodeBuild, "serve": nodeSe
 	serve := spec.Ops["serve"]
 	assert.Equal(t, spells.OpKindService, serve.OpKind())
 	assert.True(t, serve.IsService())
-	require.NotNil(t, serve.Service)
-	assert.Equal(t, "npm", serve.Service.Command.Bin)
-	assert.Equal(t, []string{"run", "dev"}, serve.Service.Command.Args)
-	// Optional readiness probe decodes when provided.
-	assert.Equal(t, "curl", serve.Service.Readiness.Bin)
-	// stop is optional and omitted here, so it stays the empty Command.
-	assert.Equal(t, "", serve.Service.Stop.Bin)
-	// The embedded Command mirrors Service.Command so existing paths read it uniformly.
-	assert.Equal(t, serve.Service.Command.Bin, serve.Bin)
-	assert.Equal(t, serve.Service.Command.Args, serve.Args)
+	// Optional readiness probe decodes when provided; stop is omitted here, so it stays
+	// the empty Command. The embedded Command mirrors Service.Command so existing paths
+	// read it uniformly.
+	cmd := spells.Command{Bin: "npm", Args: []string{"run", "dev"}}
+	assert.Equal(t, spells.Op{
+		Kind:    spells.OpKindService,
+		Command: cmd,
+		Service: &spells.Service{
+			Command:   cmd,
+			Readiness: spells.Command{Bin: "curl", Args: []string{"-sf", "http://localhost:5173"}},
+		},
+	}, serve)
 }
 
 // TestResolve_ServiceDistinctAndIdle pins that the optional distinct (justified
@@ -286,9 +286,11 @@ export fun mgs_listTargets() > any { return {"pg": pg}; }
 	require.NoError(t, err)
 
 	pg := spec.Ops["pg"]
-	require.NotNil(t, pg.Service)
-	assert.Equal(t, "pins PG 16 for the 15 to 16 migration test", pg.Service.Distinct)
-	assert.Equal(t, "45m", pg.Service.Idle)
+	assert.Equal(t, &spells.Service{
+		Command:  spells.Command{Bin: "docker", Args: []string{"run", "postgres:16"}},
+		Distinct: "pins PG 16 for the 15 to 16 migration test",
+		Idle:     "45m",
+	}, pg.Service)
 }
 
 // TestResolve_DetachedServiceRejected pins the kind-coherence ward (MGS5002): a

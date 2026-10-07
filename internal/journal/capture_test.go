@@ -30,10 +30,15 @@ func TestFileHandlerAppendsJSONL(t *testing.T) {
 	require.Len(t, lines, 2)
 	var first Event
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &first))
-	assert.Equal(t, KindOutput, first.Kind)
-	assert.Equal(t, "line one", first.Text)
-	assert.Equal(t, "web", first.Project)
 	assert.Greater(t, first.Ts, int64(0), "Emit stamps a timestamp")
+	assert.Equal(t, Event{
+		Ts:      first.Ts,
+		Kind:    KindOutput,
+		Stream:  StreamStdout,
+		Project: "web",
+		Target:  "build",
+		Text:    "line one",
+	}, first)
 }
 
 // TestEmitStampsFromContext confirms Emit fills the timestamp and the invocation id from

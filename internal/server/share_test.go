@@ -47,22 +47,22 @@ func TestShareHandlerRefusesInTheAIPShape(t *testing.T) {
 			assert.Equal(t, tc.status, rr.Code)
 			assert.Equal(t, tc.allow, rr.Header().Get("Allow"))
 			assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
+			type detail struct {
+				Type   string `json:"@type"`
+				Reason string `json:"reason"`
+			}
 			var body struct {
 				Error struct {
-					Code    int    `json:"code"`
-					Message string `json:"message"`
-					Details []struct {
-						Type   string `json:"@type"`
-						Reason string `json:"reason"`
-					} `json:"details"`
+					Code    int      `json:"code"`
+					Message string   `json:"message"`
+					Details []detail `json:"details"`
 				} `json:"error"`
 			}
 			require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body), rr.Body.String())
 			assert.Equal(t, tc.status, body.Error.Code)
 			assert.Contains(t, body.Error.Message, tc.reason)
 			require.NotEmpty(t, body.Error.Details)
-			assert.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", body.Error.Details[0].Type)
-			assert.Equal(t, tc.reason, body.Error.Details[0].Reason)
+			assert.Equal(t, detail{Type: "type.googleapis.com/google.rpc.ErrorInfo", Reason: tc.reason}, body.Error.Details[0])
 		})
 	}
 }
@@ -94,18 +94,28 @@ func TestShareMintIsAudited(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	e := events[0]
-	assert.Equal(t, "share.mint", e.Action)
-	assert.Equal(t, trail.KindTokenLifecycle, e.Kind)
 	assert.Contains(t, e.Preview, "share link ")
 	assert.Contains(t, e.Preview, "console=read")
 	assert.NotContains(t, e.Preview, secret)
+	assert.Equal(t, trail.Event{
+		Ts:           e.Ts,
+		Kind:         trail.KindTokenLifecycle,
+		Origin:       e.Origin,
+		Action:       "share.mint",
+		Outcome:      trail.OutcomeOK,
+		RequestRef:   e.RequestRef,
+		RequestBytes: e.RequestBytes,
+		Preview:      e.Preview,
+	}, e)
 	blob, err := trail.ReadBlob(trailDir, e.RequestRef)
 	require.NoError(t, err)
 	assert.NotContains(t, string(blob), secret)
 	var rec trail.MintRecord
 	require.NoError(t, json.Unmarshal(blob, &rec))
-	assert.Equal(t, types.KindShare, rec.Minted.Kind)
-	assert.Equal(t, types.GrantViewer, rec.Minted.Grant)
 	assert.Len(t, rec.Minted.ID, 8)
-	assert.Equal(t, minter, rec.Minter)
+	assert.Equal(t, trail.MintRecord{
+		Minted:  types.Credential{Kind: types.KindShare, ID: rec.Minted.ID, Name: rec.Minted.Name, Grant: types.GrantViewer},
+		Expires: rec.Expires, // stamped at mint time
+		Minter:  minter,
+	}, rec)
 }

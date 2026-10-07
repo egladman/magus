@@ -168,9 +168,8 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if out.AsOf != changeset.PatchDigest(src.patch) || out.Start != 2 || len(out.Lines) != 3 || out.Lines[0] != "two" || out.Lines[2] != "four" {
-		t.Fatalf("unexpected context: %#v", out)
-	}
+	want := contextResponse{Path: "source.go", AsOf: changeset.PatchDigest(src.patch), Start: 2, Lines: []string{"two", "three", "four"}}
+	require.Equal(t, want, out)
 }
 
 func TestContextHandler_RejectsPathEscape(t *testing.T) {
@@ -273,13 +272,12 @@ func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var got types.DiffReview
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatal(err)
-	}
-	if got.ID != want.ID || got.AsOf != "snapshot-a" || got.Base != "main" {
-		t.Fatalf("unexpected session: %#v", got)
-	}
+	// Compared as the wire form, so a field the review gains is covered without a decode
+	// turning an empty slice into a nil one.
+	wire, err := json.Marshal(want)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(wire), w.Body.String())
+	assert.Equal(t, "snapshot-a main", want.AsOf+" "+want.Base, "the served review is the one attached")
 }
 
 // post is one session mutation, for the publish cases below.
@@ -636,8 +634,16 @@ func TestReviewRouteServesPlacedThreads(t *testing.T) {
 
 	var got diffReviewResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.Equal(t, "482", got.ID)
-	assert.Equal(t, "acme/acme", got.Repo)
+	// The verdict set, the state and the threads are the provider's answer and are checked
+	// below or by their own tests, so they are copied across; no workspace is wired, so no host.
+	assert.Equal(t, diffReviewResponse{
+		ID:           "482",
+		Repo:         "acme/acme",
+		State:        got.State,
+		Verdicts:     got.Verdicts,
+		VerdictLimit: got.VerdictLimit,
+		Threads:      got.Threads,
+	}, got)
 	require.Len(t, got.Threads, 2)
 	assert.Equal(t, 0, got.Threads[0].Hunk, "a line inside a hunk arrives placed")
 	assert.Equal(t, -1, got.Threads[1].Hunk, "one outside every hunk arrives unplaced, not dropped")

@@ -347,9 +347,8 @@ func TestSnapshotOneSymlink(t *testing.T) {
 
 	rec, err := c.snapshotOne(link, "link")
 	require.NoError(t, err)
-	assert.Equal(t, "link", rec.Path)
-	assert.Equal(t, "target/path", rec.Symlink)
-	assert.Empty(t, rec.Blob, "symlink record must not carry a blob")
+	// The record carries no blob: the link is recorded as its target, not dereferenced.
+	assert.Equal(t, OutputRecord{Path: "link", Symlink: "target/path", Mode: rec.Mode}, rec)
 }
 
 // TestSnapshotOneDirectoryRejected verifies that pointing snapshotOne at a

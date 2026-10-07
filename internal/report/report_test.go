@@ -66,14 +66,16 @@ func TestSchemaFieldOnEveryLine(t *testing.T) {
 	sc := bufio.NewScanner(&buf)
 	for sc.Scan() {
 		line := sc.Bytes()
-		var head struct {
-			Schema int    `json:"schema"`
-			Type   string `json:"type"`
-		}
+		var head envelopeHead
 		require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
-		assert.Equal(t, Schema, head.Schema, "schema on line %q", line)
-		assert.Equal(t, TypeTargetResult, head.Type)
+		assert.Equal(t, envelopeHead{Schema: Schema, Type: TypeTargetResult}, head, "line %q", line)
 	}
+}
+
+// envelopeHead is the schema and type every line of a report carries.
+type envelopeHead struct {
+	Schema int    `json:"schema"`
+	Type   string `json:"type"`
 }
 
 // TestRoundTripAllTypes writes one of every registered event type and
@@ -119,13 +121,9 @@ func TestRoundTripAllTypes(t *testing.T) {
 	sc := bufio.NewScanner(f)
 	for i := 0; sc.Scan(); i++ {
 		require.Less(t, i, len(wantTypes), "got more lines than expected")
-		var head struct {
-			Schema int    `json:"schema"`
-			Type   string `json:"type"`
-		}
+		var head envelopeHead
 		require.NoError(t, json.Unmarshal(sc.Bytes(), &head), "line %d unmarshal: %q", i, sc.Bytes())
-		assert.Equal(t, Schema, head.Schema, "line %d schema", i)
-		assert.Equal(t, wantTypes[i], head.Type, "line %d type", i)
+		assert.Equal(t, envelopeHead{Schema: Schema, Type: wantTypes[i]}, head, "line %d", i)
 	}
 }
 
@@ -176,9 +174,7 @@ func TestConcurrentWrites(t *testing.T) {
 
 	st := w.Stats()
 	want := uint64(goroutines * perG)
-	assert.Equal(t, want, st.Recorded)
-	assert.Equal(t, want, st.Flushed)
-	assert.Zero(t, st.Dropped, "Dropped should be 0 under WithBlockOnFull")
+	assert.Equal(t, Stats{Recorded: want, Flushed: want}, st, "Dropped should be 0 under WithBlockOnFull")
 
 	f, err := os.Open(path)
 	require.NoError(t, err)
@@ -245,8 +241,7 @@ func TestFilterIncludeOnly(t *testing.T) {
 	require.NoError(t, w.Close())
 	st := w.Stats()
 	// hit and miss are both target.result now, so the include filter admits both.
-	assert.Equal(t, uint64(2), st.Recorded)
-	assert.Equal(t, uint64(1), st.Filtered)
+	assert.Equal(t, Stats{Recorded: 2, Filtered: 1, Flushed: 2}, st)
 }
 
 // TestFilterExcludeOnly drops listed types, admits the rest.
@@ -262,8 +257,7 @@ func TestFilterExcludeOnly(t *testing.T) {
 	require.NoError(t, Record(w, GraphError{Message: "boom"}))
 	require.NoError(t, w.Close())
 	st := w.Stats()
-	assert.Equal(t, uint64(2), st.Recorded, "want 2 (cache.hit + graph.error)")
-	assert.Equal(t, uint64(2), st.Filtered, "want 2 (graph.build + graph.query)")
+	assert.Equal(t, Stats{Recorded: 2, Filtered: 2, Flushed: 2}, st, "want 2 recorded (cache.hit + graph.error) and 2 filtered (graph.build + graph.query)")
 }
 
 func TestFilterEmptyAdmitsAll(t *testing.T) {
@@ -538,14 +532,10 @@ func TestStructuredRunEventTypes(t *testing.T) {
 			require.NoError(t, recordAny(w, tc.event))
 			require.NoError(t, w.Close())
 
-			var head struct {
-				Schema int    `json:"schema"`
-				Type   string `json:"type"`
-			}
+			var head envelopeHead
 			line := bytes.TrimSpace(buf.Bytes())
 			require.NoError(t, json.Unmarshal(line, &head), "unmarshal %q", line)
-			assert.Equal(t, Schema, head.Schema)
-			assert.Equal(t, tc.wantType, head.Type)
+			assert.Equal(t, envelopeHead{Schema: Schema, Type: tc.wantType}, head)
 
 			// Whole-struct: decode the SAME line back into the event's own type
 			// (the envelope's extra "schema"/"type" keys are ignored by the

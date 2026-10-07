@@ -74,8 +74,16 @@ func TestDirsAndLayerReadEveryProjectsDeclarations(t *testing.T) {
 	dirs, err := MagusDirs(ctx, "internal/**", map[string]any{"layer": "handler", "language": "go", "depth": int64(0)})
 	require.NoError(t, err)
 	require.Len(t, dirs, 1)
-	assert.Equal(t, "internal/handler/mcp", dirs[0].Path)
-	assert.Equal(t, "handler", dirs[0].Layer)
+	assert.Equal(t, types.Dir{
+		Path: "internal/handler/mcp", ID: "dir:internal/handler/mcp", Layer: "handler", Language: "go",
+		Imports: []string{"internal/httpx"}, ImportedBy: []string{}, ImportsIndexed: true,
+		Calls: []types.DirCall{},
+		CalledBy: []types.DirCall{{
+			Dir: "internal/httpx", Transport: "http",
+			Marker: "marker:internal/httpx/a.go:12", Source: "internal/httpx/a.go:12",
+		}},
+		Children: []string{},
+	}, dirs[0])
 
 	l, err := MagusLayer(ctx, "transport")
 	require.NoError(t, err)
@@ -119,11 +127,24 @@ func TestNeighborhoodDecodesItsOptions(t *testing.T) {
 		"depth": int64(1), "relations": []any{"calls"}, "direction": "out", "collapse": []any{"internal/handler"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "dir:internal/httpx", out.Focus)
-	assert.Equal(t, []types.KnowledgeFold{{Prefix: "internal/handler", Node: "dir:internal/handler", Folded: 1}}, out.Folds)
-	require.Len(t, out.Links, 1)
-	assert.Equal(t, "dir:internal/handler", out.Links[0].Target)
-	assert.Equal(t, map[string]string{types.AttrTransport: "http"}, out.Links[0].Attrs)
+	// The node list is the walk's own rendering of the graph and the answer is asserted by its
+	// verdict below, so both are taken from out.
+	assert.Equal(t, types.KnowledgeNeighborhoodOutput{
+		Definition:    types.KnowledgeNeighborhoodDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Focus:         "dir:internal/httpx",
+		Resolution:    types.ResolvedPath,
+		Options: types.KnowledgeNeighborhoodOptions{
+			Depth: 1, Relations: []types.RelationID{types.RelationCalls}, Direction: types.EdgeOut, Collapse: []string{"internal/handler"},
+		},
+		Nodes: out.Nodes,
+		Links: []types.KnowledgeEdge{{
+			Source: "dir:internal/httpx", Target: "dir:internal/handler", Relation: types.RelationCalls,
+			Confidence: types.ConfidenceExtracted, Score: 1, Attrs: map[string]string{types.AttrTransport: "http"},
+		}},
+		Folds:  []types.KnowledgeFold{{Prefix: "internal/handler", Node: "dir:internal/handler", Folded: 1}},
+		Answer: out.Answer,
+	}, out)
 	assert.Equal(t, types.VerdictUnknown, out.Answer.Verdict, "calls lives beside the symbol layer, and no index was loaded")
 
 	declared, err := MagusNeighborhood(ctx, "target:.:mcp-tools-generate", map[string]any{"relations": []any{"depends_on"}})

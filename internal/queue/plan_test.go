@@ -251,16 +251,18 @@ func TestPlanAdmission(t *testing.T) {
 			}
 			require.Len(t, plan.Verdicts, 1)
 			v := plan.Verdicts[0]
-			assert.Equal(t, tc.want, v.Decision)
-			assert.Equal(t, tc.wantCode, v.Code)
-			if v.Code == types.CodeKickConflict {
-				assert.Equal(t, []string{"a/x.go"}, v.Paths)
-				assert.Equal(t, []string{head("x")[:12] + " change a/x.go"}, v.With)
-				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.\n\n"+
-					"Merge `main` into this branch and resolve the conflict by hand.\n", v.Report, "the files travel in paths and with, not in the prose")
-				assert.Equal(t, "The merge queue could not merge this change at `"+short(v.Change.Head)+"`: it conflicts with `main` outside the generated files.", v.Reason)
-				assert.Empty(t, v.Gate, "planning runs no hook")
+			// A refusal's words are not what this table pins; a conflict's are.
+			want := types.Verdict{Change: v.Change, Decision: tc.want, Code: tc.wantCode, Reason: v.Reason, Report: v.Report}
+			if tc.wantCode == types.CodeKickConflict {
+				want.Paths = []string{"a/x.go"}
+				want.With = []string{head("x")[:12] + " change a/x.go"}
+				// The files travel in paths and with, not in the prose.
+				want.Report = "The merge queue could not merge this change at `" + short(v.Change.Head) + "`: it conflicts with `main` outside the generated files.\n\n" +
+					"Merge `main` into this branch and resolve the conflict by hand.\n"
+				want.Reason = "The merge queue could not merge this change at `" + short(v.Change.Head) + "`: it conflicts with `main` outside the generated files."
 			}
+			// Planning runs no hook, so no Gate is set.
+			assert.Equal(t, want, v)
 		})
 	}
 }
@@ -305,9 +307,11 @@ func TestPlanPeelsAMergeOfTheBaseOffTheChangeBeneath(t *testing.T) {
 		byID[v.Change.ID] = v
 	}
 	assert.Equal(t, types.CodeWaitNotApproved, byID["1"].Code)
-	assert.Equal(t, types.CodeWaitBelow, byID["2"].Code, "held on the change beneath, never blamed")
-	assert.Equal(t, top, byID["2"].Change.StackBase)
-	assert.Equal(t, "1", byID["2"].Change.Below)
+	wantChild := child
+	wantChild.StackBase, wantChild.Below = top, "1"
+	wantHeld := byID["2"]
+	wantHeld.Code, wantHeld.Change = types.CodeWaitBelow, wantChild
+	assert.Equal(t, wantHeld, byID["2"], "held on the change beneath, never blamed")
 }
 
 // mergeOfBaseOnto says head is a merge of the base, at onBase, into top, and top sits on
@@ -339,8 +343,12 @@ func TestPlanHoldsAChangeBuiltOnAnUnqueuedChangeBeneathAMergeOfTheBase(t *testin
 	plan, err := planner(t, d).Run(t.Context(), in)
 	require.NoError(t, err)
 	require.Len(t, plan.Verdicts, 1)
-	assert.Equal(t, types.CodeWaitUnqueuedBelow, plan.Verdicts[0].Code)
-	assert.Equal(t, "carries the commits of #7, which is open but not queued", plan.Verdicts[0].Reason)
+	assert.Equal(t, types.Verdict{
+		Change:   plan.Verdicts[0].Change,
+		Decision: types.DecisionWait,
+		Code:     types.CodeWaitUnqueuedBelow,
+		Reason:   "carries the commits of #7, which is open but not queued",
+	}, plan.Verdicts[0])
 	assert.Empty(t, plan.Partitions)
 }
 

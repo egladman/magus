@@ -24,10 +24,13 @@ func TestBuildGuard(t *testing.T) {
 		rule.MapSet("args", args)
 		require.NoError(t, callVoidDirect(t, requireDirect(t, guard, "shell"), rule))
 		got := reg.ShellRules()
-		require.Len(t, got, 1)
-		assert.Equal(t, "no-curl-prod", got[0].Name)
-		assert.Equal(t, "deny", got[0].Decision)
-		assert.Equal(t, []string{"https://prod.example/health"}, got[0].Args)
+		assert.Equal(t, []workspace.ShellRule{{
+			Name:     "no-curl-prod",
+			Decision: "deny",
+			Program:  "curl",
+			Args:     []string{"https://prod.example/health"},
+			Reason:   "do not hit prod",
+		}}, got)
 	})
 
 	t.Run("dialect is kept as written", func(t *testing.T) {

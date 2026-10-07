@@ -79,11 +79,17 @@ func TestStoreExec(t *testing.T) {
 
 			got, err := s.Exec(ctx, "u1", tt.reported)
 			require.NoError(t, err, "the ledger records every verdict and refuses none of them")
-			assert.Equal(t, tt.want, got.BaseVerdict)
-			assert.Equal(t, tt.reported, got.ReportedBase)
 			assert.NotZero(t, got.Registered, "the store stamps Registered")
-			assert.Equal(t, tt.checkpoint, got.Checkpoint, "registering does not overwrite the checkpoint it compares against")
-			assert.Equal(t, types.StateRunning, got.State, "taking a declared job is what starts it")
+			wantRow := stamped(types.Job{
+				ID:           "u1",
+				Checkpoint:   tt.checkpoint,
+				State:        types.StateRunning,
+				ReportedBase: tt.reported,
+				BaseVerdict:  tt.want,
+				Registered:   got.Registered,
+				CheckoutRoot: got.CheckoutRoot,
+			}, got)
+			assert.Equal(t, wantRow, got, "registering does not overwrite the checkpoint it compares against, and taking a declared job is what starts it")
 
 			advice := BaseAdvice(got)
 			assert.Contains(t, advice, "u1")
@@ -100,8 +106,7 @@ func TestStoreExec(t *testing.T) {
 			listed, err := s.List()
 			require.NoError(t, err)
 			require.Len(t, listed, 1)
-			assert.Equal(t, tt.want, listed[0].BaseVerdict)
-			assert.Equal(t, tt.reported, listed[0].ReportedBase)
+			assert.Equal(t, wantRow, listed[0])
 		})
 	}
 }
@@ -158,9 +163,18 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 
 	settled, err := s.Exec(ctx, "u1", baseA)
 	require.NoError(t, err)
-	assert.Equal(t, types.BaseMatch, settled.BaseVerdict)
-	assert.Equal(t, "declared goal", settled.Criteria, "registering erased nothing the orchestrator declared")
-	assert.Equal(t, diverged.Created, settled.Created)
+	want := stamped(types.Job{
+		ID:           "u1",
+		Criteria:     "declared goal",
+		Checkpoint:   baseA,
+		State:        types.StateRunning,
+		ReportedBase: baseA,
+		BaseVerdict:  types.BaseMatch,
+		Registered:   settled.Registered,
+		CheckoutRoot: settled.CheckoutRoot,
+	}, settled)
+	want.Created = diverged.Created
+	assert.Equal(t, want, settled, "registering erased nothing the orchestrator declared and kept the row it first wrote")
 }
 
 // A checkpoint handed as an abbreviated revision names the same commit as the full one a
@@ -274,8 +288,8 @@ func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
 
 	got, err := ana.List()
 	require.NoError(t, err)
-	assert.Equal(t, taken.CheckoutRoot, got[0].CheckoutRoot, "the refusal leaves the holder's checkout in place")
-	assert.Equal(t, baseA, got[0].ReportedBase)
+	assert.Equal(t, baseA, taken.ReportedBase)
+	assert.Equal(t, taken, got[0], "the refusal leaves the holder's row, checkout included, as it was")
 
 	again, err := ana.Exec(ctx, "u1", baseA)
 	require.NoError(t, err, "the holder's own checkout takes it again")

@@ -83,13 +83,13 @@ func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 
 	got := filterShardPaths(shards, map[string]bool{"docs": true, "proto": true})
 
-	require.Len(t, got, 2, "a shard left with nothing drops out")
-	// IDs are preserved, not renumbered, so a filtered plan reads against the one it came
-	// from: shard 1 is absent rather than shard 2 being renamed to 1.
-	assert.Equal(t, "0", got[0].ID)
-	assert.Equal(t, []string{"docs"}, got[0].ProjectPaths, "the unselected project leaves the shard it shared")
-	assert.Equal(t, "2", got[1].ID)
-	assert.Equal(t, []string{"proto"}, got[1].ProjectPaths)
+	// A shard left with nothing drops out, and the unselected project leaves the shard it
+	// shared. IDs are preserved, not renumbered, so a filtered plan reads against the one
+	// it came from: shard 1 is absent rather than shard 2 being renamed to 1.
+	assert.Equal(t, []types.Shard{
+		{ID: "0", ProjectPaths: []string{"docs"}},
+		{ID: "2", ProjectPaths: []string{"proto"}},
+	}, got)
 }
 
 // TestFilterShardPathsEmptyWhenNothingMatches: a real project outside the affected set is

@@ -19,8 +19,9 @@ func TestParseDiagnosticsHadolintGNU(t *testing.T) {
 		File: "Dockerfile", Line: 1, Severity: "warning", Code: "DL3006",
 		Message: "Always tag the version of an image explicitly",
 	}, got[0], "the program prefix is not the file")
-	assert.Equal(t, 2, got[1].Line)
-	assert.Equal(t, "info", got[1].Severity)
+	assert.Equal(t, Diagnostic{
+		File: "Dockerfile", Line: 2, Severity: "info", Code: "DL3015", Message: "Avoid additional packages",
+	}, got[1])
 }
 
 // Verbatim `shellcheck --format=gcc` output: no program prefix, a column, and the code
@@ -51,8 +52,7 @@ func TestParseDiagnosticsKeepsAWindowsDriveLetter(t *testing.T) {
 	got := ParseDiagnostics(DiagnosticGNU, `C:\src\main.go:12:5: error: boom`)
 
 	require.Len(t, got, 1)
-	assert.Equal(t, `C:\src\main.go`, got[0].File)
-	assert.Equal(t, 12, got[0].Line)
+	assert.Equal(t, Diagnostic{File: `C:\src\main.go`, Line: 12, Col: 5, Severity: "error", Message: "boom"}, got[0])
 }
 
 // An undeclared format parses nothing, so a caller cannot accidentally read prose as

@@ -71,9 +71,7 @@ func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 	assert.Equal(t, "hello", string(got))
 	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	assert.Equal(t, "get", op.Method)
-	assert.Equal(t, "hit", op.Outcome)
-	assert.Equal(t, int64(5), op.Bytes)
+	assert.Equal(t, RemoteOp{Method: "get", Outcome: "hit", Duration: op.Duration, Bytes: 5}, op)
 	assert.Equal(t, []string{"magus.cache.remote.get"}, rec.spans)
 }
 
@@ -86,8 +84,7 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	require.ErrorIs(t, err, cache.ErrRemoteMiss, "a miss passes through as the sentinel")
 	assert.Nil(t, rc)
 	require.Len(t, rec.remoteOps, 1)
-	assert.Equal(t, "miss", rec.remoteOps[0].Outcome)
-	assert.Equal(t, int64(0), rec.remoteOps[0].Bytes)
+	assert.Equal(t, RemoteOp{Method: "get", Outcome: "miss", Duration: rec.remoteOps[0].Duration}, rec.remoteOps[0])
 }
 
 // A put the store answers "already present" is its own outcome, not an error.
@@ -132,9 +129,7 @@ func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	assert.Equal(t, "world", string(fb.put))
 	require.Len(t, rec.remoteOps, 1)
 	op := rec.remoteOps[0]
-	assert.Equal(t, "put", op.Method)
-	assert.Equal(t, "stored", op.Outcome)
-	assert.Equal(t, int64(5), op.Bytes)
+	assert.Equal(t, RemoteOp{Method: "put", Outcome: "stored", Duration: op.Duration, Bytes: 5}, op)
 	assert.Equal(t, []string{"magus.cache.remote.put"}, rec.spans)
 }
 

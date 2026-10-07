@@ -14,8 +14,7 @@ func TestResolveRace(t *testing.T) {
 		t.Helper()
 		opts, err := resolveRace(input)
 		require.NoError(t, err)
-		assert.Equal(t, wantEnabled, opts.Enabled)
-		assert.Equal(t, wantReplay, opts.Replay)
+		assert.Equal(t, raceOptions{Enabled: wantEnabled, Replay: wantReplay}, opts)
 	}
 
 	t.Run("flag absent = disabled", func(t *testing.T) { assertRace(t, "", false, false) })

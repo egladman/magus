@@ -417,13 +417,13 @@ func TestMapValueTypesStayReachable(t *testing.T) {
 	a := fixtureAPI(t)
 	resp := a.messages["magus.token.v1.ListTokensResponse"]
 
-	labels := fieldNamed(t, resp, "labels")
-	assert.Equal(t, "map<string, string>", labels.Type)
-	assert.Equal(t, "", labels.Ref, "a map cell carries no inline link")
-
-	byID := fieldNamed(t, resp, "by_id")
-	assert.Equal(t, "map<string, Token>", byID.Type)
-	assert.Equal(t, "", byID.Ref)
+	// A map cell carries no inline link, so Ref stays empty.
+	assert.Equal(t,
+		field{Name: "labels", JSONName: "labels", Number: 2, Kind: protoreflect.MessageKind, Type: "map<string, string>"},
+		fieldNamed(t, resp, "labels"))
+	assert.Equal(t,
+		field{Name: "by_id", JSONName: "byId", Number: 3, Kind: protoreflect.MessageKind, Type: "map<string, Token>"},
+		fieldNamed(t, resp, "by_id"))
 
 	assert.Contains(t, resp.refs, "magus.token.v1.Token")
 }
@@ -746,10 +746,12 @@ func TestServicePageStatesTheCallContract(t *testing.T) {
 
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok)
-	assert.Equal(t, "TokenService", fm.Title)
-	assert.Equal(t, "reference/api/", fm.GeneratedFrom)
-	assert.Equal(t, "Issues and lists tokens.", fm.Description)
-	assert.Contains(t, fm.Tags, "tokenservice")
+	assert.Equal(t, docs.Frontmatter{
+		Title:         "TokenService",
+		GeneratedFrom: "reference/api/",
+		Description:   "Issues and lists tokens.",
+		Tags:          []string{"api", "proto", "connect", "grpc", "tokenservice"},
+	}, fm)
 
 	for _, want := range []string{
 		"`POST /magus.token.v1.TokenService/ListTokens`: unary. Source: [token.proto:14]",
@@ -898,8 +900,12 @@ func TestIndexOrientsAClientWithNoGeneratedCode(t *testing.T) {
 
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok)
-	assert.Equal(t, "Server API", fm.Title)
-	assert.Equal(t, "proto/magus/**/*.proto", fm.GeneratedFrom)
+	assert.Equal(t, docs.Frontmatter{
+		Title:         "Server API",
+		GeneratedFrom: "proto/magus/**/*.proto",
+		Description:   "The magus server's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
+		Tags:          []string{"api", "proto", "protobuf", "connect", "grpc", "server", "reference"},
+	}, fm)
 
 	for _, want := range []string{
 		"| [TokenService](token/v1/token.md) | 3 | `magus.token.v1` |",
@@ -930,9 +936,12 @@ func TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn(t *testing.T) {
 
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok)
-	assert.Equal(t, "magus.query.v1", fm.Title)
-	assert.Equal(t, "Shared query types.", fm.Description)
-	assert.Contains(t, fm.Tags, "query-v1")
+	assert.Equal(t, docs.Frontmatter{
+		Title:         "magus.query.v1",
+		GeneratedFrom: "reference/api/",
+		Description:   "Shared query types.",
+		Tags:          []string{"api", "proto", "connect", "grpc", "query-v1"},
+	}, fm)
 
 	for _, want := range []string{
 		"Declares no service of its own; part of the [server API](../../index.md).",

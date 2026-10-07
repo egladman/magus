@@ -400,14 +400,20 @@ func TestLatestRefsByTarget(t *testing.T) {
 	got := s.LatestRefsByTarget()
 	require.Len(t, got, 2, "one entry per (project, bare target); charm variants collapse, the target-less run is skipped")
 
-	assert.Equal(t, "pkg/a", got[0].Project)
-	assert.Equal(t, "build", got[0].Target, "charm suffix stripped; sorted build before test")
-	assert.Equal(t, newer, got[0].Ref, "the newer timestamp wins across charm variants")
-	assert.False(t, got[0].Failed, "the winning run's outcome rides along")
 	assert.NotEqual(t, older, got[0].Ref)
 
-	assert.Equal(t, "test", got[1].Target)
-	assert.Equal(t, testRef, got[1].Ref)
+	// The store stamps the key, its version, the attempt and the persist time beside what the
+	// caller handed it. The charm suffix is stripped and build sorts before test; the newer
+	// timestamp wins across charm variants and the winning run's outcome rides along.
+	persisted := func(d OutputDescriptor, key string, stamped OutputDescriptor) OutputDescriptor {
+		d.Key, d.KeyVersion = key, KeyVersion
+		d.Attempt, d.PersistedNs = stamped.Attempt, stamped.PersistedNs
+		return d
+	}
+	assert.Equal(t, []OutputDescriptor{
+		persisted(OutputDescriptor{Ref: newer, Project: "pkg/a", Target: "build", TimestampMs: 200}, "ka2", got[0]),
+		persisted(OutputDescriptor{Ref: testRef, Project: "pkg/a", Target: "test", TimestampMs: 150}, "kb", got[1]),
+	}, got)
 }
 
 // TestLatestRefsByTargetEmpty: an output store with nothing persisted returns no refs
@@ -560,8 +566,12 @@ func TestInvocationEventsByID(t *testing.T) {
 
 	header, events, err := NewOutputStore(dir).InvocationEventsByID("invaudit1")
 	require.NoError(t, err)
-	assert.Equal(t, "invaudit1", header.ID)
-	assert.Equal(t, journal.StatusPass, header.Status, "the header is still reconstructed")
+	// The header is still reconstructed.
+	assert.Equal(t, journal.Invocation{
+		ID:      "invaudit1",
+		Command: journal.Command{Arguments: []string{"run", "image-login"}},
+		Status:  journal.StatusPass,
+	}, header)
 	require.Len(t, events, 3, "every event is returned, not only the two lifecycle ones")
 
 	var secrets []journal.Event
@@ -713,17 +723,20 @@ func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
 
 	got := NewOutputStore(dir).ListRunLogs(0)
 	require.Len(t, got, 2, "only .jsonl journals list")
-	assert.Equal(t, "invsweep", got[0].Inv, "newest by modtime first")
-	assert.Equal(t, []string{"affected", "ci"}, got[0].Arguments)
-	assert.Equal(t, journal.TriggerCI, got[0].Trigger)
-	assert.Equal(t, int64(100), got[0].StartedMs)
-	assert.Equal(t, int64(900), got[0].FinishedMs)
-	assert.Equal(t, journal.StatusFail, got[0].Status)
-	assert.Equal(t, "v9", got[0].MagusVersion)
-
-	assert.Equal(t, "invkilled", got[1].Inv)
-	assert.Empty(t, got[1].Status, "no finished event means no outcome to claim")
-	assert.Equal(t, int64(40), got[1].FinishedMs, "the last event still dates the run")
+	// Newest by modtime first. The interrupted run has no finished event, so no outcome to claim,
+	// and its last event still dates the run.
+	assert.Equal(t, []RunLog{
+		{
+			Inv: "invsweep", Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI,
+			StartedMs: 100, FinishedMs: 900, Status: journal.StatusFail, MagusVersion: "v9",
+			SizeBytes: fileSize(t, sweepPath),
+		},
+		{
+			Inv: "invkilled", Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun,
+			StartedMs: 10, FinishedMs: 40,
+			SizeBytes: fileSize(t, killedPath),
+		},
+	}, got)
 
 	assert.Len(t, NewOutputStore(dir).ListRunLogs(1), 1, "a positive limit keeps the newest")
 	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(0), "a store with no runs dir lists nothing")
@@ -1174,9 +1187,12 @@ func TestDescriptorByRefSkipsTheBlob(t *testing.T) {
 
 	desc, err := s.DescriptorByRef(ref)
 	require.NoError(t, err)
-	assert.Equal(t, "svc/api", desc.Project)
-	assert.Equal(t, "test", desc.Target)
-	assert.Equal(t, int64(42), desc.TimestampMs)
+	// The store stamps the key, its version, the attempt and the persist time beside what the
+	// caller handed it.
+	assert.Equal(t, OutputDescriptor{
+		Ref: ref, Project: "svc/api", Target: "test", TimestampMs: 42, DurationMs: 7,
+		Key: key, KeyVersion: KeyVersion, Attempt: desc.Attempt, PersistedNs: desc.PersistedNs,
+	}, desc)
 
 	_, viaBytes, err := s.ByRef(ref)
 	require.NoError(t, err)

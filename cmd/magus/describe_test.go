@@ -144,9 +144,7 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
 		assert.Equal(t, 1, got.Differences, "one value moved, so one input moved")
 		require.NotNil(t, got.First)
-		assert.Equal(t, "keyVersion", got.First.Input)
-		assert.Equal(t, "3", got.First.Recorded)
-		assert.Equal(t, "4", got.First.Live)
+		assert.Equal(t, cache.KeyInputChange{Class: "keyVersion", Input: "keyVersion", Recorded: "3", Live: "4"}, *got.First)
 		assert.Contains(t, got.Explanation, "1 input moved")
 	})
 

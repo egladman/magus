@@ -15,8 +15,14 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	feedback, err := RecentGuardFeedback(base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
-	assert.Equal(t, "raw-tool", feedback[0].Rule)
-	assert.Equal(t, 1, feedback[0].Denied)
+	assert.Equal(t, GuardFeedback{
+		Rule:     "raw-tool",
+		Surface:  "shell.command",
+		Denied:   1,
+		Sessions: 1,
+		Latest:   feedback[0].Latest, // wall-clock stamp
+		Evidence: []string{"claude-code:one (1 denials)"},
+	}, feedback[0])
 	assert.False(t, feedback[0].NeedsReview(), "a one-off guard correction is not a recurring candidate")
 
 	recordFeedbackCommand(t, base, "claude-code", "one", "go test ./...")
@@ -28,9 +34,15 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	feedback, err = RecentGuardFeedback(base, "one", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
-	assert.Equal(t, 3, feedback[0].Denied)
-	assert.Equal(t, 1, feedback[0].Sessions)
-	assert.Equal(t, 1, feedback[0].FollowedSessions)
+	assert.Equal(t, GuardFeedback{
+		Rule:             "raw-tool",
+		Surface:          "shell.command",
+		Denied:           3,
+		Sessions:         1,
+		FollowedSessions: 1,
+		Latest:           feedback[0].Latest, // wall-clock stamp
+		Evidence:         []string{"claude-code:one (3 denials)"},
+	}, feedback[0])
 	assert.True(t, feedback[0].NeedsReview(), "three same-session repeats are enough to review")
 }
 
@@ -42,10 +54,16 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	feedback, err := RecentGuardFeedback(base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
-	assert.Equal(t, 2, feedback[0].Denied)
-	assert.Equal(t, 2, feedback[0].Sessions)
+	// FollowedSessions stays zero: the hook observes requests, never target completion.
+	assert.Equal(t, GuardFeedback{
+		Rule:     "raw-tool",
+		Surface:  "shell.command",
+		Denied:   2,
+		Sessions: 2,
+		Latest:   feedback[0].Latest, // wall-clock stamp
+		Evidence: []string{"codex:first (1 denials)", "codex:second (1 denials)"},
+	}, feedback[0])
 	assert.True(t, feedback[0].NeedsReview())
-	assert.Zero(t, feedback[0].FollowedSessions, "the hook observes requests, never target completion")
 }
 
 func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
@@ -63,8 +81,15 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 	feedback, err = RecentGuardFeedback(base, "", 100)
 	require.NoError(t, err)
 	require.Len(t, feedback, 1)
-	assert.Equal(t, 1, feedback[0].Denied, "the host-less denials must not inflate the count")
-	assert.Equal(t, 1, feedback[0].Sessions)
+	// The host-less denials must not inflate the count.
+	assert.Equal(t, GuardFeedback{
+		Rule:     "raw-tool",
+		Surface:  "shell.command",
+		Denied:   1,
+		Sessions: 1,
+		Latest:   feedback[0].Latest, // wall-clock stamp
+		Evidence: []string{"cursor:real (1 denials)"},
+	}, feedback[0])
 	assert.False(t, feedback[0].NeedsReview(), "one operator cannot manufacture the repeat that promotes a candidate")
 }
 

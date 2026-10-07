@@ -64,6 +64,13 @@ func seed(t *testing.T, s *Store, row types.Job) types.Job {
 	return stored
 }
 
+// stamped copies the fields the store writes itself from got onto want, so a whole-row
+// comparison covers every other field.
+func stamped(want, got types.Job) types.Job {
+	want.Schema, want.RegisteredBy, want.Created, want.Updated = got.Schema, got.RegisteredBy, got.Created, got.Updated
+	return want
+}
+
 func TestStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -271,9 +278,8 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	s := tmpStore(t, t.TempDir())
 	stored, err := s.Update(ctx, "fresh", func(u *types.Job) { u.State = types.StateRunning })
 	require.NoError(t, err)
-	assert.Equal(t, "fresh", stored.ID)
-	assert.Equal(t, types.StateRunning, stored.State)
 	assert.NotZero(t, stored.Created)
+	assert.Equal(t, stamped(types.Job{ID: "fresh", State: types.StateRunning}, stored), stored)
 
 	_, err = s.Update(ctx, "", func(*types.Job) {})
 	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
@@ -308,11 +314,11 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	})
 
 	require.Len(t, stored.Releases, 3, "every path the put dropped is recorded, in the order it was owned")
-	assert.Equal(t, "released.go", stored.Releases[0].Path)
-	assert.Equal(t,
-		"sha256:"+hashOf(t, filepath.Join(root, "released.go")),
-		stored.Releases[0].Digest,
-		"the digest is the file's content at the moment it was released")
+	assert.Equal(t, types.JobRelease{
+		Path:       "released.go",
+		Digest:     "sha256:" + hashOf(t, filepath.Join(root, "released.go")),
+		ReleasedAt: stored.Releases[0].ReleasedAt,
+	}, stored.Releases[0], "the digest is the file's content at the moment it was released")
 	assert.NotZero(t, stored.Releases[0].ReleasedAt)
 	// A directory has no single content digest and a path with nothing on disk has no
 	// content at all; both say so by name rather than by a hash-shaped value.
@@ -409,11 +415,14 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 	forged.Unattributed = []types.JobUnattributedWrite{{Path: "docs/forged.md"}}
 	stored := seed(t, s, forged)
 
-	assert.Equal(t, "abc123", stored.ReportedBase)
-	assert.Equal(t, types.BaseMatch, stored.BaseVerdict)
 	assert.NotZero(t, stored.Registered)
 	require.Len(t, stored.Unattributed, 1)
 	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
+
+	want := stamped(lease("a"), stored)
+	want.ReportedBase, want.BaseVerdict = "abc123", types.BaseMatch
+	want.Registered, want.CheckoutRoot, want.Unattributed = stored.Registered, stored.CheckoutRoot, stored.Unattributed
+	assert.Equal(t, want, stored, "the forged registration is dropped and the one the store observed kept")
 }
 
 // A re-fork that only moves a live row's boundaries widens it in place: the holder's state
@@ -454,12 +463,20 @@ func TestJobForkWidensALiveRowInPlace(t *testing.T) {
 
 			stored, err := s.Update(ctx, "a", fork(tc.criteria, tc.write, tc.read))
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, stored.State)
 			assert.ElementsMatch(t, tc.write, stored.WritePaths)
 			assert.ElementsMatch(t, tc.read, stored.ReadPaths)
-			assert.Equal(t, taken.Registered, stored.Registered)
-			assert.Equal(t, taken.ReportedBase, stored.ReportedBase)
-			assert.Equal(t, taken.CheckoutRoot, stored.CheckoutRoot)
+			assert.Equal(t, stamped(types.Job{
+				ID:           "a",
+				Criteria:     tc.criteria,
+				Checkpoint:   "abc123",
+				WritePaths:   stored.WritePaths, // order is not what this test pins
+				ReadPaths:    stored.ReadPaths,
+				State:        tc.want,
+				ReportedBase: taken.ReportedBase,
+				BaseVerdict:  taken.BaseVerdict,
+				Registered:   taken.Registered,
+				CheckoutRoot: taken.CheckoutRoot,
+			}, stored), stored)
 		})
 	}
 }
@@ -655,10 +672,14 @@ func TestStoreReadsAPlanWrittenBeforeTheRename(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []string{"internal/ledger"}, rows[0].WritePaths)
-	assert.Equal(t, []string{"MAGUS.md"}, rows[0].DenyPaths)
-	assert.Equal(t, []string{"internal/hint"}, rows[0].ReadPaths)
-	assert.Equal(t, "principal", rows[0].Model)
+	assert.Equal(t, types.Job{
+		Schema:     rows[0].Schema, // the envelope is the store's
+		ID:         "adj/store",
+		WritePaths: []string{"internal/ledger"},
+		DenyPaths:  []string{"MAGUS.md"},
+		ReadPaths:  []string{"internal/hint"},
+		Model:      "principal",
+	}, rows[0])
 }
 
 // A row an older magus wrote keeps its goals: read back under the new name and written
@@ -755,8 +776,7 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	got, err := second.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "a", got[0].ID)
-	assert.Equal(t, []string{"internal/a"}, got[0].WritePaths)
+	assert.Equal(t, stamped(lease("a"), got[0]), got[0])
 
 	assert.NoFileExists(t, filepath.Join(loc.CacheDir, "ledger", "leases.json"),
 		"the cache directory is no longer the ledger's home")
@@ -838,8 +858,14 @@ func TestStoreCarriesAPreRenamePlanForward(t *testing.T) {
 	got, err := NewStore(loc).List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, "wave3/move", got[0].ID)
-	assert.Equal(t, []string{"internal/guard"}, got[0].WritePaths)
+	assert.Equal(t, types.Job{
+		Schema:     got[0].Schema, // the envelope carries the members this magus does not know
+		ID:         "wave3/move",
+		WritePaths: []string{"internal/guard"},
+		State:      types.StateRunning,
+		Created:    1,
+		Updated:    1,
+	}, got[0])
 	assert.FileExists(t, legacy, "copied, not moved: an older binary elsewhere is still reading it")
 
 	carried, err := os.ReadFile(path)
@@ -926,8 +952,7 @@ func TestStoreListReturnsCopies(t *testing.T) {
 
 	again, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/a"}, again[0].WritePaths, "a caller mutating a returned row cannot reach the store")
-	assert.Equal(t, "goal for a", again[0].Criteria)
+	assert.Equal(t, stamped(lease("a"), again[0]), again[0], "a caller mutating a returned row cannot reach the store")
 }
 
 func TestStoreReportsAnUnreadableFile(t *testing.T) {

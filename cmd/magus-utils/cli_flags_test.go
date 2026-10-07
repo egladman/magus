@@ -51,17 +51,19 @@ func TestAliasGroupSpellings(t *testing.T) {
 }
 
 func TestGroupAliasesFoldsAnAliasIntoItsPrimary(t *testing.T) {
+	explain := cli.Flag{Name: "explain", Kind: cli.FlagBool}
+	base := cli.Flag{Name: "base", Kind: cli.FlagString}
 	groups := groupAliases("demo", []cli.Flag{
-		{Name: "explain", Kind: cli.FlagBool},
+		explain,
 		{Name: "e", Kind: cli.FlagBool, AliasOf: "explain"},
-		{Name: "base", Kind: cli.FlagString},
+		base,
 	})
 
 	require.Len(t, groups, 2, "an alias must not introduce a group of its own")
-	assert.Equal(t, []string{"explain", "e"}, groups[0].names)
-	assert.Equal(t, "Explain", groups[0].field)
-	assert.Equal(t, []string{"base"}, groups[1].names)
-	assert.Equal(t, "Base", groups[1].field)
+	assert.Equal(t, []aliasGroup{
+		{primary: explain, names: []string{"explain", "e"}, field: "Explain"},
+		{primary: base, names: []string{"base"}, field: "Base"},
+	}, groups)
 }
 
 // TestGroupAliasesNamesTheFieldForTheLongestSpelling covers the {t, test} case from the

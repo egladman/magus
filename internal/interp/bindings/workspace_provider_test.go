@@ -110,8 +110,7 @@ func TestDecodeProvidedProject(t *testing.T) {
 		// to WithRegisteredSpell, which already rejects one.
 		pp, err := decodeProvidedProject("nx", 0, map[string]any{"path": "../outside", "spells": []any{"nope"}})
 		require.NoError(t, err)
-		assert.Equal(t, "../outside", pp.Path)
-		assert.Equal(t, []string{"nope"}, pp.Spells)
+		assert.Equal(t, spells.ProvidedProject{Path: "../outside", Spells: []string{"nope"}}, pp)
 	})
 
 	for _, tc := range []struct {

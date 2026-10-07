@@ -770,9 +770,8 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		t.Setenv(trail.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go"))
 
-		require.Equal(t, "advise", got.Decision)
-		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
-		assert.Equal(t, advisoryUnleasedWrite, got.Kind, "a standing fact, so it is held to one firing per session")
+		require.Equal(t, writeGrade{Decision: "advise", Context: got.Context, Kind: advisoryUnleasedWrite}, got,
+			"the spawn chain is a claim, so it may teach and may never block; a standing fact, so it is held to one firing per session")
 		assert.Contains(t, got.Context, `client tool (magus\job.put)`, "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
@@ -1049,8 +1048,7 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 	}
 
 	first := write("s1", "internal/ledger/store.go")
-	assert.Equal(t, "advise", first.Decision)
-	assert.Equal(t, string(advisoryLeasedPath), first.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(first))
 	assert.Contains(t, first.Context, "if you are lease lease-a")
 	assert.NotContains(t, first.Context, "concurrent agent")
 	assert.Contains(t, first.Context, "whoever took it may be editing this file now", "fleetLeases registers lease-a with no checkout")
@@ -1207,8 +1205,7 @@ func TestVCSOffSwitchDeniesLeasedWrite(t *testing.T) {
 
 	got := denyVCSOffSwitch("lease-a", filepath.Join(root, "magus.yaml"), fields)
 
-	require.Equal(t, "deny", got.Decision)
-	assert.Equal(t, string(denyRuleVCSOffSwitch), got.Rule)
+	require.Equal(t, writeGrade{Decision: "deny", Reason: got.Reason, Rule: string(denyRuleVCSOffSwitch)}, got)
 	assert.Contains(t, got.Reason, "vcs.enabled", "names the field the write is denied over")
 	assert.Contains(t, got.Reason, "lease-a", "leaseActorClause names the acting lease")
 	assert.Contains(t, got.Reason, "orchestrator", "a leased write is told its orchestrator can do this, it cannot")

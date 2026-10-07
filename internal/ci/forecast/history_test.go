@@ -616,9 +616,9 @@ func TestUpdate_skipsInvalidSamples(t *testing.T) {
 		{Project: "svc", Target: "ci", DurationMs: -5},  // negative duration
 	}, nil)
 
-	assert.Empty(t, h.Projects["svc"], "all samples dropped by guards")
-	assert.Equal(t, HistoryVersion, h.Version, "version stamped even with no folds")
-	assert.Equal(t, fixedNow, h.UpdatedAt)
+	// Every sample is dropped by a guard, yet the version and time are stamped.
+	want := History{Version: HistoryVersion, UpdatedAt: fixedNow, Projects: map[string]map[string]Stats{}}
+	assert.Equal(t, want, h)
 }
 
 // TestUpdate_missWithTagsBuildsBuckets folds miss samples carrying subdir tags
@@ -694,11 +694,16 @@ func TestUpdate_fitsSetupAndAlpha(t *testing.T) {
 		{SetupMs: 30_000, TotalMs: 100_000, WorkMs: 40_000, NShards: 4},
 	})
 
-	assert.Equal(t, []int64{30_000}, h.Setup)
-	assert.Equal(t, []int64{15_000}, h.Alpha)
-	// Single-element windows -> percentile returns the lone value.
-	assert.Equal(t, Millis(30_000), h.Constants.SetupP50Ms)
-	assert.Equal(t, Millis(15_000), h.Constants.AlphaMs)
+	want := History{
+		Version:   HistoryVersion,
+		UpdatedAt: fixedNow,
+		// Single-element windows -> percentile returns the lone value.
+		Constants: Constants{SetupP50Ms: 30_000, AlphaMs: 15_000},
+		Projects:  map[string]map[string]Stats{},
+		Setup:     []int64{30_000},
+		Alpha:     []int64{15_000},
+	}
+	assert.Equal(t, want, h)
 }
 
 // TestUpdate_shardSampleNonPositiveResidual verifies that when the computed
@@ -756,11 +761,18 @@ func TestMerge_adoptsVersionAndOlderUpdateSkipped(t *testing.T) {
 	}
 	h.Merge(&other)
 
-	assert.Equal(t, 3, h.Version, "zero version adopts other's")
-	assert.Equal(t, Constants{SetupP50Ms: 30_000, AlphaMs: 5_000}, h.Constants, "older other does not overwrite constants")
-	assert.Equal(t, int64(9_000), h.WorkspaceFallbackMs, "older other does not overwrite fallback")
-	assert.Equal(t, []int64{1, 2, 3}, h.Setup, "setup window unchanged")
-	assert.Equal(t, []int64{1, 2, 3}, h.Alpha, "alpha window unchanged")
+	// The zero version adopts other's, while an older other leaves the constants, fallback
+	// and Setup/Alpha windows alone.
+	want := History{
+		Version:             3,
+		UpdatedAt:           newer,
+		Constants:           Constants{SetupP50Ms: 30_000, AlphaMs: 5_000},
+		Projects:            map[string]map[string]Stats{},
+		Setup:               []int64{1, 2, 3},
+		Alpha:               []int64{1, 2, 3},
+		WorkspaceFallbackMs: 9_000,
+	}
+	assert.Equal(t, want, h)
 }
 
 // TestMerge_newerAdoptsWindows covers the UpdatedAt.After branch including the
@@ -787,10 +799,17 @@ func TestMerge_newerAdoptsWindows(t *testing.T) {
 	}
 	h.Merge(&other)
 
-	assert.Equal(t, Constants{SetupP50Ms: 42, AlphaMs: 7}, h.Constants)
-	assert.Equal(t, int64(88), h.WorkspaceFallbackMs)
-	assert.Equal(t, []int64{10, 20}, h.Setup, "longer newer setup adopted")
-	assert.Equal(t, []int64{10, 20}, h.Alpha, "longer newer alpha adopted")
+	// The newer other's constants, fallback and longer Setup/Alpha windows are adopted.
+	want := History{
+		Version:             4,
+		UpdatedAt:           newer,
+		Constants:           Constants{SetupP50Ms: 42, AlphaMs: 7},
+		Projects:            map[string]map[string]Stats{},
+		Setup:               []int64{10, 20},
+		Alpha:               []int64{10, 20},
+		WorkspaceFallbackMs: 88,
+	}
+	assert.Equal(t, want, h)
 }
 
 // TestLoad_missingFileIsZeroHistory asserts a nonexistent path is not an error
@@ -824,10 +843,10 @@ func TestSaveThenLoad(t *testing.T) {
 
 	var got History
 	require.NoError(t, got.Load(context.Background(), path))
-	assert.Equal(t, orig.Version, got.Version)
-	assert.Equal(t, orig.Constants, got.Constants)
-	assert.Equal(t, orig.Projects, got.Projects)
 	assert.True(t, orig.UpdatedAt.Equal(got.UpdatedAt), "updated_at round-trips")
+	// The instant round-tripped; its location need not, so compare the rest whole.
+	got.UpdatedAt = orig.UpdatedAt
+	assert.Equal(t, orig, got)
 }
 
 // TestLoad_versionTooNew rejects a history whose schema version exceeds the
@@ -952,12 +971,19 @@ func TestFoldTargetHistoriesCombinesEverySpellServingATarget(t *testing.T) {
 
 	got, ok := h.FoldTargetHistories("p", "ci")
 	require.True(t, ok)
-	assert.Equal(t, int64(250), got.P75Ms, "a project runs each spell's implementation, so durations add")
-	assert.Equal(t, 13, got.Samples)
-	assert.Equal(t, 4, got.PassCount)
-	assert.Equal(t, 1, got.FailCount, "a failure in any spell failed the target")
-	require.Len(t, got.RecentOutcomes, 2)
-	assert.Equal(t, OutcomeFail, got.RecentOutcomes[1].Result, "outcomes interleave by time, newest last")
+	// A project runs each spell's implementation, so durations add; a failure in any spell
+	// failed the target; outcomes interleave by time, newest last.
+	want := Stats{
+		P75Ms:     250,
+		Samples:   13,
+		PassCount: 4,
+		FailCount: 1,
+		RecentOutcomes: []Outcome{
+			{Result: OutcomePass, At: now.Add(-time.Minute)},
+			{Result: OutcomeFail, At: now},
+		},
+	}
+	assert.Equal(t, want, got)
 
 	// An exact key still answers alone, so the callers that record and read
 	// "<spell>/<target>" are unchanged by the fold.

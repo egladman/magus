@@ -75,11 +75,15 @@ func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
 
 	top, ok := nodeByID(out, "docsection:docs/guide.md#top")
 	require.True(t, ok, "a section node per heading")
-	assert.Equal(t, types.KindDocSection, top.Kind)
-	assert.Equal(t, "Top", top.Label)
-	assert.Equal(t, "top", top.Attrs[attrAnchor])
-	assert.Equal(t, "1", top.Attrs[attrLevel])
-	assert.Equal(t, "docs/guide.md#top", top.Source, "the node is a citable pointer into the page")
+	// The node is a citable pointer into the page.
+	wantTop := types.KnowledgeNode{
+		ID:     "docsection:docs/guide.md#top",
+		Kind:   types.KindDocSection,
+		Label:  "Top",
+		Source: "docs/guide.md#top",
+		Attrs:  map[string]string{attrAnchor: "top", attrLevel: "1"},
+	}
+	assert.Equal(t, wantTop, top)
 
 	// The page contains the top heading; the top heading (not the page) contains the sub.
 	assert.True(t, hasEdge(out, "doc:docs/guide.md", "docsection:docs/guide.md#top", types.RelationContains))

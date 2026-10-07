@@ -50,9 +50,10 @@ func TestStampOriginReadsTheCredentialFromTheContext(t *testing.T) {
 	ctx := ContextWithCredential(ContextWithEntryPoint(t.Context(), types.EntryPointRPC), cred)
 
 	got := StampOrigin(ctx, types.Origin{Host: "console"})
-	assert.Equal(t, types.EntryPointRPC, got.EntryPoint)
-	assert.Equal(t, cred, got.Credential)
-	assert.Equal(t, "console", got.Host)
+	local := LocalOrigin(ctx)
+	assert.Equal(t, types.Origin{
+		User: local.User, UID: local.UID, EntryPoint: types.EntryPointRPC, Host: "console", Credential: cred,
+	}, got)
 	share := types.Credential{Kind: types.KindShare, ID: "9b2e04aa", Grant: types.GrantViewer}
 	assert.Equal(t, share, StampOrigin(ctx, types.Origin{Credential: share}).Credential, "a named credential is kept")
 	assert.Zero(t, StampOrigin(t.Context(), types.Origin{}).Credential, "no guard, no credential")

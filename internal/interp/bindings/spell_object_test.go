@@ -74,18 +74,16 @@ func TestSpellOptionsApplied(t *testing.T) {
 // workspace-local spell's declaration is silently dropped at bind time and its ops run
 // without their default scope (see the warning on targetsToMap's secrets write-back).
 func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
+	declared := spells.Op{Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}}
 	h := spellHandleFromMeta(spells.Descriptor{
 		Name: "myspell",
-		Ops: map[string]spells.Op{
-			"test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}},
-		},
+		Ops:  map[string]spells.Op{"test": declared},
 	})
 	got, err := spell.DecodeHandle(h)
 	require.NoError(t, err)
 	op, ok := got.Ops["test"]
 	require.True(t, ok)
-	assert.Equal(t, []string{"test"}, op.Args)
-	assert.Equal(t, []string{"./..."}, op.DefaultArgs, "defaultArgs must survive the bind-time handle round trip")
+	assert.Equal(t, declared, op, "defaultArgs must survive the bind-time handle round trip")
 }
 
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
@@ -116,8 +114,7 @@ func TestCtxOverridesReadFromAMarkedContext(t *testing.T) {
 	got, consumed := ctxOverridesFromBuzz(args, 0)
 
 	require.Equal(t, 1, consumed, "a marked context must be consumed as argument one")
-	assert.Equal(t, map[string]string{"CGO_ENABLED": "0"}, got.env, "env override")
-	assert.Equal(t, "sub", got.cwd, "cwd override")
+	assert.Equal(t, commandOpts{env: map[string]string{"CGO_ENABLED": "0"}, cwd: "sub"}, got, "env and cwd overrides, and nothing else")
 }
 
 // TestPlainOptsTableIsNotAContext is the other half: an ordinary {args: [...]} table

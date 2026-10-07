@@ -86,10 +86,22 @@ func TestStatsConnectivity(t *testing.T) {
 	// spell:magusfile, the isolated diagnostic:MGS2001, and the isolated doc:docs/orphan.md.
 	s := statsFixture().Stats("")
 	// Two non-spell isolated nodes: diagnostic:MGS2001 and doc:docs/orphan.md (spell:magusfile is excluded).
-	assert.Equal(t, 2, s.IsolatedCount, "isolated counts every 0-degree non-spell node")
-	// Every node reachable in some component; a single-node isolated is its own component. The largest is
-	// the go build cluster (spell:go + op:go:build + target:.:build = 3).
-	assert.Equal(t, 3, s.LargestComponentSize)
+	// Isolated counts every 0-degree non-spell node. Every node is reachable in some component;
+	// a single-node isolated is its own component. The largest is the go build cluster
+	// (spell:go + op:go:build + target:.:build = 3). The totals, rows and component count are
+	// pinned by their own tests and the bounds below, so they are carried over.
+	want := types.KnowledgeStats{
+		Definition:           types.KnowledgeStatsDefinition,
+		NodeCount:            s.NodeCount,
+		EdgeCount:            s.EdgeCount,
+		Gods:                 s.Gods,
+		Orphans:              s.Orphans,
+		Coverage:             s.Coverage,
+		IsolatedCount:        2,
+		ComponentCount:       s.ComponentCount,
+		LargestComponentSize: 3,
+	}
+	assert.Equal(t, want, s)
 	assert.Greater(t, s.ComponentCount, 1, "an unlinked graph splits into several components")
 	assert.LessOrEqual(t, s.ComponentCount, s.NodeCount)
 }
@@ -137,11 +149,13 @@ func TestStatsCoverage(t *testing.T) {
 			diag = c
 		}
 	}
-	require.Equal(t, types.KindDiagnostic, diag.Kind)
-	assert.Equal(t, 2, diag.Total)
-	assert.Equal(t, 1, diag.Documented)
-	assert.Equal(t, 50, diag.Percent)
-	assert.Equal(t, []string{"MGS2001"}, diag.Undocumented)
+	assert.Equal(t, types.KnowledgeDocCoverage{
+		Kind:         types.KindDiagnostic,
+		Total:        2,
+		Documented:   1,
+		Percent:      50,
+		Undocumented: []string{"MGS2001"},
+	}, diag)
 }
 
 // TestStatsFileDocCoverage pins the citation layer's reading of doc coverage: a source
@@ -161,9 +175,9 @@ func TestStatsFileDocCoverage(t *testing.T) {
 		}
 	}
 	require.Equal(t, types.KindFile, files.Kind)
-	assert.Equal(t, 2, files.Total)
-	assert.Equal(t, 1, files.Documented)
-	assert.Equal(t, []string{"b.go"}, files.Undocumented)
+	assert.Equal(t, types.KnowledgeDocCoverage{
+		Kind: types.KindFile, Total: 2, Documented: 1, Percent: 50, Undocumented: []string{"b.go"},
+	}, files)
 }
 
 func TestStatsGodsSortedByDegree(t *testing.T) {

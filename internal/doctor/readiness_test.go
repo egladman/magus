@@ -22,8 +22,11 @@ func TestCheckReadinessProbes(t *testing.T) {
 
 	t.Run("no gates", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes([]*types.Project{{}})
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "no spell gates an op on a tool being reachable", got.Message)
+		assert.Equal(t, types.Check{
+			Name:    "tool-readiness",
+			Status:  types.CheckOK,
+			Message: "no spell gates an op on a tool being reachable",
+		}, got)
 	})
 
 	// Doctor answers questions about the workspace, so listing the gate is the default
@@ -31,10 +34,13 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// is OK: an advice nobody can clear is one every docker workspace carries forever.
 	t.Run("lists the gate without running it", func(t *testing.T) {
 		got := (&runner{}).checkReadinessProbes(gated)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "1 tool(s) gated on a readiness probe", got.Message)
-		require.Len(t, got.Details, 1)
-		assert.Equal(t, "compose: docker gated on `magus-doctor-no-such-bin info`", got.Details[0])
+		assert.Equal(t, types.Check{
+			Name:     "tool-readiness",
+			Status:   types.CheckOK,
+			Evidence: types.EvidenceDeclared,
+			Message:  "1 tool(s) gated on a readiness probe",
+			Details:  []string{"compose: docker gated on `magus-doctor-no-such-bin info`"},
+		}, got)
 	})
 
 	// The same spell reached through two projects is one gate, not two.
@@ -47,9 +53,15 @@ func TestCheckReadinessProbes(t *testing.T) {
 	// honest answer for a tool that is down is no.
 	t.Run("probing a tool that is down fails", func(t *testing.T) {
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(gated)
-		assert.Equal(t, types.CheckFail, got.Status)
-		assert.Equal(t, "1 of 1 gated tool(s) not ready", got.Message)
 		require.Len(t, got.Details, 1)
+		// The failed probe's own wording is pinned by substring below.
+		assert.Equal(t, types.Check{
+			Name:     "tool-readiness",
+			Status:   types.CheckFail,
+			Evidence: types.EvidenceMeasured,
+			Message:  "1 of 1 gated tool(s) not ready",
+			Details:  got.Details,
+		}, got)
 		assert.Contains(t, got.Details[0], "docker NOT ready")
 	})
 
@@ -69,8 +81,12 @@ func TestCheckReadinessProbes(t *testing.T) {
 			},
 		}}
 		got := (&runner{opts: options{probe: true}}).checkReadinessProbes(up)
-		assert.Equal(t, types.CheckOK, got.Status)
-		assert.Equal(t, "1 gated tool(s), all ready", got.Message)
-		assert.Equal(t, types.EvidenceMeasured, got.Evidence)
+		assert.Equal(t, types.Check{
+			Name:     "tool-readiness",
+			Status:   types.CheckOK,
+			Evidence: types.EvidenceMeasured,
+			Message:  "1 gated tool(s), all ready",
+			Details:  []string{"compose: docker ready (`" + bin + "`)"},
+		}, got)
 	})
 }

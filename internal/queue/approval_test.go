@@ -49,8 +49,11 @@ func TestAdmissionDecidesTheCodeOfEveryWaitAndKick(t *testing.T) {
 				return
 			}
 			require.NotNil(t, v)
-			assert.Equal(t, tc.wantCode, v.Code)
-			assert.Equal(t, tc.wantWhy, v.Reason)
+			want := types.Verdict{Change: got, Decision: types.DecisionWait, Code: tc.wantCode, Reason: tc.wantWhy}
+			if tc.wantCode == types.CodeKickRefused {
+				want.Decision, want.Report = types.DecisionKick, "The merge queue cannot merge this change: "+tc.wantWhy+".\n"
+			}
+			assert.Equal(t, want, *v)
 			require.NoError(t, v.Check())
 			if tc.wantHead != "" {
 				assert.Equal(t, tc.wantHead, v.Change.Head, "the wait names the head it is retried at")
@@ -256,8 +259,20 @@ func TestCarryApprovalByTier(t *testing.T) {
 			tc.want.From, tc.want.Head = carryOld, c.Head
 			require.NotNil(t, a.carry)
 			assert.Equal(t, tc.want, *a.carry)
-			assert.Equal(t, tc.want.Carry, a.Approved)
-			assert.Equal(t, tc.wantReason, a.Reason)
+			assert.Equal(t, approvalResult{
+				Approval: types.Approval{
+					Approved:       tc.want.Carry,
+					Head:           c.Head,
+					Reason:         tc.wantReason,
+					Base:           "main",
+					Method:         types.MethodSquash,
+					Queued:         true,
+					ApprovedCommit: carryOld,
+				},
+				reviewed: a.reviewed, // the commit asked about is reviewTarget's answer, not this test's
+				owed:     a.owed,
+				carry:    a.carry,
+			}, a)
 			if tc.want.Carry {
 				assert.Equal(t, tc.want.Reason+", so its approval carried over", carriedNotice(a))
 				return
@@ -266,8 +281,12 @@ func TestCarryApprovalByTier(t *testing.T) {
 			held := c
 			v := admission(&held, a, types.Capabilities{StackMerge: types.StackMergeSequential, Methods: []types.MergeMethod{types.MethodSquash}})
 			require.NotNil(t, v)
-			assert.Equal(t, types.CodeWaitNotApproved, v.Code)
-			assert.Equal(t, "not approved at "+h+": "+tc.wantReason, v.Reason)
+			assert.Equal(t, &types.Verdict{
+				Change:   held,
+				Decision: types.DecisionWait,
+				Code:     types.CodeWaitNotApproved,
+				Reason:   "not approved at " + h + ": " + tc.wantReason,
+			}, v)
 		})
 	}
 }

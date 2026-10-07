@@ -220,7 +220,6 @@ func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
 
 	v := Judge(ctx, testDependencies(), Request{Input: envelope})
 
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRuleBusyWait), v.Rule)
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(v))
 	assert.Contains(t, v.Reason, "retry.sh")
 }

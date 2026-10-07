@@ -903,16 +903,17 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 
 	code, body = call(http.MethodGet, "/api/v1/graph", cli, "", "")
 	assert.Equal(t, http.StatusBadRequest, code)
+	type violation struct {
+		Type    string `json:"type"`
+		Subject string `json:"subject"`
+	}
 	var aip struct {
 		Error struct {
 			Status  string `json:"status"`
 			Details []struct {
-				Type       string `json:"@type"`
-				Reason     string `json:"reason"`
-				Violations []struct {
-					Type    string `json:"type"`
-					Subject string `json:"subject"`
-				} `json:"violations"`
+				Type       string      `json:"@type"`
+				Reason     string      `json:"reason"`
+				Violations []violation `json:"violations"`
 			} `json:"details"`
 		} `json:"error"`
 	}
@@ -920,9 +921,7 @@ func TestServeUnloadedAnswersWorkspaceCallsWithTheFailure(t *testing.T) {
 	assert.Equal(t, "FAILED_PRECONDITION", aip.Error.Status)
 	require.Len(t, aip.Error.Details, 4)
 	assert.Equal(t, "MGS3016", aip.Error.Details[0].Reason)
-	require.Len(t, aip.Error.Details[1].Violations, 1)
-	assert.Equal(t, "BZZ1005", aip.Error.Details[1].Violations[0].Type)
-	assert.Equal(t, "magusfile.buzz:3:3", aip.Error.Details[1].Violations[0].Subject)
+	assert.Equal(t, []violation{{Type: "BZZ1005", Subject: "magusfile.buzz:3:3"}}, aip.Error.Details[1].Violations)
 
 	// StatusService needs no workspace, so it answers even now.
 	code, body = call(http.MethodPost, "/magus.status.v1alpha1.StatusService/GetStatus", cli, "application/json", "{}")

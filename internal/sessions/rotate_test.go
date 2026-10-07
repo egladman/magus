@@ -342,8 +342,8 @@ func TestASchemaOneFileIsCountedAndAgesOutByItsTimestamps(t *testing.T) {
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records)
-	assert.Equal(t, 4, fold.Legacy)
-	assert.Equal(t, 1, fold.Skipped, "a line written before the rename is not damage; the undated one is")
+	assert.Equal(t, Fold{Records: fold.Records, Invocations: 3, Skipped: 1, Legacy: 4}, fold,
+		"a line written before the rename is not damage; the undated one is")
 
 	Prune(dir, DefaultRetention)
 	assert.NoFileExists(t, old, "a schema-1 file past the window ages out like any other")

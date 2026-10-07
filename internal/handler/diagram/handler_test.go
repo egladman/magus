@@ -199,16 +199,20 @@ func TestDiagramRendersProjects(t *testing.T) {
 
 	var out Rendered
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
-	assert.Equal(t, "projects", out.ID)
-	assert.Equal(t, "Workspace projects", out.Title)
-	assert.Equal(t, []Node{
-		{ID: "external:app", Anchor: "app", Label: "app"},
-		{ID: "external:lib", Anchor: "libs/lib", Label: "lib"},
-		{ID: "external:core", Anchor: "libs/core", Label: "core"},
-		{ID: `external:base "{x}"`, Anchor: "libs/base", Label: `base "{x}"`},
-		{ID: "external:tools", Anchor: "tools", Label: "tools"},
-	}, out.Nodes)
-	assert.Equal(t, "https://github.com/acme/widgets/blob/0123abcd/{path}#L{line}", out.SourceURL)
+	// The SVG is checked by substring below, so it is copied across.
+	assert.Equal(t, Rendered{
+		ID:    "projects",
+		Title: "Workspace projects",
+		SVG:   out.SVG,
+		Nodes: []Node{
+			{ID: "external:app", Anchor: "app", Label: "app"},
+			{ID: "external:lib", Anchor: "libs/lib", Label: "lib"},
+			{ID: "external:core", Anchor: "libs/core", Label: "core"},
+			{ID: `external:base "{x}"`, Anchor: "libs/base", Label: `base "{x}"`},
+			{ID: "external:tools", Anchor: "tools", Label: "tools"},
+		},
+		SourceURL: "https://github.com/acme/widgets/blob/0123abcd/{path}#L{line}",
+	}, out)
 	// Each row names the node the SVG draws; the quoted, braced label proves the driver
 	// escaped it into a Buzz literal intact.
 	assert.Contains(t, out.SVG, `data-node="external:core"`)

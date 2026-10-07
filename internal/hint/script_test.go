@@ -78,8 +78,13 @@ func TestScriptsForBindsPlaceholdersOrServesNothing(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, next, 2)
-	assert.Equal(t, []string{"magus", "buzz", "hack/dev/count-refusals.buzz", "--", "--rule=stage-all", "--in=docs site"}, next[1].Argv)
-	assert.Equal(t, `magus buzz hack/dev/count-refusals.buzz -- --rule=stage-all "--in=docs site"`, next[1].Run)
+	assert.Equal(t, Next{
+		ID:    ScriptIDPrefix + "count-refusals",
+		Run:   `magus buzz hack/dev/count-refusals.buzz -- --rule=stage-all "--in=docs site"`,
+		Argv:  []string{"magus", "buzz", "hack/dev/count-refusals.buzz", "--", "--rule=stage-all", "--in=docs site"},
+		Why:   scoped.Summary,
+		Reads: true, // a read script whose file is unchanged since it was indexed
+	}, next[1])
 	for _, n := range next {
 		assert.NotRegexp(t, placeholderRe, n.Run, "Run never carries a placeholder")
 	}

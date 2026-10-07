@@ -139,8 +139,7 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 
 	open := AttentionQueue(fold)
 	require.Len(t, open, 1, "the open after the oversized line must still fold")
-	assert.Equal(t, "att-small", open[0].ID)
-	assert.Equal(t, "needs a decision", open[0].Message)
+	assert.Equal(t, AttentionRequest{ID: "att-small", Invocation: "sess1", OpenedMs: 2, Outcome: "waiting", Message: "needs a decision"}, open[0])
 }
 
 // A session id is reached twice whenever it is reused (a resumed agent session, a
@@ -312,11 +311,14 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, "/repo", sessions[0].Workspace)
-	assert.Equal(t, 3, sessions[0].Facts, "an unrecognized fact still counts as activity")
-	assert.Equal(t, int64(30), sessions[0].LastMs, "an unrecognized fact still advances the clock")
-	require.Len(t, sessions[0].Targets, 1)
-	assert.Equal(t, "build", sessions[0].Targets[0].Target)
+	assert.Equal(t, Summary{
+		Invocation: "sess1",
+		Workspace:  "/repo",
+		StartedMs:  10,
+		LastMs:     30, // an unrecognized fact still advances the clock
+		Facts:      3,  // and still counts as activity
+		Targets:    []TargetResult{{Target: "build", Outcome: OutcomePass}},
+	}, sessions[0])
 }
 
 func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
@@ -519,9 +521,21 @@ func TestLoadEventsRecordsTheHostOnTheInvocationStart(t *testing.T) {
 	require.NoError(t, err)
 	summaries := Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "h1", summaries[0].Host)
-	assert.Equal(t, "s1", summaries[0].Session, "a load names the host session the events came from")
-	assert.Equal(t, 1, summaries[0].Events)
+	got := summaries[0]
+	origin := got.Origin // the account and entry point are the writing process's own
+	origin.Host, origin.Session = "h1", "s1"
+	assert.Equal(t, Summary{
+		Invocation: got.Invocation,
+		Origin:     origin, // a load names the host session the events came from
+		SpanID:     got.SpanID,
+		Workspace:  "/tmp/ws",
+		StartedMs:  got.StartedMs,
+		LastMs:     got.LastMs,
+		Facts:      got.Facts,
+		Events:     1,
+		Agent:      got.Agent,
+		pairAtMs:   got.pairAtMs,
+	}, got)
 }
 
 // A run no host delivered a session for lists with its invocation id and no session: the

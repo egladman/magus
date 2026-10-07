@@ -44,8 +44,15 @@ export fun a_gen(ctx: magus\Context, args: [str]) > void { go["x"](); }
 
 	foo, ok := nodeByName(g, "foo-bar")
 	require.True(t, ok, "missing foo-bar; got %v", g)
-	assert.Equal(t, "foo does a thing.", foo.Doc)
-	assert.Equal(t, []string{"baz"}, foo.Dependencies, "comment mention ignored")
+	// The comment mention of ctx.needs(baz) adds no second edge.
+	wantFoo := types.TargetGraphNode{
+		Name:         "foo-bar",
+		Declared:     "foo_bar",
+		Doc:          "foo does a thing.",
+		Dependencies: []string{"baz"},
+		Chain:        types.Needs("baz"),
+	}
+	assert.Equal(t, wantFoo, foo)
 
 	baz, _ := nodeByName(g, "baz")
 	assert.Empty(t, baz.Doc, "blank line breaks contiguity")
@@ -151,11 +158,14 @@ export fun plain(ctx: magus\Context, args: [str]) > void { }
 	build, _ := nodeByName(g, "build")
 	// A bare-literal glob is a same-project input: empty Project (meaning "this target's
 	// own project", filled at resolution), Rel the glob.
-	assert.Equal(t, []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}}, build.ReadsFiles)
-	// Same shape on the outputs side, in the type that carries the OPPOSITE edge: an
-	// empty Project means "this target's own project", filled at resolution.
-	assert.Equal(t, []types.OutputRef{{Glob: "dist/**"}}, build.WritesFiles)
-	assert.False(t, build.DynamicIO)
+	wantBuild := types.TargetGraphNode{
+		Name:       "build",
+		ReadsFiles: []types.InputRef{{Glob: "src/**"}, {Glob: "tsconfig.json"}},
+		// Same shape on the outputs side, in the type that carries the OPPOSITE edge: an
+		// empty Project means "this target's own project", filled at resolution.
+		WritesFiles: []types.OutputRef{{Glob: "dist/**"}},
+	}
+	assert.Equal(t, wantBuild, build)
 	testNode, _ := nodeByName(g, "test")
 	assert.Equal(t, []types.InputRef{{Glob: "src/**"}}, testNode.ReadsFiles)
 	assert.Empty(t, testNode.WritesFiles)
@@ -371,12 +381,17 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 export fun scan(ctx: magus\Context, args: [str]) > void { proc\exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
-	want := []types.TargetSpellUse{
-		{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}}, // grouped, deduped, call order
-		{Spell: "md", Ops: []string{"markdownlint"}},
+	want := types.TargetGraphNode{
+		Name: "lint",
+		Spells: []types.TargetSpellUse{
+			{Spell: "go", Ops: []string{"golangci-lint", "go-vet"}}, // grouped, deduped, call order
+			{Spell: "md", Ops: []string{"markdownlint"}},
+		},
+		// The identifier edge resolves to the exported target.
+		Dependencies: []string{"format"},
+		Chain:        types.Needs("format"),
 	}
-	assert.Equal(t, want, lint.Spells)
-	assert.Equal(t, []string{"format"}, lint.Dependencies, "the identifier edge resolves to the exported target")
+	assert.Equal(t, want, lint)
 	// scan only calls a host module and an unknown identifier: no spell ops.
 	scan, _ := nodeByName(g, "scan")
 	assert.Empty(t, scan.Spells, "proc.exec is host, other[] is not a spell")
@@ -409,13 +424,19 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 `)
 	img, ok := nodeByName(g, "image-build")
 	require.True(t, ok, "missing image-build; got %v", g)
-	wantSpells := []types.TargetSpellUse{
-		{Spell: "cosign", Ops: []string{"cosign-sign"}},
-		{Spell: "docker", Ops: []string{"docker-buildx"}},
+	// The spell ops and the charm are reached through the helper.
+	wantImg := types.TargetGraphNode{
+		Name:     "image-build",
+		Declared: "image_build",
+		Spells: []types.TargetSpellUse{
+			{Spell: "cosign", Ops: []string{"cosign-sign"}},
+			{Spell: "docker", Ops: []string{"docker-buildx"}},
+		},
+		Charms:       []string{"sign"},
+		Dependencies: []string{"preflight"},
+		Chain:        types.Needs("preflight"),
 	}
-	assert.Equal(t, wantSpells, img.Spells, "ops through helper")
-	assert.Equal(t, []string{"sign"}, img.Charms, "charm through helper")
-	assert.Equal(t, []string{"preflight"}, img.Dependencies)
+	assert.Equal(t, wantImg, img)
 	// The helper's ops belong only to callers; a sibling that never calls it stays clean.
 	pf, _ := nodeByName(g, "preflight")
 	assert.Empty(t, pf.Spells, "helper ops must not leak between siblings")
@@ -657,9 +678,15 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 	require.True(t, ok, "missing build-playground; got %v", g)
 	// The cross-project edge is a CrossDependency (project + target), not a same-project
 	// dependency; the project path is left raw for the caller to resolve.
-	want := []types.CrossTargetRef{{Project: "../gopherbuzz", Target: "build"}}
-	assert.Equal(t, want, bp.CrossDependencies)
-	assert.Equal(t, []string{"preflight"}, bp.Dependencies, "external is not a same-project dep")
+	want := types.TargetGraphNode{
+		Name:     "build-playground",
+		Declared: "build_playground",
+		// External is not a same-project dep.
+		Dependencies:      []string{"preflight"},
+		CrossDependencies: []types.CrossTargetRef{{Project: "../gopherbuzz", Target: "build"}},
+		Chain:             types.Needs("preflight").Needs("../gopherbuzz:build"),
+	}
+	assert.Equal(t, want, bp)
 }
 
 // TestDependencyTokensInStringLiterals ensures dependency-edge tokens that appear

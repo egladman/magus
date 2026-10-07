@@ -211,11 +211,15 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	events, err := trail.ReadRecent(base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, trail.KindSandboxDenial, events[0].Kind)
-	assert.Equal(t, "write of /definitely/not/allowed/f", events[0].Action)
-	assert.Equal(t, trail.OutcomeError, events[0].Outcome)
 	assert.NotEmpty(t, events[0].Error)
-	assert.Empty(t, events[0].Lease, "a workspace-default denial claims no lease")
+	assert.Equal(t, trail.Event{
+		Ts:      events[0].Ts,
+		Kind:    trail.KindSandboxDenial,
+		Origin:  events[0].Origin,
+		Action:  "write of /definitely/not/allowed/f",
+		Outcome: trail.OutcomeError,
+		Error:   events[0].Error,
+	}, events[0], "a workspace-default denial claims no lease")
 }
 
 // A lease-narrowed policy names its lease on a denial, so a reader can say whose
@@ -230,9 +234,16 @@ func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	events, err := trail.ReadRecent(base, 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, "fleet/worker-3", events[0].Lease)
-	assert.Equal(t, types.LeaseSourceMarker, events[0].LeaseFrom)
-	assert.Equal(t, "exec of /definitely/not/allowed/f", events[0].Action)
+	assert.Equal(t, trail.Event{
+		Ts:        events[0].Ts,
+		Kind:      trail.KindSandboxDenial,
+		Origin:    events[0].Origin,
+		Lease:     "fleet/worker-3",
+		LeaseFrom: types.LeaseSourceMarker,
+		Action:    "exec of /definitely/not/allowed/f",
+		Outcome:   trail.OutcomeError,
+		Error:     events[0].Error,
+	}, events[0])
 }
 
 // A provider spell's declaration is the remote cache's credential, so it reaches the

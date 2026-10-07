@@ -210,9 +210,15 @@ func TestCheckDiagnosticDocsHelpTitle(t *testing.T) {
 	require.Equal(t, types.CheckOK, got.Status, got.Message)
 
 	got = checkDiagnosticDocs(root, codes, types.CodeURL, map[types.DiagnosticCode]string{types.NoCITarget: "ci target missing"})
-	require.Equal(t, types.CheckFail, got.Status)
-	assert.Equal(t, "1 code page(s) are titled otherwise than the Help link that opens them", got.Message)
 	require.Len(t, got.Details, 1)
+	// The detail line is pinned by substring below, so it is carried over here.
+	want := types.Check{
+		Name:    "diagnostic-docs",
+		Status:  types.CheckFail,
+		Message: "1 code page(s) are titled otherwise than the Help link that opens them",
+		Details: got.Details,
+	}
+	require.Equal(t, want, got)
 	assert.Contains(t, got.Details[0], `"MGS1001: ci target missing"`)
 	assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
 }

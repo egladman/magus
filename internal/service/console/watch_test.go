@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -45,8 +46,14 @@ func TestJobFeedAttributesAChangeToTheWritePathThatCoversIt(t *testing.T) {
 			if e.Action != "internal/trail/trail.go" {
 				continue // the watcher may report the directory alongside the file
 			}
-			require.Equal(t, "pwa/job-watch", e.Job)
-			require.Equal(t, "internal/trail", e.WritePath, "the reader is told WHICH declaration answered")
+			require.Equal(t, job.FeedEvent{
+				Ts:        e.Ts,
+				Kind:      job.FeedFile,
+				Job:       "pwa/job-watch",
+				WritePath: "internal/trail", // the reader is told WHICH declaration answered
+				Action:    "internal/trail/trail.go",
+				Outcome:   trail.OutcomeOK,
+			}, e)
 			return
 		case <-retick.C:
 			rewrite()

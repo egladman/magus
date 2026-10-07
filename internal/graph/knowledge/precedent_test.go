@@ -222,8 +222,14 @@ func TestPrecedentsJudgeAValueWhoseLineACappedReferenceListMayHide(t *testing.T)
 	})
 
 	row := precedentRow(t, f.g.Precedents(PrecedentOptions{}), types.PrecedentErrSentinelName, goScope)
-	assert.Equal(t, 6, row.Cohort, "lastErr is state; cachedErr's line may hold the third Errorf")
-	assert.Equal(t, []types.Case{{Node: hidden, Source: "internal/b/f0.go:7"}}, row.Departures)
+	// lastErr is state; cachedErr's line may hold the third Errorf. Whether the row clears the
+	// gate and which followers it cites are other tests' business, so they are carried over.
+	want := types.Precedent{
+		Family: types.PrecedentErrSentinelName, Scope: goScope, Key: types.PrecedentKey{Prefix: "err"},
+		Follow: 5, Cohort: 6, Share: 5.0 / 6, Established: row.Established, Cited: row.Cited,
+		Departures: []types.Case{{Node: hidden, Source: "internal/b/f0.go:7"}},
+	}
+	assert.Equal(t, want, row)
 	assert.NotContains(t, row.Departures, types.Case{Node: bare, Source: "internal/a/f0.go:6"})
 }
 

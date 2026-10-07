@@ -90,8 +90,15 @@ func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	}, summaries[0].Targets)
 
 	require.Len(t, fold.Records, 4, "one session-start plus one fact per result")
-	assert.Equal(t, sessions.KindInvocationStart, fold.Records[0].Kind)
-	assert.Equal(t, uint64(1), fold.Records[0].Seq)
+	first := fold.Records[0]
+	assert.Equal(t, sessions.Record{
+		V:          first.V,
+		Invocation: "inv1",
+		Seq:        1,
+		Kind:       sessions.KindInvocationStart,
+		Ts:         first.Ts, // the clock at the start
+		Payload:    first.Payload,
+	}, first)
 }
 
 // `magus session` is a view of the repository, so a fact must not carry a trace of which
@@ -160,9 +167,10 @@ func TestWithInvocationJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 			summaries := sessions.Summarize(fold)
 			require.Len(t, summaries, 1)
 			assert.Equal(t, "fleet/f3", summaries[0].Lease)
-			require.Len(t, summaries[0].Targets, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Lease)
-			assert.Equal(t, types.LeaseSourceEnv, summaries[0].Targets[0].LeaseFrom, "a BAGGAGE lease records as the claim it is")
+			// A BAGGAGE lease records as the claim it is.
+			assert.Equal(t, []sessions.TargetResult{
+				{Target: "ci", Project: "api", Outcome: sessions.OutcomePass, Lease: "fleet/f3", LeaseFrom: types.LeaseSourceEnv},
+			}, summaries[0].Targets)
 		})
 	}
 }
@@ -192,9 +200,9 @@ func TestWithInvocationJournalRanksTheBindingOverTheClaim(t *testing.T) {
 	require.Len(t, summaries, 1)
 	assert.Equal(t, types.LeaseSourceContested, summaries[0].LeaseFrom, "the summary carries the start's source")
 	assert.NotEmpty(t, summaries[0].UID, "the summary carries the start's origin whole, uid included")
-	require.Len(t, summaries[0].Targets, 1)
-	assert.Equal(t, "fleet/bound", summaries[0].Targets[0].Lease)
-	assert.Equal(t, types.LeaseSourceContested, summaries[0].Targets[0].LeaseFrom)
+	assert.Equal(t, []sessions.TargetResult{
+		{Target: "ci", Outcome: sessions.OutcomePass, Lease: "fleet/bound", LeaseFrom: types.LeaseSourceContested},
+	}, summaries[0].Targets)
 }
 
 // The lease a forwarded run carries beats the environment, because on an adopted run this

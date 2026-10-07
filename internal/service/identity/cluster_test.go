@@ -16,23 +16,19 @@ func TestNearDuplicatesCanonicalPostgresSprawl(t *testing.T) {
 		{Name: "search/pg", Service: dockerRun("-e", "POSTGRES_DB=search", "-p", "5432:5432", "postgres:16")},
 	}
 	clusters := NearDuplicates(members)
-	require.Len(t, clusters, 1)
-	c := clusters[0]
-	assert.Equal(t, "postgres", c.Image)
-	assert.Equal(t, "5432", c.Port)
-	require.Len(t, c.Members, 3)
 
 	// Members are name-sorted; each delta reports only the attributes that vary
 	// across the cluster. Tag varies (one is postgres:16), so every member reports
 	// its tag for comparison alongside its differing DB.
-	assert.Equal(t, "billing/db", c.Members[0].Name)
-	assert.Equal(t, []string{"tag=15", "POSTGRES_DB=billing"}, c.Members[0].Delta)
-
-	assert.Equal(t, "search/pg", c.Members[1].Name)
-	assert.Equal(t, []string{"tag=16", "POSTGRES_DB=search"}, c.Members[1].Delta)
-
-	assert.Equal(t, "web/api-db", c.Members[2].Name)
-	assert.Equal(t, []string{"tag=15", "POSTGRES_DB=api"}, c.Members[2].Delta)
+	assert.Equal(t, []Cluster{{
+		Image: "postgres",
+		Port:  "5432",
+		Members: []MemberDelta{
+			{Name: "billing/db", Delta: []string{"tag=15", "POSTGRES_DB=billing"}},
+			{Name: "search/pg", Delta: []string{"tag=16", "POSTGRES_DB=search"}},
+			{Name: "web/api-db", Delta: []string{"tag=15", "POSTGRES_DB=api"}},
+		},
+	}}, clusters)
 }
 
 func TestNearDuplicatesIdenticalCopiesNotWarned(t *testing.T) {

@@ -56,15 +56,34 @@ func TestFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 
 	summaries := Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Equal(t, "inv1", summaries[0].Invocation, "the journal's invocation id files the facts")
-	assert.Equal(t, "run build", summaries[0].Command)
-	assert.Equal(t, root, summaries[0].Workspace)
+	// The journal's invocation id files the facts. Who ran it, when, and the span the
+	// invocation minted are the process's own, read back rather than set here.
+	assert.Equal(t, Summary{
+		Invocation: "inv1",
+		Origin:     summaries[0].Origin,
+		SpanID:     summaries[0].SpanID,
+		Workspace:  root,
+		Command:    "run build",
+		StartedMs:  summaries[0].StartedMs,
+		LastMs:     summaries[0].LastMs,
+		Facts:      4,
+		Targets: []TargetResult{
+			{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
+			{Target: "test", Project: "api", Outcome: OutcomeFail, DurationMs: 5},
+			{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
+		},
+	}, summaries[0])
 
 	// One session-start plus one fact per result, and the start is always seq 1.
 	require.Len(t, fold.Records, 4)
-	assert.Equal(t, KindInvocationStart, fold.Records[0].Kind)
-	assert.Equal(t, uint64(1), fold.Records[0].Seq)
-	assert.Equal(t, SchemaVersion, fold.Records[0].V)
+	assert.Equal(t, Record{
+		V:          SchemaVersion,
+		Invocation: "inv1",
+		Seq:        1,
+		Kind:       KindInvocationStart,
+		Ts:         fold.Records[0].Ts,
+		Payload:    fold.Records[0].Payload,
+	}, fold.Records[0])
 }
 
 func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {

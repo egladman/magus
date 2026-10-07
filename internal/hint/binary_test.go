@@ -84,8 +84,12 @@ func TestOnPathRespellsForAReaderElsewhere(t *testing.T) {
 
 	served := OnPath([]Next{breadcrumb("query-explain", Explain, "why", "spell:go")})
 	require.Len(t, served, 1)
-	assert.Equal(t, "magus explain spell:go", served[0].Run)
-	assert.Equal(t, []string{"magus", "explain", "spell:go"}, served[0].Argv)
+	assert.Equal(t, Next{
+		ID:   "query-explain",
+		Run:  "magus explain spell:go",
+		Argv: []string{"magus", "explain", "spell:go"},
+		Why:  "why",
+	}, served[0])
 
 	ResolveBinaryNameFrom("magus")
 	assert.Equal(t, "magus explain spell:go", OnPath([]Next{breadcrumb("query-explain", Explain, "why", "spell:go")})[0].Run)

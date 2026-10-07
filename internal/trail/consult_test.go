@@ -125,8 +125,7 @@ func TestConsultedRelativizesTheWrittenPath(t *testing.T) {
 
 	got, _ := Consulted("/repo", base, []string{"magusfile.buzz"}, 100)
 	require.Len(t, got, 1)
-	assert.Equal(t, "describe", got[0].Verb)
-	assert.Equal(t, "target ci .", got[0].Subject)
+	assert.Equal(t, Consultation{Verb: "describe", Subject: "target ci .", Count: 1}, got[0])
 }
 
 func TestConsultationOfReadsTheVerbAndItsSubject(t *testing.T) {

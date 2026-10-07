@@ -335,8 +335,7 @@ func TestMergeLayers(t *testing.T) {
 			h := hostDirs{vars: tc.vars, home: "/home/u", goos: "linux"}
 			rules, allow := h.mergeLayers(tc.layers...)
 			assert.Equal(t, append([]filesystem.Rule{}, tc.want...), rules)
-			assert.Equal(t, append(env.DefaultAllow(), tc.wantNames...), allow.Names)
-			assert.Equal(t, tc.wantPfx, allow.Prefixes)
+			assert.Equal(t, env.Allowlist{Names: append(env.DefaultAllow(), tc.wantNames...), Prefixes: tc.wantPfx}, allow)
 		})
 	}
 }

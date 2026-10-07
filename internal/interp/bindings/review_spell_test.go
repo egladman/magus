@@ -41,8 +41,7 @@ func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 	})
 	at := FindReview(context.Background(), "feat/x", "git@github.com:acme/acme.git")
 	assert.True(t, at.Open())
-	assert.Equal(t, "482", at.ID)
-	assert.Equal(t, "acme/acme", at.Repo)
+	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
 }
 
 // A mistyped field becomes a REASON, never a zero target: those two render identically to the
