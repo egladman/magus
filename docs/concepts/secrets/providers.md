@@ -1,6 +1,6 @@
 ---
 title: Secret providers
-description: Where a credential comes from: the built-in environment provider, a spell-backed one, and why magus keeps exactly one active per run instead of a fallback chain.
+description: "Where a credential comes from: the built-in environment provider, a spell-backed one, and why magus keeps exactly one active per run instead of a fallback chain."
 tags:
   [
     secrets,

@@ -1,7 +1,7 @@
 ---
 title: Concurrency
 order: 8
-description: How magus coordinates parallel work: the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the broker-held machine budget that keeps every magus on the host from oversubscribing it.
+description: "How magus coordinates parallel work: the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the broker-held machine budget that keeps every magus on the host from oversubscribing it."
 tags:
   [
     concurrency,

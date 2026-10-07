@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, when acting on code-review findings against this tree, when touching a Buzz host module descriptor in std/, and when a change ripples into generated output. These rules are workspace-specific and deliberately NOT part of the shipped magus-* skills.
+description: "Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, when acting on code-review findings against this tree, when touching a Buzz host module descriptor in std/, and when a change ripples into generated output. These rules are workspace-specific and deliberately NOT part of the shipped magus-* skills."
 metadata:
   source: workspace
 ---

@@ -1,6 +1,6 @@
 ---
 title: CI providers
-description: Teach magus your CI system's job-log structure with a provider spell: fold markers around failures and annotations that surface on a pull request, without magus itself knowing any vendor's syntax.
+description: "Teach magus your CI system's job-log structure with a provider spell: fold markers around failures and annotations that surface on a pull request, without magus itself knowing any vendor's syntax."
 tags:
   [
     ci,

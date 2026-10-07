@@ -1,7 +1,7 @@
 ---
 title: Dependencies
 order: 6
-description: The two dependency mechanisms in magus: magus\needs (target-level, imperative) and depends_on (project-level, declarative), how they interact, and how a cross-project needs folds into both.
+description: "The two dependency mechanisms in magus: magus\\needs (target-level, imperative) and depends_on (project-level, declarative), how they interact, and how a cross-project needs folds into both."
 tags: [dependencies, needs, depends_on, cache, affected, cycles, magusfile]
 ---
 

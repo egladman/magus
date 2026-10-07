@@ -1,6 +1,6 @@
 ---
 title: Recommendations
-description: The conventions magus recommends but does not enforce: which charms to reach for, how to name one, when a charm should check its own claim, and how a workspace raises its own diagnostics.
+description: "The conventions magus recommends but does not enforce: which charms to reach for, how to name one, when a charm should check its own claim, and how a workspace raises its own diagnostics."
 tags:
   [
     recommendations,
