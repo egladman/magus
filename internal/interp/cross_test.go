@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,6 +164,24 @@ func TestCrossDispatchResetsTargetInterceptor(t *testing.T) {
 
 	assert.False(t, sawInterceptor.Load(),
 		"the caller's interceptor crossed the project boundary, so the remote project's needs mint steps against the caller")
+}
+
+// TestCrossDispatchDropsForwardedArgs holds a cross-project dependency to the boundary
+// runBuzzDependencies draws for a same-project one: `--` args belong to the target the
+// user named. Carried across, the merge queue's --inherited=fatal for the root ci target
+// reached a nested module's format, and gofmt tried to lstat it as a path.
+func TestCrossDispatchDropsForwardedArgs(t *testing.T) {
+	var got []string
+	cd := NewCrossDispatch(cache.NewTargetRuns())
+	cd.run = func(ctx context.Context, _, _ string) error {
+		got = project.ExtraArgs(ctx)
+		return nil
+	}
+
+	ctx := project.WithExtraArgs(context.Background(), []string{"--inherited=fatal"})
+	require.NoError(t, cd.Dispatch(ctx, fakeProject("libs/gopherbuzz"), "format"))
+
+	assert.Nil(t, got, "the caller's forwarded args reached a cross-project dependency")
 }
 
 // fakeProject is a workspace project at path, rooted under /ws.
