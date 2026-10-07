@@ -350,7 +350,7 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	// A Buzz number arrives as float64; an int is what a Go caller would pass.
 	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
 	require.NoError(t, err)
-	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d"}, a.got)
+	assert.Equal(t, types.InsightOptions{Commits: 42, Since: "90d", Files: true}, a.got) // Files defaults on, as the CLI did
 
 	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
 	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.

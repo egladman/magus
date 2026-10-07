@@ -275,12 +275,13 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
 	second.Unattributed = append(second.Unattributed, JobUnattributedWrite{Path: "second/z.go"})
 
+	// Clone resolves each gate's kind and expectation, so the clone's gate carries both.
 	assert.Equal(t, Job{
 		ID:           "a",
 		WritePaths:   []string{"types/", "first/"},
 		DenyPaths:    []string{"gen/", "first/"},
 		DependsOn:    []string{"b", "first"},
-		Goals:        []CompletionGate{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
+		Goals:        []CompletionGate{{ID: "unit", Kind: GateKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}},
 		Releases:     []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}},
 		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
