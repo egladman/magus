@@ -3,8 +3,8 @@
 The presentation layer: the code that turns a request (an HTTP call from a browser,
 or an MCP tool call from an agent) into a domain call and maps the result onto a
 versioned wire contract. Transport (the loopback HTTP server, its bind, and the
-CORS / loopback / DNS-rebind / bearer middleware) does NOT live here - it lives in
-`internal/httpx`. Data access does NOT live here - handlers call the repositories.
+CORS / loopback / DNS-rebind / bearer middleware) does NOT live here; it lives in
+`internal/httpx`. Data access does NOT live here; handlers call the repositories.
 
 ## The rule: a handler subpackage mirrors its proto package
 
@@ -19,7 +19,7 @@ trivially correlated:
 | `internal/handler/graph`  | `magus.graph.v1alpha1`  | knowledge-graph -> proto mapping, the GET /api/v1/graph handler                              |
 
 When you add a new wire contract `proto/magus/foo/v1alpha1`, its mapping goes in a new
-`internal/handler/foo` package - same name, no exceptions for the wire packages.
+`internal/handler/foo` package, same name, no exceptions for the wire packages.
 
 Each console handler is an `http.Handler` receiver type holding a NARROW
 consumer interface that is satisfied by the pure-logic `internal/service/console` service. The
@@ -27,7 +27,7 @@ service returns DOMAIN values; the handler owns the wire encoding.
 
 Name that interface `<name>Source` and keep it UNEXPORTED: `graphSource`, `statusSource`,
 `insightSource`. It is the consumer's statement of what it needs, not a type any caller has to
-name - Go satisfies it structurally, so the service that implements it never mentions it. Export
+name; Go satisfies it structurally, so the service that implements it never mentions it. Export
 it only when the composition root genuinely has to write the type down, which today is true of
 exactly one (`plan.Source`, named in five places outside its package).
 
@@ -35,7 +35,7 @@ A handler that needs no service takes a concrete dependency instead and declares
 all; `attention` is the example. Do not invent a one-implementation interface to match the shape
 of its neighbours.
 
-MCP is always compiled in - there are no build tags. Test files use the SAME package
+MCP is always compiled in; there are no build tags. Test files use the SAME package
 as the code they test (`package status`, never `package status_test`).
 
 ## Packages that mirror a route instead of a proto
@@ -53,14 +53,14 @@ namespace outright.
 
 A route package is NOT a place to put whatever has no home yet. `handler/status` accumulated
 five of these before they were split out, while its own doc still described one thing: mapping
-the status report onto StatusService's two RPCs. The tell was in the constructor names - every
+the status report onto StatusService's two RPCs. The tell was in the constructor names: every
 one of them read `NewDiff*` inside `package status`.
 
 ## Deliberate non-mirror packages
 
 Two subpackages mirror neither a proto package nor a route:
 
-- `internal/handler/mcp` - the MCP request handlers (the tool implementations, the
+- `internal/handler/mcp`: the MCP request handlers (the tool implementations, the
   descriptor catalog in `registry.go`, the dispatch pipeline in `mcp.go`, and the
   transports in `transport.go`: the streamable-HTTP handler builder + stdio). It
   mirrors the agent-facing MCP tool surface. Its bearer
@@ -69,7 +69,7 @@ Two subpackages mirror neither a proto package nor a route:
   runner or stores. The `buzz` tool forks a JSON transform worker, while other MCP
   tools own workspace access. See the
   [MCP boundary](../../docs/guides/integrations/mcp.md#the-boundary-and-the-fallback).
-- `internal/handler/trailrpc` - the audit interceptor for the Connect services, which
+- `internal/handler/trailrpc`: the audit interceptor for the Connect services, which
   records mutating unary RPCs to the activity trail by construction.
 
 ## Naming a handler package against its domain twin

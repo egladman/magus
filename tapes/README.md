@@ -12,7 +12,7 @@ magus run termcast-generate .   # render both captures into assets/gen/*.svg
 
 Recording is opt-in; rendering is not. A session is not byte-reproducible, so
 the two record targets carry `skip_cache` and are deliberately not named
-`*-generate` - `generate` globs that suffix and drift-gates what it finds, and a
+`*-generate`: `generate` globs that suffix and drift-gates what it finds, and a
 gate over a live recording would be red every run. Rendering a committed capture
 IS reproducible, so `termcast-generate` is gated: a recording nothing checks goes
 stale in silence.
@@ -29,7 +29,7 @@ regenerate it and the recording quietly starts lying.
 `core-loop.session.sh` drives the README's transcript: what magus PRINTS. It runs
 non-interactively, one frame per command.
 
-`cmd/magus-termcast/showcase.go` drives the interactive one: what magus DRAWS -
+`cmd/magus-termcast/showcase.go` drives the interactive one: what magus DRAWS:
 the pinned run band, the failure tree beside its captured output, the picker
 searching the knowledge graph. None of that appears in a piped log, and it is
 recorded by real keystrokes with the frames marked as they are taken.
@@ -50,7 +50,7 @@ on `PATH`. Two things that buys, both load-bearing:
 
 These earn their place by showing something a code block cannot: output arriving
 in stages, a cache hit landing, a surface being driven. A recording that only
-shows text should be a fenced code block instead - cheaper, copyable, greppable,
+shows text should be a fenced code block instead: cheaper, copyable, greppable,
 and readable to someone on a screen reader.
 
 Give every embed real alt text describing what happens, not "terminal demo".

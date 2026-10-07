@@ -2,13 +2,13 @@
 
 Benchmarks gopherbuzz (this repo's Buzz VM) against other embedded languages, on
 ten workloads. This is a **separate Go module** (`buzzbench`) so its comparison
-dependencies - gopher-lua, tengo, goja - never touch the `gopherbuzz` module. It
+dependencies (gopher-lua, tengo, goja) never touch the `gopherbuzz` module. It
 uses a `replace` directive to build against the in-tree `gopherbuzz`.
 
 Two tiers, kept honest by being labelled as such:
 
 - **Pure-Go, no-toolchain** (default): gopherbuzz, gopher-lua, tengo, goja. No
-  cgo, no C libraries - what you get from `go test`.
+  cgo, no C libraries: what you get from `go test`.
 - **Extended tier** (opt-in, `-tags cgo_engines`): LuaJIT (a tracing JIT, cgo)
   and Umka (a C interpreter, cgo). These show the ceiling a JIT/native dependency
   buys, and the gap a pure-Go interpreter accepts in exchange for `CGO_ENABLED=0`,
@@ -22,17 +22,17 @@ a warm VM while another rebuilds its VM every iteration, you are no longer
 measuring the same thing. To keep every engine on the same footing, each one
 runs under **both** of these protocols, and the harness times them identically:
 
-- **Warm** - the VM is constructed once and reused; only repeated execution on
+- **Warm**: the VM is constructed once and reused; only repeated execution on
   the warm VM is timed (compilation and VM construction are hoisted out of the
   loop). This is the headline steady-state-throughput number.
-- **Fresh** - a new VM is constructed and torn down every iteration, so the
+- **Fresh**: a new VM is constructed and torn down every iteration, so the
   per-run setup cost is folded in. The compiled program is reused across
   iterations where the engine separates the compiled artifact from VM state
   (gopherbuzz, goja, tengo via `Clone`); for engines whose compiled artifact is bound
   to the VM (gopher-lua), the source is necessarily re-loaded.
 
 For workloads this heavy (`fib(30)` ≈ 10⁶ calls), setup is noise, so Warm ≈ Fresh
-on **time** - the axes diverge mainly on **allocations**, where Fresh exposes the
+on **time**; the axes diverge mainly on **allocations**, where Fresh exposes the
 per-run VM allocation that Warm amortizes away.
 
 ## Run
@@ -52,51 +52,51 @@ benchstat out.txt
 
 Sub-benchmark names are `BenchmarkComparison/<Workload>/<Protocol>/<Engine>`,
 e.g. `BenchmarkComparison/LoopSum/Warm/Gopherbuzz`. Filter with a regex on any
-segment - `-bench='LoopSum/Warm'`, `-bench='/Fresh/Goja'`, etc.
+segment: `-bench='LoopSum/Warm'`, `-bench='/Fresh/Goja'`, etc.
 
 ## Workloads
 
-Each program is **self-contained** - it builds whatever data or function it
-needs inside the timed program - and every engine runs the same shape. This is
+Each program is **self-contained**: it builds whatever data or function it
+needs inside the timed program, and every engine runs the same shape. This is
 deliberate: the in-tree engine suite (`internal/interp/engine`) can lean on
 a persistent session to keep `setup` state alive across a separate `hot` chunk,
 but that doesn't port across engines (tengo can't share a defined function or
 collection between compiled units), so a setup/hot split would not be level here.
 Sizes are picked so the intended operation dominates construction.
 
-- **LoopSum** - sum `0..1e6` in a tight numeric loop. The JIT's wheelhouse: a
+- **LoopSum**: sum `0..1e6` in a tight numeric loop. The JIT's wheelhouse: a
   top-level numeric loop with no calls.
-- **Fib** - recursive `fib(30)`. Call-heavy, so gopherbuzz runs it on the
-  interpreter (the JIT does not compile calls yet) - an honest control that
+- **Fib**: recursive `fib(30)`. Call-heavy, so gopherbuzz runs it on the
+  interpreter (the JIT does not compile calls yet), an honest control that
   measures raw interpreter dispatch, not the JIT.
-- **Call** - 1e6 iterations of a trivial two-arg `add` call. LoopSum plus a
+- **Call**: 1e6 iterations of a trivial two-arg `add` call. LoopSum plus a
   call/return on every iteration, so the delta from LoopSum is call overhead.
-- **ForeachList** - build a 1000-element list, then sum it by iteration 1000
+- **ForeachList**: build a 1000-element list, then sum it by iteration 1000
   times (1e6 element reads). Stresses list iteration/indexing.
-- **ForeachMap** - iterate a 10-entry map's key/value pairs 1e5 times (1e6
+- **ForeachMap**: iterate a 10-entry map's key/value pairs 1e5 times (1e6
   visits). Stresses map iteration and, for some engines, per-iteration key
   enumeration.
-- **StringInterp** - build an interpolated/concatenated `"item {i}"` string in a
+- **StringInterp**: build an interpolated/concatenated `"item {i}"` string in a
   1e5-iteration loop.
 
 And four heavier **compute kernels**, to show the whole stack's time _and_
 allocation footprint under sustained work:
 
-- **Mandelbrot** - 150×150 escape-time grid, max 100 iterations. Float-heavy
+- **Mandelbrot**: 150×150 escape-time grid, max 100 iterations. Float-heavy
   nested loops, near-zero allocation.
-- **MatMul** - 80×80 integer matrix multiply. Nested loops over 2D lists.
-- **BinaryTrees** - allocate, walk, and discard ~1M small tree nodes. The
+- **MatMul**: 80×80 integer matrix multiply. Nested loops over 2D lists.
+- **BinaryTrees**: allocate, walk, and discard ~1M small tree nodes. The
   allocation/GC-pressure workload.
-- **NBody** - 5-body gravitational simulation, 1e4 steps, with `sqrt`. Float
+- **NBody**: 5-body gravitational simulation, 1e4 steps, with `sqrt`. Float
   arithmetic and array updates (gopherbuzz runs it via a session so it can
   `import "math"`).
 
 And two **string/text** workloads, which stress substring extraction and map
-churn - the area gopherbuzz historically handled worst:
+churn, the area gopherbuzz historically handled worst:
 
-- **KmerCount** - slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+- **KmerCount**: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
   map, 50x.
-- **SubstringSearch** - slide over the same string counting a short pattern by
+- **SubstringSearch**: slide over the same string counting a short pattern by
   extracting and comparing each window, 100x (no map).
 
 gopherbuzz is ONE row, `Gopherbuzz`, on every workload. It used to be split into
@@ -126,7 +126,7 @@ ties.
 
 ### Scripting microbenchmarks
 
-**Warm - steady-state execution time** on a reused VM (ms/op, lower is better):
+**Warm: steady-state execution time** on a reused VM (ms/op, lower is better):
 
 | Engine     | LoopSum | Fib(30) |    Call | ForeachList | ForeachMap | StringInterp |
 | ---------- | ------: | ------: | ------: | ----------: | ---------: | -----------: |
@@ -140,9 +140,9 @@ interpreter-only number for it was 40.6. gopherbuzz leads LoopSum, Fib(30),
 ForeachList and ForeachMap outright. Call is a tie: gopher-lua's 100 (±12%) and
 gopherbuzz's 105 (±10%) are within noise. On `StringInterp` gopher-lua edges it
 (21.4 vs 23.2, ±7% and ±8%, so nearly within noise), while gopherbuzz now beats
-tengo (26.5) and goja (46.5) - disclosed, not hidden.
+tengo (26.5) and goja (46.5); disclosed, not hidden.
 
-**Warm - allocation** (B/op, lower is better):
+**Warm: allocation** (B/op, lower is better):
 
 | Engine     | LoopSum | Fib(30) |   Call | ForeachList | ForeachMap | StringInterp |
 | ---------- | ------: | ------: | -----: | ----------: | ---------: | -----------: |
@@ -156,7 +156,7 @@ for warm `LoopSum`, ~1 KB), and `foreach` reuses a per-slot iterator object, so
 map/list iteration is nearly allocation-free too (`ForeachMap`'s 1e6 visits cost
 ~2 KB, not megabytes). `StringInterp` is still gopherbuzz's heaviest scripting
 allocation (~1.5 MB), but it is now the lowest of the four engines, and it is
-GC-sensitive - its time can still vary from run to run.
+GC-sensitive: its time can still vary from run to run.
 
 ### String/text workloads
 
@@ -165,12 +165,12 @@ Two text-processing workloads added to probe gopherbuzz's string handling head-o
 the heap). Both are split-free and produce identical results across engines,
 guarded by a cross-engine agreement test (`TestExtraStringWorkloadsAgree` in `comparison_test.go`).
 
-- **KmerCount** - slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+- **KmerCount**: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
   map, 50x. Substring extraction + map churn.
-- **SubstringSearch** - slide over the same string counting a short pattern by
+- **SubstringSearch**: slide over the same string counting a short pattern by
   extracting each window and comparing, 100x. Substring extraction, no map.
 
-**Warm - execution time** (ms/op) | **allocation** (B/op), lower is better:
+**Warm: execution time** (ms/op) | **allocation** (B/op), lower is better:
 
 | Engine     | KmerCount | KmerCount B/op | SubstringSearch | SubstringSearch B/op |
 | ---------- | --------: | -------------: | --------------: | -------------------: |
@@ -179,7 +179,7 @@ guarded by a cross-engine agreement test (`TestExtraStringWorkloadsAgree` in `co
 | tengo      |      13.3 |         4.4 MB |            18.4 |               7.2 MB |
 | goja (JS)  |        57 |          13 MB |              63 |                12 MB |
 
-These started ~10-18x _behind_ gopher-lua and tengo - and profiling that gap was
+These started ~10-18x _behind_ gopher-lua and tengo, and profiling that gap was
 the point. It turned up two real bugs and one structural cost, all since fixed:
 `str.sub` rebuilt a `[]rune` of the whole string on every call (O(n) per call,
 O(n²) over a sliding window); each `s.sub(...)` allocated a fresh bound-method
@@ -195,7 +195,7 @@ workload where gopher-lua still edges it, by a margin near the noise (21.4 vs
 
 ### Compute kernels
 
-**Warm - execution time** (ms/op, lower is better):
+**Warm: execution time** (ms/op, lower is better):
 
 | Engine     | Mandelbrot | MatMul | BinaryTrees |   NBody |
 | ---------- | ---------: | -----: | ----------: | ------: |
@@ -204,7 +204,7 @@ workload where gopher-lua still edges it, by a margin near the noise (21.4 vs
 | tengo      |        355 |     67 |      **96** |     123 |
 | goja (JS)  |       1863 |    306 |         235 |     592 |
 
-**Warm - allocation** (lower is better):
+**Warm: allocation** (lower is better):
 
 | Engine     | Mandelbrot |     MatMul | BinaryTrees |     NBody |
 | ---------- | ---------: | ---------: | ----------: | --------: |
@@ -214,7 +214,7 @@ workload where gopher-lua still edges it, by a margin near the noise (21.4 vs
 | goja (JS)  |     453 MB |      56 MB |      146 MB |     98 MB |
 
 The compute kernels are where the field is most honest. **On Mandelbrot
-gopherbuzz leads outright: 24 ms vs gopher-lua's 228, an ~9.5x lead** - the kernel
+gopherbuzz leads outright: 24 ms vs gopher-lua's 228, an ~9.5x lead**: the kernel
 compiles, because the baseline JIT learned the `and` short-circuit and int->float
 promotion, so its nested float loop becomes native SSE code. An earlier run without
 compilation measured ~370 ms; that figure was not re-measured (an interpreter-only
@@ -229,7 +229,7 @@ gopherbuzz narrowly leads (118 vs tengo's 123, within noise, and gopher-lua's
 
 gopherbuzz's _allocation_ is in a different class on most kernels, and it leads on
 Mandelbrot (~10 KB vs 93-453 MB), MatMul (338 KB vs 8.5-56 MB) and NBody (27 KB
-vs 25-98 MB) - a tiny, GC-quiet footprint. BinaryTrees is the exception: tengo
+vs 25-98 MB), a tiny, GC-quiet footprint. BinaryTrees is the exception: tengo
 allocates less (24 MB vs gopherbuzz's 32 MB median, or 27.5 MB / 492,895 allocs
 in the steady-state samples; the slow early samples allocated up to 62 MB),
 though gopherbuzz is still below gopher-lua (45 MB) and goja (146 MB). An
@@ -247,11 +247,11 @@ This tier is **off by default**, enabled with a build tag:
 GOWORK=off CGO_ENABLED=1 go test -tags cgo_engines -run='^$' -bench=. -benchmem .
 ```
 
-- **LuaJIT 2.1** (cgo) - a tracing JIT; reuses the Lua sources verbatim.
-- **Umka** (cgo) - a statically typed C interpreter (its own dialect; `workload.umka`).
+- **LuaJIT 2.1** (cgo): a tracing JIT; reuses the Lua sources verbatim.
+- **Umka** (cgo): a statically typed C interpreter (its own dialect; `workload.umka`).
 
 **Memory:** Go's `-benchmem` counts only Go-heap allocation, so LuaJIT's and
-Umka's C-heap usage reads ~0 and is _not_ comparable - read their times only.
+Umka's C-heap usage reads ~0 and is _not_ comparable; read their times only.
 
 Indicative warm times (ms/op). The LuaJIT and Umka columns were NOT re-measured in
 the run above (no cgo toolchain on this host); they are from an earlier run on
@@ -268,6 +268,6 @@ columns are from the new run:
 | NBody      |    1.7 |   60 | 118 (gopherbuzz) |        118 |
 
 These are microbenchmarks across languages with different semantics, type
-systems, and safety models - read them as order-of-magnitude, not a verdict.
+systems, and safety models; read them as order-of-magnitude, not a verdict.
 The point of keeping the harness in-tree is that it's easy to add your own
 workload and re-measure.

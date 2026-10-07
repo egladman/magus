@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5829
-skill_short_bytes: 4170
+skill_full_bytes: 5820
+skill_short_bytes: 4162
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `506792359aa3` |
+| `skill-content` | `35fdf06e3190` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -94,7 +94,7 @@ magus describe file <path>            # is that file really source / output
 
 Then RUN the commands the instructions tell an agent to run.
 
-Work outward from what CHANGED - a diff, a changelog, a recent decision - rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -103,22 +103,22 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 
 ## Rank what you find
 
-Every finding carries the command that REPRODUCES it - a finding nobody can re-run is an opinion about a
+Every finding carries the command that REPRODUCES it: a finding nobody can re-run is an opinion about a
 document.
 
 Report findings in this order.
 
-1. **Dead end** - A forbids X, B requires X, and no third path exists. The agent
+1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall.
-2. **Stale instruction** - a named command no longer exists, no longer works, or
+2. **Stale instruction**: a named command no longer exists, no longer works, or
    is now denied.
-3. **Split authority** - two surfaces describe the same decision differently
+3. **Split authority**: two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    A local rule contradicting a shipped skill is always this. Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement** - a denial or deprecation names a tool that no
+4. **Orphaned replacement**: a denial or deprecation names a tool that no
    instruction anywhere documents.
-5. **Silent duplication** - the same rule restated in several places.
+5. **Silent duplication**: the same rule restated in several places.
 
 ## Do not report these
 
@@ -196,7 +196,7 @@ the person hitting the contradiction.
 ## Check claims against the tool, not against the other documents
 
 Two documents agreeing with each other and both being wrong is the common case,
-not the exception - they were usually written in the same sitting by the same
+not the exception: they were usually written in the same sitting by the same
 person. So resolve every claim against something that executes.
 
 ```sh
@@ -209,7 +209,7 @@ Then RUN the commands the instructions tell an agent to run. A documented comman
 that errors is worse than an undocumented one: the agent trusts it, tries it,
 fails, and has to invent a recovery nothing sanctioned.
 
-Work outward from what CHANGED - a diff, a changelog, a recent decision - rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -218,7 +218,7 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 
 ## Rank what you find
 
-Every finding carries the command that REPRODUCES it - the exact line a reader
+Every finding carries the command that REPRODUCES it: the exact line a reader
 runs to see the contradiction for themselves, not a description of where you saw
 it. A finding nobody can re-run is an opinion about a document, and it gets
 argued with instead of fixed.
@@ -226,19 +226,19 @@ argued with instead of fixed.
 Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
 
-1. **Dead end** - A forbids X, B requires X, and no third path exists. The agent
+1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall. Nothing else on this list is worth
    reporting before one of these.
-2. **Stale instruction** - a named command no longer exists, no longer works, or
+2. **Stale instruction**: a named command no longer exists, no longer works, or
    is now denied. Indistinguishable from a dead end until the agent tries it.
-3. **Split authority** - two surfaces describe the same decision differently
+3. **Split authority**: two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    A workspace-local rule contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are simply in conflict. Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement** - a denial or deprecation names a tool that no
+4. **Orphaned replacement**: a denial or deprecation names a tool that no
    instruction anywhere documents.
-5. **Silent duplication** - the same rule restated in several places. Not yet a
+5. **Silent duplication**: the same rule restated in several places. Not yet a
    contradiction; it is where the next one is born, because an edit will update
    some of them.
 

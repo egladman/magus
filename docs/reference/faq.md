@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: Short answers to the questions that come up first with magus - spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the broker and the server, and adding a tool.
+description: Short answers to the questions that come up first with magus (spells versus targets versus charms, why runs are read-only, how the cache decides, affected builds, the broker and the server, and adding a tool).
 tags: [faq, questions, spells, targets, charms, cache, affected, broker, server]
 ---
 
@@ -23,7 +23,7 @@ magus normalizes every target name to canonical kebab-case on both sides: when
 a magusfile declares a target and when you reference one, whether on the CLI,
 in a `ctx.needs` literal, or in a per-target policy key. `go_build`,
 `goBuild`, and `go-build` all normalize to the same registered target, so any
-spelling reaches it - there is exactly one target, not a table of aliases.
+spelling reaches it: there is exactly one target, not a table of aliases.
 This does not apply to a spell op after `::` (`go::golangci-lint` matches
 verbatim) or to a Buzz map subscript like `typescript["tsc"]`. See
 [targets.md](../concepts/targets.md#name-normalization-casing--delimiters).
@@ -96,5 +96,5 @@ configuration; every key is documented in the [config reference](config.md).
 
 ## See also
 
-- [getting-started.md](../guides/getting-started.md) - the first ten minutes.
-- [conventions.md](../conventions.md) - how to read the rest of the docs.
+- [getting-started.md](../guides/getting-started.md): the first ten minutes.
+- [conventions.md](../conventions.md): how to read the rest of the docs.

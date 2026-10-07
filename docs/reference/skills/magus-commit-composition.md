@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4365
-skill_short_bytes: 3757
+skill_full_bytes: 4360
+skill_short_bytes: 3755
 ---
 
 # magus-commit-composition
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `4f1fef0ddfa7` |
+| `skill-content` | `a1fee706a772` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -81,7 +81,7 @@ magus describe file <changed-path>...
 ```
 
 Every `output` path joins the `source` change that invalidated it. A commit whose
-whole content is regeneration means that pairing was missed - fold it into the
+whole content is regeneration means that pairing was missed; fold it into the
 change that caused it.
 
 ## Ask the workspace where the seams are
@@ -156,7 +156,7 @@ harness's own memory, not the branch.
 
 ## See also
 
-- **magus-vcs-hygiene** - classifying paths and staging one commit safely.
+- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
 ````
 
 
@@ -198,7 +198,7 @@ magus describe file <changed-path>...
 ```
 
 Every `output` path joins the `source` change that invalidated it. A commit whose
-whole content is regeneration means that pairing was missed - fold it into the
+whole content is regeneration means that pairing was missed; fold it into the
 change that caused it.
 
 ## Ask the workspace where the seams are
@@ -220,7 +220,7 @@ Three signals, strongest first:
   commit.
 - **Symbol coupling.** A rename's sites belong together however many directories
   they span. If refs reports a project not-indexed, run `magus graph
-  build` first - `unknown, not absent` is not an empty result.
+  build` first: `unknown, not absent` is not an empty result.
 
 ## Where this stops
 
@@ -250,7 +250,7 @@ magus vcs resolve             # settles the conflicted declared outputs, regener
 ```
 
 **Prove the content survived.** A restructure must change history and nothing
-else, and a lost commit still leaves a tree that builds - which is why
+else, and a lost commit still leaves a tree that builds, which is why
 a green suite is not evidence here:
 
 ```sh
@@ -272,14 +272,14 @@ magus affected ci
 ## What does not belong in a commit at all
 
 Session notes and scratch plans are not repository content unless the repository
-already tracks them - check the path's history on the base branch
+already tracks them; check the path's history on the base branch
 before assuming either way. Untracked session state belongs in your
 harness's own memory, not the branch, and dropping those commits is
 often the single largest reduction available.
 
 ## See also
 
-- **magus-vcs-hygiene** - classifying paths and staging one commit safely.
+- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
 ````
 
 

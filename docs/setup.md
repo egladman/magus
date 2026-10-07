@@ -19,7 +19,7 @@ sh install.sh
 
 Read the script before you run it. It downloads the current release, checks the signature, and installs the binary, the man pages, and the [`mgs` shorthand](setup/shell-setup.md#mgs-shorthand) under `~/.local`. `--dry-run` prints the whole plan without writing anything.
 
-The only dependency is on the verification step: the script needs OpenSSL 3 with Ed25519 support on `PATH` to check the release signature. Stock macOS does not have it by default - see [macOS](setup/macos.md#openssl-3) for the fix.
+The only dependency is on the verification step: the script needs OpenSSL 3 with Ed25519 support on `PATH` to check the release signature. Stock macOS does not have it by default; see [macOS](setup/macos.md#openssl-3) for the fix.
 
 In a hurry, and willing to give a network response your shell? `curl ... | sh` works too:
 
@@ -41,7 +41,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install | sh
 ## Platform support
 
 Every platform below gets a signed release archive built by the same pipeline, and every
-published archive is the STATIC build - it links nothing, so it runs wherever its platform
+published archive is the STATIC build: it links nothing, so it runs wherever its platform
 runs. A dynamically linked build is supported but not published; see the per-platform
 guides. They do not all get the same amount of testing, and it is more useful to say so
 than to imply otherwise.
@@ -56,7 +56,7 @@ by the release pipeline but not tested by it.
 | linux/arm64   | Not covered by CI. Built natively by the release pipeline; the release binary and the test suites have been executed on real arm64 hardware. |
 | darwin/amd64  | Not covered by CI. Built natively by the release pipeline on an Intel runner, so it compiles and links, but **never executed**.              |
 | windows/amd64 | Not covered by CI. Built natively by the release pipeline, so it compiles and links, but **never executed**.                                 |
-| windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed** - the newest and least proven target.                                     |
+| windows/arm64 | Not covered by CI. Cross-compiled, static only, **never executed**: the newest and least proven target.                                      |
 
 Two consequences worth knowing before you pick a build:
 

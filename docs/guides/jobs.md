@@ -1,6 +1,6 @@
 ---
 title: Jobs
-description: Coordinate work by hand with magus job - one person across two worktrees, two teammates sharing a file, and CI recording whether merged work still passes - and what the job store tells you about who holds what, since when, and what done means.
+description: Coordinate work by hand with magus job (one person across two worktrees, two teammates sharing a file, and CI recording whether merged work still passes), and what the job store tells you about who holds what, since when, and what done means.
 tags:
   [
     jobs,

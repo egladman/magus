@@ -86,7 +86,7 @@ Two consequences:
 
 ## The target name
 
-`ci` is the only target magus requires. Every other name below is a CONVENTION - a shared vocabulary for phases that recur across toolchains, not a set you must declare. A project that defines only `ci` is complete and correct. The type is `project.Target` (a `string` alias).
+`ci` is the only target magus requires. Every other name below is a CONVENTION: a shared vocabulary for phases that recur across toolchains, not a set you must declare. A project that defines only `ci` is complete and correct. The type is `project.Target` (a `string` alias).
 
 | Name       | Meaning                                  |
 | ---------- | ---------------------------------------- |
@@ -105,25 +105,25 @@ every project before the expensive part starts, run it first and
 
 Both produce files, so the table above splits them on the only difference that changes what CI can do: **is the output committed?**
 
-`generate`'s output is in the repository, so CI can re-run the generator and fail when the bytes move. That drift gate is the whole point of the name - it is what catches a page nobody regenerated after editing its source. `build`'s output is ignored or thrown away, so no comparison is possible; it is verified by producing without error.
+`generate`'s output is in the repository, so CI can re-run the generator and fail when the bytes move. That drift gate is the whole point of the name: it is what catches a page nobody regenerated after editing its source. `build`'s output is ignored or thrown away, so no comparison is possible; it is verified by producing without error.
 
-The test is the artifact, not the verb. "It runs a generator" is not the question - a code generator writing an ignored `dist/` belongs in `build`, and a renderer writing a committed SVG belongs in `generate`.
+The test is the artifact, not the verb. "It runs a generator" is not the question: a code generator writing an ignored `dist/` belongs in `build`, and a renderer writing a committed SVG belongs in `generate`.
 
 Two failure modes follow, and both are quiet:
 
 - **Uncommitted output in `generate`** makes every `magus affected ci` pay for work no gate can check. It looks like coverage and is not.
 - **Committed output in `build`** leaves a tracked file with nothing verifying it, so it drifts from its source indefinitely with every gate green.
 
-When one phase feeds the other, `build` depends on `generate` rather than repeating it - the ordering falls out, and `generate` stays runnable on its own as the fast gate.
+When one phase feeds the other, `build` depends on `generate` rather than repeating it; the ordering falls out, and `generate` stays runnable on its own as the fast gate.
 
-`ci` itself is an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
+`ci` itself is an ordinary magusfile-defined target, not a hardcoded chain; you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op: a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 
-Tool operations compose **into** these targets; they are not targets of their own. All static analysis - `go-vet`, `golangci-lint`, `cargo-clippy`, type-checks - belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. That is advice about keeping a vocabulary legible, not a constraint the engine enforces: reserve new names for genuinely distinct work (a `deploy`, `release`, or `security`) rather than fragmenting a phase that already has a name.
+Tool operations compose **into** these targets; they are not targets of their own. All static analysis (`go-vet`, `golangci-lint`, `cargo-clippy`, type-checks) belongs under `lint` (its definition is "static analysis, type-check"), not a bespoke `vet`, `audit`, or `typecheck` target. That is advice about keeping a vocabulary legible, not a constraint the engine enforces: reserve new names for genuinely distinct work (a `deploy`, `release`, or `security`) rather than fragmenting a phase that already has a name.
 
-`security` is a worked example of a name worth adding, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache` - and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it. [Security scanning](../guides/security-scanning.md) builds one that fails a pull request only on the vulnerabilities it introduced.
+`security` is a worked example of a name worth adding, and magus's own workspace declares one. A scanner reads an advisory database that changes independently of your tree, so it needs `skip_cache`, and composing it into `lint` would spread that to every op `lint` runs, costing the whole phase its caching. A different cache contract is a real phase boundary rather than a naming preference. [MGS1003](../reference/codes/magusfile/MGS1003.md) does not flag it. [Security scanning](../guides/security-scanning.md) builds one that fails a pull request only on the vulnerabilities it introduced.
 
-What belongs under `security` is analysis of the DEPENDENCY INVENTORY - what the industry
-calls Software Composition Analysis - and that is two questions, not one:
+What belongs under `security` is analysis of the DEPENDENCY INVENTORY (what the industry
+calls Software Composition Analysis), and that is two questions, not one:
 
 - **Vulnerabilities.** Advisory scanners over the dependency graph: `govulncheck`, `pnpm
   audit`, `trivy image`. Answers "does a dependency have a known flaw".
@@ -131,8 +131,8 @@ calls Software Composition Analysis - and that is two questions, not one:
   own license. Answers "may this dependency legally be here at all".
 
 They belong in one target because they share an input and a cache contract. Both read the
-same inventory, and both depend on data that lives OUTSIDE the tree - an advisory database,
-a license classifier - so neither can be cached against sources alone. That is the same
+same inventory, and both depend on data that lives OUTSIDE the tree: an advisory database,
+a license classifier, so neither can be cached against sources alone. That is the same
 `skip_cache` argument above, arriving twice.
 
 They do not share a vocabulary, and the distinction is worth keeping. A license violation is
@@ -144,7 +144,7 @@ One trap when adding a license gate: a scanner's built-in license CATEGORIES ass
 proprietary consumer. trivy classifies AGPL as `forbidden` and GPL/LGPL as `restricted`,
 which is correct advice for someone shipping closed source and wrong for a copyleft project,
 where those are the ordinary case. Calibrate the gate against your OWN license before
-turning it on - magus is GPL-3.0-or-later and ignores the compatible copyleft licenses
+turning it on: magus is GPL-3.0-or-later and ignores the compatible copyleft licenses
 explicitly, while still failing on the genuinely incompatible ones (GPL-2.0-only, which
 cannot be upgraded to v3, plus CDDL, EPL, and MPL-1.1). A gate that reports dependencies you
 are perfectly entitled to use is a gate someone will switch off.
@@ -153,24 +153,24 @@ Custom target names must use the target-name charset: letters, digits, `-`, `_` 
 
 ### When is a new name worth adding?
 
-The names above are the recommended vocabulary, not a closed set - nothing stops
+The names above are the recommended vocabulary, not a closed set; nothing stops
 you declaring any name the charset allows. The questions below are the ones worth
 asking before you do, because a name that fails them usually describes something
 that already has a home:
 
-1. **Universality** - the phase must mean something in every toolchain magus
+1. **Universality**: the phase must mean something in every toolchain magus
    adapts. A phase that only makes sense for one language fails this test:
    `typecheck` is universal-sounding but Go and Rust type-check as part of
    `build`, not as a separate phase, so it does not earn a slot of its own.
-2. **Distinctness** - it must be a genuine phase, not a subset of an existing
+2. **Distinctness**: it must be a genuine phase, not a subset of an existing
    one. `vet`, `audit`, and `typecheck` are all static analysis or formatting
    fragments of `lint`/`format` (see [MGS1003](../reference/codes/magusfile/MGS1003.md)),
    not phases of their own. A different CACHE CONTRACT counts as distinct: that is
    what separates `security` from the fragments it otherwise resembles.
-3. **Pipeline membership** - `ci` must need to order it against the other
+3. **Pipeline membership**: `ci` must need to order it against the other
    phases. A step nobody's `ci` ever sequences against `build`/`test`/`lint`
    has weak claim on a name of its own.
-4. **Tooling weight** - `ci` is the one name the engine treats specially. Every
+4. **Tooling weight**: `ci` is the one name the engine treats specially. Every
    other behavior attaches to a declaration, not a name: any target that declares
    output is drift-gated when it runs without `rw` (see
    [operations.md](operations.md)), whatever it is called. Reuse an existing name
@@ -178,7 +178,7 @@ that already has a home:
 
 The recommended vocabulary is deliberately small, and `ci` is the only member the
 engine requires. `deploy`,
-`release`, and `serve` stay custom by design - they are real, common phases,
+`release`, and `serve` stay custom by design; they are real, common phases,
 but they are workspace-specific enough (which environment, which registry,
 which port) that forcing one shape on them would be more prescriptive than
 useful.
@@ -255,13 +255,13 @@ std\print(strings\kebabCase("HTTPServer"));  // -> "http-server"
 std\print(strings\kebabCase("build2"));      // -> "build-2"
 ```
 
-That the two agree is not a coincidence you have to take on faith - a test holds
+That the two agree is not a coincidence you have to take on faith: a test holds
 them to identical output on every case in the table above
 ([`TestKebabCaseMatchesNormalize`](https://github.com/egladman/magus/blob/main/std/strings_test.go)).
 Internally the resolver calls `types.Normalize`, which is also reachable from a
 magusfile as `magus\normalize` when you want to canonicalize a name yourself.
 
-Buzz has testing built in, so the rule can be asserted rather than eyeballed - and
+Buzz has testing built in, so the rule can be asserted rather than eyeballed, and
 a `test` block is exactly how the magusfiles and spells in this repo are tested.
 Save this and run `magus buzz -t names.buzz`:
 
@@ -289,14 +289,14 @@ ok    test "the two that surprise people"
 2 passed, 0 failed, 0 skipped
 ```
 
-Change one expected value and re-run to watch it fail - that is the whole testing
+Change one expected value and re-run to watch it fail; that is the whole testing
 workflow, and it is the same `-t` flag the spells in this repo are tested with.
 
 Two things about that snippet are deliberate. It has no Run button, because the
-in-browser playground evaluates a script but does not execute `test` blocks - a
+in-browser playground evaluates a script but does not execute `test` blocks; a
 runnable version would sit there reporting nothing while a wrong assertion looked
 like it passed. It also keeps to `strings\kebabCase`, which the standalone
-runner can resolve without a workspace - and which is the point rather than a
+runner can resolve without a workspace, and which is the point rather than a
 concession: the rule really is just kebab-case.
 
 Names are constrained to alphanumerics plus `-` and `_`. Everything else, `:` and
@@ -339,7 +339,7 @@ and no alias table.
 
 Op keys are now normalized when the spell is decoded, the same as every other
 name. Before, they were stored exactly as authored while every request arriving
-at the spell had already been normalized - so an op declared `go_build` was
+at the spell had already been normalized, so an op declared `go_build` was
 stored under `go_build`, looked up as `go-build`, and missed. The result was not
 an error: the dispatcher treated it as "this spell does not provide that target"
 and skipped it silently, logging only at debug level. The op was declared and
@@ -357,7 +357,7 @@ or `snake_case` op, it now works instead of silently never running.
 - **Lookups by literal key.** Normalization canonicalizes what gets _stored_, not
   how a literal subscript is spelled. `typescript["tsc"]` is an ordinary map-key
   lookup into the value `import "magus/spell/typescript"` binds, so it must name the canonical
-  (kebab) key. Likewise `go::lint` is still a graceful no-op - the go spell's
+  (kebab) key. Likewise `go::lint` is still a graceful no-op: the go spell's
   linter op is `golangci-lint`, and that is a different word, not a different
   casing. See [spell-qualified targets](#cli-extension-spell-qualified-targets).
 - **Project paths.** `Path` is never normalized; `api` and `Api` are different
@@ -452,7 +452,7 @@ Key invariant: targets passed to `Run` should be concrete (each Path resolves to
 ## See also
 
 - [dependencies.md](dependencies.md): `magus\needs` versus `depends_on`, and how a cross-project `needs` folds into the affected set and the cache key.
-- [dependencies.md, pattern forms](dependencies.md#pattern-forms): the `ctx.glob` grammar - suffix shorthand, globs, and `!` negation - with a worked example per form.
+- [dependencies.md, pattern forms](dependencies.md#pattern-forms): the `ctx.glob` grammar (suffix shorthand, globs, and `!` negation) with a worked example per form.
 - [The guided tour, step 7](../tour/index.html#step-7): those pattern forms runnable in the browser.
 - [operations.md](operations.md): the formal Operation definition and the work hierarchy (Spell → Operation → Target).
 - [spells.md](spells.md): the operations a target composes, and [Spells vs Targets](spells.md#spells-vs-targets).

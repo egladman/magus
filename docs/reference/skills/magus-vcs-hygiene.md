@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9990
-skill_short_bytes: 7211
+skill_full_bytes: 9979
+skill_short_bytes: 7203
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `e7aacd93064f` |
+| `skill-content` | `c6cbb7f16799` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -71,16 +71,16 @@ magus describe file $(git diff --name-only) <other paths...>
 MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
 project and a role:
 
-- `output` - matches a declared outputs glob: the file is GENERATED.
-- `source` - matches a declared sources glob: it feeds cache keys and the
+- `output` (matches a declared outputs glob): the file is GENERATED.
+- `source` (matches a declared sources glob): it feeds cache keys and the
   affected set. This is the diff worth reading.
-- `maintained` - no project declares it, but magus wrote it: commit it, never
-  ignore it - it is derived from the declared
+- `maintained` (no project declares it, but magus wrote it): commit it, never
+  ignore it: it is derived from the declared
   output globs, so no project can claim it.
-- `unclaimed` - no project declares it and magus does not write it: it enters no
+- `unclaimed` (no project declares it and magus does not write it): it enters no
   cache key, but directory containment still seeds its owning project, so touching
   it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
-  owning project's `sources` fixes both halves. Check the VCS ignore rules (`git check-ignore -v <path>`) - an unclaimed
+  owning project's `sources` fixes both halves. Check the VCS ignore rules (`git check-ignore -v <path>`): an unclaimed
   un-ignored file is at risk of being lost.
 
 ## Rules for generated files
@@ -123,7 +123,7 @@ Read the change before you stage it. `magus diff --impact` orders the uncommitte
 changeset by what it can BREAK rather than alphabetically, folds the generated
 files away, and appends what landing it costs: which projects rebuild, who has been
 changing them, an estimate from recorded run times, what the workspace's advisors
-say, and any human-authored note anchored to a file or symbol you touched - context, never a
+say, and any human-authored note anchored to a file or symbol you touched: context, never a
 verdict, and an empty section means nobody could measure it rather than nothing
 found.
 
@@ -138,8 +138,8 @@ Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
 scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
 both answers at once.
 
-Revision state is `vcs\commit()`, one typed record - `id`, `short`, `author`,
-`date`, `subject`, `body`, `parents` - rather than an accessor per field.
+Revision state is `vcs\commit()`, one typed record (`id`, `short`, `author`,
+`date`, `subject`, `body`, `parents`) rather than an accessor per field.
 Annotate it `> Commit` for compile-checked field access.
 
 `vcs\ref()` is the movable name pointing at the current revision, and it is
@@ -156,7 +156,7 @@ not another everyday CLI surface.
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
    that are neither ignored nor declared outputs are the ones at risk of being
-   silently lost - stage them or ask about them, never leave them dangling.
+   silently lost: stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
 4. Review `git status` first, then stage deliberately with `git add -- <paths>`. Avoid staging
@@ -164,7 +164,7 @@ not another everyday CLI surface.
    since the first non-matching pathspec aborts the whole call. Confirm with
    `git diff --cached --stat`: every intended edit, renames included.
 5. Run `magus affected ci` before calling the work done: it reaches projects you
-   never edited, and confirms HEAD builds - a partial commit that drops a rename
+   never edited, and confirms HEAD builds; a partial commit that drops a rename
    leaves HEAD broken.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
@@ -176,7 +176,7 @@ pristine tree (e.g. to diff regenerated output), use a throwaway
 ## Getting back to a recorded state
 
 A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
-and a DIGEST of the uncommitted patch - not the patch. So a dirty checkpoint tells you
+and a DIGEST of the uncommitted patch, not the patch. So a dirty checkpoint tells you
 whether a tree is the same one, and cannot give the work back.
 
 Commit before you park. Uncommitted work that is not committed is not recoverable from
@@ -218,7 +218,7 @@ declarations to decide which changed files deserve your attention.
 
 ## Classify before you read
 
-Feed every changed or conflicting path to magus in one call - it classifies
+Feed every changed or conflicting path to magus in one call; it classifies
 each against the workspace's declared globs:
 
 ```sh
@@ -228,19 +228,19 @@ magus describe file $(git diff --name-only) <other paths...>
 MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
 project and a role:
 
-- `output` - matches a declared outputs glob: the file is GENERATED.
-- `source` - matches a declared sources glob: it feeds cache keys and the
+- `output` (matches a declared outputs glob): the file is GENERATED.
+- `source` (matches a declared sources glob): it feeds cache keys and the
   affected set. This is the diff worth reading.
-- `maintained` - no project declares it, but magus wrote it: commit it, never
+- `maintained` (no project declares it, but magus wrote it): commit it, never
   ignore it. `.gitattributes` is the one today. It is derived FROM every
   project's declared output globs, so no project can declare it without the
-  derivation claiming to be its own product - which is why it needs its own role
+  derivation claiming to be its own product, which is why it needs its own role
   rather than a wider glob somewhere.
-- `unclaimed` - no project declares it and magus does not write it: it enters no
+- `unclaimed` (no project declares it and magus does not write it): it enters no
   cache key, but directory containment still seeds its owning project, so touching
   it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
   owning project's `sources` fixes both halves; leaving it undeclared is right when
-  nothing reads it. Check the VCS ignore rules (`git check-ignore -v <path>`) - build residue should be
+  nothing reads it. Check the VCS ignore rules (`git check-ignore -v <path>`); build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost.
 
 WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
@@ -253,7 +253,7 @@ CORRECT: note that `docs/gen/**` is a declared output of
   target (usually `magus run generate`).
 - Do not investigate their diffs; regenerate and compare instead. If a generated
   file changed with no source change, that is the finding (stale or hand-edited
-  output) - `magus run generate` should settle it.
+  output); `magus run generate` should settle it.
 - Prove drift by regenerating a SECOND time, never by reading the diff and
   judging it. If that second run reproduces the same diff while the target's
   declared inputs are unchanged, the drift is environmental (a tool-version bump,
@@ -294,7 +294,7 @@ changeset by what it can BREAK rather than alphabetically, folds the generated
 files away, and appends what landing it costs: which projects rebuild, who has been
 changing them, an estimate from recorded run times, what the workspace's advisors
 say, and any human-authored note anchored to a file or symbol you touched.
-None of it is a verdict - nothing is gated on it and the exit code is unchanged -
+None of it is a verdict: nothing is gated on it and the exit code is unchanged,
 and each section says when it could not measure something, so an empty one reads as
 "nobody looked" rather than as a clean bill of health.
 
@@ -309,8 +309,8 @@ Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
 scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
 both answers at once.
 
-Revision state is `vcs\commit()`, one typed record - `id`, `short`, `author`,
-`date`, `subject`, `body`, `parents` - rather than an accessor per field.
+Revision state is `vcs\commit()`, one typed record (`id`, `short`, `author`,
+`date`, `subject`, `body`, `parents`) rather than an accessor per field.
 Annotate it `> Commit` for compile-checked field access.
 
 `vcs\ref()` is the movable name pointing at the current revision, and it is
@@ -327,7 +327,7 @@ not another everyday CLI surface.
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files
    that are neither ignored nor declared outputs are the ones at risk of being
-   silently lost - stage them or ask about them, never leave them dangling.
+   silently lost: stage them or ask about them, never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the
    refreshed outputs in the same commit.
 4. Review `git status` first, then stage deliberately with `git add -- <paths>`. `git add -A` stages every
@@ -342,7 +342,7 @@ not another everyday CLI surface.
    diff --cached` shows and does not re-check that your edits landed.
 5. Run `magus affected ci` before calling the work done: it runs the full
    pipeline over every project the diff reaches, including ones you never edited,
-   and after committing confirms HEAD builds - a partial commit that drops a
+   and after committing confirms HEAD builds; a partial commit that drops a
    rename or an importer update leaves HEAD non-building.
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
@@ -356,7 +356,7 @@ pristine tree (e.g. to diff regenerated output), use a throwaway
 ## Getting back to a recorded state
 
 A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
-and a DIGEST of the uncommitted patch - not the patch. So a dirty checkpoint tells you
+and a DIGEST of the uncommitted patch, not the patch. So a dirty checkpoint tells you
 whether a tree is the same one, and cannot give the work back. The digest is
 a hash of the diff and the text is discarded; untracked files are not even hashed.
 Nothing in magus reads a stored checkpoint except the `magus session` listing. Treat

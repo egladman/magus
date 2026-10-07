@@ -4,8 +4,8 @@ Four small packages live under `packages/platform/`. Some of the feature librari
 under `packages/<app>/important-feature-*` reach into them, and the platform
 packages also import each other.
 
-Work out which feature libraries end up depending on `packages/platform/http` -
-directly, or by way of another platform package. Change no code.
+Work out which feature libraries end up depending on `packages/platform/http`
+(directly, or by way of another platform package). Change no code.
 
 Write the answer to `ANSWER.md` at the root of this checkout, in exactly this shape:
 

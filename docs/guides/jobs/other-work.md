@@ -1,6 +1,6 @@
 ---
 title: Splitting other work
-description: Use magus jobs to split work that is not a refactor - a dependency upgrade one project at a time, a translation divided by page and heading, and a release checklist whose board is magus ls jobs.
+description: Use magus jobs to split work that is not a refactor (a dependency upgrade one project at a time, a translation divided by page and heading, and a release checklist whose board is magus ls jobs).
 tags:
   [
     jobs,

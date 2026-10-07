@@ -247,16 +247,16 @@ server started by an older magus says so with
 
 The Unix socket is the source of truth for server state; the HTTP health routes are a thin
 wrapper that answers by querying that same socket. But only an actual HTTP request proves
-the agent-facing endpoint is bound and serving - a socket check cannot detect an HTTP bind
-failure - so the two listeners can diverge, which is why `magus status` reports each
+the agent-facing endpoint is bound and serving (a socket check cannot detect an HTTP bind
+failure), so the two listeners can diverge, which is why `magus status` reports each
 separately.
 
 This page zooms in on the two transports; the HTTP server also carries the agent-facing
 [MCP tools](mcp.md), the read-only [console routes](../../reference/console.md) the browser apps use
 (all reading the same warm [knowledge graph](../../concepts/knowledge.md)), and one bearer-gated
-[job-control service](../../reference/console.md#job-control) for maintenance jobs - the server's only
-mutating HTTP surface. The full-system view - clients,
-guards, shared state, and the progressive web app - is the architecture diagram in the
+[job-control service](../../reference/console.md#job-control) for maintenance jobs, the server's only
+mutating HTTP surface. The full-system view (clients,
+guards, shared state, and the progressive web app) is the architecture diagram in the
 [README](https://github.com/egladman/magus#architecture).
 
 ## Sharing the console to a phone
@@ -324,13 +324,13 @@ server   -      not running (`magus server start` serves MCP and the console)
 ```
 
 It also reports the **MCP endpoint** (`mcp endpoint` block with `state: serving |
-not-ready | unreachable | disabled`) - the HTTP endpoint agent hosts connect to. Nothing
+not-ready | unreachable | disabled`), the HTTP endpoint agent hosts connect to. Nothing
 starts this on its own, so an `unreachable` MCP endpoint is the usual reason "the magus
 tools disappeared" from an agent. See [MCP](mcp.md#is-mcp-actually-reachable).
 
 For scripts and Kubernetes probes, `magus status --probe=<kind>` exits `0` healthy / `1`
 unhealthy. The kinds are `liveness` (the server answers), `readiness` (a workspace is
-loaded), and `mcp` (the MCP endpoint is reachable), and they are comma-combinable -
+loaded), and `mcp` (the MCP endpoint is reachable), and they are comma-combinable:
 `--probe=liveness,mcp` fails if either the server or the endpoint is down. The server also
 serves `/livez`, `/readyz`, and `/healthz` over HTTP on the MCP port.
 
@@ -341,7 +341,7 @@ probes), split along the standard liveness/readiness lines:
 
 | K8s probe   | endpoint                        | passes when                                     |
 | ----------- | ------------------------------- | ----------------------------------------------- |
-| `liveness`  | `GET /livez` (alias `/healthz`) | the server answers - independent of warm-up     |
+| `liveness`  | `GET /livez` (alias `/healthz`) | the server answers: independent of warm-up      |
 | `readiness` | `GET /readyz`                   | the server answers AND a workspace is loaded    |
 | `startup`   | `GET /livez`                    | the server has come up (reuse the liveness URL) |
 
@@ -352,11 +352,11 @@ one specific workspace (returns `503` until that workspace is warm). Because the
 are served by the MCP HTTP server itself, a successful probe also proves the MCP endpoint is
 listening.
 
-The **status code is the signal** - a kubelet reads only that. Because these routes are
+The **status code is the signal**: a kubelet reads only that. Because these routes are
 unguarded, their bodies carry nothing identifying: `/livez` and `/healthz` answer a bare
 `ok` or `unavailable`, and `/readyz` returns a JSON `{"ready": ..., "components": [...]}`
 where each component has a coarse `status` (`ok`, `degraded`, `down`, `disabled`) plus a
-generic, quantitative `detail` such as `1 loaded` or `0 of 4 up to date` - counts and state
+generic, quantitative `detail` such as `1 loaded` or `0 of 4 up to date`: counts and state
 phrases only, never workspace roots, project or service names, filesystem paths, or the
 server PID. For the identifying per-subsystem view (workspace roots, per-project
 symbol-index freshness, named service state), read the bearer-authenticated
@@ -384,7 +384,7 @@ readinessProbe:
 ```
 
 The endpoint requires no auth token (health routes are exempt); keep the port on the pod
-network, not the public internet - see [MCP security](mcp.md#security-keep-this-local).
+network, not the public internet; see [MCP security](mcp.md#security-keep-this-local).
 
 ## Keeping the server running
 

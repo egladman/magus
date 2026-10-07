@@ -62,12 +62,12 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
 
 ## Metric definitions
 
-- **tokens** - summed over assistant records' `message.usage`, deduplicated by
+- **tokens**: summed over assistant records' `message.usage`, deduplicated by
   message id: `input`, `output`, `cache_read` (`cache_read_input_tokens`),
   `cache_write` (`cache_creation_input_tokens`, or the 5m/1h breakdown under
   `cache_creation` when the transcript reports one). `total_billed` is the sum
   of all four; it is a token count, not a price.
-- **dollars** - the per-model token totals priced from
+- **dollars**: the per-model token totals priced from
   [the pricing package](../pricing/rates.json) (USD per million tokens,
   read from the published pricing page on the date recorded in that file), which
   is also reported as `table_dollars_usd`. The host's own `total_cost_usd`, from
@@ -82,47 +82,47 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   priced at the 5-minute rate and the record carries
   `cache_write_ttl_assumed: true`, which the report surfaces as a caveat: the
   table dollars are a floor.
-- **turns** - assistant records, deduplicated by message id.
-- **tool_calls** - `tool_use` blocks, total and by tool name.
-- **file_reads / re_read_rate** - Read and NotebookRead calls;
+- **turns**: assistant records, deduplicated by message id.
+- **tool_calls**: `tool_use` blocks, total and by tool name.
+- **file_reads / re_read_rate**: Read and NotebookRead calls;
   `re_read_rate = (reads - distinct paths) / reads`, so 0.5 means half the reads
   were of a path already read.
-- **tool_result_bytes** - characters of `tool_result` content entering context.
-- **guard_events** - from the activity trail: an `agent_command` event whose
+- **tool_result_bytes**: characters of `tool_result` content entering context.
+- **guard_events**: from the activity trail: an `agent_command` event whose
   preview contains `guard: deny` is a denial and one containing `guard: advis`
   an advisory; a `skill.*` action, or a `file.read` under a `/skills/` path, is a
-  skill load. **Null when no trail was captured, never zero** - zero means the
+  skill load. **Null when no trail was captured, never zero**: zero means the
   guard was present and silent.
-- **success** - `check.exit == 0`. A run with no `check.exit` is null (unknown),
+- **success**: `check.exit == 0`. A run with no `check.exit` is null (unknown),
   not a failure; the report lists it under its caveats as an unknown outcome,
   excluded from every pass rate.
-- **control runs** - a run whose `meta.json` carries `control` (`golden` or
+- **control runs**: a run whose `meta.json` carries `control` (`golden` or
   `null`) never launched an agent and has no transcript. The extractor writes a
   record with only its identity, kind and check verdict; the report's Controls
   section reads those to say whether each task's check discriminates (golden
   passes, null fails), and a pass rate is flagged as not evidence until it does.
   Controls never enter a cell or a pairing. A scored run without a transcript is
   still an error.
-- **invariant_violations** - `tests_deleted` lists paths the diff deletes whose
+- **invariant_violations**: `tests_deleted` lists paths the diff deletes whose
   basename contains `_test.` or `.test.`. Deletion is the only violation read
   from a diff deterministically; everything else belongs in an acceptance check.
 
 ## Statistics
 
-- **Paired deltas** - per task, per metric, `full` rep i minus `rampant` rep i.
+- **Paired deltas**: per task, per metric, `full` rep i minus `rampant` rep i.
   A rep present in only one arm contributes to no delta and is reported as an
   unpaired cell. Never a comparison of independent means.
-- **CI** - percentile interval from a 10,000-sample bootstrap of the mean paired
+- **CI**: percentile interval from a 10,000-sample bootstrap of the mean paired
   delta, seeded from `(seed, metric, task)` so each interval is independent of
   what else is in the run set.
-- **p** - two-sided bootstrap p, Holm-adjusted across tasks within a metric.
-- **Verdict** - `lower under full` / `higher under full` only when the CI
+- **p**: two-sided bootstrap p, Holm-adjusted across tasks within a metric.
+- **Verdict**: `lower under full` / `higher under full` only when the CI
   excludes zero AND `|delta| >= 10%` of the rampant median. Everything else is
   `inconclusive`; a statistically clean 2 percent is not a finding.
-- **pass@1** - successes / reps in a cell, with a Wilson score 95% interval.
-  **pass^k** - 1 only when all k reps in the cell passed.
-- **cost-of-pass** - mean dollars / pass rate, per arm. Reported as infinite when
+- **pass@1**: successes / reps in a cell, with a Wilson score 95% interval.
+  **pass^k**: 1 only when all k reps in the cell passed.
+- **cost-of-pass**: mean dollars / pass rate, per arm. Reported as infinite when
   the pass rate is zero; never silently dropped.
-- **Efficiency conditioned on success** - each cell also carries
+- **Efficiency conditioned on success**: each cell also carries
   `metrics_success_only`; a cheap failure is not efficient.
 - Every spread is reported as median plus IQR alongside the mean.

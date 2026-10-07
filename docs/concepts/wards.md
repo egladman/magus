@@ -6,7 +6,7 @@ tags: [wards, diagnostics, operations, services, kind, MGSxxxx, guardrails]
 
 # Wards
 
-A **ward** is a guardrail magus runs against a _resolved op_ - after a target's
+A **ward** is a guardrail magus runs against a _resolved op_, after a target's
 operation is fully assembled but before it executes. The ward inspects the op's
 argv and rejects it when the command contradicts the op's declared _kind_, so a
 misconfigured op fails immediately with a coded, actionable diagnostic instead of
@@ -17,15 +17,15 @@ code, a plain-language explanation, and a suggested fix.
 
 ## Kind coherence
 
-magus ops carry a _kind_ - a **service** op is a long-running process magus
+magus ops carry a _kind_: a **service** op is a long-running process magus
 supervises in the foreground; a **command** op runs to completion. A ward fires when
 the argv lies about that kind:
 
-- **A service op that detaches** ([MGS5002](../reference/codes/services/MGS5002.md)) - `docker run -d`,
+- **A service op that detaches** ([MGS5002](../reference/codes/services/MGS5002.md)): `docker run -d`,
   a `--detach` flag, and friends fork the process away from magus, so foreground
   supervision, readiness, and stop all stop working. Drop the detach flag, or make it
   a command op if detaching is what you want.
-- **A command op that never exits** ([MGS5003](../reference/codes/services/MGS5003.md)) - a watcher
+- **A command op that never exits** ([MGS5003](../reference/codes/services/MGS5003.md)): a watcher
   like `tsc --watch` in a run-to-completion op hangs the run. Make it a service op, or
   drop the watch flag.
 
@@ -40,7 +40,7 @@ See [Services](services.md#kind-coherence-wards) for the full rationale, and
 Wards are one family in magus's diagnostics. The complete catalog, grouped by area,
 lives under the diagnostic codes:
 
-- [magusfile](../reference/codes/magusfile/README.md) - authoring and configuration problems.
-- [race](../reference/codes/race/README.md) - concurrency and ordering hazards.
-- [sandbox](../reference/codes/sandbox/README.md) - filesystem and exec isolation violations.
-- [services](../reference/codes/services/README.md) - service-op problems, including the kind-coherence wards above.
+- [magusfile](../reference/codes/magusfile/README.md): authoring and configuration problems.
+- [race](../reference/codes/race/README.md): concurrency and ordering hazards.
+- [sandbox](../reference/codes/sandbox/README.md): filesystem and exec isolation violations.
+- [services](../reference/codes/services/README.md): service-op problems, including the kind-coherence wards above.

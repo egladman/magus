@@ -1,7 +1,7 @@
 ---
 title: Concurrency
 order: 8
-description: How magus coordinates parallel work - the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the broker-held machine budget that keeps every magus on the host from oversubscribing it.
+description: "How magus coordinates parallel work: the intra-process scheduler that parallelizes a single run, the cross-process workspace lock that keeps two separate magus invocations from clobbering each other's outputs and cache, and the broker-held machine budget that keeps every magus on the host from oversubscribing it."
 tags:
   [
     concurrency,
@@ -22,12 +22,12 @@ tags:
 magus coordinates parallel work at two distinct scopes, and it helps to keep them
 apart:
 
-- **Within one run** - the scheduler fans a single invocation out across projects
+- **Within one run**: the scheduler fans a single invocation out across projects
   and targets, ordered by the dependency graph. This is [dependencies](dependencies.md)
   and per-target policy (`slots`, `exclusive`) doing their job.
-- **Across separate runs** - the **workspace lock** stops two _independent_ `magus`
+- **Across separate runs**: the **workspace lock** stops two _independent_ `magus`
   processes from mutating the same project at the same time.
-- **Across the whole machine** - the **machine budget** stops every magus on the
+- **Across the whole machine**: the **machine budget** stops every magus on the
   host, in every worktree, from starting more work than the machine can carry.
 
 The first is about _ordering and fan-out_, the second about _mutual exclusion_, the
@@ -55,9 +55,9 @@ carry.
 the default), or `aggressive` (every core). The default is `balanced` everywhere: magus
 reads no environment variable to guess where it is running, so the same command run
 the same way behaves the same on a laptop and on any CI provider. `MAGUS_CONCURRENCY`
-overrides both. A CI job that wants every core asks for it explicitly - a
+overrides both. A CI job that wants every core asks for it explicitly: a
 `--concurrency-profile aggressive` flag, `MAGUS_CONCURRENCY_PROFILE=aggressive`, or
-`concurrency_profile: aggressive` in `magus.yaml` - the same way any other caller would.
+`concurrency_profile: aggressive` in `magus.yaml`, the same way any other caller would.
 
 `concurrency_profile` sizes the machine budget's memory the same way, not just the
 pool's core count: see [below](#across-the-whole-machine-the-budget).
@@ -100,7 +100,7 @@ error on the 4.4 `fifo:` form. The limits follow from the protocol:
 ## Across separate runs: the workspace lock
 
 That second invocation is the problem the workspace lock exists for. Two `magus`
-processes running at once - two terminals, or two agents - can collide: one running
+processes running at once (two terminals, or two agents) can collide: one running
 `generate` or `clean` rewrites or deletes a project's declared outputs while the
 other is reading or writing them, and work is lost. Both also write the project's
 [cache](cache.md). Serializing that is **mutual exclusion**, which is why `needs`
@@ -116,13 +116,13 @@ Key properties:
 
 - **Per project, not per workspace.** Runs on _different_ projects proceed in
   parallel; only runs on the _same_ project contend. The lock is not directory- or
-  target-scoped - a project's outputs and cache are the unit being protected, and
+  target-scoped: a project's outputs and cache are the unit being protected, and
   that is exactly a project.
 - **Advisory.** It serializes _magus_ processes and nothing else. A raw `git clean`,
   an `rm`, or any other tool ignores it. The guarantee is "no two magus invocations
   mutate the same project at once," not "the tree is untouchable."
 - **Crash-safe.** It is an OS file lock (`flock`), which the kernel releases when the
-  holding process exits or crashes - never a stale PID file that would wedge a project
+  holding process exits or crashes, never a stale PID file that would wedge a project
   after a `Ctrl-C`.
 - **Taken by every real run**, not just `generate`/`clean`. Even `magus test` writes
   the project's cache and run log, so two concurrent runs on one project contend
@@ -285,14 +285,14 @@ load average 13.7, and tests failing because they were starved rather than wrong
 
 So before a step starts, magus takes its concurrency slots and its declared
 `memory_mb` from a budget shared by every magus on the machine: the host's capacity.
-It lives in the [broker](../guides/integrations/server.md) - one broker per user means
-one budget per machine - and a run starts one if none is up.
+It lives in the [broker](../guides/integrations/server.md): one broker per user means
+one budget per machine, and a run starts one if none is up.
 
 Key properties:
 
 - **Per machine, not per workspace.** The whole point is the worktree this run
   cannot see. The budget is a share of the memory the broker may commit, and the
-  machine's cores - both sized by the same `concurrency_profile` that
+  machine's cores, both sized by the same `concurrency_profile` that
   decided the pool's width above: `balanced` and `conservative` reserve a quarter of
   memory for the OS, magus's own processes, and everything else sharing the
   machine; `aggressive` reserves none of that, taking every usable megabyte down to a
@@ -304,9 +304,9 @@ Key properties:
   never blocks.
 - **It does not queue behind another invocation.** A step kept out by another magus
   invocation is refused immediately, exiting **75**
-  ([MGS3009](../reference/codes/sandbox/MGS3009.md)) - the same transient-failure code
+  ([MGS3009](../reference/codes/sandbox/MGS3009.md)), the same transient-failure code
   a contended lock uses above, and for the same reason. The refusal names who holds
-  the budget - pid, project, target, and directory - so a caller can go see why and
+  the budget (pid, project, target, and directory), so a caller can go see why and
   retry once it frees. A step kept out only by its own process or its own run waits
   for them, on the same terms as the lock.
 - **What a missing broker means is a setting.** `broker: best-effort` (the default)
@@ -344,7 +344,7 @@ its output belongs.
 
 The workspace lock is the floor underneath both: it holds even with no broker in the
 loop, because it is an OS file lock rather than a process anyone has to start. The
-three compose - ordering inside a run, exclusion per project, capacity per machine.
+three compose: ordering inside a run, exclusion per project, capacity per machine.
 
 ## See also
 

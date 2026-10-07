@@ -1,6 +1,6 @@
 ---
 title: GitHub Actions
-description: Wiring magus into GitHub Actions - the three actions magus publishes, how much belongs in YAML and how little, a workflow that shards by affected project, remote caching over the Actions cache service, and the annotations and pull request advice that come with it.
+description: Wiring magus into GitHub Actions (the three actions magus publishes, how much belongs in YAML and how little, a workflow that shards by affected project, remote caching over the Actions cache service, and the annotations and pull request advice that come with it).
 tags:
   [
     ci,
@@ -137,7 +137,7 @@ where a failure is a signal instead of a row everyone has learned to scroll past
 | `artifact`  | a binary an earlier job of this run built, digest-verified |
 
 Reach for `source` when the workspace under test needs a magus that has not been released
-yet - a magusfile using a feature from this commit. Reach for `prebuilt` with an explicit
+yet (a magusfile using a feature from this commit). Reach for `prebuilt` with an explicit
 `git-ref` everywhere else: it is faster, and it pins what ran.
 
 A run with several jobs needs only one source build. The first job builds with
@@ -237,7 +237,7 @@ magus\cache.remote(github);
 The spell reads `ACTIONS_RESULTS_URL` and `ACTIONS_RUNTIME_TOKEN`. The runner injects both
 into an action's process but not into a plain `run:` step, so re-export them through
 `$GITHUB_ENV` in any job that should share the cache. It has to be a JS action that does
-it - a composite action's `run:` steps do not see them either:
+it; a composite action's `run:` steps do not see them either:
 
 ```yaml
 - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -277,7 +277,7 @@ and set `SECRET_PROVIDER: github-actions` in the workflow's `env:`. Selected, it
 laptop.
 
 You do not have to. With no provider selected, magus's built-in one already reads the
-environment, which is the only way to reach a repository secret - an Actions secret is
+environment, which is the only way to reach a repository secret: an Actions secret is
 write-only, and `${{ secrets.NAME }}` in a step's `env:` block is the whole mechanism.
 Selecting this spell buys two things the built-in cannot do.
 
@@ -366,11 +366,11 @@ report:
 ```
 
 `ci-outcome` writes the run's result and the volatility lens to the step summary. It is
-its own action because it invokes no magus subcommand - it reads the workspace through
-the typed `magus\insight` client - so it has nothing to do with the action that runs one.
+its own action because it invokes no magus subcommand (it reads the workspace through
+the typed `magus\insight` client), so it has nothing to do with the action that runs one.
 
 `merge-history` folds each shard's run history into the persisted one, which is what makes
-volatility and timing data accumulate across runs - on main only, since a pull request's
+volatility and timing data accumulate across runs, on main only, since a pull request's
 history describes a branch about to disappear. `always()`, so a red run's timings are
 kept too.
 

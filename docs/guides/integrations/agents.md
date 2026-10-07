@@ -1,6 +1,6 @@
 ---
 title: Agents
-description: How magus equips AI agents - the installable skills, the MAGUS.md routing index, the MCP server, and the guard hook any agent host can wire, with a setup page per host.
+description: How magus equips AI agents (the installable skills, the MAGUS.md routing index, the MCP server, and the guard hook any agent host can wire), with a setup page per host.
 tags:
   [
     agents,
@@ -157,7 +157,7 @@ context.
 
 ## Parity across hosts
 
-Every host gets the same RULES - they come from one binary, and none of them is
+Every host gets the same RULES: they come from one binary, and none of them is
 per-host. What differs is how much of a verdict a host's hook surface can carry.
 Claude Code is the reference contract: parity means every supported adapter
 exercises the same guard decision cells and preserves the verdict semantics.
@@ -212,7 +212,7 @@ host discovered an isolated configuration, dispatched the `git stash` command
 hook, and delivered its deny. Neither label proves filesystem-path delivery,
 MCP delivery, or lifecycle delivery unless that cell says so; those remain
 pending. "Wired, rule-empty" means the transport carries a verdict end to end
-but the guard has no MCP-specific rule yet, so every call passes - not because
+but the guard has no MCP-specific rule yet, so every call passes, not because
 the channel is silent, but because nothing has been asked of it.
 
 Both decisions now reach the model everywhere, which they did not until recently:
@@ -276,10 +276,10 @@ Three rules cover the whole surface:
 - **A bare path is absolute enough.** It is measured from the workspace root, so
   it means the same project from any directory. Only the dot forms depend on
   where you are standing, and when you are standing outside the workspace
-  entirely, `--root <path>` measures them from the workspace it names - so a
+  entirely, `--root <path>` measures them from the workspace it names, so a
   command written once keeps working when it is run from somewhere else.
 - **Never rewrite a path magus printed.** Every surface prints the bare
-  workspace-relative form - `-o name`, `-o json`, logs, error messages - so it
+  workspace-relative form (`-o name`, `-o json`, logs, error messages), so it
   is already in the form the next command wants. Commands
   that take fuzzy search tokens rather than paths, such as `magus where`, take
   the same bare text.
@@ -291,8 +291,8 @@ Three rules cover the whole surface:
 The `project:` prefix in the last row is not a second path syntax. It is the
 kind-prefixed node grammar the graph commands use where kinds mix, alongside
 `target:`, `spell:`, and `doc:`; `magus explain project:pkg/api` disambiguates a
-name that could be either. Commands that only ever take a project - `run`,
-`affected`, `ls`, `describe project` - take the bare path.
+name that could be either. Commands that only ever take a project (`run`,
+`affected`, `ls`, `describe project`) take the bare path.
 
 > [!NOTE]
 > A `workspace://pkg/api` reference still parses and resolves to the same
@@ -302,19 +302,19 @@ name that could be either. Commands that only ever take a project - `run`,
 
 ## Incremental review
 
-Answer "I reviewed earlier - what changed since, and what do I need to look
+Answer "I reviewed earlier, what changed since, and what do I need to look
 at now" without re-reading the whole workspace:
 
 1. At review time, record where you stopped: `magus vcs checkpoint -o name`
-   prints the revision, or `<revision>+<digest>` when the tree was dirty -
+   prints the revision, or `<revision>+<digest>` when the tree was dirty:
    the digest says which dirty tree was reviewed, since the revision alone
    reads the same for every dirty tree built on it.
 2. Later, pipe the delta through the annotated view instead of reading a raw
    diff: `git diff <revision> | magus diff -` reports each changed file's
-   reach, public-surface exposure, and referents - the surrounding code
+   reach, public-surface exposure, and referents: the surrounding code
    worth a second look, not just the literal hunks. `magus diff` refuses a
-   git ref given positionally, on purpose - a swallowed ref once printed the
-   reader's own edits as the answer - so the pipe form above is the only
+   git ref given positionally, on purpose (a swallowed ref once printed the
+   reader's own edits as the answer), so the pipe form above is the only
    sanctioned spelling, and the refusal message says so.
 3. Reviewing through a diff session carries this further: per-hunk viewed
    marks key off content digest, not position, so a hunk that has not
@@ -374,7 +374,7 @@ work with.
 An agent working through a shell falls back on the habits it learned everywhere
 else: grep and cat over the files. Those return text matches. They do not return
 the project DAG, the declared outputs, the affected set, or the blast radius of
-a symbol, because none of that is written in the files - it lives in the graph
+a symbol, because none of that is written in the files; it lives in the graph
 the server keeps warm. So the agent reasons one layer below the structure it is
 trying to understand, and fills the gap by guessing: this file looks generated,
 these two packages probably change together. Those guesses are frequently wrong,
@@ -384,8 +384,8 @@ The tools answer from what the workspace declares. Ask `client` (`magus\describe
 about a path and it does not read the filename and infer; it checks the
 project's own globs and reports `role: output` with the note "generated: never
 hand-edit, regenerate." In one case an agent spent close to an hour working out
-whether a committed `gen/` file was safe to edit - running generate repeatedly,
-planting sentinel writes, diffing timestamps - when one call to that tool would
+whether a committed `gen/` file was safe to edit, running generate repeatedly,
+planting sentinel writes, diffing timestamps, when one call to that tool would
 have answered it in a line.
 
 So the server adds three things a shell-out leaves on the floor. Discovery: the

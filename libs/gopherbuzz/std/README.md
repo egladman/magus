@@ -1,7 +1,7 @@
-# gopherbuzz/std - the Buzz standard library
+# gopherbuzz/std: the Buzz standard library
 
 This package implements the **standard library of the Buzz language** for the
-gopherbuzz VM: the modules a Buzz program reaches with a bare `import` -
+gopherbuzz VM: the modules a Buzz program reaches with a bare `import`:
 `std`, `math`, `fs`, `os`, `crypto`, `gc`, `debug`, `io`, `serialize`,
 `buffer`, and `ffi`.
 
@@ -26,8 +26,8 @@ capabilities, diverge only where a concrete reason forces it."** Concretely, for
 this package:
 
 - **Do not add upstream-shaped modules or methods here that upstream Buzz does
-  not have.** A capability magus wants - running a subprocess, querying git,
-  hashing a file - is a _host_ concern and belongs in
+  not have.** A capability magus wants (running a subprocess, querying git,
+  hashing a file) is a _host_ concern and belongs in
   [`magus/std`](../../std/README.md), layered on top (see below). Keeping the
   upstream-faithful surface upstream-shaped is what lets a standalone `.buzz`
   program (and `cmd/buzz`) stay portable. The one sanctioned exception is
@@ -40,7 +40,7 @@ this package:
 - **Document any deliberate divergence.** Where gopherbuzz intentionally differs
   (e.g. `test` is a soft keyword, not hard-reserved), the divergence is called
   out in the top-level README's compatibility notes. A new divergence needs the
-  same treatment - a comment explaining _why_, not a silent behavior change.
+  same treatment: a comment explaining _why_, not a silent behavior change.
 
 ## Relationship to `magus/std`
 

@@ -7,6 +7,6 @@ because it is not yet clear whether it is worth keeping.
 
 Each subdirectory says what it is:
 
-- `nx/` - a workspace-provider spell that maps an Nx workspace into magus. Copy
+- `nx/`: a workspace-provider spell that maps an Nx workspace into magus. Copy
   it into your own Nx repo and import it there; see
   [docs/guides/integrations/nx.md](../../docs/guides/integrations/nx.md) for setup.

@@ -1,10 +1,14 @@
-// markdown-prose holds this repository's hand-written Markdown to two rules no
+// markdown-prose holds this repository's hand-written Markdown to three rules no
 // off-the-shelf linter checks, each an error:
 //
 //   - No typographic punctuation outside code: no em or en dash, curly quote or ellipsis
 //     character. Each has a plain ASCII spelling everyone can type and grep for, and a
 //     page that mixes the two is searched with two patterns or not at all. Arrows and
 //     box-drawing characters stay: they have no plain spelling.
+//   - No spaced hyphen as a dash: ` - ` or ` -- ` between words is the em dash typed in
+//     ASCII, and it leaves the reader to guess the relation. A colon, semicolon, comma,
+//     parentheses or a second sentence names it. List markers, table cells and code are
+//     not dashes; a code span may wrap within its paragraph and still counts as code.
 //   - Headings in sentence case: after the first word, a word is lowercase unless it is a
 //     proper noun or an identifier in ALLOW. Title Case and SHOUTING read as emphasis the
 //     heading does not mean, and sentence case is what the docs already write.
@@ -36,7 +40,7 @@ final HAND_WRITTEN = ["changes/unreleased/", "internal/agent/agents-section.md",
 
 // TYPOGRAPHY are the characters refused outside code, each with its plain spelling.
 final TYPOGRAPHY = {
-    "—": "an em dash; write ` - ` or a colon",
+    "—": "an em dash; write a colon, a semicolon, a comma or parentheses",
     "–": "an en dash; write `-`, or `to` in a range",
     "‘": "a curly quote; write `'`",
     "’": "a curly quote; write `'`",
@@ -150,7 +154,8 @@ fun fenceRun(t: str) > str {
     return t.sub(0, len: n);
 }
 
-// prose is line with its inline code spans blanked to spaces, so columns still line up.
+// prose is line with its inline code spans blanked to spaces, newlines kept, so lines and
+// columns still line up. line may be a whole paragraph, since a span can wrap.
 export fun prose(line: str) > str {
     final parts = mut [<str>];
     var i = 0;
@@ -171,7 +176,11 @@ export fun prose(line: str) > str {
             continue;
         }
         parts.append(line.sub(start, len: i - start));
-        parts.append(" ".repeat(close! + run - i));
+        final blanked = mut [<str>];
+        foreach (row in line.sub(i, len: close! + run - i).split("\n")) {
+            blanked.append(" ".repeat(row.len()));
+        }
+        parts.append(blanked.join("\n"));
         i = close! + run;
         start = i;
     }
@@ -179,26 +188,113 @@ export fun prose(line: str) > str {
     return parts.join("");
 }
 
-// proseFindings checks one file's lines outside fenced blocks.
-export fun proseFindings(file: str, md: str) > [Finding] !> any {
-    final found = mut [<Finding>];
+// LIST_ITEM matches a trimmed line that opens a list item.
+final LIST_ITEM = std\pattern(`^([-*+]|[0-9]+[.)])( |$)`);
+
+// proseLines is each line as prose: "" for a line of fenced or indented code, and code
+// spans blanked by prose one paragraph at a time. A paragraph ends at a blank line, and
+// a list item, heading or table row starts a new one.
+export fun proseLines(lines: [str]) > [str] {
+    final rows = mut [<str>];
+    var para = mut [<str>];
     var fence = "";
-    var n = 0;
-    foreach (line in md.split("\n")) {
-        n = n + 1;
+    // list is the content column of the open list item: indented code sits 4 past it,
+    // so a list's continuation lines are prose.
+    var list = 0;
+    var code = false;
+    var blank = true;
+    // ended is set when para holds a heading or table row, which never wraps.
+    var ended = false;
+    foreach (line in lines) {
         final t = line.trim();
         final run = fenceRun(t);
+        var indent = 0;
+        while (indent < line.len() and line.byte(indent) == 32) {
+            indent = indent + 1;
+        }
+        final item = LIST_ITEM.match(t) != null;
+        if (fence == "" and blank and t != "" and !item and indent < list) {
+            list = 0;
+        }
+        final fenced = fence != "" or run != "";
         if (fence != "") {
             if (run != "" and run.byte(0) == fence.byte(0) and run.len() >= fence.len() and run == t) {
                 fence = "";
             }
-            continue;
-        }
-        if (run != "") {
+        } else if (run != "") {
             fence = run;
+        }
+        final indented = t != "" and !fenced and (blank or code)
+            and (line.startsWith("\t") or indent >= list + 4);
+        final single = t.startsWith("#") or t.startsWith("|");
+        if (para.len() > 0 and (ended or t == "" or fenced or indented or item or single)) {
+            foreach (p in prose(para.join("\n")).split("\n")) { rows.append(p); }
+            para = mut [<str>];
+        }
+        if (t == "" or fenced or indented) {
+            rows.append("");
+            code = indented or (code and t == "");
+            blank = t == "";
             continue;
         }
-        final text = prose(line);
+        if (item) {
+            list = indent + (t.indexOf(" ") ?? t.len()) + 1;
+        }
+        para.append(line);
+        ended = single;
+        code = false;
+        blank = false;
+    }
+    if (para.len() > 0) {
+        foreach (p in prose(para.join("\n")).split("\n")) { rows.append(p); }
+    }
+    return rows;
+}
+
+// dashColumns are the 1-based columns of each spaced `-` or `--` in line that stands as a
+// dash between words, given text, its prose. A hyphen with nothing but `>` and spaces before
+// it is a list marker, and one beside a `|` is a table cell or a delimiter row.
+export fun dashColumns(line: str, text: str) > [int] {
+    final cols = mut [<int>];
+    var i = 2;
+    while (i < text.len()) {
+        if (text.byte(i) != 45 or line.byte(i - 1) != 32) {   // 45 = hyphen, 32 = space
+            i = i + 1;
+            continue;
+        }
+        var end = i;
+        while (end < text.len() and text.byte(end) == 45) {
+            end = end + 1;
+        }
+        final before = line.sub(i - 2, len: 1);
+        final rest = line.sub(end);
+        final after = if (rest.startsWith(" ")) rest.sub(1, len: 1) else "";
+        final wrapped = rest.trim() == "";
+        if (end - i <= 2 and (wrapped or (after != "" and " \t|".indexOf(after) == null))
+            and " \t|".indexOf(before) == null and line.sub(0, len: i).replace(">", with: " ").trim() != "") {
+            cols.append(i + 1);
+        }
+        i = end;
+    }
+    return cols;
+}
+
+// proseFindings checks one file's lines outside code.
+export fun proseFindings(file: str, md: str) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final lines = md.split("\n");
+    final texts = proseLines(lines);
+    var n = 0;
+    while (n < lines.len()) {
+        final line = lines[n];
+        final text = texts[n];
+        n = n + 1;
+        foreach (col in dashColumns(line, text: text)) {
+            final pair = text.sub(col, len: 1) == "-";
+            found.append(Finding{ path = file, line = n, col = col,
+                message = (if (pair) "a spaced double hyphen" else "a spaced hyphen") + " used as a dash",
+                fix = "Say what the dash meant: a colon, a semicolon, a comma, parentheses or two sentences. A command's `--` goes in a code span." });
+        }
         foreach (ch, what in TYPOGRAPHY) {
             final at = text.indexOf(ch);
             if (at != null) {
@@ -238,7 +334,7 @@ export fun headingWord(line: str) > str {
             words.append(w.trim());
         }
     }
-    // A leading label - `3b.`, `A.`, `S4:` - numbers the heading and is not its first word.
+    // A leading label (`3b.`, `A.`, `S4:`) numbers the heading and is not its first word.
     if (words.len() > 0 and std\pattern(`^([0-9]+[a-z]?|[A-Z]'?|[A-Z][0-9]+)[.:]$`).match(words[0]) != null) {
         words.remove(0);
     }
@@ -300,6 +396,33 @@ test "typographic punctuation outside code is reported at its column" {
     assert\equal(got[0].line, want: 1, message: "line");
     assert\equal(got[0].col, want: 5, message: "column");
     assert\equal(got[2].line, want: 6, message: "after the fence");
+}
+
+test "a spaced hyphen or double hyphen between words is a dash" {
+    final got = proseFindings("a.md", md: "One - two.\nWait -- then go.\n**Term** - its gloss.\n`code` - after a span.\n"
+        + "A line that ends -\non a dash.\n| a - b | c |\n> Quoted - prose.\n- an item - with a dash\n\n  continued - prose\n"
+        + "  that wraps --\n  twice.\n");
+    final where = mut [<str>];
+    foreach (f in got) { where.append("{f.line}:{f.col} {f.message}"); }
+    assert\equal(where, want: [
+        "1:5 a spaced hyphen used as a dash",
+        "2:6 a spaced double hyphen used as a dash",
+        "3:10 a spaced hyphen used as a dash",
+        "4:8 a spaced hyphen used as a dash",
+        "5:18 a spaced hyphen used as a dash",
+        "7:5 a spaced hyphen used as a dash",
+        "8:10 a spaced hyphen used as a dash",
+        "9:11 a spaced hyphen used as a dash",
+        "11:13 a spaced hyphen used as a dash",
+        "12:14 a spaced double hyphen used as a dash",
+    ], message: "each dash at its column, a wrapped one included");
+}
+
+test "code, list markers and table cells are not dashes" {
+    final md = "- item\n  - nested\n1. ordered\n> - quoted item\n\n| a | b |\n| - | --- |\n| x | - |\n\n"
+        + "Use `a - b` and `magus run x -- -v`, then\n``a ` - b``.\nA span `magus run test\n-- -run X` wraps, as does `magus run x --\n-v`.\n\n-\n  -\n\n"
+        + "```sh\necho a - b\n```\n\n    indented - code — too\n\n- item\n\n      code - in a list\n\n---\nSee a-b, x -y and --flag.\n";
+    assert\equal(support\messages(proseFindings("a.md", md: md)), want: [<str>], message: "no dashes");
 }
 
 test "arrows and box drawing stay" {

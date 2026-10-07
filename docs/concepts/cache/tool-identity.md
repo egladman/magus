@@ -34,7 +34,7 @@ and a distro rebuild moves the key with no version change at all.
 
 ## Extraction is opt-in
 
-By default the whole probe output keys the cache - what magus has always done.
+By default the whole probe output keys the cache (what magus has always done).
 Finding the version inside that output means guessing which number is the version,
 and a spell asks for that guess explicitly:
 
@@ -50,8 +50,8 @@ export fun mgs_getVersionKey() > VersionKey { return VersionKey{upTo = VersionCo
 - `minor` lets patch releases share one entry.
 - `major` lets a whole major share one entry.
 
-Narrowing past `patch` is a **claim** - that the tool's output does not change across
-the component you dropped - and it trades cache hits for the risk of replaying an
+Narrowing past `patch` is a **claim** (that the tool's output does not change across
+the component you dropped), and it trades cache hits for the risk of replaying an
 artifact a different version would not have produced. None of the built-in spells
 narrow past `patch`.
 
@@ -62,7 +62,7 @@ string and edits it by hand to invalidate.
 
 `govulncheck -version` reports the Go version first, the scanner second, and the
 vulnerability database's last-modified date last. Extraction would take the Go
-version and discard the database date - so a newly published CVE could not
+version and discard the database date, so a newly published CVE could not
 invalidate a cached pass. It declares no version key, and keys on its whole output.
 
 A spell author knows their tool's output. magus does not.
@@ -110,7 +110,7 @@ magus\project({"targets": {
 ```
 
 An axis the target does not mention inherits. A misspelled nesting level is a load
-error rather than a silent inherit - the two are indistinguishable at run time, and
+error rather than a silent inherit; the two are indistinguishable at run time, and
 one of them is a cache that quietly does the wrong thing.
 
 This is the **host** platform. The platform an artifact is built _for_ travels as
@@ -126,7 +126,7 @@ export fun mgs_getReadinessProbes() > {str: Command} {
 }
 ```
 
-`docker --version` is client-only - it succeeds with no daemon - so the version probe
+`docker --version` is client-only (it succeeds with no daemon), so the version probe
 structurally cannot detect a stopped daemon. Without readiness the op forked, docker
 failed, and magus reported a build failure for a project with nothing wrong with it.
 Now it fails as [MGS3004](../../reference/codes/sandbox/MGS3004.md) before forking.
@@ -138,5 +138,5 @@ opposite: a version key exists precisely to enter the key. The two probes look a
 and mean opposite things.
 
 Probes are keyed by tool and resolved through an op's own `bin`, so a spell driving
-both `docker` and `hadolint` gates only the former - linting a Dockerfile talks to no
+both `docker` and `hadolint` gates only the former; linting a Dockerfile talks to no
 daemon. `magus doctor` lists every gate without running any of them.

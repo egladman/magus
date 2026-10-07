@@ -169,7 +169,7 @@ ignore file is a list that rots silently, because nothing checks it against the 
 
 ## Adding a generated artifact
 
-1. Produce it from `generate`, not `build` - committing the output is what makes the
+1. Produce it from `generate`, not `build`: committing the output is what makes the
    drift gate able to check it. See [`generate` or `build`?](targets.md) in targets.
 2. Declare it with `ctx.writesFiles`, so magus, `.gitattributes`, and `magus clean`
    all learn about it from one place.

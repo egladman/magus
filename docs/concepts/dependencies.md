@@ -1,7 +1,7 @@
 ---
 title: Dependencies
 order: 6
-description: The two dependency mechanisms in magus - magus\needs (target-level, imperative) and depends_on (project-level, declarative) - how they interact, and how a cross-project needs folds into both.
+description: "The two dependency mechanisms in magus: magus\\needs (target-level, imperative) and depends_on (project-level, declarative), how they interact, and how a cross-project needs folds into both."
 tags: [dependencies, needs, depends_on, cache, affected, cycles, magusfile]
 ---
 
@@ -17,10 +17,10 @@ owns that story end to end.
 
 - **`ctx.needs(...)`** is target-level, imperative, and blocking at its call
   site inside the target body. It says "run X before the rest of my body
-  executes" - same-project or cross-project, deduped per invocation, run
+  executes". It runs same-project or cross-project, deduped per invocation, run
   once. See [targets.md](targets.md) for the full grammar.
 - **`depends_on`** is project-level, declared in `magus\project`'s options
-  map. It says "that project is upstream of me" - an ordering barrier for
+  map. It says "that project is upstream of me". It is an ordering barrier for
   same-target runs, a seed for the affected closure, and an input to the
   cache key. See [workspace.md](workspace.md#depends_on-cross-project-dependencies).
 
@@ -28,7 +28,7 @@ owns that story end to end.
 ("run `generate` before I `build`"); reach for `depends_on` to declare that
 another project's changes affect you, independent of whether any target
 calls into it directly. A cross-project `needs` gives you both at
-once - see the fold, below.
+once; see the fold, below.
 
 ## The fold: a cross-project `needs` also declares `depends_on`
 
@@ -39,13 +39,13 @@ consuming project's `DependsOn`** at workspace-open time
 (`applyCrossProjectDependencies`, called from `Magus.Open`'s `load`). You
 declare the dependency once, at the target that actually needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
-you had also written a `depends_on` entry - you never write both.
+you had also written a `depends_on` entry; you never write both.
 
 **The fold is a static read, so a computed edge is invisible.** The extractor
 reads the magusfile's AST; it resolves a same-project target passed by
 reference (`ctx.needs(build)`), a cross-project handle passed as a member
 access (`ctx.needs(alias.target)`), and each literal pattern given to
-`magus\glob` inside a `magus\needs`. What it cannot evaluate is a _computed_ dependency - a
+`magus\glob` inside a `magus\needs`. What it cannot evaluate is a _computed_ dependency: a
 handle stored in a variable, returned from a function, or otherwise built at
 runtime. Such a `magus\needs` call is invisible to the static graph, to
 `magus describe`, and to the affected set. It still runs correctly at runtime
@@ -59,18 +59,18 @@ via `depends_on` instead.
 `depends_on` is data, not a call. It never invokes anything by itself:
 
 - It does not run the upstream project's target for you. Something still
-  has to call it - either the upstream project's own `ci` composition, or
+  has to call it, either the upstream project's own `ci` composition or
   a `magus\needs` in the dependent.
 - It only orders **same-target** runs within one dispatch (`build` in a
   dependent waits on `build` in its dependency, if both are in the current
-  scope) - it does not order arbitrary target pairs.
+  scope); it does not order arbitrary target pairs.
 - It seeds the affected closure and feeds `dep:` lines into the cache key
   (see [cache.md](cache.md#the-cache-key)); that is the entirety of its
   runtime effect.
 
 ## Caching interplay
 
-A cache hit on a target means **its body never runs** - so any `magus\needs`
+A cache hit on a target means **its body never runs**, so any `magus\needs`
 calls inside that body never dispatch either, on a hit. This has two
 consequences worth stating plainly:
 
@@ -86,7 +86,7 @@ consequences worth stating plainly:
   safe-but-coarse** (see [cache.md](cache.md#granularity-project-wide-vs-per-target)).
   `baseStep` seeds every target's sources with the union of every bound
   spell's `needs` plus the magusfile, so an under-declared `needs` glob is
-  the one way a stale hit can slip through - the coarse baseline is the
+  the one way a stale hit can slip through; the coarse baseline is the
   safety margin against exactly that. To attach an input to one target rather
   than widen the whole project, declare it in the body with
   [`magus\inputs`](cache.md#per-target-inputs-and-outputs), whose literal globs
@@ -107,8 +107,8 @@ is a bug when they do.
 ## Cycle and error behavior
 
 - **Same-project runtime cycle.** A target that (transitively) needs itself
-  fails with `buzzpool: dispatch: stack contains "<name>" (cycle detected)` -
-  the ancestor stack that catches this also catches a direct self-loop
+  fails with `buzzpool: dispatch: stack contains "<name>" (cycle detected)`.
+  The ancestor stack that catches this also catches a direct self-loop
   (`ctx.needs(self)` inside `self`).
 - **Cross-project runtime cycle.** Two projects whose `magus\needs` chains
   point back at each other fail with `cross-project cycle: <dir> target
@@ -120,7 +120,7 @@ is a bug when they do.
 - **MGS4004 (undeclared dependency, runtime hint).** Diagnostic, not a load
   error: when `--race` detects a path written by one project and read by
   another that was not in the dispatched scope, it warns "potential
-  undeclared dependency" - a signal you may be missing a `depends_on`, not a
+  undeclared dependency", a signal you may be missing a `depends_on`, not a
   guarantee.
 
 ## `needs` and `glob`: functions and patterns, same-project globs
@@ -299,11 +299,11 @@ translated, so an authored regex is matched as literal text: `"^(?!site-).*-gene
 matches a target with that exact name, which is to say nothing. Two reasons it
 stays that way. A pattern that is sometimes glob and sometimes regex has no safe
 reading for `*`. And the engine underneath is Go's RE2, which has no lookaround at
-all, so the expression people reach for first - "everything ending in `-generate`
-except this one" - is not expressible as a single regex regardless. Negation exists
+all, so the expression people reach for first ("everything ending in `-generate`
+except this one") is not expressible as a single regex regardless. Negation exists
 because that is the actual use case, and it is expressible directly.
 
-One matcher serves all three readers of a pattern - the runtime dispatch, `magus
+One matcher serves all three readers of a pattern: the runtime dispatch, `magus
 run --dry-run`, and the static extractor behind `magus describe`/`magus graph`
 (`types.MatchTargetPatterns`). They agree by construction rather than by three
 implementations being kept in step.
@@ -314,7 +314,7 @@ A [service op](services.md) run **directly** (`magus run dev`) forks in the
 foreground and blocks until Ctrl-C. The same service reached as a
 `magus\needs` dependency is instead **supervised in the background**:
 started, gated on its readiness probe, and shared with any other dependent
-that needs the same configuration - the dependent's own body runs without
+that needs the same configuration; the dependent's own body runs without
 blocking on the service process itself. See
 [Directly run vs. as a dependency](services.md#directly-run-vs-as-a-dependency).
 
@@ -328,5 +328,5 @@ blocking on the service process itself. See
   this page's caching section builds on.
 - [affected.md](workspace/affected.md): the transitive closure these edges feed.
 - [The guided tour, step 7](../tour/index.html#step-7): the pattern forms above, runnable and
-  editable in the browser - including the negation that keeps one member of a family
+  editable in the browser, including the negation that keeps one member of a family
   out of its umbrella.

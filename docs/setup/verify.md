@@ -16,7 +16,7 @@ magus self update --dry-run
 
 The trust chain runs through your already-trusted binary. Nothing else to do.
 
-**First install - verify by hand.** Do _not_ verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
+**First install: verify by hand.** Do _not_ verify a fresh magus with itself: a tampered build carries the attacker's key and self-reports success. Use OpenSSL with the key served from this HTTPS page.
 
 1. Save the key. Either [download magus-release.pem](../../assets/magus-release.pem), or copy the PEM block below into `magus-release.pem`.
 
@@ -36,25 +36,25 @@ The trust chain runs through your already-trusted binary. Nothing else to do.
    ```
 
    `--ignore-missing` skips manifest entries for artifacts you did not download,
-   so the output stays limited to the file you fetched - without piping through
+   so the output stays limited to the file you fetched, without piping through
    `grep`, which would replace the command's exit status with `grep`'s and let a
    failed check report success.
 
 Order matters. Checking a hash against an unverified manifest proves nothing.
-The whole procedure in one picture - each merged cell consumes everything beside
+The whole procedure in one picture: each merged cell consumes everything beside
 it, and the tarball deliberately skips the first step, because nothing signs the
 tarball directly:
 
 <figure class="table-scroll">
 <table class="fold-table">
 <tr><td colspan="4">Have OpenSSL 3.0+ with Ed25519 support on <code>PATH</code></td></tr>
-<tr><td><code>magus-release.pem</code> - the key, from this HTTPS page</td>
+<tr><td><code>magus-release.pem</code>: the key, from this HTTPS page</td>
     <td rowspan="3">verify the signature<br><code>openssl pkeyutl -verify</code></td>
     <td rowspan="4">check the hash<br><code>sha256sum -c</code></td>
     <td rowspan="4">a release<br>you can trust</td></tr>
-<tr><td><code>SHA256SUMS</code> - the manifest, from the release</td></tr>
-<tr><td><code>SHA256SUMS.sig</code> - its signature, from the release</td></tr>
-<tr><td><code>magus-&lt;os&gt;-&lt;arch&gt;.tar.gz</code> - the artifact you downloaded</td><td></td></tr>
+<tr><td><code>SHA256SUMS</code>: the manifest, from the release</td></tr>
+<tr><td><code>SHA256SUMS.sig</code>: its signature, from the release</td></tr>
+<tr><td><code>magus-&lt;os&gt;-&lt;arch&gt;.tar.gz</code>: the artifact you downloaded</td><td></td></tr>
 </table>
 </figure>
 

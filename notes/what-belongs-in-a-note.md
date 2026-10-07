@@ -13,7 +13,7 @@ magus:
 One store, and the test for entry is provenance rather than importance.
 
 A note is the only node class the graph does not derive from the workspace. A doc comes
-from markdown, a rationale from a comment, a symbol from an index, an author from git -
+from markdown, a rationale from a comment, a symbol from an index, an author from git:
 delete the graph, rebuild, and every one of them comes back. A note's content originates
 with a person, nothing in the repository corroborates it later, and no rebuild recovers it.
 That is the whole reason agents may read notes and never write them: a note of uncertain

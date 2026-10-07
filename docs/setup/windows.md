@@ -14,7 +14,7 @@ tags: [download, install, windows, powershell, path]
 >
 > The Buzz JIT is also newly enabled on Windows and its machine-code path has never run on a
 > Windows machine here. If a magusfile gives a result that looks wrong, set `BUZZ_JIT=0` and
-> re-run - if the answer changes, that is a JIT bug and a very valuable report.
+> re-run: if the answer changes, that is a JIT bug and a very valuable report.
 >
 > See [platform support](../setup.md#platform-support) for the full matrix.
 
@@ -54,8 +54,8 @@ Windows binaries are built by the release pipeline but are **not executed by CI*
 which runs on Linux only. windows/amd64 has shipped for several releases and has
 field use behind it; **windows/arm64 is new and has never been run end to end**.
 
-The Buzz JIT is also newly enabled on Windows - it was disabled there until this
-release line - and its generated machine code has not executed on any Windows
+The Buzz JIT is also newly enabled on Windows (it was disabled there until this
+release line) and its generated machine code has not executed on any Windows
 machine during development. If a magusfile gives a result that looks wrong, re-run
 with the JIT off:
 
@@ -80,7 +80,7 @@ curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA2
 curl.exe -fLO "https://github.com/egladman/magus/releases/download/$VERSION/SHA256SUMS.sig"
 ```
 
-Then verify the Ed25519 signature _first_, and only then the checksum - checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
+Then verify the Ed25519 signature _first_, and only then the checksum: checking a hash against an unverified manifest proves nothing. The exact commands are in [Verify a release](verify.md).
 
 ## Put it on your PATH
 

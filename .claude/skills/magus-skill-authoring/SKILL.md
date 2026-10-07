@@ -1,6 +1,6 @@
 ---
 name: magus-skill-authoring
-description: The working method for building and maintaining magus's agent surface in THIS repo - the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary.
+description: "The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary."
 ---
 
 # Authoring the agent surface
@@ -18,7 +18,7 @@ server, call the actual tool (over MCP HTTP as well as the CLI), and paste the
 observed output into your analysis before writing a word of skill text.
 
 Cautionary precedent, found here: the registry advertised dry_run as "print
-what would run without executing" - the verified reality was zero bytes of
+what would run without executing"; the verified reality was zero bytes of
 output AND regenerated files on disk. A skill written from the docs would
 have taught agents a "safe preview" that silently mutates the tree.
 
@@ -41,9 +41,9 @@ the gap where it will be found (the plans doc, a task, the harness memory).
   (here: .claude/skills).
 - Every destination receives identical bytes (a test asserts it). magus is
   agent-host agnostic: no host name appears in code. Host-specific glue (hook
-  event shapes, config dialects) is documentation over the neutral surfaces -
+  event shapes, config dialects) is documentation over the neutral surfaces:
   explicit install destinations, the agent hook verdict, --from-json
-  extraction, -o template rendering - never a per-host code path.
+  extraction, -o template rendering, never a per-host code path.
 - Any change to skill content or the tool surface it documents bumps
   agentSkillVersion with a changelog line.
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the
@@ -61,7 +61,7 @@ Run the target first{{if .Full}}, because a raw tool bypasses the cache{{end}}.
 {{if .Short}}Full explains this at length below.{{end}}
 
 Read `llms.txt` first{{if .Full}}, because guessing a URL wastes a fetch and the
-index is authoritative{{else}} - it is the index{{end}}.
+index is authoritative{{else}}: it is the index{{end}}.
 ```
 
 Unconditional text is in both forms.
@@ -145,7 +145,7 @@ function, an execute error for an unknown field), never a silently mangled file.
 
 ### Who the short form is for, and therefore what it cuts
 
-Short is not the beginner form. It is installed for the most capable readers -
+Short is not the beginner form. It is installed for the most capable readers:
 the models that can re-derive an imperative from the tool surface and do not need
 it spelled out. That inverts the obvious instinct, so state the consequence
 plainly: **short sheds ENUMERATION and keeps JUDGMENT.** It is not "the steps
@@ -169,15 +169,15 @@ Not every rule tolerates losing its rationale, and the split is not stylistic.
   arm rather than dropping it.
 
 The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader
-on its own and needs no rationale in short; a failure that is silent - an edit
+on its own and needs no rationale in short; a failure that is silent (an edit
 that stops existing, a guard that fails open, a pipe that turns a failing gate
-into exit 0 - can only arrive as text, because nothing in the session will ever
+into exit 0) can only arrive as text, because nothing in the session will ever
 say it.
 
 The evidence, for the record: an ablation of repository context files
 (arXiv:2602.11988) found imperative instructions are followed well while
 background and overview prose is not worth its tokens. That licenses cutting
-BACKGROUND - what magus is, why it exists - and it is not a license to cut the
+BACKGROUND (what magus is, why it exists), and it is not a license to cut the
 why of a judgment rule. Short-context compression studies (arXiv:2505.00019,
 arXiv:2502.14255) found terse rewrites degrade short instruction text, so do not
 crush the grammar of what survives.
@@ -190,19 +190,19 @@ less, not by writing badly. Plain sentences, ordinary punctuation, in both arms.
 
 Rules:
 
-- Never put the LOAD-BEARING instruction inside `{{if .Full}}` - the one command
+- Never put the LOAD-BEARING instruction inside `{{if .Full}}`: the one command
   or path without which short cannot act, or the CORRECT half of a
   WRONG/CORRECT pair. Short must still be able to do the thing.
 - An EXHAUSTIVE enumeration is different, and it is exactly what short sheds:
   every flag of a command, every kind in a table, every variant of a form. Put
   it in `{{if .Full}}` and have short name where to get it (`-h`, `magus
   describe <thing>`, a docs URL) rather than carrying the list. That is
-  progressive disclosure, and it is the intended shape - a capable reader
+  progressive disclosure, and it is the intended shape; a capable reader
   fetches an enumeration far more cheaply than it recovers a judgment.
 - War stories, "otherwise X" clauses, and examples that only illustrate go in
   `{{if .Full}}`. The why of a judgment rule does NOT: shorten it into an
   `{{else}}` arm instead.
-- Keep the imperative grammatical after the cut. `foo{{if .Full}} - because
+- Keep the imperative grammatical after the cut. `foo{{if .Full}}, because
   bar{{end}}.` reads as `foo.` in short; a mid-clause cut reads as damage.
 - A malformed template is a parse or execute error at install, which also catches
   typos the old scheme let through as literal text.
@@ -216,7 +216,7 @@ Rules:
 
 ## 4. Breadcrumbs are load-bearing
 
-magus's cross-link discipline: every surface mints a stable, resolvable ID -
+magus's cross-link discipline: every surface mints a stable, resolvable ID:
 tool names (internal/hint ToolName constants), CLI paths (internal/hint
 Command values), output refs
 (out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that
@@ -266,19 +266,19 @@ reader can generalize for a ritual.
   possibly a lesser model, inherits them instead of re-deriving. Read them
   before re-litigating anything.
 - After editing skills, in this order:
-  1. `magus run go-build .` - the embedded bodies are go:embed'd, so nothing
+  1. `magus run go-build .`: the embedded bodies are go:embed'd, so nothing
      below reads your edit until the binary carries it.
   2. `magus run go::go-test . --silent -- -run 'TestAgent|TestSkill' ./cmd/magus/`
      (frontmatter, ASCII, byte-identity, install/verify testscripts). The raw
      `go test ./cmd/magus/` this line used to carry is guard-denied; magus flags
      go BEFORE the `--`, and everything after it forwards to the test binary.
-  3. `./magus agent install .claude/skills --force` - reinstall the dogfooded
+  3. `./magus agent install .claude/skills --force`: reinstall the dogfooded
      copies, which are stamped and will otherwise read as drift.
   4. Refresh the AGENTS.md managed block: `./magus agent starter` prints the
      current block (so does `agent install`), and you replace everything
      between the `magus:skills:begin` and `magus:skills:end` markers with it,
      leaving the rest of the file alone. magus never writes AGENTS.md, so
-     nothing does this for you - `magus doctor`'s agent-skills advice is what
+     nothing does this for you; `magus doctor`'s agent-skills advice is what
      names the stale block.
   5. `./magus doctor` says up to date. `magus doctor --fix` runs the remedy
      each finding names, where one exists.

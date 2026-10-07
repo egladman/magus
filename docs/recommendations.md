@@ -1,6 +1,6 @@
 ---
 title: Recommendations
-description: The conventions magus recommends but does not enforce - which charms to reach for, how to name one, when a charm should check its own claim, and how a workspace raises its own diagnostics.
+description: "The conventions magus recommends but does not enforce: which charms to reach for, how to name one, when a charm should check its own claim, and how a workspace raises its own diagnostics."
 tags:
   [
     recommendations,
@@ -42,7 +42,7 @@ So charm names read as modifiers, not actions. `rw` is
 
 The default state does not get a charm. A charm marks a deliberate step away from
 what a target already does, so naming the default gives you two ways to say one
-thing - and forces the bare command to mean something else.
+thing, and forces the bare command to mean something else.
 
 That "something else" is almost always the riskier variant, which is how the
 mistake bites. magus ships two binaries: a static one that runs anywhere, and a
@@ -132,7 +132,7 @@ use. `release` would read well too, but it is a target in this workspace, and
 `magus doctor` fails a name that is both a charm and a target because
 `target:charm` then reads ambiguously.
 
-Avoid `snapshot`. It means opposite things in the two tools that popularized it -
+Avoid `snapshot`. It means opposite things in the two tools that popularized it:
 GoReleaser's `--snapshot` builds and publishes **nothing**, while Maven's
 `-SNAPSHOT` publishes to a different repository. A reader cannot know which you
 meant.
@@ -152,7 +152,7 @@ magus run release-build:dynamic
 The same rule governs the artifacts a charm produces, because the name outlives
 the command that made it. This workspace publishes
 `magus_<version>_<os>_<arch>_static.tar.gz` and `:latest-dynamic`, not `-cgo`, for
-exactly that reason - each name states a runtime property rather than a build flag.
+exactly that reason: each name states a runtime property rather than a build flag.
 
 ## A rubric for a new charm name
 
@@ -218,7 +218,7 @@ Question 6 catches that: `rw` means "regenerate derived output from sources in t
 tree," which is deterministic and reproducible. A dependency refresh reads a remote
 registry, so running it twice a day apart gives different bytes and discarding the
 result does not let you recover it by re-running. Same verb, different guarantee,
-so folding it into `rw` would quietly widen what `rw` promises - and in a workspace
+so folding it into `rw` would quietly widen what `rw` promises, and in a workspace
 with `default_charms: [rw]`, it would mean unrelated builds rewrite the lockfile.
 
 That establishes a new charm is warranted. Then the rubric ran:
@@ -333,7 +333,7 @@ the test they had to pass to get in. `ci` you get either way, since magus reserv
 
 Releasing is different, and this page does not recommend a shape for it. magus's own
 workspace splits it into a `release` target that picks versions and cuts tags, plus
-`release-build` and `release-sign` - and that split exists because this repository
+`release-build` and `release-sign`, and that split exists because this repository
 publishes several independently versioned Go modules from one tree. Yours may cut one
 tag, or none, or hand the whole job to a service. Everyone's release process differs
 enough that a recommendation would be someone else's constraint, so what is written

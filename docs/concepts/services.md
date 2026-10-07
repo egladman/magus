@@ -49,7 +49,7 @@ A service op's target is **inherently uncached** (see
 [Spells vs Targets](spells.md#an-operation-is-a-command-or-a-service)): `servesTarget`
 in the run engine detects that the target is backed by a service op and
 forces `NoCache` on its step, regardless of any `skip_cache` declaration. This
-is not an author opt-in - there is no way to make a service op cacheable,
+is not an author opt-in; there is no way to make a service op cacheable,
 because caching would mean replaying a "success" result without ever
 starting the process, which defeats the point of a long-running service. See
 [Opting out and busting](cache.md#opting-out-and-busting) for the

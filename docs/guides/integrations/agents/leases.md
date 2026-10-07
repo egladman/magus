@@ -1,6 +1,6 @@
 ---
 title: Jobs and leases
-description: The surface magus gives an agent that fans work out - the working-state checkpoint, the declared job store, the lease a holder takes on a job, the console Jobs view, the recorded spawn, and verifying a result against the diff since the checkpoint.
+description: The surface magus gives an agent that fans work out (the working-state checkpoint, the declared job store, the lease a holder takes on a job, the console Jobs view, the recorded spawn, and verifying a result against the diff since the checkpoint).
 tags:
   [
     agents,
@@ -205,9 +205,9 @@ Once the held job has exited, passed, failed, or was never returned, the next
 `magus job exec` takes the next job; nothing has to be given up first.
 
 **A workspace-load file needs a worktree of its own.** `fork` refuses a job
-whose `write_paths` cover a file magus must READ to load the workspace - any
+whose `write_paths` cover a file magus must READ to load the workspace (any
 project's `magusfile.buzz` or `magusfiles/*.buzz`, its `magus.yaml`, and the
-workspace-local spell sources those magusfiles import - while another live job
+workspace-local spell sources those magusfiles import) while another live job
 with write paths was already taken in the same checkout. The refusal names the
 file and the job that holds the checkout, and the fix it names is a worktree
 rather than a narrower boundary. Half-saved, one of those files stops the workspace
@@ -217,8 +217,8 @@ see. The same three doors are covered, since `magus job fork`, `client` (`magus\
 `magus\job.put` share one declaration path.
 
 Nothing else about a shared checkout is refused. Two sets of write paths that
-merely overlap are the orchestrator's call - it may have sequenced them
-deliberately - so the fork RECORDS what it could prove instead, in `write_proof`:
+merely overlap are the orchestrator's call (it may have sequenced them
+deliberately), so the fork RECORDS what it could prove instead, in `write_proof`:
 `alone` when no other live job with write paths was bound to the checkout, else
 `disjoint` or `overlapping`. `magus ls jobs` prints it per row, so a plan read
 later says which forks were checked and which were not.

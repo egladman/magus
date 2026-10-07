@@ -145,7 +145,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void {
 
 `ctx.modifiesExistingFiles` is **never deleted** by `magus clean` and **never replayed** from a
 snapshot, because the bytes magus produced are only part of the file. It still folds
-into the target's cache key exactly as an input does - so editing the prose _around_
+into the target's cache key exactly as an input does, so editing the prose _around_
 a generated region invalidates the target that maintains that region, which declaring
 the file as an output could not do (an output is excluded from its own source hash).
 
@@ -153,12 +153,12 @@ Unlike reads and writes, a modification infers no ordering edge in either direct
 "I edit one region of a file someone else authored" says nothing about build order.
 Declare `ctx.needs` if you need it.
 
-The globs are read **statically**, before the target runs - a cache hit skips the
+The globs are read **statically**, before the target runs: a cache hit skips the
 body, so the run can't be the source of truth. magus recovers them from the
 source: it walks each target body and the helpers it calls by name, collecting the
 **string-literal** globs. Two disciplines follow, both enforced:
 
-- A **non-literal argument** (`ctx.readsFiles(someVar)`) is a magusfile load error -
+- A **non-literal argument** (`ctx.readsFiles(someVar)`) is a magusfile load error:
   a computed glob is invisible to the static read, and silently dropping it would
   risk a stale hit.
 - A call the walk **can't reach** (in an unreferenced helper, or the identifier
@@ -173,9 +173,9 @@ declare the footprint at the target, in literals magus can see.
 The key is the hex SHA-256 of a deterministic, newline-delimited serialization of
 the `Step`. magus writes these lines, in this order, into one hash:
 
-- **`keyVersion`** - an internal schema version. Bumping it (when the set of hashed
+- **`keyVersion`**: an internal schema version. Bumping it (when the set of hashed
   fields changes) forces a global rebuild.
-- **`os`** and **`arch`** - the host platform, each independently switchable with
+- **`os`** and **`arch`**: the host platform, each independently switchable with
   [`cache.include.os.enabled`](../reference/config.md) and
   `cache.include.arch.enabled`. Both default to **off**, so a macOS laptop and a Linux
   runner mint the same key for identical sources, and an output ref names the same run
@@ -183,27 +183,27 @@ the `Step`. magus writes these lines, in this order, into one hash:
   built on, and a replay onto a different one is refused as a miss whatever these say.
   Turn them on for a cache shared across platforms, where one key per platform beats
   every platform colliding on one key and taking that miss.
-- **`projectPath`** and **`target`** - so the same sources under different targets
+- **`projectPath`** and **`target`**: so the same sources under different targets
   key separately.
-- **`spell`** - the explicit `spell::op` filter, written only on such runs. An
+- **`spell`**: the explicit `spell::op` filter, written only on such runs. An
   explicit op bypasses a magusfile export that shadows the same name, so the two
   forms run different definitions under one target name and must not share an
   entry: without this line a compile-only `go::go-build` recorded a pass that the
   real `go-build` target then replayed. Plain target runs hash without it.
-- **`charm:` lines** - the active [charms](charms.md), sorted by name. A
+- **`charm:` lines**: the active [charms](charms.md), sorted by name. A
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
   unaffected.
-- **`arg:` lines** - one per argument after `--` (`magus run test -- -run
+- **`arg:` lines**: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,
   since `-run X` is not `X -run`; a run with different trailing args must not
   replay another run's result. Empty when no args are forwarded, so an ordinary
   run hashes unaffected.
-- **`src:` lines** - for every file matched by `needs`, its workspace-relative path,
+- **`src:` lines**: for every file matched by `needs`, its workspace-relative path,
   its content SHA-256, and its executable bit. Files are discovered by a single
   walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
   is folded in (not the full permissions, which would differ across machines with
-  different umasks), so `chmod +x` on a script - which changes no content -
+  different umasks), so `chmod +x` on a script (which changes no content)
   still invalidates the key.
 
   **Magusfiles are always in this set, whether or not you declare them.** magus
@@ -211,31 +211,31 @@ the `Step`. magus writes these lines, in this order, into one hash:
   sources. You never need to list `magusfile.buzz` in a project's `sources`, and
   listing it changes nothing.
 
-  This is load-bearing rather than a convenience. A target's BODY is not hashed -
-  only its NAME goes into the key, as `target:` - so if the magusfile were not a
+  This is load-bearing rather than a convenience. A target's BODY is not hashed:
+  only its NAME goes into the key, as `target:`, so if the magusfile were not a
   source, editing what a target actually does would leave the key unmoved and
   replay the previous result. Everything a target does that magus can see comes in
   through the files it reads; the file that DEFINES it has to be one of them.
-- **`env:` lines** - each allow-listed environment variable name and its value,
+- **`env:` lines**: each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
-- **`obs:` lines** - each observation of a fact outside the tree: a
+- **`obs:` lines**: each observation of a fact outside the tree: a
   `ctx.observes(key, value)` declaration as `key=value`, and the output of any
   observation probe a spell declares for a tool the target's ops drive,
   sorted. Its own class rather than a fold into `env:` or `exec:`, because an
   observation names a fact outside the tree entirely and changes nothing about how
   the target runs. A target declaring none writes no line, so an ordinary run
   hashes unaffected.
-- **`exec:` lines** - per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
+- **`exec:` lines**: per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
   sorted. Unlike `env:` lines, which read a variable's live process value at hash
   time, an override's value is fixed in the magusfile source itself, so it hashes
-  directly - two runs differing only by a derived override must not share an entry.
-- **`dep:` lines** - the resolved cache keys of upstream dependencies, sorted. This
+  directly: two runs differing only by a derived override must not share an entry.
+- **`dep:` lines**: the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
-- **`spellDefVersion`** - a binary fingerprint of the spell definition, so a magus
+- **`spellDefVersion`**: a binary fingerprint of the spell definition, so a magus
   upgrade that changes a spell forces a miss.
-- **`tool:` lines** - `spell:version` strings, sorted, so a toolchain upgrade
+- **`tool:` lines**: `spell:version` strings, sorted, so a toolchain upgrade
   (a new `go` or `prettier`) invalidates the key even when no source changed.
 
 Because the serialization is stable and sorted, the key is reproducible: identical
@@ -244,27 +244,27 @@ mtime + size fast path (a per-file memo persisted under the cache dir), so an
 unchanged tree re-keys without re-reading every byte; the memo is a performance
 cache for the hash, never a substitute for it.
 
-The whole fold at a glance - every row is an input, each merged cell consumes
+The whole fold at a glance: every row is an input, each merged cell consumes
 everything beside it, and the read ends at one verdict. If a change is not on
 this list, it cannot move the key:
 
 <figure class="table-scroll">
 <table class="fold-table">
-<tr><td><code>keyVersion</code> - the schema of this very list</td>
+<tr><td><code>keyVersion</code>: the schema of this very list</td>
     <td rowspan="12">serialize<br>one line each,<br>stable order</td>
     <td rowspan="12">SHA-256<br>= the key</td>
     <td rowspan="12">look up<br>manifest stored: <strong>hit</strong>, replay outputs<br>none: <strong>miss</strong>, run and store</td></tr>
-<tr><td><code>os</code>, <code>arch</code> - opt-in, for caches shared across platforms</td></tr>
+<tr><td><code>os</code>, <code>arch</code>: opt-in, for caches shared across platforms</td></tr>
 <tr><td><code>projectPath</code>, <code>target</code></td></tr>
-<tr><td><code>spell</code> - op-direct (<code>spell::op</code>) runs only</td></tr>
-<tr><td><code>charm:</code> - active charms, sorted</td></tr>
-<tr><td><code>arg:</code> - arguments after <code>--</code>, in the order given</td></tr>
-<tr><td><code>src:</code> - every <code>needs</code> file: path, content hash, exec bit; the magusfiles always included</td></tr>
-<tr><td><code>env:</code> - allow-listed variables, sorted</td></tr>
-<tr><td><code>obs:</code> - facts outside the tree, stated and probed, sorted</td></tr>
-<tr><td><code>exec:</code> - <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
-<tr><td><code>dep:</code> - each upstream target's resolved key, this same fold applied one level up</td></tr>
-<tr><td><code>spellDefVersion</code>, <code>tool:</code> - the spell definition and toolchain versions</td></tr>
+<tr><td><code>spell</code>: op-direct (<code>spell::op</code>) runs only</td></tr>
+<tr><td><code>charm:</code>: active charms, sorted</td></tr>
+<tr><td><code>arg:</code>: arguments after <code>--</code>, in the order given</td></tr>
+<tr><td><code>src:</code>: every <code>needs</code> file: path, content hash, exec bit; the magusfiles always included</td></tr>
+<tr><td><code>env:</code>: allow-listed variables, sorted</td></tr>
+<tr><td><code>obs:</code>: facts outside the tree, stated and probed, sorted</td></tr>
+<tr><td><code>exec:</code>: <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
+<tr><td><code>dep:</code>: each upstream target's resolved key, this same fold applied one level up</td></tr>
+<tr><td><code>spellDefVersion</code>, <code>tool:</code>: the spell definition and toolchain versions</td></tr>
 </table>
 </figure>
 
@@ -286,21 +286,21 @@ hashed line above yields a new key, and thus a new (empty) slot:
 What does **not** invalidate: a file's mtime alone (content is what's hashed), or
 anything outside the declared `needs`.
 
-Old keys are never mutated - a miss writes a _new_ entry beside the old one - so
+Old keys are never mutated: a miss writes a _new_ entry beside the old one, so
 invalidation is additive. Reverting a change restores the earlier key and replays
 its still-present entry. Disk is reclaimed separately by eviction and pruning (see
 [On disk](#on-disk-just-files)).
 
 ### Anti-pattern: a shared manifest as an input
 
-The commonest way to wreck a cache is to reach for the file that pins your tools -
-`mise.toml`, `package.json`, `go.mod`, a lockfile - and declare it an input,
+The commonest way to wreck a cache is to reach for the file that pins your tools
+(`mise.toml`, `package.json`, `go.mod`, a lockfile) and declare it an input,
 usually project-wide.
 
 The intent is right: a tool version really is part of what produced the output, and
 a bump really should invalidate. The result is not. A manifest pins _many_ tools,
 and it moves for reasons unrelated to most of them. Wire it into every project and
-one linter bump rebuilds the entire graph - in CI, the difference between an
+one linter bump rebuilds the entire graph: in CI, the difference between an
 affected run and a from-scratch build, for a change that could not have altered
 almost any of it. Do that a few times and people stop trusting the affected set,
 which is the actual loss: a cache nobody believes is worse than no cache.
@@ -314,8 +314,8 @@ tools a project genuinely uses:
   _nothing_ to any other. Bumping hadolint moves projects using the docker spell;
   a Go project's key never notices. This is almost always the right answer for an
   external binary.
-- **a manifest that is genuinely a source** of one project - `go.mod` for a Go
-  project whose build reads it - belongs in that project's `sources`, where it
+- **a manifest that is genuinely a source** of one project (`go.mod` for a Go
+  project whose build reads it) belongs in that project's `sources`, where it
   already is. That is not this anti-pattern: the file really does feed those
   targets.
 - **a pin that reaches one target only** wants a per-target declaration, not a
@@ -334,14 +334,14 @@ worse, and it is the more common default: most build caches key on file contents
 and nothing else, so **the tools themselves are invisible**.
 
 The failure does not look like a cache bug. A linter upgrades, and suddenly code
-that passed yesterday fails - or worse, code that should fail passes, because the
+that passed yesterday fails, or worse, code that should fail passes, because the
 verdict was replayed from an entry the old linter wrote. A formatter upgrades and
 a "clean" tree starts failing a drift gate on a file nobody touched. A codegen
 plugin upgrades and the committed output no longer matches what the generator
 would emit, but the generate step is a cache hit, so it never runs to notice.
 
 What makes it expensive is that every one of those looks like a bug in _your_
-change. You bisect, you re-run, you blame the flaky test, you diff the branch -
+change. You bisect, you re-run, you blame the flaky test, you diff the branch,
 and the answer was never in the repository at all. Someone's toolchain moved.
 
 magus keys on the tool versions for this reason. Each spell declares how to ask:
@@ -356,25 +356,25 @@ export fun mgs_getVersionProbes() > {str: [str]} {
 ```
 
 Their output lands in the key as `spell:version` and `spell:tool:version`, so a
-tool that upgrades invalidates exactly the projects that bind that spell - the
+tool that upgrades invalidates exactly the projects that bind that spell, the
 precise middle between the two failures. `magus describe spells` reports which
 spells probe.
 
 A tool pinned by a manifest the project already reads needs no probe: `go.mod` is
 a source of the go spell, so bumping a `go tool` pin invalidates on its own. Probes
-are for binaries that live outside the project's declared inputs - a linter from
-PATH, a formatter from a version manager - which is precisely the set nothing else
+are for binaries that live outside the project's declared inputs (a linter from
+PATH, a formatter from a version manager), which is precisely the set nothing else
 would catch.
 
 **Where the declaration lives is the whole point.** Most build systems can express
-this - Nx, for instance, makes tool-version tracking technically possible through
+this. Nx, for instance, makes tool-version tracking technically possible through
 executors, but shifts the burden entirely to developers to implement it
 consistently. Correctness then depends on each of them remembering, in every
 project, in every repository. One person skips it and that project silently caches
 across toolchains, and the failure surfaces somewhere else entirely.
 
 magus does not infer this. Nothing sniffs your PATH or guesses which binaries a
-target touched - the probe is a declaration someone wrote by hand, and
+target touched; the probe is a declaration someone wrote by hand, and
 `mgs_getVersionProbe` is as explicit as it looks. What differs is its
 **location**: it sits on the SPELL, the adapter that already knows it drives
 `golangci-lint`, rather than being restated by every project that uses one. A
@@ -382,7 +382,7 @@ project binding `spells: [go]` inherits that declaration the same way it inherit
 the spell's sources and ops.
 
 So the trade is not magic against discipline. It is declaring a fact once, where
-it is true, instead of once per consumer - the same reason a spell declares its
+it is true, instead of once per consumer, the same reason a spell declares its
 `needs` globs rather than each project re-listing `**/*.go`.
 
 Set `MAGUS_CACHE_TOOL_VERSION=off` to drop probes from keys, or `=workspace` to
@@ -410,7 +410,7 @@ export fun scan(ctx: magus\Context, args: [str]) > void {
 ```
 
 The value joins the key as its own `obs:` line. A value that moves is a miss; a
-value that holds still replays. magus never interprets it - it is a stamp to
+value that holds still replays. magus never interprets it; it is a stamp to
 compare, so a version string, a digest, and a date are all equally good, and
 anything that changes when the fact changes will do. `describe target --cache`
 reports an `obs` class beside `src` and `env`, so a rerun names the external fact
@@ -418,7 +418,7 @@ instead of blaming a file.
 
 **Name the key for the fact, not for the target that reads it.** The key is a
 label someone else meets in a rerun explanation, so scope it to whatever owns the
-fact - `trivy-db`, `npm-advisories`, `schema-rev` - and keep it identical
+fact (`trivy-db`, `npm-advisories`, `schema-rev`) and keep it identical
 everywhere that fact is observed. Two targets watching one feed writing one key
 is what makes an `obs:` line legible when two machines disagree.
 
@@ -430,8 +430,8 @@ keeping both over-invalidates, where picking a winner would drop a fact the targ
 really does depend on.
 
 **It is observation, not verification.** The value is a cheap thing the magusfile
-already knows, stated where the target is declared. Real work - fetching the
-feed, scanning the image - belongs in the target BODY, where its cost is paid on
+already knows, stated where the target is declared. Real work (fetching the
+feed, scanning the image) belongs in the target BODY, where its cost is paid on
 a miss and skipped on a hit. That is also why both arguments must be literals: a
 target's key is computed before its body runs, so a value computed in the body
 could only reach the NEXT run's key, which is the staleness this exists to
@@ -445,8 +445,8 @@ says the magusfile changed, an `obs:` line says which fact changed and to what.
 Declare one for a fact a person deliberately bumps, where writing it down is the
 point.
 
-For a fact that moves on its own - a vulnerability database that refreshes every
-few hours, a feed that publishes whenever it likes - a literal is a stamp nobody
+For a fact that moves on its own (a vulnerability database that refreshes every
+few hours, a feed that publishes whenever it likes), a literal is a stamp nobody
 remembers to update, and a hit would then claim an observation that had already
 stopped holding.
 
@@ -519,7 +519,7 @@ that is not a source file":
 | An environment variable's value        | `ctx.envInputs("GOFLAGS")`        | Only the NAME is knowable statically; magus reads the value    |
 | A fact a person maintains              | `ctx.observes("schema-rev", "7")` | Magus cannot reach it, so the magusfile states it              |
 | A fact the tool can be asked           | `Tool{observe = Command{...}}`    | The tool knows which copy of the world it holds; magus asks it |
-| Nothing - the target must never replay | `skip_cache` policy               | It signs, publishes, mutates, or never returns                 |
+| Nothing (the target must never replay) | `skip_cache` policy               | It signs, publishes, mutates, or never returns                 |
 
 Reach for `skip_cache` only when replaying would be _wrong_, not when it would be
 _stale_. Staleness has a declaration now.
@@ -528,14 +528,14 @@ _stale_. Staleness has a declaration now.
 
 Six controls, at different scopes:
 
-| Control                                                           | Scope                       | Semantics                                                                                                                                                                                                                               |
-| ----------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `skip_cache` target policy                                        | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                             |
-| `magus run <target> --no-cache`                                   | one target, one invocation  | Skips replay for this run only, but still snapshots on success - the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
-| `magus\bust_cache(path?)`                                         | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time - the fix is usually to model the missing input as a declared `needs` source instead. |
-| `magus clean --cache`                                             | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                           |
-| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`)               | local tier, whole run       | When false, replays hits, but a miss runs the target and writes **no** new manifest to either tier. Restoring from the remote tier still populates the local tier.                                                                      |
-| `cache.remote.write.enabled` (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) | remote tier, whole run      | When false, a miss still writes the local tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required; see [Cache tiers](#cache-tiers).       |
+| Control                                                           | Scope                       | Semantics                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `skip_cache` target policy                                        | one target, every run       | Always runs; never replays **or** snapshots (a long-running `fs\watch` loop, a service op).                                                                                                                                            |
+| `magus run <target> --no-cache`                                   | one target, one invocation  | Skips replay for this run only, but still snapshots on success: the entry is refreshed, not left stale, unlike `skip_cache`.                                                                                                           |
+| `magus\bust_cache(path?)`                                         | runtime, one magusfile call | Clears manifests (one project, or the whole cache if `path` is omitted) from inside a target body. An escape hatch that logs a warning every time: the fix is usually to model the missing input as a declared `needs` source instead. |
+| `magus clean --cache`                                             | CLI, whole cache            | Wipes the on-disk store from outside any run.                                                                                                                                                                                          |
+| `cache.write.enabled` (`MAGUS_CACHE_WRITE_ENABLED`)               | local tier, whole run       | When false, replays hits, but a miss runs the target and writes **no** new manifest to either tier. Restoring from the remote tier still populates the local tier.                                                                     |
+| `cache.remote.write.enabled` (`MAGUS_CACHE_REMOTE_WRITE_ENABLED`) | remote tier, whole run      | When false, a miss still writes the local tier but never the remote tier. Unset, the remote tier is written when the local tier is and a signing key is held. True makes remote writes required; see [Cache tiers](#cache-tiers).      |
 
 `skip_cache` states that **replaying this target would be wrong**: it signs a
 fresh artifact, records a screen capture, mutates `go.mod`, rewrites a badge, or
@@ -551,7 +551,7 @@ a release. Reach for `skip_cache` when you merely wanted a fresh run and the
 target stops caching forever, for everyone.
 
 `skip_cache` is **not** how you handle a target that produces no files. A pure
-orchestration target - a `ci` that only composes `lint`, `build`, and `test` -
+orchestration target (a `ci` that only composes `lint`, `build`, and `test`)
 caches correctly with no policy at all: it snapshots an empty manifest and
 replays as a hit, while its stages keep their own entries. Output globs
 _inherited_ from the project or a bound spell are allowed to match nothing, and
@@ -566,7 +566,7 @@ difference is what happens to the cache entry afterward (never snapshot vs.
 snapshot-and-refresh). `bust_cache` and `clean --cache` both delete entries, at
 different granularities and from different sides of a run. `cache.immutable` is
 the odd one out: it does not force anything to re-run, it just stops the cache
-from ever writing - the common case is a read-only CI runner or a shared cache
+from ever writing: the common case is a read-only CI runner or a shared cache
 mirror that must not accumulate local entries.
 
 ### Granularity: project-wide vs per-target
@@ -591,15 +591,15 @@ That gives a clean rule for **where to declare a glob**:
   `ctx.modifiesExistingFiles(...)` in that target's body, according to the file relationship above.
 
 Outputs are almost always target-specific (`build` -> `dist/`, `test` ->
-`coverage/`), so a project-wide `outputs` - which makes every target snapshot
-it - is usually the wrong tool; prefer `ctx.writesFiles(...)`.
+`coverage/`), so a project-wide `outputs` (which makes every target snapshot
+it) is usually the wrong tool; prefer `ctx.writesFiles(...)`.
 
 ## Replay: a hit restores outputs, not execution
 
 On a run, magus computes the key, then looks for a manifest stored under it:
 
 1. **Hit.** The manifest is read and its outputs are restored into the workspace.
-   The target's body **does not run** - the `export fun` never executes on a hit.
+   The target's body **does not run**: the `export fun` never executes on a hit.
    Each output is materialized from the content-addressed store by reflink (a
    copy-on-write clone) where the filesystem supports it, falling back to a byte
    copy. (Hard-linking is deliberately avoided: it would alias the shared blob and
@@ -613,7 +613,7 @@ On a run, magus computes the key, then looks for a manifest stored under it:
    hits.
 
 This is why the target result is _emitted, not returned_. A return value can't
-exist on a hit, since the body never ran - but a hit is exactly what you most want
+exist on a hit, since the body never ran, but a hit is exactly what you most want
 to report. So the dispatcher emits a **`run.target.result`** event
 (`{project, target, status, cache_hit, duration_ms}`) for **both** the ran and the
 cached case, sourced from the cache's per-run callback. See
@@ -680,16 +680,16 @@ or a broken `magus clean`, so the model is worth stating once.
 | **Generated-files manifest** | "what files does _this project_ generate?"     | whole project | `types.Project.AllOutputs()`: the project-wide `Outputs` unioned with _every_ target's `magus\outputs`.                                                       |
 
 The cache role is per-target on purpose. A miss snapshots exactly the outputs in
-that target's `Step`, and a hit replays exactly those - so an output must be
+that target's `Step`, and a hit replays exactly those, so an output must be
 declared on the target that **produces** it. This is the **producer-ownership
 rule**, and violating it is a real bug, not a style nit: a glob declared
 project-wide is in _every_ cacheable target's `Step.Outputs`, including targets
 that never write it. When one of those unrelated targets gets a cache hit, its
-replay restores the file to whatever it was when _that_ target last ran - so a
+replay restores the file to whatever it was when _that_ target last ran, so a
 `go-build` hit can silently **revert** a freshly regenerated `MAGUS.md`. Scoping
 the output to its producer with `magus\outputs` means only the producer's hit
 replays it. Project-wide `outputs` is correct only when every target genuinely
-produces the glob, which is rare - most outputs belong to one generator.
+produces the glob, which is rare; most outputs belong to one generator.
 
 The generated-files role is the union, because "clean everything this project
 generates" and "which project owns this path?" don't care which target produced
@@ -707,8 +707,8 @@ one.
 ## Should generated output be committed?
 
 Two ecosystems answer this in opposite directions, and each answer follows from
-its own build model. Go projects commit generated code - `*.pb.go`, `stringer`
-output, mocks - and a clean clone then builds with only the Go toolchain.
+its own build model. Go projects commit generated code (`*.pb.go`, `stringer`
+output, mocks), and a clean clone then builds with only the Go toolchain.
 TypeScript projects regenerate at build time and gitignore the result, since you
 cannot build without `node_modules` in the first place, so the committed copy
 would duplicate something the build already produces.
@@ -719,16 +719,16 @@ generator already required to build?** Ask that first.
 <!--diagram:commit-generated-->
 
 The first question is the one that decides it outright. A file recording its own
-commit cannot be committed and stay correct, whatever the other answers are - that
+commit cannot be committed and stay correct, whatever the other answers are; that
 is [the next section](#the-self-staling-output-generated-files-that-record-vcs-state).
 The rest trade cost against reach:
 
 | Question                                         | Commit it                                     | Regenerate it                                |
 | ------------------------------------------------ | --------------------------------------------- | -------------------------------------------- |
-| Is the generator already required to build?      | No - committing removes a dependency          | Yes - committing adds churn, removes nothing |
-| Does anything read it without running the build? | Yes - IDEs, `pkg.go.dev`, a downstream module | No                                           |
-| Is it a pure function of committed sources?      | Yes                                           | No - see the next section                    |
-| Is it small and slow-churning?                   | Yes                                           | No - large or per-commit churn               |
+| Is the generator already required to build?      | No (committing removes a dependency)          | Yes (committing adds churn, removes nothing) |
+| Does anything read it without running the build? | Yes (IDEs, `pkg.go.dev`, a downstream module) | No                                           |
+| Is it a pure function of committed sources?      | Yes                                           | No (see the next section)                    |
+| Is it small and slow-churning?                   | Yes                                           | No (large or per-commit churn)               |
 
 **Commit it when a consumer cannot regenerate it.** A Go module's generated code
 ships in the module zip. Leave it out and everyone importing your package needs
@@ -755,7 +755,7 @@ file carries no such edge: it is present before anything runs.
 
 magus lets you declare the edge instead. A generator states what it writes
 (`magus\outputs`), a consumer states what it depends on, and the run order comes
-from those declarations - `magus affected` reruns codegen when a `.proto` changes,
+from those declarations: `magus affected` reruns codegen when a `.proto` changes,
 `FindOutputOwner` resolves which project owns a generated path, and
 [MGS4004](../reference/codes/race/MGS4004.md) reports a project reading a path
 another project wrote without declaring the dependency.
@@ -776,7 +776,7 @@ ships the last good copy without anyone noticing.
 There is one combination of ordinary decisions that produces a build which can
 never be clean. Each half of it reads as sound practice on its own:
 
-1. A generator records **VCS state** in its output - a "Last updated" line, the
+1. A generator records **VCS state** in its output: a "Last updated" line, the
    commit that produced a page, a build stamp.
 2. That output is **committed**, because generated files are usually committed so
    a reader can see them and CI can drift-gate them.
@@ -831,7 +831,7 @@ output simply describes a commit that is no longer the one it sits in.
 ### The narrower rule this is an instance of
 
 A committed generated file must be a **pure function of its committed sources**.
-Anything else in its inputs - the clock, the machine, the branch, the commit -
+Anything else in its inputs (the clock, the machine, the branch, the commit)
 turns "regenerate and diff" from a correctness check into noise. magus's drift
 gate assumes that purity, which is why the `termcast-record` target here is
 deliberately kept out of the `generate` umbrella: it records a live session, so
@@ -858,7 +858,7 @@ files, the run journals, the knowledge shards and the symbol index:
 ```
 
 A **manifest** is plain JSON you can read directly. It records the project path, the
-cache key, the target, and one record per output - path, content-address (`blob`),
+cache key, the target, and one record per output: path, content-address (`blob`),
 mode, size, and (for symlinks) the link target:
 
 ```json
@@ -897,12 +897,12 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 Everything above is local to one machine. A [remote cache](cache/remote.md) shares
 these exact artifacts across CI runners: on a **local** miss magus asks the remote
 provider for the artifact keyed by the same `(projectPath, hash)`, and if found
-imports it into the local store so the ordinary hit path replays it - no rebuild.
+imports it into the local store so the ordinary hit path replays it: no rebuild.
 After a genuine build, magus uploads the artifact so the next machine hits.
 
 The artifact is the same content: the manifest, its blobs, and the build log,
 packed as a gzip-tar. The key computation, the replay path, and the manifest format
-are identical - the remote layer only moves those bytes between machines. On top of
+are identical; the remote layer only moves those bytes between machines. On top of
 that it adds a **signed trust model**: because a replayed artifact injects files
 into a consumer's build, every remote artifact is verified against an Ed25519 trust
 set before it is allowed to replay, and an unsigned or untrusted one falls back to a
@@ -974,7 +974,7 @@ in, and never written by a run that may not write the remote tier.
 - [spells.md](spells.md): where `needs`/`provides` are declared, and what a bound spell contributes.
 - [dependencies.md](dependencies.md): how `depends_on`'s `dep:` propagation and a `magus\needs` call each interact with this cache key.
 - [operations.md](operations.md): the run hierarchy and the `run.target.result` event that fires on a hit.
-- [targets.md](targets.md): what a Target is - the unit a cache key is computed and replayed for.
+- [targets.md](targets.md): what a Target is: the unit a cache key is computed and replayed for.
 - [charms.md](charms.md): the execution modifiers that key into the cache as `charm:` lines.
 - [cache/output-refs.md](cache/output-refs.md): how the key's hex digest becomes a
   portable reference id, what is deliberately excluded from it, and a known leak

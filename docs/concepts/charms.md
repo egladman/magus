@@ -31,7 +31,7 @@ default baseline at once, after which you re-add exactly what you want. There is
 Some task runners take the other path, with named configuration profiles you toggle
 on and off per invocation. That turns the active configuration into a set you are
 always managing: enable a default, then remember to disable it here and re-enable it
-there. magus keeps the active set an explicit, additive union instead - what you see
+there. magus keeps the active set an explicit, additive union instead: what you see
 named is what is on. If you do not want a charm's effect, do not add it.
 
 This is a design decision, not a shortcoming. An additive-only model keeps a charm's
@@ -520,7 +520,7 @@ An active charm that no selected target declares (and isn't a reserved built-in 
 
 Charm names use the target-name charset: letters, digits, `-`, `_` (`types.ValidateCharmName`). By convention they are lowercase and represent **shared vocabulary** across the workspace: define a charm's meaning once and honor it everywhere. A charm useful only with one target is a smell; that is a one-off tool flag (pass it after `--`).
 
-Names are normalized the same way target names are (`types.Normalize`, kebab-case - one function for targets, charms and spell ops alike), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa; declaration and invocation can't drift on spelling.
+Names are normalized the same way target names are (`types.Normalize`, kebab-case; one function for targets, charms and spell ops alike), so matching is case- and separator-insensitive on both sides: `:Rw`, `:rw`, and `:RW` are one charm, as are `:no_cache` and `:no-cache`. A spell that tests `has_charm("noCache")` is matched by a `:no-cache` suffix and vice versa; declaration and invocation can't drift on spelling.
 
 ## What is not a charm
 

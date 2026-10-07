@@ -1,6 +1,6 @@
 ---
 title: Guard hook templates
-description: The Buzz hook templates Claude Code and Codex run for the magus guard, the checkpoint and the post-compaction brief - the knobs that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
+description: The Buzz hook templates Claude Code and Codex run for the magus guard, the checkpoint and the post-compaction brief, with the knobs that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
 tags: [agents, guard, hooks, templates, claude code, codex]
 ---
 
@@ -30,7 +30,7 @@ guard ends up without one.
 ## Checking whether your copy is current
 
 Once you copy a template into your host's config it is yours, and magus cannot
-reach it again. That is the point - you are meant to edit these - but it means a
+reach it again. That is the point (you are meant to edit these), but it means a
 fix magus makes never arrives on its own, and nothing about your copy says how
 old it is. So each one carries a version line:
 
@@ -39,7 +39,7 @@ grep magus-guard-template magus-command.buzz
 ```
 
 Compare it with the version in the block below. If yours is lower or absent,
-re-copy - and diff rather than overwrite, because your edits are worth keeping.
+re-copy, and diff rather than overwrite, because your edits are worth keeping.
 A missing line means the copy predates versioning entirely.
 
 The version tracks BEHAVIOR, not wording: it moves when a template starts doing
@@ -55,8 +55,8 @@ your host config points at, and fails when it is stale or missing.
 
 ## How they fit together
 
-One implementation per guard surface. A hook command is a plain argv - the host
-splits it and runs `magus buzz` itself - so what varies PER ENTRY rides on that
+One implementation per guard surface. A hook command is a plain argv (the host
+splits it and runs `magus buzz` itself), so what varies PER ENTRY rides on that
 argv, after `--`:
 
 - `--agent-name <host>`, on every command. The template reads the host from there
@@ -69,7 +69,7 @@ argv, after `--`:
 - `magus shell` flags an entry declares about itself, such as
   `-- --agent-name claude-code --observes-skill-loads`. The template parses them
   against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
-  named on stderr and left out, and the call is judged anyway - your host shows that
+  named on stderr and left out, and the call is judged anyway; your host shows that
   line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
   chose is the failure this shape exists to avoid, and so is a guard that refuses to
   answer because an entry was typed wrong.
@@ -116,8 +116,8 @@ it.
 ## `magus-command.buzz`
 
 The command guard. Wired to the host's `Read` tool as well, it restates the read
-as the shell line it stands for - `cat <file>`, or `sed -n <first>,<last>p <file>`
-over its offset and limit, a limit over 300 counting as whole - so the read rules
+as the shell line it stands for (`cat <file>`, or `sed -n <first>,<last>p <file>`
+over its offset and limit, a limit over 300 counting as whole), so the read rules
 judge a `Read` exactly as they judge the `cat` it replaces.
 
 <!-- embed: magus-command.buzz -->
@@ -132,8 +132,8 @@ wasteful, not destructive.
 
 ## `magus-observe.buzz`
 
-The one template that carries no verdict. Wire it to the tools that only LOOK -
-your host's read equivalent - and it records the path the agent reached without
+The one template that carries no verdict. Wire it to the tools that only LOOK
+(your host's read equivalent), and it records the path the agent reached without
 judging it. It prints nothing and always exits 0.
 
 A host that wants its reads judged too wires `magus-command.buzz` beside it, which
@@ -161,13 +161,13 @@ only the deny arm, so every advisory it produced was silently dropped, while the
 shipped path template had the opposite gap and dropped denials.
 
 **A pass and a broken guard both render nothing.** A pass exits 0 with empty
-output because there was nothing to say. A binary that cannot run - too old for
-`session hook`, unable to load the workspace, half-written by a concurrent build - exits
+output because there was nothing to say. A binary that cannot run (too old for
+`session hook`, unable to load the workspace, half-written by a concurrent build) exits
 non-zero with empty output. Printing that as a pass disables every rule with
 nothing anywhere saying so. Both templates discriminate on status and emptiness
-together, and announce the second case. The announcement names its evidence -
-the binary path they resolved, that binary's version, and the first line it
-printed on stderr - because the guesses it used to offer sent readers to check a
+together, and announce the second case. The announcement names its evidence
+(the binary path they resolved, that binary's version, and the first line it
+printed on stderr) because the guesses it used to offer sent readers to check a
 workspace that was never the problem. Set `__MAGUS_FAILED_RESPONSE` to replace it
 with a fixed response of your own.
 
@@ -175,7 +175,7 @@ with a fixed response of your own.
 postdate the current release, and an older binary rejects an unknown flag by
 printing usage and exiting non-zero, which leaves the host with no verdict at
 all. Both templates try with attribution and retry without it, and they retry only
-when the call produced no verdict - never merely because it exited non-zero,
+when the call produced no verdict, never merely because it exited non-zero,
 since a deny exits 2 with the verdict on stdout.
 
 ## `magus-checkpoint.buzz`

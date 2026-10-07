@@ -135,7 +135,7 @@ The serializable Buzz value types model the _nouns_ around this hierarchy:
 
 A `Target` is run as a set of `Operation`s; each `Operation` yields an
 `ExecResult`. A `magus\needs` edge points straight at another `Target`'s
-function - there is no intermediate query value.
+function; there is no intermediate query value.
 
 ## Glossary
 

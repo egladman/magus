@@ -45,7 +45,7 @@ out3a777178
 [summary] 2 cached, 5 ran, 0 failed (1m44s)
 ```
 
-Each result carries an [output reference](../concepts/cache/output-refs.md) - the short
+Each result carries an [output reference](../concepts/cache/output-refs.md): the short
 `out...` id addressing the exact bytes that run produced. `magus query output
 out3a777178` replays them verbatim.
 
@@ -62,7 +62,7 @@ A failure prints more, because more is actionable:
 The `inspect:` hint is omitted on CI. Refs are portable (the same inputs mint
 the same ref anywhere), but the ephemeral runner that printed one is usually
 gone by the time anyone reads the log, and its full output is already inline
-above the hint - a command that cannot work where the log is read is worse than
+above the hint; a command that cannot work where the log is read is worse than
 no hint. The reference itself stays, since it still correlates the failure with
 the run, and `magus query output <ref>` still resolves it later from any
 machine whose cache holds a run of those exact inputs.
@@ -83,7 +83,7 @@ Reach for `-v` when the question is **"why did magus rebuild this?"** or
 **"what command did it actually execute?"**.
 
 Two records answer nearly every such question. `cache.key` fires once per step
-with the derived hash and the inputs that produced it - source count, dependency
+with the derived hash and the inputs that produced it: source count, dependency
 count, tool versions, charms. `run.exec` fires once per subprocess with the
 command, its full arguments, and its directory, rendered as a shell line you can
 copy and run yourself:
@@ -97,8 +97,8 @@ affected set with the full project list, and breadcrumbs for best-effort
 operations that failed quietly (a knowledge-shard push, a diagnostics write).
 
 Every record also gains a `dir` attribute naming the project that emitted it.
-magus never changes the process working directory - targets carry their own
-directory so they can run concurrently - so per-line attribution is how a log
+magus never changes the process working directory (targets carry their own
+directory so they can run concurrently), so per-line attribution is how a log
 line is traced back to its project. There is no "entering directory" marker to
 look for, and with parallel targets there could not usefully be one.
 
@@ -143,7 +143,7 @@ magus startup trace:
   total                                7.918ms
 ```
 
-Trace also stamps source locations on records - but the default pretty output
+Trace also stamps source locations on records, but the default pretty output
 does not render them. Pair it with a machine format to actually see them:
 
 ```sh
@@ -198,7 +198,7 @@ anything.
 Read `-v` output before pasting it into an issue, a chat, or a CI artifact.
 
 **Full request URLs at default verbosity.** Outbound HTTP from a magusfile is
-logged with the complete URL including its query string, at info - no flag
+logged with the complete URL including its query string, at info; no flag
 required. Presigned URLs and `?token=` parameters land in ordinary output.
 
 Prefer environment variables over command-line arguments for secrets in
@@ -214,7 +214,7 @@ or `json`.
 One thing to know before piping: with `json`, cache events go to **stdout**
 while diagnostics go to **stderr**. Redirecting only stdout gives you a clean
 event stream and leaves warnings on the terminal, which is usually what you
-want - but it does mean neither stream is the whole picture.
+want, but it does mean neither stream is the whole picture.
 
 Some output is also TTY-dependent by design. The concurrency pool status line is
 suppressed when output is not a terminal, so a piped or CI log will not contain

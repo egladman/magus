@@ -8,7 +8,7 @@ language with JIT support. It targets Buzz 0.6.0-dev, tracking upstream
 It implements a **subset** of the language. The goal is 100% compatibility; the
 running record of how far along that is lives in [Upstream parity](#upstream-parity),
 and is enforced by a test rather than asserted by this file. If you are evaluating
-gopherbuzz as a Buzz implementation, read [Where the skeletons are](#where-the-skeletons-are) before the feature list -- it names every place this VM
+gopherbuzz as a Buzz implementation, read [Where the skeletons are](#where-the-skeletons-are) before the feature list; it names every place this VM
 answers differently from upstream, or accepts source upstream refuses.
 
 - Reference: <https://buzz-lang.dev/0.5.0/reference/> (latest published; 0.6.0 is unreleased)
@@ -36,11 +36,11 @@ both of which need upstream's C API rather than a language feature.
 82 programs compile CLEAN here that upstream refuses. That is not a missing feature, it
 is missing strictness: gopherbuzz will accept source upstream tells you is wrong. If
 you are evaluating this VM as a Buzz implementation, weigh that at least as heavily as
-the behavior row -- a permissive checker is the failure mode a subset does not warn you
+the behavior row; a permissive checker is the failure mode a subset does not warn you
 about.
 
-The three largest clusters are closed: `match` analysis (11 files -- exhaustiveness,
-duplicate conditions, overlapping ranges), terminal flow (8 -- unreachable code after
+The three largest clusters are closed: `match` analysis (11 files: exhaustiveness,
+duplicate conditions, overlapping ranges), terminal flow (8: unreachable code after
 a statement that transfers control away, plus the missing return), and yield
 propagation with the reserved-method signatures (6). What remains has no cluster
 bigger than a handful: `out` and block expressions, mutability, unused locals and
@@ -64,18 +64,18 @@ than a missing check. Each of these was implemented, measured, and reverted:
 | -------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `yield-location`, `yield-without-annotation` | require `*>` on any function that yields                          | reverses a recorded choice (`ast.YieldExpr`, `TestYieldOutsideFiberDismissed`); ~18 fixtures here plus magus's s3-cache spell |
 | `fiber-error-location`                       | hold a direct `throw` to propagate-or-catch, as a CALL already is | breaks seven of magus's suites: its spells, tour files and scripts throw without `!>`                                         |
-| `unused-import`                              | make BZZ3001 an error                                             | impossible as stated -- see the note in `session.go`                                                                          |
+| `unused-import`                              | make BZZ3001 an error                                             | impossible as stated; see the note in `session.go`                                                                            |
 | `selective-import`                           | stop `assert` resolving unimported                                | blocked on `registerBuiltins`, which pre-defines the stdlib names on purpose                                                  |
 | `error-message`                              | rendering a thrown object's message                               | the test body never runs under `Exec`, so nothing can surface it here                                                         |
 
-Each is a call to make deliberately, with the migration budgeted -- not a gap to
+Each is a call to make deliberately, with the migration budgeted, not a gap to
 patch. The one structural item worth naming: **optionality is erased**, which is
 what blocks two of them and would be the next real piece of type-system work.
 
 The fuzz seeds are upstream's checked-in AFL output, not hand-written tests: the
 filenames are AFL's (`id_000123,sig_06,src_000051,op_flip1,pos_1`), where `sig_06` is
 the signal that crashed the target and `op_flip1`/`op_arith8` is the mutation applied.
-The contents are real Buzz programs with a byte corrupted -- `mnssage:` for `message:`,
+The contents are real Buzz programs with a byte corrupted: `mnssage:` for `message:`,
 or invalid UTF-8 spliced mid-token. Passing means the front end REPORTS an error rather
 than crashing on them; note the scope, since it is measured over parse, check and
 compile and not over execution, and upstream blacklists an entry or two of its own.
@@ -91,8 +91,8 @@ Nothing is copied into this repo. `magus run conformance libs/gopherbuzz` fetche
 suites against it, so every number here is reproducible against the ref this VM
 claims to track.
 
-Both allowlists -- `testdata/upstream-behavior-allowlist.txt` and
-`testdata/upstream-compile-errors-allowlist.txt` -- are the enforced source of truth,
+Both allowlists, `testdata/upstream-behavior-allowlist.txt` and
+`testdata/upstream-compile-errors-allowlist.txt`, are the enforced source of truth,
 and each fails in **both** directions: a listed test that regresses, and an unlisted
 test that starts passing without being recorded. Parity can therefore only go up, and
 closing a gap forces the gain to be banked rather than quietly enjoyed.
@@ -111,13 +111,13 @@ interpolation, pattern literals, `zdef` FFI, closures, generics as erasure, rang
 the collection/loop core (multi-clause `for`, labeled loops), and block
 expressions (`from { ... out v; }`), free identifiers (`@"non-standard"`), and
 generic object declarations, inline ifs, `catch void`, and maps keyed by any
-value (an object, an int, a bool -- not only a `str`). Three deliberate supersets: the contextual
+value (an object, an int, a bool, not only a `str`). Three deliberate supersets: the contextual
 `test` keyword (below), named-argument labels, and compiled-bytecode serialization
 (next).
 
 ### One superset worth naming: serialized bytecode
 
-Upstream compiles to bytecode -- it is a bytecode VM, JITed through MIR -- but it has
+Upstream compiles to bytecode (it is a bytecode VM, JITed through MIR) but it has
 no way to PERSIST that bytecode. Its subcommands are `test`, `check`, `fetch`,
 `format`, `help`, `init` and `version` (running a script is the default path), none of
 which emits an artifact, and `Chunk.zig` builds a chunk in memory with no reader or
@@ -127,17 +127,17 @@ different thing entirely: it turns a runtime VALUE into text.
 gopherbuzz adds the persistence: [`Chunk.Marshal`](vm/marshal.go) emits a portable
 `.bo` blob that `UnmarshalChunk` runs without re-parsing or re-compiling, with source
 positions split into a companion `.bdb`. The distinction is narrow but it is the whole
-superset -- compiling to bytecode is upstream behaviour, writing it to a file is not.
+superset: compiling to bytecode is upstream behaviour, writing it to a file is not.
 
-This is the ordinary shape for a bytecode VM rather than an invention -- CPython's
+This is the ordinary shape for a bytecode VM rather than an invention: CPython's
 `.pyc`, the JVM's `.class`, `luac` and Lua's `string.dump`, and Erlang's `.beam` are
 all the same idea, and the split debug file mirrors a PDB or a DWARF `.dwo`. magus
 uses it through the bytecode cache below, for the guard's policy files a hook loads
 in a fresh process on every command.
 
 Because it is ours and not upstream's, it is ours to keep whole. Every constant kind
-the compiler can mint -- null, bool, int, float, str, enum def, object declaration,
-pattern, and type value -- has an encoding, so the encoder's "cannot serialize" arm
+the compiler can mint (null, bool, int, float, str, enum def, object declaration,
+pattern, and type value) has an encoding, so the encoder's "cannot serialize" arm
 is unreachable from compiled code. A type-value constant (`<T>`, `typeof x`) was the
 one that had been missed: `Marshal` failed outright on it, which silently barred any
 program using `typeof` from ever being a built-in spell. [Bytecode version](#bytecode-version) records what each format bump changed and why an older
@@ -157,7 +157,7 @@ Three embedding supersets sit beside it, none of which changes what a program me
   scripts it did not write.
 
 Read that list as "the shape parses and runs", not as "matches upstream in every
-detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are) -- `as` coerces rather than asserts, a compound assign
+detail". Several entries carry a caveat recorded under [Where the skeletons are](#where-the-skeletons-are): `as` coerces rather than asserts, a compound assign
 evaluates its target twice, and generics are erased.
 
 ### What does not
@@ -183,7 +183,7 @@ upstream, or answers where upstream would refuse. They are listed because a subs
 can measure is more useful than a subset you have to discover. Each is a real,
 reproducible difference at the pinned ref.
 
-**Silently different answers.** The dangerous class -- these do not error.
+**Silently different answers.** The dangerous class: these do not error.
 
 - **A bare `as` COERCES instead of asserting.** `3.9 as int` is 3 here; upstream's `as`
   is a statically checked cast, not a conversion. Only `as?` was fixed to be a real type
@@ -192,8 +192,8 @@ reproducible difference at the pinned ref.
   sharing the target node, so `f().n += 1` calls `f()` twice. Harmless for the plain
   variable and field cases; wrong for any side-effecting target.
 - **A stored map key shadows a same-named builtin method.** `rec.map` reads the field,
-  not `map.map`. Deliberate -- an anonymous object literal is represented as a map, and
-  upstream's anonymous objects have fields and no methods -- but it is a language-wide
+  not `map.map`. Deliberate: an anonymous object literal is represented as a map, and
+  upstream's anonymous objects have fields and no methods, but it is a language-wide
   flip driven by one representation choice.
 - **A backtick string interpolates, and an unparsable `{...}` stays literal.** Upstream
   interpolates too, but would reject the malformed case; here it silently becomes text.
@@ -209,7 +209,7 @@ reproducible difference at the pinned ref.
 - **`match` analysis is narrower than the runtime.** Exhaustiveness, duplicate
   conditions and overlapping ranges are all checked now, but only over conditions that
   fold to a CONSTANT: `1 + 1` duplicates `2`, while two conditions naming the same
-  `final` do not. That is deliberately one-sided -- an unfoldable condition is recorded
+  `final` do not. That is deliberately one-sided: an unfoldable condition is recorded
   and never reported, because a false positive here rejects a correct program.
 - **Generics are erased.** There is no reified type argument, so `assertOfType::<int>`
   cannot inspect anything; gopherbuzz's own `testing` module takes a type NAME string
@@ -487,23 +487,23 @@ always run interpreted. On by default; disable with `BUZZ_JIT=0` or `vm.SetJIT(f
   local slot, branch target, const index, fused sub-opcode and absorbed-nop slot is
   range-checked before a backend turns it into an address. The interpreter can
   assume a well-formed chunk (its indexing is bounds-checked, and the compiler
-  emits nothing else); generated code cannot, on both counts -- and `marshal.go`
+  emits nothing else); generated code cannot, on both counts, and `marshal.go`
   decodes chunks from `.bo` bytes the compiler never wrote. A malformed chunk is
   declined, exactly like an unsupported opcode.
 - Code generation is **serialized**. `golang-asm` initializes package-level
   assembler tables from `NewBuilder` without synchronization, so two goroutines
-  entering the generator at once race inside it -- on any two chunks, not just the
+  entering the generator at once race inside it, on any two chunks, not just the
   same one. Compiling happens once per chunk, so the lock costs nothing; the cache
   read in front of it stays lock-free.
 - A compilation lives exactly as long as its `*Chunk`. The cache is keyed by a
   WEAK pointer, so it is not itself the reason a chunk can never be collected; when
   the chunk goes, a cleanup drops the entry and unmaps the executable pages.
-  Reachability is what makes that unmap safe -- a chunk is reachable for the whole
-  of its native run -- which is also why there is no LRU or size cap: neither can
+  Reachability is what makes that unmap safe: a chunk is reachable for the whole
+  of its native run, which is also why there is no LRU or size cap: neither can
   prove nobody is inside those pages. `vm.JITMappedBytes()` is the gauge, and it
   should plateau in a long-lived host rather than climb.
 - Every native exit is **checked, not trusted**. A deopt names a resume ip and a
-  stack height, and the height has to equal `base + LocalCount + entryDepth[ip]` --
+  stack height, and the height has to equal `base + LocalCount + entryDepth[ip]`:
   the same depth model the stub was emitted from, so this is an exact equality, not
   a range check. An exit that fails it (or names an ip outside the chunk, or a
   status no stub writes) is discarded: the entry locals are restored, the chunk is
@@ -530,14 +530,14 @@ by executing the differential suite (`TestJITMatchesInterpreter`,
 `TestJITComputesNatively`, `TestJITDeoptsOnRuntimeError`) on the platform in
 question. Where each stands:
 
-| Platform      | Backend        | Executable memory | Status                                                                                  |
-| ------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------- |
-| linux/amd64   | `jit_amd64.go` | mmap              | **Exercised every CI run** - the only platform CI covers.                               |
-| darwin/arm64  | `jit_arm64.go` | mmap              | **Exercised continuously** by hand - primary development platform, not covered by CI.   |
-| linux/arm64   | `jit_arm64.go` | mmap              | **Verified by hand** - suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
-| darwin/amd64  | `jit_amd64.go` | mmap              | Not executed here. Same backend and mapping as linux/amd64; only the OS differs.        |
-| windows/amd64 | `jit_amd64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
-| windows/arm64 | `jit_arm64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                         |
+| Platform      | Backend        | Executable memory | Status                                                                                 |
+| ------------- | -------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| linux/amd64   | `jit_amd64.go` | mmap              | **Exercised every CI run**: the only platform CI covers.                               |
+| darwin/arm64  | `jit_arm64.go` | mmap              | **Exercised continuously** by hand: primary development platform, not covered by CI.   |
+| linux/arm64   | `jit_arm64.go` | mmap              | **Verified by hand**: suite executed on arm64 hardware, 2026-08-04. Not covered by CI. |
+| darwin/amd64  | `jit_amd64.go` | mmap              | Not executed here. Same backend and mapping as linux/amd64; only the OS differs.       |
+| windows/amd64 | `jit_amd64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                        |
+| windows/arm64 | `jit_arm64.go` | `VirtualAlloc`    | **NEVER EXECUTED.** Compiled and reviewed only.                                        |
 
 The two Windows rows are the honest gap, and they are new: the JIT was excluded
 on Windows (`!windows` in every build tag) until it was enabled alongside the
@@ -555,7 +555,7 @@ What that does and does not mean:
   verdict an unsupported opcode gets, so a backend that has stopped working is
   distinguishable from one that was never asked to. With `depths()` validating
   the chunk, nothing reaches that recovery any more except a genuine codegen
-  bug -- which is why the test for it substitutes a panicking generator rather
+  bug, which is why the test for it substitutes a panicking generator rather
   than feeding in a malformed chunk.
 - A miscompile that produces an **unresumable exit** is caught by the exit check
   above and recovered. A miscompile that computes the **wrong number** is not:
