@@ -14,7 +14,7 @@ magus serves its tools as an **MCP (Model Context Protocol) server**, so agents 
 
 Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
-For the full agent surface built on top of MCP - the installable skills, `MAGUS.md` routing, and the drift check - see [Agents](agents.md).
+For the full agent surface built on top of MCP (the installable skills, `MAGUS.md` routing, and the drift check), see [Agents](agents.md).
 
 ## stdio: the host launches magus
 
@@ -79,14 +79,14 @@ The `state` is one of:
 
 | state         | meaning                                                          |
 | ------------- | ---------------------------------------------------------------- |
-| `serving`     | listening and a workspace is loaded - the tools are reachable    |
+| `serving`     | listening and a workspace is loaded: the tools are reachable     |
 | `not-ready`   | listening, but no workspace is loaded yet                        |
 | `unreachable` | nothing is listening; start the server with `magus server start` |
 | `disabled`    | turned off by `mcp.enabled=false`                                |
 
 For scripts and container probes, `magus status --probe=<kind>` exits `0` healthy / `1`
 unhealthy. The kinds are `liveness` (the server answers), `readiness` (a workspace is
-loaded), and `mcp` (this endpoint is reachable) - and they are comma-combinable, failing
+loaded), and `mcp` (this endpoint is reachable), and they are comma-combinable, failing
 if any listed check does:
 
 ```sh
@@ -346,8 +346,8 @@ non-loopback listener.
 The endpoint requires a **bearer token** whose grant includes `mcp=write` (see
 [Tokens and grants](../../concepts/tokens.md)). Two kinds hold it:
 
-- **A connector token** (`mgs_...`) - a named, hashed-at-rest token you mint per external client (a Claude connector, an IDE). It holds `mcp=write` and nothing else. Only its SHA-256 is stored, so it is shown once at creation; rotate by minting a new one. It always expires: 90 days by default, at most 366.
-- **The operator token** (`mgo_...`) - the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
+- **A connector token** (`mgs_...`): a named, hashed-at-rest token you mint per external client (a Claude connector, an IDE). It holds `mcp=write` and nothing else. Only its SHA-256 is stored, so it is shown once at creation; rotate by minting a new one. It always expires: 90 days by default, at most 366.
+- **The operator token** (`mgo_...`): the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>`. A request without one, or with a token that is wrong, expired or revoked, gets `401`; a valid token without `mcp=write` (a console token) gets `403` [MGS9015](../../reference/codes/auth/MGS9015.md). Manage connector tokens with:
 
@@ -442,7 +442,7 @@ logs and history). How you connect depends on the client:
   environment provider: the ref `MAGUS_MCP_TOKEN`) rather than pasting a
   plaintext secret into a committed file. Harness spells declare that ref via
   `harness_mcp`; `magus describe harness` prints a host CLI command sketch
-  and/or a docs pointer only - Magus does not write host MCP client config.
+  and/or a docs pointer only; Magus does not write host MCP client config.
   Resolve the ref with `magus\secret.read("MAGUS_MCP_TOKEN")` inside a
   magusfile when a spell needs the value; hosts read the env var directly.
 

@@ -1,6 +1,6 @@
 ---
 title: Nx
-description: An experiment that maps an existing Nx workspace into magus with a workspace provider - nx keeps running the work, magus gets the project graph, the affected set, and the knowledge graph - without committing anything to the repo.
+description: An experiment that maps an existing Nx workspace into magus with a workspace provider (nx keeps running the work, magus gets the project graph, the affected set, and the knowledge graph), without committing anything to the repo.
 tags:
   [
     nx,
@@ -34,7 +34,7 @@ coverage that magus derives from running the work.
 ## Nothing is committed to the repo
 
 The shim is three untracked files at the repo root plus magus's cache directory,
-and `.git/info/exclude` - which is per-clone and never committed - keeps them out
+and `.git/info/exclude`, which is per-clone and never committed, keeps them out
 of `git status`:
 
 ```text
@@ -94,7 +94,7 @@ magus\workspace.provider(nx);
 
 That is the whole file. It declares no targets of its own: every target in the
 workspace is an op of the provider spell, and an empty placeholder target would
-be a name, not a phase - it cannot fail and nothing depends on it.
+be a name, not a phase; it cannot fail and nothing depends on it.
 
 **3. Write `magus.yaml`** with the [sandbox env passthrough](#sandbox-env-passthrough) below. It is load-bearing only when the
 sandbox is enabled.
@@ -112,8 +112,8 @@ The copy is yours: it is a workspace-local spell like any other, and magus
 invalidates the provider's cached answer when it changes.
 
 `ci` chains every target the base spell already exposes. Trim the chain to
-what every project in the repo actually declares - nx errors on a project
-that lacks one of the chained targets - or, if flavors diverge, split `ci`
+what every project in the repo actually declares (nx errors on a project
+that lacks one of the chained targets) or, if flavors diverge, split `ci`
 across separate provider spells, one per flavor.
 
 The copy is the smallest version that works. What it leaves out, in the order
@@ -136,12 +136,12 @@ worth adding:
 npm 7+'s `npx` prefers the workspace-local `nx` over anything global. But when
 `nx` is not installed and stdin is not a TTY (or `CI` is set), `npx` assumes
 `--yes` and silently downloads the latest `nx` from the registry and runs
-that instead - the wrong version, none of the workspace's plugins.
+that instead: the wrong version, none of the workspace's plugins.
 `--no-install` turns that into a loud failure: `npx` errors instead of
 guessing, which is why every `npx nx` call in the spell carries it.
 
 A globally installed `nx` delegates to the workspace-local version the same
-way a gradle wrapper delegates to the pinned gradle - so `nx` on PATH is also
+way a gradle wrapper delegates to the pinned gradle, so `nx` on PATH is also
 fine when you control the machines that run it. Yarn PnP repos have no
 `node_modules/.bin` for `npx` to resolve against, so `npx` cannot find the
 workspace `nx` there at all: use `yarn nx` as the op's `bin` instead, in
@@ -156,7 +156,7 @@ release.
 The nx cloud-onboarding prompt is TTY-gated, but its non-interactive skip was
 only fixed around nx 20.2, and the nx 21 TUI is interactive-only regardless
 of TTY. `NX_NO_CLOUD`, `NX_TUI`, and `NX_INTERACTIVE` cover all three cases at
-once - belt and suspenders costs nothing here, so `list_projects` sets them
+once; belt and suspenders costs nothing here, so `list_projects` sets them
 unconditionally around its two `proc\exec` calls.
 
 A one-shot nx command also starts the nx daemon, and that daemon outlives the
@@ -168,10 +168,10 @@ configuration; it is nx behaving normally, not a shim concern.
 ## Sandbox env passthrough
 
 When [the sandbox](../../concepts/sandbox.md) is enabled, magus rebuilds a
-child process's environment from an allowlist - `HOME`, `USER`, `PATH`,
+child process's environment from an allowlist: `HOME`, `USER`, `PATH`,
 `LANG`, `LC_*`, `TZ`, `TERM`, and a few more. `NX_*`, `NODE_*`, and
 `npm_config_*` are not on it, so none of them reach `nx` unless the workspace
-passes them through - silently different behavior from running `nx` bare in
+passes them through: silently different behavior from running `nx` bare in
 a shell, where those variables are simply inherited.
 
 ```yaml
@@ -187,8 +187,8 @@ This `magus.yaml` block joins the untracked shim files listed
 [above](#nothing-is-committed-to-the-repo); the `.git/info/exclude` snippet
 there already covers it.
 [MGS2003](../../reference/codes/sandbox/MGS2003.md) reports every dropped
-variable, so a missing passthrough entry fails loud - a broken nx run with a
-stripped-var notice in the log - rather than silently behaving differently.
+variable, so a missing passthrough entry fails loud (a broken nx run with a
+stripped-var notice in the log) rather than silently behaving differently.
 
 ## Three things to know about the mapping
 
@@ -230,7 +230,7 @@ provider has not reported yet.
 ## Secrets
 
 A provided project has no magusfile body, so `magus\secret.read` is out of
-reach for it - there is no target function to call it from. A `Command` can
+reach for it: there is no target function to call it from. A `Command` can
 still declare `secrets`, and magus injects the resolved values into that one
 child process at spawn, redacted from every captured output:
 

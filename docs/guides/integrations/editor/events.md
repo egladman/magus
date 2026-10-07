@@ -16,7 +16,7 @@ magus events --follow
 ```
 
 Every magus RUN in the workspace feeds the stream, so a build started in another
-terminal shows up here. Commands that are not runs - `ls`, `query`, `doctor` -
+terminal shows up here. Commands that are not runs (`ls`, `query`, `doctor`)
 write no run log and so produce no events. It needs no server, no token, and no
 loadable magusfile: an editor can attach to a repository whose magusfile is
 mid-edit, which is exactly when someone wants it.
@@ -44,11 +44,11 @@ Envelope fields and the event's own fields sit at one level:
 | `run.started`   | an invocation opens        | `phase`, `command`, `trigger`, `magus_version`             |
 | `run.finished`  | it closes                  | `phase`, `status`                                          |
 | `target.result` | one target finishes        | `project`, `target`, `status`, `cache_hit`, `ref`, `error` |
-| `target.output` | a subprocess writes a line | `stream`, `text` - opt-in, see below                       |
+| `target.output` | a subprocess writes a line | `stream`, `text`: opt-in, see below                        |
 
 Four types, and that is the whole taxonomy today. Diagnostics, file changes,
 attention requests and guard verdicts are all facts magus records somewhere, and
-each is a candidate - but a type you can name and never receive is worse than one
+each is a candidate, but a type you can name and never receive is worse than one
 that does not exist, because a silent stream and a wrong filter look identical.
 They arrive when their producer does. Adding a type is additive and does not bump
 `schema`, so nothing you write today breaks when they land.
@@ -123,7 +123,7 @@ is additive and does not bump it.
 ## What the stream is not
 
 It is outbound only, and there is no reply channel. Nothing a subscriber does can
-change what magus decides - the engine, the cache, the graph schema, and the
+change what magus decides: the engine, the cache, the graph schema, and the
 guard's evaluation are sealed (see [scope](../../../scope.md)), and an extension
 seam "may change what magus does, never what a verdict means".
 
@@ -133,7 +133,7 @@ request/reply and returns a verdict. A guard denial reaches this stream as a
 can influence it.
 
 To change what a build DOES, the extension points are the ones that already
-exist: spells, charms, and the magusfile - declarations the sealed engine
+exist: spells, charms, and the magusfile: declarations the sealed engine
 evaluates, auditable in a diff.
 
 ## Latency
@@ -152,7 +152,7 @@ prints every target failure as it happens, anywhere in the workspace:
 ./magus-events-watch.sh
 ```
 
-It is a TEMPLATE you own, not a package magus releases - the same arrangement as
+It is a TEMPLATE you own, not a package magus releases, the same arrangement as
 the [agent guard templates](../agents/guard-templates.md), and for the same
 reason ("The host wiring is yours" in [doctrine](../../../doctrine.md)).
 
@@ -171,7 +171,7 @@ The shipped script is that plus two things the reduction leaves out, and both ar
 worth copying. It also handles `run.finished`, so a run that fails without any
 single target failing still reports. And it does not let the pipeline swallow the
 exit status: a shell pipeline exits with its LAST stage, so a `magus events` that
-dies reaches jq as a clean EOF and the script would otherwise exit 0 - a
+dies reaches jq as a clean EOF and the script would otherwise exit 0: a
 supervisor would see a healthy subscriber that had stopped subscribing. POSIX sh
 has no `pipefail`, so the producer records its own status and the script exits
 with that.
@@ -195,18 +195,18 @@ Two runtimes do it for you, and it is worth knowing which:
   line per callback.
 - **Node / VS Code**: `child_process.spawn` plus `readline.createInterface`.
 
-Everything else needs the pending buffer - Neovim's `on_stdout` hands over a
+Everything else needs the pending buffer: Neovim's `on_stdout` hands over a
 list whose last element may be partial, and an Emacs process filter gets raw
 chunks.
 
-For editing magusfiles and spells - completion, hover, signature help - see
+For editing magusfiles and spells (completion, hover, signature help) see
 [Editor setup](../editor.md), which wires `magus buzz lsp`. The two are
 independent: the language server is edit time, this stream is run time.
 
 ## See also
 
-- [design.md](design.md): why the stream is shaped this way - outbound only, no
-  server, and what building the first clients changed about it.
+- [design.md](design.md): why the stream is shaped this way (outbound only, no
+  server, and what building the first clients changed about it).
 - [editor.md](../editor.md): the language server for `*.buzz` files.
 - [server.md](../server.md): the server, and why this stream does not need one.
 - [console.md](../../../reference/console.md): the browser surface reading the

@@ -1,6 +1,6 @@
 ---
 title: Cursor
-description: Wiring magus into Cursor - AGENTS.md for guidance, one self-contained hook script for its wired events, and the one job Cursor's contract cannot express.
+description: Wiring magus into Cursor (AGENTS.md for guidance, one self-contained hook script for its wired events, and the one job Cursor's contract cannot express).
 tags: [agents, cursor, AGENTS.md, guard, hooks]
 ---
 

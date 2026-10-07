@@ -41,7 +41,7 @@ never reached the point where it prints a summary.
 
 magus watches host memory for the life of an invocation and streams a warning the
 moment headroom collapses. Streamed, not summarized, because a killed process
-never gets to print a summary - only what already reached the log survives.
+never gets to print a summary; only what already reached the log survives.
 
 ```text
 [warn] memory headroom low: 265MB available of 15989MB total; a target here is
@@ -51,10 +51,10 @@ close to taking the machine down; running: .:test; buzz heap: 8402931 objects
 
 Three facts, in the order you need them:
 
-- **the machine is nearly out** - available against total
-- **what was running** - the project and target, read from the registry that
+- **the machine is nearly out**: available against total
+- **what was running**: the project and target, read from the registry that
   survives a `SIGKILL`
-- **whether it was Buzz, and where** - the heap object count and the source
+- **whether it was Buzz, and where**: the heap object count and the source
   position responsible for most of its growth
 
 That last clause is the one that separates "a subprocess ate the memory" from
@@ -100,7 +100,7 @@ heap: 30660 objects live, 30660 peak this run
   build into a list and join once rather than reassigning a string.
 ```
 
-`.heap` sits alongside `.where`, `.locals` and `.globals` - see
+`.heap` sits alongside `.where`, `.locals` and `.globals`; see
 [Debugging](debugging.md) for the rest of the pry surface. It answers the one
 question a paused stack cannot: where you _are_ says nothing about what filled
 memory getting there.
@@ -181,7 +181,7 @@ registers on a 64GB workstation without naming either machine. See
 [configuration](../reference/config.md) for the rest of the target policy.
 
 This bounds what runs _alongside_ the target. It cannot shrink a single target
-that alone exceeds the machine - for that, size the work itself:
+that alone exceeds the machine; for that, size the work itself:
 
 ```buzz
 final procs = platform\memoryBytes() / (8 * 1024 * 1024 * 1024);

@@ -87,7 +87,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 Three ideas carry the whole model:
 
 - **Targets are exported functions.** There is no registration call for a target: export a `fun`, and its name becomes a runnable target. See [targets.md](../concepts/targets.md) for the full model and the CLI grammar.
-- **`ctx.needs` declares prerequisites.** `ctx.needs(format)` says "run `format` first" - you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
+- **`ctx.needs` declares prerequisites.** `ctx.needs(format)` says "run `format` first"; you pass the target function itself, so a typo is an undefined variable caught at load, not a run-time miss. magus builds a DAG from these edges, runs shared prerequisites once, and parallelizes independent branches.
 - **`ci` is the anchor.** It is an ordinary target you compose with `ctx.needs`. magus does not hardcode its steps, but it is the target `magus affected` keys off, and it always runs read-only.
 
 List what magus discovered, then run the starter `build`:
@@ -198,15 +198,15 @@ You now have the full loop:
 
 The [documentation index](../documentation.md) is the map. From here, the core concepts:
 
-- [targets.md](../concepts/targets.md) - targets, the CLI grammar, and name resolution.
-- [spells.md](../concepts/spells.md) - spells, their ops, and the built-in spell catalog.
-- [charms.md](../concepts/charms.md) - `rw` and other execution modifiers attached with `:`.
-- [workspace.md](../concepts/workspace.md) - how magus discovers projects, and multi-project (monorepo) layout.
-- [cache.md](../concepts/cache.md) - the content-addressed cache that makes re-runs fast.
-- [config.md](../reference/config.md) - every `magus.yaml` key, its `MAGUS_*` env var, and CLI flag.
-- [sandbox.md](../concepts/sandbox.md) - how spell subprocesses are confined to the workspace.
+- [targets.md](../concepts/targets.md): targets, the CLI grammar, and name resolution.
+- [spells.md](../concepts/spells.md): spells, their ops, and the built-in spell catalog.
+- [charms.md](../concepts/charms.md): `rw` and other execution modifiers attached with `:`.
+- [workspace.md](../concepts/workspace.md): how magus discovers projects, and multi-project (monorepo) layout.
+- [cache.md](../concepts/cache.md): the content-addressed cache that makes re-runs fast.
+- [config.md](../reference/config.md): every `magus.yaml` key, its `MAGUS_*` env var, and CLI flag.
+- [sandbox.md](../concepts/sandbox.md): how spell subprocesses are confined to the workspace.
 
 And the reference:
 
-- [`magus init`](../reference/manpage/magus-init.md), [`magus run`](../reference/manpage/magus-run.md), [`magus ls`](../reference/manpage/magus-ls.md), [`magus affected`](../reference/manpage/magus-affected.md) - the commands in this guide.
-- [playground.html](../playground.html) - try any example live in the browser.
+- [`magus init`](../reference/manpage/magus-init.md), [`magus run`](../reference/manpage/magus-run.md), [`magus ls`](../reference/manpage/magus-ls.md), [`magus affected`](../reference/manpage/magus-affected.md): the commands in this guide.
+- [playground.html](../playground.html): try any example live in the browser.

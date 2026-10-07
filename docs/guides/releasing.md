@@ -136,7 +136,7 @@ release: OK   workflow trigger - `v0.5.0` matches `v*` and starts the release
 
 Timing is the whole point. Each gating check already had an owner, and each of
 them fired hours after the tag was pushed, in a workflow. A pushed tag is not
-retractable in any useful sense - the Go module proxy caches it within the hour -
+retractable in any useful sense: the Go module proxy caches it within the hour,
 so a release that fails in CI burns the version number.
 
 ### A branch using the tag's name

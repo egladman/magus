@@ -1,6 +1,6 @@
 ---
 title: OpenCode
-description: Wiring magus into OpenCode - skills in .opencode/skills, the TypeScript plugin that carries both guard surfaces, the post-compaction brief, and the idle checkpoint.
+description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries both guard surfaces, the post-compaction brief, and the idle checkpoint).
 tags: [agents, opencode, skills, guard, plugin]
 ---
 
@@ -511,7 +511,7 @@ export default MagusGuard;
 
 The thing being judged goes in on stdin, never in argv. `magus shell` takes no
 positional arguments, and a plugin that passes the command as one does not get a
-wrong verdict - it gets no verdict, which fails open on every call.
+wrong verdict; it gets no verdict, which fails open on every call.
 
 If magus lives in a prefix the OpenCode process does not have on PATH (mise,
 brew, asdf, `~/.local/bin`), set `__MAGUS_BIN` to an absolute path.
@@ -549,7 +549,7 @@ summarizer kept. The brief is state read off the disk, and this was the one plac
 it was retold.
 
 The second reason is parity. Of the four hosts, only OpenCode can shape a summary
-at all -- Claude Code exposes no `PreCompact` output arm, Codex's
+at all: Claude Code exposes no `PreCompact` output arm, Codex's
 `pre-compact.command.output` schema is closed over four fields with no context
 channel, and Cursor's `preCompact` is observational. A behavior available on one
 host of four is a difference nobody can reason about, and deciding what a model
@@ -577,7 +577,7 @@ If you would rather not have the plugin do it, running
 ## Coverage and limits
 
 - An `advise` verdict is appended to the tool result that call produced, joined
-  to it by `callID`. It is judged once, before the call, and delivered after it -
+  to it by `callID`. It is judged once, before the call, and delivered after it:
   judging again in `tool.execute.after` would record two verdicts for one call.
   An advised call whose result never arrives strands one string for the life of
   the session, which is the cheaper of the two leaks.
@@ -589,8 +589,8 @@ If you would rather not have the plugin do it, running
   `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
   string was NOT among them (OpenCode has no hook config schema to check it
   against either, per `testdata/hosts/SOURCES.md`), so the MCP call
-  surface is feasible - `tool.execute.before`/`.after` already see every call,
-  MCP included - but not wired: a branch keyed on a guessed name risks judging
+  surface is feasible (`tool.execute.before`/`.after` already see every call,
+  MCP included) but not wired: a branch keyed on a guessed name risks judging
   an unrelated tool rather than magus's own calls. Confirm the string against a
   live session, then add a third `if (input.tool === ...)` branch beside `bash`
   and `edit`/`write`.

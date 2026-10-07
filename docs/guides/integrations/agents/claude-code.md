@@ -1,6 +1,6 @@
 ---
 title: Claude Code
-description: Wiring magus into Claude Code - skills in .claude/skills, the two PreToolUse guard hooks, attention notifications, and the checks that prove the guard is running.
+description: Wiring magus into Claude Code (skills in .claude/skills, the two PreToolUse guard hooks, attention notifications, and the checks that prove the guard is running).
 tags: [agents, claude, claude code, skills, guard, hooks, notifications]
 ---
 
@@ -222,7 +222,7 @@ whole instead of extracting one field, so the entry says nothing the event does 
 already say. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than
-denying or advising on one - which is the honest state to ship rather than
+denying or advising on one, which is the honest state to ship rather than
 silence. The next rule this surface grows reaches the model the moment it
 ships, with no new host wiring, because the transport is already here.
 
@@ -276,7 +276,7 @@ than enforcement. The judging entry is enforcement, and Codex carries it too.
 ## Lease capture
 
 When Claude Code hands work to a sub-agent it does so through a tool call, and
-that call fires `PreToolUse` like any other - carrying the whole prompt the
+that call fires `PreToolUse` like any other, carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`, the callee's declared
 `subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
 descriptor includes a matcher for it, so `magus describe harness claude-code`
@@ -346,7 +346,7 @@ as a hook error, and the call is judged without it rather than blocked.
 `description`, then `tool_name`) for the callee's label, `tool_input.model` for
 the model the caller claimed, and `session_id` for the parent's session. The
 result is one `agent_spawn` event per lease, with the handed context and the
-declared model stored as a payload blob you fetch by ref - `magus session show
+declared model stored as a payload blob you fetch by ref: `magus session show
 <id>` renders each spawn's model claim, wording an absent one as "none
 declared" rather than leaving it blank.
 
@@ -355,7 +355,7 @@ releases (`Task` historically, `Agent` currently); a release that emits neither
 records nothing here; nothing else in the contract depends on the spelling.
 
 It records; it does not judge. A lease prompt is prose, so the command rules
-never run against it and the verdict is always a pass - a prompt that mentions a
+never run against it and the verdict is always a pass: a prompt that mentions a
 denied command describes it rather than runs it, and that holds whether or not
 the caller named a model: magus asks the question, it does not grade the
 answer. A later decision may add an advisory or a deny keyed on the declared
@@ -474,7 +474,7 @@ be handed.
 No transport gap in the guard contract: all three surfaces are wired, `deny`
 arrives as a `permissionDecision`, and `advise` arrives as `additionalContext`,
 which puts the explanation in front of the model rather than the person. The
-MCP surface is transport-complete but rule-empty today - the wiring passes
+MCP surface is transport-complete but rule-empty today: the wiring passes
 every call because nothing yet judges an MCP tool name, not because the
 channel cannot carry a verdict.
 
@@ -526,5 +526,5 @@ and `--fix` reinstalls whatever it reports stale.
 
 Commit `.claude/settings.json` once you are happy with it. Until a checkout has
 that file, its guard rules are correct and entirely unenforced, with nothing in
-the session saying so - which is the gap the **guard wiring** check exists to
+the session saying so, which is the gap the **guard wiring** check exists to
 report.

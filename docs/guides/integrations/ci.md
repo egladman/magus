@@ -1,6 +1,6 @@
 ---
 title: CI checkout
-description: How to check out a repository for magus on any CI provider - why a blobless partial clone is the right default, why fetch-depth 0 gets more expensive every day the repository lives, and how magus deepens a shallow clone by itself rather than silently rebuilding the world.
+description: How to check out a repository for magus on any CI provider, why a blobless partial clone is the right default, why fetch-depth 0 gets more expensive every day the repository lives, and how magus deepens a shallow clone by itself rather than silently rebuilding the world.
 tags:
   [
     ci,
@@ -71,8 +71,8 @@ contents on the server. The checkout still materializes the files at the revisio
 being built, because those are the ones the working tree needs. Anything that does
 reach for an old blob still works: git fetches it on demand.
 
-That is exactly the shape magus wants, and it is why blobless - not treeless, not
-shallow - is the right default.
+That is exactly the shape magus wants, and it is why blobless (not treeless, not
+shallow) is the right default.
 
 Measured on this repository, cloning the same revision three ways:
 
@@ -93,7 +93,7 @@ Measured on this repository, cloning the same revision three ways:
     filter: blob:none
 ```
 
-Keep `fetch-depth: 0`. It is not the expensive half - with `filter` set it fetches the
+Keep `fetch-depth: 0`. It is not the expensive half: with `filter` set it fetches the
 commit graph and nothing else, and it keeps `git describe --tags` and any
 base-branch diff working no matter how old the branch point is.
 
@@ -111,7 +111,7 @@ variables:
 
 ### CircleCI, Buildkite, Jenkins, and anything script-driven
 
-Providers that hand you a shell do not need a special integration - the clone is just
+Providers that hand you a shell do not need a special integration: the clone is just
 git:
 
 ```sh
@@ -137,7 +137,7 @@ steps:
 
 Blobless makes the payload small; it is still linear in the age of the repository,
 because the commit graph keeps growing. Bounding the depth as well makes the cost
-track how far the branch diverged instead - a branch cut three commits ago pays for
+track how far the branch diverged instead: a branch cut three commits ago pays for
 three commits.
 
 The reason nobody does this is that a naive shallow clone fails in the worst possible
@@ -149,7 +149,7 @@ just quietly stopped being incremental, on every run, forever. That is
 [MGS1010](../../reference/codes/magusfile/MGS1010.md).
 
 magus handles this itself. When the merge base is missing **and** the repository is
-shallow, it fetches progressively more history - depth 32, then 128, 512, 2048 -
+shallow, it fetches progressively more history (depth 32, then 128, 512, 2048)
 until the common ancestor appears, then diffs against it normally. You will see it in
 the log when it happens:
 
@@ -225,7 +225,7 @@ project, look for MGS1010 before looking anywhere else.
 
 ## See also
 
-- [affected.md](../../concepts/workspace/affected.md) - how the diff becomes a project set.
-- [MGS1010](../../reference/codes/magusfile/MGS1010.md) - the diagnostic for an uncomputable diff.
-- [ci.md](../../concepts/targets/ci.md) - the `ci` anchor these pipelines run.
-- [server.md](server.md) - concurrency when several CI steps share a machine.
+- [affected.md](../../concepts/workspace/affected.md): how the diff becomes a project set.
+- [MGS1010](../../reference/codes/magusfile/MGS1010.md): the diagnostic for an uncomputable diff.
+- [ci.md](../../concepts/targets/ci.md): the `ci` anchor these pipelines run.
+- [server.md](server.md): concurrency when several CI steps share a machine.
