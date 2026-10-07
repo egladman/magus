@@ -334,12 +334,16 @@ func refsOf(ctx context.Context, ws types.WorkspaceRepository, cfg config.Config
 	// A resolved symbol still carries the coverage verdict: an uncovered project could hold
 	// references this list does not show, whether or not it showed any. A stale index
 	// caveats a list that has rows and explains one that does not, so the age rides the
-	// answer as StaleIndexes either way and only downgrades the empty case.
+	// answer as StaleIndexes either way and only downgrades the empty case. Only the indexes
+	// of the symbol's own language could hold its sites, so only they qualify the answer.
+	language := g.SymbolLanguage(out.Symbol)
+	cov = cov.For(language)
 	out.Answer = knowledge.Answer(read.Input, len(out.Refs) > 0, cov)
 	res := refsResult{Found: true, Out: out, coverage: cov}
 	if read.Occurrences {
 		key := strings.TrimPrefix(out.Symbol, types.KindSymbol+":")
 		if occ, probed := magus.SymbolOccurrences(ctx, ws, ws.Root(), cfg, slog.Default(), key); probed {
+			occ.Unreadable = knowledge.GapsFor(occ.Unreadable, language)
 			res.Occurrences = &occ
 		}
 	}
@@ -576,20 +580,20 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 // written, and false when no index for it can be found.
 type indexedAtFunc func(file string) (time.Time, bool)
 
-// symbolIndexTimes returns an indexedAtFunc over the cached index of each project, or
-// nil when the workspace cannot be read. Files under a knowledge.symbols override check as
-// unverified; see magus.SymbolIndexedAt.
+// symbolIndexTimes returns an indexedAtFunc over the cached indexes each project declares,
+// or nil when the workspace cannot be read. Files under a knowledge.symbols override check
+// as unverified; see magus.SymbolIndexTimes.
 func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
 		return nil
 	}
-	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
+	projects, err := ws.ListProjects(ctx)
 	if err != nil {
 		return nil
 	}
-	projects, err := ws.ListProjects(ctx)
-	if err != nil {
+	times, ok := magus.SymbolIndexTimes(ctx, ws, ws.Root(), globalCfg)
+	if !ok {
 		return nil
 	}
 	return func(file string) (time.Time, bool) {
@@ -602,7 +606,8 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 		if !found {
 			return time.Time{}, false
 		}
-		return magus.SymbolIndexedAt(cacheDir, filepath.Join(ws.Root(), filepath.FromSlash(owner)))
+		at, ok := times[owner]
+		return at, ok
 	}
 }
 
@@ -712,7 +717,7 @@ func emitDefinitions(w io.Writer, opts OutputOptions, out types.KnowledgeDefinit
 	// teaches callers to ignore it.
 	settle := func(nw io.Writer) error {
 		if verified > 0 && verified == len(out.Definitions) {
-			fmt.Fprint(nw, staleIndexNotice(out.Answer.StaleIndexes))
+			fmt.Fprint(nw, staleIndexNotice(out.Answer))
 			return nil
 		}
 		if err := reportIndexStaleness(nw, out.Answer); err != nil {
@@ -827,16 +832,8 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 	refs, _ := g.Refs(id)
 	out.Symbol, out.Label = refs.Symbol, refs.Label
 
-	// A project whose index is missing or older than its sources can hold call sites the
-	// occurrence list never names, and no per-site check sees a site that is not listed.
-	answer := knowledge.Answer(id, true, symbolCoverage(ctx, root, id, true))
-	var blind []types.EditRefusal
-	for _, gap := range answer.Gaps {
-		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; build it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
-	}
-	for _, project := range answer.StaleIndexes {
-		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s changed after its index was built; refresh with `%s`", project, hint.GraphBuild)})
-	}
+	language := g.SymbolLanguage(id)
+	blind := renameBlindSpots(id, language, symbolCoverage(ctx, root, id, true))
 
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
@@ -847,7 +844,7 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 	if !probed {
 		return refuse(append(blind, types.EditRefusal{Reason: "cannot read the symbol indexes"})...)
 	}
-	for _, gap := range read.Unreadable {
+	for _, gap := range knowledge.GapsFor(read.Unreadable, language) {
 		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; rebuild it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
 	}
 	if len(read.Names) > 0 {
@@ -863,6 +860,16 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		}
 		return files
 	}, sites)...)
+	importers := buzzImporters(g)
+	readFile := func(file string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(ws.Root(), filepath.FromSlash(file)))
+	}
+	defs := make([]string, 0, len(refs.Defs))
+	for _, d := range refs.Defs {
+		defs = append(defs, d.File)
+	}
+	refused = append(refused, edit.BuzzNameCaptures(to, sites, importers, readFile)...)
+	refused = append(refused, edit.BuzzLabelUses(out.From, defs, sites, importers, readFile)...)
 	if refused = append(blind, refused...); len(refused) > 0 {
 		return refuse(refused...)
 	}
@@ -903,6 +910,42 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 		fmt.Println("nothing written (--dry-run)")
 	}
 	return nil
+}
+
+// renameBlindSpots refuses a rename of id, a symbol of language, for every index that could
+// hold its sites and is missing or older than its sources: such an index can hold call
+// sites the occurrence list never names, and no per-site check sees a site that is not
+// listed. An index of another language holds none of them, so it refuses nothing.
+func renameBlindSpots(id, language string, cov knowledge.Coverage) []types.EditRefusal {
+	answer := knowledge.Answer(id, true, cov.For(language))
+	blind := make([]types.EditRefusal, 0, len(answer.Gaps)+len(answer.StaleIndexDetails))
+	for _, gap := range answer.Gaps {
+		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s: symbol index %s; build it with `%s`", gap.Project.Path, gap.Describe(), hint.GraphBuild)})
+	}
+	for _, stale := range answer.StaleIndexDetails {
+		index := "index"
+		if stale.Language != "" {
+			index = stale.Language + " index"
+		}
+		blind = append(blind, types.EditRefusal{Reason: fmt.Sprintf("project %s changed after its %s was built; refresh with `%s`", stale.Project, index, hint.GraphBuild)})
+	}
+	return blind
+}
+
+// buzzImporters answers, from g's import edges, which workspace-relative files import file.
+func buzzImporters(g *knowledge.Graph) func(file string) []string {
+	byTarget := map[string][]string{}
+	for _, e := range g.Edges() {
+		if e.Relation != types.RelationImports {
+			continue
+		}
+		from, isFile := strings.CutPrefix(e.Source, types.KindFile+":")
+		to, toFile := strings.CutPrefix(e.Target, types.KindFile+":")
+		if isFile && toFile {
+			byTarget[to] = append(byTarget[to], from)
+		}
+	}
+	return func(file string) []string { return byTarget[file] }
 }
 
 // renameGrade refuses a declared output, then asks the guard about each rewritten file

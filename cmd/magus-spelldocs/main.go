@@ -52,8 +52,8 @@ type spellInfo struct {
 var spellMeta = map[string]spellInfo{
 	"buzz": {
 		dir: "buzz", language: "Buzz",
-		description: "Buzz language identity: the .buzz extension and the comment and string syntax magus reads source with.",
-		intro:       "The `buzz` spell declares what a Buzz file IS and declares no ops. It is what lets the knowledge graph and the symbol index tell code from a comment or a string in a `.buzz` source, and what binds the extension to its project. Running Buzz needs no spell: `magus buzz -t <file>` executes a file's in-file `test` blocks through magus's own embedded engine.",
+		description: "Buzz language identity and symbol index: the .buzz extension, the comment and string syntax magus reads source with, and scip-buzz.",
+		intro:       "The `buzz` spell declares what a Buzz file IS and how to index it. It is what lets the knowledge graph tell code from a comment or a string in a `.buzz` source, and what binds the extension to its project. Its one op, `scip-buzz`, builds the project's Buzz symbol index beside any other index the project has, so `magus refs` and renames reach Buzz. Running Buzz needs no spell: `magus buzz -t <file>` executes a file's in-file `test` blocks through magus's own embedded engine.",
 		tags:        []string{"buzz", "language"},
 	},
 	"go": {
@@ -244,15 +244,18 @@ func renderSpell(d spells.Descriptor) string {
 
 	// Facts derivable from the Descriptor, as a short definition list.
 	fmt.Fprintf(&b, "**Runtime name:** `%s` (source `spells/%s/`)\n\n", d.Name, meta.dir)
-	if len(d.Tools) > 0 {
-		for _, name := range slices.Sorted(maps.Keys(d.Tools)) {
-			t := d.Tools[name]
-			if t.Probe.Bin == "" {
-				continue
-			}
-			fmt.Fprintf(&b, "**Version probe (%s):** `%s`\n\n", name, strings.Join(append([]string{t.Probe.Bin}, t.Probe.Args...), " "))
+	// A tool declared only with an observe probe (scip-buzz) keys its own op and has no
+	// version probe, so a spell whose tools are all observed still reads as none.
+	probed := false
+	for _, name := range slices.Sorted(maps.Keys(d.Tools)) {
+		t := d.Tools[name]
+		if t.Probe.Bin == "" {
+			continue
 		}
-	} else {
+		probed = true
+		fmt.Fprintf(&b, "**Version probe (%s):** `%s`\n\n", name, strings.Join(append([]string{t.Probe.Bin}, t.Probe.Args...), " "))
+	}
+	if !probed {
 		fmt.Fprintf(&b, "**Version probe:** none\n\n")
 	}
 	if len(d.Provides) > 0 {
@@ -263,6 +266,12 @@ func renderSpell(d spells.Descriptor) string {
 	}
 
 	opDocs := parseOpDocs(meta.dir)
+	if op := d.SymbolIndexer.OpName(); op != "" && op != spells.DefaultSymbolIndexOp {
+		if doc, ok := opDocs[spells.DefaultSymbolIndexOp]; ok {
+			opDocs[op] = doc
+			delete(opDocs, spells.DefaultSymbolIndexOp)
+		}
+	}
 	ops := d.OpNames()
 
 	writeArgsSection(&b, d.Name)
@@ -401,7 +410,9 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 // bytecode strips it), so the source is the only place the handler comments
 // survive. It maps each op key to its handler via the mgs_listTargets return map,
 // then reads that handler's FunDecl.Doc. Any read/parse miss yields an empty map,
-// so a spell with no source-side docs renders no op descriptions.
+// so a spell with no source-side docs renders no op descriptions. The symbol indexer's
+// doc is keyed under spells.DefaultSymbolIndexOp, since an indexer that declares no op
+// runs under it; the caller moves it to the op the descriptor declares.
 func parseOpDocs(dir string) map[string]string {
 	src, err := os.ReadFile(filepath.Join(spellsDir, dir, "spell.buzz"))
 	if err != nil {
@@ -437,7 +448,7 @@ func parseOpDocs(dir string) map[string]string {
 	// op from mgs_getSymbolIndexer, so that export's own comment is the prose describing
 	// it, and without this the page renders the indexer's argv with nothing said about it.
 	if doc := funcDoc["mgs_getSymbolIndexer"]; doc != "" {
-		out[spells.SymbolIndexOp] = doc
+		out[spells.DefaultSymbolIndexOp] = doc
 	}
 	return out
 }

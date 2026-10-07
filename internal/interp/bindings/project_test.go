@@ -14,6 +14,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// A spell bound only for its symbol index, as buzz is, contributes something; a spell with
+// no target, declaration or index almost always lost its mgs_listTargets.
+func TestContributesNothing(t *testing.T) {
+	for name, tc := range map[string]struct {
+		spell *spells.Spell
+		want  bool
+	}{
+		"nothing":        {spells.NewSpell("empty"), true},
+		"targets":        {spells.NewSpell("go", spells.WithTargets("go-build")), false},
+		"declarations":   {spells.NewSpell("magusfile", spells.WithDeclarationFiles("magusfile.buzz")), false},
+		"a symbol index": {spells.NewSpell("buzz", spells.WithSymbolIndexer(&spells.SymbolIndexer{})), false},
+	} {
+		assert.Equal(t, tc.want, contributesNothing(tc.spell), name)
+	}
+}
+
 // applyOpts runs the parsed project options against a fresh root project so tests can
 // assert the resulting policy fields.
 func applyOpts(t *testing.T, opts vm.Value) *types.Project {

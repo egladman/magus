@@ -493,8 +493,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// project marked its Go index out of date when no symbol could have moved.
 	// An indexing spell that declares no sources keeps the whole project, which is the
 	// claim that can only over-invalidate.
-	if target == spells.SymbolIndexOp {
-		if indexed := symbolIndexSources(p); len(indexed) > 0 {
+	// Each indexing spell's op keys on its own spell's sources, so binding the buzz spell
+	// beside go leaves the Go index's key where it was.
+	if indexesSymbols(p, target) {
+		if indexed := symbolIndexSources(p, target); len(indexed) > 0 {
 			step.Sources = slices.Concat(magusfileGlobs(p.Path), indexed)
 			if p.Path != "." {
 				step.Sources = append(step.Sources, magusfileGlobs(".")...)
@@ -504,9 +506,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// restore it: an entry for reverted sources would replay over an index built from
 		// the edit. As a stamp, an entry replays only while the index is the one its run
 		// wrote.
-		if _, ok := symbolCapableLanguage(p); ok {
-			step.Stamps = append(step.Stamps, symbols.IndexPath(m.CacheDir(), p.Dir))
-		}
+		step.Stamps = append(step.Stamps, symbols.IndexPath(m.CacheDir(), p.Dir, target))
 	}
 	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
 	// Every project's outputs, not just this one's. The reason is the reason OwnedOutputs
@@ -811,7 +811,7 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if keysTools(p, target) {
 		keyTools = toolVersions[p.Path]
 	}
-	applyRunKeying(&step, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
+	applyRunKeying(&step, p, keyTools, observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -835,12 +835,12 @@ func alwaysRuns(p *types.Project, target string) bool {
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
 //
-// The scip step takes no tool versions: the indexer is its own binary, keyed through the
-// observation its spell declares for it, and of the spell's other tools only those the
-// indexer declares it uses (go for scip-go, never golangci-lint or tsc) key it, through
-// observationsForTarget.
-func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
-	if step.Target == spells.SymbolIndexOp {
+// A symbol indexer op of p keys on no tool versions, whatever the caller passes: the
+// indexer is its own binary, keyed through the observation its spell declares for it, and
+// of the spell's other tools only those the indexer declares it uses (go for scip-go,
+// never golangci-lint or tsc) key it, through observationsForTarget.
+func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observations, charms []string) {
+	if indexesSymbols(p, step.Target) {
 		toolVersions = nil
 	}
 	step.ToolVersions = toolVersions
@@ -1373,11 +1373,11 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if !t.HasObservationProbe() {
 					// A tool the symbol indexer uses is observed through its version argv,
 					// for the scip op alone: only a caller scoped to that op names it.
-					if driven == nil || !slices.Contains(indexerUses(s, spells.SymbolIndexOp), tool) {
+					if driven == nil || !slices.Contains(indexerUses(s, s.SymbolIndexOp()), tool) {
 						continue
 					}
 					probe, fork = t.Probe, func() (string, error) { return s.ProbeVersion(ctx, tool, p.Dir) }
-					drivenAs = indexerUseKey(s.Name(), tool)
+					drivenAs = indexerUseKey(s, tool)
 				}
 				// The spawn the doc above promises a target does not pay for unless it
 				// drives the binary. observationsForTarget already dropped an undriven
@@ -1391,7 +1391,13 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 				if !hit {
 					probed, err := m.probeCached(ctx, probe, p.Dir, fork)
 					if err != nil {
-						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
+						// A tool that is not installed is said where it matters: the target that
+						// runs it fails with MGS3003, and a missing indexer is an index gap.
+						level := slog.LevelWarn
+						if errors.Is(err, types.ToolNotOnPath) {
+							level = slog.LevelDebug
+						}
+						slog.Log(ctx, level, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),
 							slog.String("dir", p.Dir), slog.String("err", err.Error()))
 						probed = "UNPROBED"
@@ -1433,7 +1439,7 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 			driven[s.Name()+":"+op.Bin] = true
 		}
 		for _, tool := range indexerUses(s, target) {
-			driven[indexerUseKey(s.Name(), tool)] = true
+			driven[indexerUseKey(s, tool)] = true
 		}
 	}
 	return driven
@@ -1822,7 +1828,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			}
 			toolVersions = byProject[p.Path]
 		}
-		applyRunKeying(&step, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
+		applyRunKeying(&step, p, toolVersions, observationsForTarget(p, target, obs[p.Path]), charmKey)
 		return step, nil
 	}
 	newStep := func(p *types.Project, target string) (cache.Step, error) {

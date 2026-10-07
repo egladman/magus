@@ -31,10 +31,13 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/oci"
+	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"golang.org/x/mod/modfile"
@@ -307,20 +310,20 @@ func evaluationReads(ctx context.Context, ws types.Inspector) (readlog.Reads, bo
 }
 
 // indexFreshness is the freshness verdict of every symbol index the evaluation behind ws
-// declares, by project path, or nil when ws carries no evaluation to ask. It costs the
-// probe SymbolIndexStatusByStamp costs, paid where the evaluation already was.
-func indexFreshness(ctx context.Context, ws types.Inspector) map[string]types.SymbolIndexStatus {
+// declares, or nil when ws carries no evaluation to ask. It costs the probe
+// SymbolIndexStatusByStamp costs, paid where the evaluation already was.
+func indexFreshness(ctx context.Context, ws types.Inspector) map[indexRef]types.SymbolIndexStatus {
 	m := magusBehind(ctx, ws)
 	if m == nil {
 		return nil
 	}
-	out := map[string]types.SymbolIndexStatus{}
+	out := map[indexRef]types.SymbolIndexStatus{}
 	for _, s := range m.SymbolIndexStatusByStamp(ctx) {
 		path := s.Project.Path
 		if path == "" {
 			path = "."
 		}
-		out[path] = s
+		out[indexRef{project: path, op: s.Op}] = s
 	}
 	return out
 }
@@ -329,7 +332,7 @@ func indexFreshness(ctx context.Context, ws types.Inspector) map[string]types.Sy
 // records on its manifest, so a read the fast stamps settle can probe coverage without the
 // evaluated workspace the resolution needs. Never nil: a workspace that declares no index
 // records an empty list, which the store tells apart from none recorded.
-func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, freshness map[string]types.SymbolIndexStatus) []knowledge.SymbolIndexDeclaration {
+func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, freshness map[indexRef]types.SymbolIndexStatus) []knowledge.SymbolIndexDeclaration {
 	dirByPath := make(map[string]string, len(in.projects.Projects))
 	for _, p := range in.projects.Projects {
 		dirByPath[p.Path] = p.Dir
@@ -337,8 +340,11 @@ func symbolIndexDeclarationRecords(ctx context.Context, in symbolIngestInputs, f
 	decls := symbolIndexDeclarations(ctx, in)
 	out := make([]knowledge.SymbolIndexDeclaration, 0, len(decls))
 	for _, d := range decls {
-		rec := knowledge.SymbolIndexDeclaration{Project: d.project, Dir: dirByPath[d.project], Language: d.language, Path: d.path}
-		if s, ok := freshness[d.project]; ok {
+		rec := knowledge.SymbolIndexDeclaration{
+			Project: d.project, Dir: dirByPath[d.project], Op: d.op, Bin: d.bin, Language: d.language, Path: d.path,
+		}
+		// An override has no op, and so no verdict: magus never builds its index.
+		if s, ok := freshness[indexRef{project: d.project, op: d.op}]; ok && d.op != "" {
 			// The verdict and the file it judged, so a later read can reuse the one while
 			// the other is unchanged (see RecordedStaleIndexes). An index that cannot be
 			// stat'ed records no identity, and so is re-judged by every read.
@@ -371,13 +377,18 @@ func recordedSymbolIndexDeclarations(ctx context.Context, lw *LazyWorkspace, cfg
 // caller must open the workspace and judge afresh, as every read did before; it never
 // guesses, so an index rebuilt since the record, or one the record never judged, sends
 // the read to the workspace rather than to a stale verdict.
-func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]string, bool) {
+func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Config) ([]types.KnowledgeStaleIndex, bool) {
 	decls, ok := recordedSymbolIndexDeclarations(ctx, lw, cfg)
 	if !ok {
 		return nil, false
 	}
-	var stale []string
+	var stale []types.KnowledgeStaleIndex
 	for _, d := range decls {
+		if d.Op == "" {
+			// A knowledge.symbols override: magus never builds its index, so no evaluation
+			// judges it and none ever will.
+			continue
+		}
 		if d.Freshness == "" {
 			return nil, false
 		}
@@ -389,10 +400,10 @@ func RecordedStaleIndexes(ctx context.Context, lw *LazyWorkspace, cfg config.Con
 			return nil, false
 		}
 		if d.Freshness == string(types.SymbolIndexStale) {
-			stale = append(stale, d.Project)
+			stale = append(stale, types.KnowledgeStaleIndex{Project: d.Project, Language: d.Language, Op: d.Op})
 		}
 	}
-	slices.Sort(stale)
+	slices.SortFunc(stale, types.CompareStaleIndexes)
 	return stale, true
 }
 
@@ -1103,13 +1114,13 @@ func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root s
 	return store.MergeSymbolShards(ctx, g)
 }
 
-// loadKnowledgeSymbols reads each project's SCIP index (best-effort) into per-project
+// loadKnowledgeSymbols reads each project's SCIP indexes (best-effort) into per-project
 // symbol records for the @symbols shards. Ingestion is AUTOMATIC: every project bound to
-// a symbol-capable spell (one exposing the reserved `scip` op) is read from that
-// project's cached index, so importing a language's spells is the only opt-in: no
-// per-project config. The index lives under the cache dir, not the tree: `magus run
-// <project>::scip` produces it there. An index that has not been built yet (its scip
-// target has not run) or an unreadable/undecodable one is skipped with a debug log,
+// a symbol-capable spell (one declaring mgs_getSymbolIndexer) is read from that spell's
+// cached index, so importing a language's spells is the only opt-in: no per-project
+// config. The index lives under the cache dir, not the tree: `magus run <project>::scip`
+// (or scip-<spell>) produces it there. An index that has not been built yet (its op
+// has not run) or an unreadable/undecodable one is skipped with a debug log,
 // never an error: symbol ingestion is optional enrichment, so a bad index degrades to
 // "no symbols for that project" rather than failing every graph query.
 func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string][]types.KnowledgeSymbol {
@@ -1138,7 +1149,8 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 			continue
 		}
 		symbols.FingerprintBodies(in.root, syms)
-		out[decl.project] = syms
+		// A project's indexes are unioned: a Go and a Buzz index name disjoint symbols.
+		out[decl.project] = append(out[decl.project], syms...)
 	}
 	return out
 }
@@ -1323,7 +1335,7 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 		// declarations it recorded then answer the probe the same way. A store that cannot
 		// vouch for them opens the workspace below, as every probe did before.
 		if decls, recorded := recordedSymbolIndexDeclarations(ctx, lw, cfg); recorded {
-			return probeSymbolIndexes(decls), true
+			return probeSymbolIndexes(decls, indexerInstalled(ctx)), true
 		}
 	}
 	spells, err := ListSpells(ctx)
@@ -1342,15 +1354,57 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}), true
 }
 
-// SymbolIndexedAt reports when the cached SCIP index of the project at projectAbsDir was
-// written under cacheDir, and false when there is none. A knowledge.symbols override that
-// points at an index in the tree is not consulted.
+// SymbolIndexedAt reports when the cached SCIP index the default indexer op writes for the
+// project at projectAbsDir was written under cacheDir, and false when there is none.
+//
+// Deprecated: a project may hold an index per indexer op, which this cannot see. Use
+// SymbolIndexTimes, which reads every index each project declares.
 func SymbolIndexedAt(cacheDir, projectAbsDir string) (time.Time, bool) {
-	info, err := os.Stat(symbols.IndexPath(cacheDir, projectAbsDir))
+	info, err := os.Stat(symbols.IndexPath(cacheDir, projectAbsDir, spells.DefaultSymbolIndexOp))
 	if err != nil {
 		return time.Time{}, false
 	}
 	return info.ModTime(), true
+}
+
+// SymbolIndexTimes reports, by workspace-relative project path, when the cached SCIP
+// indexes each project declares were written, leaving out a project with none built. A
+// project with several reports the oldest: a caller asks whether a file predates the index
+// that covers it, and the oldest is the one answer that holds for every index. ok is false
+// when the declarations cannot be resolved. A knowledge.symbols override that points at an
+// index in the tree is not consulted.
+func SymbolIndexTimes(ctx context.Context, ws types.Inspector, root string, cfg config.Config) (times map[string]time.Time, ok bool) {
+	spells, err := ListSpells(ctx)
+	if err != nil {
+		return nil, false
+	}
+	projects, err := ws.ListProjects(ctx)
+	if err != nil {
+		return nil, false
+	}
+	return symbolIndexTimes(symbolIndexDeclarations(ctx, symbolIngestInputs{
+		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
+		projects: projects, spells: spells, log: slog.Default(),
+	})), true
+}
+
+// symbolIndexTimes is SymbolIndexTimes over resolved declarations: one Stat per derived
+// index, and nothing else in the cache dir, which may hold an index an unbound spell left.
+func symbolIndexTimes(decls []resolvedSymbolIndex) map[string]time.Time {
+	out := map[string]time.Time{}
+	for _, d := range decls {
+		if d.op == "" {
+			continue
+		}
+		info, err := os.Stat(d.path)
+		if err != nil {
+			continue
+		}
+		if at, seen := out[d.project]; !seen || info.ModTime().Before(at) {
+			out[d.project] = info.ModTime()
+		}
+	}
+	return out
 }
 
 // SymbolOccurrences returns every exact source range where the symbol keyed by key
@@ -1519,28 +1573,43 @@ type SymbolOccurrenceRead struct {
 // symbolGaps is the testable half of SymbolGaps: it takes the same resolved inputs
 // loadKnowledgeSymbols does, so the two cannot disagree about which indexes exist.
 func symbolGaps(ctx context.Context, in symbolIngestInputs) []types.KnowledgeSymbolGap {
-	return probeSymbolIndexes(symbolIndexDeclarationRecords(ctx, in, nil))
+	return probeSymbolIndexes(symbolIndexDeclarationRecords(ctx, in, nil), indexerInstalled(ctx))
+}
+
+// indexerInstalled reports whether an indexer binary resolves on the PATH a run started
+// from ctx would hand it, which is where the indexer would have to be found.
+func indexerInstalled(ctx context.Context) func(bin string) bool {
+	return func(bin string) bool {
+		_, err := procrun.LookPath(ctx, bin)
+		return err == nil
+	}
 }
 
 // probeSymbolIndexes is the probe itself, over declarations however they were resolved: one Stat
-// per declared index, and a gap for each that is not a readable file.
-func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration) []types.KnowledgeSymbolGap {
-	var out []types.KnowledgeSymbolGap
+// per declared index, and a gap for each that is not a readable file. installed answers
+// whether a missing index's indexer could have built it, so the gap carries the install
+// as its fix.
+func probeSymbolIndexes(decls []knowledge.SymbolIndexDeclaration, installed func(bin string) bool) []types.KnowledgeSymbolGap {
+	out := make([]types.KnowledgeSymbolGap, 0, len(decls))
 	for _, decl := range decls {
 		// Detail carries what Stat can actually distinguish: absent, or present but
 		// unreadable. State stays the machine-branchable field and is accurate for both,
 		// since neither yields a usable index.
-		var detail string
-		if _, err := os.Stat(decl.Path); err == nil {
-			continue
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			detail = "unreadable"
+		gap := types.KnowledgeSymbolGap{
+			Project:  types.NewProjectRef(decl.Project, decl.Dir),
+			Language: decl.Language,
+			State:    types.SymbolIndexNotBuilt,
 		}
-		out = append(out, types.KnowledgeSymbolGap{
-			Project: types.NewProjectRef(decl.Project, decl.Dir),
-			State:   types.SymbolIndexNotBuilt,
-			Detail:  detail,
-		})
+		_, err := os.Stat(decl.Path)
+		switch {
+		case err == nil:
+			continue
+		case !errors.Is(err, fs.ErrNotExist):
+			gap.Detail = "unreadable"
+		case decl.Bin != "" && !installed(decl.Bin):
+			gap.Hint = symbols.MissingIndexerHint(decl.Language, decl.Bin)
+		}
+		out = append(out, gap)
 	}
 	return out
 }
@@ -1570,6 +1639,8 @@ func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurr
 // though the override names a path rather than one.
 type resolvedSymbolIndex struct {
 	project  string
+	op       string // the indexer op that writes it; "" for a knowledge.symbols override
+	bin      string // the binary op forks; "" for an override
 	path     string
 	language string
 }
@@ -1586,14 +1657,16 @@ type symbolIngestInputs struct {
 	log      *slog.Logger
 }
 
-// symbolIndexDeclarations resolves which SCIP indexes to ingest, keyed by project so a
+// symbolIndexDeclarations resolves which SCIP indexes to ingest, grouped by project so a
 // derived entry and an explicit override for the same project cannot both fire. It
-// derives one for every project bound to a symbol-capable spell (one declaring a
-// symbol indexer), pointing at that project's cached index (symbols.IndexPath, the
-// same location the op writes to), the zero-config path. Explicit knowledge.symbols
-// entries are then merged in and win on the same project, pointing instead at a
-// workspace-relative path in the tree for a project whose indexer writes somewhere
-// non-standard. The result is sorted by project for deterministic ingestion.
+// derives one for every (project, indexer op) a symbol-capable spell (one declaring a
+// symbol indexer) binds, pointing at that op's cached index (symbols.IndexPath, the same
+// location the op writes to), the zero-config path: a project bound to go and buzz gets
+// two. The op is the one the run registers (spells.Spell.SymbolIndexOp), read from the
+// registry in.spells describes. Explicit knowledge.symbols entries then replace a
+// project's derived set, pointing instead at workspace-relative paths in the tree for a
+// project whose indexers write somewhere non-standard. The result is sorted by project,
+// then binding order, for deterministic ingestion.
 func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resolvedSymbolIndex {
 	capable := map[string]bool{}
 	langBySpell := map[string]string{}
@@ -1630,23 +1703,34 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 		languageByProject[p.Path] = languageOf(p)
 	}
 
-	byProject := map[string]resolvedSymbolIndex{}
+	byProject := map[string][]resolvedSymbolIndex{}
 	for _, p := range in.projects.Projects {
 		bound := p.Spells
 		if len(bound) == 0 && p.Spell != "" {
 			bound = []string{p.Spell}
 		}
+		absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
 		for _, name := range bound {
 			if !capable[name] {
 				continue
 			}
-			// One index per project: the cache location is keyed by the project dir, so
-			// the first symbol-capable spell wins and the rest would name the same file.
-			absDir := filepath.Join(in.root, filepath.FromSlash(p.Path))
-			byProject[p.Path] = resolvedSymbolIndex{project: p.Path, path: symbols.IndexPath(in.cacheDir, absDir), language: languageByProject[p.Path]}
-			break
+			indexer := spellIndexer(name)
+			op := indexer.OpName()
+			// One index per indexer op: two spells that run under one op share its file,
+			// and the first one bound names its language (see spells.SymbolIndexer).
+			if op == "" || slices.ContainsFunc(byProject[p.Path], func(d resolvedSymbolIndex) bool { return d.op == op }) {
+				continue
+			}
+			byProject[p.Path] = append(byProject[p.Path], resolvedSymbolIndex{
+				project: p.Path, op: op, bin: indexer.Command.Bin,
+				path: symbols.IndexPath(in.cacheDir, absDir, op), language: langBySpell[name],
+			})
 		}
 	}
+	// A project's knowledge.symbols entries are its whole index set: the first entry for a
+	// project replaces every index derived for it, and each further entry adds one, so a
+	// project indexed by its own build lists one entry per index that build writes.
+	overridden := map[string]bool{}
 	for _, decl := range in.cfg.Knowledge.Symbols {
 		if decl.Project == "" || decl.Index == "" {
 			continue
@@ -1657,15 +1741,35 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 			in.log.WarnContext(ctx, "knowledge: symbol index path escapes the workspace, skipping", slog.String("project", decl.Project), slog.String("index", decl.Index))
 			continue
 		}
-		byProject[decl.Project] = resolvedSymbolIndex{project: decl.Project, path: filepath.Join(in.root, decl.Index), language: languageByProject[decl.Project]}
+		if !overridden[decl.Project] {
+			overridden[decl.Project] = true
+			byProject[decl.Project] = nil
+		}
+		byProject[decl.Project] = append(byProject[decl.Project], resolvedSymbolIndex{
+			project: decl.Project, path: filepath.Join(in.root, decl.Index), language: cmp.Or(decl.Language, languageByProject[decl.Project]),
+		})
 	}
 
-	out := make([]resolvedSymbolIndex, 0, len(byProject))
-	for _, d := range byProject {
-		out = append(out, d)
+	var out []resolvedSymbolIndex
+	for _, project := range slices.Sorted(maps.Keys(byProject)) {
+		out = append(out, byProject[project]...)
 	}
-	slices.SortFunc(out, func(a, b resolvedSymbolIndex) int { return cmp.Compare(a.project, b.project) })
 	return out
+}
+
+// spellIndexer is the symbol indexer the spell called name declares, nil for none: the
+// registered spell's, which is the registry ListSpells describes, else the built-in's of
+// that name, which is what loading it would register. A caller asks only of a spell its
+// describe record calls symbol-capable, so a registered spell with no indexer is a stand-in
+// that has not loaded the spell yet.
+func spellIndexer(name string) *spells.SymbolIndexer {
+	if sp, ok := project.DefaultSpellRegistry().Lookup(name); ok && sp.SymbolIndexer() != nil {
+		return sp.SymbolIndexer()
+	}
+	if d, ok := spell.Builtins()[name]; ok {
+		return d.SymbolIndexer
+	}
+	return nil
 }
 
 // vcsDefaultMaxCommits bounds the history walk when knowledge.vcs.max_commits is unset.

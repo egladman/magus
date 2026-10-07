@@ -262,6 +262,7 @@ func (s *Store) mergeShardsNamed(ctx context.Context, g *Graph, man *manifest, n
 			return err
 		}
 	}
+	g.supersedeBuzzFunctions()
 	// Both overlays are single small shards, so load them whenever symbols are pulled in:
 	// the routed subset still gets the coverage ratio and agent contact on what it merged.
 	s.mergeOverlayShard(ctx, g, man, coverageShardName)

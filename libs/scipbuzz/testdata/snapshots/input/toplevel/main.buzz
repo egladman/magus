@@ -1,0 +1,40 @@
+import "std";
+
+// Width of the default frame.
+final width = 3;
+var counter = 0;
+
+protocol Shape {
+    fun area() > int;
+}
+
+// A rectangle.
+export object<Shape> Rect {
+    w: int,
+    h: int = width,
+
+    fun area() > int {
+        return this.w * this.h;
+    }
+}
+
+enum Level { low, high }
+
+// square builds a Rect with equal sides.
+export fun square(side: int) > Rect {
+    counter = counter + 1;
+    return Rect{ w = side, h = side };
+}
+
+fun describe(shape: Shape, level: Level) > str {
+    return "{shape.area()} {level.value}";
+}
+
+// hostNow is provided by the embedding host.
+extern fun hostNow() > int;
+
+fun main(args: [str]) > void {
+    final r: Rect = square(width);
+    std\print(describe(r, level: Level.high));
+    final started = hostNow();
+}

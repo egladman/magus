@@ -1,0 +1,69 @@
+// Nothing in the magus module imports this; the scip-buzz binary is its consumer.
+
+import "magus";
+import "../../hack/magusfile/index" as index;
+
+import "magus/spell/go";
+
+// go.mod requires the published gopherbuzz and diagnostics with no replace
+// directive, so `go install .../cmd/scip-buzz@<tag>` accepts the module. That is
+// why generate does not call gomod\replaceWorkspaceModules and nothing here
+// depends on ../gopherbuzz: a gopherbuzz change reaches this module only through
+// a release and a version bump.
+magus\project({
+    "spells": [go],
+    // The snapshot inputs are Buzz, which the go spell does not claim; without this a
+    // changed input would replay a cached test.
+    "sources": ["testdata/**/*.buzz"],
+    // MAGUS.md is declared on index_generate, not here.
+    "targets": {
+        "generate": {"skip_cache": "the engine drift-gates the MAGUS.md it writes; a replay would skip the check"},
+    },
+});
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md, this project's target catalog.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("MAGUS.md");
+    ctx.readsFiles("magusfile.buzz", "../../magus.yaml", "../../internal/render/target_graph.go",
+                   "../../internal/render/md/md.go", "../../internal/hint/cli_command.go");
+    index\render("libs/scipbuzz");
+}
+
+// Rewrites testdata/snapshots/gen from the inputs beside it, through the SCIP bindings'
+// own -update-snapshots flag, so a golden is never edited by hand. It sits outside
+// generate because it compiles the module, which needs format's go.sum first; drift
+// fails TestSnapshots in test instead.
+export fun snapshots_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.writesFiles("testdata/snapshots/gen/**/*.buzz");
+    go["go-test"](ctx, {"args": ["-run", "TestSnapshots", ".", "-args", "-update-snapshots"]});
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+// Runs the suite. Arguments after `--` reach go test after the package pattern.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.writesFiles("coverage.out");
+    final testArgs = mut ["-covermode=atomic", "-coverprofile=coverage.out", "./..."];
+    foreach (arg in args) {
+        testArgs.append(arg);
+    }
+    go["go-test"](ctx, {"args": testArgs});
+}
+
+// The anchor `magus affected ci` keys off.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
+}

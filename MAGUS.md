@@ -48,7 +48,7 @@ magus graph export -o json  # the whole graph
 | project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                |
 | target     |     100+ | `magus query kind=target`     | `lint-rules`, `content-generate`, `site-generate`                                                                 |
 | spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                        |
-| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                   |
+| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                   |
 | tool       | built in | `magus query kind=tool`       |                                                                                                                   |
 | charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                             |
 | module     | built in | `magus query kind=module`     |                                                                                                                   |
@@ -75,6 +75,7 @@ magus graph export -o json  # the whole graph
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                     |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      11 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       8 | `magus query project=libs/scipbuzz`                   | `format`, `test`, `build`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `test`, `install`                                |
 | [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `ci`, `lint`                                 |

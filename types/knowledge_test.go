@@ -98,6 +98,22 @@ func TestKnowledgeAnswerIndexCauseJSON(t *testing.T) {
 	assert.True(t, KnowledgeAnswer{StaleIndexes: []string{"libs/api"}}.IndexBehind())
 }
 
+// A project with two indexes names each project once and each stale index apart, so a
+// structured reader can tell the Buzz index is behind while the Go one is current.
+func TestKnowledgeAnswerStaleIndexDetailsJSON(t *testing.T) {
+	stale := []KnowledgeStaleIndex{{Project: ".", Language: "buzz", Op: "scip-buzz"}, {Project: "libs/api"}}
+	ans := KnowledgeAnswer{Verdict: VerdictFound, StaleIndexes: StaleIndexProjects(stale), StaleIndexDetails: stale}
+	b, err := json.Marshal(ans)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"verdict": "found",
+		"stale_indexes": [".", "libs/api"],
+		"stale_index_details": [{"project": ".", "language": "buzz", "op": "scip-buzz"}, {"project": "libs/api"}]
+	}`, string(b))
+	assert.Equal(t, ". (buzz index), libs/api", ans.DescribeStale())
+	assert.Equal(t, []string{"."}, StaleIndexProjects([]KnowledgeStaleIndex{{Project: ".", Language: "go"}, {Project: ".", Language: "buzz"}}))
+}
+
 // TestNodeKindPaletteDrift locks the browser's node-kind palette to the kinds declared here.
 //
 // The Graph Explorer colors every node by kind, and a kind with no entry falls through to a flat

@@ -31,19 +31,39 @@ const (
 //
 // Uses names the spell's own tools the indexer runs besides its binary: scip-go loads
 // packages through `go`, so a Go index is out of date once the toolchain moves. Each entry
-// must be a tool mgs_getTools declares with a version probe; that version keys the scip op
-// and no other target.
+// must be a tool mgs_getTools declares with a version probe; that version keys the
+// indexer's op and no other target.
+//
+// Op names the op magus registers the indexer under; empty means DefaultSymbolIndexOp.
+// A spell whose index rides beside another spell's on one project declares an op of its
+// own, so each index runs, keys and fails apart. Two spells on one project that run
+// under the same op share its one index, and the first one bound names its language.
 type SymbolIndexer struct {
 	Format  SymbolFormat `json:"format,omitempty"`
+	Op      string       `json:"op,omitempty"`
 	Command Command      `json:"command,omitempty"`
 	Uses    []string     `json:"uses,omitempty"`
 }
 
-// SymbolIndexOp is the op name magus registers a declared indexer under, so an index
-// run reaches the cache, keying and freshness machinery as an ordinary command op.
-//
-// magus owns this name now; a spell no longer spells it. It stays "scip" because
-// renaming it would rekey every cached index and rename a target users and docs
-// already name, buying nothing: the format a spell emits is declared on
-// SymbolIndexer.Format, which is the conflation that mattered.
-const SymbolIndexOp = "scip"
+// DefaultSymbolIndexOp is the op a symbol indexer that declares none runs under.
+// Registering the indexer as an op is what lets an index run reach the cache, keying and
+// freshness machinery as an ordinary command op. It stays "scip" because renaming it
+// would re-key every cached index and rename a target users and docs already name.
+const DefaultSymbolIndexOp = "scip"
+
+// OpName returns the op si runs under: its declared Op, else DefaultSymbolIndexOp, and ""
+// for a nil si. Decode registers the indexer under this name, and the run, freshness and
+// ingestion paths all find the index through it, so there is one answer to which op
+// writes a spell's index.
+func (si *SymbolIndexer) OpName() string {
+	if si == nil {
+		return ""
+	}
+	if si.Op != "" {
+		return si.Op
+	}
+	return DefaultSymbolIndexOp
+}
+
+// SymbolIndexOp returns the op s's symbol indexer runs under, or "" when s declares none.
+func (s *Spell) SymbolIndexOp() string { return s.symbolIndexer.OpName() }

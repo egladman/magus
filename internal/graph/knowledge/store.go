@@ -103,9 +103,11 @@ type shardMeta struct {
 }
 
 // SymbolIndexDeclaration is one symbol index a workspace declares: the project it covers,
-// where that project's directory is, the language its symbols are written in, and the
-// absolute path of the index file. The resolution is the caller's (it reads the evaluated
-// projects and spells); the store only records and returns it.
+// where that project's directory is, the indexer op that writes it and the binary that op
+// forks, the language its symbols are written in, and the absolute path of the index
+// file. Project and Op identify it. Op and Bin are empty for a knowledge.symbols override,
+// whose index the user's own build writes. The resolution is the caller's (it reads the
+// evaluated projects and spells); the store only records and returns it.
 //
 // Freshness is the verdict the evaluation reached about the index file at Path (one of
 // types.SymbolIndexFreshness, "" when none was reached), and Size and ModTime identify the
@@ -115,6 +117,8 @@ type shardMeta struct {
 type SymbolIndexDeclaration struct {
 	Project   string `json:"project"`
 	Dir       string `json:"dir"`
+	Op        string `json:"op,omitempty"`
+	Bin       string `json:"bin,omitempty"`
 	Language  string `json:"language,omitempty"`
 	Path      string `json:"path"`
 	Freshness string `json:"freshness,omitempty"`
@@ -672,6 +676,7 @@ func (s *Store) mergeSymbolShards(ctx context.Context, g *Graph, man *manifest, 
 		}
 		exact = exact && fp == man.Shards[name].Fingerprint
 	}
+	g.supersedeBuzzFunctions()
 	exact = s.mergeOverlayShard(ctx, g, man, coverageShardName) && exact
 	exact = s.mergeOverlayShard(ctx, g, man, sessionShardName) && exact
 	return exact, nil

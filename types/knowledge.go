@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
@@ -328,7 +329,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	// stored edges instead of refolding the symbol shard.
 	{ID: RelationImports, Description: "imports another source file, package, or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: joinEndpointShapes(
 		endpointShapes(KindFile, KindFile, KindImport), endpointShapes(KindDir, KindDir))},
-	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile)},
+	{ID: RelationRationaleFor, Description: "records source-local rationale for code", ForwardLabel: "explains", ReverseLabel: "explained by", Shapes: endpointShapes(KindRationale, KindFunction, KindFile, KindSymbol)},
 	{ID: RelationEmits, Description: "has emitted a diagnostic in an observed run", ForwardLabel: "emits", ReverseLabel: "emitted by", Shapes: joinEndpointShapes(
 		endpointShapes(KindProject, KindDiagnostic), endpointShapes(KindTarget, KindDiagnostic))},
 	{ID: RelationOwns, Description: "declares ownership through CODEOWNERS", ForwardLabel: "owns", ReverseLabel: "owned by", Shapes: endpointShapes(KindOwner, KindProject, KindDir, KindFile)},
@@ -661,8 +662,12 @@ const (
 // SymbolIndexStatus is one symbol-capable project's index freshness, for status output.
 // Project carries both the machine path and the human name so the workspace-root project
 // renders as its repo name, not the bare ".".
+//
+// Project and Op identify the index: a project bound to two indexing spells has an entry
+// per indexer op.
 type SymbolIndexStatus struct {
 	Project   ProjectRef           `json:"project"`
+	Op        string               `json:"op,omitempty"`
 	Language  string               `json:"language,omitempty"`
 	Freshness SymbolIndexFreshness `json:"freshness"`
 	// Detail says why, for a freshness that needs it; empty otherwise.
@@ -737,18 +742,30 @@ const (
 // State reuses SymbolIndexFreshness so reporting staleness here later is additive rather
 // than a second enum; today only SymbolIndexNotBuilt is emitted, because a gap is an index
 // magus could not READ and staleness reaches the answer by its own route, as StaleIndexes.
+//
+// Language names which of the project's indexes is missing, empty when the declaration
+// does not say. Hint is the fix when the reason is an indexer that is not installed.
 type KnowledgeSymbolGap struct {
-	Project ProjectRef           `json:"project"          yaml:"project"`
-	State   SymbolIndexFreshness `json:"state"            yaml:"state"`
-	Detail  string               `json:"detail,omitempty" yaml:"detail,omitempty"`
+	Project  ProjectRef           `json:"project"            yaml:"project"`
+	Language string               `json:"language,omitempty" yaml:"language,omitempty"`
+	State    SymbolIndexFreshness `json:"state"              yaml:"state"`
+	Detail   string               `json:"detail,omitempty"   yaml:"detail,omitempty"`
+	Hint     string               `json:"hint,omitempty"     yaml:"hint,omitempty"`
 }
 
-// Describe renders one gap as "libs/api (not-indexed)". It lives here so the CLI, the
+// Describe renders one gap as "libs/api (not-indexed)", or "libs/api (buzz index
+// not-indexed; <hint>)" when it names a language and a fix. It lives here so the CLI, the
 // explain text, and the insight report cannot drift into three spellings of one fact.
 func (g KnowledgeSymbolGap) Describe() string {
 	detail := g.Detail
 	if detail == "" {
 		detail = string(g.State)
+	}
+	if g.Language != "" {
+		detail = g.Language + " index " + detail
+	}
+	if g.Hint != "" {
+		detail += "; " + g.Hint
 	}
 	return g.Project.Display() + " (" + detail + ")"
 }
@@ -758,6 +775,65 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 	parts := make([]string, len(gaps))
 	for i, g := range gaps {
 		parts[i] = g.Describe()
+	}
+	return strings.Join(parts, ", ")
+}
+
+// CouldHold reports whether this gap's index could hold a symbol of language. Either side
+// unknown (empty) could, so an undeclared language never hides a gap.
+func (g KnowledgeSymbolGap) CouldHold(language string) bool {
+	return languageCouldMatch(g.Language, language)
+}
+
+// KnowledgeStaleIndex is one built symbol index older than the sources it covers. A project
+// bound to two indexing spells has one index per indexer op, judged apart, so the language
+// says which of them is behind.
+type KnowledgeStaleIndex struct {
+	// Project is the workspace-relative path, "." for the root.
+	Project  string `json:"project"            yaml:"project"`
+	Language string `json:"language,omitempty" yaml:"language,omitempty"`
+	Op       string `json:"op,omitempty"       yaml:"op,omitempty"`
+}
+
+// Describe renders the index as "libs/api (go index)", or the bare project when the
+// language is unknown.
+func (s KnowledgeStaleIndex) Describe() string {
+	if s.Language == "" {
+		return s.Project
+	}
+	return s.Project + " (" + s.Language + " index)"
+}
+
+// CouldHold reports whether this index could hold a symbol of language, on the same terms
+// as KnowledgeSymbolGap.CouldHold.
+func (s KnowledgeStaleIndex) CouldHold(language string) bool {
+	return languageCouldMatch(s.Language, language)
+}
+
+func languageCouldMatch(index, symbol string) bool {
+	return index == "" || symbol == "" || strings.EqualFold(index, symbol)
+}
+
+// CompareStaleIndexes orders stale indexes by project, then language, then op.
+func CompareStaleIndexes(a, b KnowledgeStaleIndex) int {
+	return cmp.Or(cmp.Compare(a.Project, b.Project), cmp.Compare(a.Language, b.Language), cmp.Compare(a.Op, b.Op))
+}
+
+// StaleIndexProjects lists the projects stale holds, sorted and once each.
+func StaleIndexProjects(stale []KnowledgeStaleIndex) []string {
+	out := make([]string, 0, len(stale))
+	for _, s := range stale {
+		out = append(out, s.Project)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// DescribeStaleIndexes renders a stale list as "libs/api (go index), docs (buzz index)".
+func DescribeStaleIndexes(stale []KnowledgeStaleIndex) string {
+	parts := make([]string, len(stale))
+	for i, s := range stale {
+		parts[i] = s.Describe()
 	}
 	return strings.Join(parts, ", ")
 }
@@ -772,6 +848,9 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // symbol index predates the sources it covers. It rides the answer rather than the console
 // so `-o json` and MCP cannot lose it: a machine consumer reading only stdout got an
 // unqualified `absent` where a human reading the same lookup was told the index was behind.
+// StaleIndexDetails is the same caveat one index at a time, naming the language of each, so
+// a reader of a project with a Go and a Buzz index can tell which one is behind; StaleIndexes
+// names each of those projects once.
 //
 // Text rides the answer for the same reason and corrects a sharper misreading. A symbol
 // lookup that finds nothing reports `absent`, which is TRUE of symbols and false of the
@@ -790,7 +869,10 @@ type KnowledgeAnswer struct {
 	Reason       KnowledgeUnknownReason `json:"reason,omitempty"        yaml:"reason,omitempty"`
 	Gaps         []KnowledgeSymbolGap   `json:"gaps,omitempty"          yaml:"gaps,omitempty"`
 	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
-	Text         *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
+	// Off the Buzz boundary until KnowledgeStaleIndex is declared a boundary object in
+	// cmd/magus-utils; a script reads StaleIndexes.
+	StaleIndexDetails []KnowledgeStaleIndex `json:"stale_index_details,omitempty" yaml:"stale_index_details,omitempty" buzz:"-"`
+	Text              *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
 	// IndexCause is why Gaps or StaleIndexes exist, as far as magus can observe, and what
 	// clears it. Nil when the answer has neither, or when the lookup did not diagnose them.
 	IndexCause *KnowledgeIndexCause `json:"index_cause,omitempty" yaml:"index_cause,omitempty"`
@@ -800,6 +882,18 @@ type KnowledgeAnswer struct {
 // older than its sources, the condition IndexCause explains.
 func (a KnowledgeAnswer) IndexBehind() bool {
 	return len(a.Gaps) > 0 || len(a.StaleIndexes) > 0
+}
+
+// DescribeStale renders the answer's stale indexes as "libs/api (go index), docs", or ""
+// when none is stale.
+func (a KnowledgeAnswer) DescribeStale() string {
+	if len(a.StaleIndexDetails) == 0 {
+		// compat(until: no magus server that predates stale_index_details answers a newer
+		// CLI, observed as `magus status` reporting no version skew on any host): such a
+		// server sends only the project paths.
+		return strings.Join(a.StaleIndexes, ", ")
+	}
+	return DescribeStaleIndexes(a.StaleIndexDetails)
 }
 
 // KnowledgeIndexCause is the observed reason a checkout's symbol index is missing or

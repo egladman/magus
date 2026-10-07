@@ -1,0 +1,31 @@
+  import twice, Point from "lib/util";
+//       ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+//              ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/main().
+  fun main(args: [str]) > void {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/main().
+//         kind Function
+//         display_name main
+//         signature_documentation
+//         > fun main(args: [str]) > void
+//         ^^^^ definition local 0
+//              kind Parameter
+//              display_name args
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final p: Point = Point{ x = twice(2) };
+//          ^ definition local 1
+//            kind Constant
+//            display_name p
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//             ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
+//                     ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
+//                                ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+      final b = base;
+//          ^ definition local 2
+//            kind Constant
+//            display_name b
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/main().
+  

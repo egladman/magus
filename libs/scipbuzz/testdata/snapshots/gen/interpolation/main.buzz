@@ -1,0 +1,74 @@
+  final a = 1;
+//      ^ definition scip-buzz buzz . . `main.buzz`/a.
+//        kind Constant
+//        display_name a
+//        signature_documentation
+//        > final a
+  final b = 2;
+//      ^ definition scip-buzz buzz . . `main.buzz`/b.
+//        kind Constant
+//        display_name b
+//        signature_documentation
+//        > final b
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/show().
+  fun show() > str {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/show().
+//         kind Function
+//         display_name show
+//         signature_documentation
+//         > fun show() > str
+      return "{a} and {b} and {"{a}{b}"}";
+//             ^ reference scip-buzz buzz . . `main.buzz`/a.
+//                     ^ reference scip-buzz buzz . . `main.buzz`/b.
+//                               ^ reference scip-buzz buzz . . `main.buzz`/a.
+//                                  ^ reference scip-buzz buzz . . `main.buzz`/b.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/show().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/raw().
+  fun raw() > str {
+//    ^^^ definition scip-buzz buzz . . `main.buzz`/raw().
+//        kind Function
+//        display_name raw
+//        signature_documentation
+//        > fun raw() > str
+      return `{a}-{b}
+//             ^ reference scip-buzz buzz . . `main.buzz`/a.
+//                 ^ reference scip-buzz buzz . . `main.buzz`/b.
+    {b}`;
+//   ^ reference scip-buzz buzz . . `main.buzz`/b.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/raw().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/escaped().
+  fun escaped() > str {
+//    ^^^^^^^ definition scip-buzz buzz . . `main.buzz`/escaped().
+//            kind Function
+//            display_name escaped
+//            signature_documentation
+//            > fun escaped() > str
+      return "\{a} \"{b}\" \t{a}";
+//                    ^ reference scip-buzz buzz . . `main.buzz`/b.
+//                            ^ reference scip-buzz buzz . . `main.buzz`/a.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/escaped().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/free().
+  fun free() > str {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/free().
+//         kind Function
+//         display_name free
+//         signature_documentation
+//         > fun free() > str
+      final @"type" = "x";
+//            ^^^^ definition local 0
+//                 kind Constant
+//                 display_name type
+//                 enclosing_symbol scip-buzz buzz . . `main.buzz`/free().
+      return "{@"type"}{a}";
+//               ^^^^ reference local 0
+//                      ^ reference scip-buzz buzz . . `main.buzz`/a.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/free().
+  

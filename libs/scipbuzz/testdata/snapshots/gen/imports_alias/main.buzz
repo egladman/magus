@@ -1,0 +1,38 @@
+  import "./lib/util" as u;
+//                       ^ definition local 0
+//                         kind Module
+//                         display_name u
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/quadruple().
+  fun quadruple() > int {
+//    ^^^^^^^^^ definition scip-buzz buzz . . `main.buzz`/quadruple().
+//              kind Function
+//              display_name quadruple
+//              signature_documentation
+//              > fun quadruple() > int
+      return u\twice(u\twice(u\base));
+//           ^ reference local 0
+//             ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+//                   ^ reference local 0
+//                     ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+//                           ^ reference local 0
+//                             ^^^^ reference scip-buzz buzz . . `lib/util.buzz`/base.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/quadruple().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/shadowed().
+  fun shadowed(u: int) > int {
+//    ^^^^^^^^ definition scip-buzz buzz . . `main.buzz`/shadowed().
+//             kind Function
+//             display_name shadowed
+//             signature_documentation
+//             > fun shadowed(u: int) > int
+//             ^ definition local 1
+//               kind Parameter
+//               display_name u
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/shadowed().
+      return u + 1;
+//           ^ reference local 1
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/shadowed().
+  

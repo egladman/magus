@@ -19,6 +19,9 @@ import "project/guides/integrations/agents";
 import "render" as renderer;
 
 import "magus/spell/typescript";
+// Claims **/*.buzz, which sources already lists by directory, and builds the Buzz symbol
+// index (scip-buzz) beside the TypeScript one.
+import "magus/spell/buzz";
 // Imported for go-run only. Listing it in spells would claim **/*.go for docs.
 import "magus/spell/go";
 // Imported for typos only. Listing it in spells would claim **/*.md, which the root lints.
@@ -26,7 +29,7 @@ import "magus/spell/markdown";
 
 magus\project({
     "tools": {"node": policy\node},
-    "spells": [typescript],
+    "spells": [typescript, buzz],
     // content-generate reads proto's descriptor and the render reads libs/figure;
     // without these edges the reads are unordered (MGS4004).
     "depends_on": ["..", "../proto", "../libs/figure"],

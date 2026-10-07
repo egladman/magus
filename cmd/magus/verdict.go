@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"strings"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
@@ -54,7 +53,7 @@ func symbolCoverageOf(ctx context.Context, ws graphWorkspace, cfg config.Config,
 		return cov
 	}
 	cov.Gaps, cov.Probed = magus.SymbolGaps(ctx, ws, ws.Root(), cfg, slog.Default())
-	cov.Stale = staleIndexProjectsOf(ctx, ws)
+	cov.Stale = staleIndexesOf(ctx, ws)
 	return cov
 }
 
@@ -85,7 +84,7 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 			// The caveat where it is the whole explanation. It used to print only under an
 			// answer that found something, and vanish on the miss it actually accounted for.
 			fmt.Fprintf(w, "  the symbol index predates the sources it covers, so a definition added since it was built is not in it: %s\n",
-				strings.Join(ans.StaleIndexes, ", "))
+				ans.DescribeStale())
 			fmt.Fprintf(w, "  refresh and ask again: %s\n", hint.GraphBuild)
 		}
 		if len(ans.Gaps) > 0 {

@@ -1,0 +1,42 @@
+  // Größe: a label with non-ASCII text.
+  final label = "héllo wörld";
+//      ^^^^^ definition scip-buzz buzz . . `main.buzz`/label.
+//            kind Constant
+//            display_name label
+//            signature_documentation
+//            > final label
+//            documentation
+//            > Größe: a label with non-ASCII text.
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/greet().
+  fun greet(name: str) > str {
+//    ^^^^^ definition scip-buzz buzz . . `main.buzz`/greet().
+//          kind Function
+//          display_name greet
+//          signature_documentation
+//          > fun greet(name: str) > str
+//          ^^^^ definition local 0
+//               kind Parameter
+//               display_name name
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/greet().
+      return "ünïcödé → {name} ✓ {label}";
+//                             ^^^^ reference local 0
+//                                        ^^^^^ reference scip-buzz buzz . . `main.buzz`/label.
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/greet().
+  
+  /* ✓ */ final greeting = greet("Zoë"); final again = greet(label);
+//                ^^^^^^^^ definition scip-buzz buzz . . `main.buzz`/greeting.
+//                         kind Constant
+//                         display_name greeting
+//                         signature_documentation
+//                         > final greeting
+//                           ^^^^^ reference scip-buzz buzz . . `main.buzz`/greet().
+//                                                ^^^^^ definition scip-buzz buzz . . `main.buzz`/again.
+//                                                      kind Constant
+//                                                      display_name again
+//                                                      signature_documentation
+//                                                      > final again
+//                                                        ^^^^^ reference scip-buzz buzz . . `main.buzz`/greet().
+//                                                              ^^^^^ reference scip-buzz buzz . . `main.buzz`/label.
+  

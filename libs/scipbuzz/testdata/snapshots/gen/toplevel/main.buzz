@@ -1,0 +1,150 @@
+  import "std";
+//        ^^^ definition local 0
+//            kind Module
+//            display_name std
+  
+  // Width of the default frame.
+  final width = 3;
+//      ^^^^^ definition scip-buzz buzz . . `main.buzz`/width.
+//            kind Constant
+//            display_name width
+//            signature_documentation
+//            > final width
+//            documentation
+//            > Width of the default frame.
+  var counter = 0;
+//    ^^^^^^^ definition scip-buzz buzz . . `main.buzz`/counter.
+//            kind Variable
+//            display_name counter
+//            signature_documentation
+//            > var counter
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/Shape#
+  protocol Shape {
+//         ^^^^^ definition scip-buzz buzz . . `main.buzz`/Shape#
+//               kind Protocol
+//               display_name Shape
+//               signature_documentation
+//               > protocol Shape
+      fun area() > int;
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/Shape#
+  
+  // A rectangle.
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/Rect#
+  export object<Shape> Rect {
+//              ^^^^^ reference scip-buzz buzz . . `main.buzz`/Shape#
+//                     ^^^^ definition scip-buzz buzz . . `main.buzz`/Rect#
+//                          kind Object
+//                          display_name Rect
+//                          signature_documentation
+//                          > object<Shape> Rect
+//                          documentation
+//                          > A rectangle.
+      w: int,
+      h: int = width,
+//             ^^^^^ reference scip-buzz buzz . . `main.buzz`/width.
+  
+      fun area() > int {
+          return this.w * this.h;
+      }
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/Rect#
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/Level#
+  enum Level { low, high }
+//     ^^^^^ definition scip-buzz buzz . . `main.buzz`/Level#
+//           kind Enum
+//           display_name Level
+//           signature_documentation
+//           > enum Level
+//                       ⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/Level#
+  
+  // square builds a Rect with equal sides.
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/square().
+  export fun square(side: int) > Rect {
+//           ^^^^^^ definition scip-buzz buzz . . `main.buzz`/square().
+//                  kind Function
+//                  display_name square
+//                  signature_documentation
+//                  > fun square(side: int) > Rect
+//                  documentation
+//                  > square builds a Rect with equal sides.
+//                  ^^^^ definition local 1
+//                       kind Parameter
+//                       display_name side
+//                       enclosing_symbol scip-buzz buzz . . `main.buzz`/square().
+//                               ^^^^ reference scip-buzz buzz . . `main.buzz`/Rect#
+      counter = counter + 1;
+//    ^^^^^^^ reference scip-buzz buzz . . `main.buzz`/counter.
+//              ^^^^^^^ reference scip-buzz buzz . . `main.buzz`/counter.
+      return Rect{ w = side, h = side };
+//           ^^^^ reference scip-buzz buzz . . `main.buzz`/Rect#
+//                     ^^^^ reference local 1
+//                               ^^^^ reference local 1
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/square().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/describe().
+  fun describe(shape: Shape, level: Level) > str {
+//    ^^^^^^^^ definition scip-buzz buzz . . `main.buzz`/describe().
+//             kind Function
+//             display_name describe
+//             signature_documentation
+//             > fun describe(shape: Shape, level: Level) > str
+//             ^^^^^ definition local 2
+//                   kind Parameter
+//                   display_name shape
+//                   enclosing_symbol scip-buzz buzz . . `main.buzz`/describe().
+//                    ^^^^^ reference scip-buzz buzz . . `main.buzz`/Shape#
+//                           ^^^^^ definition local 3
+//                                 kind Parameter
+//                                 display_name level
+//                                 enclosing_symbol scip-buzz buzz . . `main.buzz`/describe().
+//                                  ^^^^^ reference scip-buzz buzz . . `main.buzz`/Level#
+      return "{shape.area()} {level.value}";
+//             ^^^^^ reference local 2
+//                            ^^^^^ reference local 3
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/describe().
+  
+  // hostNow is provided by the embedding host.
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/hostNow().
+  extern fun hostNow() > int;
+//           ^^^^^^^ forward_definition scip-buzz buzz . . `main.buzz`/hostNow().
+//                          ⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/hostNow().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/main().
+  fun main(args: [str]) > void {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/main().
+//         kind Function
+//         display_name main
+//         signature_documentation
+//         > fun main(args: [str]) > void
+//         ^^^^ definition local 4
+//              kind Parameter
+//              display_name args
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final r: Rect = square(width);
+//          ^ definition local 5
+//            kind Constant
+//            display_name r
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//             ^^^^ reference scip-buzz buzz . . `main.buzz`/Rect#
+//                    ^^^^^^ reference scip-buzz buzz . . `main.buzz`/square().
+//                           ^^^^^ reference scip-buzz buzz . . `main.buzz`/width.
+      std\print(describe(r, level: Level.high));
+//    ^^^ reference local 0
+//        ^^^^^ reference scip-buzz buzz host . std/print().
+//              ^^^^^^^^ reference scip-buzz buzz . . `main.buzz`/describe().
+//                       ^ reference local 5
+//                                 ^^^^^ reference scip-buzz buzz . . `main.buzz`/Level#
+      final started = hostNow();
+//          ^^^^^^^ definition local 6
+//                  kind Constant
+//                  display_name started
+//                  enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//                    ^^^^^^^ reference scip-buzz buzz . . `main.buzz`/hostNow().
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/main().
+  

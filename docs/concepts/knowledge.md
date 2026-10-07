@@ -348,7 +348,8 @@ from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
 Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
 `documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
-function, and code symbol to code symbol from a SCIP index.
+function, and code symbol to code symbol from a SCIP index. `rationale_for` points at a
+buzz function, or at its symbol once a Buzz index covers the file.
 
 Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
 root, `.github/`, or `docs/`): each owner becomes an `owner` node with an `owns`
@@ -488,22 +489,31 @@ magus never parses source code. To bring code symbols into the graph, it ingests
 that a per-language indexer (`scip-go`, `scip-typescript`, ...) emits - so any
 language with an indexer works, with no magus code per language.
 
-**This is automatic.** Every symbol-capable spell (go, ts, py, rust) exposes a reserved
-`scip` op that runs its indexer. Importing the language's spells is the entire opt-in:
-each project bound to such a spell is ingested with no `knowledge:` config. Build the
-index the same way you run any target:
+**This is automatic.** Every symbol-capable spell (go, typescript, python, rust, buzz)
+declares its indexer, and magus runs it as an op. Importing the language's spells is the
+entire opt-in: each project bound to such a spell is ingested with no `knowledge:`
+config. Build the index the same way you run any target:
 
 ```sh
-magus run pkg/foo::scip   # forks the language's SCIP indexer
+magus run pkg/foo::scip        # forks the language's SCIP indexer
+magus run ::scip-buzz          # the Buzz index of the root project
 ```
+
+A project keeps one index per indexer op among the spells it binds. An indexer runs as
+`scip` unless its `SymbolIndexer` declares an `op` of its own; the buzz spell declares
+`scip-buzz`, so the root project of this repository builds its Go index with `scip` and
+its Buzz index with `scip-buzz`. Each op has its own cache entry, freshness verdict and
+failure: a missing `scip-buzz` leaves the Buzz index unbuilt and the Go index untouched.
+Two spells bound to one project under the same op share that op's one index, and the
+first one bound names its language.
 
 The index is a build artifact, so it lives under the magus cache dir, never in the
 source tree: magus hands the indexer the destination through a `MAGUS_SYMBOL_INDEX`
-environment variable it injects for the `scip` op, and reads that same path back at
-query time. The next graph query folds the symbols in.
+environment variable it injects for the op, and reads that same path back at query
+time. The next graph query folds the symbols in, every index of a project unioned.
 
 **The server keeps it fresh for you.** While the server runs, background auto-indexing
-re-runs each symbol-capable project's `scip` op when its sources change, so symbols stay
+re-runs each symbol-capable project's indexer ops when its sources change, so symbols stay
 current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
 into one run (a quiet window), a project re-indexes at most once per interval, a run
 starts only when nothing else is running, and it cancels itself the moment your own work
@@ -511,11 +521,13 @@ needs a slot. Each run goes through the normal path, so it shows up as an ordina
 journaled job, not hidden work. It is on by default in the server; a one-shot CLI never
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
-run just fails and backs off - run `magus run <project>::scip` yourself, or index in CI.
+run of that index just fails and backs off, while the project's other indexes keep
+running - install it, or run `magus run <project>::scip` yourself, or index in CI.
+`magus status` and the gaps a lookup reports name a missing indexer and where to get it.
 
-An index that has not been built yet is simply skipped, so symbols appear once the
-`scip` target has run. To point a project at an index your own build already emits
-somewhere in the tree instead, override it:
+An index that has not been built yet is simply skipped, so symbols appear once its op
+has run. To point a project at indexes your own build already emits somewhere in the
+tree instead, override it:
 
 ```yaml
 # magus.yaml
@@ -523,7 +535,23 @@ knowledge:
   symbols:
     - project: pkg/foo
       index: build/custom.scip # a workspace-relative path magus reads as-is
+    - project: pkg/foo
+      index: build/buzz.scip   # a second index of the same project
+      language: buzz           # what its symbols are written in
 ```
+
+A project's entries are its whole index set: the first one replaces every index magus
+would have derived for that project, and each further entry for it adds one. An entry
+without `language` takes the language of the project's indexing spell, so a project with
+an index per language names each one.
+
+Once a Buzz index defines a file's top-level function, that function is the index's
+`symbol` node, and the AST walk's `function` node and its intra-file `calls` edges drop
+out when the symbols merge (a function the index does not define, such as an `extern
+fun`, keeps its node); the file node, its imports and its `NOTE`/`WHY`
+rationale stay, each rationale now explaining its function's symbol. The committed
+default graph still carries the function nodes, since it never depends on what a
+machine's cache holds, and a function id resolves to its symbol in `magus refs`.
 
 Each ingested index becomes a per-project `<project>@symbols` shard: `symbol` nodes
 (keyed by their version-stripped SCIP moniker), `defines` edges from the defining

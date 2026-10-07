@@ -159,7 +159,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 			attrs[attrSymbolKind] = sym.SymbolKind
 		}
 		if sym.Moniker != "" {
-			attrs["moniker"] = sym.Moniker
+			attrs[attrMoniker] = sym.Moniker
 		}
 		// Tested-by lens: how many referencing files are tests. Derived from the same
 		// SCIP reference edges (no new data), so it rides this deterministic shard rather

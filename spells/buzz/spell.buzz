@@ -1,4 +1,4 @@
-// Buzz's language identity, and nothing else. magus writes its own magusfile and
+// Buzz's language identity and its symbol indexer. magus writes its own magusfile and
 // spells in Buzz, so a workspace full of .buzz sources needs magus to know what a
 // Buzz file IS: which extension carries one, and how to tell code from a comment or
 // a string while scanning it.
@@ -8,15 +8,12 @@
 // extension map that binds a file to a project - so removing it does not remove
 // work, it makes those surfaces read Buzz as unstructured text.
 //
-// It declares NO ops on purpose. The three it used to carry (buzz-check, buzz-test,
-// magus-buzz) forked interpreters that know only the Buzz stdlib, so they could not
-// load a magusfile or a spell, which is every Buzz file in this repository. They
-// were checkable only against sources nobody had. `magus buzz -t <file>` runs the
-// in-file test blocks directly and needs no spell.
-//
-// No mgs_getTools either: `magus buzz` reports magus's own version, the upstream
-// `buzz` toolchain is not reliably on PATH, and a failed probe would warn on every
-// run touching a Buzz-bound project.
+// It declares NO ops of its own on purpose. The three it used to carry (buzz-check,
+// buzz-test, magus-buzz) forked interpreters that know only the Buzz stdlib, so they
+// could not load a magusfile or a spell, which is every Buzz file in this repository.
+// They were checkable only against sources nobody had. `magus buzz -t <file>` runs the
+// in-file test blocks directly and needs no spell. The one op it has is the indexer
+// magus synthesizes from mgs_getSymbolIndexer, scip-buzz.
 
 import "magus/spell";
 
@@ -41,4 +38,31 @@ export fun mgs_getLanguage() > Language {
 
 export fun mgs_listRequiredGlobs() > [Path] {
     return [Path{value = "**/*.buzz"}];
+}
+
+// Observed, not probed: only the scip-buzz op drives it, so its version keys the index
+// and no other target, and a machine without it warns on no run but the index's own.
+// The upstream `buzz` toolchain stays undeclared: it is not reliably on PATH, and
+// nothing here runs it.
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "scip-buzz": Tool{observe = Command{bin = "scip-buzz", args = ["--version"]}},
+    };
+}
+
+// Indexes the project's Buzz into the cache: magus injects MAGUS_SYMBOL_INDEX with the
+// destination and runs the op from the project dir, which scip-buzz indexes. A project
+// bound to another indexing spell too (go, typescript) keeps that index under `scip`
+// and builds this one beside it as `scip-buzz`, so a missing scip-buzz never fails the
+// other index. The workspace root is magus's own, so the paths in the index's symbols
+// are the ones magus resolves files by.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        op = "scip-buzz",
+        command = Command{
+            bin = "scip-buzz",
+            args = ["--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"],
+        },
+    };
 }

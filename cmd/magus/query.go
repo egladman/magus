@@ -1026,7 +1026,12 @@ func explainNode(ctx context.Context, ws graphWorkspace, cfg config.Config, read
 	// look nonexistent, so the answer says so when the input could have named one, and a
 	// typo'd `kind:target` still gets the absent verdict it deserves.
 	stop = tr.phase("explain.coverage")
-	res := explainResult{Out: out, Found: found, Answer: knowledge.Answer(read.Input, found, symbolCoverageOf(ctx, ws, cfg, read.Input, seeded))}
+	cov := symbolCoverageOf(ctx, ws, cfg, read.Input, seeded)
+	if found {
+		// One symbol: only its own language's indexes could have missed a site of it.
+		cov = cov.For(g.SymbolLanguage(read.Input))
+	}
+	res := explainResult{Out: out, Found: found, Answer: knowledge.Answer(read.Input, found, cov)}
 	stop()
 	if !found {
 		res.Nearest = g.NearestNode(read.Input)

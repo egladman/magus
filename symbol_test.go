@@ -1,11 +1,13 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -15,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -28,17 +32,17 @@ func TestDueToIndex(t *testing.T) {
 
 	cases := []struct {
 		name string
-		st   *projIndexState
+		st   *indexState
 		now  time.Time
 		want bool
 	}{
 		{"nil", nil, base, false},
-		{"clean", &projIndexState{dirty: false, lastChange: base}, base.Add(time.Hour), false},
-		{"within quiet window", &projIndexState{dirty: true, lastChange: base}, base.Add(30 * time.Second), false},
-		{"quiet elapsed, never run", &projIndexState{dirty: true, lastChange: base}, base.Add(90 * time.Second), true},
-		{"min interval not elapsed", &projIndexState{dirty: true, lastChange: base, lastRun: base.Add(time.Minute)}, base.Add(2 * time.Minute), false},
-		{"min interval elapsed", &projIndexState{dirty: true, lastChange: base, lastRun: base}, base.Add(6 * time.Minute), true},
-		{"in backoff", &projIndexState{dirty: true, lastChange: base, backoffTill: base.Add(10 * time.Minute)}, base.Add(2 * time.Minute), false},
+		{"clean", &indexState{dirty: false, lastChange: base}, base.Add(time.Hour), false},
+		{"within quiet window", &indexState{dirty: true, lastChange: base}, base.Add(30 * time.Second), false},
+		{"quiet elapsed, never run", &indexState{dirty: true, lastChange: base}, base.Add(90 * time.Second), true},
+		{"min interval not elapsed", &indexState{dirty: true, lastChange: base, lastRun: base.Add(time.Minute)}, base.Add(2 * time.Minute), false},
+		{"min interval elapsed", &indexState{dirty: true, lastChange: base, lastRun: base}, base.Add(6 * time.Minute), true},
+		{"in backoff", &indexState{dirty: true, lastChange: base, backoffTill: base.Add(10 * time.Minute)}, base.Add(2 * time.Minute), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -61,10 +65,10 @@ func TestBackoffDuration(t *testing.T) {
 func TestMatchProject(t *testing.T) {
 	sep := string(filepath.Separator)
 	root := sep + "ws"
-	projects := []capableProject{
-		{path: ".", dir: root},
-		{path: "gopherbuzz", dir: root + sep + "gopherbuzz"},
-		{path: "foo", dir: root + sep + "foo"},
+	projects := []projectIndex{
+		{project: &types.Project{Path: ".", Dir: root}},
+		{project: &types.Project{Path: "gopherbuzz", Dir: root + sep + "gopherbuzz"}},
+		{project: &types.Project{Path: "foo", Dir: root + sep + "foo"}},
 	}
 	cases := []struct {
 		file string
@@ -95,17 +99,26 @@ func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 		quiet:          60 * time.Second,
 		minInterval:    5 * time.Minute,
 		now:            func() time.Time { return clock },
-		state:          map[string]*projIndexState{},
-		projectForPath: func(p string) (string, bool) { return "pkg/a", true },
-		runIndex: func(ctx context.Context, project string) error {
+		state:          map[indexRef]*indexState{},
+		indexesForPath: func(p string) []indexRef { return []indexRef{goIndexA} },
+		runIndex: func(ctx context.Context, ref indexRef) error {
 			mu.Lock()
-			runs = append(runs, project)
+			runs = append(runs, indexName(ref))
 			mu.Unlock()
 			return nil
 		},
 	}
 	return si, &runs, &clock
 }
+
+// indexName spells ref as project:op, for asserting which indexes ran.
+func indexName(ref indexRef) string { return ref.project + ":" + ref.op }
+
+// goIndexA and buzzIndexA are the two indexes of one project bound to go and buzz.
+var (
+	goIndexA   = indexRef{project: "pkg/a", op: "scip"}
+	buzzIndexA = indexRef{project: "pkg/a", op: "scip-buzz"}
+)
 
 func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	si, _, clock := newTestIndexer(t)
@@ -115,19 +128,19 @@ func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	assert.False(t, ok, "not due within the quiet window")
 
 	*clock = clock.Add(90 * time.Second)
-	proj, ok := si.pickDue()
+	ref, ok := si.pickDue()
 	require.True(t, ok, "due once the quiet window elapses")
-	assert.Equal(t, "pkg/a", proj)
+	assert.Equal(t, goIndexA, ref)
 }
 
 func TestSymbolIndexerExecuteSuccess(t *testing.T) {
 	si, runs, _ := newTestIndexer(t)
-	si.state["pkg/a"] = &projIndexState{dirty: true}
+	si.state[goIndexA] = &indexState{dirty: true}
 
-	si.execute(context.Background(), "pkg/a")
+	si.execute(context.Background(), goIndexA)
 
-	assert.Equal(t, []string{"pkg/a"}, *runs)
-	st := si.state["pkg/a"]
+	assert.Equal(t, []string{"pkg/a:scip"}, *runs)
+	st := si.state[goIndexA]
 	assert.False(t, st.dirty, "a completed run clears dirty")
 	assert.Zero(t, st.failures)
 	assert.False(t, st.lastRun.IsZero(), "lastRun is stamped")
@@ -135,15 +148,44 @@ func TestSymbolIndexerExecuteSuccess(t *testing.T) {
 
 func TestSymbolIndexerExecuteFailureBacksOff(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
-	si.runIndex = func(ctx context.Context, project string) error { return errors.New("scip-go: not found") }
-	si.state["pkg/a"] = &projIndexState{dirty: true}
+	si.runIndex = func(ctx context.Context, ref indexRef) error { return errors.New("scip-go: not found") }
+	si.state[goIndexA] = &indexState{dirty: true}
 
-	si.execute(context.Background(), "pkg/a")
+	si.execute(context.Background(), goIndexA)
 
-	st := si.state["pkg/a"]
+	st := si.state[goIndexA]
 	assert.Equal(t, 1, st.failures)
 	assert.True(t, st.dirty, "a failed run stays dirty to retry")
 	assert.False(t, st.backoffTill.IsZero(), "a failure sets a backoff deadline")
+}
+
+// One edit dirties every index of its project, and a missing scip-buzz backs off only the
+// Buzz index: the Go index beside it keeps being rebuilt on schedule.
+func TestSymbolIndexerBacksOffOneIndexOfAProject(t *testing.T) {
+	si, runs, clock := newTestIndexer(t)
+	si.indexesForPath = func(string) []indexRef { return []indexRef{goIndexA, buzzIndexA} }
+	si.runIndex = func(ctx context.Context, ref indexRef) error {
+		*runs = append(*runs, indexName(ref))
+		if ref == buzzIndexA {
+			return errors.New(`exec: "scip-buzz": executable file not found in $PATH`)
+		}
+		return nil
+	}
+
+	si.mark([]string{"/ws/pkg/a/a.go"})
+	*clock = clock.Add(90 * time.Second)
+	for range 2 {
+		ref, ok := si.pickDue()
+		require.True(t, ok)
+		si.execute(t.Context(), ref)
+	}
+
+	assert.Equal(t, []string{"pkg/a:scip", "pkg/a:scip-buzz"}, *runs, "both indexes ran, Go first")
+	assert.Zero(t, si.state[goIndexA].failures)
+	assert.False(t, si.state[goIndexA].dirty)
+	assert.True(t, si.state[goIndexA].backoffTill.IsZero(), "the Go index carries no backoff")
+	assert.Equal(t, 1, si.state[buzzIndexA].failures, "the Buzz index alone backs off")
+	assert.False(t, si.state[buzzIndexA].backoffTill.IsZero())
 }
 
 func TestSymbolStatusCache(t *testing.T) {
@@ -192,14 +234,14 @@ func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
 	// Simulate a run cancelled to yield: the parent context is already cancelled and
 	// the indexer returns the context error.
-	si.runIndex = func(ctx context.Context, project string) error { return context.Canceled }
-	si.state["pkg/a"] = &projIndexState{dirty: true}
+	si.runIndex = func(ctx context.Context, ref indexRef) error { return context.Canceled }
+	si.state[goIndexA] = &indexState{dirty: true}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	si.execute(ctx, "pkg/a")
+	si.execute(ctx, goIndexA)
 
-	st := si.state["pkg/a"]
+	st := si.state[goIndexA]
 	assert.Zero(t, st.failures, "yielding is not a failure")
 	assert.True(t, st.dirty, "a yielded run stays dirty to retry")
 	assert.True(t, st.backoffTill.IsZero(), "yielding sets no backoff")
@@ -232,10 +274,10 @@ func newIndexedWorkspaceWith(t *testing.T) (*Magus, string, *string) {
 	const skillsSpell = "zzz-scip-freshness-skills-spell"
 	version := "1.0.0"
 	spell := spells.NewSpell(spellName,
-		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
 		spells.WithOps(map[string]spells.Op{
-			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: indexerBin}},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: indexerBin}},
 		}),
 		spells.WithSources("**/*.go"),
 		// The observed indexer is not decoration: its version is a key input the run
@@ -277,14 +319,14 @@ func newIndexedWorkspaceWith(t *testing.T) (*Magus, string, *string) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	ctx := context.Background()
-	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: spells.SymbolIndexOp}}), "scip run")
+	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: spells.DefaultSymbolIndexOp}}), "scip run")
 	return m, src, &version
 }
 
 // writesTheIndex is a symbol indexer body that writes a fixed index where dispatch tells a
 // real indexer to, inside the run, so the entry the run files records it.
 func writesTheIndex(ctx context.Context, req spells.InvokeRequest) (any, error) {
-	index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir)
+	index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir, req.Target)
 	if err := os.MkdirAll(filepath.Dir(index), 0o755); err != nil {
 		return nil, err
 	}
@@ -356,19 +398,19 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	ps := []*types.Project{p}
 	toolVersions, err := m.toolVersionsByProject(ctx, ps)
 	require.NoError(t, err)
-	step := m.symbolIndexStep(p, toolVersions[p.Path], m.probeObservations(ctx, ps, symbolIndexDriven(ps))[p.Path])
+	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, toolVersions[p.Path], m.probeObservations(ctx, ps, indexesDriven(projectIndexes(p)))[p.Path])
 	probeKey, _, err := m.cache.StepKey(ctx, &step)
 	require.NoError(t, err)
 
 	// ReindexSymbols runs the op with no RunOptions, so the key it mints is the charmless one.
-	runKey, _, err := m.ComputeTargetKey(ctx, ".", spells.SymbolIndexOp, nil)
+	runKey, _, err := m.ComputeTargetKey(ctx, ".", spells.DefaultSymbolIndexOp, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, runKey, probeKey)
 
 	// And the shape the probe used to have, so a revert to it fails here rather than
 	// quietly reporting every index out-of-date.
-	bare := m.buildStep(p, spells.SymbolIndexOp)
+	bare := m.buildStep(p, spells.DefaultSymbolIndexOp)
 	bareKey, _, err := m.cache.StepKey(ctx, &bare)
 	require.NoError(t, err)
 	assert.NotEqual(t, runKey, bareKey, "buildStep alone is not the key any run mints")
@@ -381,7 +423,7 @@ func TestSymbolIndexIgnoresAnInstalledSkillRewrite(t *testing.T) {
 	m, _ := newIndexedWorkspace(t)
 	ctx := context.Background()
 	scipKey := func() string {
-		key, _, err := m.ComputeTargetKey(ctx, ".", spells.SymbolIndexOp, nil)
+		key, _, err := m.ComputeTargetKey(ctx, ".", spells.DefaultSymbolIndexOp, nil)
 		require.NoError(t, err)
 		return key
 	}
@@ -409,11 +451,121 @@ func TestSymbolIndexKeysOnTheIndexerVersionNotTheToolchain(t *testing.T) {
 	require.Equal(t, types.SymbolIndexFresh, freshness(t, m))
 
 	p := m.Get(".")
-	step := m.symbolIndexStep(p, []string{"zzz:zzz-toolchain:9.9.9"}, nil)
+	step := m.symbolIndexStep(p, spells.DefaultSymbolIndexOp, []string{"zzz:zzz-toolchain:9.9.9"}, nil)
 	assert.Empty(t, step.ToolVersions, "the scip step drops the spell's tool versions")
 
 	*version = "2.0.0"
 	assert.Equal(t, types.SymbolIndexStale, freshness(t, m), "a new indexer version stales the index")
+}
+
+// A missing scip-buzz is a gap in one index, never a failure of anything else: the Go
+// index beside it still builds, a target that is not the Buzz indexer runs although the
+// scip-buzz observation cannot be probed, and the gap and the status name the install.
+func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // no scip-buzz, wherever this runs
+	const goSpell = "zzz-missing-buzz-go-spell"
+	goOp := spells.DefaultSymbolIndexOp
+	missing := errors.New(`exec: "scip-buzz": executable file not found in $PATH`)
+	buzzProbes := 0
+	goSp := spells.NewSpell(goSpell,
+		spells.WithLanguage("go"), spells.WithSources("**/*.go"), spells.WithTargets(goOp, "build"),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
+		spells.WithOps(map[string]spells.Op{goOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: indexerBin}}}),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == goOp {
+				return writesTheIndex(ctx, req)
+			}
+			return nil, nil
+		}),
+	)
+	buzzSp := spells.NewSpell("buzz",
+		spells.WithLanguage("buzz"), spells.WithSources("**/*.buzz"), spells.WithTargets("scip-buzz"),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: spells.Command{Bin: "scip-buzz"}}),
+		spells.WithOps(map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-buzz"}}}),
+		spells.WithTools(map[string]spells.Tool{"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}}}),
+		spells.WithVersionProber(func(context.Context, spells.Command, string) (string, error) {
+			buzzProbes++
+			return "", missing
+		}),
+		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "scip-buzz" {
+				return nil, missing
+			}
+			return nil, nil
+		}),
+	)
+	for _, sp := range []*spells.Spell{goSp, buzzSp} {
+		project.DefaultSpellRegistry().RegisterSpell(sp)
+		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
+	}
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	built, err := m.ReindexSymbols(ctx)
+	assert.Equal(t, 1, built, "the Go index builds")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), symbols.InstallHint("buzz"), "the Buzz failure names its fix")
+	assert.NotContains(t, err.Error(), indexerBin)
+
+	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: "build"}}), "a target that is not the Buzz indexer runs")
+
+	buzzProbes = 0
+	status := map[string]types.SymbolIndexStatus{}
+	for _, s := range m.SymbolIndexStatus(ctx) {
+		status[s.Language] = s
+	}
+	assert.Zero(t, buzzProbes, "judging the Go index never forks scip-buzz, which would warn on every read")
+	assert.Equal(t, types.SymbolIndexFresh, status["go"].Freshness)
+	assert.Equal(t, types.SymbolIndexStatus{
+		Project: types.NewProjectRef(".", m.Get(".").Dir), Op: "scip-buzz", Language: "buzz",
+		Freshness: types.SymbolIndexNotBuilt, Detail: symbols.MissingIndexerHint("buzz", "scip-buzz"),
+	}, status["buzz"])
+
+	gaps, ok := SymbolGaps(ctx, m, root, m.cfg, nil)
+	require.True(t, ok)
+	assert.Equal(t, []types.KnowledgeSymbolGap{{
+		Project: types.NewProjectRef(".", m.Get(".").Dir), Language: "buzz",
+		State: types.SymbolIndexNotBuilt, Hint: symbols.MissingIndexerHint("buzz", "scip-buzz"),
+	}}, gaps)
+}
+
+// A project with one index gets the install hint too when its indexer is missing, in the
+// same shape as a project with two; one whose indexer is installed needs only a build.
+func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
+	decls := []knowledge.SymbolIndexDeclaration{
+		{Project: "web", Dir: "/ws/web", Op: "scip", Bin: "scip-typescript", Language: "typescript", Path: filepath.Join(t.TempDir(), "index.scip")},
+		{Project: "svc", Dir: "/ws/svc", Op: "scip", Bin: "scip-go", Language: "go", Path: filepath.Join(t.TempDir(), "index.scip")},
+	}
+	installed := func(bin string) bool { return bin == "scip-go" }
+
+	assert.Equal(t, []types.KnowledgeSymbolGap{
+		{Project: types.NewProjectRef("web", "/ws/web"), Language: "typescript", State: types.SymbolIndexNotBuilt, Hint: symbols.MissingIndexerHint("typescript", "scip-typescript")},
+		{Project: types.NewProjectRef("svc", "/ws/svc"), Language: "go", State: types.SymbolIndexNotBuilt},
+	}, probeSymbolIndexes(decls, installed))
+}
+
+// Whether an indexer is installed is asked of the PATH a run hands its children, not the
+// server's own: a run that put scip-buzz on its PATH builds the index, so a review must
+// not leave that index out as uninstalled.
+func TestInstalledIndexesUsesTheRunsPATH(t *testing.T) {
+	server, bin := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(server, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-buzz"), []byte("#!/bin/sh\n"), 0o755))
+	t.Setenv("PATH", server)
+	ctx := environ.With(t.Context())
+	environ.From(ctx).Set("PATH", bin)
+
+	p := &types.Project{Path: "."}
+	idxs := []projectIndex{{project: p, op: "scip", bin: "zzz-scip-go"}, {project: p, op: "scip-buzz", bin: "zzz-scip-buzz"}}
+	assert.Equal(t, idxs, installedIndexes(ctx, idxs))
 }
 
 // The indexer's version reaches the scip key and no other target's: it is declared as an
@@ -423,8 +575,8 @@ func TestIndexerObservationKeysOnlyTheScipOp(t *testing.T) {
 	sp := spells.NewSpell("go",
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-go"}, Uses: []string{"go"}}),
 		spells.WithOps(map[string]spells.Op{
-			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
-			"go-build":           {Command: spells.Command{Bin: "go"}},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			"go-build":                  {Command: spells.Command{Bin: "go"}},
 		}),
 		spells.WithTools(map[string]spells.Tool{
 			"go":      {Probe: spells.Command{Bin: "go", Args: []string{"version"}}},
@@ -434,10 +586,10 @@ func TestIndexerObservationKeysOnlyTheScipOp(t *testing.T) {
 	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
 	probed := map[string]string{"go:scip-go": "0.2.7", "go:go": "go version go1.26.6"}
 
-	assert.Equal(t, []string{"go:scip-go:0.2.7", "go:go:go version go1.26.6"}, observationsForTarget(p, spells.SymbolIndexOp, probed))
+	assert.Equal(t, []string{"go:scip-go:0.2.7", "go:go:go version go1.26.6"}, observationsForTarget(p, spells.DefaultSymbolIndexOp, probed))
 	assert.Empty(t, observationsForTarget(p, "go-build", probed), "build keys on go through its version probe, never this line")
 	assert.Empty(t, observationsForTarget(p, "test", probed))
-	assert.Equal(t, map[string]bool{"go:scip-go": true, "go:go@scip": true}, targetDrivenBins(p, spells.SymbolIndexOp))
+	assert.Equal(t, map[string]bool{"go:scip-go": true, "go:go@scip": true}, targetDrivenBins(p, spells.DefaultSymbolIndexOp))
 	assert.Equal(t, map[string]bool{"go:go": true}, targetDrivenBins(p, "go-build"))
 }
 
@@ -458,10 +610,10 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 	}
 	indexer := spells.WithInvoker(writesTheIndex)
 	goSpell := spells.NewSpell("zzz-uses-go-spell",
-		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.go"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-go"}, Uses: []string{"zzz-uses-go"}}),
-		spells.WithOps(map[string]spells.Op{spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-go"}}}),
+		spells.WithOps(map[string]spells.Op{spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-go"}}}),
 		spells.WithTools(map[string]spells.Tool{
 			"zzz-uses-go":      {Probe: spells.Command{Bin: "zzz-uses-go", Args: []string{"version"}}},
 			"zzz-uses-scip-go": {Observe: spells.Command{Bin: "zzz-uses-scip-go", Args: []string{"--version"}}},
@@ -469,10 +621,10 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		spells.WithVersionProber(prober), indexer,
 	)
 	tsSpell := spells.NewSpell("zzz-uses-ts-spell",
-		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.ts"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}),
-		spells.WithOps(map[string]spells.Op{spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}}),
+		spells.WithOps(map[string]spells.Op{spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}}),
 		spells.WithTools(map[string]spells.Tool{
 			"zzz-uses-tsc":     {Probe: spells.Command{Bin: "zzz-uses-tsc", Args: []string{"--version"}}},
 			"zzz-uses-scip-ts": {Observe: spells.Command{Bin: "zzz-uses-scip-ts", Args: []string{"--version"}}},
@@ -500,7 +652,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 
 	ctx := context.Background()
 	for _, path := range []string{"svc", "web"} {
-		require.NoError(t, m.Run(ctx, []types.Target{{Path: path, Name: spells.SymbolIndexOp}}), "scip run in %s", path)
+		require.NoError(t, m.Run(ctx, []types.Target{{Path: path, Name: spells.DefaultSymbolIndexOp}}), "scip run in %s", path)
 	}
 	status := func() map[string]types.SymbolIndexFreshness {
 		out := map[string]types.SymbolIndexFreshness{}
@@ -525,9 +677,10 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	var mu sync.Mutex
 	forked := map[string]int{}
 	sp := spells.NewSpell("go",
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "scip-go"}}),
 		spells.WithOps(map[string]spells.Op{
-			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
-			"govulncheck":        {Command: spells.Command{Bin: "govulncheck"}},
+			spells.DefaultSymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go"}},
+			"govulncheck":               {Command: spells.Command{Bin: "govulncheck"}},
 		}),
 		spells.WithTools(map[string]spells.Tool{
 			"scip-go":     {Observe: spells.Command{Bin: "scip-go", Args: []string{"--version"}}},
@@ -554,17 +707,57 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 		ps = append(ps, &types.Project{Path: fmt.Sprintf("p%d", i), Dir: dir, ResolvedSpells: []*spells.Spell{sp}})
 	}
 	m := &Magus{ws: &types.Workspace{Root: root}}
+	var idxs []projectIndex
+	for _, p := range ps {
+		idxs = append(idxs, projectIndexes(p)...)
+	}
 
-	got := m.probeObservations(t.Context(), ps, symbolIndexDriven(ps))
+	got := m.probeObservations(t.Context(), ps, indexesDriven(idxs))
 	assert.Equal(t, map[string]int{"scip-go": 1}, forked,
 		"one scip-go fork for seven projects that see the same inputs, and no govulncheck")
 	assert.Equal(t, "v1", got["p3"]["go:scip-go"])
 
-	m.probeObservations(t.Context(), ps, symbolIndexDriven(ps))
+	m.probeObservations(t.Context(), ps, indexesDriven(idxs))
 	assert.Equal(t, map[string]int{"scip-go": 1}, forked, "the second status check is a cache hit")
 
 	m.probeObservations(t.Context(), ps, map[string]map[string]bool{"p0": {"go:govulncheck": true}, "p1": {"go:govulncheck": true}})
 	assert.Equal(t, 2, forked["govulncheck"], "the database observation is never cached: it moves on a clock")
+}
+
+// An observed tool that is not installed keys UNPROBED without a warning: the index gap and
+// any target that runs it already say MGS3003. One that is installed and cannot answer
+// still warns, since nothing else would.
+func TestProbeObservationsWarnsOnlyForAnInstalledToolThatFails(t *testing.T) {
+	sp := spells.NewSpell("buzz",
+		spells.WithOps(map[string]spells.Op{"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-buzz"}}}),
+		spells.WithTools(map[string]spells.Tool{"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}}}),
+		// Answers as the real prober does: MGS3003 for a binary PATH lacks.
+		spells.WithVersionProber(func(_ context.Context, cmd spells.Command, _ string) (string, error) {
+			if _, err := exec.LookPath(cmd.Bin); err != nil {
+				return "", types.DiagnosticErrorf(types.ToolNotOnPath, "%q is not on PATH", cmd.Bin)
+			}
+			return "", errors.New("segmentation fault")
+		}),
+	)
+	binDir := t.TempDir()
+	t.Setenv("PATH", binDir)
+	root := t.TempDir()
+	p := &types.Project{Path: ".", Dir: root, ResolvedSpells: []*spells.Spell{sp}}
+	m := &Magus{ws: &types.Workspace{Root: root}}
+	driven := map[string]map[string]bool{".": {"buzz:scip-buzz": true}}
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	got := m.probeObservations(t.Context(), []*types.Project{p}, driven)
+	assert.Equal(t, "UNPROBED", got["."]["buzz:scip-buzz"])
+	assert.Empty(t, buf.String(), "a tool that is not installed")
+
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "scip-buzz"), []byte("\x7fELF binary"), 0o755))
+	m.probeObservations(t.Context(), []*types.Project{p}, driven)
+	assert.Contains(t, buf.String(), "observation probe failed", "an installed tool that cannot answer")
 }
 
 // TestDispatchDueSkipsARunAlreadyInFlight is the one occupancy rule the scheduler still
@@ -582,12 +775,13 @@ func TestDispatchDueSkipsARunAlreadyInFlight(t *testing.T) {
 	si.dispatchDue(t.Context())
 
 	assert.Empty(t, *runs, "a run already in flight must not be dispatched again")
-	proj, due := si.pickDue()
+	ref, due := si.pickDue()
 	assert.True(t, due, "and the project stays due, so the next tick picks it up")
-	assert.Equal(t, "pkg/a", proj)
+	assert.Equal(t, goIndexA, ref)
 }
 
-// indexWorld is freshenIndexes' outside world: which indexes are current, and what a build does.
+// indexWorld is freshenIndexes' outside world: which indexes are current, and what a build
+// does. current and built name an index by indexName.
 type indexWorld struct {
 	current  map[string]bool
 	built    []string
@@ -595,45 +789,47 @@ type indexWorld struct {
 	recorded bool // whether a build leaves the cache a record to vouch by
 }
 
-func (w *indexWorld) probe(ps []*types.Project) map[string]bool {
-	out := map[string]bool{}
-	for _, p := range ps {
-		out[p.Path] = w.current[p.Path]
+func (w *indexWorld) probe(idxs []projectIndex) map[indexRef]bool {
+	out := map[indexRef]bool{}
+	for _, idx := range idxs {
+		out[idx.ref()] = w.current[indexName(idx.ref())]
 	}
 	return out
 }
 
-func (w *indexWorld) build(p *types.Project) error {
-	w.built = append(w.built, p.Path)
+func (w *indexWorld) build(idx projectIndex) error {
+	w.built = append(w.built, indexName(idx.ref()))
 	if w.buildErr != nil {
 		return w.buildErr
 	}
-	w.current[p.Path] = w.recorded
+	w.current[indexName(idx.ref())] = w.recorded
 	return nil
 }
 
-func freshenProjects() ([]*types.Project, map[string]string) {
-	return []*types.Project{{Path: ".", Dir: "/ws"}, {Path: "web", Dir: "/ws/web"}},
-		map[string]string{".": "go", "web": "typescript"}
+func freshenProjects() []projectIndex {
+	return []projectIndex{
+		{project: &types.Project{Path: ".", Dir: "/ws"}, op: "scip", language: "go"},
+		{project: &types.Project{Path: "web", Dir: "/ws/web"}, op: "scip", language: "typescript"},
+	}
 }
 
 // A stale index is rebuilt through its own target before the review reads it, and a current
 // one is left alone.
 func TestFreshenIndexesRebuildsOnlyTheStale(t *testing.T) {
-	ps, langs := freshenProjects()
-	w := &indexWorld{current: map[string]bool{"web": true}, recorded: true}
+	idxs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: true}
 
-	require.NoError(t, freshenIndexes(ps, langs, w.probe, w.build, true))
+	require.NoError(t, freshenIndexes(idxs, w.probe, w.build, true))
 
-	assert.Equal(t, []string{"."}, w.built)
-	assert.True(t, w.current["."], "the review then reads a current index")
+	assert.Equal(t, []string{".:scip"}, w.built)
+	assert.True(t, w.current[".:scip"], "the review then reads a current index")
 }
 
 func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
-	ps, langs := freshenProjects()
+	idxs := freshenProjects()
 	w := &indexWorld{current: map[string]bool{}, buildErr: errors.New(`exec: "scip-go": executable file not found`)}
 
-	err := freshenIndexes(ps, langs, w.probe, w.build, true)
+	err := freshenIndexes(idxs, w.probe, w.build, true)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "scip-go")
@@ -643,11 +839,11 @@ func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
 // Another magus holding the project's lock refuses the refresh at once; the review says so,
 // with the holder named, rather than reporting a missing indexer or reading the stale index.
 func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
-	ps, langs := freshenProjects()
+	idxs := freshenProjects()
 	held := fmt.Errorf("run .:scip: %w", &lockContendedError{Project: ".", Owner: "pid 4242, `magus run test .`"})
-	w := &indexWorld{current: map[string]bool{"web": true}, buildErr: held}
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, buildErr: held}
 
-	err := freshenIndexes(ps, langs, w.probe, w.build, true)
+	err := freshenIndexes(idxs, w.probe, w.build, true)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "locked by another magus process")
@@ -658,13 +854,32 @@ func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
 // A read-only cache runs the indexer and records nothing, so the fresh index is one nothing can
 // vouch for: that is the error, never a stale index read as current.
 func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
-	ps, langs := freshenProjects()
-	w := &indexWorld{current: map[string]bool{"web": true}, recorded: false}
+	idxs := freshenProjects()
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, recorded: false}
 
-	err := freshenIndexes(ps, langs, w.probe, w.build, false)
+	err := freshenIndexes(idxs, w.probe, w.build, false)
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "cache writes are off")
+}
+
+// A missing scip-buzz must not cost the root project its review: while the Go index's
+// indexer is installed the Buzz index is left out, and a project with no indexer installed
+// keeps every index, so its review still fails naming what to install.
+func TestInstalledIndexesDropsAMissingSecondIndexer(t *testing.T) {
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
+	t.Setenv("PATH", bin)
+	root, docs := &types.Project{Path: "."}, &types.Project{Path: "docs"}
+	idxs := []projectIndex{
+		{project: root, op: "scip", language: "go", bin: "zzz-scip-go"},
+		{project: root, op: "scip-buzz", language: "buzz", bin: "zzz-scip-buzz"},
+		{project: docs, op: "scip-buzz", language: "buzz", bin: "zzz-scip-buzz"},
+	}
+
+	got := installedIndexes(t.Context(), idxs)
+
+	assert.Equal(t, []projectIndex{idxs[0], idxs[2]}, got)
 }
 
 // A touched project with no indexer is named, so "found nothing" is only ever said about
@@ -697,7 +912,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 	const spellName = "zzz-scip-replay-test-spell"
 	runs := 0
 	spell := spells.NewSpell(spellName,
-		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
@@ -706,7 +921,7 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir)
+			index := symbols.IndexPath(cache.FromContext(ctx).Dir(), req.Dir, req.Target)
 			if err := os.MkdirAll(filepath.Dir(index), 0o755); err != nil {
 				return nil, err
 			}
@@ -728,12 +943,12 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
-	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root())
+	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)
 
 	scip := func(source []byte) {
 		t.Helper()
 		require.NoError(t, os.WriteFile(src, source, 0o644))
-		require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.SymbolIndexOp}}), "scip run")
+		require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.DefaultSymbolIndexOp}}), "scip run")
 		got, err := os.ReadFile(index)
 		require.NoError(t, err)
 		require.Equal(t, string(source), string(got), "the index must be built from the sources in the tree")

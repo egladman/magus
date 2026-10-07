@@ -1,0 +1,9 @@
+export fun twice(n: int) > int {
+    return n * 2;
+}
+
+export final base = 10;
+
+export object Point {
+    x: int,
+}

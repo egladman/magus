@@ -1,0 +1,8 @@
+// Größe: a label with non-ASCII text.
+final label = "héllo wörld";
+
+fun greet(name: str) > str {
+    return "ünïcödé → {name} ✓ {label}";
+}
+
+/* ✓ */ final greeting = greet("Zoë"); final again = greet(label);

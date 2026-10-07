@@ -276,10 +276,17 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				{Open: `"`, Close: `"`},
 			},
 		}},
-		// No Ops, and that is the point of this entry: buzz is the one built-in that
-		// carries a language identity and no work. Its three former ops forked
-		// interpreters that know only the Buzz stdlib, so none could load a magusfile
-		// or a spell, which is every Buzz file here.
+		// Its one op is the indexer magus synthesizes, under the scip-buzz it declares
+		// rather than the default scip, so it can sit beside a project's Go index. Its
+		// three former ops forked interpreters that know only the Buzz stdlib, so none
+		// could load a magusfile or a spell, which is every Buzz file here.
+		Ops: map[string]spells.Op{
+			"scip-buzz": {Kind: spells.OpKindSymbolIndex, Command: goldenScipBuzz},
+		},
+		Tools: map[string]spells.Tool{
+			"scip-buzz": {Observe: spells.Command{Bin: "scip-buzz", Args: []string{"--version"}}},
+		},
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: goldenScipBuzz},
 	},
 	"cosign": {
 		Name:  "cosign",
@@ -691,6 +698,8 @@ var (
 			"npm-shrinkwrap.json": goldenNpmInstall,
 		},
 	}}
+	// goldenScipBuzz roots the index's paths at magus's own workspace root.
+	goldenScipBuzz = spells.Command{Bin: "scip-buzz", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX", "--workspace-root", "$MAGUS_WORKSPACE_ROOT"}}
 	// goldenPnpmInstallManifests / goldenNpmCiManifests are the op-scoped manifests
 	// synthesizeInstall builds: pnpm-install and npm-ci each see only their own lock
 	// candidates, not the other's or the lockless yarn/bun ones.

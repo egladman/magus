@@ -24,7 +24,7 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 	const spellName = "zzz-scip-stamp-test-spell"
 	probes = &atomic.Int32{}
 	spell := spells.NewSpell(spellName,
-		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
 		spells.WithTools(map[string]spells.Tool{
@@ -50,8 +50,8 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
-	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.SymbolIndexOp}}), "scip run")
-	index = symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root())
+	require.NoError(t, m.Run(context.Background(), []types.Target{{Path: ".", Name: spells.DefaultSymbolIndexOp}}), "scip run")
+	index = symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root(), spells.DefaultSymbolIndexOp)
 	probes.Store(0)
 	return m, src, index, probes
 }

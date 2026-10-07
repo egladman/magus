@@ -1,0 +1,46 @@
+  import "std";
+//        ^^^ definition local 0
+//            kind Module
+//            display_name std
+  import "lib/util";
+//            ^^^^ definition local 1
+//                 kind Module
+//                 display_name util
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/main().
+  fun main(args: [str]) > void {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/main().
+//         kind Function
+//         display_name main
+//         signature_documentation
+//         > fun main(args: [str]) > void
+//         ^^^^ definition local 2
+//              kind Parameter
+//              display_name args
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+      final p = util\Point{ x = util\twice(util\base) };
+//          ^ definition local 3
+//            kind Constant
+//            display_name p
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//              ^^^^ reference local 1
+//                   ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
+//                              ^^^^ reference local 1
+//                                   ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/twice().
+//                                         ^^^^ reference local 1
+//                                              ^^^^ reference scip-buzz buzz . . `lib/util.buzz`/base.
+      final q: util\Point = p;
+//          ^ definition local 4
+//            kind Constant
+//            display_name q
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/main().
+//             ^^^^ reference local 1
+//                  ^^^^^ reference scip-buzz buzz . . `lib/util.buzz`/Point#
+//                          ^ reference local 3
+      std\print("{q.x}");
+//    ^^^ reference local 0
+//        ^^^^^ reference scip-buzz buzz host . std/print().
+//                ^ reference local 4
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/main().
+  

@@ -1,6 +1,7 @@
 package spell
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -449,9 +450,12 @@ func Decode(src obj) (spells.Descriptor, error) {
 	// is the migration path: accepting it would leave such a spell running its indexer
 	// with an unresolved $MAGUS_SYMBOL_INDEX and dropping out of the symbol graph, with
 	// nothing said. There is no compat shim because the condition to retire one is
-	// "no spell anywhere still declares the op", which magus cannot observe.
-	if _, authored := m.Ops[spells.SymbolIndexOp]; authored {
-		return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, spells.SymbolIndexOp)
+	// "no spell anywhere still declares the op", which magus cannot observe. The op an
+	// indexer declares for itself is refused for the same collision.
+	for _, reserved := range []string{spells.DefaultSymbolIndexOp, indexer.OpName()} {
+		if _, authored := m.Ops[reserved]; authored {
+			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
+		}
 	}
 	if indexer != nil {
 		if m.Ops == nil {
@@ -459,8 +463,8 @@ func Decode(src obj) (spells.Descriptor, error) {
 		}
 		// Synthesized rather than authored, so the run, cache and freshness paths reach
 		// the indexer as an ordinary command op while the spell declares it once, by
-		// name. The kind is what the runner matches on; nothing keys on the op's name.
-		m.Ops[spells.SymbolIndexOp] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
+		// name. The kind is what the runner matches on.
+		m.Ops[indexer.OpName()] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
 	}
 	if err := synthesizeInstall(&m); err != nil {
 		return spells.Descriptor{}, err
@@ -776,11 +780,19 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if !f.Valid() || f == spells.SymbolFormatNone {
 		return nil, fmt.Errorf("symbol indexer: format is %s; want one of %s", f, strings.Join(f.Values(), ", "))
 	}
+	// Normalized like an authored op, since a request reaches it kebab-cased.
+	var op string
+	if declared, _ := rec.Str("op"); declared != "" {
+		if err := types.ValidateTargetName(declared); err != nil {
+			return nil, fmt.Errorf("symbol indexer: op %q: %w", declared, err)
+		}
+		op = types.Normalize(declared)
+	}
 	cmdRec, ok := rec.Obj("command")
 	if !ok {
 		return nil, fmt.Errorf("symbol indexer: command is required")
 	}
-	cmd, err := decodeCommand(spellName, spells.SymbolIndexOp, cmdRec)
+	cmd, err := decodeCommand(spellName, cmp.Or(op, spells.DefaultSymbolIndexOp), cmdRec)
 	if err != nil {
 		return nil, err
 	}
@@ -791,7 +803,7 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	if err != nil {
 		return nil, fmt.Errorf("symbol indexer: uses: %w", err)
 	}
-	return &spells.SymbolIndexer{Format: f, Command: cmd, Uses: uses}, nil
+	return &spells.SymbolIndexer{Format: f, Op: op, Command: cmd, Uses: uses}, nil
 }
 
 // decodeSandbox reads mgs_getSandbox's declaration, nil when the spell exports none.

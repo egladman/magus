@@ -478,7 +478,10 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Set by magus when it replaces itself with a workspace-local ./magus, so the replacement never hops again; never set it by hand
 
 **MAGUS_SYMBOL_INDEX**
-: Set by magus for a spell's scip op: the path the indexer writes its SCIP index to; never set it by hand
+: Set by magus for a spell's symbol indexer op: the path the indexer writes its SCIP index to; never set it by hand
+
+**MAGUS_WORKSPACE_ROOT**
+: Set by magus for a spell's symbol indexer op: the workspace root the index's paths are relative to; never set it by hand
 
 **MAGUS_INTERNAL_ADVICE_MODE**
 : Set by \`magus diff\` for the advice script it runs; the two halves of one feature, not a setting, and either may be renamed without notice

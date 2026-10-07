@@ -506,11 +506,14 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 		_, err := runCommand(ctx, op, opts)
 		return nil, err
 	}
-	indexPath, err := symbolIndexEnv(ctx, req.Dir)
+	indexPath, err := symbolIndexEnv(ctx, req.Dir, req.Target)
 	if err != nil {
 		return nil, err
 	}
 	env := map[string]string{symbols.IndexEnvVar: indexPath}
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		env[symbols.WorkspaceRootEnvVar] = ws.Root()
+	}
 	opts.env = env
 	opts.refs = env
 	if _, err := runCommand(ctx, op, opts); err != nil {
@@ -592,7 +595,10 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 // freshness probe SymbolIndexStatus reads, so `magus run scip <project>` remains
 // reachable and a magusfile can still compose the op into a body that runs outside a
 // cached target. Only the authoring hack went away, not the path this defends.
-func symbolIndexEnv(ctx context.Context, projectDir string) (string, error) {
+//
+// op is the indexer's op name, which keys the file: two indexing spells on one project
+// write two indexes.
+func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
 		return "", fmt.Errorf("spell: a symbol indexer must run as a magus target so its index lands in the cache")
@@ -605,7 +611,7 @@ func symbolIndexEnv(ctx context.Context, projectDir string) (string, error) {
 		}
 		abs = filepath.Join(cwd, abs)
 	}
-	path := symbols.IndexPath(c.Dir(), abs)
+	path := symbols.IndexPath(c.Dir(), abs, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("spell: prepare symbol index dir: %w", err)
 	}

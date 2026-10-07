@@ -1,0 +1,79 @@
+  import "std";
+//        ^^^ definition local 0
+//            kind Module
+//            display_name std
+  import "fs";
+//        ^^ definition local 1
+//           kind Module
+//           display_name fs
+  import "magus";
+//        ^^^^^ definition local 2
+//              kind Module
+//              display_name magus
+  import "magus/spell/go";
+//                    ^^ definition local 3
+//                       kind Module
+//                       display_name go
+  import "encoding/json";
+//                 ^^^^ definition local 4
+//                      kind Module
+//                      display_name json
+  import "project/libs/coldread" as coldread;
+//                                  ^^^^^^^^ definition local 5
+//                                           kind Module
+//                                           display_name coldread
+  import print from "std";
+//       ^^^^^ reference scip-buzz buzz host . std/print().
+  
+  // build compiles the module.
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/build().
+  export fun build(ctx: magus\Context, args: [str]) > void !> any {
+//           ^^^^^ definition scip-buzz buzz . . `main.buzz`/build().
+//                 kind Function
+//                 display_name build
+//                 signature_documentation
+//                 > fun build(ctx: magus\Context, args: [str]) > void !> any
+//                 documentation
+//                 > build compiles the module.
+//                 ^^^ definition local 6
+//                     kind Parameter
+//                     display_name ctx
+//                     enclosing_symbol scip-buzz buzz . . `main.buzz`/build().
+//                      ^^^^^ reference local 2
+//                            ^^^^^^^ reference scip-buzz buzz host . magus/Context#
+//                                     ^^^^ definition local 7
+//                                          kind Parameter
+//                                          display_name args
+//                                          enclosing_symbol scip-buzz buzz . . `main.buzz`/build().
+      final text = fs\readFile("go.mod");
+//          ^^^^ definition local 8
+//               kind Constant
+//               display_name text
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/build().
+//                 ^^ reference local 1
+//                    ^^^^^^^^ reference scip-buzz buzz host . fs/readFile().
+      final doc = json\parse(text);
+//          ^^^ definition local 9
+//              kind Constant
+//              display_name doc
+//              enclosing_symbol scip-buzz buzz . . `main.buzz`/build().
+//                ^^^^ reference local 4
+//                     ^^^^^ reference scip-buzz buzz host . `encoding/json`/parse().
+//                           ^^^^ reference local 8
+      go["go-build"](ctx);
+//    ^^ reference local 3
+//                   ^^^ reference local 6
+      coldread.test(ctx, args: args);
+//    ^^^^^^^^ reference local 5
+//             ^^^^ reference scip-buzz buzz host . `project/libs/coldread`/test().
+//                  ^^^ reference local 6
+//                             ^^^^ reference local 7
+      std\print("{doc}");
+//    ^^^ reference local 0
+//        ^^^^^ reference scip-buzz buzz host . std/print().
+//                ^^^ reference local 9
+      print("done");
+//    ^^^^^ reference scip-buzz buzz host . std/print().
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/build().
+  

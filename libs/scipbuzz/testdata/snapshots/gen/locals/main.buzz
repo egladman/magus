@@ -1,0 +1,110 @@
+  import "std";
+//        ^^^ definition local 0
+//            kind Module
+//            display_name std
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/total().
+  fun total(items: [int], scale: int = 1) > int !> str {
+//    ^^^^^ definition scip-buzz buzz . . `main.buzz`/total().
+//          kind Function
+//          display_name total
+//          signature_documentation
+//          > fun total(items: [int], scale: int) > int !> str
+//          ^^^^^ definition local 1
+//                kind Parameter
+//                display_name items
+//                enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+//                        ^^^^^ definition local 2
+//                              kind Parameter
+//                              display_name scale
+//                              enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+      var sum = 0;
+//        ^^^ definition local 3
+//            kind Variable
+//            display_name sum
+//            enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+      foreach (index, item in items) {
+//             ^^^^^ definition local 4
+//                   kind Variable
+//                   display_name index
+//                   enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+//                    ^^^^ definition local 5
+//                         kind Variable
+//                         display_name item
+//                         enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+//                            ^^^^^ reference local 1
+          sum = sum + item * scale + index;
+//        ^^^ reference local 3
+//              ^^^ reference local 3
+//                    ^^^^ reference local 5
+//                           ^^^^^ reference local 2
+//                                   ^^^^^ reference local 4
+      }
+      for (var i = 0; i < 2; i = i + 1) {
+//             ^ definition local 6
+//               kind Variable
+//               display_name i
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/total().
+//                    ^ reference local 6
+//                           ^ reference local 6
+//                               ^ reference local 6
+          sum = sum + i;
+//        ^^^ reference local 3
+//              ^^^ reference local 3
+//                    ^ reference local 6
+          sum += i;
+//        ^^^ reference local 3
+//               ^ reference local 6
+      }
+      if (sum < 0) {
+//        ^^^ reference local 3
+          throw "negative";
+      }
+      return sum;
+//           ^^^ reference local 3
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/total().
+  
+//⌄ enclosing_range_start scip-buzz buzz . . `main.buzz`/safe().
+  fun safe(items: [int]) > int {
+//    ^^^^ definition scip-buzz buzz . . `main.buzz`/safe().
+//         kind Function
+//         display_name safe
+//         signature_documentation
+//         > fun safe(items: [int]) > int
+//         ^^^^^ definition local 7
+//               kind Parameter
+//               display_name items
+//               enclosing_symbol scip-buzz buzz . . `main.buzz`/safe().
+      try {
+          return total(items);
+//               ^^^^^ reference scip-buzz buzz . . `main.buzz`/total().
+//                     ^^^^^ reference local 7
+      } catch (err: str) {
+//             ^^^ definition local 8
+//                 kind Variable
+//                 display_name err
+//                 enclosing_symbol scip-buzz buzz . . `main.buzz`/safe().
+          std\print(err);
+//        ^^^ reference local 0
+//            ^^^^^ reference scip-buzz buzz host . std/print().
+//                  ^^^ reference local 8
+      }
+      final maybe: int? = null;
+//          ^^^^^ definition local 9
+//                kind Constant
+//                display_name maybe
+//                enclosing_symbol scip-buzz buzz . . `main.buzz`/safe().
+      if (maybe -> value) {
+//        ^^^^^ reference local 9
+//                 ^^^^^ definition local 10
+//                       kind Variable
+//                       display_name value
+//                       enclosing_symbol scip-buzz buzz . . `main.buzz`/safe().
+          return value;
+//               ^^^^^ reference local 10
+      }
+      return 0;
+  }
+//⌃ enclosing_range_end scip-buzz buzz . . `main.buzz`/safe().
+  

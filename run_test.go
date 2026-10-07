@@ -1862,12 +1862,30 @@ func TestObservationsForTarget(t *testing.T) {
 // scheduler adds the probed ones, so an assignment here would silently drop whichever
 // arrived first, and the key would lose an input with nothing to notice.
 func TestApplyRunKeyingCarriesObservations(t *testing.T) {
-	step := cache.Step{Observations: []string{"schema-rev=a1b2c3"}}
-	applyRunKeying(&step, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
+	step := cache.Step{Target: "go-build", Observations: []string{"schema-rev=a1b2c3"}}
+	applyRunKeying(&step, &types.Project{Path: "."}, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
 
 	assert.Equal(t, []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"}, step.Observations)
 	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
 	assert.Equal(t, []string{"rw"}, step.Charms)
+}
+
+// The one place an indexer op sheds the spell's tool versions is applyRunKeying itself, so
+// no caller that mints the indexer's key can forget to: the run, `describe target --cache`
+// and the freshness probe all hand it the project's versions as they would any target's.
+func TestApplyRunKeyingDropsToolVersionsForAnIndexerOp(t *testing.T) {
+	sp := spells.NewSpell("buzz", spells.WithSymbolIndexer(&spells.SymbolIndexer{
+		Format: spells.SymbolFormatSCIP, Op: "scip-buzz", Command: spells.Command{Bin: "scip-buzz"},
+	}))
+	p := &types.Project{Path: ".", ResolvedSpells: []*spells.Spell{sp}}
+
+	indexer := cache.Step{Target: "scip-buzz"}
+	applyRunKeying(&indexer, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	assert.Empty(t, indexer.ToolVersions)
+
+	other := cache.Step{Target: "build"}
+	applyRunKeying(&other, p, []string{"buzz:buzz:1.0"}, nil, nil)
+	assert.Equal(t, []string{"buzz:buzz:1.0"}, other.ToolVersions)
 }
 
 // TestTargetDrivenEnvKeys pins the two ways an op's EnvKeys reach a target's key: composed

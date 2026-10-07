@@ -31,6 +31,7 @@ import "magus/spell/docker";
 import "magus/spell/cosign";
 import "magus/spell/markdown";
 import "magus/spell/bash";
+import "magus/spell/buzz";
 
 import "./hack/magusfile/badges" as badges;
 import "./hack/magusfile/coverage" as cov;
@@ -47,6 +48,7 @@ import "project/libs/diagnostics";
 import "project/libs/coldread";
 import "project/libs/conventions";
 import "project/libs/testlayout";
+import "project/libs/scipbuzz";
 
 // Declaring trusted keys is what enables the cache; the insecure arm ignores them all.
 // This reads raw env while the engine reads parsed config, so the two can disagree.
@@ -102,13 +104,13 @@ magus\project({
         "internal/graph/knowledge": "repository",
         "internal/server": "composition",
     },
-    "spells": [go, markdown, bash],
+    // buzz claims **/*.buzz, which go_build keys on, and builds the Buzz symbol index
+    // (scip-buzz) beside the Go one.
+    "spells": [go, markdown, bash, buzz],
     // Tool configs no spell glob matches. Each changes what a target does, so an
     // undeclared one replays a stale verdict. Files doctor lists as undeclared stay
     // out when nothing reads them. Never add .gitattributes: magus writes it.
     "sources": [
-        // No spell claims .buzz, and go_build keys on the tree through this glob.
-        "**/*.buzz",
         ".golangci.yml",
         ".mockery.yaml",
         ".markdownlintignore",
@@ -1975,7 +1977,7 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // generate first: the denominator reads every Go file the generators write.
     ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
-        conventions\test, testlayout\test, buzz_test);
+        conventions\test, testlayout\test, scipbuzz\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
     if (!fs\exists("gen/site/index.html")) {
@@ -1993,7 +1995,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
          "libs/coldread/coverage.out", "libs/conventions/coverage.out",
-         "libs/testlayout/coverage.out"]));
+         "libs/testlayout/coverage.out", "libs/scipbuzz/coverage.out"]));
     final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2127,6 +2129,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/magusfile.buzz",
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
+                   "libs/scipbuzz/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
                    "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static",
@@ -2144,10 +2147,11 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/coldread/**/*.md", "libs/conventions/**/*.md",
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
-                   "libs/textsearch/**/*.md", "proto/**/*.md",
+                   "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "proto/**/*.md",
                    "**/*_test.go", "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
-                   "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go");
+                   "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
+                   "libs/scipbuzz/**/*_test.go");
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 

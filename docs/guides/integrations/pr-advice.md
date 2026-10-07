@@ -204,9 +204,9 @@ nearest that do. A test file is recognized by its language's own naming (`_test.
 `.test.ts`, `.spec.ts`, `test_*.py`), and a directory mixing two languages is left alone.
 These are facts about a boundary the author chose, so they stay advice.
 
-Before the checks run, `magus diff` brings the symbol index of every project the change
-touched up to date through that project's `scip` target, so a current index replays and a
-stale one rebuilds only itself. When it cannot (the indexer is missing or fails, or cache
+Before the checks run, `magus diff` brings every symbol index of every project the change
+touched up to date through its own op (`scip`, or the op its indexer declares, such as `scip-buzz`), so a
+current index replays and a stale one rebuilds only itself. When it cannot (the indexer is missing or fails, or cache
 writes are off so nothing vouches for the rebuilt index), the review carries
 [MGS7003](../../reference/codes/knowledge/MGS7003.md) in place of findings, and this section
 says so and fails its step. It never reads as a change with nothing to report. The job running
