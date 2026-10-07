@@ -13,10 +13,10 @@ const (
 	maxSentenceWords = 60
 )
 
-// fillerPattern matches case-sensitively. Throat-clearing opens a sentence ("Note
-// that", "This function"), so those match only capitalized: "a note that ..."
-// names the notes feature, and "this function's job" is a contract. The
-// adverbs are filler wherever they sit.
+// fillerPattern matches case-sensitively. Throat-clearing opens a sentence
+// (`Note that`, `This function`), so those match only capitalized:
+// `a note that` names the notes feature, and `this function's job` is a
+// contract. The adverbs are filler wherever they sit.
 var fillerPattern = regexp.MustCompile(`\b(?:Note that|Please note|It should be noted|It is worth noting|` +
 	`It's worth noting|It is important to|It's important to|This function|This method|` +
 	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say)\b`)

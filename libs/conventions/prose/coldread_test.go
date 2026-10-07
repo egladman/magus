@@ -115,6 +115,112 @@ func TestAsideReportsAHyphenEndingALine(t *testing.T) {
 	runJudgeCases(t, cases)
 }
 
+// TestAsideLeavesAListItemAlone pins the list items the tree reported as asides.
+// The knowledge graph collapses a doc's newlines to spaces, so each item arrives
+// as a run of blanks and a marker in the middle of the line; the collapsed
+// cases are those docs as the graph stores them.
+func TestAsideLeavesAListItemAlone(t *testing.T) {
+	cases := []judgeCase{
+		{
+			name: "every marker go/doc/comment reads",
+			doc: "Markers lists each shape of item:\n\n  - a hyphen\n  * a star\n  + a plus\n" +
+				" 1. a numbered step\n 2) a parenthesized step",
+		},
+		{
+			name: "a line ending in a hyphen before a list",
+			doc:  "Modes lists the delivery modes -\n  - default: a fragment\n  - upload: a link",
+		},
+		{
+			name: "collapsed: derived",
+			doc: "renderJobSchema renders one record. Every rule it applies is derived:    " +
+				"- one property per json tag, in declaration order and named by the tag;",
+		},
+		{
+			name: "collapsed: modes",
+			doc:  "Two privacy-first delivery modes:   - default: gzip+base64url the graph into a URL fragment.",
+		},
+		{
+			name: "collapsed: Accepts",
+			doc:  "number scans a numeric literal. Accepts:    - Decimal ints and floats:  42, 1_000_000, 3.14",
+		},
+		{
+			name: "collapsed: levels",
+			doc: "Two namespaces answer, reflecting the two identity levels:    " +
+				"- STEP refs (portable, key-derived): the hex tail prefix-matches a cache key.",
+		},
+		{
+			name: "collapsed: them.",
+			doc:  "Notes attach to graph entities without being derived from any of them.    - WHO WRITES. A person.",
+		},
+		{
+			name: "collapsed: full",
+			doc:  "Layout places a figure in full  - box, edge and label positions.",
+		},
+		{
+			name: "collapsed: value",
+			doc:  `Graph returns a knowledge-graph flavor as a domain value:   - "skeleton": project nodes only`,
+		},
+		{
+			name: "collapsed: every marker",
+			doc:  "Markers lists:   * a star   + a plus   1. a step   2) a step",
+		},
+		{
+			name: "collapsed: a hyphen leading into a list",
+			doc:  "Modes lists the delivery modes -   - default: a fragment   - upload: a link",
+		},
+		{
+			name: "collapsed: an item in backticks is a literal",
+			doc:  "Flags reads `a  - b` as one argument.",
+		},
+	}
+
+	runJudgeCases(t, cases)
+}
+
+// TestAsideStillReportsAnAsideBesideAList pins the asides the tree reported
+// correctly, in the collapsed form the graph stores and beside list items.
+func TestAsideStillReportsAnAsideBesideAList(t *testing.T) {
+	cases := []judgeCase{
+		{
+			name: "needed)",
+			doc:  "Grow adds a worker when the pool runs dry (and only when needed) - the queue waits.",
+			want: []Finding{asideFinding("needed) - the")},
+		},
+		{
+			name: "underprovisioned",
+			doc:  "Admit refuses a run whose host is underprovisioned - which the caller retries.",
+			want: []Finding{asideFinding("underprovisioned - which")},
+		},
+		{
+			name: "point",
+			doc:  "Split cuts the range at one point - three pieces would be two cuts.",
+			want: []Finding{asideFinding("point - three")},
+		},
+		{
+			name: "a wrapped aside collapsed onto one line",
+			doc:  "The lock is taken before the check - which is what makes the fast path safe.",
+			want: []Finding{asideFinding("check - which")},
+		},
+		{
+			name: "collapsed: an aside inside an item",
+			doc:  "Every rule it applies is derived:    - one property per tag - in declaration order",
+			want: []Finding{asideFinding("tag - in")},
+		},
+		{
+			name: "collapsed: an aside before a list",
+			doc:  "Modes reads the flag - not the env:   - default: a fragment",
+			want: []Finding{asideFinding("flag - not")},
+		},
+		{
+			name: "a line ending in a hyphen before prose",
+			doc:  "Modes lists the delivery modes -\nthe default is a fragment.\n\n  - upload: a link",
+			want: []Finding{wrappedFinding("modes -")},
+		},
+	}
+
+	runJudgeCases(t, cases)
+}
+
 func TestHistoryReportsAPhraseNarratingTheChange(t *testing.T) {
 	cases := []judgeCase{
 		{
@@ -195,11 +301,57 @@ func TestDocStubReportsADocThatOnlyRepeatsTheName(t *testing.T) {
 			sym: Symbol{Name: "Options", Doc: "Options is a Options.\n\n" +
 				"The second paragraph is the contract, so the first line is scaffolding."},
 		},
+		{
+			name: "a type named in words",
+			sym:  Symbol{Name: "FuncType", Doc: "FuncType is a function type."},
+			want: []Finding{docStubFinding("FuncType", "FuncType is a function type.")},
+		},
+		{
+			name: "the name alone",
+			sym:  Symbol{Name: "ApplyEnv", Callable: true, Doc: "ApplyEnv"},
+			want: []Finding{docStubFinding("ApplyEnv", "ApplyEnv")},
+		},
+		{
+			name: "a method naming its owner",
+			sym:  Symbol{Name: "Close", Owner: "PoolRegistry", Callable: true, Doc: "Close closes every Pool in the registry."},
+			want: []Finding{docStubFinding("Close", "Close closes every Pool in the registry.")},
+		},
+		{
+			name: "a word of the name",
+			sym:  Symbol{Name: "MarkNone", Doc: "none"},
+			want: []Finding{docStubFinding("MarkNone", "none")},
+		},
+		{name: "a word the name lacks", sym: Symbol{Name: "MarkNone", Doc: "cleared"}},
+		{name: "a qualified name", sym: Symbol{Name: "Client", Doc: "Client is an http.Client."}},
+		{name: "an operator", sym: Symbol{Name: "OpBXor", Doc: "^"}},
+		{name: "a table alignment row", sym: Symbol{Name: "Left", Doc: "---"}},
+		{name: "a centered alignment row", sym: Symbol{Name: "Center", Doc: ":-:"}},
+		{name: "a flag", sym: Symbol{Name: "dumpAST", Doc: "--ast"}},
+		{name: "a grammar with a quoted literal", sym: Symbol{Name: "StringLit", Doc: `StringLit: "..."`}},
+		{name: "a grammar with braces", sym: Symbol{Name: "BlockStmt", Doc: "BlockStmt: { stmt* }"}},
+		{name: "a bracketed order", sym: Symbol{Name: "BackPath", Doc: "[To, ..., From]"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			assertFindings(t, Judge(tc.sym), tc.want)
+		})
+	}
+}
+
+// TestDocStubSkipsATokenDoc pins every trailing comment the tree reported as a
+// stub: each spells the token or syntax its symbol stands for.
+func TestDocStubSkipsATokenDoc(t *testing.T) {
+	docs := []string{
+		`^`, `>>`, `<<`, `~`, `}`, `|=`, `{`, `]`, `\`, `[`, `??`, `?`, `>>=`, `>=`, `>`,
+		`=>`, `==`, `=`, `<=`, `<<=`, `<`, `;`, `:-:`, `:`, `/=`, `/`, `..`, `.`, `->`,
+		`-=`, `--embedded`, `--ast`, `--:`, `---`, `-`, `,`, `+`, `*>`, `*=`, `*`, `)`,
+		`&=`, `&`, `%=`, `%`, `!>`, `|`,
+	}
+
+	for _, doc := range docs {
+		t.Run(doc, func(t *testing.T) {
+			assertFindings(t, Judge(Symbol{Name: "Op", Doc: doc}), nil)
 		})
 	}
 }

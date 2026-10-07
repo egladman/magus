@@ -86,9 +86,26 @@ func TestProseLinesDropCodeAndKeepListItems(t *testing.T) {
 	want := []proseLine{
 		{text: "Intro line.", start: 0, opens: true},
 		{text: "wraps here.", start: 0},
-		{text: "- an item", start: 2, opens: true},
+		{text: "- an item", start: 2, opens: true, item: true},
 		{text: "  continues", start: 2},
 		{text: "After the fence.", start: 0, opens: true},
+	}
+
+	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
+		t.Errorf("proseLines:\n got %#v\nwant %#v", got, want)
+	}
+}
+
+// TestProseLinesSplitACollapsedList pins the split at a run of blanks before a
+// marker, which is all that is left of a list item's line in a doc whose
+// newlines were collapsed. A single space and a backtick span never split.
+func TestProseLinesSplitACollapsedList(t *testing.T) {
+	doc := "Rules are derived:    - one property;   - the next - here `a  - b`"
+
+	want := []proseLine{
+		{text: "Rules are derived:", start: 0, opens: true},
+		{text: "    - one property;", start: 6, opens: true, item: true},
+		{text: "   - the next - here `a  - b`", start: 5, opens: true, item: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {

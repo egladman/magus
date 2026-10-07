@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // asideMessage names the fix rather than the sin: the wrong punctuation reads
@@ -28,8 +29,9 @@ const docStubMessage = "Doc comment only repeats the name %s; state the contract
 func aside(_ Symbol, prose []proseLine) []Finding {
 	var out []Finding
 
-	for _, ln := range prose {
-		if f, ok := scanAside(ln.text, ln.start); ok {
+	for i, ln := range prose {
+		itemFollows := i+1 < len(prose) && prose[i+1].item
+		if f, ok := scanAside(ln.text, ln.start, itemFollows); ok {
 			out = append(out, f)
 		}
 	}
@@ -40,8 +42,8 @@ func aside(_ Symbol, prose []proseLine) []Finding {
 // scanAside judges text from start, which skips a list marker so the bullet's
 // own hyphen is exempt while a second one later in the item is not. A line
 // ENDING in a spaced hyphen is the same aside with its second clause on the
-// next line.
-func scanAside(text string, start int) (Finding, bool) {
+// next line, unless itemFollows: a list item on the next line is no clause.
+func scanAside(text string, start int, itemFollows bool) (Finding, bool) {
 	if start >= len(text) {
 		return Finding{}, false
 	}
@@ -63,7 +65,7 @@ func scanAside(text string, start int) (Finding, bool) {
 	}
 
 	trimmed := strings.TrimRight(masked, " \t")
-	if len(trimmed) < start+2 || trimmed[len(trimmed)-1] != '-' {
+	if itemFollows || len(trimmed) < start+2 || trimmed[len(trimmed)-1] != '-' {
 		return Finding{}, false
 	}
 
@@ -242,8 +244,8 @@ var historyPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bthe old (?:code|behaviou?r|implementation|version)\b`),
 }
 
-// purposeLead is the word before a "used to" that states a purpose ("is used
-// to sign") rather than a past habit ("it used to sign").
+// purposeLead is the word before a `used to` that states a purpose
+// (`is used to sign`) rather than a past habit (`it used to sign`).
 var purposeLead = wordSet("is", "are", "was", "were", "be", "been", "being", "get", "gets", "got", "getting")
 
 // history reports the first history phrase on each prose line.
@@ -310,7 +312,7 @@ func docStub(s Symbol, _ []proseLine) []Finding {
 	}
 
 	text := strings.TrimSpace(s.Doc)
-	if text == "" || strings.Contains(text, "\n") {
+	if text == "" || strings.Contains(text, "\n") || spellsSyntax(text) {
 		return nil
 	}
 
@@ -332,6 +334,43 @@ func docStub(s Symbol, _ []proseLine) []Finding {
 	}
 
 	return []Finding{{Message: fmt.Sprintf(docStubMessage, s.Name), Match: text}}
+}
+
+// spellsSyntax reports whether text holds what no name can say: a token that
+// is not a plain word (an operator, a flag, a quoted literal, a bracket), or no
+// letter at all. Such a doc is the token or grammar its symbol stands for, as
+// in `OpBXor // ^` or `BlockStmt // BlockStmt: { stmt* }`. Sentence
+// punctuation, parentheses and an ellipsis are prose, so `Close ...` is still
+// a stub.
+func spellsSyntax(text string) bool {
+	if !strings.ContainsFunc(text, unicode.IsLetter) {
+		return true
+	}
+
+	for _, token := range strings.Fields(text) {
+		token = strings.TrimLeft(strings.TrimRight(token, ".,;:!?…)"), "(")
+		if token != "" && !plainWord(token) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// plainWord reports whether token is a word or an identifier: letters, digits
+// and underscores, joined inside by the dot of a qualified name, a hyphen or an
+// apostrophe.
+func plainWord(token string) bool {
+	for i, r := range token {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r), r == '_':
+		case (r == '.' || r == '-' || r == '\'' || r == '’') && i > 0 && i+utf8.RuneLen(r) < len(token):
+		default:
+			return false
+		}
+	}
+
+	return true
 }
 
 // stubWords is the vocabulary a stub pads a name with, stemmed. "implement" is
