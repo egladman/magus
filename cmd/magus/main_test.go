@@ -732,16 +732,21 @@ const coverStagePrefix = "magus-scripts-"
 // named by the wall clock alone, which darwin reports in whole microseconds. Two
 // processes exiting in the same microsecond share that temp file, the second rename
 // fails with ENOENT, and the runtime prints the error to a stderr a script asserts on.
+//
+// A process the sandbox denies writes under the stage could not have emitted coverage
+// either, so it drops GOCOVERDIR and runs uncovered: the runtime then emits nothing,
+// where it would otherwise print its own write failure.
 func isolateCoverDir() {
 	dir := os.Getenv("GOCOVERDIR")
 	if dir == "" || !strings.Contains(filepath.ToSlash(dir), "/"+coverStagePrefix) {
 		return
 	}
 	own, err := os.MkdirTemp(dir, "p")
-	if err == nil {
-		err = os.Setenv("GOCOVERDIR", own)
-	}
 	if err != nil {
+		_ = os.Unsetenv("GOCOVERDIR")
+		return
+	}
+	if err := os.Setenv("GOCOVERDIR", own); err != nil {
 		fmt.Fprintln(os.Stderr, "magus test: isolate coverage:", err)
 		os.Exit(1)
 	}
