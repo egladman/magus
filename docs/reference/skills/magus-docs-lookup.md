@@ -3,8 +3,8 @@ title: magus-docs-lookup
 generated_from: internal/agent/skills/magus-docs-lookup/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs-lookup]
-skill_full_bytes: 4259
-skill_short_bytes: 3432
+skill_full_bytes: 4254
+skill_short_bytes: 3428
 ---
 
 # magus-docs-lookup
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `23f524bab3ea` |
+| `skill-content` | `ec4a165abe3d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -57,7 +57,7 @@ magus agent install --tar | tar -xO -f - magus-docs-lookup/SKILL.md
 # Navigating the magus docs
 
 magus ships one official documentation site. Reach for it when a magus-domain fact
-is not derivable from the workspace graph - they are the source of
+is not derivable from the workspace graph: they are the source of
 truth for magus's own behavior.
 
 Two places serve the same pages:
@@ -84,10 +84,10 @@ below is for the PUBLISHED site, where there is no graph to ask.
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 
-- `llms.txt` - one titled link per page, each pointing at that page's raw
+- `llms.txt`: one titled link per page, each pointing at that page's raw
   Markdown (`<url>index.md`), with a one-line description. Read this FIRST to
   locate a page, then fetch its `index.md`.
-- `search-index.json` - a flat array of `{url, title, text, tags, description}`,
+- `search-index.json`: a flat array of `{url, title, text, tags, description}`,
   one record per page. Search it when you do not know the page name.
 
 ## URL scheme
@@ -128,7 +128,7 @@ Land via `llms.txt`, then sweep siblings via "In this section".
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
-(never edit it - change the source and regenerate). MAGUS.md is a routing index
+(never edit it; change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it: true only as of its last
 regeneration. `magus query "kind=doc"` lists every
 page from the graph.
@@ -149,7 +149,7 @@ magus agent install --tar | tar -xO -f - magus-docs-lookup-full/SKILL.md
 magus ships one official documentation site. It is a static site, so its
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT. Reach for it when a magus-domain fact
-is not derivable from the workspace graph - the docs are the source of truth for
+is not derivable from the workspace graph: the docs are the source of truth for
 magus's own behavior, so read them rather than guessing.
 
 Two places serve the same pages:
@@ -178,10 +178,10 @@ below is for the PUBLISHED site, where there is no graph to ask.
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 
-- `llms.txt` - one titled link per page, each pointing at that page's raw
+- `llms.txt`: one titled link per page, each pointing at that page's raw
   Markdown (`<url>index.md`), with a one-line description. Read this FIRST to
   locate a page, then fetch its `index.md`.
-- `search-index.json` - a flat array of `{url, title, text, tags, description}`,
+- `search-index.json`: a flat array of `{url, title, text, tags, description}`,
   one record per page. Grep it for a keyword when you do not know the page name.
 
 WRONG: guess `https://.../go-spell` or grep the open web.
@@ -221,12 +221,12 @@ Every page gives you three axes, so from one page you can reach its whole area:
 - Prev / next (pager): the adjacent pages in the same section.
 
 So: land via `llms.txt`, read the page, then use "In this section" to sweep its
-siblings - do not re-search for each one.
+siblings; do not re-search for each one.
 
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
-(never edit it - change the source and regenerate). MAGUS.md is a routing index
+(never edit it; change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it: it is true only as of the
 last regeneration, and every fact in it has a live command. The knowledge graph
 carries every page as a `doc` node, so `magus query "kind=doc"` (see the

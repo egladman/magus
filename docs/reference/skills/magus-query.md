@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15082
-skill_short_bytes: 12315
+skill_full_bytes: 15050
+skill_short_bytes: 12288
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `df2ed44cf6fc` |
+| `skill-content` | `ab43442133d5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -61,8 +61,8 @@ find and relate entities instead of grepping source.
 
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
 shaped like "what exists / what depends on X / where is Y used / how do A and B
-relate" is a graph query FIRST - do not open Grep or Glob for it. If the graph cannot answer,
-say so and then fall back - falling back silently hides the gap.
+relate" is a graph query FIRST; do not open Grep or Glob for it. If the graph cannot answer,
+say so and then fall back: falling back silently hides the gap.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
 generated index for humans, true only as of its last regeneration. Last resort
@@ -102,7 +102,7 @@ only: no server AND no CLI, or a human asking what the committed index says.
 
    Every result that has one names its own next step: text mode prints the commands
    under a `next:` label and `-o json` carries them as a `next` field, each with the
-   real ids already filled in. Following one is optional - it is a suggestion magus
+   real ids already filled in. Following one is optional; it is a suggestion magus
    offers, never an order, and a result with nothing to suggest carries no `next` at
    all.
 
@@ -112,7 +112,7 @@ only: no server AND no CLI, or a human asking what the committed index says.
 ## Rewriting a symbol everywhere it appears
 
 `magus refs <symbol>` answers "where is this used" at file granularity, and its line
-list is CAPPED - it describes fan-in, and a rewrite driven off it silently skips sites.
+list is CAPPED: it describes fan-in, and a rewrite driven off it silently skips sites.
 Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
 end line/column, and each range checked against the file on disk.
 
@@ -123,7 +123,7 @@ magus refs <symbol> --occurrences -o json
 magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
-**Never drive the rewrite from a pattern** - not `sed -i`, not a scripted
+**Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
 substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
 same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
 proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
@@ -134,7 +134,7 @@ extra steps.
 **A not-indexed project is a stop, not an empty result.** `magus refs` says
 `verdict: unknown, not absent` and names the projects it could not see. Run
 `magus graph build` and ask again. Reading that verdict as "no matches" and falling back
-to a text search is how a rename misses every site in an unindexed project - and a fresh
+to a text search is how a rename misses every site in an unindexed project, and a fresh
 worktree starts unindexed, so this is the normal state at the moment you most want a
 rename.
 
@@ -143,11 +143,11 @@ rewrite corrupts a file:
 
 - **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
   magus read that exact range and found the symbol there. `mismatch` means it found
-  something else - the index predates an edit - and `unreadable` means the range is no
+  something else (the index predates an edit), and `unreadable` means the range is no
   longer inside the file. The `text` field shows what is really there, and `names` is every
   spelling that would have verified, so you can check the verdict rather than trust it.
 - **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
-  verified sites ONLY, so a wholly stale index prints nothing - which on its own is
+  verified sites ONLY, so a wholly stale index prints nothing, which on its own is
   indistinguishable from a symbol that is never used. Exit 1 means sites were found and
   withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
 - **Apply back-to-front within each file.** Replacing a name with one of a different
@@ -155,7 +155,7 @@ rewrite corrupts a file:
   subsequent range as you go. Walk each file's occurrences in reverse. Files are
   independent of each other.
 - **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
-  ranges failed to verify, which proves it changed after indexing - so the index may also
+  ranges failed to verify, which proves it changed after indexing, so the index may also
   be MISSING occurrences added since, and no per-site check can see a site that is not in
   the list. Re-run that project's `scip` target and ask again. Editing the verified sites
   and skipping the rest produces a half-renamed tree that may still compile.
@@ -164,22 +164,22 @@ Completeness rests on the index being current even when everything verifies: an 
 appended a new use without disturbing existing ranges leaves every site verifying while
 adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
 first when the tree has moved since you last did, and check the verdict for projects that
-declare no index at all - those are not searched.
+declare no index at all; those are not searched.
 
 ## Query grammar
 
 Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
 are `=` (match), `!=` (exclude), `=~` (regex):
 
-- `build` - free text over IDs, labels, and docs
-- `kind=spell` - only that node kind
-- `project=pkg/foo` - everything the project owns
-- `relation=uses` - seed from nodes touching that edge
-- `id=build` - substring match on the node ID
-- `kind!=op` - exclude these
-- `id=~build$` - regex over the target; `kind=~"spell|op"` ORs the alternatives
-- `id=target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
-- `"exact phrase"` - keep a quoted span as one term
+- `build`: free text over IDs, labels, and docs
+- `kind=spell`: only that node kind
+- `project=pkg/foo`: everything the project owns
+- `relation=uses`: seed from nodes touching that edge
+- `id=build`: substring match on the node ID
+- `kind!=op`: exclude these
+- `id=~build$`: regex over the target; `kind=~"spell|op"` ORs the alternatives
+- `id=target:*build`: `*` wildcard, matching any run (in a value or a free-text term)
+- `"exact phrase"`: keep a quoted span as one term
 
 The `:`/`-kind:op` spelling still parses (compat); prefer `=`/`!=`/`=~`.
 
@@ -191,31 +191,31 @@ in `magus\query`'s options; `matchCount` stays the total.
 
 Every markdown heading in the workspace is a `docsection` node, so documentation is
 QUERYABLE, not something to read whole. When you are looking for WHERE something is
-explained - in this repo's docs, a project's README, any tracked markdown - query the
+explained (in this repo's docs, a project's README, any tracked markdown), query the
 section rather than cat or grep the file:
 
 - `magus query "kind=docsection <terms>"` returns the heading whose section covers your
-  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  terms. Each result's id and Source are `<path>#<anchor>`: a citable pointer to the exact
   passage, the same fragment a link into the rendered page carries. Read that one section,
   not the whole page.
 - Scope it with `project=<p>` and combine free-text terms.
-- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+- Prose only: a code file is not indexed this way: `magus refs` and the entity kinds above
   still cover code and the domain model.
 
-Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
-cat over markdown to find a passage - not a targeted read.
+Reading one file you already know the path of is fine. This replaces the SCAN (the grep or
+cat over markdown to find a passage), not a targeted read.
 
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper - key into the
+  `schema_version`-stamped OBJECT with a top-level wrapper: key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
   bare IDs for piping. Do not scrape the human text or trim it with `head`.
 
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
-- Edges are directed and carry a `confidence` - `extracted` (read directly off a
-  source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
+- Edges are directed and carry a `confidence`: `extracted` (read directly off a
+  source) or `inferred` (a rubric score), plus `provenance` (where it came from).
 - Node `attrs` surface metadata. The `duration_p75_ms`,
   `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
   OBSERVED from local run history. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
@@ -263,7 +263,7 @@ this workspace declares no adapter, which is the common case.
 ## Do not render the graph yourself
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
-human an export - `magus graph export -o json` (or `-o graphml`) opens directly in
+human an export: `magus graph export -o json` (or `-o graphml`) opens directly in
 Gephi, yEd, or a browser graph tool.
 
 ## Fetching current behavior
@@ -287,19 +287,19 @@ magus agent install --tar | tar -xO -f - magus-query-full/SKILL.md
 magus keeps a deterministic, cache-backed graph of its own domain. Query it to
 find and relate entities instead of grepping source. This skill teaches HOW to use
 the tools; the verbs below say WHAT is in this specific workspace. The division is
-strict, so this skill never goes stale when a workspace changes - only when the
+strict, so this skill never goes stale when a workspace changes, only when the
 tool surface does.
 
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
 shaped like "what exists / what depends on X / where is Y used / how do A and B
-relate" is a graph query FIRST - do not open Grep or Glob for it. Unlike a
+relate" is a graph query FIRST; do not open Grep or Glob for it. Unlike a
 grep hit, a graph answer is verified: every edge is extracted from a declared
 source or scored by a rubric, and says which. If the graph cannot answer,
-say so and then fall back - a silent fallback hides the gap that should be
+say so and then fall back: a silent fallback hides the gap that should be
 reported.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
-HUMAN reading the repo, and it is only as true as its last regeneration - a
+HUMAN reading the repo, and it is only as true as its last regeneration: a
 workspace whose generate target has not run since the last change describes a
 tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
@@ -344,20 +344,20 @@ unavailable too, or when a human explicitly asks what the committed index says.
 
    Every result that has one names its own next step: text mode prints the commands
    under a `next:` label and `-o json` carries them as a `next` field, each with the
-   real ids already filled in. Following one is optional - it is a suggestion magus
+   real ids already filled in. Following one is optional; it is a suggestion magus
    offers, never an order, and a result with nothing to suggest carries no `next` at
    all.
 
    The graph relates entities; the evaluated dispatch plan lives one verb over.
    `magus describe target <name>` prints, per project, the resolved source globs,
-   output globs (the generated files), spells, and policy for that target - use it
+   output globs (the generated files), spells, and policy for that target; use it
    when the question is "what feeds or comes out of this target", not "what relates
    to it".
 
 ## Rewriting a symbol everywhere it appears
 
 `magus refs <symbol>` answers "where is this used" at file granularity, and its line
-list is CAPPED - it describes fan-in, and a rewrite driven off it silently skips sites.
+list is CAPPED: it describes fan-in, and a rewrite driven off it silently skips sites.
 Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
 end line/column, and each range checked against the file on disk.
 
@@ -368,7 +368,7 @@ magus refs <symbol> --occurrences -o json
 magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
-**Never drive the rewrite from a pattern** - not `sed -i`, not a scripted
+**Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
 substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
 same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
 proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
@@ -379,7 +379,7 @@ extra steps.
 **A not-indexed project is a stop, not an empty result.** `magus refs` says
 `verdict: unknown, not absent` and names the projects it could not see. Run
 `magus graph build` and ask again. Reading that verdict as "no matches" and falling back
-to a text search is how a rename misses every site in an unindexed project - and a fresh
+to a text search is how a rename misses every site in an unindexed project, and a fresh
 worktree starts unindexed, so this is the normal state at the moment you most want a
 rename.
 
@@ -388,11 +388,11 @@ rewrite corrupts a file:
 
 - **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
   magus read that exact range and found the symbol there. `mismatch` means it found
-  something else - the index predates an edit - and `unreadable` means the range is no
+  something else (the index predates an edit), and `unreadable` means the range is no
   longer inside the file. The `text` field shows what is really there, and `names` is every
   spelling that would have verified, so you can check the verdict rather than trust it.
 - **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
-  verified sites ONLY, so a wholly stale index prints nothing - which on its own is
+  verified sites ONLY, so a wholly stale index prints nothing, which on its own is
   indistinguishable from a symbol that is never used. Exit 1 means sites were found and
   withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
 - **Apply back-to-front within each file.** Replacing a name with one of a different
@@ -400,7 +400,7 @@ rewrite corrupts a file:
   subsequent range as you go. Walk each file's occurrences in reverse. Files are
   independent of each other.
 - **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
-  ranges failed to verify, which proves it changed after indexing - so the index may also
+  ranges failed to verify, which proves it changed after indexing, so the index may also
   be MISSING occurrences added since, and no per-site check can see a site that is not in
   the list. Re-run that project's `scip` target and ask again. Editing the verified sites
   and skipping the rest produces a half-renamed tree that may still compile.
@@ -409,25 +409,25 @@ Completeness rests on the index being current even when everything verifies: an 
 appended a new use without disturbing existing ranges leaves every site verifying while
 adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
 first when the tree has moved since you last did, and check the verdict for projects that
-declare no index at all - those are not searched.
+declare no index at all; those are not searched.
 
 ## Query grammar
 
 Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
 are `=` (match), `!=` (exclude), `=~` (regex):
 
-- `build` - free text over IDs, labels, and docs
-- `kind=spell` - only that node kind
-- `project=pkg/foo` - everything the project owns: the project node, its
+- `build`: free text over IDs, labels, and docs
+- `kind=spell`: only that node kind
+- `project=pkg/foo`: everything the project owns: the project node, its
   targets, and the files/functions/docs whose source lives under it (nested
   projects claim their own; the root `.` owns only what no nested project does)
-- `relation=uses` - seed from nodes touching that edge (`relation=calls`
+- `relation=uses`: seed from nodes touching that edge (`relation=calls`
   reaches symbol-to-symbol call edges, so it loads the lazy symbol shards)
-- `id=build` - substring match on the node ID
-- `kind!=op` - exclude these
-- `id=~build$` - regex over the target; `kind=~"spell|op"` ORs the alternatives
-- `id=target:*build` - `*` wildcard, matching any run (in a value or a free-text term)
-- `"exact phrase"` - keep a quoted span as one term
+- `id=build`: substring match on the node ID
+- `kind!=op`: exclude these
+- `id=~build$`: regex over the target; `kind=~"spell|op"` ORs the alternatives
+- `id=target:*build`: `*` wildcard, matching any run (in a value or a free-text term)
+- `"exact phrase"`: keep a quoted span as one term
 
 The `:` grammar (`kind:spell`) and dash negation (`-kind:op`) are the pre-`=`
 spelling, kept as a compat alias so old invocations still parse. Prefer `=`/`!=`/`=~`.
@@ -441,42 +441,42 @@ stays the total, so you know when you have them all.
 
 Every markdown heading in the workspace is a `docsection` node, so documentation is
 QUERYABLE, not something to read whole. When you are looking for WHERE something is
-explained - in this repo's docs, a project's README, any tracked markdown - query the
+explained (in this repo's docs, a project's README, any tracked markdown), query the
 section rather than cat or grep the file:
 
 - `magus query "kind=docsection <terms>"` returns the heading whose section covers your
-  terms. Each result's id and Source are `<path>#<anchor>` - a citable pointer to the exact
+  terms. Each result's id and Source are `<path>#<anchor>`: a citable pointer to the exact
   passage, the same fragment a link into the rendered page carries. Read that one section,
   not the whole page.
 - Scope it with `project=<p>` and combine free-text terms. `magus explain
   "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
   page `contains` its sections and a section contains the headings nested under it, so you
   can walk the outline.
-- Prose only: a code file is not indexed this way - `magus refs` and the entity kinds above
+- Prose only: a code file is not indexed this way: `magus refs` and the entity kinds above
   still cover code and the domain model.
 
-Reading one file you already know the path of is fine. This replaces the SCAN - the grep or
-cat over markdown to find a passage - not a targeted read.
+Reading one file you already know the path of is fine. This replaces the SCAN (the grep or
+cat over markdown to find a passage), not a targeted read.
 
 ## Reading results
 
 - Reading as a machine? Add `-o json`: every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper - key into the
+  `schema_version`-stamped OBJECT with a top-level wrapper: key into the
   plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
   bare IDs for piping. Do not scrape the human text or trim it with `head`.
   Over MCP the tools already return structured content; nothing to shape.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them; a rename
   is a delete plus an add.
-- Edges are directed and carry a `confidence` - `extracted` (read directly off a
-  source) or `inferred` (a rubric score) - plus `provenance` (where it came from).
+- Edges are directed and carry a `confidence`: `extracted` (read directly off a
+  source) or `inferred` (a rubric score), plus `provenance` (where it came from).
 - Node `attrs` surface metadata: a project's `engine` and `target_count`, a
   target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
   `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history, not derived from sources - read them as history, not
+  OBSERVED from local run history, not derived from sources; read them as history, not
   guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
   captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-<ref>` on it fetches that output - a target-to-output hop. When `knowledge.vcs` is
+<ref>` on it fetches that output (a target-to-output hop). When `knowledge.vcs` is
   enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
   `vcs_commits` extracted from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
@@ -487,7 +487,7 @@ If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. Combine that with dependency edges to
 answer "who owns the blast radius of this change": `magus explain <node>` for the
 node's owners and dependents, or `magus query kind=owner` to list owners. Only
-declared CODEOWNERS ownership appears - it is not blame-inferred.
+declared CODEOWNERS ownership appears; it is not blame-inferred.
 
 ## What other sessions already did here
 
@@ -523,7 +523,7 @@ this workspace declares no adapter, which is the common case.
 ## Do not render the graph yourself
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
-human an export - `magus graph export -o json` (or `-o graphml`) opens directly in
+human an export: `magus graph export -o json` (or `-o graphml`) opens directly in
 Gephi, yEd, or a browser graph tool. The emit-never-render rule that governs magus
 governs you too.
 

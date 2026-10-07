@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40941
-skill_short_bytes: 31664
+skill_full_bytes: 40909
+skill_short_bytes: 31645
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `109` |
+| `agent-skill-version` | `110` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `53909c86eb03` |
+| `skill-content` | `02be9565cbb9` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,12 +56,12 @@ magus agent install --tar | tar -xO -f - magus-multi-agent/SKILL.md
 ````markdown
 # Splitting work across agents
 
-Count the WRITE SETS your change needs - the distinct groups of files that must be
-edited - not the projects a change invalidates. That distinction decides everything
+Count the WRITE SETS your change needs (the distinct groups of files that must be
+edited), not the projects a change invalidates. That distinction decides everything
 here, and getting it backwards is the standard way fan-out goes wrong: a one-line
 edit in a central package invalidates half the workspace and is still one edit.
 
-`magus affected <target> --plan` partitions VALIDATION - which targets to run,
+`magus affected <target> --plan` partitions VALIDATION: which targets to run,
 grouped for runner balance. It is not an edit assignment and not a proof of write
 isolation (the section below is what establishes that). So it can veto a fan-out
 and never license one: one shard means keep the work local; several shards mean the
@@ -90,7 +90,7 @@ covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; write
 sets that look separate is not that check. If the graph supports only one
-coherent write set, keep the work local - fanning out one job adds coordination
+coherent write set, keep the work local; fanning out one job adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
 
@@ -124,8 +124,8 @@ the top-level goal is complete.
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface - a module several call sites will use, a type,
-an event, an exported function - the ROOT names it before any edit: the path, every
+When a change adds a shared surface (a module several call sites will use, a type,
+an event, an exported function), the ROOT names it before any edit: the path, every
 exported name with its signature, and the EXISTING symbols it must reuse rather than
 restate. Workers implement names they were handed and never coin a public one. A
 name invented at each call site is how one concept ends up with five spellings.
@@ -154,8 +154,8 @@ exists only when magus.yaml's `jobs` section sets one (read it with
 `magus config view` or `config`): `max_depth` and `max_live`
 make `magus job fork` refuse past them, naming the key, and
 `default_timeout` bounds a fork that names no `--timeout`. Honor a cap the user
-states the same way. Editing costs the workspace nothing; what contends is VALIDATION - the
-magus runs a job triggers - so read the live pool (`magus status`) before
+states the same way. Editing costs the workspace nothing; what contends is VALIDATION: the
+magus runs a job triggers, so read the live pool (`magus status`) before
 starting a validation rather than before starting an agent, and serialize
 validations that share a worktree even when their write sets are disjoint.
 
@@ -169,8 +169,8 @@ A job's check is that narrow target and never the gate. The
 root gates ONCE, in its own tree, after every unit lands.
 
 Decide each job's validation PLANE with its target. A worker environment that
-cannot execute magus at all - an isolated tree with no usable binary, or a
-guard that routes raw language tools back to targets it cannot run - cannot
+cannot execute magus at all (an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run) cannot
 validate anything it writes. Mark that job's check ROOT-DEFERRED when you fork
 it: the worker writes the tests, stops at the static checks
 its environment does run, and says so; the root executes the job's target
@@ -267,7 +267,7 @@ magus describe file <both jobs' paths>... -o json
 ```
 
 Read the facts: `overlaps` lists each declaration covering more than one
-proposed path - a shared write set by construction; `claims[].target` names the
+proposed path, a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
 Affinity stays with `client` (`magus\insight`, read affinity; without MCP,
@@ -277,7 +277,7 @@ this analysis entirely.
 
 Two jobs may run together only when:
 
-- The combined classification reports no overlaps - source write sets and
+- The combined classification reports no overlaps: source write sets and
   declared outputs disjoint.
 - Neither consumes an API or generated artifact the other will change.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
@@ -285,7 +285,7 @@ Two jobs may run together only when:
 - Dependency and temporal-affinity evidence does not indicate that they should
   move together.
 
-ONE WORKTREE PER WORKER wherever a write path touches workspace configuration - any
+ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: any
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 Those are the files magus READS to load the workspace, so a half-saved one is
 not a conflict between two workers: it stops the workspace loading for everybody
@@ -294,8 +294,8 @@ tests over an edit they cannot see.
 When `magus job fork` refuses one, the answer is a separate worktree, not a
 narrower boundary.
 
-Fork records what it could prove in `write_proof` - `alone`, `disjoint` or
-`overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
+Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
+`overlapping`), and `magus ls jobs` prints it. An overlap is recorded rather than
 refused, because sequencing two jobs onto one path is a call only you can make;
 what the row settles is whether anybody checked. Answer the guard's shared-checkout
 reminder the same way: a proof or a worktree, not a judgment that it looks fine.
@@ -377,7 +377,7 @@ is not graded.
 
 Every worker prompt must include its row, its JOB ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
-`BAGGAGE=magus.lease=<its id>` before it works - the guard grades its writes only when that is
+`BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only when that is
 set. Require it to preserve
 unrelated changes, stay inside write paths, avoid generated outputs, and run only its
 assigned Magus target.
@@ -413,15 +413,15 @@ its base on its first call; any other worker runs `magus job exec <its id>` once
 which records the base it landed on. The guard binds the caller that ran it, keyed
 on the session and subagent ids the host names, so workers sharing a tree each
 hold their own lease and none of them binds you. The
-answer is a status recorded on the row - match, revision-match (same revision,
-different uncommitted patch), diverged, or unknown - plus a reading of it that
+answer is a status recorded on the row: match, revision-match (same revision,
+different uncommitted patch), diverged, or unknown, plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
 records, diverged included. Acting on it is still yours: respawn from the right
 revision, or have the worker materialize the files it builds on from the intended
 one (`git show <rev>:<path> > <path>`, verifying each blob against
 `git rev-parse <rev>:<path>`) and re-fork the job with the right checkpoint.
-Also name any fact that will READ as drift to the worker's snapshot - a project
-deleted this session, a rename, an index regenerated underneath it - never a
+Also name any fact that will READ as drift to the worker's snapshot (a project
+deleted this session, a rename, an index regenerated underneath it), never a
 generic "expect drift" line.
 
 Write paths bound READS too: a worker may read its projects and what they declare
@@ -429,9 +429,9 @@ Write paths bound READS too: a worker may read its projects and what they declar
 the row's `read_paths` instead of widening `write_paths`, or two workers end up owning one file.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
-finished writing a contested path announces the release immediately - shrink the
+finished writing a contested path announces the release immediately: shrink the
 job's `write_paths` with another `client` (`magus\job.put`) write, or message the orchestrator
-if the host supports it - and then carries on validating.
+if the host supports it, and then carries on validating.
 
 That write records each dropped path with the digest it carried at that moment.
 Hand the digest to the job taking the path over: it names the version being
@@ -599,8 +599,8 @@ itself: the orchestrator, or any human, disposes it with `magus session dispose
 that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a job actually RAN, as opposed
-to what it reported. Each invocation carries the job it was launched under -
-the same `magus.lease` channel - along with the spawner label and parent span it
+to what it reported. Each invocation carries the job it was launched under
+(the same `magus.lease` channel), along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here. `magus session --since 2h -o json` is the
 form that answers what the fleet has been doing.
@@ -657,13 +657,13 @@ magus agent install --tar | tar -xO -f - magus-multi-agent-full/SKILL.md
 ````markdown
 # Splitting work across agents
 
-Count the WRITE SETS your change needs - the distinct groups of files that must be
-edited - not the projects a change invalidates. That distinction decides everything
+Count the WRITE SETS your change needs (the distinct groups of files that must be
+edited), not the projects a change invalidates. That distinction decides everything
 here, and getting it backwards is the standard way fan-out goes wrong: a one-line
 edit in a central package invalidates half the workspace and is still one edit,
 and fanning it out produces several agents editing one file.
 
-`magus affected <target> --plan` partitions VALIDATION - which targets to run,
+`magus affected <target> --plan` partitions VALIDATION: which targets to run,
 grouped for runner balance. It is not an edit assignment and not a proof of write
 isolation (the section below is what establishes that). So it can veto a fan-out
 and never license one: one shard means keep the work local; several shards mean the
@@ -696,16 +696,16 @@ covers the work.
 
 Fan out only after the collision check below REPORTS the jobs disjoint; write
 sets that look separate is not that check. If the graph supports only one
-coherent write set, keep the work local - fanning out one job adds coordination
+coherent write set, keep the work local; fanning out one job adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
 
 ## Coalesce what the write sets allow
 
 Disjoint write sets LICENSE parallelism; they do not require it. Every worker
-carries a fixed load before it reads a line of the diff - a system
+carries a fixed load before it reads a line of the diff: a system
 prompt, the repository's instruction file, the routing index, the skills that
-load, and the graph queries it runs to find its own footing - spent identically
+load, and the graph queries it runs to find its own footing, spent identically
 whether the unit is fifty lines or five hundred. So the question after
 partitioning is never "may these run in parallel" but "is each one big enough to
 be worth a worker".
@@ -750,7 +750,7 @@ Run this control loop:
 
 Acceptance evidence is an output ref the root reopens (`magus query output <ref>`),
 never a worker's prose. A worker that ran a filtered subset, or quietly restated its
-criteria into something it did pass, reports success either way - and a
+criteria into something it did pass, reports success either way, and a
 transcript cannot tell you which happened.
 
 An agent may report that its edits are done, but no job is complete until its
@@ -759,8 +759,8 @@ decides whether the top-level goal is complete.
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface - a module several call sites will use, a type,
-an event, an exported function - the ROOT names it before any edit: the path, every
+When a change adds a shared surface (a module several call sites will use, a type,
+an event, an exported function), the ROOT names it before any edit: the path, every
 exported name with its signature, and the EXISTING symbols it must reuse rather than
 restate. Workers implement names they were handed and never coin a public one. A
 name invented at each call site is how one concept ends up with five spellings, and how a plan that says "collapse two state types into one" ships
@@ -794,8 +794,8 @@ exists only when magus.yaml's `jobs` section sets one (read it with
 `magus config view` or `config`): `max_depth` and `max_live`
 make `magus job fork` refuse past them, naming the key, and
 `default_timeout` bounds a fork that names no `--timeout`. Honor a cap the user
-states the same way. Editing costs the workspace nothing; what contends is VALIDATION - the
-magus runs a job triggers - so read the live pool (`magus status`) before
+states the same way. Editing costs the workspace nothing; what contends is VALIDATION: the
+magus runs a job triggers, so read the live pool (`magus status`) before
 starting a validation rather than before starting an agent, and serialize
 validations that share a worktree even when their write sets are disjoint.
 
@@ -813,18 +813,18 @@ what stops seven fanned-out workers from each running the whole pipeline
 concurrently on one machine.
 
 Decide each job's validation PLANE with its target. A worker environment that
-cannot execute magus at all - an isolated tree with no usable binary, or a
-guard that routes raw language tools back to targets it cannot run - cannot
+cannot execute magus at all (an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run) cannot
 validate anything it writes. Mark that job's check ROOT-DEFERRED when you fork
 it: the worker writes the tests, stops at the static checks
 its environment does run, and says so; the root executes the job's target
 centrally before verifying. Leaving each worker to discover the wall
 spends its budget on the discovery, once per worker, and its report then reads
-"done" with nothing executed - which the acceptance-evidence rule above already
+"done" with nothing executed, which the acceptance-evidence rule above already
 refuses to accept.
 
 A worker may fork part of its own job. What it may not do is hand it out
-without shrinking the problem - that is the shape that does not terminate, and
+without shrinking the problem; that is the shape that does not terminate, and
 the cost people attribute to "multi-agent" is almost always this. These rules give
 it a definitive end without capping how deep it goes:
 
@@ -846,7 +846,7 @@ it a definitive end without capping how deep it goes:
 Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
 runs both ways: a mechanical rename does not need the strongest model available, and
 an ambiguous API boundary does not get the cheapest one because it looked like less
-work. Matching the model to the work is the only cost decision worth making here -
+work. Matching the model to the work is the only cost decision worth making here;
 past that, cost is not your call to agonize over, and a job done badly by an
 under-powered worker costs more than the model it saved.
 
@@ -925,7 +925,7 @@ magus describe file <both jobs' paths>... -o json
 ```
 
 Read the facts: `overlaps` lists each declaration covering more than one
-proposed path - a shared write set by construction; `claims[].target` names the
+proposed path, a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
 Affinity stays with `client` (`magus\insight`, read affinity; without MCP,
@@ -936,7 +936,7 @@ this analysis entirely.
 
 Two jobs may run together only when:
 
-- The combined classification reports no overlaps - source write sets and
+- The combined classification reports no overlaps: source write sets and
   declared outputs disjoint.
 - Neither consumes an API or generated artifact the other will change.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
@@ -944,7 +944,7 @@ Two jobs may run together only when:
 - Dependency and temporal-affinity evidence does not indicate that they should
   move together.
 
-ONE WORKTREE PER WORKER wherever a write path touches workspace configuration - any
+ONE WORKTREE PER WORKER wherever a write path touches workspace configuration: any
 project's magusfile, its `magus.yaml`, or a spell source a magusfile imports.
 Those are the files magus READS to load the workspace, so a half-saved one is
 not a conflict between two workers: it stops the workspace loading for everybody
@@ -955,8 +955,8 @@ stopped for the duration by a file only one of them had ever opened.
 When `magus job fork` refuses one, the answer is a separate worktree, not a
 narrower boundary.
 
-Fork records what it could prove in `write_proof` - `alone`, `disjoint` or
-`overlapping` - and `magus ls jobs` prints it. An overlap is recorded rather than
+Fork records what it could prove in `write_proof` (`alone`, `disjoint` or
+`overlapping`), and `magus ls jobs` prints it. An overlap is recorded rather than
 refused, because sequencing two jobs onto one path is a call only you can make;
 what the row settles is whether anybody checked. Answer the guard's shared-checkout
 reminder the same way: a proof or a worktree, not a judgment that it looks fine.
@@ -1027,17 +1027,17 @@ The check is `<target> <project> [-- args]` with the `magus run` implied
 that chains to it.
 
 Fork with `client` (`magus\job.put`) from an agent, or `magus job fork` from
-a terminal - the same store and the same authorization rule either way, so a
+a terminal: the same store and the same authorization rule either way, so a
 job forked by hand and one an agent forked are indistinguishable to everything that
 reads them. A worker holding a lease forks its own units the same way, naming
 its job with `--parent` and paths inside its own.
 
 The same checkpoint is what a later incremental re-review diffs from (see the
-magus-change-summary skill) - review time and pickup time read the same object.
+magus-change-summary skill); review time and pickup time read the same object.
 
 Render the prompt FROM the row rather than typing it: `magus describe job <job>`
 prints the job's own criteria, boundary and check, plus what the workspace knows
-and nobody wrote down - the projects the write paths reach, the declared
+and nobody wrote down: the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency. Two renders
@@ -1051,7 +1051,7 @@ is not graded.
 
 Every worker prompt must include its row, its JOB ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
-`BAGGAGE=magus.lease=<its id>` before it works - that is the W3C
+`BAGGAGE=magus.lease=<its id>` before it works: that is the W3C
 Baggage channel, and the member is what tells the agent guard whose declared boundary
 to grade a write against, so a worker that never exports it is graded as an editor
 magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
@@ -1090,7 +1090,7 @@ and stops.
 The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
-partitioned - and every diff-since-checkpoint in Integrate and verify
+partitioned, and every diff-since-checkpoint in Integrate and verify
 silently lies when the recorded base is not the real one. A worker whose
 spawn title names its job (`<parent>/<role> <job>`) is bound already and records
 its base on its first call; any other worker runs `magus job exec <its id>` once,
@@ -1100,8 +1100,8 @@ hold their own lease and none of them binds you. Nothing to pass: the
 CLI cannot tell a subagent from its parent, which is why the binding is the
 guard's, and a host that names neither id binds the checkout for every caller like
 it. The
-answer is a status recorded on the row - match, revision-match (same revision,
-different uncommitted patch), diverged, or unknown - plus a reading of it that
+answer is a status recorded on the row: match, revision-match (same revision,
+different uncommitted patch), diverged, or unknown, plus a reading of it that
 names both tokens and the next step. It is a FACT and not a gate: every status
 records, diverged included, because refusing would leave the orchestrator
 with no record that a worker went to the wrong base, which is the one case the
@@ -1111,8 +1111,8 @@ one (`git show <rev>:<path> > <path>`, verifying each blob against
 `git rev-parse <rev>:<path>`) and re-fork the job with the right checkpoint. A worker
 that edits stale content without noticing reports clean validation against a tree
 nobody will ever merge.
-Also name any fact that will READ as drift to the worker's snapshot - a project
-deleted this session, a rename, an index regenerated underneath it - never a
+Also name any fact that will READ as drift to the worker's snapshot (a project
+deleted this session, a rename, an index regenerated underneath it), never a
 generic "expect drift" line, which only primes the worker to dismiss real
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct.
@@ -1124,9 +1124,9 @@ both, and widening the write paths to open a read is how two workers end up owni
 one file.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
-finished writing a contested path announces the release immediately - shrink the
+finished writing a contested path announces the release immediately: shrink the
 job's `write_paths` with another `client` (`magus\job.put`) write, or message the orchestrator
-if the host supports it - and then carries on validating. A waiting job
+if the host supports it, and then carries on validating. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
 time they spend not editing.
@@ -1296,7 +1296,7 @@ calls the guard saw under its lease, and the runs recorded against it, one line
 each until you interrupt it. A file is attributed by WRITE PATH and by nothing the
 worker says: the write paths are proven disjoint when the job forks, so the
 path alone names the holder. Where two live jobs do cover one path the line says
-`contested`, names both, and attributes it to neither - there is nothing in a path
+`contested`, names both, and attributes it to neither; there is nothing in a path
 to break that tie with, and naming one would tell you a file moved under a worker
 that never touched it.
 
@@ -1316,8 +1316,8 @@ request magus could answer on its own would not have needed a person. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
 `magus session` is how the root audits what a job actually RAN, as opposed
-to what it reported. Each invocation carries the job it was launched under -
-the same `magus.lease` channel - along with the spawner label and parent span it
+to what it reported. Each invocation carries the job it was launched under
+(the same `magus.lease` channel), along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here.
 Attribution is cooperative and every one of those values is a CLAIM magus records
@@ -1363,8 +1363,8 @@ As jobs finish:
 6. Read the integrated changeset with `magus diff --impact` before landing it: what
    the fleet's combined edit reaches, who else has been changing it, an estimate of
    the rebuild from recorded run times, what the advisors say, and any note anchored
-   to a file it touched. Context, never a verdict - nothing gates on it and
-   the exit code is unchanged - and a section that is empty means nobody could
+   to a file it touched. Context, never a verdict: nothing gates on it and
+   the exit code is unchanged, and a section that is empty means nobody could
    measure it, not that nothing was found.
 7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
 
