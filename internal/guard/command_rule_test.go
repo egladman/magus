@@ -71,13 +71,16 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 	require.Len(t, probe.asked, 2)
 	sub, main := probe.asked[0], probe.asked[1]
 	assert.Equal(t, types.CommandRequest{
-		Host:      "claude-code",
-		Session:   main.Session,
-		Command:   "git push origin HEAD:x",
-		Commands:  []types.CommandInvocation{{Program: "git", Args: []string{"push", "origin", "HEAD:x"}}},
+		Host:    "claude-code",
+		Session: main.Session,
+		Command: "git push origin HEAD:x",
+		Commands: []types.CommandInvocation{{
+			Program: "git",
+			Args:    []string{"push", "origin", "HEAD:x"},
+			VCS:     &types.VCSInvocation{Tool: "git", Subcommand: "push", Args: []string{"origin", "HEAD:x"}},
+		}},
 		Agent:     "a534fcfe",
 		Role:      types.AgentRoleRoot,
-		VCS:       &types.VCSInvocation{Tool: "git", Subcommand: "push", Args: []string{"origin", "HEAD:x"}},
 		Checkout:  sub.Checkout, // read from the fixture's own checkout, which this test does not shape
 		Dir:       sub.Dir,
 		Workspace: sub.Workspace,
