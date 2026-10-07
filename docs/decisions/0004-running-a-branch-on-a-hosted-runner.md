@@ -32,36 +32,6 @@ environment, so a word-split argv never reaches a shell as code. GitHub's dispat
 returns the run it created (changelog 2026-02-19), and `gh workflow run` prints its URL
 since v2.87.0. `hack/ci/merge-queue.buzz` already dispatches `queue.yaml` with `gh`.
 
-## Options
-
-### A. Dispatch `ci.yaml` from a branch
-
-Rejected as the first version. It runs the full plan cold on every call, its concurrency
-group and history were written for main and pull requests, and a person wants one argv,
-not the whole gate.
-
-### B. `--platform github`, a value of ADR 0003's flag
-
-Rejected. The relay mounts your checkout and returns a store; a runner can do neither. A
-run takes a pushed commit, answers in minutes, and returns a log. Folding it into
-`--platform` would promise a contract it cannot keep.
-
-### C. A private mirror
-
-Push to `egladman/magus-scratch` and dispatch there, so no run is public. Rejected: it
-spends minutes a public repository gets free (2,000 per month on the Free plan, then
-$0.006 per Linux minute), duplicates secrets and variables, and hands every agent a second
-remote.
-
-### D. One workflow and one repository script (decided)
-
-```sh
-magus buzz hack/gha-run.buzz -- dispatch --ref <branch> -- run test .
-magus buzz hack/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
-magus buzz hack/gha-run.buzz -- result --run <id>
-magus buzz hack/gha-run.buzz -- forget --run <id>
-```
-
 ## Decision
 
 1. **`.github/workflows/run.yaml`**, triggered by `workflow_dispatch` alone, with inputs
@@ -135,6 +105,36 @@ reads a secret beyond `GITHUB_TOKEN` (`release.yaml` and `release-index.yaml` ca
 Use `--platform` for the inner loop. Dispatch for the proof, and to move work off a busy
 laptop.
 
+## Alternatives
+
+### A. Dispatch `ci.yaml` from a branch
+
+Rejected as the first version. It runs the full plan cold on every call, its concurrency
+group and history were written for main and pull requests, and a person wants one argv,
+not the whole gate.
+
+### B. `--platform github`, a value of ADR 0003's flag
+
+Rejected. The relay mounts your checkout and returns a store; a runner can do neither. A
+run takes a pushed commit, answers in minutes, and returns a log. Folding it into
+`--platform` would promise a contract it cannot keep.
+
+### C. A private mirror
+
+Push to `egladman/magus-scratch` and dispatch there, so no run is public. Rejected: it
+spends minutes a public repository gets free (2,000 per month on the Free plan, then
+$0.006 per Linux minute), duplicates secrets and variables, and hands every agent a second
+remote.
+
+### D. One workflow and one repository script (decided)
+
+```sh
+magus buzz hack/gha-run.buzz -- dispatch --ref <branch> -- run test .
+magus buzz hack/gha-run.buzz -- dispatch --push -- run go::go-test . -- -run TestPipePeer
+magus buzz hack/gha-run.buzz -- result --run <id>
+magus buzz hack/gha-run.buzz -- forget --run <id>
+```
+
 ## Consequences
 
 - A person or agent gets CI's machine for one argv with no pull request, in the same box
@@ -162,7 +162,9 @@ laptop.
 4. A laptop-side `spells/github/workflows` speaking HTTP, beside `review`, if the
    measurement says the loop earns it. No engine verb is proposed.
 
-## Amendment, 2026-09-29
+## Amendments
+
+### 2026-09-29: the script becomes the `hack/remote/on-actions.buzz` prefix
 
 The script is `hack/remote/on-actions.buzz`, a prefix in front of the command you would run
 here, like `sudo` or `nice`:

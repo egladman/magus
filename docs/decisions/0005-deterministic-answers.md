@@ -40,7 +40,9 @@ Measured during the pass:
   (260), rewriting one block (245), counting command output (216), building job records
   (125) and renaming by regex (46, 34 of them denied).
 
-## Principles
+## Decision
+
+### Principles
 
 1. **The person drives.** magus prints what to run and the person runs it. magus does
    not write host configuration or own a checkout.
@@ -55,7 +57,7 @@ Measured during the pass:
    better path and denies only the shapes that cause harm, each deny naming the command
    it would accept.
 
-## 1. Attention queue (the original Cursor brief)
+### 1. Attention queue (the original Cursor brief)
 
 | Use case | State |
 |---|---|
@@ -68,7 +70,7 @@ Measured during the pass:
 | A guard that failed open becomes a standing absence on status: the fail-open arm records a `session notify --outcome diagnostic` and status shows it | proposed |
 | Leave out: review-time scores, a prompt asking the person to explain an approval, a model watching for fatigue, planted canaries, an ask on every command. Test for anything added later: if it would teach someone to clear the queue unread, it does not go in | not built |
 
-## 2. MCP
+### 2. MCP
 
 | Use case | State |
 |---|---|
@@ -83,7 +85,7 @@ Measured during the pass:
 | The guard grades only calls addressed to the magus server (`mcp__magus__<tool>`), and parses a `client` script to see its gate runs and job writes | done |
 | One merged package for both workers (research favored it) | not built |
 
-## 3. Guard
+### 3. Guard
 
 | Use case | State |
 |---|---|
@@ -109,7 +111,7 @@ Measured during the pass:
 | Every verdict records its catalog rule name (about 21,000 recorded verdicts carry none, so they cannot be tallied) | planned |
 | A write to a tracked `hack/` script by a session with no lease naming it gets an ask, not a silent pass: the host's approval prompt is the person's consent to a self-improvement change. Needs a `magus\guard.ask` member | planned |
 
-## 4. Jobs, leases and change tracking
+### 4. Jobs, leases and change tracking
 
 | Use case | State |
 |---|---|
@@ -124,7 +126,7 @@ Measured during the pass:
 | Replacing a declared job whose dependencies changed is judged against its new dependencies (today it is judged against the stored row, so the fix is remove and fork again) | done |
 | A typed `magus\activity` member returning resolved guard verdicts, so scripts stop reading the activity store directly | proposed |
 
-## 5. Engine
+### 5. Engine
 
 | Use case | State |
 |---|---|
@@ -143,7 +145,7 @@ Measured during the pass:
 | The merge queue passes a change's projects ahead of the gate line's `--`, not after it as forwarded args (which selected every project) | done |
 | Cached Buzz bytecode is keyed by the build's content and authenticated with a per-user key, so a planted chunk is refused | done |
 
-## 6. Harness and host configuration
+### 6. Harness and host configuration
 
 | Use case | State |
 |---|---|
@@ -152,7 +154,7 @@ Measured during the pass:
 | Shell hook glue is retired: every `docs/guides/integrations/agents/*.sh` is deleted, the three session-load scripts without a Buzz twin are ported, and every reference follows | planned |
 | Load the Buzz authoring skill when an agent writes a `.buzz` file. The rule (`buzz-unbriefed`) already exists but never fires on Claude Code (0 verdicts over 1,950 Buzz writes): the path and Bash hook entries must declare that they observe skill loads, and a skill load must count per agent, not per session | planned |
 
-## 7. Scripts in `hack/`
+### 7. Scripts in `hack/`
 
 `tools/` moves to `hack/` (*planned*). Reference scripts sit flat beside it with a
 `hack/README.md` index; each carries a read-only test block that `buzz-test` runs, so a
@@ -191,7 +193,7 @@ Fixes found while planning the scripts: the `magus-buzz-write` skill's worked ex
 imports `json` instead of `encoding/json` and calls a missing `fs\list`; `flags\parse`
 needs names declared with their dashes and says nothing of it (*planned*).
 
-## 8. Review fixes folded into the change
+### 8. Review fixes folded into the change
 
 Beyond the items above, the review's findings were fixed or refuted with evidence, nits
 included (*done*): the desktop-toast rule for rows without a queue id, typed-nil profile
@@ -203,7 +205,7 @@ renamed `QueryResult`, `ExplainResult` and `RefsResult` with their keys listed, 
 races and framing in the guard, auth `Class` to `Kind`, and stale skill text about
 paging, memory refs, impact and insight.
 
-## Practices for agent-run work
+### Practices for agent-run work
 
 - Hand a dirty tree to workers with `magus vcs checkpoint --preserve`; never hand-roll a
   snapshot; never ask raw `git diff <rev>` whether a tree changed.
@@ -216,6 +218,10 @@ paging, memory refs, impact and insight.
   re-fork resets it.
 - Stale leases held by dead sessions are ended one at a time by a person, after their
   checkouts are rescued.
+
+## Alternatives
+
+The ideas weighed and declined are the *not built* rows in the tables above.
 
 ## Consequences
 

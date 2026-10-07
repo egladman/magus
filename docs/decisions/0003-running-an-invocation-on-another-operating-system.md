@@ -12,21 +12,6 @@ tags: [adr, decision, platform, linux, macos, containers, podman, docker, sandbo
 - **Supersedes:** the two earlier drafts of this page, which decided a repository-local
   prefix script (B') and recorded a flag relayed through a provider spell (D) as considered.
 
-## Amendment, 2026-09-29: B' revived while E is on hold
-
-E is on hold indefinitely, and B' is revived as `hack/remote/on-linux.buzz`:
-`magus buzz hack/remote/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
-Linux container through Podman. The need that opened this page, seeing a Linux-only failure
-before CI does, has not gone away, and E is a large engine delivery whose measurements
-(decision 4) have not been made. A script costs the engine nothing, so nothing is lost if E
-resumes. It keeps the contract lines a script can keep: the checkout read-only at its own
-path, the environment crossing only by name (`--env NAME`), the floor, the command's own
-streams and exit status, 71 when the relay fails before the command starts, a landlock
-kernel checked before start, and magus built on the host and run in a Chainguard image
-whose git meets magus's floor (the Go image `mise.toml` pins ships an older one). It cannot
-keep a digest pin, no implicit pull, a TTY, stdin, or signals waited for without a timer.
-The rest of this page is unchanged.
-
 ## Context
 
 Some of magus's behavior exists on one kernel only:
@@ -70,65 +55,6 @@ equivalence it then had to meet.
 `docs/scope.md` states that a container gives environment reproducibility, not
 hermeticity, that magus offers no opt-in container isolation, and that magus will not
 require a container runtime. This page amends the last of those, and says how much.
-
-## Options
-
-### A. Document the container command, build nothing
-
-Rejected: the command is nine flags long and drifts from `mise.toml`; the guard's raw-tool
-rule denies `podman run` to every agent and leaves it no route, so an agent wraps it in a
-script the guard cannot see.
-
-### B. A repository-local target (the prototype)
-
-`magus run linux . -- <magus arguments>`. Rejected: every flaw it has comes from being a
-target. The nested `--` is a house dialect, the inner run's output is one op's captured
-stdout, the working directory is fixed by the target, and reaching `affected` or `queue
-gate` means nesting a second command line.
-
-### B'. A prefix script in this repository (considered, superseded)
-
-`tools/on-linux magus queue gate ...`, the way `sudo` and `cross` take a command. It has
-none of B's flaws and the engine learns nothing. Superseded rather than rejected: it
-answers one repository's one need, shells out to one runtime's CLI, cannot serve the
-indexers, and its every contract line (the environment crossing by name, the read-only
-mount, the exit and stream rules) is a promise a script keeps by discipline where the
-engine keeps it by construction. The reviews that shaped it shaped E too.
-
-### C. A `:linux` charm
-
-Rejected by every reviewer. A charm patches one op's arguments and cannot change what runs;
-charms key the cache, so a `:linux` run mints keys CI never mints; it means nothing on
-`affected`, `queue gate`, `buzz` or `x`; and `amd64`/`arm64` already answer "build for
-which architecture", a different question from "run on which kernel".
-
-### D. A flag relayed through a provider spell that returns a runtime CLI command (considered)
-
-The engine asks a provider spell for the `podman run` argv and forks it. Rejected in this
-shape: the provider owns the mounts and the environment, so the one property that must hold
-(the sandbox floor, the read-only checkout, no shared-tier writes) holds only if the spell
-remembers, and the engine must then verify a command it did not write; a per-machine
-runtime becomes a repository fact, which it is not; and every runtime CLI is a second
-surface with its own exit codes and its own idea of a TTY.
-
-### E. One Engine-API client, one user fact, two callers (decided)
-
-magus speaks the Docker Engine API over a unix socket directly. Docker Desktop, podman
-(`podman system service` and a podman machine), Colima, OrbStack and Rancher Desktop all
-serve it. One key in the user config names the socket. Two things call the client:
-
-```sh
-magus --platform linux/arm64 queue gate --sandbox=required -- magus run test .
-magus --platform linux/arm64 run go::go-test . -- -run TestPipePeer
-magus -C libs/gopherbuzz --platform linux/arm64 run test
-magus --platform linux/amd64 run test .              # emulated on an arm64 host; line one says so
-magus --platform linux/arm64 --print-request run test .   # the create request as data; runs nothing
-magus run pkg/foo::scip                              # the indexer runs from its spell's image
-```
-
-`--platform` says where this invocation runs. The `amd64` and `arm64` image charms in
-this repository say what an image is built for. Two questions, two spellings, and this is
-the one place the page says so.
 
 ## Decision
 
@@ -435,6 +361,65 @@ The closing paragraph adds: "magus can also run one invocation, unchanged, on a 
 name with `--platform`, with your checkout mounted read-only. A relayed run shares your
 checkout; it is not isolated from it."
 
+## Alternatives
+
+### A. Document the container command, build nothing
+
+Rejected: the command is nine flags long and drifts from `mise.toml`; the guard's raw-tool
+rule denies `podman run` to every agent and leaves it no route, so an agent wraps it in a
+script the guard cannot see.
+
+### B. A repository-local target (the prototype)
+
+`magus run linux . -- <magus arguments>`. Rejected: every flaw it has comes from being a
+target. The nested `--` is a house dialect, the inner run's output is one op's captured
+stdout, the working directory is fixed by the target, and reaching `affected` or `queue
+gate` means nesting a second command line.
+
+### B'. A prefix script in this repository (considered, superseded)
+
+`tools/on-linux magus queue gate ...`, the way `sudo` and `cross` take a command. It has
+none of B's flaws and the engine learns nothing. Superseded rather than rejected: it
+answers one repository's one need, shells out to one runtime's CLI, cannot serve the
+indexers, and its every contract line (the environment crossing by name, the read-only
+mount, the exit and stream rules) is a promise a script keeps by discipline where the
+engine keeps it by construction. The reviews that shaped it shaped E too.
+
+### C. A `:linux` charm
+
+Rejected by every reviewer. A charm patches one op's arguments and cannot change what runs;
+charms key the cache, so a `:linux` run mints keys CI never mints; it means nothing on
+`affected`, `queue gate`, `buzz` or `x`; and `amd64`/`arm64` already answer "build for
+which architecture", a different question from "run on which kernel".
+
+### D. A flag relayed through a provider spell that returns a runtime CLI command (considered)
+
+The engine asks a provider spell for the `podman run` argv and forks it. Rejected in this
+shape: the provider owns the mounts and the environment, so the one property that must hold
+(the sandbox floor, the read-only checkout, no shared-tier writes) holds only if the spell
+remembers, and the engine must then verify a command it did not write; a per-machine
+runtime becomes a repository fact, which it is not; and every runtime CLI is a second
+surface with its own exit codes and its own idea of a TTY.
+
+### E. One Engine-API client, one user fact, two callers (decided)
+
+magus speaks the Docker Engine API over a unix socket directly. Docker Desktop, podman
+(`podman system service` and a podman machine), Colima, OrbStack and Rancher Desktop all
+serve it. One key in the user config names the socket. Two things call the client:
+
+```sh
+magus --platform linux/arm64 queue gate --sandbox=required -- magus run test .
+magus --platform linux/arm64 run go::go-test . -- -run TestPipePeer
+magus -C libs/gopherbuzz --platform linux/arm64 run test
+magus --platform linux/amd64 run test .              # emulated on an arm64 host; line one says so
+magus --platform linux/arm64 --print-request run test .   # the create request as data; runs nothing
+magus run pkg/foo::scip                              # the indexer runs from its spell's image
+```
+
+`--platform` says where this invocation runs. The `amd64` and `arm64` image charms in
+this repository say what an image is built for. Two questions, two spellings, and this is
+the one place the page says so.
+
 ## Consequences
 
 - magus as a product gains the same command on another kernel when asked, and a graph
@@ -456,7 +441,7 @@ checkout; it is not isolated from it."
   and the VCS mounts run on every push. The macOS half runs on developer machines, and the
   matrix in decision 4 is where that is written down.
 
-## Review
+### Review
 
 Four reviewer archetypes read the previous draft of E; six read the draft before it, and
 the corrections they forced (the sandbox floor does not cross on its own; keys match CI's,
@@ -490,3 +475,20 @@ read path.
    signal an agent would read, or nothing.
 7. The headroom factor over an indexer's benchmarked peak, and whether one factor serves
    memory, CPU and pids alike.
+
+## Amendments
+
+### 2026-09-29: B' revived while E is on hold
+
+E is on hold indefinitely, and B' is revived as `hack/remote/on-linux.buzz`:
+`magus buzz hack/remote/on-linux.buzz -- magus affected ci` runs the command, unchanged, in a local
+Linux container through Podman. The need that opened this page, seeing a Linux-only failure
+before CI does, has not gone away, and E is a large engine delivery whose measurements
+(decision 4) have not been made. A script costs the engine nothing, so nothing is lost if E
+resumes. It keeps the contract lines a script can keep: the checkout read-only at its own
+path, the environment crossing only by name (`--env NAME`), the floor, the command's own
+streams and exit status, 71 when the relay fails before the command starts, a landlock
+kernel checked before start, and magus built on the host and run in a Chainguard image
+whose git meets magus's floor (the Go image `mise.toml` pins ships an older one). It cannot
+keep a digest pin, no implicit pull, a TTY, stdin, or signals waited for without a timer.
+The rest of this page is unchanged.

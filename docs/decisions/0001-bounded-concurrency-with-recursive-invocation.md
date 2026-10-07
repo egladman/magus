@@ -11,7 +11,7 @@ tags: [adr, decision, concurrency, deadlock, scheduler, recursion, slots, isolat
 - **Date:** 2026-09-19
 - **Supersedes:** nothing. This is the first ADR in this repository.
 
-## Why this document exists
+## Context
 
 magus has rebuilt its concurrency machinery several times since May 2026, and runs hung
 along the way. Most of them are one shape: work dispatched inside a running target waited
@@ -21,8 +21,6 @@ it, and nobody wrote down the rule.
 The most recent change deleted a mechanism nobody had ever justified, and establishing that
 took an afternoon of archaeology. The first draft of this document then asserted five
 things about the code that were false. Both are recorded below.
-
-## Context
 
 ### The requirement that shapes everything
 
@@ -165,7 +163,7 @@ among simultaneously ready steps is unspecified today and stays unspecified; nei
 nor Bazel is schedule-deterministic either. The honest claim is narrower: **the schedule
 space contains no in-process deadlock.**
 
-## Alternatives considered
+## Alternatives
 
 **Keep yield-and-retake.** Gradle's `WorkerLeaseService.withoutLocks` does exactly this, and
 Gradle has been fixing deadlocks from it since 2021: issues 17812 and 20269 (both since
@@ -206,7 +204,7 @@ a nested-lock deadlock (converts a hang into a late failure that still does not 
 a detector for the cross-root machine wedge, built and dropped 26 minutes later in favor of
 a structural rule.
 
-## What other systems do
+### What other systems do
 
 | System | Recursion | What is bounded | Nested wait |
 |---|---|---|---|
@@ -249,7 +247,7 @@ than a seat held by a body that is waiting.
 **Not addressed.** Cross-process cycles between two invocations with mutual cross-project
 needs; nothing detects those today either.
 
-## When to revisit
+### When to revisit
 
 The real dependency is **the daemon's shared limiter**: parent and adopted child draw from
 one pool, so `magus\cmd` cannot become a plain leaf without make's free-slot rule. If that
@@ -261,7 +259,9 @@ reason this ADR has not found, then prevention is off the table and the honest a
 exact detection: a short optimistic wait, then a wait-for graph reduction, no grace beyond
 that, and the cycle named in the refusal. Pair it with stage 1 regardless.
 
-## Corrections to this document's first draft
+## Amendments
+
+### 2026-09-20: corrections to this document's first draft
 
 - It claimed the CI shard forecaster arbitrates declared `memory_mb`. It does not: it packs
   on measured peak RSS from run history and reads no declaration.

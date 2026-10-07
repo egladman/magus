@@ -110,19 +110,25 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    written for a different tag; an override whose `path` holds no spell; an undeclared
    shadow of an embedded or declared spell.
 
-## Consequences
+### Resolved questions
 
-- An import names exactly one repository, so moving a spell to another registry is a
-  visible change to every importer, as moving a Go module is. That is the price of an
-  unambiguous name, and it is paid on purpose.
-- Code that uses a spell does not change when the spell becomes remote: the import string
-  changes and the bound name does not.
-- The lock is the supply-chain record. Reviewing an upgrade means reviewing the lock diff
-  the `update` charm produces.
-- Signing (who published a digest, not just which bytes) attaches to the same `magus.yaml`
-  entries and is decided separately.
+- **The target that owns `magus.lock` is `spell-lock`**, declared in the root
+  `magusfile.buzz` with `magus.lock` as its output. It is a thin wrapper over
+  `magus spell lock`, which never loads the workspace: plain, it checks the lock against
+  `magus.yaml` and verifies every pinned digest; under the `update` charm it runs
+  `magus spell lock --update`, the only code path that resolves a tag. The name is this
+  repository's convention; the lock names no target, so another workspace may call its
+  own anything. A stale pin fails the import that names it, not the workspace load, so
+  the target still loads to repair it; when the lock-owning magusfile imports the stale
+  spell itself, `magus spell lock --update` is the escape and every error says so.
+- **An override points at a workspace `path` only, never at another registry path.** A
+  fork is served today by publishing it under its own path and changing the import,
+  which is the visible move decision 1 already pays for on purpose. A registry-to-registry
+  replace would put a second name in the lock for one import, a second pin to review per
+  upgrade, and a resolution chain for a case nobody has asked for; it can be added later
+  as a `replace:` key without changing anything decided here.
 
-## Alternatives rejected
+## Alternatives
 
 - **A scheme in the import (`import "oci://...@sha256:..."`).** Puts `:` and `//` into what
   becomes a filesystem path, puts a digest into every magusfile that uses the spell so every
@@ -150,20 +156,14 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
 - **A tag resolved at run time.** Makes two runs of the same commit able to execute different
   bytes, which is what the lock exists to prevent.
 
-## Resolved questions
+## Consequences
 
-- **The target that owns `magus.lock` is `spell-lock`**, declared in the root
-  `magusfile.buzz` with `magus.lock` as its output. It is a thin wrapper over
-  `magus spell lock`, which never loads the workspace: plain, it checks the lock against
-  `magus.yaml` and verifies every pinned digest; under the `update` charm it runs
-  `magus spell lock --update`, the only code path that resolves a tag. The name is this
-  repository's convention; the lock names no target, so another workspace may call its
-  own anything. A stale pin fails the import that names it, not the workspace load, so
-  the target still loads to repair it; when the lock-owning magusfile imports the stale
-  spell itself, `magus spell lock --update` is the escape and every error says so.
-- **An override points at a workspace `path` only, never at another registry path.** A
-  fork is served today by publishing it under its own path and changing the import,
-  which is the visible move decision 1 already pays for on purpose. A registry-to-registry
-  replace would put a second name in the lock for one import, a second pin to review per
-  upgrade, and a resolution chain for a case nobody has asked for; it can be added later
-  as a `replace:` key without changing anything decided here.
+- An import names exactly one repository, so moving a spell to another registry is a
+  visible change to every importer, as moving a Go module is. That is the price of an
+  unambiguous name, and it is paid on purpose.
+- Code that uses a spell does not change when the spell becomes remote: the import string
+  changes and the bound name does not.
+- The lock is the supply-chain record. Reviewing an upgrade means reviewing the lock diff
+  the `update` charm produces.
+- Signing (who published a digest, not just which bytes) attaches to the same `magus.yaml`
+  entries and is decided separately.
