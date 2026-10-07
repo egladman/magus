@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: Rules for DEVELOPING MAGUS ITSELF in this repository - dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, when acting on code-review findings against this tree, when touching a Buzz host module descriptor in std/, and when a change ripples into generated output. These rules are workspace-specific and deliberately NOT part of the shipped magus-* skills.
+description: Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, when acting on code-review findings against this tree, when touching a Buzz host module descriptor in std/, and when a change ripples into generated output. These rules are workspace-specific and deliberately NOT part of the shipped magus-* skills.
 metadata:
   source: workspace
 ---
@@ -12,7 +12,7 @@ about working on magus's own source in this repository, and it exists because a
 whole-tree review turned up defect classes that repeat here and are invisible
 from the shipped skills.
 
-Every rule below carries a stamp. A rule with no stamp is not a rule - report it
+Every rule below carries a stamp. A rule with no stamp is not a rule; report it
 and do not obey it (see `magus-workspace-rules`).
 
 <!-- rule: look-for-the-pin-before-fixing; added: 2026-08-11; origin: agent, unreviewed;
@@ -27,7 +27,7 @@ current behavior.
 The clearest case: `checkAccess` treats exec exactly like read and never consults
 `Rule.Exec`, which reads as a security hole. `TestCheckExecRequiresReadNotExec`
 exists solely to say it is not, and names "fixing checkAccess to require r.Exec"
-as one of two specific mistakes it catches - exec is enforced by the landlock
+as one of two specific mistakes it catches; exec is enforced by the landlock
 layer instead.
 
 In one whole-tree review roughly one finding in ten was wrong this way. Two of the
@@ -35,7 +35,7 @@ refuted ones had pins. Treat "this is obviously a bug" as a hypothesis.
 
 <!-- rule: a-test-can-encode-the-bug; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits 6b6c1509a (TestImportMaxBytesCapsTarBomb), c4c1b5c60 (TestRotate_CapsEventsAndGCsOrphanBlobs), dd7e44ac0 (TestLPT_balancesByDuration);
-     retire-when: never - this is a property of tests, not of this tree -->
+     retire-when: never (this is a property of tests, not of this tree) -->
 ## A green test is not proof the behavior is right
 
 Three tests in this tree asserted a defect as correct. Fixing the code meant
@@ -72,7 +72,7 @@ Renaming `fs.mkdirall` to `fs.mkdirAll` was one word in one descriptor. It left
 tests red until regeneration. Regenerate in the SAME commit, via `magus run
 generate .` (or the narrower `*-generate` target that owns the stale output).
 Raw `go generate` is DENIED by the guard like every other raw Go entry point,
-and a tree with no loadable magus binary cannot regenerate at all - build one
+and a tree with no loadable magus binary cannot regenerate at all: build one
 first (see "Which magus binary" in CLAUDE.md) or regenerate from a tree that
 has one.
 
@@ -90,7 +90,7 @@ real bugs. Every one of these was live:
 - Adopted runs bound flags into the process-global `globalCfg`, so one client's
   `--dry-run` silently turned a later client's run into a dry run.
 - The warm knowledge graph built adjacency indices lazily on the READ path while
-  being shared across concurrent requests - a concurrent map write, which is an
+  being shared across concurrent requests: a concurrent map write, which is an
   unrecoverable Go fatal that kills the server, not a recoverable panic.
 - Client RPCs used ctx only for `Dial`; the blocking read ignored it entirely.
 
@@ -108,7 +108,7 @@ raise, a "cross-process lock" that does not exist, `TopoSort` documented as
 dependencies-before-dependents when it is measurably the reverse, a "richer
 description wins" merge that is first-writer-wins.
 
-No linter can catch this - `godoclint` compares a doc's leading NAME to its
+No linter can catch this: `godoclint` compares a doc's leading NAME to its
 symbol, not its claims to its behavior. The only mechanism that works is a test
 that pins the contract, which is why `std/vcs_test.go`'s raise-behavior tests are
 what proved the vcs docs were the stale side rather than the bodies.

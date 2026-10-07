@@ -44,9 +44,9 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    workspace is loaded there; it does not test the host's MCP registration.
    Hosts manage their own connection; do not manually start a server for an agent.{{if .Full}}
    Do not make the connection a prerequisite for completing the work.{{end}}
-   - `{{tool "client"}}` (`{{buzz "run"}}`) - run named projects, with the same arguments as `magus run`{{if .Full}} (or the cwd
+   - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, with the same arguments as `magus run`{{if .Full}} (or the cwd
      project). Use when you know which projects to run{{end}}.
-   - `{{tool "client"}}` (`{{buzz "affected"}}`) - the projects a VCS change
+   - `{{tool "client"}}` (`{{buzz "affected"}}`): the projects a VCS change
      touched. It returns the set and does not run it{{if .Full}}. The gate is `magus affected ci`{{end}}.
 
    `{{tool "client"}}` is bounded at 10 minutes when called directly; a host that
@@ -63,16 +63,16 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    target name magus enforces{{if .Full}}: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares{{end}}.
    Run `magus run ci <project>` for the project you are working in, and
-   `magus affected ci` as the final gate once the change is done{{if .Full}} - it runs the
+   `magus affected ci` as the final gate once the change is done{{if .Full}}; it runs the
    full pipeline over every project your change reaches, which is how you learn
    about ramifications in projects you never touched{{end}}. Hand-running lint,
    format, and test one at a time re-derives an order the magusfile already
    owns, and the step you forget fails silently by omission. A gate you ADDED
-   this session is not proven by its green: make it FAIL once - break the input
-   it checks, watch it go red, restore - before you count its pass as
+   this session is not proven by its green: make it FAIL once (break the input
+   it checks, watch it go red, restore) before you count its pass as
    verification. A check wired to the wrong path passes exactly the same way.
    Verify in place;
-   never `git stash`/`reset` first{{if .Full}} (data-loss-prone and pointless - the tree is
+   never `git stash`/`reset` first{{if .Full}} (data-loss-prone and pointless: the tree is
    already what you want to verify){{else}} (it destroys a concurrent agent's untracked
    work, and the tree is already what you want to verify){{end}}.
 3. Reach for an individual target only to iterate on a failure `ci` named:
@@ -88,7 +88,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
    update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
    <target>:update <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
-   visible to affected tracking{{end}}. It is reserved and deliberately not part of `rw` -
+   visible to affected tracking{{end}}. It is reserved and deliberately not part of `rw`:
    `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today{{if .Full}}. `ci` strips both, so a gate verifies
    the committed lockfile rather than refreshing it{{end}}. Applying a lockfile (`npm ci`,
@@ -130,7 +130,7 @@ truncating it after the fact:
   timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
   it.{{if .Full}} Reaching for shell `time` around a silent run measures the wall clock magus
   already reported and hides which targets were cache hits.{{end}}
-- `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
+- `-q` / `--quiet`: looser; drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.{{if .Full}} Ask for the
   shape you want. `json`/`yaml` to parse, `jsonl` to stream records, `name` for
@@ -171,12 +171,12 @@ Replace the filter with the flag that already does it:
 `jq` on `-o json` is fine: that is consuming a contract, not scraping text. The
 prohibition is on text filters standing in for an output format.{{else}} Use the flag
 instead: `-o template='{{"{{.Field}}"}}'` for a field, `-o name` for bare identifiers,
-`-o json` to parse, `-s` to quieten. `jq` over `-o json` is fine - that is a
+`-o json` to parse, `-s` to quieten. `jq` over `-o json` is fine: that is a
 contract, not scraped text.{{end}}
 
 **Piping magus INTO magus is supported and encouraged.** The composition seam is
 `--stdin`. (`--tee <file>` exists but is not a composition seam: it mirrors
-STRUCTURED output only - `-o json|yaml|jsonl|template` - never console text.){{if .Full}} These are contracts on both
+STRUCTURED output only (`-o json|yaml|jsonl|template`), never console text.){{if .Full}} These are contracts on both
 ends, so they are the opposite of the antipattern above:{{end}}
 
 ```sh
@@ -204,7 +204,7 @@ target just to see its error again.
 {{end}}## When you need finer granularity
 
 Every top-level target composes spell ops (tool-native operations).{{if .Full}} When you
-genuinely need one op - a single formatter, one linter -{{end}} address one directly
+genuinely need one op (a single formatter, one linter){{end}} address one directly
 with the spell-qualified form:
 
 ```sh
@@ -259,6 +259,6 @@ service from active shared work before deciding how to proceed.
 
 {{if .Full}}Flags and target sets differ per workspace and magus version. Trust
 `magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
-over anything remembered - and over `MAGUS.md`, which is generated output that
+over anything remembered, and over `MAGUS.md`, which is generated output that
 lags the tree between regenerations.{{else}}Trust `magus describe targets`, `magus describe target <name>` and
 `magus <verb> -h` over anything remembered, and over `MAGUS.md`.{{end}}

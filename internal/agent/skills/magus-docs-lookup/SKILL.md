@@ -3,8 +3,8 @@
 magus ships one official documentation site.{{if .Full}} It is a static site, so its
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT.{{end}} Reach for it when a magus-domain fact
-is not derivable from the workspace graph{{if .Full}} - the docs are the source of truth for
-magus's own behavior, so read them rather than guessing{{else}} - they are the source of
+is not derivable from the workspace graph{{if .Full}}: the docs are the source of truth for
+magus's own behavior, so read them rather than guessing{{else}}: they are the source of
 truth for magus's own behavior{{end}}.
 
 Two places serve the same pages:
@@ -33,10 +33,10 @@ below is for the PUBLISHED site, where there is no graph to ask.
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 
-- `llms.txt` - one titled link per page, each pointing at that page's raw
+- `llms.txt`: one titled link per page, each pointing at that page's raw
   Markdown (`<url>index.md`), with a one-line description. Read this FIRST to
   locate a page, then fetch its `index.md`.
-- `search-index.json` - a flat array of `{url, title, text, tags, description}`,
+- `search-index.json`: a flat array of `{url, title, text, tags, description}`,
   one record per page.{{if .Full}} Grep it for a keyword when you do not know the page name.{{else}} Search it when you do not know the page name.{{end}}
 
 {{if .Full}}WRONG: guess `https://.../go-spell` or grep the open web.
@@ -76,12 +76,12 @@ Every page gives you three axes{{if .Full}}, so from one page you can reach its 
 - Prev / next (pager): the adjacent pages in the same section.
 
 {{if .Full}}So: land via `llms.txt`, read the page, then use "In this section" to sweep its
-siblings - do not re-search for each one.{{else}}Land via `llms.txt`, then sweep siblings via "In this section".{{end}}
+siblings; do not re-search for each one.{{else}}Land via `llms.txt`, then sweep siblings via "In this section".{{end}}
 
 ## In the magus repo
 
 The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
-(never edit it - change the source and regenerate). MAGUS.md is a routing index
+(never edit it; change the source and regenerate). MAGUS.md is a routing index
 generated for HUMAN readers, so do not answer from it{{if .Full}}: it is true only as of the
 last regeneration, and every fact in it has a live command{{else}}: true only as of its last
 regeneration{{end}}.{{if .Full}} The knowledge graph

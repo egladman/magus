@@ -27,7 +27,7 @@ magus describe file <changed-path>...
 ```
 
 Every `output` path joins the `source` change that invalidated it. A commit whose
-whole content is regeneration means that pairing was missed - fold it into the
+whole content is regeneration means that pairing was missed; fold it into the
 change that caused it.
 
 ## Ask the workspace where the seams are
@@ -49,7 +49,7 @@ Three signals, strongest first:
   commit.
 - **Symbol coupling.** A rename's sites belong together however many directories
   they span{{if .Full}}. If refs reports a project not-indexed, run `magus graph
-  build` first - `unknown, not absent` is not an empty result{{end}}.
+  build` first: `unknown, not absent` is not an empty result{{end}}.
 
 ## Where this stops
 
@@ -79,7 +79,7 @@ magus vcs resolve             # settles the conflicted declared outputs, regener
 ```
 
 **Prove the content survived.** A restructure must change history and nothing
-else, and a lost commit still leaves a tree that builds{{if .Full}} - which is why
+else, and a lost commit still leaves a tree that builds{{if .Full}}, which is why
 a green suite is not evidence here{{end}}:
 
 ```sh
@@ -101,11 +101,11 @@ magus affected ci
 ## What does not belong in a commit at all
 
 Session notes and scratch plans are not repository content unless the repository
-already tracks them{{if .Full}} - check the path's history on the base branch
+already tracks them{{if .Full}}; check the path's history on the base branch
 before assuming either way{{end}}. Untracked session state belongs in your
 harness's own memory, not the branch{{if .Full}}, and dropping those commits is
 often the single largest reduction available{{end}}.
 
 ## See also
 
-- **{{skill "vcs-hygiene"}}** - classifying paths and staging one commit safely.
+- **{{skill "vcs-hygiene"}}**: classifying paths and staging one commit safely.

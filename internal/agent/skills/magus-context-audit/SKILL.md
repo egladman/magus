@@ -37,7 +37,7 @@ the person hitting the contradiction.{{end}}
 ## Check claims against the tool, not against the other documents
 
 {{if .Full}}Two documents agreeing with each other and both being wrong is the common case,
-not the exception - they were usually written in the same sitting by the same
+not the exception: they were usually written in the same sitting by the same
 person.{{end}} So resolve every claim against something that executes.
 
 ```sh
@@ -50,7 +50,7 @@ Then RUN the commands the instructions tell an agent to run.{{if .Full}} A docum
 that errors is worse than an undocumented one: the agent trusts it, tries it,
 fails, and has to invent a recovery nothing sanctioned.{{end}}
 
-Work outward from what CHANGED - a diff, a changelog, a recent decision - rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -59,28 +59,28 @@ grep -rn "<the command or rule>" <every surface you enumerated>
 
 ## Rank what you find
 
-Every finding carries the command that REPRODUCES it{{if .Full}} - the exact line a reader
+Every finding carries the command that REPRODUCES it{{if .Full}}: the exact line a reader
 runs to see the contradiction for themselves, not a description of where you saw
 it. A finding nobody can re-run is an opinion about a document, and it gets
-argued with instead of fixed{{else}} - a finding nobody can re-run is an opinion about a
+argued with instead of fixed{{else}}: a finding nobody can re-run is an opinion about a
 document{{end}}.
 
 Report findings in this order.{{if .Full}} Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".{{end}}
 
-1. **Dead end** - A forbids X, B requires X, and no third path exists. The agent
+1. **Dead end**: A forbids X, B requires X, and no third path exists. The agent
    must either violate a rule or stall.{{if .Full}} Nothing else on this list is worth
    reporting before one of these.{{end}}
-2. **Stale instruction** - a named command no longer exists, no longer works, or
+2. **Stale instruction**: a named command no longer exists, no longer works, or
    is now denied.{{if .Full}} Indistinguishable from a dead end until the agent tries it.{{end}}
-3. **Split authority** - two surfaces describe the same decision differently
+3. **Split authority**: two surfaces describe the same decision differently
    (one "advised", the other "denied"). The agent cannot tell which is current.
    {{if .Full}}A workspace-local rule contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are simply in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
    local rule's `retire-when` while you are here; the condition may have arrived.
-4. **Orphaned replacement** - a denial or deprecation names a tool that no
+4. **Orphaned replacement**: a denial or deprecation names a tool that no
    instruction anywhere documents.
-5. **Silent duplication** - the same rule restated in several places.{{if .Full}} Not yet a
+5. **Silent duplication**: the same rule restated in several places.{{if .Full}} Not yet a
    contradiction; it is where the next one is born, because an edit will update
    some of them.{{end}}
 
