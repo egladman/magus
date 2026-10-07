@@ -44,6 +44,10 @@ type declShape struct {
 	Meaning string
 	// Params is the parameter list of a function or method, in order.
 	Params []namingParam
+	// Results are the classes of a function's results in declaration order, each as Key
+	// renders one before a long list collapses. Nil when the language gives its results no
+	// order: a Buzz raise is not a positional result.
+	Results []string
 }
 
 // symbolFacts is the language-neutral view of one symbol node that a reader starts from.
@@ -60,11 +64,15 @@ type symbolFacts struct {
 // sees declShape and nothing else.
 type shapeReader interface {
 	read(s symbolFacts) declShape
+	// typeClass normalizes a parameter type as read renders one in a Key, or returns "" when
+	// the language's types are not compared.
+	typeClass(typ string) string
 }
 
 // shapeReaders maps an index's language to its reader. A language missing here falls back to
 // descriptorShapes: families by kind and name only.
 var shapeReaders = map[string]shapeReader{
+	"buzz":       buzzShapes{},
 	"go":         goShapes{},
 	"typescript": colonShapes{},
 }
@@ -85,10 +93,14 @@ func (descriptorShapes) read(s symbolFacts) declShape {
 	return declShape{Kind: s.Neutral, Visible: true}
 }
 
+func (descriptorShapes) typeClass(string) string { return "" }
+
 // colonShapes reads the parameter names of a declaration rendered `name(a: T, b?: U): R`, the
 // form scip-typescript uses, and leaves the rest to the descriptor grammar: its rendered types
 // are not compared, so families form on kind and name as with descriptorShapes.
 type colonShapes struct{}
+
+func (colonShapes) typeClass(string) string { return "" }
 
 func (colonShapes) read(s symbolFacts) declShape {
 	shape := declShape{Kind: s.Neutral, Visible: true}
@@ -113,6 +125,106 @@ func (colonShapes) read(s symbolFacts) declShape {
 		}
 	}
 	return shape
+}
+
+// buzzShapes reads scip-buzz's rendered declarations: `fun name(a: T, b: U) > R !> E`,
+// `final name: T`, `var name`, `object<P> Name`, `protocol Name`, `enum<int> Name`. scip-buzz
+// indexes top-level declarations only and records no `export`, so every one is visible.
+type buzzShapes struct{}
+
+func (buzzShapes) typeClass(typ string) string { return buzzTypeClass(typ) }
+
+func (buzzShapes) read(s symbolFacts) declShape {
+	shape := declShape{Kind: s.Neutral, Visible: true}
+	switch s.Kind {
+	case "Object":
+		shape.Kind = declStruct
+	case "Protocol":
+		shape.Kind = declInterface
+	}
+	sig := strings.Join(strings.Fields(s.Signature), " ")
+	switch shape.Kind {
+	case declFunction:
+		rest, ok := strings.CutPrefix(strings.TrimPrefix(sig, "extern "), "fun ")
+		open := strings.IndexByte(rest, '(')
+		if !ok || open < 0 {
+			return shape
+		}
+		end := matchingClose(rest, open)
+		if end < 0 {
+			return shape
+		}
+		var classes []string
+		for list := rest[open+1 : end]; list != ""; {
+			part, more, _ := cutTopLevel(list, ',')
+			list = more
+			name, typ, _ := strings.Cut(strings.TrimSpace(part), ":")
+			typ = strings.TrimSpace(typ)
+			shape.Params = append(shape.Params, namingParam{Name: strings.TrimSpace(name), Type: typ})
+			classes = append(classes, buzzTypeClass(typ))
+		}
+		shape.Key = "fun(" + strings.Join(classes, ", ") + ") " + buzzResultClass(strings.TrimSpace(rest[end+1:]))
+		shape.Meaning = "func"
+	case declStruct:
+		shape.Key, shape.Meaning = "object", "struct"
+	case declInterface:
+		shape.Key, shape.Meaning = "protocol", "interface"
+	case declType:
+		if strings.HasPrefix(sig, "enum") {
+			shape.Key, shape.Meaning = "enum", "enum"
+		}
+	case declValue:
+		word, rest, _ := strings.Cut(sig, " ")
+		if word != "final" && word != "var" {
+			return shape
+		}
+		_, typ, _ := strings.Cut(rest, ":")
+		shape.Meaning = buzzTypeClass(typ)
+		shape.Key = strings.TrimSpace(word + " " + shape.Meaning)
+	}
+	return shape
+}
+
+// buzzResultClass collapses what follows a Buzz parameter list (`> R *> Y !> E`) to the
+// categories a caller branches on, as goResultClass does: the return's own type is dropped,
+// and a raise is the error a Go caller would check.
+func buzzResultClass(tail string) string {
+	tail, raises, _ := strings.Cut(tail, "!>")
+	tail, _, _ = strings.Cut(tail, "*>")
+	class := "value"
+	switch ret := buzzTypeClass(strings.TrimPrefix(strings.TrimSpace(tail), ">")); ret {
+	case "", "void":
+		class = "none"
+	case "bool", "ctx", "func":
+		class = ret
+	}
+	if strings.TrimSpace(raises) != "" {
+		class += ", error"
+	}
+	return class
+}
+
+// buzzTypeClass normalizes a Buzz type for comparison as goTypeClass does a Go one: an
+// optional compares as its base, a module qualifier goes, and a function type is one word.
+// Buzz has no error type, since a function may raise any value; by the convention upstream's
+// errors module keeps, a type named ...Error is one.
+func buzzTypeClass(typ string) string {
+	typ = strings.TrimSuffix(strings.TrimSpace(typ), "?")
+	switch {
+	case typ == "":
+		return ""
+	case typ == `magus\Context`:
+		return "ctx"
+	case strings.HasPrefix(typ, "fun"):
+		return "func"
+	}
+	if i := strings.LastIndexByte(typ, '\\'); i >= 0 && !strings.ContainsAny(typ[:i], "[{<(") {
+		typ = typ[i+1:]
+	}
+	if strings.HasSuffix(typ, "Error") && strings.IndexFunc(typ, func(r rune) bool { return !isIdentRune(r) }) < 0 {
+		return "error"
+	}
+	return typ
 }
 
 // descriptor is one step of a SCIP symbol's descriptor chain.
@@ -223,6 +335,8 @@ func neutralKind(path []descriptor) string {
 // `type X interface { ... }`, `const X T = ...`, `struct field Name T`.
 type goShapes struct{}
 
+func (goShapes) typeClass(typ string) string { return goTypeClass(typ) }
+
 func (goShapes) read(s symbolFacts) declShape {
 	shape := declShape{Kind: s.Neutral, Visible: goVisible(s.Path)}
 	switch s.Kind {
@@ -245,7 +359,8 @@ func (goShapes) read(s symbolFacts) declShape {
 		for i, p := range params {
 			types[i] = goTypeClass(p.Type)
 		}
-		shape.Key = "func(" + strings.Join(types, ", ") + ") " + goResultClass(results)
+		shape.Results = goResultClasses(results)
+		shape.Key = "func(" + strings.Join(types, ", ") + ") " + goResultClass(shape.Results)
 		shape.Meaning = "func"
 	case declInterface:
 		shape.Key, shape.Meaning = "interface", "interface"
@@ -393,10 +508,18 @@ func goTypeClass(typ string) string {
 // goResultClass collapses a result list to the categories a caller's code branches on. The
 // value's own type is dropped: `LeaseFromContext` and `RootFromContext` return different types
 // and are one idiom.
-func goResultClass(results string) string {
-	if results == "" {
+func goResultClass(classes []string) string {
+	switch {
+	case len(classes) == 0:
 		return "none"
+	case len(classes) > 2:
+		return "values"
 	}
+	return strings.Join(classes, ", ")
+}
+
+// goResultClasses classes each result of a rendered result list, in order.
+func goResultClasses(results string) []string {
 	if strings.HasPrefix(results, "(") {
 		if end := matchingClose(results, 0); end == len(results)-1 {
 			results = results[1:end]
@@ -417,10 +540,7 @@ func goResultClass(results string) string {
 		}
 		results = rest
 	}
-	if len(classes) > 2 {
-		return "values"
-	}
-	return strings.Join(classes, ", ")
+	return classes
 }
 
 // goNamed splits a parameter or result declared with a name (`mapped bool`, `ch <-chan int`)

@@ -2,9 +2,12 @@ package std
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,4 +207,113 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	_, err = MagusDir(types.WithEvalMemo(eval), "internal/httpx")
 	require.NoError(t, err)
 	assert.Equal(t, 2, ws.builds, "a new evaluation rebuilds")
+}
+
+// precedentGraphs is a workspace whose indexes have the given freshness and whose declared
+// outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
+// before the freshness was read.
+type precedentGraphs struct {
+	*fakeGraphWorkspace
+	indexes    []types.SymbolIndexStatus
+	outputs    map[string]bool
+	freshenErr error
+	freshened  bool
+	readAfter  bool
+}
+
+func (p *precedentGraphs) FreshenSymbolIndexes(context.Context) error {
+	p.freshened = true
+	return p.freshenErr
+}
+
+func (p *precedentGraphs) SymbolIndexStatusByStamp(context.Context) []types.SymbolIndexStatus {
+	p.readAfter = p.freshened
+	return p.indexes
+}
+
+func (p *precedentGraphs) ClassifyFiles(_ context.Context, paths []string) ([]types.FileEntry, error) {
+	out := make([]types.FileEntry, len(paths))
+	for i, path := range paths {
+		out[i] = types.FileEntry{Path: path, Role: types.DiffRoleSource}
+		if p.outputs[path] {
+			out[i].Role = types.DiffRoleOutput
+		}
+	}
+	return out, nil
+}
+
+// errValue declares `var name = errors.New(...)` on line of file in package internal/a, as
+// scip-go indexes it.
+func errValue(g *knowledge.Graph, file string, line int, name string) string {
+	ns := "symbol:gomod example.com/m `example.com/m/internal/a`/"
+	id := ns + name + "."
+	g.AddNode(types.KnowledgeNode{ID: ns, Kind: types.KindSymbol, Label: "a", Source: "internal/a/a.go:1",
+		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Package"}})
+	g.AddNode(types.KnowledgeNode{ID: "file:" + file, Kind: types.KindFile, Label: file, Source: file})
+	g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindSymbol, Label: name, Source: fmt.Sprintf("%s:%d", file, line),
+		Attrs: map[string]string{"namespace": ns, types.AttrLanguage: "go", "symbol_kind": "Variable", knowledge.AttrSignature: "var " + name + " error"}})
+	g.AddEdge(types.KnowledgeEdge{Source: "file:" + file, Target: "symbol:gomod std `errors`/New().", Relation: types.RelationReferences,
+		Confidence: types.ConfidenceExtracted, Score: 1, Provenance: fmt.Sprintf("scip count=1 lines=%d", line)})
+	return id
+}
+
+func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
+	t.Parallel()
+	g := knowledge.NewGraph()
+	var cited []types.Case
+	for i, name := range []string{"ErrA", "ErrB", "ErrC", "ErrD", "ErrE"} {
+		id := errValue(g, fmt.Sprintf("internal/a/e%d.go", i), 3, name)
+		if i < 3 {
+			cited = append(cited, types.Case{Node: id, Source: fmt.Sprintf("internal/a/e%d.go:3", i)})
+		}
+	}
+	bad := errValue(g, "internal/a/z.go", 4, "badInput")
+	errValue(g, "internal/a/gen.go", 2, "generatedFailure")
+	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "libs/x"}, Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}
+	ws := &precedentGraphs{
+		fakeGraphWorkspace: &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()},
+		indexes:            []types.SymbolIndexStatus{stale},
+		outputs:            map[string]bool{"internal/a/gen.go": true},
+	}
+
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err)
+	b, err := json.Marshal(got)
+	require.NoError(t, err)
+	var report types.PrecedentReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	assert.Equal(t, types.PrecedentReport{
+		Precedents: []types.Precedent{{
+			Family: types.PrecedentErrSentinelName, Scope: types.PrecedentScope{Language: "go"}, Key: types.PrecedentKey{Prefix: "err"},
+			Follow: 5, Cohort: 6, Share: 5.0 / 6, Established: true, Cited: cited,
+			Departures: []types.Case{{Node: bad, Source: "internal/a/z.go:4"}},
+		}},
+		Indexes: []types.SymbolIndexStatus{stale},
+	}, report, "a declared output's departure is not counted, and the index verdict rides beside the rows")
+
+	_, err = MagusPrecedents(graphContext(t))
+	assert.ErrorContains(t, err, "cannot judge its symbol indexes", "a workspace that cannot say whether its index is current gets no rows")
+}
+
+func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
+	t.Parallel()
+	fresh := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "."}, Op: "scip", Language: "go", Freshness: types.SymbolIndexFresh}
+	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "docs"}, Op: "scip-buzz", Language: "buzz",
+		Freshness: types.SymbolIndexStale, Detail: "docs changed"}
+	ws := &precedentGraphs{
+		fakeGraphWorkspace: &fakeGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()},
+		indexes:            []types.SymbolIndexStatus{fresh, stale},
+		freshenErr:         errors.New("scip-buzz is not on PATH"),
+	}
+
+	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
+	require.NoError(t, err, "a failed freshen is a verdict on its index, not an error")
+	assert.True(t, ws.readAfter, "freshness is read after the freshen, so it judges the rebuilt index")
+	b, err := json.Marshal(got)
+	require.NoError(t, err)
+	var report types.PrecedentReport
+	require.NoError(t, json.Unmarshal(b, &report))
+	stale.Detail = "docs changed\nscip-buzz is not on PATH"
+	assert.Equal(t, []types.SymbolIndexStatus{fresh, stale}, report.Indexes,
+		"the freshen's error rides on the index it left stale, and a current index carries none")
 }

@@ -648,7 +648,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			}
 			cb := args[0]
 			for i, it := range lo.Items {
-				if _, err := callValue(vm, ctx, cb, []Value{IntValue(int64(i)), it}); err != nil {
+				if _, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it}); err != nil {
 					return Null, err
 				}
 			}
@@ -663,7 +663,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			items := lo.Items
 			out := make([]Value, len(items))
 			for i, it := range items {
-				v, err := callValue(vm, ctx, cb, []Value{IntValue(int64(i)), it})
+				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it})
 				if err != nil {
 					return Null, err
 				}
@@ -679,7 +679,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			cb := args[0]
 			var out []Value
 			for i, it := range lo.Items {
-				v, err := callValue(vm, ctx, cb, []Value{IntValue(int64(i)), it})
+				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it})
 				if err != nil {
 					return Null, err
 				}
@@ -697,7 +697,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			cb := args[0]
 			acc := args[1]
 			for i, it := range lo.Items {
-				v, err := callValue(vm, ctx, cb, []Value{IntValue(int64(i)), it, acc})
+				v, err := callValue(ctx, vm, cb, []Value{IntValue(int64(i)), it, acc})
 				if err != nil {
 					return Null, err
 				}
@@ -730,7 +730,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{snapshot[i], snapshot[j]})
+				v, err := callValue(ctx, vm, cb, []Value{snapshot[i], snapshot[j]})
 				if err != nil {
 					sortErr = err
 					return false
@@ -859,7 +859,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			}
 			cb := args[0]
 			for i, k := range mp.keyVals {
-				if _, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]}); err != nil {
+				if _, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]}); err != nil {
 					return Null, err
 				}
 			}
@@ -878,7 +878,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			cb := args[0]
 			out := NewMap()
 			for i, k := range mp.keyVals {
-				entry, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
+				entry, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
@@ -902,7 +902,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			cb := args[0]
 			out := mapValue(mp.Mut)
 			for i, k := range mp.keyVals {
-				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i]})
+				v, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i]})
 				if err != nil {
 					return Null, err
 				}
@@ -920,7 +920,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 			cb := args[0]
 			acc := args[1]
 			for i, k := range mp.keyVals {
-				v, err := callValue(vm, ctx, cb, []Value{k, mp.Vals[i], acc})
+				v, err := callValue(ctx, vm, cb, []Value{k, mp.Vals[i], acc})
 				if err != nil {
 					return Null, err
 				}
@@ -999,7 +999,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 				if sortErr != nil {
 					return false
 				}
-				v, err := callValue(vm, ctx, cb, []Value{pairs[i].k, pairs[j].k})
+				v, err := callValue(ctx, vm, cb, []Value{pairs[i].k, pairs[j].k})
 				if err != nil {
 					sortErr = err
 					return false
@@ -1341,7 +1341,7 @@ func fibMethod(vm *VM, fib Value, name string) *directObj {
 
 // callValue invokes a Buzz callable (direct or fun) with args.
 // Used by higher-order list/map methods (forEach, map, filter, reduce, sort).
-func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, error) {
+func callValue(ctx context.Context, vm *VM, callee Value, args []Value) (Value, error) {
 	switch callee.tag() {
 	case tagDirect:
 		result, err := vm.asDirect(callee).Fn(ctx, args)

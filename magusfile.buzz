@@ -601,6 +601,10 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
             + "LGPL-2.1,LGPL-2.1-only,LGPL-2.1-or-later,"
             + "LGPL-3.0,LGPL-3.0-only,LGPL-3.0-or-later",
         "--exit-code", "1",
+        // .magus is magus's own cache, which lint's graph build rewrites while this walks
+        // the tree: a shard renamed mid-walk failed the scan. .claude/worktrees holds whole
+        // other checkouts in a local clone. Neither carries a dependency's license.
+        "--skip-dirs", ".magus,.claude/worktrees",
         "."], ".", {});
 }
 
@@ -2231,7 +2235,14 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*_test.go", "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
-                   "libs/scipbuzz/**/*_test.go");
+                   "libs/scipbuzz/**/*_test.go",
+                   "**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go",
+                   "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
+                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go");
+    // code-follows-mined-precedents fails on a stale symbol index. magus\precedents freshens
+    // every index here, under this run's lock, so the rule run below finds them current; read
+    // from that child process instead, a rebuild would be refused the lock (MGS3007).
+    _ = magus\precedents();
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
 

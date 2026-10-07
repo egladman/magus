@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -264,6 +265,76 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 		return types.ImportGraph{}, err
 	}
 	return kg.ImportGraph(), nil
+}
+
+// precedentWorkspace is the part of *magus.Magus magus\precedents reads beside the graph:
+// a freshen of every index, the freshness verdict `magus status` prints, and which files are
+// declared outputs.
+type precedentWorkspace interface {
+	FreshenSymbolIndexes(ctx context.Context) error
+	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
+	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
+}
+
+// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
+// and each declared index's freshness. Every index is freshened first, as magus\diff does, so a
+// caller never runs a graph build of its own; one that could not be made current reads as
+// stale, the freshen's error in its detail. Freshness is judged before the graph is read, so
+// the verdict covers the index the rows came from. Generated files are never counted. The
+// answer is a PrecedentReport as a map: no Buzz object mirrors it.
+func MagusPrecedents(ctx context.Context) (map[string]any, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return nil, errNoWorkspace("precedents")
+	}
+	pw, ok := ws.(precedentWorkspace)
+	if !ok {
+		return nil, errors.New("magus\\precedents: this workspace cannot judge its symbol indexes")
+	}
+	g, err := graphsFromContext(ctx, "precedents")
+	if err != nil {
+		return nil, err
+	}
+	freshErr := pw.FreshenSymbolIndexes(ctx)
+	report := types.PrecedentReport{Indexes: pw.SymbolIndexStatusByStamp(ctx)}
+	if freshErr != nil {
+		for i := range report.Indexes {
+			if idx := &report.Indexes[i]; idx.Freshness != types.SymbolIndexFresh {
+				idx.Detail = strings.TrimSpace(idx.Detail + "\n" + freshErr.Error())
+			}
+		}
+	}
+	kg, err := g.KnowledgeGraphWithSymbols(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, n := range kg.Nodes() {
+		if n.Kind == types.KindFile {
+			files = append(files, n.Source)
+		}
+	}
+	slices.Sort(files)
+	entries, err := pw.ClassifyFiles(ctx, slices.Compact(files))
+	if err != nil {
+		return nil, fmt.Errorf("magus\\precedents: %w", err)
+	}
+	generated := map[string]bool{}
+	for _, e := range entries {
+		if e.Role == types.DiffRoleOutput {
+			generated[e.Path] = true
+		}
+	}
+	report.Precedents = kg.Precedents(knowledge.PrecedentOptions{Generated: generated})
+	b, err := json.Marshal(report)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages

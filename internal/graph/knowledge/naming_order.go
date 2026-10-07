@@ -35,17 +35,7 @@ func (orderCheck) run(x *namingIndex) []finding {
 		bestFor := 0
 		for i, a := range names {
 			for _, b := range names[i+1:] {
-				var same, reversed []*namingDecl
-				for j, p := range peers {
-					pa, pb := slices.Index(peerNames[j], a), slices.Index(peerNames[j], b)
-					switch {
-					case pa < 0 || pb < 0:
-					case pa < pb:
-						same = append(same, p)
-					default:
-						reversed = append(reversed, p)
-					}
-				}
+				same, reversed := pairOrder(peers, peerNames, a, b)
 				if len(reversed) < x.cohort || len(reversed) <= bestFor {
 					continue
 				}
@@ -72,6 +62,22 @@ func (orderCheck) run(x *namingIndex) []finding {
 		}
 	}
 	return out
+}
+
+// pairOrder splits ds, whose parameter names names holds index for index, by whether each
+// takes a before b. A declaration missing either name is on neither side.
+func pairOrder(ds []*namingDecl, names [][]string, a, b string) (same, reversed []*namingDecl) {
+	for i, d := range ds {
+		pa, pb := slices.Index(names[i], a), slices.Index(names[i], b)
+		switch {
+		case pa < 0 || pb < 0:
+		case pa < pb:
+			same = append(same, d)
+		default:
+			reversed = append(reversed, d)
+		}
+	}
+	return same, reversed
 }
 
 // paramNames are a declaration's named parameters in order, each once.

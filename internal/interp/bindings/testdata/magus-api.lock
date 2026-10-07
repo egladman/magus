@@ -67,6 +67,7 @@ log.warn
 neighborhood
 output
 path
+precedents
 project
 projectGraph
 pry

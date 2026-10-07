@@ -1,11 +1,10 @@
-package buzz_test //nolint:testlayout // in-package would close a cycle: gopherbuzz/std imports gopherbuzz
+package buzz
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,14 +24,14 @@ fun guarded() > void *> int {
 }
 `
 
-func newGuardSession(t *testing.T) *buzz.Session {
+func newGuardSession(t *testing.T) *Session {
 	t.Helper()
-	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	s := NewSession(t.Context(), WithEmbedded())
 	require.NoError(t, s.Exec(t.Context(), guardSource), "exec guard source")
 	return s
 }
 
-func held(t *testing.T, s *buzz.Session) bool {
+func held(t *testing.T, s *Session) bool {
 	t.Helper()
 	v, ok := s.Globals()["held"]
 	require.True(t, ok, "global 'held' missing")
@@ -170,7 +169,7 @@ func TestHostDrivenFiberFinalizesUnderCancellationOnlyWithoutCancel(t *testing.T
 // This is the load-bearing claim for driving target bodies as fibers. If it fails, a
 // blocking native cannot become a suspending one and the whole approach is dead.
 func TestNativeCanSuspendTheFiberItRunsInside(t *testing.T) {
-	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	s := NewSession(t.Context(), WithEmbedded())
 
 	resumes := 0
 	mod := vm.NewMap()
@@ -220,7 +219,7 @@ fun body() > void *> str !> any {
 // may be several Buzz frames deep. The suspend has to unwind and re-enter through all of
 // them, or the mechanism only works in the toy case.
 func TestNativeSuspendSurvivesNestedFrames(t *testing.T) {
-	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	s := NewSession(t.Context(), WithEmbedded())
 
 	calls := 0
 	mod := vm.NewMap()
@@ -260,7 +259,7 @@ fun body() > void *> str !> any { landed = middle(); }
 // by resolve rather than stepped by resume: resolve dismisses yields, so it drives the
 // re-execution itself and must land on the same answer.
 func TestNativeSuspendUnderResolve(t *testing.T) {
-	s := buzz.NewSession(t.Context(), buzz.WithEmbedded())
+	s := NewSession(t.Context(), WithEmbedded())
 
 	calls := 0
 	mod := vm.NewMap()

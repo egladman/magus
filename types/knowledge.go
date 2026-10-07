@@ -1628,6 +1628,15 @@ const (
 	// PrecedentTestPackageName is whether a test file declares the package its directory's
 	// sources declare.
 	PrecedentTestPackageName PrecedentFamily = "test-package-name"
+	// PrecedentParamNameByType is the name functions give a parameter of one type. In a
+	// language whose call sites label arguments, the name is the API.
+	PrecedentParamNameByType PrecedentFamily = "param-name-by-type"
+	// PrecedentParamOrder is which of two parameter names functions taking both take first.
+	PrecedentParamOrder PrecedentFamily = "param-order"
+	// PrecedentCtxFirst is whether a function taking a context takes it first.
+	PrecedentCtxFirst PrecedentFamily = "ctx-first"
+	// PrecedentErrorLast is whether a function returning an error returns it last.
+	PrecedentErrorLast PrecedentFamily = "error-last"
 )
 
 // Precedent is what a body of cases in the graph establishes: Follow of Cohort cases share one
@@ -1659,7 +1668,8 @@ type PrecedentScope struct {
 }
 
 // PrecedentKey is the shape a precedent's following cases share. Which fields are set depends
-// on the family; a test-package-name key sets none, since the family names its one shape.
+// on the family; a test-package-name, ctx-first or error-last key sets none, since the family
+// names its one shape.
 type PrecedentKey struct {
 	// From and To are the layers a dep-direction precedent says imports run from and to.
 	From string `json:"from,omitempty"`
@@ -1671,6 +1681,14 @@ type PrecedentKey struct {
 	// Prefix is the word an err-sentinel-name precedent says a name starts with, folded to
 	// lower case.
 	Prefix string `json:"prefix,omitempty"`
+	// Type is the parameter type a param-name-by-type precedent names, as the language's
+	// reader classes it (ctx for a context, the package qualifier dropped), and Name the name
+	// it says that parameter takes.
+	Type string `json:"type,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Order is the two parameter names of a param-order precedent, in the order it says they
+	// are taken.
+	Order []string `json:"order,omitempty"`
 }
 
 // Case is one instance in the graph a precedent counts.
@@ -1683,4 +1701,13 @@ type Case struct {
 	Source string `json:"source"`
 	// Imports are the directories a dep family case imports that the row counted, sorted.
 	Imports []string `json:"imports,omitempty"`
+}
+
+// PrecedentReport is magus\precedents' answer: the rows mined from the workspace's merged
+// symbol indexes, and the freshness of each declared index judged just before the read. An
+// index that is not up to date contributed nothing or something old, so a caller that gates
+// on the rows checks Indexes first.
+type PrecedentReport struct {
+	Precedents []Precedent         `json:"precedents"`
+	Indexes    []SymbolIndexStatus `json:"indexes"`
 }

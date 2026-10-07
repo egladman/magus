@@ -1473,6 +1473,7 @@ export extern fun layer(name: str) > Layer !> any;
 export extern fun neighborhood(focus: str, opts: NeighborhoodOptions = {<str: any>}) > NeighborhoodResult !> any;
 export extern fun output(ref: str) > OutputRecord !> any;
 export extern fun path(node: str, to: str, opts: PathOptions = {<str: any>}) > PathResult !> any;
+export extern fun precedents() > {str: any} !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
