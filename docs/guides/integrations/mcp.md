@@ -381,7 +381,7 @@ logs and history). How you connect depends on the client:
   then report `magus ... - Connected`. **Restart the
   Claude Code session** afterward: a session only discovers MCP tools (and skills
   installed by `magus agent install .claude/skills`) at launch, so an already-open session
-  will not see them until it is restarted.
+  does not see them until it is restarted.
 
 - **Cursor** owns its MCP client config. `magus describe harness cursor`
   prints a short setup hint and a docs pointer; it does not write

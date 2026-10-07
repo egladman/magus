@@ -55,7 +55,7 @@ wrote, one line per distinct subject and no answer text.
 It needs two things: a host that wires `magus agent install`, and an agent working under a
 lease (`BAGGAGE magus.lease`). The lease is the join, because it is the one identity shared
 by the process that saw the question and the write it explains, and it holds across an
-orchestrator and the sub-agents it hands work to.
+orchestrator and the subagents it hands work to.
 
 The record lives in the cache of the tree the work was done in, so a reviewer reading
 someone else's branch has none of it. When the list is empty the section names which of the

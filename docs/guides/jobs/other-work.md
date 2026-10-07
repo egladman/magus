@@ -226,8 +226,8 @@ unresolved risks its holder reported
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
-Exit 1, every unmet rule named, and the risk repeated where the person deciding will
-read it. The board is the checklist:
+Exit 1, every unmet rule named, and the risk repeated where the person deciding
+reads it. The board is the checklist:
 
 <!-- golden: job_people_release.txtar ls-board.out -->
 
@@ -241,6 +241,6 @@ in flight: never fetched; `magus queue ls --provider <provider> --base <branch>`
 console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
-The release waits until every row reads `pass`. An item nobody will finish ends with
+The release waits until every row reads `pass`. An item nobody finishes ends with
 `magus job exit <job>`, recorded `no_return`, so the board never shows a skipped item
 as a finished one.

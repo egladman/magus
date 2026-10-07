@@ -25,7 +25,7 @@ Both share the same evaluator. Pry adds stack-introspection commands (`.where`, 
 
 ## Interactive REPL
 
-`magus buzz` with no arguments opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available. There is no flag for this and none is needed: magus reads the workspace from the directory you are in, the same way `magus run` and `magus ls` do. Outside a workspace there is simply nothing to load.
+`magus buzz` with no arguments opens an interactive Buzz REPL with the same runtime environment available to a magusfile: the `magus` object (including the host modules and spell bindings) is preloaded. If a `magusfile.buzz` is present at or above the current directory, it is executed automatically on startup so registered targets and locals are available. There is no flag for this and none is needed: magus reads the workspace from the directory you are in, the same way `magus run` and `magus ls` do. Outside a workspace there is nothing to load.
 
 The REPL accepts Buzz expressions and evaluates them against the magusfile runtime. Output is pretty-printed (max depth 3).
 

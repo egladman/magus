@@ -105,7 +105,7 @@ grew.
 
 Separate from the guard, and the same shape: pipe the host's pre-tool event to
 `magus shell` when the tool being called is the one that hands work to a
-sub-agent.
+subagent.
 
 ```sh
 printf '%s' "$event" | magus shell --agent-name <your host> >/dev/null 2>&1; exit 0
@@ -152,7 +152,7 @@ workspace cache.
 
 ### Correlating a spawn to a lease
 
-Correlation is COOPERATIVE. No host event names a magus lease and magus will not
+Correlation is COOPERATIVE. No host event names a magus lease and magus does not
 guess one from prose, so an orchestrator that wants the join writes ONE marker:
 
 ```text

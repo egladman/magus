@@ -163,7 +163,7 @@ Most spells need none: `go`, `rustc`, and `node` are self-contained.
 A version probe is worth more thought than it looks. If a tool changes what passes and
 nothing else in the cache key changes with it, every cached entry replays the old verdict.
 Anything pinned by a manifest the spell already reads (a `go.mod` the `go` spell claims)
-needs no probe; anything that is just "whatever is on PATH" does.
+needs no probe; anything that is "whatever is on PATH" does.
 
 ### Installs
 
@@ -207,7 +207,7 @@ Manifest{value = "package.json",
 A lockfile among `lockCandidates` with no `installs` entry makes its op fail on a
 project that uses it, rather than run another manager's command against it.
 
-A project composes the op it actually needs into its own top-level `install` target
+A project composes the op it needs into its own top-level `install` target
 (`build`/`test`/`lint` need `install`, not the spell op by name):
 
 ```buzz

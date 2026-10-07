@@ -7,7 +7,7 @@ tags: [agents, session, audit, guard, claude code, codex, opencode]
 # Session load adapters
 
 The guard is magus's record of itself, and there are questions it cannot answer
-by construction: whether a denied command was actually abandoned, which skills an
+by construction: whether a denied command was abandoned, which skills an
 agent loaded, and what ran in a session where the hook was never wired. A host's
 own session log is the independent witness for all three.
 
@@ -35,7 +35,7 @@ A loaded session answers questions the trail alone cannot:
 That last one is the join. Neither store answers it alone. `magus session show
 <id>` makes it: below the loaded transcript it reports what the guard trail in
 the current checkout observed for that host session id, how many of those calls
-it denied, the lease they ran under, and the sub-agents the session spawned.
+it denied, the lease they ran under, and the subagents the session spawned.
 The same join reaches review: `magus diff --impact` names the sessions that
 wrote each changed file from both stores, so a session no hook was wired for
 still appears once its transcript is loaded.
@@ -51,7 +51,7 @@ cache directory:
 {"ts":1789124711213,"id":"query-explain","argv":["./magus","explain","spell:go"]}
 ```
 
-Only what was actually served is recorded, and what is served depends on who is
+Only what was served is recorded, and what is served depends on who is
 asking. The entries are filtered for the acting lease's role first: a lease that
 owns paths is never offered a write whose boundary magus cannot check, and a
 read-only lease is offered no write at all. An unbound session, a person or an
@@ -84,7 +84,7 @@ query-path     4       0         4         4       0.0%
 
 Followed means the command ran within the next five calls of the same session.
 Rejected means another magus verb ran instead, and reflex means the same command
-was simply repeated; the three describe different servings and do not sum to
+was repeated; the three describe different servings and do not sum to
 served.
 
 The output names a floor. A hint below it is spending context on advice nobody

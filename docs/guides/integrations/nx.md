@@ -112,7 +112,7 @@ The copy is yours: it is a workspace-local spell like any other, and magus
 invalidates the provider's cached answer when it changes.
 
 `ci` chains every target the base spell already exposes. Trim the chain to
-what every project in the repo actually declares (nx errors on a project
+what every project in the repo declares (nx errors on a project
 that lacks one of the chained targets) or, if flavors diverge, split `ci`
 across separate provider spells, one per flavor.
 
@@ -172,7 +172,7 @@ child process's environment from an allowlist: `HOME`, `USER`, `PATH`,
 `LANG`, `LC_*`, `TZ`, `TERM`, and a few more. `NX_*`, `NODE_*`, and
 `npm_config_*` are not on it, so none of them reach `nx` unless the workspace
 passes them through: silently different behavior from running `nx` bare in
-a shell, where those variables are simply inherited.
+a shell, where those variables are inherited.
 
 ```yaml
 sandbox:

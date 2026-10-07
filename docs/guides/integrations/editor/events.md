@@ -58,7 +58,7 @@ and subtract the two `ts` values; you are holding the pair anyway.
 
 ### status and cache_hit are separate questions
 
-`status` says whether the target SUCCEEDED. `cache_hit` says whether it actually
+`status` says whether the target SUCCEEDED. `cache_hit` says whether it
 RAN. A replay is `{"status":"ok","cache_hit":true}`. Rendering a replay as a
 fresh build is the common misreading, so the two axes are kept apart rather than
 folded into one three-valued field.
@@ -191,9 +191,9 @@ whatever follows the last newline until the rest of it turns up.
 
 Two runtimes do it for you, and it is worth knowing which:
 
-- **Vim**: `job_start()` with `out_mode: 'nl'` delivers exactly one complete
+- Vim's `job_start()` with `out_mode: 'nl'` delivers exactly one complete
   line per callback.
-- **Node / VS Code**: `child_process.spawn` plus `readline.createInterface`.
+- Node and VS Code have `child_process.spawn` plus `readline.createInterface`.
 
 Everything else needs the pending buffer: Neovim's `on_stdout` hands over a
 list whose last element may be partial, and an Emacs process filter gets raw

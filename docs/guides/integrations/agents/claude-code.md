@@ -89,7 +89,7 @@ magus agent harness verify --id claude-code
 ```
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
-(recorded and judged), and sub-agent spawns. Each is one `magus buzz` command that
+(recorded and judged), and subagent spawns. Each is one `magus buzz` command that
 runs a shipped script, which talks to `magus shell`: file edits run
 `magus-path.buzz`, reads also run `magus-observe.buzz`, and every other entry runs
 `magus-command.buzz`. The Bash entry, as `magus describe harness claude-code` prints it, in the place it lands in
@@ -275,7 +275,7 @@ than enforcement. The judging entry is enforcement, and Codex carries it too.
 
 ## Lease capture
 
-When Claude Code hands work to a sub-agent it does so through a tool call, and
+When Claude Code hands work to a subagent it does so through a tool call, and
 that call fires `PreToolUse` like any other, carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`, the callee's declared
 `subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
@@ -364,7 +364,7 @@ one.
 
 To join those events to a job, write the marker line documented in
 [Any other host](any-host.md#lease-capture) at the top of the prompt you
-hand the sub-agent.
+hand the subagent.
 
 ## Notifications
 
@@ -466,8 +466,8 @@ the block on sessions that would have been fine without it.
 Every line is read off the disk when the hook runs, so nothing in it can be a
 retelling of a retelling. It restates no rule: the last line names the files your
 rules live in, `CLAUDE.md` by default and `-- --rules <file>` when yours is
-somewhere else. Run `magus session --brief` yourself to see what a session will
-be handed.
+somewhere else. Run `magus session --brief` yourself to see what a session
+is handed.
 
 ## Coverage and limits
 
@@ -505,7 +505,7 @@ model cannot otherwise get. An advisory that fires every turn to restate guidanc
 the skills already carry fails it.
 
 `SubagentStart` is the one worth naming, because it looks like it should replace
-the [lease wiring](#lease-capture) above and does not. It fires when a sub-agent
+the [lease wiring](#lease-capture) above and does not. It fires when a subagent
 is spawned and matches on agent type, but its documented input does not carry the
 prompt the orchestrator handed over, and the prompt is the whole record: it is
 what magus stores as the spawn's payload, and it is where a `lease:` marker rides.
@@ -518,7 +518,7 @@ So the `PreToolUse` matcher `Task` wiring stays, on the tool call that does carr
 magus doctor
 ```
 
-`doctor`'s **guard binary** check names the binary a hook would actually run and
+`doctor`'s **guard binary** check names the binary a hook would run and
 fails when it is older than your working tree; **guard wiring** probes it with a
 known-denied command and then looks for a host config that invokes a current
 template; **agent skills** grades the installed copies against the running binary

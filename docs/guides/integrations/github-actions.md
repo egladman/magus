@@ -107,7 +107,7 @@ magus install in every copy. Scope permissions at the job. Split files by trigge
 to a build, and it fails silently: the day someone adds an input the list does not
 mention, the job stops running and nothing reports it. `magus affected` derives that set
 from declared sources, so it cannot fall behind the tree. Prefer paying a few minutes per
-push over a filter nobody will remember to update.
+push over a filter nobody remembers to update.
 
 **Pinning a released magus to build the repository that defines it.** A workflow that runs
 the last published release against this commit's magusfile cannot survive the window

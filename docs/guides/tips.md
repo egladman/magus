@@ -206,7 +206,7 @@ Now the practical problem. **What you authenticate against and what you push to 
 | Amazon ECR        | `<acct>.dkr.ecr.<region>.amazonaws.com` | `<acct>.dkr.ecr.<region>.amazonaws.com/myapp` |
 | Artifact Registry | `us-central1-docker.pkg.dev`            | `us-central1-docker.pkg.dev/proj/repo/app`    |
 
-For GHCR and Docker Hub the registry is just the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a _project_, and a robot account is frequently scoped to exactly one, so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
+For GHCR and Docker Hub the registry is the first path segment, so it is easy to believe that is a rule. It is not. Harbor's first path segment is a _project_, and a robot account is frequently scoped to exactly one, so two repositories on one Harbor host can need two different credentials. ECR's registry embeds an account id and a region, and its password is a short-lived token from `aws ecr get-login-password` rather than a stored secret at all.
 
 **magus does not try to model this, and should not.** There is no registry-provider abstraction to get wrong, because the shape is different at every vendor and changes when they change. What magus gives you is the place to compute it:
 
@@ -234,7 +234,7 @@ fun ecr_password(region: str) > str {
 }
 ```
 
-Then the table declares whatever each entry actually needs, and the login verb reads it:
+Then the table declares whatever each entry needs, and the login verb reads it:
 
 ```buzz
 final HARBOR = Registry{
@@ -255,8 +255,8 @@ Two things to keep straight while you do:
 
 Two entry points into an interactive Buzz REPL, sharing one evaluator:
 
-- **`magus buzz`**: standalone shell with the magusfile loaded.
-- **`magus\pry()`**: `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
+- `magus buzz`: standalone shell with the magusfile loaded.
+- `magus\pry()`: `binding.pry`-style breakpoint that opens the same REPL mid-target with frame context (`.where`, `.locals`, `.up`/`.down`, `.step`, ...).
 
 ```buzz
 import "magus";

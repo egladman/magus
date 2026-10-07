@@ -596,7 +596,7 @@ If you would rather not have the plugin do it, running
   and `edit`/`write`.
 - Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
   every tool and hands the plugin `input.tool` plus the call's arguments, so a
-  branch alongside the `bash` and `edit`/`write` ones could pipe a sub-agent
+  branch alongside the `bash` and `edit`/`write` ones could pipe a subagent
   tool's prompt to `magus shell` and get the same `agent_spawn` event. Which tool
   identifier to match on has not been confirmed against an installed OpenCode,
   so the plugin above does not guess at one.

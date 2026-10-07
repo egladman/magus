@@ -115,7 +115,7 @@ The guard parses the shell rather than pattern-matching the string, so it reads
 the command being RUN: an environment prefix, `env -u GOROOT ...`, a launcher,
 or `bash -c '...'` all reach the same verdict as the bare command.
 
-- **Destructive whole-tree VCS operations**: `git stash`, `git reset --hard`,
+- Destructive whole-tree VCS operations are denied: `git stash`, `git reset --hard`,
   `git checkout .`, `git restore .`, and `git clean -f`. `git worktree remove`
   destroys another tree's work rather than this one's, so it is judged instead:
   it passes only for a clean, unlocked linked worktree of this repository that
@@ -154,7 +154,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   agent by construction and a person at a terminal never meets this rule. The
   reason routes to `magus diff --impact`, which names every changed file
   carrying no receipt, and says to hand that list back rather than stamp it.
-- **Credentials**: the console and connector token `create` and `revoke`
+- Credential access is denied: the console and connector token `create` and `revoke`
   commands, `magus config token print`, `generate` and `revoke`, and
   `magus graph export --open --follow`, whose link carries a sign-in code. Any
   line, and any editor write, that names the operator token file or the token
@@ -162,7 +162,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   passes: it shows file names, and none is a secret. This is a seatbelt for a
   harness that opted in, not a boundary: a process running as the user can reach
   the same files.
-- **Guard wiring and the VCS off-switch**: a leased or agent-attributed write to
+- Guard wiring and the VCS off-switch are protected: a leased or agent-attributed write to
   the hook wiring the guard is installed by, and a write setting `vcs.enabled:
   false` in a `magus.yaml` this workspace reads. With VCS off the guard has no
   approved copy to compare a policy edit against, so every workspace rule would
@@ -170,13 +170,13 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   (`git -c alias.x=...`, hg's and sl's `--config alias.x=...`, jj's
   `--config aliases.x=...`) is refused for the same reason: the alias body hides
   the command every other rule reads as the subcommand.
-- **Backtick substitution**: inside double quotes a backtick starts a command
+- Backtick substitution is denied: inside double quotes a backtick starts a command
   substitution, and it pairs with the next backtick anywhere on the line, so a
   pattern or a message carrying a literal backtick can run everything between
   them. A literal backtick belongs in single quotes; a substitution is
   `$(...)`.
-- **A push at a commit with no green gate**: the run log names which invocations
-  ran the gate and at which commit. A session no lease binds is asked; a leased
+- A push at a commit with no green gate is judged from the run log, which names
+  which invocations ran the gate and at which commit. A session no lease binds is asked; a leased
   worker is refused, since workers do not publish.
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on
   either surface and under every role, unbound sessions included. That directory
@@ -200,7 +200,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   refused even where the resolution is unavailable. magus's own commands are not
   judged here: every `magus run` writes in that directory, and the rule reads
   redirect targets and coreutil operands, never a `magus` argv.
-- **Rewriting your own job row, while holding a lease**: taking another job's
+- Rewriting your own job row while holding a lease is denied: taking another job's
   lease with `magus job exec <other-id>`, verifying a result with `magus job
   wait`, and a `client` call's `magus\job` writes, whichever channel they arrive
   on. Every lease-scoped rule below reads that row, so an agent that can rewrite
@@ -263,10 +263,10 @@ The rules that explain from the start, such as `capture-filter`, `graph-pipe` an
 says what each rule matches; a workspace that set `deny` gets a refusal carrying the
 same served command.
 
-- **Raw language tools**: `go test`, `go build`, `go mod tidy`, `cargo build`,
+- Raw language tools draw advice: `go test`, `go build`, `go mod tidy`, `cargo build`,
   `gofmt -w`, `prettier --write`, and the rest. The match is the base PROGRAM a
   registered spell op renders plus the leading argv it renders with it, so the
-  matched spelling is the one a spell would actually launch. A tool a spell
+  matched spelling is the one a spell would launch. A tool a spell
   reaches through a runner is therefore matched under the runner:
   `uv run pytest` and `pnpm exec eslint .` match, while bare `pytest`, `eslint`
   and `ruff` pass, because no spell renders those as the program. That is
@@ -276,11 +276,11 @@ same served command.
   magus, and `--dry-run` to see the exact command either would run. Read-only
   invocations pass: `gofmt -l` and `gofmt -d` report without writing, so they
   bypass nothing.
-- **Staging everything**: `git add -A`, `git add .`, `git add -u`. A magus
+- Staging everything draws advice: `git add -A`, `git add .`, `git add -u`. A magus
   target writes its declared outputs as it runs, so a tree is routinely dirty
   with generated files you did not edit; sweeping them into a commit about
   something else is how a focused change becomes unreviewable.
-- **Piping or redirecting magus's own output**: `| tail`, `> file`, `>> file`,
+- Piping or redirecting magus's own output draws advice: `| tail`, `> file`, `>> file`,
   `2>&1`. The equivalent is exact: `-o name|json|template=` returns the field
   the filter was reaching for, and every run persists its full log, so a failure
   prints that path with the ref. A pipe additionally replaces the exit status
@@ -299,7 +299,7 @@ same served command.
   whole does not: `cat <capture>` and an editor tool's read are both fine.
   Backgrounding the run as `-o jsonl --tee <file>` makes the capture a contract,
   after which `jq` over it is composition.
-- **In-place stream edits**: `sed -i`, `sed --in-place`. The flag is not
+- In-place stream edits draw advice: `sed -i`, `sed --in-place`. The flag is not
   portable and the two spellings destroy each other's work: GNU reads
   `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the
   backup suffix, and the portable-looking `sed -i '' ...` makes GNU edit
@@ -591,7 +591,7 @@ before it has registered the base it landed on. An empty owned list on a row tha
 is not `read_only` is a boundary nobody wrote rather than one of size zero, and
 scopes nothing. Four cases the rule cannot decide that way advise instead:
 
-- The ledger exists but will not parse. It says no boundary was checked rather
+- The ledger exists but does not parse. It says no boundary was checked rather
   than blocking on a file it cannot read, because a lease whose boundary
   silently stopped being checked looks exactly like one nobody declared.
 - A write onto another live lease's owned paths by a writer magus cannot

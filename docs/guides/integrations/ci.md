@@ -29,7 +29,7 @@ mentions it again. It is the single line in a pipeline whose cost grows every da
 the repository lives, and it buys almost nothing. This page is the model behind a
 cheaper checkout and the per-provider recipes that implement it.
 
-## What magus actually needs
+## What magus needs
 
 [`magus affected`](../../concepts/workspace/affected.md) answers one question: which
 files differ between the base branch and this working tree. For git that is three
@@ -111,7 +111,7 @@ variables:
 
 ### CircleCI, Buildkite, Jenkins, and anything script-driven
 
-Providers that hand you a shell do not need a special integration: the clone is just
+Providers that hand you a shell do not need a special integration: the clone is plain
 git:
 
 ```sh
@@ -150,8 +150,8 @@ just quietly stopped being incremental, on every run, forever. That is
 
 magus handles this itself. When the merge base is missing **and** the repository is
 shallow, it fetches progressively more history (depth 32, then 128, 512, 2048)
-until the common ancestor appears, then diffs against it normally. You will see it in
-the log when it happens:
+until the common ancestor appears, then diffs against it normally. The log shows it
+when it happens:
 
 ```text
 INFO deepened shallow clone to reach the merge base base=origin/main depth=32
@@ -162,7 +162,7 @@ Three things bound the blast radius:
 - It only ever touches a **shallow** repository. A full clone that cannot find a merge
   base is reported as the bad ref it is rather than papered over with fetches.
 - It only ever **adds** history. `git fetch --depth=N` is absolute in both directions and
-  will happily shorten a checkout that arrived deeper, so magus grows what is already
+  shortens a checkout that arrived deeper, so magus grows what is already
   present with `--deepen` and reserves `--depth` for a base ref it is fetching for the
   first time. A checkout never ends up with less history than it started with, which
   matters when a later step in the same job runs `git describe`.
@@ -184,7 +184,7 @@ low and you are paying an extra round trip to learn that.
 
 Do not bound the depth on a job that runs `git describe --tags` (a release build
 resolving a version, for example). Its cost is the distance to the nearest tag, which
-a depth bound will cut through.
+a depth bound cuts through.
 
 ## Two filters that look better and are not
 
@@ -195,7 +195,7 @@ save 3 MB over blobless. Each of those fetches is a network round trip.
 
 **`sparse-checkout`** limits which files land in the working tree. affected reads the
 diff, not the working tree, so a sparse checkout does not shrink the fetch that
-matters, and it will hide files from targets that legitimately need them.
+matters, and it hides files from targets that legitimately need them.
 
 ## Verifying it worked
 
@@ -211,7 +211,7 @@ git config remote.origin.partialclonefilter # -> blob:none
 git rev-parse --is-shallow-repository       # -> true when depth-bounded
 ```
 
-Then confirm magus agrees about the diff, which is the thing you actually care about:
+Then confirm magus agrees about the diff, which is the thing you care about:
 
 ```sh
 magus doctor
