@@ -1,0 +1,5 @@
+extends: metric
+message: "Aim for about 75 words (it has %s)."
+level: suggestion
+formula: words
+condition: "> 75"

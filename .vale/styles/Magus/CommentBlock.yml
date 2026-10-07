@@ -1,0 +1,8 @@
+# The p99 of the repository's comment blocks, measured 2026-10-06 over 46664 blocks
+# (p50 25 words, p90 72). A block past it is a design note, not a comment.
+extends: occurrence
+message: "Keep a comment block under 150 words: say why, and move the rest to docs."
+level: error
+scope: paragraph
+max: 150
+token: '[^\s]+'

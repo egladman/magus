@@ -1,0 +1,8 @@
+# A subject past 72 bytes wraps in `git log --oneline` and most review tools.
+extends: existence
+message: "Keep the subject within 72 characters; aim for 50 to 70."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '\A# [^\n]{73,}'

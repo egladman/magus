@@ -1,0 +1,5 @@
+extends: metric
+message: "Keep the description within 150 words (it has %s)."
+level: error
+formula: words
+condition: "> 150"

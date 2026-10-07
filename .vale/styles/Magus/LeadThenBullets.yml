@@ -1,0 +1,29 @@
+# A description is one lead line, then `- ` bullets. An indented line continues the
+# bullet above it.
+extends: script
+message: "Write one lead line, then bullets: this line is neither."
+level: error
+scope: raw
+script: |
+  text := import("text")
+  matches := []
+  lines := text.split(scope, "\n")
+  start := 0
+  seen := 0
+  for line in lines {
+    end := start + len(line)
+    trimmed := text.trim_space(line)
+    if trimmed != "" {
+      seen += 1
+      bullet := text.has_prefix(trimmed, "- ") || text.has_prefix(trimmed, "* ")
+      indented := text.has_prefix(line, " ") || text.has_prefix(line, "\t")
+      if seen == 1 {
+        if bullet || text.has_prefix(trimmed, "#") {
+          matches = append(matches, {begin: start, end: end})
+        }
+      } else if !bullet && !(indented && seen > 2) {
+        matches = append(matches, {begin: start, end: end})
+      }
+    }
+    start = end + 1
+  }

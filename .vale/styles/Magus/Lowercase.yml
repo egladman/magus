@@ -1,0 +1,8 @@
+# An all-caps first word is an identifier (README, MGS1039) and passes.
+extends: existence
+message: "Open the subject in lowercase."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '\A# (?:[a-z]+(?:\([^)\n]*\))?!?: )?[A-Z][a-z]'

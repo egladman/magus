@@ -1,0 +1,7 @@
+extends: existence
+message: "A commit message is its subject alone: drop the body."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '\A# [^\n]*\n\s*\S'

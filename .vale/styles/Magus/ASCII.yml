@@ -1,0 +1,8 @@
+# Emoji, smart quotes and dashes all fall outside ASCII.
+extends: existence
+message: "Write plain ASCII: replace '%s'."
+level: error
+scope: raw
+nonword: true
+raw:
+  - '[^\x00-\x7F]'

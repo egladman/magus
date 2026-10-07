@@ -1,0 +1,18 @@
+extends: existence
+message: "Drop '%s': state the fact."
+level: error
+ignorecase: true
+tokens:
+  - note that
+  - please note
+  - it should be noted
+  - it is worth noting
+  - it's worth noting
+  - it is important to
+  - it's important to
+  - this function
+  - this method
+  - simply
+  - basically
+  - essentially
+  - needless to say
