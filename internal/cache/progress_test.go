@@ -95,7 +95,7 @@ func TestRunAsideIsAccountedLikeABatchStep(t *testing.T) {
 	assert.NotEmpty(t, results[0].Ref, "the event carries the output ref its log is stored under")
 	assert.Equal(t, journal.Event{
 		Ts: results[0].Ts, Inv: results[0].Inv, // the clock and the run's id
-		Project: "test/pkg", Target: "settle", Kind: journal.KindResult, Status: journal.StatusPass,
+		Project: "test/pkg", Target: "settle", Kind: journal.KindResult, Level: "info", Status: journal.StatusPass,
 		Ref: results[0].Ref, DurationMs: results[0].DurationMs, CacheKey: results[0].CacheKey,
 	}, results[0])
 }
