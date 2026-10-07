@@ -1,5 +1,5 @@
 // `golangci-lint custom` consumes the analyzers through libs/testlayout/.custom-gcl.yml;
-// the magus module imports only the prose package.
+// nothing in the magus module imports this module.
 
 import "magus";
 import "../../hack/magusfile/drift" as drift;

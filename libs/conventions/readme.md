@@ -74,10 +74,13 @@ string loops).
 
 `prose` is not an analyzer, and golangci-lint never loads it. It judges one
 symbol from a SCIP index: the doc comment, and the name of a function or
-method. The root module imports it and feeds it what the symbol indexes
-recorded, so a Go symbol and a TypeScript one meet the same rules, and a finding
-points at the declaration because an index records no position inside a doc.
-It imports only the standard library.
+method. Its rules are this repository's policy, not magus's: the magus module
+never imports `libs/conventions`. `cmd/judge-docs` runs them, fed by
+`hack/lint/symbol-docs-follow-prose-rules.buzz` with the symbols of
+`magus\symbols()` as JSON on stdin; it writes the findings as JSON on stdout. A Go
+symbol and a TypeScript one meet the same rules, and a finding points at the
+declaration because an index records no position inside a doc. `prose` imports
+only the standard library.
 
 | Rule               | Reports                                                        |
 | ------------------ | -------------------------------------------------------------- |
