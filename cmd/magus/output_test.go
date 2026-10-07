@@ -20,8 +20,7 @@ func TestResolveOutput(t *testing.T) {
 		t.Run("ok/"+input, func(t *testing.T) {
 			opts, err := ResolveOutput(input)
 			require.NoError(t, err)
-			assert.Equal(t, wantFmt, opts.Format)
-			assert.Equal(t, wantTmpl, opts.Template)
+			assert.Equal(t, OutputOptions{Format: wantFmt, Template: wantTmpl}, opts)
 		})
 	}
 
