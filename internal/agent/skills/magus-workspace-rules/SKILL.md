@@ -132,7 +132,7 @@ a local override.{{else}} A wrong denial is an upstream bug to report, not a loc
 To strengthen the guard for THIS workspace, declare `{{buzz "guard.shell"}}({...})`
 in the root magusfile (additive only).
 
-## Adapting a Buzz harness (no Magus source edits)
+## Adapting a Buzz harness (no magus source edits)
 
 A harness written as a Buzz spell is selected by an **import** in the root
 magusfile, then wired with `{{buzz "harness.provider"}}`. Magus does not own your

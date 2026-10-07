@@ -243,7 +243,7 @@ outside its own job, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Nest wherever a child has a genuinely separable area and
 enough context to partition it better than its parent.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
 
-## Seed the partition with Magus
+## Seed the partition with magus
 
 Choose the target that will validate the work. `ci` is the release gate, but any
 target accepted by `magus affected <target>` can be planned:
@@ -627,7 +627,7 @@ agent.
 To wait for a process you did not start to end, use your host's own wait or monitor
 tool: a shell loop holds your tool slot for the whole wait.
 
-### "How is it going" is a READ, never a message
+### "How is it going" is a read, never a message
 
 Never message a worker to find out how it is doing. The question costs it the
 turn it was in the middle of, and what comes back is its account of itself rather

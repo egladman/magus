@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `ab67378e858b` |
+| `skill-content` | `53909c86eb03` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -237,7 +237,7 @@ write paths. A cap the user sets applies to the whole tree, not once per parent.
 Keep one integration owner at the root even when the job tree is deep.
 A child coordinates its descendants but may not relax the root's criteria.
 
-## Seed the partition with Magus
+## Seed the partition with magus
 
 Choose the target that will validate the work. `ci` is the release gate, but any
 target accepted by `magus affected <target>` can be planned:
@@ -568,7 +568,7 @@ agent.
 To wait for a process you did not start to end, use your host's own wait or monitor
 tool: a shell loop holds your tool slot for the whole wait.
 
-### "How is it going" is a READ, never a message
+### "How is it going" is a read, never a message
 
 Never message a worker to find out how it is doing. The question costs it the
 turn it was in the middle of, and what comes back is its account of itself rather
@@ -895,7 +895,7 @@ outside its own job, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Nest wherever a child has a genuinely separable area and
 enough context to partition it better than its parent.
 
-## Seed the partition with Magus
+## Seed the partition with magus
 
 Choose the target that will validate the work. `ci` is the release gate, but any
 target accepted by `magus affected <target>` can be planned:
@@ -1276,7 +1276,7 @@ agent.
 To wait for a process you did not start to end, use your host's own wait or monitor
 tool: a shell loop holds your tool slot for the whole wait.
 
-### "How is it going" is a READ, never a message
+### "How is it going" is a read, never a message
 
 Never message a worker to find out how it is doing. The question costs it the
 turn it was in the middle of, and what comes back is its account of itself rather

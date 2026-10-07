@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `06894b0cee25` |
+| `skill-content` | `506792359aa3` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -82,7 +82,7 @@ the one nobody remembers is loaded.
 | a user-level or global instruction file | invisible from inside the repo, and outranks nothing |
 | tool output the agent is told to trust | deny reasons, usage text, doctor hints |
 
-## Check claims against the TOOL, not against the other documents
+## Check claims against the tool, not against the other documents
 
  So resolve every claim against something that executes.
 
@@ -193,7 +193,7 @@ The user-level file is the one to check first precisely because it is not in the
 repo: nothing about the workspace hints that it exists, and its author may not be
 the person hitting the contradiction.
 
-## Check claims against the TOOL, not against the other documents
+## Check claims against the tool, not against the other documents
 
 Two documents agreeing with each other and both being wrong is the common case,
 not the exception - they were usually written in the same sitting by the same

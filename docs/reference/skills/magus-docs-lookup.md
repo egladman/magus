@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `46d6f7420b0d` |
+| `skill-content` | `23f524bab3ea` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -80,7 +80,7 @@ Each result's id is `<path>#<anchor>`, a pointer to the one passage. Read that
 section, not the file it sits in. The index route
 below is for the PUBLISHED site, where there is no graph to ask.
 
-## FAST PATH: start from the index, do not guess URLs
+## Fast path: start from the index, do not guess URLs
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 
@@ -174,7 +174,7 @@ section, not the file it sits in. `project=<p>` scopes it, and `magus explain
 "docsection:<path>#<anchor>"` walks the page's outline from there. The index route
 below is for the PUBLISHED site, where there is no graph to ask.
 
-## FAST PATH: start from the index, do not guess URLs
+## Fast path: start from the index, do not guess URLs
 
 Two files at the docs root turn "find the right page" into a lookup, not a guess:
 

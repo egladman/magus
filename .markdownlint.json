@@ -1,10 +1,16 @@
 {
   "default": true,
+  "MD003": { "style": "atx" },
+  "MD004": { "style": "dash" },
   "MD012": false,
   "MD013": false,
-  "MD060": false,
   "MD024": { "siblings_only": true },
   "MD025": { "front_matter_title": "" },
+  "MD029": { "style": "ordered" },
   "MD033": false,
-  "MD036": false
+  "MD036": false,
+  "MD049": { "style": "underscore" },
+  "MD050": { "style": "asterisk" },
+  "MD054": { "full": false, "collapsed": false, "shortcut": false },
+  "MD060": false
 }

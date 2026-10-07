@@ -29,22 +29,22 @@ Envelope fields and the event's own fields sit at one level:
 {"schema":1,"type":"target.result","ts":1756312800000,"workspace":"/repo","inv":"inv1a2b3c","project":"cmd/magus","target":"build","status":"failed","cache_hit":false,"ref":"out267cbdc9baba","duration_ms":1200,"error":"exit status 2"}
 ```
 
-| field       | meaning                                                          |
-| ----------- | ---------------------------------------------------------------- |
-| `schema`    | envelope version; see [Compatibility](#compatibility)            |
-| `type`      | what kind of fact this is                                        |
-| `ts`        | unix milliseconds                                                |
+| field       | meaning                                                           |
+| ----------- | ----------------------------------------------------------------- |
+| `schema`    | envelope version; see [Compatibility](#compatibility)             |
+| `type`      | what kind of fact this is                                         |
+| `ts`        | unix milliseconds                                                 |
 | `workspace` | absolute repository root, so a subscriber can watch more than one |
-| `inv`       | groups every event of one invocation; absent outside a run       |
+| `inv`       | groups every event of one invocation; absent outside a run        |
 
 ## The types
 
-| type             | when                       | key fields                                                 |
-| ---------------- | -------------------------- | ---------------------------------------------------------- |
-| `run.started`    | an invocation opens        | `phase`, `command`, `trigger`, `magus_version`             |
-| `run.finished`   | it closes                  | `phase`, `status`                                          |
-| `target.result`  | one target finishes        | `project`, `target`, `status`, `cache_hit`, `ref`, `error` |
-| `target.output`  | a subprocess writes a line | `stream`, `text` - opt-in, see below                       |
+| type            | when                       | key fields                                                 |
+| --------------- | -------------------------- | ---------------------------------------------------------- |
+| `run.started`   | an invocation opens        | `phase`, `command`, `trigger`, `magus_version`             |
+| `run.finished`  | it closes                  | `phase`, `status`                                          |
+| `target.result` | one target finishes        | `project`, `target`, `status`, `cache_hit`, `ref`, `error` |
+| `target.output` | a subprocess writes a line | `stream`, `text` - opt-in, see below                       |
 
 Four types, and that is the whole taxonomy today. Diagnostics, file changes,
 attention requests and guard verdicts are all facts magus records somewhere, and
@@ -101,11 +101,11 @@ magus events --limit 1
 
 `--limit` also decides what a `--follow` subscriber sees on attach:
 
-| `--limit` | on attach                                    |
-| --------- | -------------------------------------------- |
-| `0`       | nothing; only what happens from now on       |
-| `N > 0`   | the last N invocations, then follow          |
-| `< 0`     | every retained invocation, then follow       |
+| `--limit` | on attach                              |
+| --------- | -------------------------------------- |
+| `0`       | nothing; only what happens from now on |
+| `N > 0`   | the last N invocations, then follow    |
+| `< 0`     | every retained invocation, then follow |
 
 A notifier wants `0`. A statusline wants `1`, so it has something to show before
 the next run starts.
@@ -179,7 +179,6 @@ with that.
 That loop is the whole contract. An editor plugin is the same thing plus a way
 to draw on a screen.
 
-
 ## Writing your own
 
 Spawn `magus events --follow`, buffer partial lines, decode each complete one,
@@ -203,7 +202,6 @@ chunks.
 For editing magusfiles and spells - completion, hover, signature help - see
 [Editor setup](../editor.md), which wires `magus buzz lsp`. The two are
 independent: the language server is edit time, this stream is run time.
-
 
 ## See also
 

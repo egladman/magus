@@ -79,7 +79,7 @@ the over-coupling this hierarchy exists to prevent - it forces every future
 caller to construct or stub the whole repository just to satisfy a signature
 that only reads `Root()` and `All()`.
 
-## The List / Evaluate / Classify axis
+## The `List` / `Evaluate` / `Classify` axis
 
 This is the SDK's organizing idea (`types/repository.go`'s `Inspector` doc
 comment states it directly): `List*` enumerates a DECLARATION, cheap, no

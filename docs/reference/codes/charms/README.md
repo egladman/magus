@@ -1,5 +1,5 @@
 ---
-title: charm diagnostics
+title: Charm diagnostics
 page_type: overview
 description: Landing page for MGS6xxx diagnostics that flag problems with how a charm's JSON Patch interacts with a target's command.
 tags: [charms, diagnostics, error codes, MGS6xxx, json-patch, describe, argv]

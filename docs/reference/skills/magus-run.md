@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `a78a9ab3a943` |
+| `skill-content` | `5f887bceff99` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -158,7 +158,7 @@ in a local Podman container, `magus buzz hack/remote/on-linux.buzz -- <command>`
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.
 
-### Never pipe OR redirect a magus command
+### Never pipe or redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
 or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are
@@ -381,7 +381,7 @@ truncating it after the fact:
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.
 
-### Never pipe OR redirect a magus command
+### Never pipe or redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
 or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are

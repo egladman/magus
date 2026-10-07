@@ -38,7 +38,7 @@ of its neighbours.
 MCP is always compiled in - there are no build tags. Test files use the SAME package
 as the code they test (`package status`, never `package status_test`).
 
-## Packages that mirror a ROUTE instead of a proto
+## Packages that mirror a route instead of a proto
 
 Some console data rides plain JSON `/api/v1/*` routes rather than a Connect service. Those
 handlers have no proto package to be named after, so they are named after the route namespace

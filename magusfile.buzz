@@ -2218,7 +2218,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "libs/scipbuzz/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
-                   ".golangci.yml", ".mockery.yaml", ".markdownlintignore", "dprint-base.json",
+                   ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".gitattributes", "dprint-base.json",
                    "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static", ".vale.ini",
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                    ".claude/skills/magus-skill-authoring/SKILL.md",

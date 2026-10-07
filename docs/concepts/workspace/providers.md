@@ -1,6 +1,5 @@
 ---
 title: Workspace providers
-aliases: [concepts/workspace-providers]
 description: Let a spell supply the workspace's project set by asking the tool that already owns it - nx, gradle, pnpm, cargo - so a repo needs no magusfile per project.
 tags:
   [
@@ -13,6 +12,7 @@ tags:
     monorepo,
     adoption,
   ]
+aliases: [concepts/workspace-providers]
 ---
 
 # Workspace providers

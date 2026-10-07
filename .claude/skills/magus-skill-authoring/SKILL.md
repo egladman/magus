@@ -143,7 +143,7 @@ this:
 Getting it wrong is a loud failure at install (a parse error for an unknown
 function, an execute error for an unknown field), never a silently mangled file.
 
-### Who the short form is FOR, and therefore what it cuts
+### Who the short form is for, and therefore what it cuts
 
 Short is not the beginner form. It is installed for the most capable readers -
 the models that can re-derive an imperative from the tool surface and do not need

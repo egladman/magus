@@ -63,7 +63,7 @@ magus promises that a magusfile which works today keeps working, and there is no
 plan for a 2.0. [docs/concepts/compatibility.md](https://github.com/egladman/magus/blob/main/docs/concepts/compatibility.md)
 is the promise itself; this is how to work inside it.
 
-### MCP is an adapter, not another Magus API
+### MCP is an adapter, not another magus API
 
 The [MCP tool inventory and boundary](https://github.com/egladman/magus/blob/main/docs/guides/integrations/mcp.md#the-boundary-and-the-fallback)
 lists the currently exposed tools and their CLI fallbacks. Before adding one,

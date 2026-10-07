@@ -137,7 +137,7 @@ truncating it after the fact:
   bare identifiers one per line, `template=` to project exactly the fields you
   need and nothing else.{{end}}
 
-### Never pipe OR redirect a magus command
+### Never pipe or redirect a magus command
 
 **Do NOT pipe magus output through `grep`, `head`, `tail`, `awk`, `sed`, `cut`,
 or `wc`, and do NOT redirect it with `> file`, `>> file`, or `2>&1`.** Both are

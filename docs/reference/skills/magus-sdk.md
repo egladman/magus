@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13277
-skill_short_bytes: 12840
+skill_full_bytes: 13283
+skill_short_bytes: 12846
 ---
 
 # magus-sdk
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `45c92b553f5b` |
+| `skill-content` | `082f7f468b0b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -131,7 +131,7 @@ the over-coupling this hierarchy exists to prevent - it forces every future
 caller to construct or stub the whole repository just to satisfy a signature
 that only reads `Root()` and `All()`.
 
-## The List / Evaluate / Classify axis
+## The `List` / `Evaluate` / `Classify` axis
 
 This is the SDK's organizing idea (`types/repository.go`'s `Inspector` doc
 comment states it directly): `List*` enumerates a DECLARATION, cheap, no
@@ -369,7 +369,7 @@ the over-coupling this hierarchy exists to prevent - it forces every future
 caller to construct or stub the whole repository just to satisfy a signature
 that only reads `Root()` and `All()`.
 
-## The List / Evaluate / Classify axis
+## The `List` / `Evaluate` / `Classify` axis
 
 This is the SDK's organizing idea (`types/repository.go`'s `Inspector` doc
 comment states it directly): `List*` enumerates a DECLARATION, cheap, no

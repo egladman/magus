@@ -19,7 +19,7 @@ two words magus overloads, _op_ and _Target_.
 > (`internal/report`). The Operation-layer rows below are kept as the conceptual
 > model, marked **(not built)**.
 
-## What an Operation is
+## What an operation is
 
 An **Operation** (op) is one tool-native action a [Spell](spells.md) exposes,
 named after the CLI command it runs: `go-build`, `go-vet`, `golangci-lint`,
@@ -92,7 +92,7 @@ Operation's argv (_in what manner_ it runs), it is not a layer of its own.
   was prototyped and removed as speculative (no consumer, and it misattributed ops
   across the cross-project boundary).
 
-## Disambiguating "op" and "Target"
+## Disambiguating "op" and "target"
 
 magus overloads two words. Formalizing **Operation** fixes the first and exposes a
 latent misnaming in the second.

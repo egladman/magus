@@ -64,7 +64,7 @@ A spell may implement a **subset**. A host with no comment API can still take a 
 so a missing op means that provider lacks the capability, not that the spell is broken. See
 [Authoring spells](../guides/authoring-spells.md) for the shape of a provider op.
 
-### GitHub, including Enterprise
+### GitHub, including GitHub Enterprise
 
 `spells/github/review` talks to the REST API over plain HTTP with a token; no `gh` binary is
 involved. It reads `GITHUB_TOKEN` through whatever [secret provider](secrets.md) the

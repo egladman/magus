@@ -18,7 +18,7 @@ import "os"  in a magusfile
 ```
 
 - **Layered onto the same bare names.** magus registers `gopherbuzz/std` first,
-  then overlays its host methods onto the same modules (`os`, `fs`, `crypto`, …),
+  then overlays its host methods onto the same modules (`os`, `fs`, `crypto`, ...),
   so `import "os"` carries both. magus wins on the few shared keys because its
   forms are sandbox- and context-aware (the wiring lives in
   `internal/interp/bindings`, which is shared by the magusfile and spell paths).

@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `0a17f9fa21ed` |
+| `skill-content` | `a2c92dcf9f49` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -168,7 +168,7 @@ rule. A wrong denial is an upstream bug to report, not a local override.
 To strengthen the guard for THIS workspace, declare `magus\guard.shell({...})`
 in the root magusfile (additive only).
 
-## Adapting a Buzz harness (no Magus source edits)
+## Adapting a Buzz harness (no magus source edits)
 
 A harness written as a Buzz spell is selected by an **import** in the root
 magusfile, then wired with `magus\harness.provider`. Magus does not own your
@@ -378,7 +378,7 @@ a local override.
 To strengthen the guard for THIS workspace, declare `magus\guard.shell({...})`
 in the root magusfile (additive only).
 
-## Adapting a Buzz harness (no Magus source edits)
+## Adapting a Buzz harness (no magus source edits)
 
 A harness written as a Buzz spell is selected by an **import** in the root
 magusfile, then wired with `magus\harness.provider`. Magus does not own your

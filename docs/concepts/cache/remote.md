@@ -91,7 +91,7 @@ during a run. Bind **one** provider. A non-empty `cache.remote.trusted_keys` is
 **required** alongside it: a remote provider with no trust set fails at load (see
 the next section). Generate a key with `magus config cache key generate`.
 
-### GitHub Actions Cache
+### GitHub Actions cache
 
 The `github-actions` spell ([`spells/github/actions`](../../../spells/github/actions/spell.buzz))
 stores artifacts in the GitHub Actions Cache, over its v2 (Twirp) API.

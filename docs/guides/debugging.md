@@ -14,7 +14,7 @@ tags:
   ]
 ---
 
-# Debugging
+# Debugging magusfiles
 
 Magus has two entry points into an interactive debugging REPL:
 

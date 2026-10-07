@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `108` |
+| `agent-skill-version` | `109` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `15da4217d5f6` |
+| `skill-content` | `93ac63e10aec` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -81,7 +81,7 @@ magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(ar
  Weight affinity most: changing
 together with no declared edge is back-door coupling.
 
-## Then survey the opposite: what is too THIN to justify a boundary
+## Then survey the opposite: what is too thin to justify a boundary
 
 Every lens above finds something too big, too central, or too churned. None find
 the inverse, and over-abstraction is the more common failure in a young codebase.
@@ -219,7 +219,7 @@ magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(ar
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.
 
-## Then survey the opposite: what is too THIN to justify a boundary
+## Then survey the opposite: what is too thin to justify a boundary
 
 Every lens above finds something too big, too central, or too churned. None find
 the inverse, and over-abstraction is the more common failure in a young codebase.

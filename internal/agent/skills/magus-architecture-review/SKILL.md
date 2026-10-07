@@ -28,7 +28,7 @@ together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.{{else}} Weight affinity most: changing
 together with no declared edge is back-door coupling.{{end}}
 
-## Then survey the opposite: what is too THIN to justify a boundary
+## Then survey the opposite: what is too thin to justify a boundary
 
 Every lens above finds something too big, too central, or too churned. None find
 the inverse, and over-abstraction is the more common failure in a young codebase.

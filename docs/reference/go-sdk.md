@@ -40,7 +40,7 @@ replace github.com/egladman/magus/libs/diagnostics => /path/to/magus/libs/diagno
 
 Everything below assumes that step is done.
 
-## Open vs Inspect
+## `Open` vs `Inspect`
 
 Two constructors discover a workspace and return a handle to it. Both walk
 up from a root directory, load `magus.yaml`, discover projects, and evaluate
@@ -136,7 +136,7 @@ be what you have on hand forces every future caller - including a test - to
 construct or stub the whole repository just to satisfy a signature that only
 calls `Root()` and `All()`.
 
-## The List / Evaluate / Classify axis
+## The `List` / `Evaluate` / `Classify` axis
 
 This is the organizing idea of the `Inspector` interface. `List*` enumerates
 a declaration - cheap, no resolution. `Evaluate*` resolves one - spells
