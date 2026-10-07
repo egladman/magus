@@ -217,10 +217,9 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 	}
 	types.Declaration{ID: "adj/store", Criteria: "new"}.Apply(&stored)
 
-	assert.Equal(t, "new", stored.Criteria)
-	assert.Empty(t, stored.Model, "an omitted field is cleared")
-	assert.Empty(t, stored.WritePaths)
-	assert.Equal(t, int64(42), stored.Registered, "what the store computed is not the declaration's to drop")
+	// The declaration's own fields are replaced (the omitted Model and WritePaths cleared), and
+	// what the store computed is not the declaration's to drop.
+	assert.Equal(t, types.Job{ID: "adj/store", Criteria: "new", Registered: 42}, stored)
 }
 
 // The embedded schema is generated, so a field on one side and not the other means the

@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,8 +132,19 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	Judge(ctx, deps, Request{Input: "git stash", Host: "claude-code", Session: "s1"})
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.Len(t, commands, 1)
-	assert.Equal(t, "d9", commands[0].PolicyDigest)
-	assert.Equal(t, decidedByBuiltin, commands[0].DecidedBy)
+	// The clock, the stamped account, the workspace and the content-addressed fields are
+	// cleared first, so a field added to the event cannot be dropped here unseen.
+	e := commands[0]
+	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
+	e.Preview, e.VerdictRef = "", ""
+	assert.Equal(t, trail.Event{
+		Kind:         trail.KindAgentCommand,
+		Action:       "shell.command",
+		Outcome:      trail.OutcomeOK,
+		PolicyDigest: "d9",
+		DecidedBy:    decidedByBuiltin,
+	}, e)
 
 	deps.ShellRules = []WorkspaceShellRule{{Name: "no-curl", Decision: "deny", Program: "curl", Reason: "not here"}}
 	Judge(ctx, deps, Request{Input: "curl https://example.com", Host: "claude-code", Session: "s1"})

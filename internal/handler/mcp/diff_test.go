@@ -153,8 +153,19 @@ func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
 
 	sess := resp.Data.(*types.DiffReview)
 	require.Len(t, sess.Comments, 1)
-	assert.Equal(t, types.DiffAuthorAgent, sess.Comments[0].Author, "author is stamped from the transport")
-	assert.Equal(t, "Eli Gladman (human)", sess.Comments[0].AgentName, "the label is kept, as attribution only")
+	// The id, the stamped origin, the hunk and the anchor are computed, so they are copied across.
+	c := sess.Comments[0]
+	assert.Equal(t, types.DiffComment{
+		ID:        c.ID,
+		Path:      "a.go",
+		Hunk:      c.Hunk,
+		Author:    types.DiffAuthorAgent, // stamped from the transport
+		Origin:    c.Origin,
+		AgentName: "Eli Gladman (human)", // the label is kept, as attribution only
+		Body:      "hi",
+		Anchor:    c.Anchor,
+		Rung:      c.Rung,
+	}, c)
 }
 
 // The projection parameter is additive: a caller that never sends it, sends it empty, or

@@ -64,9 +64,14 @@ func TestDiffRunRefusesAnUndeclaredTarget(t *testing.T) {
 
 	assert.Empty(t, submitted, "an undeclared target must not be submitted")
 	assert.Contains(t, out.Undeclared, "sh")
-	assert.Equal(t, []string{"test", "lint"}, out.Available,
-		"naming what IS declared is what makes the refusal actionable")
-	assert.Equal(t, "unknown", out.State)
+	// The refusal's wording is checked above, so it is copied across.
+	assert.Equal(t, diffRunResponse{
+		Target:     "sh",
+		Project:    "libs/authkit",
+		State:      "unknown",
+		Undeclared: out.Undeclared,
+		Available:  []string{"test", "lint"},
+	}, out, "naming what IS declared is what makes the refusal actionable")
 }
 
 // TestDiffRunRefusesAnUnknownProject covers the other half of the pair: a project the workspace
@@ -134,10 +139,14 @@ func TestDiffRunReadsTheLastVerdictFromTheTrail(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 
 	assert.Empty(t, submitted, "a GET reports, it never starts work")
-	assert.Equal(t, "failed", out.State)
-	assert.Equal(t, "2 tests failed", out.Error)
-	assert.Equal(t, int64(4200), out.DurationMs)
-	assert.Equal(t, int64(5200), out.FinishedMs)
+	assert.Equal(t, diffRunResponse{
+		Target:     "test",
+		Project:    "libs/authkit",
+		State:      "failed",
+		Error:      "2 tests failed",
+		DurationMs: 4200,
+		FinishedMs: 5200,
+	}, out)
 }
 
 // TestDiffRunReportsNoVerdictAsUnknown keeps "nobody has run this" distinct from "this failed".

@@ -33,8 +33,7 @@ func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "value-from-spell", v.Reveal())
 
-	assert.Equal(t, "resolve_secret", d.got.Target)
-	assert.Equal(t, map[string]any{"ref": "Private/DockerHub/token"}, d.got.Params,
+	assert.Equal(t, spells.InvokeRequest{Target: "resolve_secret", Params: map[string]any{"ref": "Private/DockerHub/token"}}, d.got,
 		"the reference is passed through verbatim; magus never parses it")
 }
 

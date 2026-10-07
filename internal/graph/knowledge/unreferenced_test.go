@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/types"
 )
@@ -31,9 +30,11 @@ func sym(key, file string) types.KnowledgeSymbol {
 func TestUnreferencedFindsUnnamedSymbol(t *testing.T) {
 	g := unrefGraph(t, []types.KnowledgeSymbol{sym("x Lonely().", "pkg/a/a.go")})
 	got := g.Unreferenced()
-	require.Len(t, got, 1)
-	assert.Equal(t, "symbol:x Lonely().", got[0].ID)
-	assert.Equal(t, "pkg/a/a.go:1", got[0].Source)
+	assert.Equal(t, []types.UnreferencedEntry{{
+		ID:     "symbol:x Lonely().",
+		Label:  "x Lonely().",
+		Source: "pkg/a/a.go:1",
+	}}, got)
 }
 
 // A call from ANOTHER file makes it referenced.
@@ -116,9 +117,13 @@ func TestUnreferencedCarriesKindAndLanguage(t *testing.T) {
 	s.SymbolKind = "Struct"
 	s.Language = "go"
 	got := unrefOne(t, s)
-	require.Len(t, got, 1)
-	assert.Equal(t, "Struct", got[0].Kind)
-	assert.Equal(t, "go", got[0].Language)
+	assert.Equal(t, []types.UnreferencedEntry{{
+		ID:       "symbol:x Thing#",
+		Label:    "x Thing#",
+		Source:   "pkg/a/a.go:1",
+		Kind:     "Struct",
+		Language: "go",
+	}}, got)
 }
 
 func unrefOne(t *testing.T, s types.KnowledgeSymbol) []types.UnreferencedEntry {

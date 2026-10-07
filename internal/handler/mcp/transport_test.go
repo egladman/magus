@@ -177,10 +177,26 @@ func TestServeStdioRoundTrip(t *testing.T) {
 	events, err := trail.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, hint.ToolConfig.String(), events[0].Action)
-	assert.Equal(t, types.CredentialStdio, events[0].Credential)
-	assert.Equal(t, types.EntryPointMCP, events[0].EntryPoint)
-	assert.Equal(t, "stdio-test/1.0", events[0].Host)
+	ev := events[0]
+	// The clock, the OS account, the response preview, the content-addressed refs and the sizes
+	// are copied across; this test pins who called and what.
+	assert.Equal(t, trail.Event{
+		Ts:   ev.Ts,
+		Kind: trail.KindMCPToolCall,
+		Origin: types.Origin{
+			User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "stdio-test/1.0", Credential: types.CredentialStdio,
+		},
+		Workspace:     ev.Workspace,
+		UserAgent:     ev.UserAgent,
+		Action:        hint.ToolConfig.String(),
+		Outcome:       trail.OutcomeOK,
+		DurationMs:    ev.DurationMs,
+		RequestRef:    ev.RequestRef,
+		ResponseRef:   ev.ResponseRef,
+		Preview:       ev.Preview,
+		RequestBytes:  ev.RequestBytes,
+		ResponseBytes: ev.ResponseBytes,
+	}, ev)
 }
 
 // Cancelling the context stops the server without an error, the way a signal does.

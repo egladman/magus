@@ -83,8 +83,8 @@ func TestGradeHookWiringWriteDeniesAnAgentAttributedSession(t *testing.T) {
 func TestGradeHookWiringWriteAdvisesAPersonsOwnSession(t *testing.T) {
 	g := gradeHookWiringWrite("", false, ".cursor/hooks.json")
 
-	require.Equal(t, "advise", g.Decision)
-	assert.Equal(t, advisoryHookWiring, g.Kind, "a standing fact is said once per session")
+	require.Equal(t, writeGrade{Decision: "advise", Context: g.Context, Kind: advisoryHookWiring}, g,
+		"a standing fact is said once per session")
 	assert.Contains(t, g.Context, ".cursor/hooks.json")
 	assert.Contains(t, g.Context, "next session start", "the advisory must say when the edit takes effect")
 

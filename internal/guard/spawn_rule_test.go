@@ -151,8 +151,7 @@ func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
 	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denySpawnUnbriefed), v.Rule, "the built-in reason stands")
+	assert.Equal(t, verdictWithRule("deny", string(denySpawnUnbriefed)), unworded(v), "the built-in reason stands")
 	assert.Empty(t, probe.asked)
 }
 
@@ -177,8 +176,7 @@ func TestSpawnRuleFailureFailsOpen(t *testing.T) {
 	deps := Dependencies{SpawnRule: probe.rule()}
 
 	first := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", first.Decision)
-	assert.Equal(t, string(advisorySpawnRuleFailed), first.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisorySpawnRuleFailed)), unworded(first))
 	assert.Contains(t, first.Context, "boom")
 	assert.Contains(t, first.Context, "Only the built-in rules applied to this spawn.")
 
@@ -377,8 +375,7 @@ func TestWorkspaceAdviseJoinsABuiltInAdvise(t *testing.T) {
 
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAdvise, Reason: "Add a Done when section."}}
 	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(advisorySharedCheckout), v.Rule, "the built-in advice keeps its rule")
+	assert.Equal(t, verdictWithRule("advise", string(advisorySharedCheckout)), unworded(v), "the built-in advice keeps its rule")
 	assert.Contains(t, v.Context, "Add a Done when section.")
 }
 
@@ -443,9 +440,14 @@ func TestSpawnRuleSeesTheHostsSubagentID(t *testing.T) {
 	Judge(ctx, deps, Request{Input: unseen, Host: "claude-code"})
 	Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
-	assert.Equal(t, "never-seen", probe.asked[0].Agent)
-	assert.Empty(t, probe.asked[0].Parent)
-	assert.Equal(t, probe.asked[1].Session, probe.asked[0].Session, "the subagent reports the main session's id")
+	assert.Equal(t, types.SpawnRequest{
+		Kind:    types.SpawnKindSpawn,
+		Host:    "claude-code",
+		Session: probe.asked[1].Session,
+		Prompt:  "x",
+		Agent:   "never-seen",
+		Role:    types.AgentRoleRoot,
+	}, probe.asked[0], "the subagent reports the main session's id; magus never saw it spawned, so no Parent")
 	assert.Empty(t, probe.asked[1].Agent, "the main agent carries no subagent id")
 }
 
@@ -829,8 +831,23 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	require.Len(t, rows, 1)
 	abs, err := filepath.Abs(workerRoot)
 	require.NoError(t, err)
-	assert.Equal(t, abs, rows[0].CheckoutRoot)
-	assert.Equal(t, "9c0ffee", rows[0].ReportedBase)
+	// The store stamps the schema, the times, who registered and the holder; they are copied
+	// across so the rest of the row is compared whole.
+	got := rows[0]
+	assert.Equal(t, types.Job{
+		Schema:       got.Schema,
+		ID:           row.ID,
+		WritePaths:   row.WritePaths,
+		State:        types.StateRunning,
+		Holder:       got.Holder,
+		ReportedBase: "9c0ffee",
+		BaseVerdict:  got.BaseVerdict,
+		RegisteredBy: got.RegisteredBy,
+		Registered:   got.Registered,
+		CheckoutRoot: abs,
+		Created:      got.Created,
+		Updated:      got.Updated,
+	}, got)
 }
 
 // The command and path glue forward one field of the event, not the envelope, so the
@@ -1160,8 +1177,7 @@ func TestApprovedRuleAppliesAfterTheWorkingTreeDeletesIt(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: m.ApprovedSpawnRule},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, "Name a model.", v.Reason)
+	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: "Name a model.", Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 }
 
 // Resolving the approved rule is the one part of a spawn an agent can slow down, so running
@@ -1186,8 +1202,7 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	ctx, cacheDir := spawnFixture(t)
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: slow},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, approvedRuleTimedOut(seamSpawn), v.Reason)
+	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: approvedRuleTimedOut(seamSpawn), Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)

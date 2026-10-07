@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -117,8 +118,12 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 	for _, command := range []string{"go run ./cmd/magus", "go vet ./...", "go test ./..."} {
 		v := judgeOwnBuild(fresh, command)
 		require.Len(t, v.Next, 1, command)
-		assert.Equal(t, bootstrapArgv, v.Next[0].Argv, command)
-		assert.Equal(t, bootstrapCommand, v.Next[0].Run, command)
+		assert.Equal(t, hint.Next{
+			ID:   hint.DenyRemedyPrefix + string(denyRuleRawTool),
+			Run:  bootstrapCommand,
+			Argv: bootstrapArgv,
+			Why:  bootstrapWhy,
+		}, v.Next[0], command)
 		assert.Equal(t, Evaluate(testDependencies(), command), judgeOwnBuild(built, command), command)
 	}
 }
@@ -133,8 +138,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 
 	v := Judge(ctx, testDependencies(), Request{Input: envelope})
 
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(denyRuleRawTool), v.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
 	assert.Contains(t, v.Context, "Use ./magus from then on")
 }
 
@@ -244,7 +248,6 @@ func TestJudgeAllowsTheRelinkWhileTheWorkspaceCannotLoad(t *testing.T) {
 
 	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
 
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(denyRuleRawTool), v.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
 	assert.Contains(t, v.Context, "cannot load its own sources")
 }

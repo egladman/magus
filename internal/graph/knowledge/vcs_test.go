@@ -58,14 +58,17 @@ func TestAssembleVCS(t *testing.T) {
 	s := assembleVCS(entries, known, true)
 	require.Len(t, s.Nodes, 2, "gone.buzz has no file node, so it is dropped")
 	// Sorted by ID: file:a.buzz before file:b.buzz.
-	assert.Equal(t, fileID("a.buzz"), s.Nodes[0].ID)
-	assert.Equal(t, types.KindFile, s.Nodes[0].Kind)
-	assert.Equal(t, map[string]string{
-		"vcs_last_commit":   "cafe",
-		"vcs_last_modified": "2020-09-13",
-		"vcs_last_author":   "Ada",
-		"vcs_commits":       "1",
-	}, s.Nodes[0].Attrs)
+	assert.Equal(t, types.KnowledgeNode{
+		ID:    fileID("a.buzz"),
+		Kind:  types.KindFile,
+		Label: "a.buzz",
+		Attrs: map[string]string{
+			"vcs_last_commit":   "cafe",
+			"vcs_last_modified": "2020-09-13",
+			"vcs_last_author":   "Ada",
+			"vcs_commits":       "1",
+		},
+	}, s.Nodes[0])
 	assert.Equal(t, fileID("b.buzz"), s.Nodes[1].ID)
 	assert.Equal(t, "3", s.Nodes[1].Attrs["vcs_commits"])
 	assert.Empty(t, s.Edges, "@vcs only folds attrs, it adds no edges")

@@ -122,8 +122,7 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 			recordLoadedPolicy(t, cacheDir)
 
 			v := Judge(ctx, unloadedDeps(), Request{Input: line, Host: "claude-code", Session: "s1"})
-			assert.Equal(t, "advise", v.Decision)
-			assert.Equal(t, string(advisoryCommandRuleFailed), v.Rule)
+			assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(v))
 			assert.Contains(t, v.Context, note)
 		})
 	}
@@ -145,8 +144,7 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 func TestLoadFailureWithoutARecordPasses(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	v := Judge(ctx, unloadedDeps(), Request{Input: "gh pr merge 412 --admin", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(advisoryCommandRuleFailed), v.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(v))
 }
 
 // A record that registered no command rule protects no command.
@@ -200,8 +198,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	assert.Equal(t, staleFailures, readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
 
 	cont := Judge(ctx, unloadedDeps(), Request{Input: claudeContinueEnvelope, Host: "claude-code"})
-	assert.Equal(t, "advise", cont.Decision)
-	assert.Equal(t, string(advisorySpawnRuleFailed), cont.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisorySpawnRuleFailed)), unworded(cont))
 }
 
 // No file write is gated: the write rules are house style, and the fix may need an edit.
@@ -209,8 +206,7 @@ func TestLoadFailurePassesAWriteWithTheNote(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 	v := Judge(ctx, unloadedDeps(), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(advisoryWriteRuleFailed), v.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisoryWriteRuleFailed)), unworded(v))
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }
 

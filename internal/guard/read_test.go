@@ -284,14 +284,20 @@ func TestGoFileMapSpans(t *testing.T) {
 	m, ok := goFileMap(deps, root+"/s.go", "s.go")
 
 	require.True(t, ok)
-	assert.Equal(t, 16, m.lines)
-	assert.Equal(t, []mapEntry{
-		{name: "a", symbol: "a", first: 4, last: 4},
-		{name: "b", symbol: "b", first: 5, last: 6},
-		{name: "F", symbol: "F", first: 11, last: 13},
-		{name: "S.M", first: 15, last: 15},
-		{name: "S", symbol: "S", first: 16, last: 16},
-	}, m.entries)
+	assert.Equal(t, fileMap{
+		rel:   "s.go",
+		lines: 16,
+		entries: []mapEntry{
+			{name: "a", symbol: "a", first: 4, last: 4},
+			{name: "b", symbol: "b", first: 5, last: 6},
+			{name: "F", symbol: "F", first: 11, last: 13},
+			{name: "S.M", first: 15, last: 15},
+			{name: "S", symbol: "S", first: 16, last: 16},
+		},
+		indexed: true,
+		list:    hint.Explain.With(types.KindFile + ":s.go"),
+		noun:    "declaration",
+	}, m)
 }
 
 // TestReadVerdictResolvesFromTheCallCwd pins that a relative read resolves from the

@@ -100,10 +100,11 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 		require.Len(t, tel.calls, 1)
 		got := tel.calls[0]
-		assert.Equal(t, "client", got.Tool)
-		assert.Equal(t, "ok", got.Outcome)
+		// The request size and the wall-clock time are bounded below rather than pinned.
+		assert.Equal(t, observability.MCPCall{
+			Tool: "client", Outcome: "ok", InputBytes: got.InputBytes, OutputBytes: int64(len(out)), Duration: got.Duration,
+		}, got)
 		assert.Positive(t, got.InputBytes)
-		assert.Equal(t, int64(len(out)), got.OutputBytes)
 		assert.GreaterOrEqual(t, got.Duration, 0.0)
 	})
 
@@ -119,10 +120,11 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 		require.Len(t, tel.calls, 1)
 		got := tel.calls[0]
-		assert.Equal(t, "client", got.Tool)
-		assert.Equal(t, "error", got.Outcome)
+		// The request size and the wall-clock time are not pinned; a nil result adds no output.
+		assert.Equal(t, observability.MCPCall{
+			Tool: "client", Outcome: "error", InputBytes: got.InputBytes, Duration: got.Duration,
+		}, got)
 		assert.Positive(t, got.InputBytes)
-		assert.Zero(t, got.OutputBytes)
 	})
 
 	t.Run("nil telemetry is a no-op", func(t *testing.T) {
@@ -158,16 +160,25 @@ func TestWrapCapturesExchange(t *testing.T) {
 	require.Len(t, events, 1)
 	ev := events[0]
 
-	assert.Equal(t, trail.KindMCPToolCall, ev.Kind)
-	assert.Equal(t, "test-agent", ev.Host, "the MCP client's own name is its host label")
-	assert.Equal(t, types.EntryPointMCP, ev.EntryPoint)
-	assert.Equal(t, "claude-code/1.2.3", ev.UserAgent, "the session User-Agent is recorded on the event")
-	assert.Equal(t, "client", ev.Action)
-	assert.Equal(t, trail.OutcomeOK, ev.Outcome)
-	assert.Equal(t, int64(len(out)), ev.ResponseBytes)
-	assert.Equal(t, out, ev.Preview) // a short response: the preview is the whole body
+	// The clock, the OS account, the content-addressed refs and the request size are copied
+	// across; the refs are required and resolved below.
 	require.NotEmpty(t, ev.ResponseRef)
 	require.NotEmpty(t, ev.RequestRef) // the request arguments were captured too
+	assert.Equal(t, trail.Event{
+		Ts:   ev.Ts,
+		Kind: trail.KindMCPToolCall,
+		// The MCP client's own name is its host label.
+		Origin:        types.Origin{User: ev.User, UID: ev.UID, EntryPoint: types.EntryPointMCP, Host: "test-agent"},
+		UserAgent:     "claude-code/1.2.3", // the session User-Agent is recorded on the event
+		Action:        "client",
+		Outcome:       trail.OutcomeOK,
+		DurationMs:    ev.DurationMs,
+		RequestRef:    ev.RequestRef,
+		ResponseRef:   ev.ResponseRef,
+		Preview:       out, // a short response: the preview is the whole body
+		RequestBytes:  ev.RequestBytes,
+		ResponseBytes: int64(len(out)),
+	}, ev)
 
 	// Each ref resolves back to the exact bytes the agent exchanged.
 	resp, err := trail.ReadBlob(dir, ev.ResponseRef)

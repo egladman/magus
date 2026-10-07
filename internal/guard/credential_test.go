@@ -125,8 +125,7 @@ func TestJudgeDeniesTheTokenStateOnEverySurface(t *testing.T) {
 		`{"hook_event_name":"PreToolUse","tool_name":"Edit","cwd":"` + at.workspace + `","tool_input":{"file_path":"` + op + `"}}`,
 	} {
 		v := Judge(ctx, testDependencies(), Request{Input: envelope})
-		assert.Equal(t, "deny", v.Decision, envelope)
-		assert.Equal(t, string(denyRuleTokenState), v.Rule, envelope)
+		assert.Equal(t, verdictWithRule("deny", string(denyRuleTokenState)), unworded(v), envelope)
 		assert.Contains(t, v.Reason, "token", envelope)
 	}
 }

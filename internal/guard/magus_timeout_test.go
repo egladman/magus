@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,8 +44,8 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 		require.NotEmpty(t, v.Deny, command)
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
-		assert.Equal(t, next, v.Next[0].Run, command)
-		assert.Equal(t, "deny-magus-timeout", v.Next[0].ID)
+		// Argv and Why are the remedy's tokenized form and its prose, which this test does not pin.
+		assert.Equal(t, hint.Next{ID: "deny-magus-timeout", Run: next, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], command)
 		for _, flag := range []string{"--timeout <dur>", "--target-timeout <dur>", "--stall-timeout <dur>"} {
 			assert.Contains(t, v.Deny, flag, command)
 		}

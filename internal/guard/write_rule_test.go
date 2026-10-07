@@ -105,8 +105,7 @@ func TestWriteRuleStrengthensOnly(t *testing.T) {
 	deps := Dependencies{WriteRule: probe.rule()}
 
 	v := Judge(ctx, deps, Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code"})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, workspaceWriteRule, v.Rule)
+	assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(v))
 	assert.Contains(t, v.Reason, "Add a fragment instead.")
 	writes := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.NotEmpty(t, writes)

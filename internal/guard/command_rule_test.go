@@ -70,10 +70,17 @@ func TestCommandRuleSeesTheHostsSubagentID(t *testing.T) {
 	Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: claudeBashEnvelope, Host: "claude-code"})
 	require.Len(t, probe.asked, 2)
 	sub, main := probe.asked[0], probe.asked[1]
-	assert.Equal(t, "a534fcfe", sub.Agent)
-	assert.Equal(t, main.Session, sub.Session, "the subagent reports the main session's id")
-	assert.Empty(t, sub.Parent, "magus never saw it spawned")
-	assert.Nil(t, sub.Lease)
+	assert.Equal(t, types.CommandRequest{
+		Host:      "claude-code",
+		Session:   main.Session,
+		Command:   "git push origin HEAD:x",
+		Commands:  []types.CommandInvocation{{Program: "git", Args: []string{"push", "origin", "HEAD:x"}}},
+		Agent:     "a534fcfe",
+		Role:      types.AgentRoleRoot,
+		Checkout:  sub.Checkout, // read from the fixture's own checkout, which this test does not shape
+		Dir:       sub.Dir,
+		Workspace: sub.Workspace,
+	}, sub, "the subagent reports the main session's id; magus never saw it spawned, so no Parent or Lease")
 	assert.Empty(t, main.Agent, "the main agent carries no subagent id")
 }
 
@@ -203,8 +210,7 @@ func TestCommandRuleStrengthensOnly(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Ask for the board once."}}
 		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "gh run watch 1", Host: "claude-code"})
-		assert.Equal(t, "deny", v.Decision)
-		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
 		assert.Contains(t, v.Reason, "Ask for the board once.")
 
 		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
@@ -234,8 +240,7 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	deps := Dependencies{CommandRule: probe.rule()}
 
 	first := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "advise", first.Decision)
-	assert.Equal(t, string(advisoryCommandRuleFailed), first.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(first))
 	assert.Contains(t, first.Context, "The working tree's magus\\guard.command rule judged nothing: the rule failed: magus\\guard.command: the rule raised: boom")
 	assert.Contains(t, first.Context, "Only the built-in rules applied to this command.")
 

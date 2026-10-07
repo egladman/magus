@@ -26,11 +26,17 @@ func TestAssembleSymbols(t *testing.T) {
 
 	n, ok := nodeByID(out, "symbol:example.com/foo Bar#")
 	require.True(t, ok)
-	assert.Equal(t, types.KindSymbol, n.Kind)
-	assert.Equal(t, "Bar", n.Label)
-	assert.Equal(t, "go", n.Attrs["language"])
-	assert.Equal(t, "Type", n.Attrs["symbol_kind"])
-	assert.Equal(t, "pkg/foo/foo.go:11", n.Source)
+	assert.Equal(t, types.KnowledgeNode{
+		ID:     "symbol:example.com/foo Bar#",
+		Kind:   types.KindSymbol,
+		Label:  "Bar",
+		Source: "pkg/foo/foo.go:11",
+		Attrs: map[string]string{
+			attrLanguage:   "go",
+			attrSymbolKind: "Type",
+			attrMoniker:    "scip-go gomod example.com/foo v1 Bar#",
+		},
+	}, n)
 
 	// A defining file gets a defines edge; a using file gets a references edge whose
 	// provenance carries the per-file count and capped lines.
@@ -128,19 +134,22 @@ func TestGraphRefs(t *testing.T) {
 
 	out, ok := g.Refs("symbol:example.com/foo Bar#")
 	require.True(t, ok)
-	assert.Equal(t, "Bar", out.Label)
-	require.Len(t, out.Defs, 1)
-	assert.Equal(t, "pkg/foo/foo.go", out.Defs[0].File)
 	// The definition line (from the symbol's Source "pkg/foo/foo.go:11") is surfaced
-	// so an agent can edit at the exact line without reading the whole file.
-	assert.Equal(t, []int{11}, out.Defs[0].Lines)
-	assert.Equal(t, 2, out.FileCount)
-	assert.Equal(t, 3, out.RefCount, "1 + 2 occurrences")
-	// Refs are sorted by file: pkg/a before pkg/b.
-	require.Len(t, out.Refs, 2)
-	assert.Equal(t, "pkg/a/a.go", out.Refs[0].File)
-	assert.Equal(t, []int{5, 8}, out.Refs[0].Lines)
-	assert.Equal(t, "pkg/b/b.go", out.Refs[1].File)
+	// so an agent can edit at the exact line without reading the whole file. Refs are
+	// sorted by file: pkg/a before pkg/b. RefCount is 1 + 2 occurrences.
+	assert.Equal(t, types.KnowledgeRefsOutput{
+		Definition:    types.KnowledgeRefsDefinition,
+		SchemaVersion: types.KnowledgeSchemaVersion,
+		Symbol:        "symbol:example.com/foo Bar#",
+		Label:         "Bar",
+		FileCount:     2,
+		RefCount:      3,
+		Defs:          []types.KnowledgeRefSite{{File: "pkg/foo/foo.go", Lines: []int{11}}},
+		Refs: []types.KnowledgeRefSite{
+			{File: "pkg/a/a.go", Count: 2, Lines: []int{5, 8}},
+			{File: "pkg/b/b.go", Count: 1, Lines: []int{3}},
+		},
+	}, out)
 }
 
 // TestGraphRefsPrefersSymbol: a fuzzy name that collides with a non-symbol node
@@ -280,8 +289,7 @@ func TestSymbolsDoNotChangeTheDefaultGraph(t *testing.T) {
 	}
 
 	got, want := defaultGraph(withSyms), defaultGraph(base)
-	assert.Equal(t, want.NodeCount, got.NodeCount, "a symbol index must not add default-graph nodes")
-	assert.Equal(t, want.EdgeCount, got.EdgeCount, "a symbol index must not add default-graph edges")
+	assert.Equal(t, want, got, "a symbol index must not add default-graph nodes or edges")
 
 	// And every edge in the default graph must land on a node it actually contains.
 	ids := make(map[string]bool, len(got.Nodes))

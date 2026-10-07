@@ -247,6 +247,5 @@ func TestJudgeWorktreeRemove(t *testing.T) {
 
 	assert.NotEqual(t, "deny", Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + clean}).Decision)
 	v := Judge(ctx, Dependencies{}, Request{Input: "git worktree remove " + dirty})
-	assert.Equal(t, "deny", v.Decision)
-	assert.Equal(t, string(denyRuleWorktreeRemove), v.Rule)
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleWorktreeRemove)), unworded(v))
 }

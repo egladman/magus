@@ -645,8 +645,10 @@ func TestSecretReadIsAudited(t *testing.T) {
 		}
 	}
 	require.NotNil(t, found, "a secret read must be recorded in the journal")
-	assert.Equal(t, "demo", found.Project)
-	assert.Equal(t, "publish", found.Target)
+	// Emit stamps the clock and the invocation, and the text is checked by substring below.
+	assert.Equal(t, journal.Event{
+		Ts: found.Ts, Inv: found.Inv, Project: "demo", Target: "publish", Kind: journal.KindSecret, Text: found.Text,
+	}, *found)
 	assert.Contains(t, found.Text, "MAGUS_TEST_AUDIT_TOKEN", "the reference is the auditable fact")
 	assert.Contains(t, found.Text, "built-in environment provider", "so is which backend served it")
 	assert.NotContains(t, found.Text, "ghp_audit_me_never", "the VALUE must never be recorded")

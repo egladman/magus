@@ -352,8 +352,12 @@ func TestEveryDeclaredCommandIsClassified(t *testing.T) {
 // A breadcrumb renders twice: quoted for a shell, raw for an exec.
 func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
 	n := breadcrumb("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
-	assert.Equal(t, `magus query kind=docsection "id=docs/a b.md"`, n.Run)
-	assert.Equal(t, []string{"magus", "query", "kind=docsection", "id=docs/a b.md"}, n.Argv)
+	assert.Equal(t, Next{
+		ID:   "query-doc-sections",
+		Run:  `magus query kind=docsection "id=docs/a b.md"`,
+		Argv: []string{"magus", "query", "kind=docsection", "id=docs/a b.md"},
+		Why:  "why",
+	}, n)
 }
 
 // Both doors print one layout, so a reader who meets a breadcrumb over MCP and on a

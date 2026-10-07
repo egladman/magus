@@ -54,8 +54,7 @@ func TestInputDecodesAMultiByteRune(t *testing.T) {
 	in, _ := newTestInput("é")
 	got := drain(t, in)
 	require.Len(t, got, 1)
-	assert.Equal(t, KeyRune, got[0].Key)
-	assert.Equal(t, 'é', got[0].Rune)
+	assert.Equal(t, Event{Kind: EventKey, Key: KeyRune, Rune: 'é'}, got[0])
 }
 
 func TestInputDecodesThePagingKeys(t *testing.T) {
@@ -81,12 +80,8 @@ func TestInputDecodesAnSGRClick(t *testing.T) {
 	got := drain(t, in)
 	require.Len(t, got, 2)
 
-	assert.Equal(t, EventMouse, got[0].Kind)
-	assert.Equal(t, MouseLeft, got[0].Button)
-	assert.Equal(t, 20, got[0].Row, "row is the coordinate HitTest takes")
-	assert.Equal(t, 12, got[0].Col)
-	assert.True(t, got[0].Press)
-	assert.Equal(t, 1, got[0].Clicks)
+	// Row is the coordinate HitTest takes.
+	assert.Equal(t, Event{Kind: EventMouse, Button: MouseLeft, Row: 20, Col: 12, Press: true, Clicks: 1}, got[0])
 
 	assert.False(t, got[1].Press, "the release is reported too, as 'm'")
 }
@@ -99,8 +94,7 @@ func TestInputDecodesColumnsPastTheLegacyLimit(t *testing.T) {
 	in, _ := newTestInput("\x1b[<0;312;40M")
 	got := drain(t, in)
 	require.Len(t, got, 1)
-	assert.Equal(t, 312, got[0].Col)
-	assert.Equal(t, 40, got[0].Row)
+	assert.Equal(t, Event{Kind: EventMouse, Button: MouseLeft, Row: 40, Col: 312, Press: true, Clicks: 1}, got[0])
 }
 
 func TestInputDecodesTheWheel(t *testing.T) {
@@ -180,9 +174,8 @@ func TestInputSkipsAnUnknownSequenceWhole(t *testing.T) {
 	in, _ := newTestInput("\x1b[200~x")
 	got := drain(t, in)
 	require.Len(t, got, 2)
-	assert.Equal(t, KeyUnknown, got[0].Key)
-	assert.Equal(t, KeyRune, got[1].Key)
-	assert.Equal(t, 'x', got[1].Rune, "the byte after the sequence survives intact")
+	assert.Equal(t, []Event{{Kind: EventKey, Key: KeyUnknown}, {Kind: EventKey, Key: KeyRune, Rune: 'x'}}, got,
+		"the byte after the sequence survives intact")
 }
 
 func TestOpenInputRefusesWithoutATerminal(t *testing.T) {
@@ -271,11 +264,8 @@ func TestInputDecodesHoverMotion(t *testing.T) {
 	in, _ := newTestInput("\x1b[<35;12;20M")
 	got := drain(t, in)
 	require.Len(t, got, 1)
-	assert.Equal(t, EventMouse, got[0].Kind)
-	assert.True(t, got[0].Motion)
-	assert.False(t, got[0].Press, "motion is not a press; acting on it would fire on a mouse-over")
-	assert.Equal(t, 20, got[0].Row)
-	assert.Equal(t, 12, got[0].Col)
+	// Press stays false: motion is not a press, and acting on it would fire on a mouse-over.
+	assert.Equal(t, Event{Kind: EventMouse, Motion: true, Row: 20, Col: 12}, got[0])
 }
 
 func TestInputMotionDoesNotArmADoubleClick(t *testing.T) {
@@ -321,9 +311,7 @@ func TestInputParsesACursorReply(t *testing.T) {
 	in, _ := newTestInput("\x1b[12;40R")
 	ev, err := in.read()
 	require.NoError(t, err)
-	assert.Equal(t, eventCursor, ev.Kind)
-	assert.Equal(t, 12, ev.Row)
-	assert.Equal(t, 40, ev.Col)
+	assert.Equal(t, Event{Kind: eventCursor, Row: 12, Col: 40}, ev)
 }
 
 func TestInputNeverSurfacesACursorReplyAsInput(t *testing.T) {
@@ -334,8 +322,7 @@ func TestInputNeverSurfacesACursorReplyAsInput(t *testing.T) {
 	in, _ := newTestInput("\x1b[12;40Rx")
 	ev, err := in.Read(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, KeyRune, ev.Key)
-	assert.Equal(t, 'x', ev.Rune, "the reply was dropped and the real keystroke came through")
+	assert.Equal(t, Event{Kind: EventKey, Key: KeyRune, Rune: 'x'}, ev, "the reply was dropped and the real keystroke came through")
 }
 
 func TestInputQueuesKeystrokesThatOvertakeAReply(t *testing.T) {
@@ -543,8 +530,7 @@ func TestReadStillDeliversOnALiveContext(t *testing.T) {
 	in, _ := newTestInput("k")
 	ev, err := in.Read(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, KeyRune, ev.Key)
-	assert.Equal(t, 'k', ev.Rune)
+	assert.Equal(t, Event{Kind: EventKey, Key: KeyRune, Rune: 'k'}, ev)
 }
 
 // BenchmarkInputDecodeMouseMotion measures per-event decode cost. Any-event

@@ -37,6 +37,21 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
+// verdictWithRule is the verdict a rule reaches before any wording or lease attribution:
+// pair it with unworded so a test compares the whole struct and still checks the prose by
+// substring.
+func verdictWithRule(decision, rule string) Verdict {
+	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decision, Rule: rule}
+}
+
+// unworded is v without the fields a rule test leaves to other assertions: the reason and
+// context prose, which the test checks by substring, and the lease attribution, which follows
+// the environment the test ran in.
+func unworded(v Verdict) Verdict {
+	v.Reason, v.Context, v.Lease, v.LeaseFrom = "", "", "", ""
+	return v
+}
+
 // testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
 func testDependencies() Dependencies {
@@ -92,8 +107,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "magus run ci | tail", req.Value)
 	assert.False(t, req.IsPath)
-	assert.Equal(t, "s1", req.Who.Session)
-	assert.Equal(t, "PreToolUse", req.Who.Event)
+	assert.Equal(t, hookAttribution{Session: "s1", Event: "PreToolUse"}, req.Who)
 
 	// A file_path payload is a WRITE, so the envelope decides the --path question too.
 	writePayload := `{"hook_event_name":"PreToolUse","tool_input":{"file_path":"MAGUS.md"}}`
@@ -402,8 +416,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			`jj -R . describe -m "Fix the port."`,
 		} {
 			v := run(line)
-			assert.Equal(t, "deny", v.Decision, line)
-			assert.Equal(t, workspaceCommandRule, v.Rule)
+			assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), line)
 			assert.Contains(t, v.Reason, "a capitalized first word", line)
 			assert.Contains(t, v.Reason, "Write one subject line, lowercase and imperative", line)
 			assert.NotContains(t, v.Reason, "Skill(", line)
@@ -488,8 +501,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	t.Run("foreign-binary", func(t *testing.T) {
 		built, here := checkout(t, true), checkout(t, false)
 		v := judgeIn(t, here, filepath.Join(built, "magus")+" run lint .")
-		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "another checkout of magus")
 	})
 
@@ -497,8 +509,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	t.Run("go-into-checkout", func(t *testing.T) {
 		other := checkout(t, true)
 		v := judgeIn(t, checkout(t, false), "go -C "+other+" test ./...")
-		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "runs a toolchain command in another checkout")
 
 		bare := checkout(t, false)
@@ -517,8 +528,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		ws := checkout(t, false)
 		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
 		v := judgeIn(t, ws, "ls")
-		assert.Equal(t, "advise", v.Decision, v.Reason)
-		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Equal(t, verdictWithRule("advise", workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason+v.Context, "./magus run go-build .")
 	})
 
@@ -531,8 +541,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		ws := checkout(t, false)
 		require.NoError(t, os.Symlink(exe, filepath.Join(ws, "magus")))
 		v := judgeIn(t, ws, "./magus init --vcs git")
-		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Equal(t, workspaceCommandRule, v.Rule)
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, "no go-build stamp")
 		assert.Equal(t, "advise", judgeIn(t, ws, "./magus init --dry-run").Decision, "a dry run writes nothing")
 	})
@@ -560,8 +569,7 @@ func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
 
 	assert.Equal(t, "pass", write(elsewhere+"/CLAUDE.md").Decision)
 	inside := write(root + "/CLAUDE.md")
-	assert.Equal(t, "advise", inside.Decision)
-	assert.Equal(t, string(advisoryInstruction), inside.Rule)
+	assert.Equal(t, verdictWithRule("advise", string(advisoryInstruction)), unworded(inside))
 }
 
 // driftWorkspace is focusFixture loaded as the hook's workspace. Only the reader half and
@@ -734,20 +742,25 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	deps := testDependencies()
 
 	v := Judge(ctx, deps, Request{Input: "./magus ls jobs -o json > f"})
-	require.Equal(t, "deny", v.Decision)
-	require.Equal(t, string(denyRuleOutputRedirect), v.Rule)
 	want := hint.Next{
 		ID: "deny-output-redirect", Run: "magus ls jobs -o json --tee f",
 		Argv: []string{"magus", "ls", "jobs", "-o", "json", "--tee", "f"},
 		Why:  "--tee writes the structured record to the file and still prints it.",
 	}
-	assert.Equal(t, []hint.Next{want}, v.Next)
 	ref := verdictRef.FindString(v.Reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
-	assert.Equal(t, "`ls jobs >f`: console text is not a format anything should parse."+
-		"\nnext:\n  magus ls jobs -o json --tee f\n      "+want.Why+
-		verdictRefLine+"magus query output "+ref+
-		"\nsee: "+ruleDocsBase+"output-redirect/", v.Reason, "one line plus the next and the verdict ref")
+	require.Equal(t, Verdict{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      "deny",
+		Reason: "`ls jobs >f`: console text is not a format anything should parse." +
+			"\nnext:\n  magus ls jobs -o json --tee f\n      " + want.Why +
+			verdictRefLine + "magus query output " + ref +
+			"\nsee: " + ruleDocsBase + "output-redirect/",
+		Rule:      string(denyRuleOutputRedirect),
+		Lease:     v.Lease, // follows the environment the test ran in
+		LeaseFrom: v.LeaseFrom,
+		Next:      []hint.Next{want},
+	}, v, "one line plus the next and the verdict ref")
 
 	assert.Equal(t, "deny-output-redirect", servedNextPreauthorizes(hint.NewGate(cacheDir, ""), want.Run))
 	assert.NotEqual(t, "deny", Judge(ctx, deps, Request{Input: want.Run}).Decision, "the served line passes")
@@ -763,9 +776,14 @@ func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 
 	// The worker first: its firing is the one worded in full.
 	leased := Judge(ctx, deps, Request{Input: piped, Lease: worker.ID})
-	require.Equal(t, "deny", leased.Decision)
-	assert.Equal(t, string(denyRuleOutputPipe), leased.Rule)
-	assert.Nil(t, leased.Next, "the worker may not run the gate, so it is not served one")
+	require.Equal(t, Verdict{
+		SchemaVersion: agent.GuardSchemaVersion,
+		Decision:      "deny",
+		Reason:        leased.Reason, // the prose is checked by substring below
+		Rule:          string(denyRuleOutputPipe),
+		Lease:         worker.ID,
+		LeaseFrom:     leased.LeaseFrom, // which channel answered is not this test's concern
+	}, leased, "the worker may not run the gate, so it is not served one")
 	assert.Contains(t, leased.Reason, "`-s` stays quiet until something fails", "the prose names the lever instead")
 	assert.NotContains(t, leased.Reason, "next:")
 

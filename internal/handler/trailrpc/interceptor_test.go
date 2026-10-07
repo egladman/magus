@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -139,12 +140,18 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("recorded %d events, want exactly 1 (the mutation; the read must not record): %+v", len(events), events)
 	}
 	got := events[0]
-	if got.Action != "RevokeToken" || got.Credential != console1 || got.EntryPoint != types.EntryPointRPC ||
-		got.Kind != trail.KindTokenLifecycle || got.Outcome != trail.OutcomeOK {
-		t.Errorf("recorded event = %+v, want RevokeToken/console-1/rpc/token_lifecycle/ok", got)
+	// The clock and the OS account are stamped, so they are copied across. Without WithSubject
+	// nothing but the method is recorded: no request ref, no preview.
+	want := trail.Event{
+		Ts:         got.Ts,
+		Kind:       trail.KindTokenLifecycle,
+		Origin:     types.Origin{User: got.User, UID: got.UID, EntryPoint: types.EntryPointRPC, Credential: console1},
+		Action:     "RevokeToken",
+		Outcome:    trail.OutcomeOK,
+		DurationMs: got.DurationMs,
 	}
-	if got.RequestRef != "" {
-		t.Errorf("without WithSubject nothing but the method is recorded, got request ref %q", got.RequestRef)
+	if !reflect.DeepEqual(want, got) {
+		t.Errorf("recorded event = %+v, want RevokeToken/console-1/rpc/token_lifecycle/ok and no request ref: %+v", got, want)
 	}
 }
 
