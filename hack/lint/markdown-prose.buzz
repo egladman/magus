@@ -24,6 +24,9 @@
 //     names only what magus enforces, so a bare one is refused. A skill body
 //     under internal/agent/skills/ renders a short and a full form, so text only the
 //     full form shows is held to the Markdown rules alone.
+//   - A guide, a page the reader follows with a terminal open (GUIDES), is judged on the
+//     guide surface: the Markdown rules plus second person (no we, us or our), numbered
+//     steps that open with their verb, and no word telling the reader a step is easy.
 //
 // .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
 // enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
@@ -90,14 +93,22 @@ final FIRST_PERSON = ["reply-voice", "tense", "hedge"];
 
 final JUDGE = "libs/conventions/cmd/judge-docs";
 
+// GUIDES are the procedural pages; concepts, reference, doctrine and the decision records
+// explain and keep the general Markdown rules.
+final GUIDES = ["docs/guides/**", "docs/setup.md", "docs/setup/**", "docs/migrating/**"];
+
 // surface is the judge's surface for the hand-written file at rel: a skill body the
-// agent package renders, a skill an agent loads as written, or any other Markdown.
+// agent package renders, a skill an agent loads as written, a guide, or any other
+// Markdown.
 export fun surface(rel: str) > str !> any {
     if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
         return "skill-source";
     }
     if (path\matchesAny([".claude/skills/*/SKILL.md"], path: rel)) {
         return "skill";
+    }
+    if (path\matchesAny(GUIDES, path: rel)) {
+        return "guide";
     }
     return "markdown";
 }
@@ -114,6 +125,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     }
     final found = mut [<Finding>];
     final markdown = mut {<str: str>};
+    final guides = mut {<str: str>};
     final skills = mut {<str: str>};
     final sources = mut {<str: str>};
     foreach (f in files) {
@@ -129,11 +141,16 @@ export fun check(files: [Path]) > [Finding] !> any {
             sources[full] = f.value;
         } else if (on == "skill") {
             skills[full] = f.value;
+        } else if (on == "guide") {
+            guides[full] = f.value;
         } else {
             markdown[full] = f.value;
         }
     }
     foreach (finding in judge(markdown, module: "libs/conventions", surface: "markdown")) {
+        found.append(finding);
+    }
+    foreach (finding in judge(guides, module: "libs/conventions", surface: "guide")) {
         found.append(finding);
     }
     foreach (finding in judge(skills, module: "libs/conventions", surface: "skill")) {
@@ -624,11 +641,28 @@ test "a judge that does not run is an error, not a pass" {
         message: "no file, no run");
 }
 
-test "a skill body, a loaded skill and any other page each take their own surface" {
+test "a skill body, a loaded skill, a guide and any other page each take their own surface" {
     assert\equal(surface("internal/agent/skills/magus-run/SKILL.md"), want: "skill-source", message: "a body");
     assert\equal(surface(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "skill", message: "a loaded skill");
     assert\equal(surface("internal/agent/agents-section.md"), want: "markdown", message: "not a skill");
     assert\equal(surface(".claude/skills/x/notes.md"), want: "markdown", message: "not a SKILL.md");
+    foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/setup.md", "docs/setup/linux.md",
+        "docs/migrating/from-nx.md"]) {
+        assert\equal(surface(page), want: "guide", message: page);
+    }
+    assert\equal(surface("docs/concepts/cache.md"), want: "markdown", message: "a concept page");
+    assert\equal(surface("docs/doctrine.md"), want: "markdown", message: "doctrine");
+}
+
+test "a guide is held to the guide rules and a concept page is not" {
+    final page = "# A page\n\nWe keep it easy.\n\n1. Run `magus init`.\n2. The target builds.\n";
+    final got = check(support\fixture({"docs/guides/a.md": page, "docs/concepts/a.md": page}));
+    final where = mut [<str>];
+    foreach (f in got) {
+        where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
+    }
+    assert\equal(where, want: ["docs/guides/a.md:3 [second-person]", "docs/guides/a.md:6 [step-verb]",
+        "docs/guides/a.md:3 [condescension]"], message: "guide findings only on the guide");
 }
 
 test "a skill's short form is held to the terse rules and its full-only text is not" {
