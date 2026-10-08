@@ -4,7 +4,10 @@
 // With no flag it reads a JSON array of symbol records on stdin and judges
 // each one's doc, reporting in input order and then the order [prose.Judge]
 // reports them. With -surface markdown it judges the Markdown files its
-// arguments name, in argument order. With -surface pull-request it reads a pull
+// arguments name, in argument order; -surface skill judges them as skills an
+// agent loads as written, and -surface skill-source as skill bodies
+// internal/agent renders into a short and a full form, each finding at its
+// source line. With -surface pull-request it reads a pull
 // request on stdin, the title on the first line and the description after it.
 // A finding from text names its file, or "pull-request", and its line as
 // source, `path:line`, the way a symbol's index position reads.
@@ -61,7 +64,8 @@ func main() {
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("judge-docs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	surface := fs.String("surface", "", "judge `markdown` files named as arguments, or a `pull-request` on stdin")
+	surface := fs.String("surface", "",
+		"judge `markdown`, skill or skill-source files named as arguments, or a pull-request on stdin")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -91,8 +95,8 @@ func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, e
 		}
 
 		return judgeSymbols(stdin)
-	case prose.SurfaceMarkdown:
-		return judgeFiles(paths)
+	case prose.SurfaceMarkdown, prose.SurfaceSkill, prose.SurfaceSkillSource:
+		return judgeFiles(paths, surface)
 	case prose.SurfacePullRequest:
 		if len(paths) > 0 {
 			return nil, errors.New("a pull request is read from stdin, not from a path")
@@ -105,11 +109,11 @@ func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, e
 
 		return textFindings(pullRequestSource, string(text), surface), nil
 	default:
-		return nil, fmt.Errorf("unknown surface %q: want markdown or pull-request", surface)
+		return nil, fmt.Errorf("unknown surface %q: want markdown, skill, skill-source or pull-request", surface)
 	}
 }
 
-func judgeFiles(paths []string) ([]finding, error) {
+func judgeFiles(paths []string, surface prose.Surface) ([]finding, error) {
 	out := []finding{}
 
 	for _, path := range paths {
@@ -118,7 +122,7 @@ func judgeFiles(paths []string) ([]finding, error) {
 			return nil, fmt.Errorf("read %s: %w", path, err)
 		}
 
-		out = append(out, textFindings(path, string(text), prose.SurfaceMarkdown)...)
+		out = append(out, textFindings(path, string(text), surface)...)
 	}
 
 	return out, nil

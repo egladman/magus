@@ -1,7 +1,7 @@
 // Package prose judges prose: the doc comment and name of one symbol a SCIP
-// index describes, a hand-written Markdown file, or a pull request's title and
-// description. It parses no programming language, so every indexer's symbols
-// meet the same rules.
+// index describes, a hand-written Markdown file, a skill, or a pull request's
+// title and description. It parses no programming language, so every
+// indexer's symbols meet the same rules.
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
@@ -48,6 +48,15 @@ const (
 	// RuleLeadContext reports a pull request description that does not open
 	// with a paragraph naming the goal behind the change.
 	RuleLeadContext Rule = "lead-context"
+	// RuleTerseSentence reports a skill sentence over 35 words.
+	RuleTerseSentence Rule = "terse-sentence"
+	// RuleTerseParagraph reports a skill paragraph or list item over 80 words.
+	RuleTerseParagraph Rule = "terse-paragraph"
+	// RuleWordy reports a phrase with a shorter equivalent in a skill.
+	RuleWordy Rule = "wordy"
+	// RuleTemplate reports a skill body that does not render, so neither of
+	// its forms can be judged.
+	RuleTemplate Rule = "template"
 )
 
 // Surface names the kind of text a rule judges.
@@ -61,12 +70,22 @@ const (
 	// SurfacePullRequest is a pull request: its title on the first line, its
 	// description after it.
 	SurfacePullRequest Surface = "pull-request"
+	// SurfaceSkill is a skill's SKILL.md as an agent loads it: Markdown held
+	// to the terse rules, since every word costs context in every session that
+	// loads it.
+	SurfaceSkill Surface = "skill"
+	// SurfaceSkillSource is a skill body internal/agent renders with
+	// text/template into a short and a full form. What the short form shows is
+	// judged on SurfaceSkill; what only the full form shows, on
+	// SurfaceMarkdown.
+	SurfaceSkillSource Surface = "skill-source"
 )
 
 var (
 	docOnly = []Surface{SurfaceDoc}
-	written = []Surface{SurfaceMarkdown, SurfacePullRequest}
-	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfacePullRequest}
+	written = []Surface{SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
+	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
+	skill   = []Surface{SurfaceSkill}
 )
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
@@ -91,6 +110,12 @@ var checks = []struct {
 	{RuleTense, written, tense},
 	{RuleHedge, written, hedge},
 	{RuleAttribution, written, attribution},
+	{RuleTerseSentence, skill, terseSentence},
+	{RuleTerseParagraph, skill, terseParagraph},
+	{RuleWordy, skill, wordy},
+	// A skill body that does not render is reported before any rule runs; the
+	// entry gives the rule its place in [Rules].
+	{RuleTemplate, nil, nil},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.
@@ -124,9 +149,10 @@ type Finding struct {
 	// Match is the offending text, or "" for a rule that judges a budget, where
 	// no one span is at fault.
 	Match string
-	// Line is the 1-based line of the judged text that Match sits on, or 0 for
-	// a budget. [Judge] leaves it 0: a doc comment's lines are not its source
-	// file's, and the index places the symbol.
+	// Line is the 1-based line of the judged text that Match sits on, or that
+	// a skill's over-budget sentence or paragraph opens on, or 0 for a doc
+	// comment's budget. [Judge] leaves it 0: a doc comment's lines are not its
+	// source file's, and the index places the symbol.
 	Line int
 }
 

@@ -72,17 +72,20 @@ string loops).
 
 ## prose
 
-`prose` is not an analyzer, and golangci-lint never loads it. It judges three
-surfaces: one symbol from a SCIP index (the doc comment, and the name of a
-function or method), a hand-written Markdown file, and a pull request's title
-and description. Its rules are this repository's policy, not magus's: the magus
+`prose` is not an analyzer, and golangci-lint never loads it. It judges four
+kinds of text: one symbol from a SCIP index (the doc comment, and the name of a
+function or method), a hand-written Markdown file, a skill, and a pull
+request's title and description. Its rules are this repository's policy, not magus's: the magus
 module never imports `libs/conventions`. `cmd/judge-docs` runs them. With no
 flag it reads the symbols of `magus\symbols()` as JSON on stdin, fed by
 `hack/lint/symbol-docs-follow-prose-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. With
 `-surface markdown` it judges the files its arguments name, and with
 `-surface pull-request` a pull request on stdin, the title on the first line;
-each finding names its file and line. It writes the findings as JSON on stdout.
+each finding names its file and line. `-surface skill` judges a SKILL.md an
+agent loads as written, and `-surface skill-source` a skill body
+`internal/agent` renders with `text/template`: what its short form shows meets
+the skill rules, and what only its full form shows meets the Markdown ones. It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
@@ -101,7 +104,12 @@ standard library.
 | `tense`            | Markdown, PR | the future tense, and the author as the actor of a change      |
 | `hedge`            | Markdown, PR | a softener on a claim ("might fix", "probably")                |
 | `attribution`      | Markdown, PR | credit to a tool, or an account of how the work was made       |
+| `terse-sentence`   | skill        | a sentence over 35 words                                       |
+| `terse-paragraph`  | skill        | a paragraph or list item over 80 words                         |
+| `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
+| `template`         | skill source | a body that does not render, so neither form can be judged     |
 
+A skill takes every Markdown and pull request rule but `lead-context`.
 Markdown and pull requests take a wider `filler` list ("actually", "robust")
 than doc comments do. docs/conventions.md states the written rules for authors.
 

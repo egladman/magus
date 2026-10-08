@@ -14,13 +14,19 @@ import (
 // with its line in text.
 //
 // SurfaceDoc reads text as a doc comment, by the rules [Judge] applies to one.
+// SurfaceSkillSource renders text in both of a skill's forms first, and each
+// finding's line is its line in the source.
 func JudgeText(text string, surface Surface) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	if surface == SurfaceDoc {
+
+	switch surface {
+	case SurfaceDoc:
 		return run(input{symbol: Symbol{Doc: text}, surface: surface, prose: readProse(raw, false), lines: raw})
+	case SurfaceSkillSource:
+		return judgeSkillSource(strings.Join(raw, "\n"))
 	}
 
-	lines := markdownProse(raw, surface == SurfaceMarkdown)
+	lines := markdownProse(raw, surface != SurfacePullRequest)
 	prose := readProse(lines, true)
 
 	if surface == SurfacePullRequest {

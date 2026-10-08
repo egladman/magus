@@ -36,6 +36,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 		RuleCommentBlock, RuleCommentSentence, RuleFiller, RuleTerms,
 		RuleNameSuffix, RuleAside, RuleHistory, RuleDocStub,
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
+		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleTemplate,
 	}
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {

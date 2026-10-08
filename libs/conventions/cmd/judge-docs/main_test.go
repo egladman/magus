@@ -103,6 +103,25 @@ func TestRunJudgesMarkdownFilesInArgumentOrder(t *testing.T) {
 	}
 }
 
+func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "SKILL.md")
+	body := "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n"
+
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-surface", "skill-source", path}, strings.NewReader(""), &out, &errOut)
+
+	want := `[{"node":"` + path + `","source":"` + path + `:7","language":"skill-source","rule":"wordy",` +
+		`"message":"Write 'to', not 'in order to'.","match":"in order to"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
 func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
 	var out, errOut bytes.Buffer
 
@@ -122,7 +141,7 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
-		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown or pull-request\n"},
+		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown, skill, skill-source or pull-request\n"},
 		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -surface markdown\n"},
 		{"a path for a pull request", []string{"-surface", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
 		{"a missing file", []string{"-surface", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
