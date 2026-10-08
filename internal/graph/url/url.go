@@ -99,7 +99,7 @@ func GraphLink(opts GraphLinkOpts) (string, error) {
 	}
 	return console.Link(console.LinkOpts{
 		Host:     opts.Host,
-		Surface:  "graph",
+		App:      "graph",
 		Code:     opts.Code,
 		Fragment: frag,
 	}), nil

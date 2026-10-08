@@ -402,10 +402,10 @@ func argvKey(argv []string) string { return strings.Join(argv, "\x00") }
 // console is mounted" covers: a submit the server could not name cannot be linked to. It
 // is a PATH rather than an absolute URL because the reader is the console, served from the
 // server it just called, so it resolves this against its own origin; see
-// console.SurfaceLink.
+// console.AppLink.
 func consoleURL(inv string) string {
 	if inv == "" {
 		return ""
 	}
-	return console.SurfaceLink("runs", console.FragmentParam{Key: "inv", Value: inv})
+	return console.AppLink("runs", console.FragmentParam{Key: "inv", Value: inv})
 }

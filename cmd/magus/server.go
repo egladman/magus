@@ -796,7 +796,7 @@ func consoleWatchURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard"})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), App: "dashboard"})
 }
 
 // consoleRootURL is the console's own address, for the three places a person is already
@@ -819,7 +819,7 @@ func consoleDiffURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
-	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff"})
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), App: "diff"})
 }
 
 func jobRunUsage() {

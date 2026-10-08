@@ -37,7 +37,7 @@ func TestLogViewerURL(t *testing.T) {
 // the fragment (never the query string, so it is not transmitted on the document GET). There
 // is no #live= host directive; the origin already names which server.
 func TestLink(t *testing.T) {
-	got := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "dashboard", Code: "mgx_abc123"})
+	got := Link(LinkOpts{Host: "127.0.0.1:7391", App: "dashboard", Code: "mgx_abc123"})
 	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/#code=mgx_abc123", got)
 	assert.NotContains(t, got, "#live=", "the server-origin grammar carries no #live= host directive")
 
@@ -53,13 +53,13 @@ func TestLink(t *testing.T) {
 func TestLinkFragmentThenCode(t *testing.T) {
 	got := Link(LinkOpts{
 		Host:     "127.0.0.1:7391",
-		Surface:  "graph",
+		App:      "graph",
 		Code:     "mgx_abc123",
 		Fragment: []FragmentParam{{Key: "flavor", Value: "targets"}},
 	})
 	assert.Equal(t, "http://127.0.0.1:7391/console/graph/#flavor=targets&code=mgx_abc123", got)
 
-	bare := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "graph"})
+	bare := Link(LinkOpts{Host: "127.0.0.1:7391", App: "graph"})
 	assert.Equal(t, "http://127.0.0.1:7391/console/graph/", bare, "no code and no directives yields a bare surface path")
 }
 
@@ -84,17 +84,17 @@ func TestEncodeComponent(t *testing.T) {
 	}
 }
 
-// TestKnownSurfaces guards the canonical clean-path surface list the server SPA fallback and the
-// minted links share: IsSurfaceRoute matches a bare surface segment and nothing else.
-func TestKnownSurfaces(t *testing.T) {
-	assert.True(t, IsSurfaceRoute("graph"))
-	assert.True(t, IsSurfaceRoute("dashboard"))
-	assert.True(t, IsSurfaceRoute("logs"))
-	assert.True(t, IsSurfaceRoute("activity"))
-	assert.True(t, IsSurfaceRoute("tools"))
-	assert.False(t, IsSurfaceRoute("graph/explorer.js"), "a sub-path is a static file, not a surface route")
-	assert.False(t, IsSurfaceRoute(""), "the console root is not a surface route")
-	assert.False(t, IsSurfaceRoute("settings"), "settings is not a clean-path deep-link surface")
+// TestKnownApps guards the canonical clean-path app list the server SPA fallback and the
+// minted links share: IsAppRoute matches a bare app segment and nothing else.
+func TestKnownApps(t *testing.T) {
+	assert.True(t, IsAppRoute("graph"))
+	assert.True(t, IsAppRoute("dashboard"))
+	assert.True(t, IsAppRoute("logs"))
+	assert.True(t, IsAppRoute("activity"))
+	assert.True(t, IsAppRoute("tools"))
+	assert.False(t, IsAppRoute("graph/explorer.js"), "a sub-path is a static file, not a surface route")
+	assert.False(t, IsAppRoute(""), "the console root is not a surface route")
+	assert.False(t, IsAppRoute("settings"), "settings is not a clean-path deep-link surface")
 }
 
 // TestLogViewerURLKeyDirective: the key directive rides the fragment ahead of the
@@ -131,11 +131,11 @@ func TestKeyDigestsParamEmpty(t *testing.T) {
 // nothing. With no server serving there is no origin, and the empty string is what lets the
 // caller say how to start one rather than print a dead link.
 func TestJobLink(t *testing.T) {
-	assert.Equal(t, "/console/plan/#job=pwa%2Fjob-watch", JobSurfaceLink("pwa/job-watch"))
+	assert.Equal(t, "/console/plan/#job=pwa%2Fjob-watch", JobAppLink("pwa/job-watch"))
 	assert.Equal(t, "http://127.0.0.1:7777/console/plan/#job=pwa%2Fjob-watch", JobLink("127.0.0.1:7777", "pwa/job-watch"))
 	assert.Empty(t, JobLink("", "pwa/job-watch"), "no serving server has no origin, so there is no link to print")
 	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the surface link, not this")
-	assert.Contains(t, KnownSurfaces, JobSurface, "the Jobs view has to be a surface the server serves the shell for")
+	assert.Contains(t, KnownApps, JobApp, "the Jobs view has to be a surface the server serves the shell for")
 }
 
 func TestOpenCommandAs(t *testing.T) {

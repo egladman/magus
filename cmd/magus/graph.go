@@ -1177,7 +1177,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return errSilent{exitCode: 1}
 	}
 
-	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Code: code}
+	linkOpts := console.LinkOpts{Host: hostPort, App: "graph", Code: code}
 	if useTargets {
 		linkOpts.Fragment = append(linkOpts.Fragment, console.FragmentParam{Key: "flavor", Value: "targets"})
 	}

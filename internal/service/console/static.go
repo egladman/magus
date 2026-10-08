@@ -41,7 +41,7 @@ const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; st
 // origins carry the same CSP.
 //
 // The decoupled console is a single shell page that reads its surface from the URL PATH, so a
-// bare /console/<surface>/ request (see surfaceRoute) must return the shell (not the static
+// bare /console/<surface>/ request (see appRoute) must return the shell (not the static
 // directory listing that physically lives there), so the console's boot router can open that
 // surface. A real file serves through the FileServer only when it is part of the app shell
 // (see shellExtensions); anything else in consoleDir, and any directory listing, is a 404.
@@ -56,7 +56,7 @@ func StaticHandler(consoleDir string) http.Handler {
 		// seg is the single path element under /console/ ("graph"), or "" for the root, or a
 		// multi-element sub-path ("graph/explorer.js"); only a bare known surface is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
-		if target, ok := surfaceRoute(consoleDir, seg); ok {
+		if target, ok := appRoute(consoleDir, seg); ok {
 			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
 			// served with <base href="../"> and that only lands on /console/ when the URL
 			// already ends in a slash. Without the redirect, /console/diff resolves every asset
@@ -71,7 +71,7 @@ func StaticHandler(consoleDir string) http.Handler {
 			// StatusFound, matching share.go's redirect to /console/.
 			if !strings.HasSuffix(r.URL.Path, "/") {
 				// The destination is the console directory's own entry, not the request; see
-				// surfaceRoute. It also normalizes an odd but legal /console//diff.
+				// appRoute. It also normalizes an odd but legal /console//diff.
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
@@ -79,7 +79,7 @@ func StaticHandler(consoleDir string) http.Handler {
 				// so there is nothing to preserve here; the browser reattaches it itself.
 				//
 				//nolint:gosec // G710: the destination is a directory entry name, returned by
-				// surfaceRoute, so it cannot be influenced by the request; only the
+				// appRoute, so it cannot be influenced by the request; only the
 				// optional query rides along. gosec's taint analysis cannot see through the
 				// directory lookup and flags any redirect downstream of a request path.
 				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
@@ -134,15 +134,15 @@ var shellExtensions = map[string]bool{
 	".wasm": true,
 }
 
-// surfaceRoute returns the canonical /console/<seg>/ path when the console in consoleDir has a
-// surface there: a top-level directory holding an index.html stub. The console build writes one
+// appRoute returns the canonical /console/<seg>/ path when the console in consoleDir has an
+// app there: a top-level directory holding an index.html stub. The console build writes one
 // stub per app path and mode (console/scripts/surface-stubs.mjs), so the served routes are the
-// bundle's own and a surface the console adds needs no change here.
+// bundle's own and an app the console adds needs no change here.
 //
 // The path is built from the directory entry read off disk, never from seg. A redirect assembled
 // from a request path is one the requester influenced (gosec G710); this one can only name a
 // directory the build wrote.
-func surfaceRoute(consoleDir, seg string) (string, bool) {
+func appRoute(consoleDir, seg string) (string, bool) {
 	if seg == "" || strings.HasPrefix(seg, ".") || strings.ContainsAny(seg, `/\`) {
 		return "", false
 	}

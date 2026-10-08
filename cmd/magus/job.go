@@ -125,7 +125,7 @@ func consoleJobLine(id string) string {
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
-		link = console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
+		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
 	}
 	line := "console: " + link + "\n  " + authHint(link)
 	if skew := consoleSkew(serverVersion, version); skew != "" {

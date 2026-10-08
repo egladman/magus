@@ -20,7 +20,7 @@ func consoleDir(t *testing.T) string {
 	dir := t.TempDir()
 	write(t, dir, "index.html", "<html><head>\n</head><body>shell</body></html>")
 	write(t, dir, "console.css", ".a{}")
-	for _, s := range KnownSurfaces {
+	for _, s := range KnownApps {
 		write(t, dir, s+"/index.html", "<html><head>\n  <base href=\"../\"></head><body>stub</body></html>")
 	}
 	return dir
@@ -44,17 +44,17 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 // already ends in a slash. Served at a bare /console/diff, every asset resolves one level too
 // high (console.css, theme.js and patternfly.css all 404 at the site root), so the surface
 // renders unstyled and never boots. Canonicalize instead.
-func TestSurfaceRouteWithoutTrailingSlashRedirects(t *testing.T) {
+func TestAppRouteWithoutTrailingSlashRedirects(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
 
-	for _, surface := range KnownSurfaces {
-		w := get(t, h, "/console/"+surface)
-		assert.Equal(t, http.StatusFound, w.Code, "%s must canonicalize", surface)
-		assert.Equal(t, "/console/"+surface+"/", w.Header().Get("Location"), surface)
+	for _, app := range KnownApps {
+		w := get(t, h, "/console/"+app)
+		assert.Equal(t, http.StatusFound, w.Code, "%s must canonicalize", app)
+		assert.Equal(t, "/console/"+app+"/", w.Header().Get("Location"), app)
 	}
 }
 
-func TestSurfaceRouteRedirectKeepsTheQuery(t *testing.T) {
+func TestAppRouteRedirectKeepsTheQuery(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
 	w := get(t, h, "/console/diff?scope=a.go&x=1")
 	assert.Equal(t, http.StatusFound, w.Code)
@@ -63,7 +63,7 @@ func TestSurfaceRouteRedirectKeepsTheQuery(t *testing.T) {
 
 // The canonical form Link mints must be served directly: a redirect loop here would take the
 // whole console down.
-func TestCanonicalSurfaceRouteServesTheShell(t *testing.T) {
+func TestCanonicalAppRouteServesTheShell(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
 
 	w := get(t, h, "/console/diff/")
@@ -86,21 +86,21 @@ func TestAssetsAreStillServed(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, get(t, h, "/console/diff/diff.js").Code)
 }
 
-func TestUnknownSegmentIsNotASurfaceRoute(t *testing.T) {
+func TestUnknownSegmentIsNotAnAppRoute(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
 	w := get(t, h, "/console/not-a-surface")
 	assert.NotEqual(t, http.StatusFound, w.Code, "only a known surface canonicalizes")
 }
 
-// KnownSurfaces is the contract the server, the link minters, and the console's boot router
+// KnownApps is the contract the server, the link minters, and the console's boot router
 // all read. A surface added to the console without being added here is deep-linkable in
 // exactly one direction, which is the kind of gap nobody notices until someone shares a URL.
-func TestKnownSurfacesCoversTheDiffSurface(t *testing.T) {
-	assert.True(t, IsSurfaceRoute("diff"))
-	assert.False(t, IsSurfaceRoute("review"), "the surface was renamed; the old segment is gone")
-	assert.False(t, IsSurfaceRoute(""), "the console root is not a surface route")
-	assert.False(t, IsSurfaceRoute("diff/diff.js"), "a sub-path is a file, not a route")
-	for _, s := range KnownSurfaces {
+func TestKnownAppsCoversTheDiffApp(t *testing.T) {
+	assert.True(t, IsAppRoute("diff"))
+	assert.False(t, IsAppRoute("review"), "the surface was renamed; the old segment is gone")
+	assert.False(t, IsAppRoute(""), "the console root is not a surface route")
+	assert.False(t, IsAppRoute("diff/diff.js"), "a sub-path is a file, not a route")
+	for _, s := range KnownApps {
 		assert.False(t, strings.Contains(s, "/"), "a surface segment is one path element: %q", s)
 	}
 }
@@ -117,7 +117,7 @@ func TestRedirectNormalizesAndCannotEchoTheRequestPath(t *testing.T) {
 // The server's routes are the stubs the console build wrote, not a list here: a segment the
 // console adds is served as soon as its stub exists, and one without a stub is not a route even
 // when magus knows the name.
-func TestSurfaceRoutesComeFromTheBundle(t *testing.T) {
+func TestAppRoutesComeFromTheBundle(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, "index.html", "<html><head>\n</head><body>shell</body></html>")
 	write(t, dir, "newapp/index.html", "stub")
@@ -137,7 +137,7 @@ func TestSurfaceRoutesComeFromTheBundle(t *testing.T) {
 	}
 }
 
-func TestSurfaceRoute(t *testing.T) {
+func TestAppRoute(t *testing.T) {
 	dir := consoleDir(t)
 	write(t, dir, "assets/icon.svg", "<svg/>")
 
@@ -155,11 +155,11 @@ func TestSurfaceRoute(t *testing.T) {
 		{"", "", false},
 		{"..", "", false},
 	} {
-		got, ok := surfaceRoute(dir, tc.seg)
+		got, ok := appRoute(dir, tc.seg)
 		assert.Equal(t, tc.ok, ok, tc.seg)
 		assert.Equal(t, tc.want, got, tc.seg)
 	}
-	_, ok := surfaceRoute(filepath.Join(dir, "missing"), "diff")
+	_, ok := appRoute(filepath.Join(dir, "missing"), "diff")
 	assert.False(t, ok, "an unreadable console dir has no routes")
 }
 

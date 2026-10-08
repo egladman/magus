@@ -21,7 +21,7 @@ func (t *consoleTool) Invoke(_ context.Context, req spells.InvokeRequest) (spell
 	if t.unavailable != "" {
 		return spells.InvokeResponse{}, fmt.Errorf("mcp: console presentation is unavailable because %s", t.unavailable)
 	}
-	p, err := console.Present(t.host, paramString(req.Params, "surface", ""), paramString(req.Params, "reason", ""))
+	p, err := console.Present(t.host, paramString(req.Params, "app", ""), paramString(req.Params, "reason", ""))
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
