@@ -143,7 +143,7 @@ func newEndpointKey(invocation string, g types.SecretGrant) endpointKey {
 //
 // Named for what it does. It is not an accessor beside ProviderName/Timeouts: it binds
 // a TCP listener, spawns goroutines and mints a token. "Origin" was also wrong twice
-// over: types.ProjectOrigin already claims that word on the magusfile surface, and an
+// over: types.ProjectOrigin already claims that word in a magusfile, and an
 // origin is scheme+host+port by definition while this returns a base URL WITH a path.
 //
 // Memoized per grant, so a magusfile naming the same endpoint in three targets binds

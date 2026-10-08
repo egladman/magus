@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeWorkspace implements just the types.WorkspaceRepository surface the impact
+// fakeWorkspace implements just the types.WorkspaceRepository methods the impact
 // engine touches (Affected, AffectedFromPaths, Get, ListTargets). Embedding the
 // interface leaves every other method nil; the engine never calls them.
 type fakeWorkspace struct {

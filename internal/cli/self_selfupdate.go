@@ -2,7 +2,7 @@
 
 package cli
 
-// selfCommand (default build) documents the `magus self` surface: update and
+// selfCommand (default build) documents the `magus self` commands: update and
 // install-shorthand. The update child is omitted from binaries built with
 // -tags noselfupdate, so that build carries its own selfCommand.
 var selfCommand = Command{

@@ -49,7 +49,7 @@ on `PATH`. Two things that buys, both load-bearing:
 ## Keeping them useful
 
 These earn their place by showing something a code block cannot: output arriving
-in stages, a cache hit landing, a surface being driven. A recording that only
+in stages, a cache hit landing, a TUI being driven. A recording that only
 shows text should be a fenced code block instead: cheaper, copyable, greppable,
 and readable to someone on a screen reader.
 

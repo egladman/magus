@@ -54,7 +54,7 @@ type Adapter struct {
 	// string belongs on the other side of the boundary, in the hook commands magus writes
 	// into a host's own config document, where the HOST does the parsing.
 	//
-	// It is also what retires the injection surface rather than filtering it. Executed as
+	// It is also what retires shell injection rather than filtering it. Executed as
 	// argv there is no shell to interpret `;`, `|`, `$(...)` or a redirect, so a declared
 	// adapter runs one program with the arguments it names and cannot become a second
 	// command. Anything wanting a pipeline writes a script and names the script.

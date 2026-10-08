@@ -102,7 +102,7 @@ func TestCaptureBodyGroupsBySubjectAndAttributes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Setext, so a heading is a heading to a markdown renderer AND an underline to the reader
-	// of a surface that prints the body as text. Asserted by deriving the rule from the
+	// of a view that prints the body as text. Asserted by deriving the rule from the
 	// heading: a hand-counted row of dashes tests the count, which is not the invariant and
 	// goes red for a one-character rename.
 	setext := func(head string) string { return head + "\n" + strings.Repeat("-", len(head)) + "\n" }
@@ -117,7 +117,7 @@ func TestCaptureBodyGroupsBySubjectAndAttributes(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(n.Body, "internal/cache/key.go hunk 3\n---"))
 
 	// Nothing in a generated body may need a markdown renderer to be legible: every magus
-	// surface prints a note body as text, because the body is untrusted by contract.
+	// command and view prints a note body as text, because the body is untrusted by contract.
 	assert.NotContains(t, n.Body, "#")
 }
 

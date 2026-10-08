@@ -50,7 +50,7 @@ func (r *reg) f64h(name, desc string) metric.Float64Histogram {
 	return h
 }
 
-// mcpInstruments is the magus.mcp.tool.* family: how the MCP surface is exercised.
+// mcpInstruments is the magus.mcp.tool.* family: how the MCP tools are exercised.
 type mcpInstruments struct {
 	calls      metric.Int64Counter
 	inputSize  metric.Int64Histogram
@@ -253,10 +253,10 @@ func (p *otelProvider) RecordBuzzVMFault(ctx context.Context, kind string) {
 	p.buzz.vmFaults.Add(ctx, 1, metric.WithAttributes(attribute.String("kind", kind)))
 }
 
-// agentInstruments is the agent-surface family: magus.lease.*, magus.attention.* and
+// agentInstruments is the family for leases, attention and review: magus.lease.*, magus.attention.* and
 // magus.review.*, the three places a fleet of agents and the people working with them meet.
 // Every producer here runs in the server, which is what makes them collectable at all; the
-// CLI halves of the same surfaces (raising an attention request, the guard grading a write)
+// CLI halves of the same work (raising an attention request, the guard grading a write)
 // live in one-shot processes and are recorded to the activity trail instead.
 //
 // The attributes are deliberately thin. A lease id, an attention message, a remark body
@@ -292,7 +292,7 @@ func (p *otelProvider) RecordReviewRemark(ctx context.Context, author string) {
 }
 
 // The published verdict carries no author attribute, on purpose. Which door a remark came
-// through is a fact about the surface; how a change was JUDGED, split by who wrote it, is the
+// through is a fact about the transport; how a change was JUDGED, split by who wrote it, is the
 // first half of a threshold that blocks work by author kind. magus observes and does not gate.
 func (p *otelProvider) RecordReviewPublish(ctx context.Context, verdict string, downgraded bool) {
 	p.agent.reviewPublishes.Add(ctx, 1, metric.WithAttributes(

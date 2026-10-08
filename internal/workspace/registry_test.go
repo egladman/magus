@@ -104,7 +104,7 @@ func TestWorkspaceRegistry_RegisterProject_AccumulatesOptions(t *testing.T) {
 
 // fakeWorkspace is a minimal WorkspaceRepository: Apply only reads Root, All,
 // and Get, so the embedded interface stays nil and any other method would panic
-// (a signal that Apply's surface widened).
+// (a signal that Apply started calling more methods).
 type fakeWorkspace struct {
 	types.WorkspaceRepository
 	root     string

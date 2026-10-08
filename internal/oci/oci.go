@@ -16,7 +16,7 @@
 // DescriptorEmptyJSON; go-digest's Digest), so nothing here transcribes a constant the
 // spec already fixes. The TRANSPORT is net/http directly rather than a registry SDK: the
 // whole protocol used here is six requests, and the clients that wrap it bring an
-// OpenPGP stack this tool has no other use for, which is future govulncheck surface on a
+// OpenPGP stack this tool has no other use for, which is future govulncheck exposure on a
 // gate that already runs it.
 //
 // What this does NOT do is the rest of OCI: no image config, no multi-arch index, no

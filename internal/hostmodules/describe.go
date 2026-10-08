@@ -13,7 +13,7 @@ import (
 // (which marshal it to Buzz via ModuleEntry.BuzzObject). With name == "" it
 // returns every module as a summary (name + doc); with a name it returns just
 // that module with its fields and methods (and per-method Buzz signatures)
-// populated, or an empty slice if the name is unknown. Routing both surfaces
+// populated, or an empty slice if the name is unknown. Routing both callers
 // through this one function is what guarantees they can't drift.
 //
 // This lived as std.DescribeModules until std/encoding split nine modules out
@@ -22,7 +22,7 @@ import (
 // to the layer that can; every caller listed there already reads through
 // here for the same reason.
 func Describe(name string) []types.ModuleEntry {
-	// Go modules and Buzz modules are ONE surface here, deliberately. This
+	// Go modules and Buzz modules are ONE list here, deliberately. This
 	// function is what `magus describe modules`, the knowledge graph, the docs
 	// site, REPL completion, MCP describe_kind and magus\describe.module all read,
 	// so folding both kinds in at this one point is what makes a Buzz-implemented

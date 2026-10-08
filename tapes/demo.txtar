@@ -1,7 +1,7 @@
 The workspace the core-loop recording runs against.
 
 Four small stdlib-only Go projects plus a root aggregator, named after the same
-acme monorepo the console demo uses so both surfaces show one product.
+acme monorepo the console demo uses so the terminal and the console show one product.
 
 apps/admin depends on libs/authkit, and that one edge is the whole subject of
 the last act: editing authkit has to reach admin for `affected` to be narrowing
@@ -55,7 +55,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); 
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build, test); }
 // audit fails on purpose, and is NOT part of ci.
 //
-// The showcase needs pinned failures to demonstrate the surfaces that only
+// The showcase needs pinned failures to demonstrate the views that only
 // exist when something breaks - the failure tree, its captured output beside
 // it, the rerun prompt. Wiring a failing check into ci instead would break the
 // core-loop recording, whose whole subject is a clean run.
@@ -205,7 +205,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); 
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build, test); }
 // audit fails on purpose, and is NOT part of ci.
 //
-// The showcase needs pinned failures to demonstrate the surfaces that only
+// The showcase needs pinned failures to demonstrate the views that only
 // exist when something breaks - the failure tree, its captured output beside
 // it, the rerun prompt. Wiring a failing check into ci instead would break the
 // core-loop recording, whose whole subject is a clean run.
@@ -233,7 +233,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(preflight); 
 export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(lint, build, test); }
 // audit fails on purpose, and is NOT part of ci.
 //
-// The showcase needs pinned failures to demonstrate the surfaces that only
+// The showcase needs pinned failures to demonstrate the views that only
 // exist when something breaks - the failure tree, its captured output beside
 // it, the rerun prompt. Wiring a failing check into ci instead would break the
 // core-loop recording, whose whole subject is a clean run.

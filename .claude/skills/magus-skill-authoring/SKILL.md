@@ -1,9 +1,9 @@
 ---
 name: magus-skill-authoring
-description: "The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, or agent install. Also use when evaluating what agents can and cannot learn from magus. Hand-authored and committed; NOT in the installed set, and never shipped in the binary."
+description: "The working method for building and maintaining what magus installs for agents in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, or agent install. Also use when evaluating what agents can and cannot learn from magus. Hand-authored and committed; NOT in the installed set, and never shipped in the binary."
 ---
 
-# Authoring the agent surface
+# Authoring the skills, MCP tools and hints
 
 This is the working method behind the magus skills, so any model, strong or weak,
 maintains them the same way. The skills exist to stop agents guessing, so the
@@ -45,10 +45,10 @@ finds it: the plans doc, a task, the harness memory.
   (here: .claude/skills).
 - Every destination receives identical bytes (a test asserts it). magus is
   agent-host agnostic: no host name appears in code. Host-specific glue (hook
-  event shapes, config dialects) is documentation over the neutral surfaces:
+  event shapes, config dialects) is documentation over neutral commands and flags:
   explicit install destinations, the agent hook verdict, --from-json
   extraction, -o template rendering. Never a per-host code path.
-- Any change to skill content or the tool surface it documents bumps
+- Any change to skill content or the MCP tools it documents bumps
   agentSkillVersion with a changelog line.
 - Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the live
   tools. A skill that mentions this repo's specifics is a bug.
@@ -148,7 +148,7 @@ unknown function is a parse error; an unknown field is an execute error.
 ### Who the short form is for, and therefore what it cuts
 
 Short is not the beginner form. It is installed for the most capable readers,
-which can re-derive an imperative from the tool surface. So **short sheds
+which can re-derive an imperative from the MCP tool list. So **short sheds
 ENUMERATION and keeps JUDGMENT.** It is not "the steps without the why". Dropping
 the why hands the strongest reader the half it could reconstruct and takes away
 the half it could not.
@@ -185,7 +185,7 @@ save bytes measurably hurts weaker models. Write plain sentences with ordinary
 punctuation in both arms.
 
 The prose judge holds what the short form shows to the terse lint rules. Its `skill-source`
-and `skill` surfaces run in hack/lint/markdown-prose.buzz. They refuse:
+and `skill` kinds run in hack/lint/markdown-prose.buzz. They refuse:
 
 - a sentence over 25 words;
 - a paragraph or list item over 60;
@@ -225,13 +225,13 @@ When you cut:
 
 ## 4. Breadcrumbs are load-bearing
 
-Every surface mints a stable, resolvable ID:
+Every named thing magus exposes has a stable, resolvable ID:
 
 - tool names (internal/hint ToolName constants);
 - CLI paths (internal/hint Command values);
 - output refs (out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name).
 
-Prose that points at another surface goes through one of those IDs. A rename then
+Prose that points at another of those things goes through one of those IDs. A rename then
 breaks the build or a test, never an agent at 2am.
 
 Hints stay terse and earned: one line, only on an error or on a result that mints

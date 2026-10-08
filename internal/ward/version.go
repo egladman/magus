@@ -116,7 +116,7 @@ const bootstrapCmd = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-bu
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.
 //
-// Two surfaces reach that conclusion from different evidence and at different moments: a
+// Two paths reach that conclusion from different evidence and at different moments: a
 // magusfile naming something this build never heard of ([ExplainStaleBinary]) and
 // magus.yaml carrying a key it cannot decode, which fails before there is a Config to
 // read. Both render [StaleBuild.Advice], so they cannot disagree about the remedy.

@@ -18,7 +18,7 @@ import (
 	magustypes "github.com/egladman/magus/types"
 )
 
-// The GitHub provider's own `test` blocks, run on the same VM surface the queue gives it.
+// The GitHub provider's own `test` blocks, run on the same VM modules the queue gives it.
 func TestGitHubProviderBuzzTests(t *testing.T) {
 	ctx := context.Background()
 	sess, err := newSession(ctx)

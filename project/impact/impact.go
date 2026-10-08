@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// SymbolStore is the narrow surface the caller and coverage overlays read. The
+// SymbolStore is the narrow interface the caller and coverage overlays read. The
 // concrete *knowledge.Graph satisfies it through GraphStore; a console or HTTP caller
 // can enrich from its own store, and tests supply a fake.
 //
@@ -371,7 +371,7 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 // customTargetsByProject inverts the workspace target inventory into a
 // project-path -> custom-target-names map. Custom targets are magusfile export funs
 // (e.g. build, test, lint, ci here) that no spell contributes; ListTargets is the
-// one surface that attributes them to projects.
+// one call that attributes them to projects.
 func customTargetsByProject(ctx context.Context, ws types.WorkspaceRepository) (map[string][]string, error) {
 	targets, err := ws.ListTargets(ctx)
 	if err != nil {

@@ -129,7 +129,7 @@ func captureAnchors(entries []CaptureEntry) ([]Anchor, error) {
 //
 // Headings are SETEXT (a rule of dashes under the text) and speakers are a plain "name:", so
 // no line depends on a markdown renderer to make sense. A note body is untrusted by contract
-// and every magus surface therefore prints it as text: a `## path` heading is a real heading
+// and every magus command and view therefore prints it as text: a `## path` heading is a real heading
 // only in an editor, and reads as literal hashes everywhere magus itself shows it. Setext is
 // a heading to a renderer AND an underline to a reader, which is the only form that works in
 // both places.

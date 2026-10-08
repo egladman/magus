@@ -39,7 +39,7 @@ type Resolver interface {
 // separates a body edit, which rarely invalidates prose, from drift worth re-reading for.
 //
 // Exported so the CLI and the server grade with one rule rather than two. They present the
-// answer differently (an Issue with a hint, an AnchorStatus with a detail), but a surface
+// answer differently (an Issue with a hint, an AnchorStatus with a detail), but a client
 // whose verdict disagreed with `magus notes verify` would be a second opinion rather than a
 // second view of one answer.
 //

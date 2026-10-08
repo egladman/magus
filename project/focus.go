@@ -15,7 +15,7 @@ import (
 //
 //   - every file directly at the workspace root, which Contains matches by DEPTH
 //     rather than by name: the workspace declaration (magusfile.buzz), the resolved
-//     config (magus.yaml), the instruction and routing surface (AGENTS.md,
+//     config (magus.yaml), the agent instruction and routing files (AGENTS.md,
 //     MAGUS.md), and whatever tree-wide manifest the ecosystem keeps there (go.mod,
 //     package.json). A file at depth zero belongs to no subtree; it describes the
 //     workspace. Naming them one by one would go stale on the first workspace that

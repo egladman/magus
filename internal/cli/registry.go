@@ -827,7 +827,7 @@ var eventsCommand = Command{
 	Short:       "Stream workspace events as JSONL for an integration to consume",
 	Description: "Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs and results.",
 	Tags:        []string{"cli", "magus events", "events", "integration", "editor", "plugin", "jsonl", "subscribe"},
-	Long: `Stream workspace events as JSONL, one event per line. This is the surface
+	Long: `Stream workspace events as JSONL, one event per line. This is the stream
 third-party integrations build against: an Emacs or Vim plugin, a status bar,
 a notifier.
 
@@ -1086,7 +1086,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 		},
 		{
 			Name:  "token",
-			Short: "Manage the operator token (every surface)",
+			Short: "Manage the operator token (every scope)",
 			Children: []Command{
 				{
 					Name:  "generate",
@@ -2438,7 +2438,7 @@ shows what it is doing.`,
 var diffCommand = Command{
 	Name:        "diff",
 	Short:       "Read the working tree's changes in the order they deserve attention",
-	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed.",
+	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether its symbols are public API, and what coverage was observed.",
 	Tags:        []string{"cli", "magus diff", "diff", "review", "changeset", "semver"},
 	Long: `Read the working tree's uncommitted changes, annotated and ordered.
 
@@ -2491,7 +2491,7 @@ claim a change is breaking - deciding that needs signature compatibility, which
 needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
-The console's Diff surface reads the same annotations over the same session,
+The console's Diff app reads the same annotations over the same session,
 and an agent can join that session through the diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild
