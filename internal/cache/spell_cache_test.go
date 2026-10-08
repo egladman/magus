@@ -74,7 +74,7 @@ func sourceRoots(t *testing.T) []SpellCacheRoot {
 		"ab/ab01-d":      "output",
 		"README":         "not an entry",
 		"trim.txt":       "123",
-		"fuzz/x/corpus1": "fuzz",
+		"fuzz/x/a1b2c3d": "fuzz",
 	})
 	writeTree(t, filepath.Join(src, "gomod"), map[string]string{
 		"example.com/m@v1.0.0/m.go":                      "package m",

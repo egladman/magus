@@ -126,7 +126,7 @@ export fun mgs_getSandbox() > Sandbox {
         ]},
         caches = [
             // go re-dates a build cache entry it uses once the entry is an hour old.
-            // README, trim.txt and fuzz corpora are not build entries.
+            // README, trim.txt and the fuzzer's cached inputs are not build entries.
             SandboxCache{env = "GOCACHE", stampsUse = true, skip = ["README", "trim.txt", "fuzz/**"]},
             // A build reads the extracted tree and its .ziphash, never the zip, so zips
             // would double the bundle for nothing. VCS clones serve only direct fetches,

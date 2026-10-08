@@ -81,7 +81,7 @@ export object BlogPost {
     description: str = "",
     url: str = "",
     // ||-joined, same shape as DocPage.tags. A post's tag chips link to the same /tags/ pages
-    // the docs use, so the topic axis spans both corpora - without this the chips pointed at
+    // the docs use, so the topic axis spans the docs and the posts - without this the chips pointed at
     // tag pages that were never built, because tag collection only walks docPages.
     tags: str = "",
 }

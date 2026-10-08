@@ -185,7 +185,7 @@ const KIND_GROUP_ORDER: ReadonlyArray<{ kind: Kind; label: string }> = [
   { kind: Kind.CREDENTIAL_GRANT, label: "Credential grants" },
   { kind: Kind.AGENT_SPAWN, label: "Agent spawns" },
   { kind: Kind.NOTES, label: "Notes" },
-  // The two kinds the job feed synthesizes: a path under a job's write lane changed, and a run
+  // The two kinds the job feed synthesizes: a path under a job's write paths changed, and a run
   // magus recorded against a job. They are last because they are the newest sources, not
   // because they matter least.
   { kind: Kind.FILE_CHANGE, label: "File changes" },

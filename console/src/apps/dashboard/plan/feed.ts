@@ -7,7 +7,7 @@
 // for twenty minutes and interrupting it would cost it the turn it is in.
 //
 // THREE PRODUCERS, ONE SUBSCRIPTION. The server merges file changes attributed by write
-// lane, the guard's tool-call observations attributed by lease, and the runs recorded
+// paths, the guard's tool-call observations attributed by lease, and the runs recorded
 // against the job, and it time-orders them before they reach here (see
 // magus.activity.v1alpha1.ActivityService.WatchActivityEvents). A client stitching three
 // feeds would show a deny after the run it blocked.
@@ -53,7 +53,7 @@ export function feedRow(e: ActivityEvent): FeedRow {
         label: e.action,
         // A contested path is attributed to NOBODY, and both claimants are told. The mark
         // says so rather than leaving the row looking like an ordinary edit, because the
-        // fact worth seeing is that the plan has two live lanes over one file.
+        // fact worth seeing is that the plan has two live jobs writing one file.
         mark: e.contested.length ? "contested" : "",
         note: e.contested.length
           ? e.contested.join(" and ") + " both declare this path"

@@ -339,7 +339,7 @@ import (
 // 113: a skill says "rule" only for what magus enforces and calls the rest instructions;
 // magus-workspace-rules says guard.builtins grades the compiled guard rules.
 // 114: the skills name what each part of magus is (console apps, guard inputs, host
-// modules, the exported API) instead of calling it a surface.
+// modules, the exported API) instead of one catch-all noun.
 const SkillVersion = 114
 
 const skillLicense = "GPL-3.0-or-later"

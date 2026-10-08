@@ -1911,7 +1911,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 		case OpCheckType:
 			// Assert the narrowed value's runtime type (peek, leave it for the store
 			// that follows). Inserted by the compiler where an any-typed value enters
-			// a typed slot, so a mistyped any surfaces as a clear error instead of
+			// a typed slot, so a mistyped any fails with a clear error instead of
 			// silently corrupting a slot a later read trusts.
 			v := vm.peek()
 			ok := false

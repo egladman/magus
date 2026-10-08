@@ -4,7 +4,7 @@
 // orchestrator hands out are the same shape - a job with a HOLDER - so they are ONE list here
 // (JobService.ListJobs returns both), told apart by the holder on the row rather than by living on
 // two different screens. A catalog job carries a description and the size of what it maintains and
-// can be RUN from its row; a session job carries its criteria, the lanes and the check it was given.
+// can be RUN from its row; a session job carries its criteria, the write paths and the check it was given.
 // Neither is a different view.
 //
 // KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (server or session), the criteria, and the

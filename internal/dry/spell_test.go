@@ -187,12 +187,12 @@ export fun mgs_listTargets() > any { return {"serve": serve, "lint": lint}; }
 	assert.True(t, other.OK, "an op without needsArgs still plans: %+v", other.Diag)
 }
 
-// TestRunSpell_badCharmPatchSurfaces locks in that a charm patch which passes the
+// TestRunSpell_badCharmPatchRefusesTheRun locks in that a charm patch which passes the
 // structural decode check but fails to apply (an out-of-range JSON pointer) surfaces
 // as a diagnostic, not swallowed. The engine returns that error and refuses the run;
 // the sandbox must do the same rather than render the un-reshaped command as if the
 // charm applied. The bare run (no charm) still plans cleanly.
-func TestRunSpell_badCharmPatchSurfaces(t *testing.T) {
+func TestRunSpell_badCharmPatchRefusesTheRun(t *testing.T) {
 	ctx := context.Background()
 	src := `import "magus/spell";
 export fun mgs_getName() > str { return "linter"; }
