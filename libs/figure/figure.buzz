@@ -84,7 +84,7 @@ final LabelClear = 6;
 // and the attribute keeps both palettes and the site's theme toggle in step for free.
 object Palette {
     paper: str = "",        // page ground, and the opaque mask under every node
-    surface: str = "",      // default node fill
+    fill: str = "",         // default node fill
     ink: str = "",          // primary text
     muted: str = "",        // secondary text, default connector stroke
     soft: str = "",         // sublabels, connector labels
@@ -101,7 +101,7 @@ fun cssVarPalette() > Palette {
     final l = lightPalette();
     return Palette{
         paper      = "var(--magus-diagram-paper, " + l.paper + ")",
-        surface    = "var(--magus-diagram-surface, " + l.surface + ")",
+        fill       = "var(--magus-diagram-fill, " + l.fill + ")",
         ink        = "var(--magus-diagram-ink, " + l.ink + ")",
         muted      = "var(--magus-diagram-muted, " + l.muted + ")",
         soft       = "var(--magus-diagram-soft, " + l.soft + ")",
@@ -115,15 +115,15 @@ fun cssVarPalette() > Palette {
 // lightPalette and darkPalette are diagram-design's own skin, for the standalone .svg pair
 // GitHub loads. They deliberately do not mirror the site: an inlined figure blends into the
 // page through the CSS vars, while a standalone file is a document of its own and paints the
-// skill's paper. surface is the skill's backend fill (light) and paper-2 (dark).
+// skill's paper. fill is the skill's backend fill (light) and paper-2 (dark).
 //
 // Every colour is an opaque hex. SVG paint takes no rgba(), and a rasterizer that follows
 // the spec (Inkscape, librsvg) paints one black, so rule and accentTint are the tints
-// pre-blended over the surface and paper they sit on. soft is the smallest text in the
-// figure, so it holds 4.5:1 against both paper and surface.
+// pre-blended over the fill and paper they sit on. soft is the smallest text in the
+// figure, so it holds 4.5:1 against both paper and fill.
 fun lightPalette() > Palette {
     return Palette{
-        paper = "#f5f5f5", surface = "#ffffff", ink = "#2d3142", muted = "#4f5d75",
+        paper = "#f5f5f5", fill = "#ffffff", ink = "#2d3142", muted = "#4f5d75",
         soft = "#5f6780", rule = "#e6e6e8", accent = "#eb6c36",
         accentTint = "#f4eae6", link = "#2e5aa8",
     };
@@ -131,7 +131,7 @@ fun lightPalette() > Palette {
 
 fun darkPalette() > Palette {
     return Palette{
-        paper = "#2d3142", surface = "#393e53", ink = "#f5f5f5", muted = "#bfc0c0",
+        paper = "#2d3142", fill = "#393e53", ink = "#f5f5f5", muted = "#bfc0c0",
         soft = "#a9b1c2", rule = "#505466", accent = "#f08a59",
         accentTint = "#403a44", link = "#6a95d8",
     };
@@ -1036,7 +1036,7 @@ fun nodePaint(role: str, p: Palette) > str {
     if (role == "security") {
         return " fill=\"{p.accent}\" fill-opacity=\"0.05\" stroke=\"{p.accent}\" stroke-opacity=\"0.5\"";
     }
-    var fill = p.surface;
+    var fill = p.fill;
     if (role == "focal") { fill = p.accentTint; }
     if (role == "store" or role == "external") { fill = p.paper; }
     return " fill=\"{fill}\" stroke=\"" + nodeStroke(role, p) + "\"";
