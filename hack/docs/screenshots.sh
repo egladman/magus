@@ -14,8 +14,8 @@
 #
 # The one thing worth knowing before editing: the console MUST be served from the
 # assembled deploy tree (gen/site), where it lives under /console/. Served from
-# console/gen at a server root instead, the shell never matches its own base path, so a
-# surface URL like /dashboard/ does not resolve to a surface and every capture silently
+# console/gen at a server root instead, the shell never matches its own base path, so an
+# app URL like /dashboard/ does not resolve to an app and every capture silently
 # comes out as the launcher. That mistake costs an hour; the assembly step below is what
 # prevents it.
 #
@@ -45,18 +45,18 @@ find_chrome() {
 
 # name|path under the served tree|width|height|scale|mobile(0|1)|keys (optional)
 #
-# The trailing keys field presses its comma-separated list once the surface has settled. Five of
+# The trailing keys field presses its comma-separated list once the app has settled. Five of
 # these pictures live behind a keystroke and cannot be reached by a URL: the send box, which is the
 # only place magus names the host a write is about to reach; the overview that carries the threads
 # the stream has nowhere to put; the diff's one-hunk reading mode; and the dashboard's two modes,
 # the presentation board and the work plan.
 #
-# A key only lands if the surface has focus, which is why each of these surfaces focuses its own
+# A key only lands if the app has focus, which is why each of these apps focuses its own
 # root once it is ready. A binding added without that comes out here as a silent recapture of the
 # resting state.
-# The #demo fragment is what each surface reads to enter the server-free showcase, so
+# The #demo fragment is what each app reads to enter the server-free showcase, so
 # these need no server and no workspace.
-# Only what the site actually shows. Adding a surface here is the whole cost of adding a
+# Only what the site actually shows. Adding a line here is the whole cost of adding a
 # screenshot; committing one nothing references is just weight in the repo.
 #
 # The -mobile shots are a real phone: 375x812 at 3x with mobile emulation ON, so they carry BOTH

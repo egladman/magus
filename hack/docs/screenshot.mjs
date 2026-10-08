@@ -1,4 +1,4 @@
-// screenshot.mjs - capture one console surface, driven over the Chrome DevTools Protocol.
+// screenshot.mjs - capture one console app, driven over the Chrome DevTools Protocol.
 //
 // Why CDP and not `chrome --headless --screenshot`, which is simpler and is what this used to be:
 // the flag form cannot express a phone. Two hard limits, both measured rather than assumed.
@@ -19,8 +19,8 @@
 //
 //   node hack/docs/screenshot.mjs <chrome> <url> <out.png> <width> <height> <scale> <mobile:0|1> [keys]
 //
-// `keys` is a comma-separated list of keys to press once the surface has settled, so a picture can
-// show a state that only a keystroke reaches - a send box, an overview. A surface reachable only by
+// `keys` is a comma-separated list of keys to press once the app has settled, so a picture can
+// show a state that only a keystroke reaches - a send box, an overview. An app reachable only by
 // typing is the one a page most needs a picture of, and hand-capturing it puts a screenshot in the
 // repo that nothing can reproduce.
 
@@ -42,7 +42,7 @@ const port = 9222 + (process.pid % 500);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --force-prefers-reduced-motion is load-bearing here for the same reason screenshots.sh gives it
-// to the flag form: a surface with a perpetual animation loop never settles otherwise.
+// to the flag form: an app with a perpetual animation loop never settles otherwise.
 const proc = spawn(
   chrome,
   [
@@ -112,12 +112,12 @@ try {
   }
   await send("Page.navigate", { url });
   for (let i = 0; i < 120 && !seen.has("Page.loadEventFired"); i++) await sleep(100);
-  // The demo surfaces reveal incrementally (the log viewer streams its fixture in), so load is the
+  // The demo apps reveal incrementally (the log viewer streams its fixture in), so load is the
   // start of the picture rather than the end of it.
   await sleep(3000);
 
   for (const key of (keys ?? "").split(",").filter(Boolean)) {
-    // A printable key needs `text` for the surface to read it as typing; a named one must not
+    // A printable key needs `text` for the app to read it as typing; a named one must not
     // carry text at all, or the page receives a character rather than the key.
     const printable = key.length === 1;
     const base = printable ? { text: key, key } : { key, windowsVirtualKeyCode: KEY_CODES[key] };

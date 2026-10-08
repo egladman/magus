@@ -42,7 +42,7 @@
     Why the PNGs carry the pale ground and favicon.svg does not pick a side: favicon.svg already
     serves the pale pair to light-scheme browsers and the dark pair to dark-scheme ones, so
     forcing either branch on it removes a choice rather than making one. The PNGs are the
-    surfaces with no branch to take - the iOS touch icon, the Android launcher icon and the
+    icons with no branch to take - the iOS touch icon, the Android launcher icon and the
     install prompt are one image each - and a pale tile is what gives those an edge against a
     dark tab strip or a busy wallpaper.
 
