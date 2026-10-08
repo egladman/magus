@@ -27,23 +27,23 @@ export object Rule {
     denied: int,
     sessions: int,
     followed: int,
-    surfaces: [str],
+    tools: [str],
 }
 
-// byRule folds the brief's feedback, one row per rule and surface, into one row per rule,
+// byRule folds the brief's feedback, one row per rule and tool, into one row per rule,
 // most refused first.
 export fun byRule(brief: str) > [Rule] !> any {
     final rows = mut {<str: mut Rule>};
     foreach (f in json\parse(brief)["feedback"] ?? []) {
         final name = f["rule"] ?? "";
         if (rows[name] == null) {
-            rows[name] = mut Rule{ name = name, denied = 0, sessions = 0, followed = 0, surfaces = mut [<str>] };
+            rows[name] = mut Rule{ name = name, denied = 0, sessions = 0, followed = 0, tools = mut [<str>] };
         }
         final r = rows[name]!;
         r.denied = r.denied + std\toInt(f["denied"] ?? 0);
         r.sessions = r.sessions + std\toInt(f["sessions"] ?? 0);
         r.followed = r.followed + std\toInt(f["followed_sessions"] ?? 0);
-        r.surfaces = r.surfaces + [f["surface"] ?? ""];
+        r.tools = r.tools + [f["tool"] ?? ""];
     }
     final all = mut [<Rule>];
     foreach (_, r in rows) {
@@ -55,7 +55,7 @@ export fun byRule(brief: str) > [Rule] !> any {
 export fun render(rules: [Rule]) > [str] {
     final lines = mut ["recurring guard refusals in this checkout's recent trail: {rules.len()} rules"];
     foreach (r in rules) {
-        lines.append("  {r.denied}  {r.name}  ({r.sessions} sessions, magus run after it in {r.followed}; {r.surfaces.join(", ")})");
+        lines.append("  {r.denied}  {r.name}  ({r.sessions} sessions, magus run after it in {r.followed}; {r.tools.join(", ")})");
     }
     return lines;
 }
@@ -83,9 +83,9 @@ export fun refusals() > [Rule] !> any {
 
 // The feedback section of a brief, in the shape `magus session --brief -o json` prints.
 final BRIEF = `\{"workspace": "/work/repo", "feedback": [
-  \{"rule": "output-pipe", "surface": "shell.command", "denied": 5, "sessions": 2, "followed_sessions": 1\},
-  \{"rule": "sed-in-place", "surface": "shell.command", "denied": 3, "sessions": 1, "followed_sessions": 0\},
-  \{"rule": "output-pipe", "surface": "mcp.call", "denied": 2, "sessions": 1, "followed_sessions": 1\}
+  \{"rule": "output-pipe", "tool": "shell.command", "denied": 5, "sessions": 2, "followed_sessions": 1\},
+  \{"rule": "sed-in-place", "tool": "shell.command", "denied": 3, "sessions": 1, "followed_sessions": 0\},
+  \{"rule": "output-pipe", "tool": "mcp.call", "denied": 2, "sessions": 1, "followed_sessions": 1\}
 ]\}`;
 
 test "refusals fold into one row per rule, most refused first" {

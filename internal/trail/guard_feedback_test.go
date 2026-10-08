@@ -17,7 +17,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
 		Rule:     "raw-tool",
-		Surface:  "shell.command",
+		Tool:     "shell.command",
 		Denied:   1,
 		Sessions: 1,
 		Latest:   feedback[0].Latest, // wall-clock stamp
@@ -36,7 +36,7 @@ func TestRecentGuardFeedbackOnlyProposesRecurringEvidence(t *testing.T) {
 	require.Len(t, feedback, 1)
 	assert.Equal(t, GuardFeedback{
 		Rule:             "raw-tool",
-		Surface:          "shell.command",
+		Tool:             "shell.command",
 		Denied:           3,
 		Sessions:         1,
 		FollowedSessions: 1,
@@ -57,7 +57,7 @@ func TestRecentGuardFeedbackTreatsTwoSessionsAsRecurringWithoutClaimingSuccess(t
 	// FollowedSessions stays zero: the hook observes requests, never target completion.
 	assert.Equal(t, GuardFeedback{
 		Rule:     "raw-tool",
-		Surface:  "shell.command",
+		Tool:     "shell.command",
 		Denied:   2,
 		Sessions: 2,
 		Latest:   feedback[0].Latest, // wall-clock stamp
@@ -84,7 +84,7 @@ func TestRecentGuardFeedbackIgnoresDenialsNoHostClaims(t *testing.T) {
 	// The host-less denials must not inflate the count.
 	assert.Equal(t, GuardFeedback{
 		Rule:     "raw-tool",
-		Surface:  "shell.command",
+		Tool:     "shell.command",
 		Denied:   1,
 		Sessions: 1,
 		Latest:   feedback[0].Latest, // wall-clock stamp

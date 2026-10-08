@@ -44,7 +44,7 @@ func (r *runner) checkRecurringGuardDenials() types.Check {
 	details := make([]string, 0, len(recurring))
 	for _, c := range recurring {
 		details = append(details, fmt.Sprintf("%s on %s: %d denial(s) across %d session(s), followed %d/%d",
-			c.Rule, c.Surface, c.Denied, c.Sessions, c.FollowedSessions, c.Sessions))
+			c.Rule, c.Tool, c.Denied, c.Sessions, c.FollowedSessions, c.Sessions))
 	}
 	slices.Sort(details)
 	return types.Check{
