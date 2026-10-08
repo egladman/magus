@@ -1,9 +1,9 @@
-namespace agentSurface;
+namespace agentIntegration;
 
 import "magus";
 import "magus/figure";
 
-export fun agentSurfaceFigure() > figure\Figure !> any {
+export fun agentIntegrationFigure() > figure\Figure !> any {
     final skills = magus\dir("internal/agent");
     final guard = magus\dir("internal/guard");
     final hint = magus\dir("internal/hint");

@@ -22,7 +22,7 @@ import "site/diagrams/cache-trust" as _;
 import "site/diagrams/diagram-pipeline" as _;
 import "site/diagrams/knowledge-graph" as _;
 import "site/diagrams/guard-path" as _;
-import "site/diagrams/agent-surface" as _;
+import "site/diagrams/agent-integration" as _;
 import "site/diagrams/buzz-engine" as _;
 import "site/diagrams/buzz-compile" as _;
 import "site/diagrams/buzz-run" as _;
@@ -56,7 +56,7 @@ export fun allFigures() > [figure\Figure] !> any {
         diagramPipelineFigure(),
         knowledgeGraphFigure(),
         guardPathFigure(),
-        agentSurfaceFigure(),
+        agentIntegrationFigure(),
         buzzEngineFigure(),
         buzzCompileFigure(),
         buzzRunFigure(),
