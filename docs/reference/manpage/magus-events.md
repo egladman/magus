@@ -15,7 +15,7 @@ Stream workspace events as JSONL for an integration to consume
 
 ## Description
 
-Stream workspace events as JSONL, one event per line. This is the surface
+Stream workspace events as JSONL, one event per line. This is the stream
 third-party integrations build against: an Emacs or Vim plugin, a status bar,
 a notifier.
 

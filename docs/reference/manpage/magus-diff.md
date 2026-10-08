@@ -1,7 +1,7 @@
 ---
 title: magus diff
 generated_from: internal/cli/registry.go
-description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed."
+description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether its symbols are public API, and what coverage was observed."
 tags: [cli, magus diff, diff, review, changeset, semver]
 ---
 
@@ -66,7 +66,7 @@ claim a change is breaking - deciding that needs signature compatibility, which
 needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
-The console's Diff surface reads the same annotations over the same session,
+The console's Diff app reads the same annotations over the same session,
 and an agent can join that session through the diff MCP tool.
 
 --impact appends the blast radius of landing the change: which projects rebuild

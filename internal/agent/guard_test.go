@@ -288,7 +288,7 @@ func TestShippedTemplatesCarryTheCurrentVersion(t *testing.T) {
 const guardCoverageMarker = "magus-guard-coverage:"
 
 // guardCoverageSchema is the marker's own format version, apart from the verdict envelope's
-// GuardSchemaVersion. Schema 2 names the guard input with input= where schema 1 said surface=.
+// GuardSchemaVersion.
 const guardCoverageSchema = "2"
 
 // guardStances are the answers a template may give for a decision: the model

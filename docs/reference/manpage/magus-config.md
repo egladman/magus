@@ -127,7 +127,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 : Manage MCP connector tokens
 
 **token**
-: Manage the operator token (every surface)
+: Manage the operator token (every scope)
 
 **console**
 : Manage the console (PWA) auth tokens
