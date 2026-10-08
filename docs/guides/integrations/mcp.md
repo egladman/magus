@@ -172,12 +172,12 @@ the host's stdio or Unix-socket connection. For a server-socket problem,
 the socket, but cannot confirm the host registered MCP. The host owns the
 connection; an agent should not start a server merely to unlock a tool.
 
-| Need                                      | MCP                                                             | Disconnected fallback                                                |
-| ----------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`                 |
-| Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`            |
-| Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                          |
-| Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has more host modules      |
+| Need                                      | MCP                                                             | Disconnected fallback                                           |
+| ----------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`            |
+| Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`       |
+| Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                     |
+| Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has more host modules |
 
 `client` is the magus module. Define `main(args: [str])`, `import "magus"`, and
 return a JSON-encodable value. The return is under `json`; `std.print` text is

@@ -78,11 +78,7 @@ test("the readout reports the app\'s own factor, and reset returns it to 100%", 
   const readout = document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]');
   assert.equal(readout?.textContent, "100%");
   document.querySelector<HTMLElement>('.console-zoom [data-zoom="in"]')?.click();
-  assert.equal(
-    readout?.textContent,
-    "200%",
-    "the click drove the app AND repainted the readout",
-  );
+  assert.equal(readout?.textContent, "200%", "the click drove the app AND repainted the readout");
   document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]')?.click();
   assert.equal(readout?.textContent, "100%");
   // A change made by any other route - a command, ctrl+wheel - is reflected through sync().

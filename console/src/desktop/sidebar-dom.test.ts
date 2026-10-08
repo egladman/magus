@@ -161,8 +161,7 @@ test("moving focus inside a tiled tab moves the current row", () => {
   assert.equal(link(host, "dashboard").classList.contains("pf-m-current"), false);
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), true);
   assert.equal(
-    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-app].pf-m-current")
-      .length,
+    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-app].pf-m-current").length,
     1,
     "exactly one row is ever current",
   );
@@ -266,10 +265,7 @@ test("utility apps are pinned in their own group", () => {
   const utility = host.querySelector("[data-rail-utility]");
   assert.ok(utility);
   assert.equal(utility.querySelectorAll("[data-rail-app]").length, 1);
-  assert.equal(
-    utility.querySelector("[data-rail-app]")?.getAttribute("data-rail-app"),
-    "settings",
-  );
+  assert.equal(utility.querySelector("[data-rail-app]")?.getAttribute("data-rail-app"), "settings");
   // ...and the lenses are NOT in it.
   assert.equal(utility.querySelector('[data-rail-app="dashboard"]'), null);
   // The utility group comes after the main list, so it renders at the foot.

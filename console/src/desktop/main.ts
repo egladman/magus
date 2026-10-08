@@ -795,9 +795,7 @@ function openKeybindings(cmdId?: string): void {
         return;
       }
     } else {
-      const editor = document.querySelector<HTMLElement>(
-        '[data-app="settings"] [data-kbeditor]',
-      );
+      const editor = document.querySelector<HTMLElement>('[data-app="settings"] [data-kbeditor]');
       if (editor) {
         reveal(editor, "start");
         return;
@@ -2331,11 +2329,7 @@ export function startConsole(
     // A phone that just scanned the QR lands on something live immediately rather
     // than an empty launcher: open the Dashboard as the read-only view.
     open("dashboard");
-  } else if (
-    !entryApp &&
-    !hadSavedWorkspace &&
-    window.matchMedia(DESKTOP_START_QUERY).matches
-  ) {
+  } else if (!entryApp && !hadSavedWorkspace && window.matchMedia(DESKTOP_START_QUERY).matches) {
     const starter = desktopStarterWorkspace();
     const [starterTab] = starter.tabs;
     if (starterTab) {

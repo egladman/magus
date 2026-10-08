@@ -205,11 +205,7 @@ test("the diff annotations agree with the figures every other app reports", () =
   const note = (session.diff.files ?? []).find((a) => a.path === STORY_FILES.CLAIMS);
   assert.ok(note, "the annotations no longer cover the file the story turns on");
   assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight app");
-  assert.equal(
-    note.churn?.authors,
-    claims.authors,
-    "author count disagrees with the Insight app",
-  );
+  assert.equal(note.churn?.authors, claims.authors, "author count disagrees with the Insight app");
   assert.equal(
     note.reach,
     claims.blastRadius,
