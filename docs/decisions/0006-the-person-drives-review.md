@@ -23,13 +23,13 @@ The review process has not caught up, and it does not scale:
 
 - Most of us first read a change in the GitHub UI, after the push, when colleagues or the
   public can already see it. That UI makes a large change hard to navigate.
-- Teams answer the volume with policies like one human reviewer per agent-written pull
-  request and a target cycle time of eight to ten hours. That trades review for speed.
+- Teams answer the volume by shortening review cycles and thinning review, so fewer
+  people read each change, faster. That trades review for speed.
 - With one approval required, a change often merges while a second reviewer is halfway
   through reading it. Their time is gone, and nobody counts it.
 
-Left to run on their own, agents creep scope and ship slop. A review of three open pull
-requests in this repository, all agent-written, found exactly that:
+Left to run on their own, agents creep scope and ship slop. A review of this repository's
+open pull requests, all agent-written, found exactly that:
 
 - One reverted its own first approach a commit later and kept the test written for it.
 - One claimed "five real races" it never named, and its gate change broke the merge queue.
@@ -50,9 +50,10 @@ standard from one tree leaked into the product.
 
 ### Principles
 
-1. **20/60/20.** I set the intent and the constraints (the first 20), the agent does the
-   middle (60), and I close: review, question, cut, decide (the last 20). I drive the
-   session the whole way; an agent never decides the work is done.
+1. **A person holds both ends.** I open the work by deciding what it is for and what it
+   must not touch, and I close it by reading, questioning and cutting what came back. The
+   agent does the middle, often the largest share, but never the start or the finish. I
+   drive the session the whole way; an agent never decides the work is done.
 2. **Write for people.** The moment we start writing code with the intent of other
    agents reading that code instead of other humans is the moment we have lost our way
    as software engineers. Code and comments are for a human reader, and text padded for
@@ -107,7 +108,7 @@ from. What it established:
 | `magus diff --order=story`: hunks grouped into chapters by definition and use among changed symbols, definitions before uses, interfaces before implementations, code before its tests, central chapters first | planned                     |
 | Each step names the relationship that placed it; a completeness line proves every hunk appears exactly once; the order is deterministic and never chosen by a model                                            | planned                     |
 | Consecutive steps from one file merge into one screen; hunks magus cannot rank form a trailing "unranked" chapter; a declared index that is stale is an error naming the rebuild                               | planned                     |
-| The closing 20% keeps private read marks keyed by hunk content, plus an optional pre-push hook that magus prints (never installs) naming unread hunks as advice; nothing blocks a push                         | planned                     |
+| The closing read keeps private read marks keyed by hunk content, plus an optional pre-push hook that magus prints (never installs) naming unread hunks as advice; nothing blocks a push                        | planned                     |
 | The console's focus mode presents the story one step at a time, with everything else put aside                                                                                                                 | planned                     |
 | The story opens with the intent: the job's criteria, the brief, and the rationale the session recorded, since magus already holds what an agent was asked and what it ran                                      | proposed                    |
 | A Buzz prototype ordered four recent pull requests; it read better than file order where a change was one connected feature, and worse where it was many small unconnected hunks                               | done (branch `story-order`) |
