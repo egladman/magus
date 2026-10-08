@@ -124,9 +124,9 @@ func commentSentence(in input) []Finding {
 }
 
 // endsSentence reports whether token closes a sentence, looking past closing
-// quotes and brackets.
+// quotes, brackets and emphasis.
 func endsSentence(token string) bool {
-	token = strings.TrimRight(token, `"')]`+"`")
+	token = strings.TrimRight(token, `"')]*_`+"`")
 
 	return strings.HasSuffix(token, ".") || strings.HasSuffix(token, "!") || strings.HasSuffix(token, "?")
 }

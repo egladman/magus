@@ -28,6 +28,7 @@ func TestTerseSentenceReportsASentenceOverTheCap(t *testing.T) {
 			[]Finding{sentenceOver(2, 40)}},
 		{"a sentence opening on a later line", "Short one.\n\n" + longSentence(36), []Finding{sentenceOver(3, 36)}},
 		{"a code span is one word", wordRun(30) + " `" + wordRun(20) + "` end.", nil},
+		{"a bold sentence ends at its stop", "**" + longSentence(20) + "** " + longSentence(20), nil},
 		{"a sentence with no closing stop", wordRun(36), []Finding{sentenceOver(1, 36)}},
 		{"each list item is its own", "- " + longSentence(30) + "\n- " + longSentence(30), nil},
 	}
