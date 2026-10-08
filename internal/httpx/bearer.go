@@ -93,7 +93,7 @@ func WithFailureLimit(l *FailureLimiter) GuardOption {
 // meet: token management, then any write, then a read.
 func stricter(a, b types.Need) bool {
 	rank := func(n types.Need) int {
-		if n.Surface == types.SurfaceTokens {
+		if n.Scope == types.ScopeTokens {
 			return 10
 		}
 		return int(n.Level)
@@ -186,9 +186,9 @@ func grantBelow(need types.Need, held types.Grant) rpcerr.Error {
 	}
 	msg := "this route needs " + need.String() + " and the token presented holds " + heldText
 	switch {
-	case need.Surface == types.SurfaceTokens:
+	case need.Scope == types.ScopeTokens:
 		msg += "; only the operator token reaches it, used from the user's own shell"
-	case need.Surface == types.SurfaceMCP:
+	case need.Scope == types.ScopeMCP:
 		msg += "; a connector token reaches it: magus config mcp connector create"
 	case need.Level == types.LevelWrite:
 		msg += "; a console token reaches it: magus config console token create"

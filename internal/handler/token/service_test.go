@@ -357,7 +357,7 @@ func TestTokenServiceGuardAdmitsOnlyTokensWrite(t *testing.T) {
 	op, err := auth.EnsureOperator(context.Background(), nil)
 	require.NoError(t, err)
 	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
-	guarded, err := httpx.BearerGuard(rpcerr.FormatConnect, auth.Verify, types.Need{Surface: types.SurfaceTokens, Level: types.LevelWrite}, h)
+	guarded, err := httpx.BearerGuard(rpcerr.FormatConnect, auth.Verify, types.Need{Scope: types.ScopeTokens, Level: types.LevelWrite}, h)
 	require.NoError(t, err)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()

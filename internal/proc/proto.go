@@ -35,8 +35,8 @@ const (
 )
 
 var (
-	needConsoleRead  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
-	needConsoleWrite = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
+	needConsoleRead  = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+	needConsoleWrite = types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
 )
 
 // routeNeeds is the Need of every proc route. Reading the pool is a console read; anything

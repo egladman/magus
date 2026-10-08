@@ -40,7 +40,7 @@ func StartTokenServer(origin string, routes map[string]http.Handler) (*TokenServ
 	t := &TokenServer{srv: s, token: hex.EncodeToString(raw), done: make(chan struct{})}
 	// The per-run token reads its one page's data and nothing more.
 	verify := SingleTokenVerifier(func() (string, error) { return t.token, nil }, types.GrantViewer)
-	need := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
+	need := types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
 	for pattern, h := range routes {
 		guarded, err := BearerGuardWithQueryToken(rpcerr.FormatJSON, verify, need, h)
 		if err != nil {

@@ -7,18 +7,18 @@ import (
 	"strings"
 )
 
-// Surface is one part of the server a credential may be granted: token management, the MCP
+// Scope is one part of the server a credential may be granted: token management, the MCP
 // endpoint, or the console.
-type Surface string
+type Scope string
 
 const (
-	SurfaceTokens  Surface = "tokens"
-	SurfaceMCP     Surface = "mcp"
-	SurfaceConsole Surface = "console"
+	ScopeTokens  Scope = "tokens"
+	ScopeMCP     Scope = "mcp"
+	ScopeConsole Scope = "console"
 )
 
-// surfaces is the order a Grant renders and parses in.
-var surfaces = []Surface{SurfaceTokens, SurfaceMCP, SurfaceConsole}
+// scopes is the order a Grant renders and parses in.
+var scopes = []Scope{ScopeTokens, ScopeMCP, ScopeConsole}
 
 // Level is how much of one surface a credential may use. Levels are ordered: a higher level
 // includes every lower one.
@@ -88,13 +88,13 @@ var (
 )
 
 // Level returns the grant's level on s, and LevelNone for a surface it does not know.
-func (g Grant) Level(s Surface) Level {
+func (g Grant) Level(s Scope) Level {
 	switch s {
-	case SurfaceTokens:
+	case ScopeTokens:
 		return g.Tokens
-	case SurfaceMCP:
+	case ScopeMCP:
 		return g.MCP
-	case SurfaceConsole:
+	case ScopeConsole:
 		return g.Console
 	}
 	return LevelNone
@@ -104,7 +104,7 @@ func (g Grant) Level(s Surface) Level {
 // half, so tokens=read and mcp=read are errors, as is any level past write.
 func (g Grant) Validate() error {
 	var errs []error
-	for _, s := range surfaces {
+	for _, s := range scopes {
 		if err := validLevel(s, g.Level(s)); err != nil {
 			errs = append(errs, fmt.Errorf("grant: %w", err))
 		}
@@ -112,11 +112,11 @@ func (g Grant) Validate() error {
 	return errors.Join(errs...)
 }
 
-func validLevel(s Surface, l Level) error {
+func validLevel(s Scope, l Level) error {
 	switch {
 	case l > LevelWrite:
 		return fmt.Errorf("%s has unknown level %d", s, uint8(l))
-	case l == LevelRead && s != SurfaceConsole:
+	case l == LevelRead && s != ScopeConsole:
 		return fmt.Errorf("%s=read means nothing; %s is none or write", s, s)
 	}
 	return nil
@@ -124,12 +124,12 @@ func validLevel(s Surface, l Level) error {
 
 // Allows reports whether g reaches n: its level on n's surface is at least n's level. A need
 // of LevelNone is met by every grant.
-func (g Grant) Allows(n Need) bool { return g.Level(n.Surface) >= n.Level }
+func (g Grant) Allows(n Need) bool { return g.Level(n.Scope) >= n.Level }
 
 // Within reports whether g is at most outer on every surface: everything g may do, outer may
 // do too.
 func (g Grant) Within(outer Grant) bool {
-	for _, s := range surfaces {
+	for _, s := range scopes {
 		if g.Level(s) > outer.Level(s) {
 			return false
 		}
@@ -140,7 +140,7 @@ func (g Grant) Within(outer Grant) bool {
 // String renders the surfaces g grants, as "mcp=write,console=read", and "" for nothing.
 func (g Grant) String() string {
 	var parts []string
-	for _, s := range surfaces {
+	for _, s := range scopes {
 		if l := g.Level(s); l != LevelNone {
 			parts = append(parts, string(s)+"="+l.String())
 		}
@@ -151,23 +151,23 @@ func (g Grant) String() string {
 // Need is what a server route requires of the credential presented to it. Each mount declares
 // one.
 type Need struct {
-	Surface Surface
-	Level   Level
+	Scope Scope
+	Level Level
 }
 
 // String renders the need as "console=write".
-func (n Need) String() string { return string(n.Surface) + "=" + n.Level.String() }
+func (n Need) String() string { return string(n.Scope) + "=" + n.Level.String() }
 
 // Validate refuses a need no grant is meant to meet or every grant meets: an unknown surface,
 // a level the surface has no meaning for, and LevelNone, which would admit any credential.
 func (n Need) Validate() error {
-	if !slices.Contains(surfaces, n.Surface) {
-		return fmt.Errorf("need: unknown surface %q", n.Surface)
+	if !slices.Contains(scopes, n.Scope) {
+		return fmt.Errorf("need: unknown scope %q", n.Scope)
 	}
 	if n.Level == LevelNone {
-		return fmt.Errorf("need: %s=none admits every credential", n.Surface)
+		return fmt.Errorf("need: %s=none admits every credential", n.Scope)
 	}
-	if err := validLevel(n.Surface, n.Level); err != nil {
+	if err := validLevel(n.Scope, n.Level); err != nil {
 		return fmt.Errorf("need: %w", err)
 	}
 	return nil

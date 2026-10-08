@@ -25,7 +25,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-var needMCP = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+var needMCP = types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
 
 // serveSocket serves h on a real unix socket, with each connection's peer read by
 // PeerConnContext, until the test ends, and returns a client that dials it.
@@ -159,7 +159,7 @@ func unixPair() (*net.UnixConn, *net.UnixConn, error) {
 func TestGrantGuardHoldsTheCredentialOnTheContextToThePathsNeed(t *testing.T) {
 	needs := map[string]types.Need{
 		"/mcp":    needMCP,
-		"/status": {Surface: types.SurfaceConsole, Level: types.LevelRead},
+		"/status": {Scope: types.ScopeConsole, Level: types.LevelRead},
 	}
 	g, err := GrantGuard(rpcerr.FormatJSON, needs, credentialEcho)
 	require.NoError(t, err)
@@ -182,6 +182,6 @@ func TestGrantGuardHoldsTheCredentialOnTheContextToThePathsNeed(t *testing.T) {
 
 	_, err = GrantGuard(rpcerr.FormatJSON, nil, credentialEcho)
 	assert.Error(t, err)
-	_, err = GrantGuard(rpcerr.FormatJSON, map[string]types.Need{"/x": {Surface: types.SurfaceMCP}}, credentialEcho)
+	_, err = GrantGuard(rpcerr.FormatJSON, map[string]types.Need{"/x": {Scope: types.ScopeMCP}}, credentialEcho)
 	assert.Error(t, err)
 }

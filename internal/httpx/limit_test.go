@@ -63,7 +63,7 @@ func TestGuardLimitsOnlyFailures(t *testing.T) {
 	verify := func(p string) (types.Credential, bool) {
 		return types.Credential{Grant: types.GrantConnector}, p == "good"
 	}
-	h, err := ProcedureGuard(rpcerr.FormatJSON, verify, map[string]types.Need{"/mcp": {Surface: types.SurfaceMCP, Level: types.LevelWrite}},
+	h, err := ProcedureGuard(rpcerr.FormatJSON, verify, map[string]types.Need{"/mcp": {Scope: types.ScopeMCP, Level: types.LevelWrite}},
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }), WithFailureLimit(l))
 	require.NoError(t, err)
 	send := func(origin, token string) *httptest.ResponseRecorder {

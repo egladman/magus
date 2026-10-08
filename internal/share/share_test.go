@@ -185,7 +185,7 @@ func statusRoutes(h http.Handler) map[string]Route {
 	return map[string]Route{"/api/v1/status": {
 		Handler: h,
 		Format:  rpcerr.FormatJSON,
-		Needs:   map[string]types.Need{"/api/v1/status": {Surface: types.SurfaceConsole, Level: types.LevelRead}},
+		Needs:   map[string]types.Need{"/api/v1/status": {Scope: types.ScopeConsole, Level: types.LevelRead}},
 	}}
 }
 
@@ -198,7 +198,7 @@ func TestStartRefusesARouteWithoutNeeds(t *testing.T) {
 	for name, r := range map[string]Route{
 		"no needs":  {Handler: okHandler, Format: rpcerr.FormatJSON},
 		"zero need": {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]types.Need{"/api/v1/status": {}}},
-		"mcp=read":  {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]types.Need{"/api/v1/status": {Surface: types.SurfaceMCP, Level: types.LevelRead}}},
+		"mcp=read":  {Handler: okHandler, Format: rpcerr.FormatJSON, Needs: map[string]types.Need{"/api/v1/status": {Scope: types.ScopeMCP, Level: types.LevelRead}}},
 	} {
 		_, err := m.Start(types.GrantConsole, consoleDirFixture(t), map[string]Route{"/api/v1/status": r}, 0)
 		assert.Error(t, err, name)

@@ -143,7 +143,7 @@ func TestBearerGuardVerifierRejectionFailsClosed(t *testing.T) {
 // need, never a 401 (the token is valid) and never a pass.
 func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 	t.Parallel()
-	surfaces := []types.Surface{types.SurfaceTokens, types.SurfaceMCP, types.SurfaceConsole}
+	scopes := []types.Scope{types.ScopeTokens, types.ScopeMCP, types.ScopeConsole}
 	levels := []types.Level{types.LevelNone, types.LevelRead, types.LevelWrite}
 	for _, tok := range []types.Level{types.LevelNone, types.LevelWrite} {
 		for _, mcp := range []types.Level{types.LevelNone, types.LevelWrite} {
@@ -152,9 +152,9 @@ func TestBearerGuardAdmitsExactlyTheGrantsThatAllowTheNeed(t *testing.T) {
 				verify := func(string) (types.Credential, bool) {
 					return types.Credential{Kind: types.KindStored, Grant: grant}, true
 				}
-				for _, s := range surfaces {
+				for _, s := range scopes {
 					for _, l := range levels[1:] {
-						need := types.Need{Surface: s, Level: l}
+						need := types.Need{Scope: s, Level: l}
 						if need.Validate() != nil {
 							continue // tokens=read and mcp=read are no need; a guard refuses to build on one
 						}
@@ -201,7 +201,7 @@ func TestBearerGuardPutsTheVerifiedCredentialOnTheContext(t *testing.T) {
 // constructor refuses one rather than admitting every credential.
 func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 	t.Parallel()
-	for _, n := range []types.Need{{}, {Surface: types.SurfaceConsole}, {Surface: "files", Level: types.LevelWrite}, {Surface: types.SurfaceMCP, Level: types.LevelRead}} {
+	for _, n := range []types.Need{{}, {Scope: types.ScopeConsole}, {Scope: "files", Level: types.LevelWrite}, {Scope: types.ScopeMCP, Level: types.LevelRead}} {
 		_, err := BearerGuard(rpcerr.FormatJSON, rejectAll, n, okHandler)
 		assert.Error(t, err, "BearerGuard %+v", n)
 		_, err = BearerGuardWithQueryToken(rpcerr.FormatJSON, rejectAll, n, okHandler)
@@ -217,8 +217,8 @@ func TestGuardsRefuseToBuildOnAZeroOrInvalidNeed(t *testing.T) {
 // strictest one in it, so an unlisted procedure is never the weakest door.
 func TestProcedureGuardHoldsEachProcedureToItsNeed(t *testing.T) {
 	t.Parallel()
-	read := types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
-	write := types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
+	read := types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+	write := types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
 	h := built(ProcedureGuard(rpcerr.FormatConnect, func(string) (types.Credential, bool) {
 		return types.Credential{Kind: types.KindStored, Grant: types.GrantViewer}, true
 	}, map[string]types.Need{"/s.S/List": read, "/s.S/Run": write}, okHandler))
@@ -326,7 +326,7 @@ func TestBearerToken(t *testing.T) {
 var rejectAll Verifier = func(string) (types.Credential, bool) { return types.Credential{}, false }
 
 // anyNeed is a need every test credential below meets; the refusals here are about the token.
-var anyNeed = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
+var anyNeed = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
 
 // built unwraps a guard constructor for a test. A build error answers every request 500 with
 // the error text, so the status assertion that follows names it.
