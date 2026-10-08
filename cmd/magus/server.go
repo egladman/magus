@@ -216,7 +216,7 @@ func serverStart(ctx context.Context, args []string) error {
 		stopNow: func() { close(now) },
 	}.watch(ctx)
 	defer release()
-	startServerSurface(ctx, cancel)
+	startServerServices(ctx, cancel)
 
 	// Block until a signal cancels ctx OR an RPC `server stop` closes the proc server. The
 	// second case is the load-bearing one: the shutdown handler cancels only the listener's
@@ -266,10 +266,10 @@ func reloadOnHangup(ctx context.Context) {
 		slog.Int("dropped", dropped), slog.Int("busy", busy))
 }
 
-// startServerSurface opens what the server serves beyond its socket: the VCS hooks that
+// startServerServices opens what the server serves beyond its socket: the VCS hooks that
 // poke it, the graph and symbol watch, MCP and the console over HTTP on mcp.address, and
 // the maintenance scheduler. A var so a test can observe it without binding a port.
-var startServerSurface = func(ctx context.Context, cancel context.CancelFunc) {
+var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	// The socket is unusable by a person and the console is the thing they open, so it is
 	// printed here rather than left in the log. A console that is not mounted says so: a
 	// silent absence is what sends somebody reading the server's source.

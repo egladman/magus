@@ -64,8 +64,8 @@ fun claude_named_command(script: str, flags: [str]) > str {
     return claude_buzz_command(script, flags: named);
 }
 
-fun claude_glue_command(surface: str, flags: [str]) > str {
-    return claude_named_command("magus-{surface}", flags: flags);
+fun claude_glue_command(input: str, flags: [str]) > str {
+    return claude_named_command("magus-{input}", flags: flags);
 }
 
 // The Bash, MCP and Skill matchers all take this one string. Their payloads differ, but a
