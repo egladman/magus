@@ -31,7 +31,7 @@ var guardDecisions = []string{"pass", "advise", "deny", "ask"}
 // single string). A host wires each input to a different one of its events,
 // and a host that cannot wire one covers less, which is a coverage difference
 // to record, not to hide.
-var guardInputs =[]string{"command", "path", "mcp"}
+var guardInputs = []string{"command", "path", "mcp"}
 
 // GuardTemplateVersion is the revision of the hook templates a reader installs
 // into their agent host.

@@ -132,7 +132,7 @@ func TestRunCompletionsFillsEveryDialect(t *testing.T) {
 	out := completionsDir(t)
 	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table,"-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 
 	read := func(name string) string {
 		body, err := os.ReadFile(filepath.Join(out, name))
@@ -163,13 +163,13 @@ func TestRunCompletionsIsIdempotent(t *testing.T) {
 	out := completionsDir(t)
 	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table,"-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 	first, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	stat, err := os.Stat(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 
-	require.NoError(t, runCompletions([]string{"-subcommands", table,"-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 	second, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	restat, err := os.Stat(filepath.Join(out, "magus.bash"))
@@ -185,7 +185,7 @@ func TestRunCompletionsRefusesAnEmptyTable(t *testing.T) {
 	src := t.TempDir()
 	table := writeSubcommands(t, src, "package main\n\nvar unrelated = 1\n")
 
-	err := runCompletions([]string{"-subcommands", table,"-out", completionsDir(t)})
+	err := runCompletions([]string{"-subcommands", table, "-out", completionsDir(t)})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no subcommands found")
 }
