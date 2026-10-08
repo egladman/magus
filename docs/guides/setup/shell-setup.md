@@ -2,6 +2,7 @@
 title: Shell setup
 description: Set up magus tab-completion for bash, zsh, fish, or PowerShell, and install mgs, the shorthand, as a symlink beside the binary.
 tags: [completion, shell, bash, zsh, fish, powershell, mgs, shorthand, setup]
+aliases: [setup/shell-setup]
 ---
 
 # Shell setup
@@ -66,7 +67,7 @@ Append it to your profile:
 magus completion powershell >> $PROFILE
 ```
 
-Full reference: [`magus completion`](../reference/manpage/magus-completion/).
+Full reference: [`magus completion`](../../reference/manpage/magus-completion/).
 
 ## `mgs` shorthand
 
@@ -78,6 +79,6 @@ The [install script](../setup.md#install) creates it for you unless you pass `--
 magus self install-shorthand
 ```
 
-That symlinks `mgs` next to the binary itself, so it is on your `PATH` if `magus` is. An existing `mgs` is left alone unless you pass `--force`, and `--dir` puts the link somewhere else. Full flag reference: [`magus self`](../reference/manpage/magus-self/).
+That symlinks `mgs` next to the binary itself, so it is on your `PATH` if `magus` is. An existing `mgs` is left alone unless you pass `--force`, and `--dir` puts the link somewhere else. Full flag reference: [`magus self`](../../reference/manpage/magus-self/).
 
 A symlink rather than a shell alias, because an alias only exists in interactive shells: `mgs` in a script, a `Makefile`, or a CI step would not resolve. The link also survives [`magus self update`](../setup.md#update), which resolves symlinks before swapping the binary underneath.

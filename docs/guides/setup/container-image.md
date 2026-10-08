@@ -18,6 +18,7 @@ tags:
     provenance,
     install,
   ]
+aliases: [setup/container-image]
 ---
 
 # Run magus from a container image
@@ -216,5 +217,5 @@ its distroless/cc glibc layer and `inotify-tools`.
 
 ## Next steps
 
-- New to magus? Start with [Targets](../concepts/targets.md) and [Spells](../concepts/spells.md).
+- New to magus? Start with [Targets](../../concepts/targets.md) and [Spells](../../concepts/spells.md).
 - Prefer a native binary? See the [install guides](../setup.md#install).

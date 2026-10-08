@@ -2,6 +2,7 @@
 title: mise
 description: Install magus through mise via the ubi backend, and why the aqua and go backends are not the route to take.
 tags: [mise, ubi, aqua, package-manager, go-install]
+aliases: [setup/mise]
 ---
 
 # mise

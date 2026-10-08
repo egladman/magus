@@ -95,7 +95,7 @@ final JUDGE = "libs/conventions/cmd/judge-docs";
 
 // GUIDES are the procedural pages; concepts, reference, doctrine and the decision records
 // explain and keep the general Markdown rules.
-final GUIDES = ["docs/guides/**", "docs/setup.md", "docs/setup/**", "docs/migrating/**"];
+final GUIDES = ["docs/guides/**"];
 
 // kindOf is the judge's kind for the hand-written file at rel: a skill body the
 // agent package renders, a skill an agent loads as written, a guide, or any other
@@ -646,8 +646,8 @@ test "a skill body, a loaded skill, a guide and any other page each take their o
     assert\equal(kindOf(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "skill", message: "a loaded skill");
     assert\equal(kindOf("internal/agent/agents-section.md"), want: "markdown", message: "not a skill");
     assert\equal(kindOf(".claude/skills/x/notes.md"), want: "markdown", message: "not a SKILL.md");
-    foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/setup.md", "docs/setup/linux.md",
-        "docs/migrating/from-nx.md"]) {
+    foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/guides/setup.md",
+        "docs/guides/setup/linux.md", "docs/guides/migrating/from-nx.md"]) {
         assert\equal(kindOf(page), want: "guide", message: page);
     }
     assert\equal(kindOf("docs/concepts/cache.md"), want: "markdown", message: "a concept page");

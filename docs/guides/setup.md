@@ -3,6 +3,7 @@ title: Setup
 page_type: overview
 description: Install magus from a signed release, verify it, set up your shell, and keep it current with magus self update.
 tags: [install, download, release, self-update, ed25519, verify, signing]
+aliases: [setup]
 ---
 
 # Setup
@@ -74,7 +75,7 @@ Two consequences worth knowing before you pick a build:
 ## Version control
 
 magus drives the repository's own version control binary, and refuses one older than the
-release it relies on with [MGS3005](reference/codes/sandbox/MGS3005.md): git 2.54, jj 0.22,
+release it relies on with [MGS3005](../reference/codes/sandbox/MGS3005.md): git 2.54, jj 0.22,
 Mercurial 4.5, Sapling 0.2.20230523. git's floor is a fix, not a flag. Before 2.54 a
 histogram diff could shift its hunks, so which declarations a change lands in depended on
 the git that read it.
@@ -87,7 +88,7 @@ the git that read it.
 
 ## Update
 
-`magus self update` fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: [`magus self`](../reference/manpage/magus-self/).
+`magus self update` fetches the latest release, verifies the signature against the key baked into your binary, and swaps in place. Full flag reference: [`magus self`](../../reference/manpage/magus-self/).
 
 | Flag               | Effect                                 |
 | ------------------ | -------------------------------------- |
@@ -100,4 +101,4 @@ the git that read it.
 
 Package-maintainer builds compiled with `-tags noselfupdate` disable this subcommand; fall back to a manual install.
 
-Release notes are in the [changelog](changelog/).
+Release notes are in the [changelog](../../changelog/).

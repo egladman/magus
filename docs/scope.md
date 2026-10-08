@@ -336,7 +336,7 @@ are in [the server decision](guides/integrations/editor/design.md).
 and you opt into the check, and it remains infrastructure we control, in a
 project that pitches not having any.
 
-**The docs describe a `go install` path.** `docs/setup/mise.md` documents the
+**The docs describe a `go install` path.** `docs/guides/setup/mise.md` documents the
 route the rule above says not to recommend, because you find it anyway. It
 carries a warning giving the structural reason. Documenting a route while telling
 you to avoid it is a compromise, and a tension.

@@ -425,7 +425,7 @@ or a rule id) and everything else a skill asks of an agent is an instruction, so
 the mechanism.
 
 A guide is a procedure the reader follows with a terminal open: every page under
-`docs/guides/`, `docs/setup/` and `docs/migrating/`, and `docs/setup.md`. `judge-docs
+`docs/guides/`, which holds the setup and migrating pages too. `judge-docs
 -kind guide` holds it to three rules on top of the Markdown ones: it addresses the
 reader as you, with no `we`, `us` or `our` (`second-person`); each step of a numbered
 procedure opens with its verb, never an article, a pronoun, `You` or a bare code span

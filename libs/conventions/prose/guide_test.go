@@ -36,7 +36,7 @@ func TestStepVerbReportsAStepThatDoesNotOpenWithItsAction(t *testing.T) {
 			"a list with no imperative is not a procedure", KindGuide,
 			"1. `magus init` bootstrapped `magus.yaml`.\n2. A `ci` target runs the pipeline.", nil,
 		},
-		// docs/migrating/breaking-changes.md: a sequence of events.
+		// docs/guides/migrating/breaking-changes.md: a sequence of events.
 		{
 			"a sequence of events", KindGuide,
 			"1. The drift gate fails.\n2. You regenerate.\n3. A reviewer reads it.", nil,
@@ -65,7 +65,7 @@ func TestCondescensionReportsWordsThatTellTheReaderAStepIsEasy(t *testing.T) {
 			[]string{"1:easy", "1:easily", "1:obviously", "1:of course", "1:clearly", "1:Please"}},
 		{"simple", KindGuide, "A simple target builds it.", []string{"1:simple"}},
 		{"just before a step", KindGuide, "Then you just run `magus init`.", []string{"1:just"}},
-		// docs/setup/linux.md, docs/setup.md, docs/guides/integrations/agents.md.
+		// docs/guides/setup/linux.md, docs/guides/setup.md, docs/guides/integrations/agents.md.
 		{"just as only, recency and contrast", KindGuide,
 			"It extracts just the binary you just downloaded, not just the hunks.", nil},
 		// docs/guides/releasing.md, docs/guides/integrations/agents/skills.md.

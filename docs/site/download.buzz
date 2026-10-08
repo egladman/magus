@@ -25,11 +25,11 @@ import "engine/page" as _;
 // variants of the same instruction. Kept as data so the row cannot drift out of sync with
 // the guides it points at.
 final ROUTES = [
-    {"href": "setup/windows/", "label": "Windows"},
-    {"href": "setup/mise/", "label": "mise"},
-    {"href": "setup/container-image/", "label": "container"},
-    {"href": "setup/linux/", "label": "place it yourself"},
-    {"href": "setup/verify/", "label": "verify a release"},
+    {"href": "guides/setup/windows/", "label": "Windows"},
+    {"href": "guides/setup/mise/", "label": "mise"},
+    {"href": "guides/setup/container-image/", "label": "container"},
+    {"href": "guides/setup/linux/", "label": "place it yourself"},
+    {"href": "guides/setup/verify/", "label": "verify a release"},
 ];
 
 fun routeLinks() > str {
@@ -67,7 +67,7 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
       </div>
       <p class="landing-sub">Read it, then run it. <code>--dry-run</code> prints the whole plan without writing anything.</p>
       <p class="download-routes">{{{routes}}}</p>
-      <p class="landing-sub">magus is pre-1.0 and the builds are not equally proven. CI runs the full test suite on <strong>linux/amd64 only</strong>; every other platform is built by the release pipeline but not tested by it, and neither Windows build has ever been executed here. <a href="../setup/#platform-support">What is tested, per platform</a>.</p>
+      <p class="landing-sub">magus is pre-1.0 and the builds are not equally proven. CI runs the full test suite on <strong>linux/amd64 only</strong>; every other platform is built by the release pipeline but not tested by it, and neither Windows build has ever been executed here. <a href="../guides/setup/#platform-support">What is tested, per platform</a>.</p>
     </div>
   </section>
 `, {"routes": routeLinks()});

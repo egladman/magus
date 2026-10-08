@@ -153,6 +153,7 @@ decisions/0002-remote-spells-are-imported-by-registry-path/
 decisions/0003-running-an-invocation-on-another-operating-system/
 decisions/0004-running-a-branch-on-a-hosted-runner/
 decisions/0005-deterministic-answers/
+decisions/0006-the-person-drives-review/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -173,6 +174,7 @@ development/libs-gopherbuzz/
 development/libs-mergequeue/
 development/libs-orphanator/
 development/libs-pricing/
+development/libs-scipbuzz/
 development/libs-testlayout/
 development/libs-testsprawl/
 development/libs-textsearch/
@@ -246,11 +248,24 @@ guides/integrations/server/
 guides/jobs/
 guides/jobs/other-work/
 guides/mcp/
+guides/migrating/
+guides/migrating/breaking-changes/
+guides/migrating/from-nx/
 guides/profiling/
 guides/quickstart/
 guides/releasing/
 guides/reviewing-changes/
 guides/security-scanning/
+guides/setup/
+guides/setup/build-from-source/
+guides/setup/container-image/
+guides/setup/linux/
+guides/setup/macos/
+guides/setup/mise/
+guides/setup/shell-setup/
+guides/setup/uninstall/
+guides/setup/verify/
+guides/setup/windows/
 guides/testing/
 guides/tips/
 index.html
@@ -517,6 +532,7 @@ reference/codes/sandbox/MGS2009/
 reference/codes/sandbox/MGS2010/
 reference/codes/sandbox/MGS2011/
 reference/codes/sandbox/MGS2012/
+reference/codes/sandbox/MGS2013/
 reference/codes/sandbox/MGS3001/
 reference/codes/sandbox/MGS3002/
 reference/codes/sandbox/MGS3003/
@@ -678,6 +694,7 @@ reference/rules/scope-drift/
 reference/rules/scripted-rewrite/
 reference/rules/search-translation/
 reference/rules/sed-in-place/
+reference/rules/shared-checkout/
 reference/rules/shared-stash/
 reference/rules/sibling-checkout/
 reference/rules/skill-source/
