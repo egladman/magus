@@ -12,8 +12,8 @@ is a template or a few lines of config you control, and adding a host is your
 edit rather than a new magus release.
 
 That is a [standing decision](../../../doctrine.md#the-host-wiring-is-yours)
-rather than a gap waiting to be filled. A codec per host would cost us upkeep
-as the products change, and it would cost you more than it costs us: wiring you
+rather than a gap waiting to be filled. A codec per host would cost magus upkeep
+as the products change, and it would cost you more than it costs magus: wiring you
 did not write is wiring you cannot repair on the afternoon your host changes
 its event shape, and this guard fails OPEN, so a hook that quietly stopped
 judging looks exactly like a session with nothing to deny. Read the template
