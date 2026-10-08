@@ -2,7 +2,7 @@
 //
 // Source: magus/job/v1alpha1/job.proto
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL service: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same

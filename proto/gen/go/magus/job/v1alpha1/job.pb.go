@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: magus/job/v1alpha1/job.proto
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL service: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
@@ -145,7 +145,7 @@ type RunJobResponse struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	State        SubmitState            `protobuf:"varint,1,opt,name=state,proto3,enum=magus.job.v1alpha1.SubmitState" json:"state,omitempty"`
 	InvocationId string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
-	// Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+	// Where to watch this job: the console's runs app scoped to invocation_id. A PATH,
 	// not an absolute URL, because the reader is the console itself and resolves it against
 	// its own origin. Empty only when the server coalesced a submit it could not name, since
 	// a run with no invocation has nothing to link to.

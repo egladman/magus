@@ -534,7 +534,7 @@ export enum Kind {
    * An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
    * that was handed over - the lease's whole point, and routinely kilobytes, so only its
    * ref rides the event. There is no response blob and no guard decision: a spawn is an
-   * observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
+   * observation, not a judged call. OUTCOME_OK means the handoff was observed, NOT that the
    * sub-agent later succeeded.
    *
    * @generated from enum value: KIND_AGENT_SPAWN = 9;
@@ -620,7 +620,7 @@ export const OutcomeSchema: GenEnum<Outcome> = /*@__PURE__*/
 /**
  * ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a
  * page of events (newest first), Get a payload blob by ref. Mounted on the console's
- * human-facing API surface, never under /mcp (the agent protocol surface).
+ * human-facing API, never under /mcp (the agent protocol endpoint).
  *
  * @generated from service magus.activity.v1alpha1.ActivityService
  */

@@ -47,7 +47,7 @@ something different, not when a comment is rewritten. It is deliberately not a
 checksum, because these are yours to modify and a checksum would flag your own
 edits as drift.
 
-This is the one part of the agent surface with no automatic staleness check.
+This is the one part of the agent integration with no automatic staleness check.
 Installed skills are generated, so `magus doctor` regrades them against
 the binary; a copied hook template is owned by you, and this line stands in for
 that. `magus doctor`'s **guard wiring** check reads the marker in whatever file
@@ -55,7 +55,8 @@ your host config points at, and fails when it is stale or missing.
 
 ## How they fit together
 
-One implementation per guard surface. A hook command is a plain argv (the host
+One template per guard input: `magus-command.buzz` for shell commands and MCP calls,
+`magus-path.buzz` for file writes. A hook command is a plain argv (the host
 splits it and runs `magus buzz` itself), so what varies PER ENTRY rides on that
 argv, after `--`:
 
@@ -98,7 +99,7 @@ observation and cannot change a verdict. The template does read the name for one
 which reply shape its host can parse.
 
 `__MAGUS_BIN` avoids the `MAGUS_*` prefix on purpose. That space is magus's
-own configuration surface, and a variable these templates invent must not look
+own settings, and a variable these templates invent must not look
 like a setting magus reads.
 
 Each command is `magus buzz -s <file>`: `-s` keeps the interpreter's own
@@ -200,7 +201,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // be given.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
-// magus's own configuration surface, so a variable this template invents must stay
+// magus's own settings, so a variable this template invents must stay
 // out of it rather than look like a setting magus reads.
 //
 // On a missing magus this prints a visible notice rather than exiting quietly. A
@@ -212,10 +213,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // message, which would turn a Buzz bug into a refusal the person cannot read. Every
 // call that can fail is caught, and the script ends by writing one reply.
 //
-// The line below declares, per guard surface, how much of a verdict this file
+// The line below declares, per guard input, how much of a verdict this file
 // can carry: model (reaches the agent), human (reaches the person only), or none
 // (not delivered). It is machine-read by the host-parity gate, which fails the
-// build when a decision or surface exists in the guard contract that some host
+// build when a decision or input exists in the guard contract that some host
 // was never asked about. Keep it true to what HOST_RESPONSE actually renders.
 //
 // An ask reaches the person on both hosts, by different routes. Claude Code takes
@@ -235,7 +236,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
 // The mcp rows are real: an mcp__magus__* PreToolUse call carries no tool_input.command,
 // so this file forwards the whole event instead (see hook\wholeEvent), and the same hookSpecificOutput
-// reply it already renders for the command surface carries a deny or an advise on this one too.
+// reply it already renders for the command input carries a deny or an advise on this one too.
 // No rule prompts for an MCP call, so Codex's mcp ask is the deny that names the terminal.
 
 import "std";
@@ -302,7 +303,7 @@ final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"Perm
 final CONTEXT_SLOT = "__MAGUS_CONTEXT__";
 final CONTEXT_REPLY = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":__MAGUS_CONTEXT__}}`;
 
-// The prose, not the reply: the two surfaces wrap it differently, and holding it once is
+// The prose, not the reply: the two event replies wrap it differently, and holding it once is
 // what keeps them from drifting into two different sentences about one fact.
 final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
 
@@ -461,7 +462,7 @@ object Guard {
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
 // drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
-// failed BOTH attempts and the spawn surface could never recover where Bash did, and a
+// failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
 // binary too old to accept the flag cannot observe a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     final args = mut ["shell"];
@@ -533,7 +534,7 @@ fun contextReply(text: str) > str {
 // noticeReply renders a notice in the dialect of the event that asked for it.
 //
 // A PermissionRequest reply carries a decision and no context field, so the PreToolUse
-// envelope the other surfaces use is one the host rejects outright: on the single surface
+// envelope the other events use is one the host rejects outright: on the single event
 // where the notice is the only thing written, it arrived unreadable. There the prose goes
 // to the person on stderr and stdout carries the envelope that leaves the decision alone.
 fun noticeReply(eventName: str, text: str) > str {
@@ -758,8 +759,8 @@ wasteful, not destructive.
 // That rule ADVISES rather than blocks. magus denies only what cannot be undone;
 // a hand-edited generated file is wasteful, not destructive, since regenerating
 // erases it. So it explains that the edit will be overwritten and lets the agent
-// correct itself, rather than treating it as unable to learn. Every rule on this
-// surface says nothing on any uncertainty, no magus, no workspace, an unclaimed
+// correct itself, rather than treating it as unable to learn. Every file-write rule
+// says nothing on any uncertainty, no magus, no workspace, an unclaimed
 // path, because an advisory fired on a guess trains the reader to ignore it.
 //
 // HOST_RESPONSE renders BOTH arms even though the rules shipping today only
@@ -799,7 +800,7 @@ wasteful, not destructive.
 // note in magus-command.buzz. It records what HOST_RESPONSE RENDERS, not
 // which rules currently fire, so deny=model is true the moment the arm exists.
 //
-// No rule asks on this surface today. The arm exists for the same reason the deny arm did
+// No rule asks on a file write today. The arm exists for the same reason the deny arm did
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
@@ -868,7 +869,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this surface takes; see
+// The host this entry is wired into, the one argument this hook takes; see
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
@@ -884,7 +885,7 @@ fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -955,7 +956,7 @@ fun main(args: [str]) > void {
     // script made before it existed.
     //
     // The retry tests status AND emptiness together, for the same reason as the command
-    // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
+    // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
     final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
@@ -965,9 +966,9 @@ fun main(args: [str]) > void {
     }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
-    // telling them apart matters. Kept identical here so neither surface grows a behavior
+    // telling them apart matters. Kept identical here so neither template grows a behavior
     // the other lacks. The difference is only that this one has no default message,
-    // because for most hosts an empty response on this surface already means "allow".
+    // because for most hosts an empty response to a file-write hook already means "allow".
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         final failed = env\get("__MAGUS_FAILED_RESPONSE") catch "";
         if (failed != "") { io\stdout.write(failed) catch void; }
@@ -992,7 +993,7 @@ only it knows which of your host's tools look.
 
 It declares no `magus-guard-coverage` line, and that absence is deliberate: a
 coverage declaration states how much of a verdict a host can carry on a guard
-surface, and this file carries no verdict on no surface.
+input, and this file carries no verdict on any input.
 
 ```buzz
 // magus observe hook: records ONE path an agent reached, and judges nothing.
@@ -1030,7 +1031,7 @@ surface, and this file carries no verdict on no surface.
 //
 // NO magus-guard-coverage line, and that absence is deliberate rather than an
 // oversight: a coverage declaration states how much of a VERDICT a host can
-// carry on a guard surface, and this file carries no verdict on no surface. It
+// carry on a guard input, and this file carries no verdict on any input. It
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
@@ -1053,8 +1054,8 @@ import "lib/hook" as hook;
 
 // field reads an absent value as the empty string rather than the literal "null".
 // Only a STRING is a path. hook\field renders an object or a list as JSON, and that recorded the
-// serialized blob as the file the agent reached, which the judging surfaces treat as a
-// shape they cannot read; nothing to record beats recording something untrue.
+// serialized blob as the file the agent reached, which the rules reading those records treat
+// as a shape they cannot read; nothing to record beats recording something untrue.
 fun field(event: any?, dotPath: str) > str {
     final value = hook\dig(event, dotPath: dotPath);
     if (value == null) { return ""; }
@@ -1068,7 +1069,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-observe.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this surface takes; see
+// The host this entry is wired into, the one argument this hook takes; see
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
@@ -1079,7 +1080,7 @@ fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -1192,7 +1193,7 @@ still records a usable checkpoint, because the part that matters is read from th
 tree.
 
 It declares no `magus-guard-coverage` line, for the reason
-`magus-observe.buzz` declares none: it carries no verdict on any surface.
+`magus-observe.buzz` declares none: it carries no verdict on any input.
 
 ```buzz
 // magus checkpoint hook: records where the work stands when a session stops.
@@ -1233,7 +1234,7 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 // NO magus-guard-coverage line, for the same reason magus-observe.buzz has
 // none: a coverage declaration states how much of a VERDICT a host can carry, and
-// this file carries no verdict on no surface. It never denies, never advises, and
+// this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
 // magus-guard-template: 20
@@ -1254,7 +1255,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this surface takes; see
+// The host this entry is wired into, the one argument this hook takes; see
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
@@ -1265,7 +1266,7 @@ fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -1337,7 +1338,7 @@ model's context. `--format json` wraps the same text in
 for a host that parses stdout as a reply and drops anything that is not one.
 
 It declares no `magus-guard-coverage` line, for the reason
-`magus-observe.buzz` declares none: it carries no verdict on any surface.
+`magus-observe.buzz` declares none: it carries no verdict on any input.
 
 ```buzz
 // magus rehydrate hook: prints where this checkout stands, for a session that has
@@ -1381,7 +1382,7 @@ It declares no `magus-guard-coverage` line, for the reason
 //
 // NO magus-guard-coverage line, for the same reason magus-checkpoint.buzz has none: a
 // coverage declaration states how much of a VERDICT a host can carry, and this file
-// carries no verdict on no surface. It never denies, never advises, and cannot
+// carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
 // magus-guard-template: 20
@@ -1415,7 +1416,7 @@ fun parseOptions(args: [str]) > {str: str} {
         return {<str: str>};
     }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares {RULES_FLAG} and {FORMAT_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts {RULES_FLAG} and {FORMAT_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values;
@@ -1489,7 +1490,7 @@ The directory `-C` names is what goes on PATH, so the entry states it and the
 template guesses nothing. An empty `--env-file` does nothing, which is what a
 host without such a file passes.
 
-It declares no `magus-guard-coverage` line: it carries no verdict on any surface.
+It declares no `magus-guard-coverage` line: it carries no verdict on any input.
 
 ```buzz
 import "io";
@@ -1508,7 +1509,7 @@ import "path";
 // a host that sources no such file has no PATH to set. It prints nothing on stdout and
 // exits 0.
 //
-// NO magus-guard-coverage line: it judges nothing on any surface.
+// NO magus-guard-coverage line: it judges nothing on any input.
 //
 // magus-guard-template: 20
 
@@ -1525,7 +1526,7 @@ fun envFilePath(args: [str]) > str {
         return "";
     }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {ENV_FILE_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {ENV_FILE_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[ENV_FILE_FLAG] ?? "";
