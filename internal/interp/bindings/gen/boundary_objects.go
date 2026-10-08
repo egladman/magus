@@ -2604,7 +2604,7 @@ func ObjectLeaseCheck(v types.LeaseCheck) vm.Value {
 	return out
 }
 
-func ObjectCompletionGate(v types.CompletionGate) vm.Value {
+func ObjectGoal(v types.Goal) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("description", vm.StrValue(v.Description))
@@ -2774,7 +2774,7 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("validation", vm.StrValue(v.Validation))
 	itemsGoals := make([]vm.Value, len(v.Goals))
 	for indexGoals := range v.Goals {
-		itemsGoals[indexGoals] = ObjectCompletionGate(v.Goals[indexGoals])
+		itemsGoals[indexGoals] = ObjectGoal(v.Goals[indexGoals])
 	}
 	out.MapSet("goals", vm.ListValue(itemsGoals))
 	out.MapSet("state", vm.StrValue(string(v.State)))

@@ -674,7 +674,7 @@ export object LeaseCheck {
     noDefaultCharms: bool = false,
 }
 
-export object CompletionGate {
+export object Goal {
     id: str = "",
     description: str = "",
     dependsOn: [str] = [],
@@ -802,7 +802,7 @@ export object Job {
     model: str = "",
     check: LeaseCheck? = null,
     validation: str = "",
-    goals: [CompletionGate] = [],
+    goals: [Goal] = [],
     state: str = "",
     holder: str = "",
     readOnly: bool = false,

@@ -462,10 +462,10 @@ func (x *Job) GetDeadline() int64 {
 }
 
 // CompletionGate is one machine-verifiable condition a job's completion is checked against,
-// projected from types.CompletionGate. kind names WHAT it examines and expect names what must
-// be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is
-// rendered as the command that runs it, the same way Job.check is - the wire never carries the
-// unrendered form, so a client needs no second parser for it.
+// projected from types.Goal. kind names WHAT it examines and expect names what must be true of
+// it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as
+// the command that runs it, the same way Job.check is - the wire never carries the unrendered
+// form, so a client needs no second parser for it.
 type CompletionGate struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
