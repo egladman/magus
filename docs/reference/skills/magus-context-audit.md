@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5831
-skill_short_bytes: 4176
+skill_full_bytes: 5708
+skill_short_bytes: 4053
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `111` |
+| `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2063f8784853` |
+| `skill-content` | `6eba6eb4549a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,20 +56,19 @@ magus agent install --tar | tar -xO -f - magus-context-audit/SKILL.md
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus\insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus\insight`: it observes and ranks; it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
-What it looks at is not code. It is everything loaded into an agent's context as
-authoritative instruction, from sources magus does not own and cannot see the
-contents of in advance.
+It looks at instructions, not code: everything loaded into an agent's context as
+authoritative, from sources magus does not own and cannot read in advance.
 
 An agent reads all of it in one window and cannot tell which line is newer or
 which file wins. A contradiction makes it pick arbitrarily or stall.
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list, and the highest-risk surface is usually
-the one nobody remembers is loaded.
+You cannot audit what you cannot list. The riskiest surface is usually the one
+nobody remembers is loaded.
 
 | surface | why it bites |
 | --- | --- |
@@ -84,7 +83,7 @@ the one nobody remembers is loaded.
 
 ## Check claims against the tool, not against the other documents
 
- So resolve every claim against something that executes.
+ Resolve every claim against something that executes.
 
 ```sh
 magus shell "<the exact command a document recommends>"
@@ -94,7 +93,7 @@ magus describe file <path>            # is that file really source / output
 
 Then RUN the commands the instructions tell an agent to run.
 
-Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -108,31 +107,31 @@ document.
 
 Report findings in this order.
 
-1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
-   must either violate a rule or stall.
-2. A stale instruction names a command that no longer exists, no longer works, or
-   is now denied.
-3. Split authority is two surfaces describing the same decision differently
-   (one "advised", the other "denied"). The agent cannot tell which is current.
+1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
+   violate a rule or stall.
+2. Stale instruction: it names a command that no longer exists, no longer works,
+   or is now denied.
+3. Split authority: two surfaces describe one decision differently (one
+   "advised", the other "denied"), and the agent cannot tell which is current.
    A local rule contradicting a shipped skill is always this. Check each
-   local rule's `retire-when` while you are here; the condition may have arrived.
-4. An orphaned replacement is a denial or deprecation that names a tool no
-   instruction anywhere documents.
-5. Silent duplication is the same rule restated in several places.
+   local rule's `retire-when` while here; the condition may have arrived.
+4. Orphaned replacement: a denial or deprecation names a tool no instruction
+   documents.
+5. Silent duplication: one rule restated in several places.
 
 ## Do not report these
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
   giving one line are one rule at two lengths. That is the design.
-- **A record of history.** "Verified on <date> by doing X" describes what
-  happened, not what to do now. Journal entries are point-in-time by definition.
-- **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
-  on a grep and is one rule with a carve-out.
+- **A record of history.** "Verified on <date> by doing X" describes what happened,
+  not what to do now. Journal entries are point-in-time by definition.
+- **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
+  to grep and is one rule with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 
-Fix at the SOURCE and let generation propagate. For magus's own skills that means
+Fix at the SOURCE and let generation propagate. For magus's own skills that is
 `internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
@@ -144,8 +143,8 @@ magus doctor    # the agent skills check must report a CHANGED digest, or the in
 
 A stale binary re-installs the OLD body and reports success.
 
-Prefer DELETING a contradicting line over reconciling it. When a rule genuinely must appear twice, make one the source
-and have the other name it rather than restate it.
+Prefer DELETING a contradicting line over reconciling it. When a rule must appear twice, make one the source and have
+the other name it, not restate it.
 ````
 
 
@@ -160,12 +159,11 @@ magus agent install --tar | tar -xO -f - magus-context-audit-full/SKILL.md
 ````markdown
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus\insight`: it observes and ranks, it does not gate.
+This is a LENS, like `magus\insight`: it observes and ranks; it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
-What it looks at is not code. It is everything loaded into an agent's context as
-authoritative instruction, from sources magus does not own and cannot see the
-contents of in advance.
+It looks at instructions, not code: everything loaded into an agent's context as
+authoritative, from sources magus does not own and cannot read in advance.
 
 An agent reads all of it in one window, with no way to tell which line is newer,
 which file outranks which, or which was written for a version of the tools that
@@ -175,8 +173,8 @@ across turns, or spends reasoning budget arbitrating instead of working.
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list, and the highest-risk surface is usually
-the one nobody remembers is loaded.
+You cannot audit what you cannot list. The riskiest surface is usually the one
+nobody remembers is loaded.
 
 | surface | why it bites |
 | --- | --- |
@@ -197,7 +195,7 @@ the person hitting the contradiction.
 
 Two documents agreeing with each other and both being wrong is the common case,
 not the exception: they were usually written in the same sitting by the same
-person. So resolve every claim against something that executes.
+person. Resolve every claim against something that executes.
 
 ```sh
 magus shell "<the exact command a document recommends>"
@@ -209,7 +207,7 @@ Then RUN the commands the instructions tell an agent to run. A documented comman
 that errors is worse than an undocumented one: the agent trusts it, tries it,
 fails, and has to invent a recovery nothing sanctioned.
 
-Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -226,19 +224,19 @@ argued with instead of fixed.
 Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
 
-1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
-   must either violate a rule or stall. Nothing else on this list is worth
+1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
+   violate a rule or stall. Nothing else on this list is worth
    reporting before one of these.
-2. A stale instruction names a command that no longer exists, no longer works, or
-   is now denied. It is indistinguishable from a dead end until the agent tries it.
-3. Split authority is two surfaces describing the same decision differently
-   (one "advised", the other "denied"). The agent cannot tell which is current.
+2. Stale instruction: it names a command that no longer exists, no longer works,
+   or is now denied. It is indistinguishable from a dead end until the agent tries it.
+3. Split authority: two surfaces describe one decision differently (one
+   "advised", the other "denied"), and the agent cannot tell which is current.
    A workspace-local rule contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are in conflict. Check each
-   local rule's `retire-when` while you are here; the condition may have arrived.
-4. An orphaned replacement is a denial or deprecation that names a tool no
-   instruction anywhere documents.
-5. Silent duplication is the same rule restated in several places. It is not yet a
+   local rule's `retire-when` while here; the condition may have arrived.
+4. Orphaned replacement: a denial or deprecation names a tool no instruction
+   documents.
+5. Silent duplication: one rule restated in several places. It is not yet a
    contradiction; it is where the next one is born, because an edit updates
    some of them.
 
@@ -248,16 +246,16 @@ A lens that cries wolf gets switched off, taking the real findings with it.
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
   giving one line are one rule at two lengths. That is the design.
-- **A record of history.** "Verified on <date> by doing X" describes what
-  happened, not what to do now. Journal entries are point-in-time by definition.
-- **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
-  on a grep and is one rule with a carve-out.
+- **A record of history.** "Verified on <date> by doing X" describes what happened,
+  not what to do now. Journal entries are point-in-time by definition.
+- **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
+  to grep and is one rule with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 
 Fix at the SOURCE and let generation propagate; editing an installed copy is
-drift a verify step flags anyway. For magus's own skills that means
+drift a verify step flags anyway. For magus's own skills that is
 `internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
@@ -272,8 +270,8 @@ most common way an applied fix silently does not apply.
 
 Prefer DELETING a contradicting line over reconciling it. Two reconciled
 statements are still two statements to keep in sync; one statement cannot
-contradict itself. When a rule genuinely must appear twice, make one the source
-and have the other name it rather than restate it.
+contradict itself. When a rule must appear twice, make one the source and have
+the other name it, not restate it.
 ````
 
 

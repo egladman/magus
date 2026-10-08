@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15043
-skill_short_bytes: 12281
+skill_full_bytes: 14435
+skill_short_bytes: 10339
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `111` |
+| `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `7016ae8d6568` |
+| `skill-content` | `3fc860492b57` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,33 +56,34 @@ magus agent install --tar | tar -xO -f - magus-query/SKILL.md
 ````markdown
 # magus knowledge graph
 
-magus keeps a deterministic, cache-backed graph of its own domain. Query it to
-find and relate entities instead of grepping source.
+magus keeps a deterministic, cache-backed graph of its own domain. Query it to find
+and relate entities instead of grepping source.
 
-FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
-shaped like "what exists / what depends on X / where is Y used / how do A and B
-relate" is a graph query FIRST; do not open Grep or Glob for it. If the graph cannot answer,
-say so and then fall back: falling back silently hides the gap.
+FAST PATH: in a magus workspace (a magusfile.buzz at the root), ask the graph FIRST.
+That covers "what exists", "what depends on X", "where is Y used", and "how do A and
+B relate". Do not open Grep or Glob for it. If the graph cannot answer, say so,
+then fall back: falling back silently hides the gap.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
-generated index for humans, true only as of its last regeneration. Last resort
-only: no server AND no CLI, or a human asking what the committed index says.
+generated index for humans, true only as of its last regeneration. Read it only as a
+last resort: no server AND no CLI, or a human asking what the committed index says.
 
 ## Act in this order
 
 1. Ask the workspace what exists, with the verb that answers your question:
-   `magus describe targets` (every target; `-o name` for bare names),
-   `magus ls` (every project with its spell, sources, outputs, depends_on),
-   `magus describe spells`, `magus describe projects`.
+   - `magus describe targets`: every target; `-o name` for bare names.
+   - `magus ls`: every project with its spell, sources, outputs, depends_on.
+   - `magus describe spells`, `magus describe projects`.
 
-2. Then reach for the verbs. Prefer an MCP tool when this host exposes it. Call
-   the tool itself to check availability: `magus status --probe=mcp` tests the
-   loopback HTTP listener, so it can fail while stdio or Unix-socket MCP works.
-   If the tool is missing or its call fails, use the CLI equivalent from the same
-   row below. Do not stop or grep. For server-socket diagnosis,
-   `magus status --probe=readiness` checks that this workspace is loaded there;
-   it does not test the host's MCP registration. Do not start a server merely
-   to unlock a tool.
+2. Then reach for the verbs. Prefer an MCP tool when this host exposes it.
+   - Call the tool itself to check availability. `magus status --probe=mcp` tests
+     the loopback HTTP listener, so it can fail while stdio or Unix-socket MCP
+     works.
+   - If the tool is missing or its call fails, use the CLI equivalent from the same
+     row below. Do not stop or grep.
+   - `magus status --probe=readiness` checks that this workspace is loaded on the
+     server socket. It does not test the host's MCP registration.
+   - Never start a server only to unlock a tool.
 
    | question                                      | MCP                                              | CLI                                |
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
@@ -94,82 +95,76 @@ only: no server AND no CLI, or a human asking what the committed index says.
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus\refs`
-   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); Every empty result carries a verdict: `absent` means magus
-   searched every symbol index this workspace declares and the thing is not there;
-   `unknown` names the projects it could not search, and building those with
-   `magus graph build` is what turns the answer into a fact. Read the verdict before
-   concluding anything from an empty result.
+   needs a workspace that declares a SCIP index (`knowledge.symbols` in config).
 
-   Every result that has one names its own next step: text mode prints the commands
-   under a `next:` label and `-o json` carries them as a `next` field, each with the
-   real ids already filled in. Following one is optional; it is a suggestion magus
-   offers, never an order, and a result with nothing to suggest carries no `next` at
-   all.
+   Every empty result carries a verdict. Read it before concluding anything:
+   - `absent`: magus searched every symbol index this workspace declares, and the
+     thing is not there.
+   - `unknown`: it names the projects it could not search. Build those with
+     `magus graph build` to turn the answer into a fact.
+
+   A result can name its own next step, with real ids filled in: a `next:` label in text, a `next` field in JSON.
+   It is a suggestion, never an order.
 
    `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target.
 
 ## Rewriting a symbol everywhere it appears
 
-`magus refs <symbol>` answers "where is this used" at file granularity, and its line
-list is CAPPED: it describes fan-in, and a rewrite driven off it silently skips sites.
-Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
-end line/column, and each range checked against the file on disk.
+`magus refs <symbol>` answers "where is this used" at file granularity. Its line list
+is CAPPED, so a rewrite driven off it silently skips sites. Add `--occurrences` for the
+edit-precise view: every occurrence, uncapped, with start and end line/column. Each
+range is checked against the file on disk.
 
 ```sh
 magus refs <symbol> --occurrences -o json
 ```
 
-magus reports the sites; YOU apply the edits. It does not rewrite the tree for you, the
-same way `magus affected` names what a change reaches without touching it.
+magus reports the sites; YOU apply the edits. It never rewrites the tree.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
-substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
-same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
-proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
-index knows which is which. Apply the sites it reports, then let the compiler enumerate
-what still moved; widening the pattern until the errors stop is the same mistake with
-extra steps.
+substitute-and-write.
+
+- A regex cannot tell YOUR symbol from a dependency's symbol of the same name, and
+  it writes before anyone reads a diff.
+- The index knows which is which. Apply the sites it reports, then let the compiler
+  enumerate what still moved. Widening the pattern until the errors stop is the
+  same mistake.
 
 **A not-indexed project is a stop, not an empty result.** `magus refs` says
 `verdict: unknown, not absent` and names the projects it could not see. Run
-`magus graph build` and ask again. Reading that verdict as "no matches" and falling back
-to a text search is how a rename misses every site in an unindexed project, and a fresh
-worktree starts unindexed, so this is the normal state at the moment you most want a
-rename.
+`magus graph build` and ask again. A fresh worktree
+starts unindexed, so this is the normal state when you most want a rename.
 
-Three things decide whether the result is usable, and skipping any of them is how a bulk
+Three things decide whether the result is usable. Skipping any of them is how a bulk
 rewrite corrupts a file:
 
-- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
-  magus read that exact range and found the symbol there. `mismatch` means it found
-  something else (the index predates an edit), and `unreadable` means the range is no
-  longer inside the file. The `text` field shows what is there, and `names` is every
-  spelling that would have verified, so you can check the verdict rather than trust it.
-- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
-  verified sites ONLY, so a wholly stale index prints nothing, which on its own is
-  indistinguishable from a symbol that is never used. Exit 1 means sites were found and
-  withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
-- **Apply back-to-front within each file.** Replacing a name with one of a different
-  length shifts every later column on that line, so editing top-down invalidates each
-  subsequent range as you go. Walk each file's occurrences in reverse. Files are
-  independent of each other.
-- **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
-  ranges failed to verify, which proves it changed after indexing, so the index may also
-  be MISSING occurrences added since, and no per-site check can see a site that is not in
-  the list. Re-run that project's `scip` target and ask again. Editing the verified sites
-  and skipping the rest produces a half-renamed tree that may still compile.
+- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified`
+  means magus read that exact range and found the symbol there. `mismatch` and
+  `unreadable` mean the index predates an edit; `text` and `names` let you check.
+- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for
+  verified sites ONLY. A wholly stale index prints nothing, which alone looks like an
+  unused symbol. Exit 1 means sites were found and withheld, with the count on stderr.
+- **Apply back-to-front within each file.** A replacement of a different length
+  shifts every later column on that line. Walk each file's occurrences in reverse;
+  files are independent.
+- **Treat a `stale` file as a stop, not a filter.** A file is stale when any of its
+  ranges failed to verify. The index may then also be MISSING occurrences added
+  since, which no per-site check can see. Re-run that project's `scip` target and ask
+  again.
 
-Completeness rests on the index being current even when everything verifies: an edit that
-appended a new use without disturbing existing ranges leaves every site verifying while
-adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
-first when the tree has moved since you last did, and check the verdict for projects that
-declare no index at all; those are not searched.
+Completeness rests on a current index even when everything verifies: a newly appended use verifies nothing and is
+never seen.
+
+- `magus status` reports which indexes are fresh. Re-index first when the tree has
+  moved since you last did.
+- Check the verdict for projects that declare no index at all; those are not
+  searched.
 
 ## Query grammar
 
-Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
-are `=` (match), `!=` (exclude), `=~` (regex):
+Free-text terms (AND) plus field matchers. A matcher is `field<op>value`; the
+operators are `=` (match), `!=` (exclude), `=~` (regex):
 
 - `build`: free text over IDs, labels, and docs
 - `kind=spell`: only that node kind
@@ -189,87 +184,80 @@ in `magus\query`'s options; `matchCount` stays the total.
 
 ## Retrieving prose from the docs
 
-Every markdown heading in the workspace is a `docsection` node, so documentation is
-QUERYABLE, not something to read whole. When you are looking for WHERE something is
-explained (in this repo's docs, a project's README, any tracked markdown), query the
-section rather than cat or grep the file:
+Every Markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. To find WHERE something is explained, query
+the section; do not cat or grep the file:
 
-- `magus query "kind=docsection <terms>"` returns the heading whose section covers your
-  terms. Each result's id and Source are `<path>#<anchor>`: a citable pointer to the exact
-  passage, the same fragment a link into the rendered page carries. Read that one section,
-  not the whole page.
+- `magus query "kind=docsection <terms>"` returns the heading whose section covers
+  your terms. Each result's id and Source are `<path>#<anchor>`, a citable pointer
+  to the exact passage. Read that one section, not the whole page.
 - Scope it with `project=<p>` and combine free-text terms.
-- Prose only: a code file is not indexed this way: `magus refs` and the entity kinds above
-  still cover code and the domain model.
+- Prose only: code files are not indexed this way. `magus refs` and the entity
+  kinds above cover code and the domain model.
 
-Reading one file you already know the path of is fine. This replaces the SCAN (the grep or
-cat over markdown to find a passage), not a targeted read.
+Reading one file whose path you know is fine. This replaces the SCAN, not a targeted
+read.
 
 ## Reading results
 
-- Reading as a machine? Add `-o json`: every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper: key into the
-  plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping. Do not scrape the human text or trim it with `head`.
+- Reading as a machine? Add `-o json`. Every verb returns a stable,
+  `schema_version`-stamped OBJECT with a top-level wrapper. Key into the plural
+  (`.matches`, `.targets`); it is never a bare array. `-o name` prints bare IDs for
+  piping. Do not scrape the human text or trim it with `head`.
 
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them.
 - Edges are directed and carry a `confidence`: `extracted` (read directly off a
   source) or `inferred` (a rubric score), plus `provenance` (where it came from).
-- Node `attrs` surface metadata. The `duration_p75_ms`,
-  `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
-  captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-<ref>` on it fetches that output. When `knowledge.vcs` is
-  enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
-  `vcs_commits` extracted from git history.
+- Node `attrs` surface metadata.
+  - `duration_p75_ms`, `cache_hit_rate`, `run_samples`, `last_output_ref`, and
+    `last_run_ok` are OBSERVED from local run history.
+  - `magus query output <ref>` on a target's `last_output_ref` fetches its latest
+    captured run.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
 
 ## Ownership and blast radius
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. `magus explain
-<node>` for owners plus dependents; `magus query kind=owner` to list. Declared
-ownership only, never blame-inferred.
+<node>` shows owners plus dependents; `magus query kind=owner` lists them. Ownership is
+declared only, never blame-inferred.
 
 ## What other sessions already did here
 
-You are not the first agent in this repository, and the ones before you left a
-record. Where a workspace declares a session adapter, `magus graph build` folds
-each host's own transcripts into a local store, and two surfaces read it back.
+Agents before you left a record, where the workspace declares a session adapter:
 
-- `magus explain <node>` ends with an `agent sessions:` line when any loaded
-  session touched that file: reads, writes, how many distinct sessions, how long
-  ago, and any write the host refused. Silence means nothing touched it.
-- `magus session` lists those sessions; `magus session show <id>` opens one,
-  joined against this checkout's guard trail.
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded session
+  touched that file. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one, joined
+  against this checkout's guard trail.
 
-Read it before a non-trivial edit: a file last committed weeks ago may have been
+Read it before a non-trivial edit. A file last committed weeks ago may have been
 rewritten yesterday by a session whose work is not committed. A refused write
 there is a rule you are about to hit too.
 
-Never infer from an empty result that nobody worked on a file. It equally means
-this workspace declares no adapter, which is the common case.
+Never infer from an empty result that nobody worked on a file. It equally means the
+workspace declares no adapter, the common case.
 
 ## Across workspaces and neighbors
 
-- `--global` unions every workspace registered in config
-  (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\insight`), and `magus describe` sit alongside the graph;
-  `magus graph export -o json` dumps the whole graph for bulk analysis.
-- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
-  comment.
+- `--global` unions every workspace registered in config (`knowledge.workspaces`);
+  IDs are namespaced per workspace (`web//spell:go`).
+- `magus affected`, `client` (`magus\insight`), and `magus describe` sit beside the
+  graph. `magus graph export -o json` dumps the whole graph for bulk analysis.
+- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a
+  CI comment.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
-human an export: `magus graph export -o json` (or `-o graphml`) opens directly in
-Gephi, yEd, or a browser graph tool.
+human an export. `magus graph export -o json` (or `-o graphml`) opens in Gephi, yEd,
+or a browser graph tool.
 
 ## Fetching current behavior
 
-For flags and behavior this skill does not cover, run any verb with `-h`, and read
-the magus documentation site.
+For flags and behavior this skill does not cover, run any verb with `-h` and read the
+magus documentation site.
 ````
 
 
@@ -284,18 +272,18 @@ magus agent install --tar | tar -xO -f - magus-query-full/SKILL.md
 ````markdown
 # magus knowledge graph
 
-magus keeps a deterministic, cache-backed graph of its own domain. Query it to
-find and relate entities instead of grepping source. This skill teaches HOW to use
+magus keeps a deterministic, cache-backed graph of its own domain. Query it to find
+and relate entities instead of grepping source. This skill teaches HOW to use
 the tools; the verbs below say WHAT is in this specific workspace. The division is
 strict, so this skill never goes stale when a workspace changes, only when the
 tool surface does.
 
-FAST PATH: in a magus workspace (a magusfile.buzz at the root), any question
-shaped like "what exists / what depends on X / where is Y used / how do A and B
-relate" is a graph query FIRST; do not open Grep or Glob for it. Unlike a
+FAST PATH: in a magus workspace (a magusfile.buzz at the root), ask the graph FIRST.
+That covers "what exists", "what depends on X", "where is Y used", and "how do A and
+B relate". Do not open Grep or Glob for it. Unlike a
 grep hit, a graph answer is verified: every edge is extracted from a declared
-source or scored by a rubric, and says which. If the graph cannot answer,
-say so and then fall back: a silent fallback hides the gap that should be
+source or scored by a rubric, and says which. If the graph cannot answer, say so,
+then fall back: a silent fallback hides the gap that should be
 reported.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
@@ -309,20 +297,23 @@ unavailable too, or when a human explicitly asks what the committed index says.
 ## Act in this order
 
 1. Ask the workspace what exists, with the verb that answers your question:
-   `magus describe targets` (every target; `-o name` for bare names),
-   `magus ls` (every project with its spell, sources, outputs, depends_on),
-   `magus describe spells`, `magus describe projects`. These are live, so they
+   - `magus describe targets`: every target; `-o name` for bare names.
+   - `magus ls`: every project with its spell, sources, outputs, depends_on.
+   - `magus describe spells`, `magus describe projects`.
+
+   These are live, so they
    are right even mid-change, and they take a `-o json` for machine reading.
 
-2. Then reach for the verbs. Prefer an MCP tool when this host exposes it. Call
-   the tool itself to check availability: `magus status --probe=mcp` tests the
-   loopback HTTP listener, so it can fail while stdio or Unix-socket MCP works.
-   If the tool is missing or its call fails, use the CLI equivalent from the same
-   row below. Do not stop or grep. For server-socket diagnosis,
-   `magus status --probe=readiness` checks that this workspace is loaded there;
-   it does not test the host's MCP registration. Do not start a server merely
-   to unlock a tool. CLI
-   fallback remains correct, but has no tool discovery or warm server graph.
+2. Then reach for the verbs. Prefer an MCP tool when this host exposes it.
+   - Call the tool itself to check availability. `magus status --probe=mcp` tests
+     the loopback HTTP listener, so it can fail while stdio or Unix-socket MCP
+     works.
+   - If the tool is missing or its call fails, use the CLI equivalent from the same
+     row below. Do not stop or grep.
+   - `magus status --probe=readiness` checks that this workspace is loaded on the
+     server socket. It does not test the host's MCP registration.
+   - Never start a server only to unlock a tool. CLI
+     fallback remains correct, but has no tool discovery or warm server graph.
 
    | question                                      | MCP                                              | CLI                                |
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
@@ -334,19 +325,20 @@ unavailable too, or when a human explicitly asks what the committed index says.
    | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `magus\refs`
-   needs a workspace that declares a SCIP index (`knowledge.symbols` in config); it
+   needs a workspace that declares a SCIP index (`knowledge.symbols` in config). It
    is the occurrence-shaped def/references answer, so use it over `magus\query` for a
-   symbol's fan-in. Every empty result carries a verdict: `absent` means magus
-   searched every symbol index this workspace declares and the thing is not there;
-   `unknown` names the projects it could not search, and building those with
-   `magus graph build` is what turns the answer into a fact. Read the verdict before
-   concluding anything from an empty result.
+   symbol's fan-in.
 
-   Every result that has one names its own next step: text mode prints the commands
-   under a `next:` label and `-o json` carries them as a `next` field, each with the
-   real ids already filled in. Following one is optional; it is a suggestion magus
-   offers, never an order, and a result with nothing to suggest carries no `next` at
-   all.
+   Every empty result carries a verdict. Read it before concluding anything:
+   - `absent`: magus searched every symbol index this workspace declares, and the
+     thing is not there.
+   - `unknown`: it names the projects it could not search. Build those with
+     `magus graph build` to turn the answer into a fact.
+
+   A result can name its own next step, with real ids filled in. Text
+   mode prints the commands under a `next:` label; `-o json` carries a `next` field.
+   Following one is optional: a suggestion, never an order. A result with nothing
+   to suggest has no `next`.
 
    The graph relates entities; the evaluated dispatch plan lives one verb over.
    `magus describe target <name>` prints, per project, the resolved source globs,
@@ -356,65 +348,67 @@ unavailable too, or when a human explicitly asks what the committed index says.
 
 ## Rewriting a symbol everywhere it appears
 
-`magus refs <symbol>` answers "where is this used" at file granularity, and its line
-list is CAPPED: it describes fan-in, and a rewrite driven off it silently skips sites.
-Add `--occurrences` for the edit-precise view: every occurrence, uncapped, with start and
-end line/column, and each range checked against the file on disk.
+`magus refs <symbol>` answers "where is this used" at file granularity. Its line list
+is CAPPED, so a rewrite driven off it silently skips sites. Add `--occurrences` for the
+edit-precise view: every occurrence, uncapped, with start and end line/column. Each
+range is checked against the file on disk.
 
 ```sh
 magus refs <symbol> --occurrences -o json
 ```
 
-magus reports the sites; YOU apply the edits. It does not rewrite the tree for you, the
-same way `magus affected` names what a change reaches without touching it.
+magus reports the sites; YOU apply the edits. It never rewrites the tree, the same way
+`magus affected` names what a change reaches without touching it.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
-substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
-same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
-proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
-index knows which is which. Apply the sites it reports, then let the compiler enumerate
-what still moved; widening the pattern until the errors stop is the same mistake with
-extra steps.
+substitute-and-write.
+
+- A regex cannot tell YOUR symbol from a dependency's symbol of the same name, and
+  it writes before anyone reads a diff. A `\.Sum\b` rewrite aimed at one proto
+  field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`.
+- The index knows which is which. Apply the sites it reports, then let the compiler
+  enumerate what still moved. Widening the pattern until the errors stop is the
+  same mistake.
 
 **A not-indexed project is a stop, not an empty result.** `magus refs` says
 `verdict: unknown, not absent` and names the projects it could not see. Run
-`magus graph build` and ask again. Reading that verdict as "no matches" and falling back
-to a text search is how a rename misses every site in an unindexed project, and a fresh
-worktree starts unindexed, so this is the normal state at the moment you most want a
-rename.
+`magus graph build` and ask again. Reading that verdict as "no matches" and falling
+back to text search misses every site in an unindexed project. A fresh worktree
+starts unindexed, so this is the normal state when you most want a rename.
 
-Three things decide whether the result is usable, and skipping any of them is how a bulk
+Three things decide whether the result is usable. Skipping any of them is how a bulk
 rewrite corrupts a file:
 
-- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified` means
-  magus read that exact range and found the symbol there. `mismatch` means it found
-  something else (the index predates an edit), and `unreadable` means the range is no
-  longer inside the file. The `text` field shows what is there, and `names` is every
-  spelling that would have verified, so you can check the verdict rather than trust it.
-- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for the
-  verified sites ONLY, so a wholly stale index prints nothing, which on its own is
-  indistinguishable from a symbol that is never used. Exit 1 means sites were found and
-  withheld, and the count goes to stderr. Do not read empty output as "nothing to do".
-- **Apply back-to-front within each file.** Replacing a name with one of a different
-  length shifts every later column on that line, so editing top-down invalidates each
-  subsequent range as you go. Walk each file's occurrences in reverse. Files are
-  independent of each other.
-- **Treat a `stale` file as a stop, not a filter.** A file is marked stale when any of its
-  ranges failed to verify, which proves it changed after indexing, so the index may also
-  be MISSING occurrences added since, and no per-site check can see a site that is not in
-  the list. Re-run that project's `scip` target and ask again. Editing the verified sites
-  and skipping the rest produces a half-renamed tree that may still compile.
+- **Edit only `verified` sites.** Each occurrence carries a `status`. `verified`
+  means magus read that exact range and found the symbol there. `mismatch` means it
+  found something else (the index predates an edit); `unreadable` means the range
+  is no longer inside the file. `text` shows what is there, and `names` lists every
+  spelling that would have verified, so you can check the verdict.
+- **Check the exit status when scripting `-o name`.** It emits `file:line:col` for
+  verified sites ONLY. A wholly stale index prints nothing, which alone looks like an
+  unused symbol. Exit 1 means sites were found and withheld, with the count on stderr.
+- **Apply back-to-front within each file.** A replacement of a different length
+  shifts every later column on that line. Walk each file's occurrences in reverse;
+  files are independent.
+- **Treat a `stale` file as a stop, not a filter.** A file is stale when any of its
+  ranges failed to verify. The index may then also be MISSING occurrences added
+  since, which no per-site check can see. Re-run that project's `scip` target and ask
+  again. Editing only the verified sites yields
+  a half-renamed tree that may still compile.
 
-Completeness rests on the index being current even when everything verifies: an edit that
-appended a new use without disturbing existing ranges leaves every site verifying while
-adding one magus never saw. `magus status` reports which indexes are fresh. Re-index
-first when the tree has moved since you last did, and check the verdict for projects that
-declare no index at all; those are not searched.
+Completeness rests on a current index even when everything verifies. An edit that
+appended a new use without disturbing existing ranges leaves every site verifying
+while adding one magus never saw.
+
+- `magus status` reports which indexes are fresh. Re-index first when the tree has
+  moved since you last did.
+- Check the verdict for projects that declare no index at all; those are not
+  searched.
 
 ## Query grammar
 
-Free-text terms (AND) plus field matchers. A matcher is `field<op>value`, and the operators
-are `=` (match), `!=` (exclude), `=~` (regex):
+Free-text terms (AND) plus field matchers. A matcher is `field<op>value`; the
+operators are `=` (match), `!=` (exclude), `=~` (regex):
 
 - `build`: free text over IDs, labels, and docs
 - `kind=spell`: only that node kind
@@ -439,31 +433,31 @@ stays the total, so you know when you have them all.
 
 ## Retrieving prose from the docs
 
-Every markdown heading in the workspace is a `docsection` node, so documentation is
-QUERYABLE, not something to read whole. When you are looking for WHERE something is
-explained (in this repo's docs, a project's README, any tracked markdown), query the
-section rather than cat or grep the file:
+Every Markdown heading in the workspace is a `docsection` node, so documentation is
+QUERYABLE, not something to read whole. To find WHERE something is explained, query
+the section; do not cat or grep the file:
 
-- `magus query "kind=docsection <terms>"` returns the heading whose section covers your
-  terms. Each result's id and Source are `<path>#<anchor>`: a citable pointer to the exact
-  passage, the same fragment a link into the rendered page carries. Read that one section,
-  not the whole page.
+- `magus query "kind=docsection <terms>"` returns the heading whose section covers
+  your terms. Each result's id and Source are `<path>#<anchor>`, a citable pointer
+  to the exact passage. Read that one section, not the whole page.
 - Scope it with `project=<p>` and combine free-text terms. `magus explain
   "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
   page `contains` its sections and a section contains the headings nested under it, so you
   can walk the outline.
-- Prose only: a code file is not indexed this way: `magus refs` and the entity kinds above
-  still cover code and the domain model.
+- Prose only: code files are not indexed this way. `magus refs` and the entity
+  kinds above cover code and the domain model.
 
-Reading one file you already know the path of is fine. This replaces the SCAN (the grep or
-cat over markdown to find a passage), not a targeted read.
+Reading one file whose path you know is fine. This replaces the SCAN, not a targeted
+read: grep or cat over Markdown to find a passage. The docs covered are
+this repo's docs, a project's README, and any tracked Markdown, and the anchor is the
+same fragment a link into the rendered page carries.
 
 ## Reading results
 
-- Reading as a machine? Add `-o json`: every verb returns a stable,
-  `schema_version`-stamped OBJECT with a top-level wrapper: key into the
-  plural (`.matches`, `.targets`), it is never a bare array. `-o name` prints
-  bare IDs for piping. Do not scrape the human text or trim it with `head`.
+- Reading as a machine? Add `-o json`. Every verb returns a stable,
+  `schema_version`-stamped OBJECT with a top-level wrapper. Key into the plural
+  (`.matches`, `.targets`); it is never a bare array. `-o name` prints bare IDs for
+  piping. Do not scrape the human text or trim it with `head`.
   Over MCP the tools already return structured content; nothing to shape.
 - Node IDs are stable and structured: `<kind>:<qualified-name>`, e.g.
   `target:pkg/foo:build`, `spell:go`, `diagnostic:MGS2001`. Key on them; a rename
@@ -471,14 +465,15 @@ cat over markdown to find a passage), not a targeted read.
 - Edges are directed and carry a `confidence`: `extracted` (read directly off a
   source) or `inferred` (a rubric score), plus `provenance` (where it came from).
 - Node `attrs` surface metadata: a project's `engine` and `target_count`, a
-  target's inherited `engine`, a doc's `title` and `tags`. The `duration_p75_ms`,
-  `cache_hit_rate`, `run_samples`, `last_output_ref`, and `last_run_ok` attrs are
-  OBSERVED from local run history, not derived from sources; read them as history, not
-  guarantees. A target's `last_output_ref` is the `refxxxxxxxx` id of its most recent
-  captured run (with `last_run_ok` its `true`/`false` outcome), so `magus query output
-<ref>` on it fetches that output (a target-to-output hop). When `knowledge.vcs` is
-  enabled, file nodes also carry `vcs_last_commit`, `vcs_last_modified`, and
-  `vcs_commits` extracted from git history.
+  target's inherited `engine`, a doc's `title` and `tags`.
+  - `duration_p75_ms`, `cache_hit_rate`, `run_samples`, `last_output_ref`, and
+    `last_run_ok` are OBSERVED from local run history, not derived from sources; read them as history, not
+    guarantees.
+  - `magus query output <ref>` on a target's `last_output_ref` fetches its latest
+    captured run (a target-to-output hop). The ref is a `refxxxxxxxx` id, and
+    `last_run_ok` is that run's `true`/`false` outcome.
+  - With `knowledge.vcs` enabled, file nodes also carry `vcs_last_commit`,
+    `vcs_last_modified`, and `vcs_commits` from git history.
 - Every output carries `schema_version`; a bump means the node/edge shape changed.
 
 ## Ownership and blast radius
@@ -491,15 +486,15 @@ declared CODEOWNERS ownership appears; it is not blame-inferred.
 
 ## What other sessions already did here
 
-You are not the first agent in this repository, and the ones before you left a
-record. Where a workspace declares a session adapter, `magus graph build` folds
-each host's own transcripts into a local store, and two surfaces read it back.
+Agents before you left a record. Where a workspace declares a session adapter,
+`magus graph build` folds each host's transcripts into a local store, and two
+surfaces read it back:
 
-- `magus explain <node>` ends with an `agent sessions:` line when any loaded
-  session touched that file: reads, writes, how many distinct sessions, how long
-  ago, and any write the host refused. Silence means nothing touched it.
-- `magus session` lists those sessions; `magus session show <id>` opens one,
-  joined against this checkout's guard trail.
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded session
+  touched that file: reads, writes, distinct sessions, how long ago, and any write
+  the host refused. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one, joined
+  against this checkout's guard trail.
 
 Read it BEFORE a non-trivial edit, for the reason the git half of the same output
 exists. A file last committed three weeks ago looks dormant and may have been
@@ -507,30 +502,30 @@ rewritten twice yesterday by a session whose work is not committed yet. Four
 sessions on one file is a reason to look at what they did before adding a fifth
 opinion, and a refused write is a rule you are about to hit too.
 
-Never infer from an empty result that nobody worked on a file. It equally means
-this workspace declares no adapter, which is the common case.
+Never infer from an empty result that nobody worked on a file. It equally means the
+workspace declares no adapter, the common case.
 
 ## Across workspaces and neighbors
 
-- `--global` unions every workspace registered in config
-  (`knowledge.workspaces`); IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `client` (`magus\insight`), and `magus describe` sit alongside the graph;
-  `magus graph export -o json` dumps the whole graph for bulk analysis.
-- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a CI
-  comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
+- `--global` unions every workspace registered in config (`knowledge.workspaces`);
+  IDs are namespaced per workspace (`web//spell:go`).
+- `magus affected`, `client` (`magus\insight`), and `magus describe` sit beside the
+  graph. `magus graph export -o json` dumps the whole graph for bulk analysis.
+- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a
+  CI comment (nodes/edges added, removed, or changed); `--rev` builds the base graph from
   that revision's files, or pass a `graph export -o json` baseline file instead.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
-human an export: `magus graph export -o json` (or `-o graphml`) opens directly in
-Gephi, yEd, or a browser graph tool. The emit-never-render rule that governs magus
+human an export. `magus graph export -o json` (or `-o graphml`) opens in Gephi, yEd,
+or a browser graph tool. The emit-never-render rule that governs magus
 governs you too.
 
 ## Fetching current behavior
 
-For flags and behavior this skill does not cover, run any verb with `-h`, and read
-the magus documentation site. Prefer the tools' own output over assumptions.
+For flags and behavior this skill does not cover, run any verb with `-h` and read the
+magus documentation site. Prefer the tools' own output over assumptions.
 ````
 
 

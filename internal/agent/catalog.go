@@ -334,7 +334,9 @@ import (
 // had a spaced hyphen for a dash.
 // 111: skill prose keeps to the writing rules: present tense, no filler, and list items
 // written as sentences or code-span names instead of bold labels.
-const SkillVersion = 111
+// 112: the short form of every skill is terse, at most 25 words a sentence and 60 a
+// paragraph; examples and history moved to the full form.
+const SkillVersion = 112
 
 const skillLicense = "GPL-3.0-or-later"
 
