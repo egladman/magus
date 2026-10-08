@@ -3,13 +3,13 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 12495
-skill_short_bytes: 9556
+skill_full_bytes: 12491
+skill_short_bytes: 9552
 ---
 
 # magus-sdk
 
-Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks "can I use magus without the binary". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).
+Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks "can I use magus without the binary". Also use to audit the SDK's exported API itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).
 
 Install it, rather than copying from this page:
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `d949893fb732` |
+| `skill-content` | `afdb27d6393c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -58,7 +58,7 @@ magus agent install --tar | tar -xO -f - magus-sdk/SKILL.md
 
 This skill's reader has never run `magus` and does not know its subcommands. They
 found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
-call it from their own Go program. Ground every answer in the actual exported surface,
+call it from their own Go program. Ground every answer in the actual exported API,
 never in what the CLI does, which this reader cannot see:
 
 - `magus.go`, `run.go`, `knowledge.go`, `describe.go`
@@ -255,7 +255,7 @@ magus agent install --tar | tar -xO -f - magus-sdk-full/SKILL.md
 
 This skill's reader has never run `magus` and does not know its subcommands. They
 found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
-call it from their own Go program. Ground every answer in the actual exported surface,
+call it from their own Go program. Ground every answer in the actual exported API,
 never in what the CLI does, which this reader cannot see:
 
 - `magus.go`, `run.go`, `knowledge.go`, `describe.go`

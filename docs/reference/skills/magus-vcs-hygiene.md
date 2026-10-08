@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6ebda74d2371` |
+| `skill-content` | `45ffcc0d0af1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -319,7 +319,7 @@ add`, never the live tree.
 
 For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
 use one inline Buzz evaluation. It is dense on purpose: an occasional capability
-query, not an everyday CLI surface.
+query, not an everyday CLI command.
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'

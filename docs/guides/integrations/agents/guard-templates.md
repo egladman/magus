@@ -229,10 +229,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=codex surface=mcp deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
 // The mcp rows are real: an mcp__magus__* PreToolUse call carries no tool_input.command,
 // so this file forwards the whole event instead (see hook\wholeEvent), and the same hookSpecificOutput
 // reply it already renders for the command surface carries a deny or an advise on this one too.
@@ -804,8 +804,8 @@ wasteful, not destructive.
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";

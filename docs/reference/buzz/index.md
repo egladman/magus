@@ -3,13 +3,13 @@ title: magus stdlib
 page_type: overview
 generated_from: std/**/*.go, internal/hostmodules/**/*.go
 aliases: [modules]
-description: Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
+description: Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API.
 tags: [stdlib, modules, magusfile, reference, fs, os, http, json]
 ---
 
 # Magusfile Module Reference
 
-These are the runtime utility modules. Import each under its bare name (`import "fs"`, then `fs\glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
+These are the runtime utility modules. Import each under its bare name (`import "fs"`, then `fs\glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import "fs"` (or `os`, `crypto`) carries both sets of methods, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.
 
 ## Files and paths
 

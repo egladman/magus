@@ -3,8 +3,8 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6741
-skill_short_bytes: 5258
+skill_full_bytes: 6737
+skill_short_bytes: 5261
 ---
 
 # magus-architecture-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `d2382a07e63a` |
+| `skill-content` | `98433dd38521` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -88,7 +88,7 @@ the inverse, and over-abstraction is the more common failure in a young codebase
 Ask it explicitly; nothing prompts it.
 
 A boundary is not free: in
-Go, splitting a package forces exports, widening the surface you meant to shrink.
+Go, splitting a package forces exports, widening the public API you meant to shrink.
 No churn or coupling metric records that cost.
 
 The shapes worth flagging, most clearly wrong first:
@@ -230,7 +230,7 @@ Ask it explicitly; nothing prompts it.
 A boundary is not free. In Go every package boundary FORCES an export:
 a helper that would be lowercase inside one package must be capitalized to cross
 into another. So splitting files into packages to "organize" them WIDENS the
-public surface you were trying to keep small, and each new export is a name you
+public API you were trying to keep small, and each new export is a name you
 must justify, document, and keep stable. The cost is paid per boundary, and no
 churn or coupling metric records it.
 

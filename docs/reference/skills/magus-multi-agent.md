@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 39868
-skill_short_bytes: 28650
+skill_full_bytes: 39849
+skill_short_bytes: 28631
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `7af3dbc2f064` |
+| `skill-content` | `e883742deda8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -122,8 +122,8 @@ The loop: define, partition, hand out, observe, evaluate, course-correct, integr
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface, the ROOT names it before any edit. A shared
-surface is a module several call sites use, a type, an event, or an exported
+When a change adds a shared API, the ROOT names it before any edit. A shared
+API is a module several call sites use, a type, an event, or an exported
 function. Name:
 
 - the path;
@@ -138,7 +138,7 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
 - `symbol` + `present` for each new exported name.
 - `symbol` + `absent` for the name a second copy would predictably take beside a
   symbol the work must reuse. No gate grades reuse itself.
-- `symbol` + `unreferenced` for each helper the shared surface replaces.
+- `symbol` + `unreferenced` for each helper the shared API replaces.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -219,12 +219,12 @@ Map work to provider capabilities without assuming model names:
 | Model | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and bounded project surface |
+| standard | isolated implementation with a clear contract and a bounded set of projects |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
-If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis: evidence gathering, scouting, and review get a read-only tool
-surface where the host offers one. Never downgrade the root integration pass or final
+If the host cannot select models or reasoning effort, keep its default. Tool access
+is a separate axis: evidence gathering, scouting, and review get read-only tools
+where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
@@ -747,8 +747,8 @@ decides whether the top-level goal is complete.
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface, the ROOT names it before any edit. A shared
-surface is a module several call sites use, a type, an event, or an exported
+When a change adds a shared API, the ROOT names it before any edit. A shared
+API is a module several call sites use, a type, an event, or an exported
 function. Name:
 
 - the path;
@@ -766,7 +766,7 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   symbol the work must reuse. No gate grades reuse itself: `present`
   holds for a symbol that existed before the job began, and a reference count
   cannot tell the defining file or an import from real use.
-- `symbol` + `unreferenced` for each helper the shared surface replaces.
+- `symbol` + `unreferenced` for each helper the shared API replaces.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -869,12 +869,12 @@ Map work to provider capabilities without assuming model names:
 | Model | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and bounded project surface |
+| standard | isolated implementation with a clear contract and a bounded set of projects |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
-If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis: evidence gathering, scouting, and review get a read-only tool
-surface where the host offers one. Never downgrade the root integration pass or final
+If the host cannot select models or reasoning effort, keep its default. Tool access
+is a separate axis: evidence gathering, scouting, and review get read-only tools
+where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no

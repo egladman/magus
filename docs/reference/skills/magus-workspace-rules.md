@@ -1,15 +1,15 @@
 ---
 title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
-description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
+description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11026
-skill_short_bytes: 8778
+skill_full_bytes: 11032
+skill_short_bytes: 8782
 ---
 
 # magus-workspace-rules
 
-Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.
+Adapt magus's installed agent integration to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.
 
 Install it, rather than copying from this page:
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2f45a120531c` |
+| `skill-content` | `17f3af3f5223` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,7 +54,7 @@ magus agent install --tar | tar -xO -f - magus-workspace-rules/SKILL.md
 ```
 
 ````markdown
-# Adapting the agent surface to this workspace
+# Adapting the agent integration to this workspace
 
 The magus skills are one shared body installed identically into every repo. They
 teach the tool, not your workspace. They cannot know that a target here is slow, a
@@ -246,7 +246,7 @@ magus agent install --tar | tar -xO -f - magus-workspace-rules-full/SKILL.md
 ```
 
 ````markdown
-# Adapting the agent surface to this workspace
+# Adapting the agent integration to this workspace
 
 The magus skills are one shared body installed identically into every repo. They
 teach the tool, not your workspace. They cannot know that a target here is slow, a
@@ -426,7 +426,7 @@ To adapt one, declare an override; change no import and no provider call.
      The token stays a secret ref (`MAGUS_MCP_TOKEN`).
    - Commit the `magus.yaml` entry and the forked spell together.
 
-That is the whole self-improvement surface for Buzz harnesses: the `magus.yaml`
+That is the whole self-improvement mechanism for Buzz harnesses: the `magus.yaml`
 declaration is the ownership switch, and the one line a reviewer sees. A Magus upgrade
 never changes a pinned harness; a newer shipped spell arrives only when someone runs
 the lock target with `:update`, and your workspace fork is unaffected until you
