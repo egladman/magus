@@ -18,6 +18,11 @@
 //     filler, and one spelling per glossary term. A post under blog/ is first person by
 //     design, so it skips reply-voice, tense and hedge. A judge that does not run is an
 //     error, never a pass.
+//   - A skill is judged on its own surface, since an agent pays for every word on every
+//     load: what its short form shows is held to the terse rules too (a sentence and a
+//     paragraph word cap, and wordy phrases with a shorter equivalent). A skill body
+//     under internal/agent/skills/ renders a short and a full form, so text only the
+//     full form shows is held to the Markdown rules alone.
 //
 // .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
 // enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
@@ -84,6 +89,18 @@ final FIRST_PERSON = ["reply-voice", "tense", "hedge"];
 
 final JUDGE = "libs/conventions/cmd/judge-docs";
 
+// surface is the judge's surface for the hand-written file at rel: a skill body the
+// agent package renders, a skill an agent loads as written, or any other Markdown.
+export fun surface(rel: str) > str !> any {
+    if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
+        return "skill-source";
+    }
+    if (path\matchesAny([".claude/skills/*/SKILL.md"], path: rel)) {
+        return "skill";
+    }
+    return "markdown";
+}
+
 export fun check(files: [Path]) > [Finding] !> any {
     final generated = mut [<str>];
     final attrs = support\named(files, p: ".gitattributes");
@@ -95,7 +112,9 @@ export fun check(files: [Path]) > [Finding] !> any {
         foreach (g in ignoreGlobs(support\read(ignore!))) { generated.append(g); }
     }
     final found = mut [<Finding>];
-    final judged = mut {<str: str>};
+    final markdown = mut {<str: str>};
+    final skills = mut {<str: str>};
+    final sources = mut {<str: str>};
     foreach (f in files) {
         if (!f.value.endsWith(".md") or isGenerated(f.value, globs: generated)) {
             continue;
@@ -103,25 +122,39 @@ export fun check(files: [Path]) > [Finding] !> any {
         foreach (finding in proseFindings(f.value, md: support\read(f))) {
             found.append(finding);
         }
-        judged[path\abs(if (f.base == "") f.value else f.base + "/" + f.value)] = f.value;
+        final full = path\abs(if (f.base == "") f.value else f.base + "/" + f.value);
+        final on = surface(f.value);
+        if (on == "skill-source") {
+            sources[full] = f.value;
+        } else if (on == "skill") {
+            skills[full] = f.value;
+        } else {
+            markdown[full] = f.value;
+        }
     }
-    foreach (finding in judge(judged, module: "libs/conventions")) {
+    foreach (finding in judge(markdown, module: "libs/conventions", surface: "markdown")) {
+        found.append(finding);
+    }
+    foreach (finding in judge(skills, module: "libs/conventions", surface: "skill")) {
+        found.append(finding);
+    }
+    foreach (finding in judge(sources, module: "libs/conventions", surface: "skill-source")) {
         found.append(finding);
     }
     return found;
 }
 
-// judge runs the writing rules over files, each an absolute path and the workspace path
-// it is reported at, in one run of the judge in module.
-fun judge(files: {str: str}, module: str) > [Finding] !> any {
+// judge runs the writing rules of surface over files, each an absolute path and the
+// workspace path it is reported at, in one run of the judge in module.
+fun judge(files: {str: str}, module: str, surface: str) > [Finding] !> any {
     if (files.len() == 0) {
         return [<Finding>];
     }
-    final args = mut ["run", "./cmd/judge-docs", "-surface", "markdown"];
+    final args = mut ["run", "./cmd/judge-docs", "-surface", surface];
     foreach (full in support\sorted(files.keys())) {
         args.append(full);
     }
-    final fix = "Run `go run ./cmd/judge-docs -surface markdown <file>` in libs/conventions and read why it stopped.";
+    final fix = "Run `go run ./cmd/judge-docs -surface {surface} <file>` in libs/conventions and read why it stopped.";
     final run = proc\exec("go", args: args, dir: module,
         opts: {"quiet": true, "allow_failure": true}) catch null;
     if (run == null or run!.code != 0) {
@@ -582,11 +615,33 @@ test "the judge runs once over every hand-written file and reports at the file's
 }
 
 test "a judge that does not run is an error, not a pass" {
-    final got = judge({"/w/docs/a.md": "docs/a.md"}, module: "libs/no-such-module");
+    final got = judge({"/w/docs/a.md": "docs/a.md"}, module: "libs/no-such-module", surface: "markdown");
     assert\equal(got.len(), want: 1, message: "one error");
     assert\equal(got[0].path, want: JUDGE, message: "at the judge");
     assert\equal(got[0].message.startsWith("the prose judge did not run"), want: true, message: got[0].message);
-    assert\equal(judge({<str: str>}, module: "libs/no-such-module").len(), want: 0, message: "no file, no run");
+    assert\equal(judge({<str: str>}, module: "libs/no-such-module", surface: "markdown").len(), want: 0,
+        message: "no file, no run");
+}
+
+test "a skill body, a loaded skill and any other page each take their own surface" {
+    assert\equal(surface("internal/agent/skills/magus-run/SKILL.md"), want: "skill-source", message: "a body");
+    assert\equal(surface(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "skill", message: "a loaded skill");
+    assert\equal(surface("internal/agent/agents-section.md"), want: "markdown", message: "not a skill");
+    assert\equal(surface(".claude/skills/x/notes.md"), want: "markdown", message: "not a SKILL.md");
+}
+
+test "a skill's short form is held to the terse rules and its full-only text is not" {
+    final got = check(support\fixture({
+        "internal/agent/skills/magus-x/SKILL.md": "# X\n\nRun it\{\{if .Full}} in order to replay\{\{else}} in order to warm it\{\{end}}.\n",
+        ".claude/skills/y/SKILL.md": "---\nname: y\ndescription: \"Y.\"\n---\n\n# Y\n\nRun it in order to replay.\n",
+        "docs/page.md": "# A page\n\nRun it in order to replay.\n",
+    }));
+    final where = mut [<str>];
+    foreach (f in got) {
+        where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
+    }
+    assert\equal(where, want: [".claude/skills/y/SKILL.md:8 [wordy]", "internal/agent/skills/magus-x/SKILL.md:3 [wordy]"],
+        message: "one wordy finding per skill, none on the page");
 }
 
 test "ignore globs anchor a slashed entry and float a bare one" {
