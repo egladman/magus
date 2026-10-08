@@ -901,13 +901,13 @@ func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
 		"the repeat is silence, not the new-directory advisory stepping into the gap this rule left")
 }
 
-// TestHookCmdJudgesTheCacheDirOnBothSurfaces is the hook's decision table for this rule.
+// TestHookCmdJudgesTheCacheDirOnBothInputs is the hook's decision table for this rule.
 // It is here rather than in TestEvaluateBashGuard because the rule is not pure: it reads
 // the resolved cache location, so the table it belongs in is the one that runs hookCmd.
 //
 // The rows run UNBOUND, which is the contract: this is the guard's own evidence rather
 // than a boundary, so an orchestrator and a person in their own checkout are refused too.
-func TestHookCmdJudgesTheCacheDirOnBothSurfaces(t *testing.T) {
+func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 	for name, tc := range map[string]struct {
 		input string
 		path  bool
@@ -1056,9 +1056,9 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	assert.Equal(t, worker.ID, events[0].Lease)
 }
 
-// TestHookCmdJudgesTheMCPLedgerSurface is the decision table for the transport the CLI
+// TestHookCmdJudgesTheMCPLedgerInput is the decision table for the transport the CLI
 // rules would otherwise miss: the same envelope a host forwards for an MCP tool call.
-func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
+func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	wide := narrowLease()
@@ -1188,10 +1188,10 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
 }
 
-// TestHookCmdAdvisesAnInvalidLeaseOnEverySurface: the notice lived inside gradeLeasedWrite,
-// which runs on the path surface only, so a COMMAND under a typo'd id ran fully un-enrolled
+// TestHookCmdAdvisesAnInvalidLeaseOnEveryInput: the notice lived inside gradeLeasedWrite,
+// which runs on the path input only, so a COMMAND under a typo'd id ran fully un-enrolled
 // with nothing said about it.
-func TestHookCmdAdvisesAnInvalidLeaseOnEverySurface(t *testing.T) {
+func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	for name, args := range map[string][]string{
 		"the command surface": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
 		"the path surface":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},

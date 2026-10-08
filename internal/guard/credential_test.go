@@ -114,8 +114,8 @@ func TestTokenStatePathsAreDenied(t *testing.T) {
 	}
 }
 
-// Through Judge, on both graded surfaces, with the rule named, and ahead of every other verdict.
-func TestJudgeDeniesTheTokenStateOnEverySurface(t *testing.T) {
+// Through Judge, on both graded inputs, with the rule named, and ahead of every other verdict.
+func TestJudgeDeniesTheTokenStateOnEveryInput(t *testing.T) {
 	state, at := tokenStateFixture(t)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: at.workspace})
 	op := filepath.Join(state, "mcp_token")

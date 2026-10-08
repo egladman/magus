@@ -62,7 +62,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// same signatures the real runtime does. Without them this host was untyped: a
 	// snippet could read a field no return carries and the dry run would say nothing,
 	// which is the opposite of what a dry run is for. The stubs above are shaped to
-	// match, and TestMagusSurfaceMatchesBindings holds the member set in sync.
+	// match, and TestMagusAPIMatchesBindings holds the member set in sync.
 	spell.DeclareMagusTypes(sess, nil)
 	for name, ops := range spells {
 		sess.SetNativeModule("magus/spell/"+name, buildSpell(name, ops, tr))
@@ -96,7 +96,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 // buildMagus builds the tracing `magus` module. It MUST cover the same member
 // surface the real bindings register (internal/interp/bindings: MagusModuleKeys);
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
-// test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
+// test TestMagusAPIMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
 // (magus.project, and the ctx.needs/ctx.glob a target declares) are modeled into the graph.
 func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {

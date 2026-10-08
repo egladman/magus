@@ -315,7 +315,7 @@ func magusAPINames(t *testing.T) []string {
 	return out
 }
 
-// TestMagusSurfaceLocked is the gate the MGS1025 table cannot provide for itself.
+// TestMagusAPILocked is the gate the MGS1025 table cannot provide for itself.
 //
 // removedMagusfileAPI (internal/interp/runtime.go) is hand-maintained, so it only ever
 // describes removals someone remembered to write down. Deleting a binding is otherwise
@@ -326,7 +326,7 @@ func magusAPINames(t *testing.T) []string {
 // This makes the surface a committed artifact. A removed member fails here, naming the
 // member and the table that has to describe it; an added one fails too, which is the
 // cheap price of the snapshot and is settled by regenerating.
-func TestMagusSurfaceLocked(t *testing.T) {
+func TestMagusAPILocked(t *testing.T) {
 	got := magusAPINames(t)
 
 	if os.Getenv("UPDATE_MAGUS_API_LOCK") != "" {
@@ -366,7 +366,7 @@ func TestMagusSurfaceLocked(t *testing.T) {
 	}
 }
 
-// TestMagusSurfaceIsDeclared closes the drift class that let magus\review exist for
+// TestMagusAPIIsDeclared closes the drift class that let magus\review exist for
 // months with no declaration, no doc page and no MCP link back to it.
 //
 // The surface lock above pins WHAT is bound, so a removal is loud. It says nothing
@@ -377,7 +377,7 @@ func TestMagusSurfaceLocked(t *testing.T) {
 //
 // The comparison is on the BUZZ name, which is what a caller types: the descriptor
 // declares snake_case and the surface exposes camelCase.
-func TestMagusSurfaceIsDeclared(t *testing.T) {
+func TestMagusAPIIsDeclared(t *testing.T) {
 	declared := map[string]bool{}
 	for _, m := range std.Magus.Methods {
 		declared[std.BuzzMethodName(m)] = true

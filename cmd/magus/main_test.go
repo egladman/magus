@@ -395,7 +395,7 @@ func TestWantsUsage(t *testing.T) {
 // usage printer in its own file, and what these tests check is the property they share. Pairing
 // it with any one of them would name a single command for a sweep over all of them.
 
-// TestUsagePrintersNameTheirSurface pins what a reader who typed `-h` is actually
+// TestUsagePrintersNameTheirCommands pins what a reader who typed `-h` is actually
 // left with. The assertion is deliberately not byte equality: prose is meant to be
 // rewritten, but a usage block that stops naming a subcommand or a flag has stopped
 // being usage, and that is the regression worth catching.
@@ -454,7 +454,7 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 }
 
 // help is not the command's output, so it must not land in a pipe that expects data.
-func TestUsagePrintersNameTheirSurface(t *testing.T) {
+func TestUsagePrintersNameTheirCommands(t *testing.T) {
 	tests := []struct {
 		name  string
 		print func()

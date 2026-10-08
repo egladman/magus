@@ -162,7 +162,7 @@ func TestAttentionHandler_DisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 // magus through MCP and cannot arrive here, so a write that landed here came from the console.
 // Without this the store cannot say which surface closed a request, and "who answered this"
 // becomes an inference from an empty field.
-func TestAttentionHandler_DisposeStampsTheConsoleAsTheSurface(t *testing.T) {
+func TestAttentionHandler_DisposeStampsTheConsoleAsTheDisposer(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)

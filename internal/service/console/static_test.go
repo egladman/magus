@@ -88,8 +88,8 @@ func TestAssetsAreStillServed(t *testing.T) {
 
 func TestUnknownSegmentIsNotAnAppRoute(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
-	w := get(t, h, "/console/not-a-surface")
-	assert.NotEqual(t, http.StatusFound, w.Code, "only a known surface canonicalizes")
+	w := get(t, h, "/console/not-an-app")
+	assert.NotEqual(t, http.StatusFound, w.Code, "only a known app canonicalizes")
 }
 
 // KnownApps is the contract the server, the link minters, and the console's boot router

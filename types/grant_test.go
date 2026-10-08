@@ -87,7 +87,7 @@ func TestGrantWithinIsPointwiseOnEveryPair(t *testing.T) {
 	}
 }
 
-func TestGrantValidateRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
+func TestGrantValidateRefusesLevelsAScopeHasNoMeaningFor(t *testing.T) {
 	t.Parallel()
 	for _, g := range validGrants() {
 		require.NoError(t, g.Validate(), g.String())

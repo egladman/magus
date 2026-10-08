@@ -4,7 +4,7 @@ package guard
 
 const hookToolRead = "read"
 
-var surfaces = map[string]int{
+var inputs = map[string]int{
 	"Read":       1, // want `spells the host tool name "Read": .*; the labels are hookTool\*`
 	hookToolRead: 2,
 }

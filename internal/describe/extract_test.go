@@ -842,7 +842,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { http\get("https://exa
 	assert.Empty(t, plain.SecretRefs)
 }
 
-// TestReadsSecretsCoversTheWholeSecretSurface pins what MGS1026 can see.
+// TestReadsSecretsCoversEverySecretCall pins what MGS1026 can see.
 //
 // Recognizing only magus\secret.read left the entire injector surface uncovered, so a
 // target that granted a credential and then fetched with it was never flagged as
@@ -850,7 +850,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { http\get("https://exa
 // the magusfile never holds the value, so switching the ref from staging to production
 // changes nothing the cache can see and the target replays its old output against a
 // different credential, a wrong build, not a stale login.
-func TestReadsSecretsCoversTheWholeSecretSurface(t *testing.T) {
+func TestReadsSecretsCoversEverySecretCall(t *testing.T) {
 	g := Extract(`import "magus";
 export fun reads(ctx: magus\Context, args: [str]) > void {
     final tok = magus\secret.read("TOKEN");

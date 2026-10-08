@@ -61,14 +61,14 @@ func TestDryCheckParityWithEngine(t *testing.T) {
 	}
 }
 
-// TestMagusSurfaceMatchesBindings is the drift guard between the two host
+// TestMagusAPIMatchesBindings is the drift guard between the two host
 // implementations of the magus.* surface: the real Buzz bindings
 // (internal/interp/bindings) and this package's tracing dry-run host (buildMagus). A
 // magusfile referencing a member the playground omits would fail to evaluate, so the
 // playground must implement every member the real bindings register. Adding or
 // removing a binding without mirroring it here fails this test instead of silently
 // breaking the playground.
-func TestMagusSurfaceMatchesBindings(t *testing.T) {
+func TestMagusAPIMatchesBindings(t *testing.T) {
 	realTop := bindings.MagusModuleKeys()
 	require.NotEmpty(t, realTop, "bindings.MagusModuleKeys returned no members")
 
@@ -85,7 +85,7 @@ func TestMagusSurfaceMatchesBindings(t *testing.T) {
 	}
 }
 
-// TestCtxDeclarationsMatchAcrossHosts is TestMagusSurfaceMatchesBindings one surface
+// TestCtxDeclarationsMatchAcrossHosts is TestMagusAPIMatchesBindings one surface
 // down, over the ctx a target receives. Three places enumerate its members
 // independently (buildTargetContext, the magus\Exec refusal list beside it, and this
 // package's buildCtx), and each omission fails differently and quietly: an Exec that

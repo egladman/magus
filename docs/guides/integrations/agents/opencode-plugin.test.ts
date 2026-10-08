@@ -159,7 +159,7 @@ test("a call carries OpenCode's session, so push authority can tell the root fro
   ]);
 });
 
-test("a file write is judged on the path surface, also over stdin", async () => {
+test("a file write is judged on the path input, also over stdin", async () => {
   const calls = stubBun(() => advise);
   const h = await hooks();
 

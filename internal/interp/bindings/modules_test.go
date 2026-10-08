@@ -186,11 +186,11 @@ main();
 	assert.ErrorIs(t, err, types.MagusfileOnlyMember)
 }
 
-// TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
-// surfaces buildMagus serves. They must carry the SAME member names (a script
-// that cannot see a member has no way to learn it exists), so the surfaces differ
+// TestMagusModesExposeSameMembers is the lock-step guard between the two
+// modes buildMagus serves. They must carry the SAME member names (a script
+// that cannot see a member has no way to learn it exists), so the modes differ
 // only in what a member does when called, which is what MGS1022 reports.
-func TestMagusSurfacesExposeSameMembers(t *testing.T) {
+func TestMagusModesExposeSameMembers(t *testing.T) {
 	sess := scriptSession(t)
 	script, ok := sess.NativeModule("magus")
 	require.True(t, ok && script.IsMap(), "magus namespace is not installed for a script")

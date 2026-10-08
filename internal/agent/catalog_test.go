@@ -1120,7 +1120,7 @@ var vcsDriverSpellings = map[string][]string{
 	"jj":  {"Jujutsu", "jj"},
 }
 
-// TestAgentSurfaceNamesEveryVCSDriver keeps the agent surface at parity with the drivers.
+// TestAgentSkillsNameEveryVCSDriver keeps the agent skills at parity with the drivers.
 //
 // vcs/parity_test.go already pins parity for nineteen DRIVER METHODS across all four
 // backends, so the repo has decided this matters. That enforcement stopped at the driver
@@ -1131,7 +1131,7 @@ var vcsDriverSpellings = map[string][]string{
 //
 // The driver list is READ FROM THE SOURCE rather than restated, so this cannot drift from
 // what magus actually drives.
-func TestAgentSurfaceNamesEveryVCSDriver(t *testing.T) {
+func TestAgentSkillsNameEveryVCSDriver(t *testing.T) {
 	names := vcsDriverNames(t)
 	require.NotEmpty(t, names, "found no VCS drivers; the Name() scan below stopped matching")
 
