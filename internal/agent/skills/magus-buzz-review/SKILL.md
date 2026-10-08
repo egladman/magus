@@ -43,14 +43,14 @@ conformance lenses check applies to only one:
 
 So **a magusfile or a spell file is always embedded.** A top-level `if`, a top-level
 `foreach`, an unlabeled second argument: all fine and idiomatic there. Applying
-strict-mode rules to a magusfile is not a strict reading; it is a wrong one.
+strict mode to a magusfile is not a strict reading; it is a wrong one.
 
 Judge a standalone script by how it is invoked{{if .Full}}, not by
 guessing from its shape{{end}}:
 
-- Run by a bare `magus buzz <file>` (no `--embedded`): strict rules apply, and a
+- Run by a bare `magus buzz <file>` (no `--embedded`): strict mode applies, and a
   top-level `if` is a genuine defect.
-- Strict rules do not apply when it runs by `magus buzz --embedded <file>`, from
+- Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
   the surface.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
@@ -282,7 +282,7 @@ Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed {{skill "buzz-review"}} skill (.claude/skills/{{skill "buzz-review"}}/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
-script = check how it is invoked) before applying any strict-mode-derived rule.
+script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```

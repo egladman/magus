@@ -236,9 +236,9 @@ surfaces read it back{{else}}, where the workspace declares a session adapter{{e
 exists. A file last committed three weeks ago looks dormant and may have been
 rewritten twice yesterday by a session whose work is not committed yet. Four
 sessions on one file is a reason to look at what they did before adding a fifth
-opinion, and a refused write is a rule you are about to hit too.{{else}}Read it before a non-trivial edit. A file last committed weeks ago may have been
+opinion, and a refused write is a guard rule you are about to hit too.{{else}}Read it before a non-trivial edit. A file last committed weeks ago may have been
 rewritten yesterday by a session whose work is not committed. A refused write
-there is a rule you are about to hit too.{{end}}
+there is a guard rule you are about to hit too.{{end}}
 
 Never infer from an empty result that nobody worked on a file. It equally means the
 workspace declares no adapter, the common case.
@@ -257,7 +257,7 @@ workspace declares no adapter, the common case.
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
 human an export. `magus graph export -o json` (or `-o graphml`) opens in Gephi, yEd,
-or a browser graph tool.{{if .Full}} The emit-never-render rule that governs magus
+or a browser graph tool.{{if .Full}} The emit-never-render convention that governs magus
 governs you too.{{end}}
 
 ## Fetching current behavior

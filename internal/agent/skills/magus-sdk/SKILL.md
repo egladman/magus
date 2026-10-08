@@ -156,7 +156,7 @@ depend on target `build` in project B"{{end}}.
   `types/target.go:95-101`){{end}}.
 
 **The `Entry`/`Output`/`Report` suffix split needs the ~20-line comment at the top
-of `types/describe.go`.** Most of it is a naming RULE, not vocabulary. Read the comment
+of `types/describe.go`.** Most of it is a naming CONVENTION, not vocabulary. Read the comment
 before you add a type{{if .Full}}; guess at the pattern instead and you misname it{{end}}.
 
 - `Entry` is added only when the bare name would collide with an existing type:

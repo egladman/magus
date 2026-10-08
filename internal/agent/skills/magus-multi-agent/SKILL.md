@@ -51,7 +51,7 @@ load, and the graph queries it runs to find its own footing, spent identically
 whether the unit is fifty lines or five hundred{{end}}. So after partitioning, ask whether
 each unit is big enough to be worth a worker.
 
-Four rules, in the order they bite:
+Apply these four in the order they bite:
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
   Two is two loads for one unit of work, and the second starts by rediscovering
@@ -176,12 +176,12 @@ writes. Mark that job's check ROOT-DEFERRED when you fork it:
   and says so;
 - the root executes the job's target centrally before verifying.{{if .Full}} Leaving each worker to discover the wall
   spends its budget on the discovery, once per worker, and its report then reads
-  "done" with nothing executed, which the acceptance-evidence rule above already
-  refuses to accept.{{end}}
+  "done" with nothing executed, which `magus job wait` already refuses to record
+  as a pass.{{end}}
 
 A worker may fork part of its own job. It may not hand it out without shrinking the
 problem{{if .Full}}; that is the shape that does not terminate, and
-the cost people attribute to "multi-agent" is almost always this{{end}}. These rules give it a
+the cost people attribute to "multi-agent" is almost always this{{end}}. These instructions give it a
 definitive end without capping depth:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
@@ -192,14 +192,14 @@ definitive end without capping depth:
 - **A job that fails its criteria twice is not re-issued.** The root does it locally,
   or serializes it behind whatever keeps breaking it{{if .Full}}. Two jobs
   with an undeclared dependency each break the other's criteria, and re-issuing
-  the failing one satisfies every rule above while alternating forever; the budget
+  the failing one satisfies every instruction above while alternating forever; the budget
   is what ends it{{end}}.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
   leaks by construction. Split "no caller of X remains" into per-project jobs, and
   the callers in no project belong to nobody. Every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job, and SAY which one. The rule runs both ways. A
+Pick the model that FITS the job, and SAY which one. The fit runs both ways. A
 mechanical rename does not need the strongest model. An ambiguous API boundary
 does not get the cheapest one because it looked like less work{{if .Full}}. Matching the model to the work is the only cost decision worth making here;
 past that, cost is not your call to agonize over, and a job done badly by an
@@ -209,13 +209,13 @@ Naming it is the checkable half: every spawn names a model, or an agent definiti
 that names one.
 
 - Inheriting the parent's model ON PURPOSE is fine and often right{{if .Full}}. A hard review
-  under a cheaper coordinator is exactly the case an ordering rule would forbid{{end}}.
+  under a cheaper coordinator is exactly the case a weaker-only ordering would forbid{{end}}.
 - Inheriting it BY OMISSION is the failure. A host defaulting to "same as the parent"
   makes every unnamed spawn the most expensive one, and records no choice{{if .Full}}. Measured 2026-09-15: nine
   workers spawned in one session, every one inheriting the root's model, five of them
   mechanical work a cheaper model does as well{{end}}.
 
-ASK THE HUMAN when the right model is unclear, before spawning.{{if .Full}} There is no ordering rule to fall back on: "only ever spawn something
+ASK THE HUMAN when the right model is unclear, before spawning.{{if .Full}} There is no ordering to fall back on: "only ever spawn something
 weaker" was tried and withdrawn, because same-strength offload is legitimate. An
 unclear case is a question, not a default.{{end}}
 
@@ -392,7 +392,7 @@ The check is `<target> <project> [-- args]` with the `magus run` implied (`"test
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
 
 Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `magus job fork` from a
-terminal{{if .Full}}: the same store and the same authorization rule either way, so a
+terminal{{if .Full}}: the same store and the same authorization either way, so a
 job forked by hand and one an agent forked are indistinguishable to everything that
 reads them{{end}}. A worker holding a lease forks its own units the same way, naming its
 job with `--parent` and paths inside its own.
@@ -414,8 +414,8 @@ it would deny refuses the spawn{{if .Full}}, since the worker runs a brief's
 commands as written{{end}}. A line that names a command to forbid it ("never ...") is not
 graded.
 
-Every worker prompt includes its row, its JOB ID, relevant graph evidence, and the
-global spawn rule. Require the worker to:
+Every worker prompt includes its row, its JOB ID, relevant graph evidence, and
+any cap the user set for the tree. Require the worker to:
 
 - export `BAGGAGE=magus.lease=<its id>` before it works{{if .Full}}: that is the W3C
   Baggage channel, and the member is what tells the agent guard whose declared boundary
@@ -598,7 +598,7 @@ One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols":
 Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the
 common goal names only its kind and subject.
 
-Reach for `symbol` + `unreferenced` when partitioning a rename: the REMAINDER rule made
+Reach for `symbol` + `unreferenced` when partitioning a rename: the REMAINDER instruction made
 checkable. Split per project, and the callers in no project belong to no job. Every
 job passes and the rename is unfinished.
 
@@ -626,7 +626,7 @@ It prints where each goal stands beside the terms: the same grading `magus job w
 does, recording nothing. Use it instead of asking a worker how it is going.
 
 SEQUENCE goals with `depends_on` between them; a failed prerequisite propagates. Do
-NOT nest them: a goal that wants children is a JOB that wants splitting{{if .Full}}, which the rule above covers. Flat goals keep
+NOT nest them: a goal that wants children is a JOB that wants splitting{{if .Full}}, which the instructions above cover. Flat goals keep
 the job tree the only hierarchy with an owner{{end}}.
 
 Run workers non-blocking by default. Block on one only when your next action needs its

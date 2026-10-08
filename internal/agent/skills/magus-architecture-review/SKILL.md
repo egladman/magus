@@ -135,7 +135,7 @@ freely){{end}}. Ground every claim in a query, as for a layout proposal.
 A mechanism that ACTS (a guard, a refusal, a cancellation, an auto-fix) is judged on
 its wrong firings. Name the two cases its predicate cannot separate and the cost of
 guessing each wrong. When it cannot separate them, do not build it{{if .Full}}, and say so rather
-than shipping a rule that fires on the wrong one{{end}}.
+than shipping a check that fires on the wrong one{{end}}.
 
 Wrong firings are the expensive direction: a gap gets noticed, while a check that
 cries wolf teaches people to route around it{{if .Full}}, taking the real findings with it{{end}}.

@@ -94,7 +94,7 @@ and append under `## [Unreleased]`.{{if .Full}} For example:
 
 {{- else}} Open with what a user can now do, then why it is the right shape.{{end}}
 
-Rules for an entry, all checkable:
+Write each entry to this checkable list:
 
 - Name every surface it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target.{{if .Full}} A reader upgrades by searching for those strings.{{end}}

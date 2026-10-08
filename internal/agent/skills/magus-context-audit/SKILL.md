@@ -68,18 +68,18 @@ Report findings in this order.{{if .Full}} Severity here is "how badly does this
 session", not "how wrong is the sentence".{{end}}
 
 1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
-   violate a rule or stall.{{if .Full}} Nothing else on this list is worth
+   break one instruction or stall.{{if .Full}} Nothing else on this list is worth
    reporting before one of these.{{end}}
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied.{{if .Full}} It is indistinguishable from a dead end until the agent tries it.{{end}}
 3. Split authority: two surfaces describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
-   {{if .Full}}A workspace-local rule contradicting a shipped skill is always this finding:
-   local text overrides nothing, so the two are in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
-   local rule's `retire-when` while here; the condition may have arrived.
+   {{if .Full}}A workspace-local instruction contradicting a shipped skill is always this finding:
+   local text overrides nothing, so the two are in conflict.{{else}}A local instruction contradicting a shipped skill is always this.{{end}} Check each
+   local instruction's `retire-when` while here; the condition may have arrived.
 4. Orphaned replacement: a denial or deprecation names a tool no instruction
    documents.
-5. Silent duplication: one rule restated in several places.{{if .Full}} It is not yet a
+5. Silent duplication: one instruction restated in several places.{{if .Full}} It is not yet a
    contradiction; it is where the next one is born, because an edit updates
    some of them.{{end}}
 
@@ -88,11 +88,11 @@ session", not "how wrong is the sentence".{{end}}
 {{if .Full}}A lens that cries wolf gets switched off, taking the real findings with it.{{end}}
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
-  giving one line are one rule at two lengths. That is the design.
+  giving one line are one instruction at two lengths. That is the design.
 - **A record of history.** "Verified on <date> by doing X" describes what happened,
   not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
-  to grep and is one rule with a carve-out.
+  to grep and is one instruction with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
@@ -113,5 +113,5 @@ most common way an applied fix silently does not apply{{end}}.
 
 Prefer DELETING a contradicting line over reconciling it.{{if .Full}} Two reconciled
 statements are still two statements to keep in sync; one statement cannot
-contradict itself.{{end}} When a rule must appear twice, make one the source and have
+contradict itself.{{end}} When an instruction must appear twice, make one the source and have
 the other name it, not restate it.

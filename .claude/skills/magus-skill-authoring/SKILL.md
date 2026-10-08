@@ -157,11 +157,11 @@ Ask of every branch: could a capable reader work this out from `magus describe`,
 `-h`, or the docs? Then it is enumeration, and short can lose it. Could they only
 learn it by making the mistake? Then it is judgment, and it stays.
 
-Not every rule tolerates losing its rationale:
+Not every instruction tolerates losing its rationale:
 
-- MECHANICAL rules are enumerable and self-justifying. `run magus affected ci
+- MECHANICAL instructions are enumerable and self-justifying. `run magus affected ci
   before calling the work done` determines the action alone. Mark the why freely.
-- JUDGMENT rules ask the reader to recognize an instance nobody enumerated.
+- JUDGMENT instructions ask the reader to recognize an instance nobody enumerated.
   `never a whole-tree git op to verify a build` is one: its why (a concurrent
   agent's untracked work dies) lets a reader generalize. Keep a terse why in short
   via an else arm instead of dropping it.
@@ -174,7 +174,7 @@ that fails open, a pipe that turns a failing gate into exit 0.
 The evidence: an ablation of repository context files (arXiv:2602.11988) found
 imperative instructions followed well, while background and overview prose is not
 worth its tokens. That licenses cutting BACKGROUND (what magus is, why it exists),
-not the why of a judgment rule. Short-context compression studies
+not the why of a judgment instruction. Short-context compression studies
 (arXiv:2505.00019, arXiv:2502.14255) found terse rewrites degrade short instruction
 text, so keep the grammar of what survives.
 
@@ -184,18 +184,23 @@ Shorten by saying less, not by writing badly. Dropping articles and connectives 
 save bytes measurably hurts weaker models. Write plain sentences with ordinary
 punctuation in both arms.
 
-The prose judge holds what the short form shows to the terse rules. Its `skill-source`
+The prose judge holds what the short form shows to the terse lint rules. Its `skill-source`
 and `skill` surfaces run in hack/lint/markdown-prose.buzz. They refuse:
 
 - a sentence over 25 words;
 - a paragraph or list item over 60;
 - a wordy phrase (`in order to`, `is able to`).
 
+Both forms refuse a bare `rule`. In a skill, `rule` means only what magus enforces,
+so name the mechanism: a guard, workspace or lint rule, or its id in code. Write anything
+else as an instruction. Name a guard rule rather than restate what it refuses; its
+first denial teaches the fix.
+
 Write short declarative sentences and imperative steps. Prefer a list when steps are
 a sequence. Never restate what a heading says. Move examples, history and the
-reasoning behind a rule into a `.Full` arm when the rule stands without them.
+reasoning behind an instruction into a `.Full` arm when it stands without them.
 
-Rules:
+When you cut:
 
 - Never put the LOAD-BEARING instruction inside a `.Full` arm. That is the one
   command or path short cannot act without, or the CORRECT half of a WRONG/CORRECT
@@ -206,7 +211,7 @@ Rules:
   progressive disclosure: a capable reader fetches an enumeration far more cheaply
   than it recovers a judgment.
 - War stories, "otherwise X" clauses, and illustrative examples go in a `.Full`
-  arm. The why of a judgment rule does NOT: shorten it into an else arm.
+  arm. The why of a judgment instruction does NOT: shorten it into an else arm.
 - Keep the imperative grammatical after the cut. `foo{{if .Full}}, because
   bar{{end}}.` reads as `foo.` in short; a mid-clause cut reads as damage.
 - A malformed template is a parse or execute error at install, which also catches
@@ -240,8 +245,8 @@ planned; leave them.
 - Bodies use imperative fast paths, WRONG/CORRECT pairs, and tables over prose.
 - Defer to `-h` and live tools for anything versionable.
 - Plain ASCII, no emojis (tests enforce it).
-- Spell every rule out: a rule the reader must infer is inferred differently by
-  every model.
+- Spell every instruction out: one the reader must infer is inferred differently
+  by every model.
 
 ## 5b. Phrase verification as proof, not as care
 
@@ -266,9 +271,9 @@ it: a second regeneration is in the transcript or it is not. Apply it to:
   are genuinely independent";
 - reported findings: "carries the command that reproduces it".
 
-The limit is cost. A judgment rule with no cheap proof keeps its judgment framing.
+The limit is cost. A judgment instruction with no cheap proof keeps its judgment framing.
 `never a whole-tree git op to verify a build` has nothing to run; a fake obligation
-would trade a rule the reader can generalize for a ritual.
+would trade an instruction the reader can generalize for a ritual.
 
 ## 6. Record the why, then verify the whole
 

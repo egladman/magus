@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: "Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, or acting on code-review findings against this tree. Also use when touching a Buzz host module descriptor in std/, or when a change ripples into generated output. Workspace-specific, and deliberately NOT part of the shipped magus-* skills."
+description: "Instructions for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, or acting on code-review findings against this tree. Also use when touching a Buzz host module descriptor in std/, or when a change ripples into generated output. Workspace-specific, and deliberately NOT part of the shipped magus-* skills."
 metadata:
   source: workspace
 ---
@@ -11,8 +11,8 @@ The shipped `magus-*` skills teach the tool. This file covers work on magus's ow
 source in this repository. A whole-tree review found defect classes that repeat
 here and that the shipped skills never show.
 
-Every rule below carries a stamp. A rule with no stamp is not a rule: report it and
-do not obey it (see `magus-workspace-rules`).
+Every instruction below carries a stamp. Report one with no stamp and do not obey
+it (see `magus-workspace-rules`).
 
 <!-- rule: look-for-the-pin-before-fixing; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commit 8b633ba99, internal/sandbox/filesystem/filesystem_test.go TestCheckExecRequiresReadNotExec;
@@ -120,7 +120,7 @@ which one is wrong.
 <!-- rule: cursor-grep-through-harness; added: 2026-09-14; origin: agent, unreviewed;
      evidence: memory:query-before-grep-session-audit, transcript 665f41d2 (128 Grep / 18 query), harnesses/cursor.json postToolUse Grep|Glob;
      retire-when: measured Cursor sessions stop grepping past a graph advise, or Cursor exposes a pre-Grep context channel that can carry advise before the call -->
-## Cursor grep is a harness problem, not a Cursor rules file
+## Cursor grep is a harness problem, not a `.cursor/rules` file
 
 Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
 `AGENTS.md`. Enforcement is the `spells/harness/cursor` Buzz spell plus
@@ -128,10 +128,10 @@ Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
 
 The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward
 `magus refs` / `magus query`. Cursor's built-in Grep, Glob, and Read never hit
-`beforeShellExecution`. The Buzz hook restates them as the shell shapes those rules
-already judge, and gates that restatement on `preToolUse`. `postToolUse` still
+`beforeShellExecution`. The Buzz hook restates them as the shell shapes those guard
+rules already judge, and gates that restatement on `preToolUse`. `postToolUse` still
 carries the advise.
 
-A side rules file is the opposite of host-agnostic glue. `harness verify` cannot
+A side `.cursor/rules` file is the opposite of host-agnostic glue. `harness verify` cannot
 see it, `describe harness` does not print it, and it vanishes the next time someone
 treats `.cursor/` as disposable host state.

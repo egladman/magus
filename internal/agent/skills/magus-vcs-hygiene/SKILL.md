@@ -31,7 +31,7 @@ with its owning project and a role:
   - Touching it reruns targets whose answer cannot have changed ({{mgslink "MGS1028"}}).
   - Declaring it in the owning project's `sources` fixes both halves{{if .Full}}; leaving it undeclared is right when
     nothing reads it{{end}}.
-  - Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}}; build residue should be
+  - Check the VCS ignore patterns (`git check-ignore -v <path>`){{if .Full}}; build residue should be
     ignored, and an unclaimed un-ignored file is at risk of being lost{{else}}. An unclaimed
     un-ignored file is at risk of being lost{{end}}.
 
@@ -39,7 +39,7 @@ with its owning project and a role:
 CORRECT: note that `docs/gen/**` is a declared output of
 `docs:generate`, skip the diff, and read the source change that caused it.{{end}}
 
-## Rules for generated files
+## Handling generated files
 
 - Never hand-edit one. Change the source of truth, then run the producing target
   (usually `magus run generate`).

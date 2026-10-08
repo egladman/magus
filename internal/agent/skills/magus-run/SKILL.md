@@ -42,7 +42,7 @@ itself, so where a command lands is a question about markers on disk, never abou
 VCS.{{else}}Running a binary by absolute path does NOT set its working directory: it
 still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 
-## Rules
+## How to run work
 
 1. Prefer the MCP tools{{if .Full}}; they return structured content with nothing to silence{{end}}.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
@@ -209,8 +209,8 @@ magus affected ci --plan | magus run --stdin      # plan -> run its shards
 A pipe into magus, or `jq` over `-o json`, is composition. A pipe into a text filter
 is a missing `-o`.
 
-A backgrounded run's capture is magus output too, and the same rule applies.
-Grepping the task file your host wrote is denied{{if .Full}}; it drops the `output:` and `inspect:` lines
+A backgrounded run's capture is magus output too: grepping the task file your host
+wrote hits the `capture-filter` guard rule{{if .Full}}, since a grep drops the `output:` and `inspect:` lines
 under the `cause:` you matched{{end}}. Background it as `-o jsonl --tee <file>` to get a
 contract you can `jq`; otherwise read the file whole.
 {{if .Full}}

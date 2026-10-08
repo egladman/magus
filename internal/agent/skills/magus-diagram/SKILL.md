@@ -165,4 +165,4 @@ goes through a declared lens of scope, focus and depth.
 - **Hand-drawn code edges and path strings.** An edge no code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
 
-Writing the Buzz itself, the syntax and the strict-mode rules: {{skill "buzz-lang"}}.
+Writing the Buzz itself, the syntax and strict mode: {{skill "buzz-lang"}}.
