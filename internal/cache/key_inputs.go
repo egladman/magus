@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/types"
 )
 
 // This file is the key-explanation store: the pre-hash key LINES behind a step's
@@ -149,16 +150,9 @@ func readKeyInputs(dir string) ([]string, error) {
 	return lines, nil
 }
 
-// ClassDigest summarizes one component class of a cache key: every key input shares a
-// label prefix ("src", "env", "tool", ...), and the class digest hashes the class's
-// lines in key order. Two machines comparing digests learn WHICH CLASS disagrees
-// without shipping the full lines (small enough for a URL fragment) while the full
-// lines (CLI side) name the exact file or variable.
-type ClassDigest struct {
-	Class  string `json:"class"`
-	Digest string `json:"digest"` // sha256 over the class's lines, truncated to 12 hex
-	Count  int    `json:"count"`  // how many key inputs the class contributes
-}
+// ClassDigest is [types.ClassDigest]: small enough for a URL fragment, while the full
+// key lines (CLI side) name the exact file or variable.
+type ClassDigest = types.ClassDigest
 
 // classDigestHexLen matches the ref truncation: enough to compare, short enough to
 // ride a URL fragment many times over.

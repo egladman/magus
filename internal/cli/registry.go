@@ -511,6 +511,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "identity", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
 		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
+		{Name: "stdin", Kind: FlagBool, Doc: "output: print records `-o jsonl` wrote, from stdin; writes nothing"},
 		{Name: "open", Kind: FlagBool, Doc: "output <ref>: open the captured output in the browser log viewer (delivered privately)"},
 		{Name: "print", Kind: FlagBool, Doc: "With --open, print the viewer URL instead of launching a browser"},
 		{Name: "url", Kind: FlagString, Default: "https://eli.gladman.cc/magus/console/logs/", DefaultAtBind: true, Doc: "With --open, base URL of the log viewer page (override for a self-hosted mirror)"},

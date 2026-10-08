@@ -3,14 +3,19 @@ package magus
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/cache"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -298,4 +303,86 @@ func (m *Magus) CarvedOutputs(ctx context.Context) ([]string, error) {
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+// OutputRecordByRef resolves ref as [Magus.OutputByRefRemote] does and returns it as a
+// record, with class digests when this machine stored the key inputs.
+func (m *Magus) OutputRecordByRef(ctx context.Context, ref string) (types.StoredOutput, error) {
+	data, desc, err := m.OutputByRefRemote(ctx, ref)
+	if err != nil {
+		return types.StoredOutput{}, err
+	}
+	rec := types.StoredOutput{
+		Schema:           types.Schema{Version: types.StoredOutputSchemaVersion},
+		OutputDescriptor: desc,
+	}
+	if utf8.Valid(data) {
+		rec.Output = string(data)
+	} else {
+		rec.OutputBase64 = data
+	}
+	lines, err := m.OutputKeyInputs(ref)
+	switch {
+	case err == nil:
+		rec.ClassDigests = cache.ClassDigests(lines)
+	case !errors.Is(err, fs.ErrNotExist):
+		return types.StoredOutput{}, fmt.Errorf("read key inputs for %s: %w", ref, err)
+	}
+	return rec, nil
+}
+
+// ReadOutputRecords checks every JSON Lines record in r, then hands each to each; it
+// writes nothing, and any bad line is an error naming it before each sees a record.
+// Fields come back as sent, so a caller printing them uses [cache.NeutralizeTerminal].
+func ReadOutputRecords(r io.Reader, each func(types.StoredOutput) error) error {
+	return readOutputRecords(r, cache.DefaultImportLimits, each)
+}
+
+func readOutputRecords(r io.Reader, limits cache.ImportLimits, each func(types.StoredOutput) error) error {
+	var recs []types.StoredOutput
+	err := cache.ReadRecordLines(r, limits, func(line int, raw []byte) error {
+		rec, err := decodeOutputRecord(raw)
+		if err != nil {
+			return fmt.Errorf("line %d: %w", line, err)
+		}
+		recs = append(recs, rec)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, rec := range recs {
+		if err := each(rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
+	var rec types.StoredOutput
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return types.StoredOutput{}, fmt.Errorf("not an output record: %w", err)
+	}
+	switch {
+	case rec.Version == 0:
+		return types.StoredOutput{}, errors.New("not an output record: it has no schema_version; `magus query output <ref> -o jsonl` writes one per line")
+	case rec.Version > types.StoredOutputSchemaVersion:
+		return types.StoredOutput{}, fmt.Errorf("output record schema_version %d is newer than this magus reads (%d); read it with a newer magus", rec.Version, types.StoredOutputSchemaVersion)
+	case len(rec.Unmet(nil)) > 0:
+		return types.StoredOutput{}, fmt.Errorf("output record requires %v, which this magus does not implement", rec.Unmet(nil))
+	case rec.Output != "" && rec.OutputBase64 != nil:
+		return types.StoredOutput{}, errors.New("output record carries both output and output_base64")
+	}
+	d := rec.OutputDescriptor
+	err := cache.CheckImportedDescriptor(cache.OutputDescriptor{
+		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
+		TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
+		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
+		Revision: d.Revision, Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
+	}, rec.ClassDigests)
+	if err != nil {
+		return types.StoredOutput{}, err
+	}
+	return rec, nil
 }

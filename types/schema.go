@@ -115,5 +115,13 @@ var JobResultSchema = SchemaLedger{
 	Version: JobResultSchemaVersion,
 }
 
+// StoredOutputSchema is the ledger of the record `magus query output <ref> -o jsonl`
+// writes and `magus query output --stdin` reads.
+var StoredOutputSchema = SchemaLedger{
+	Name:    "output-record",
+	Type:    reflect.TypeFor[StoredOutput](),
+	Version: StoredOutputSchemaVersion,
+}
+
 // SchemaLedgers are every ledger the conventions test holds to the contract.
-var SchemaLedgers = []SchemaLedger{JobSchema, DeclarationSchema, JobResultSchema}
+var SchemaLedgers = []SchemaLedger{JobSchema, DeclarationSchema, JobResultSchema, StoredOutputSchema}

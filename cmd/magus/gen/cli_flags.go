@@ -363,6 +363,8 @@ const (
 	FlagQueryRefresh = "refresh"
 	// query: --secrets
 	FlagQuerySecrets = "secrets"
+	// query: --stdin
+	FlagQueryStdin = "stdin"
 	// query: --url
 	FlagQueryURL = "url"
 	// queue apply: --app
@@ -1034,6 +1036,7 @@ type QueryFlags struct {
 	Identity bool   // --identity
 	Attempts bool   // --attempts
 	Publish  bool   // --publish
+	Stdin    bool   // --stdin
 	Open     bool   // --open
 	Print    bool   // --print
 	URL      string // --url
@@ -1056,6 +1059,7 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
 	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
+	fs.BoolVar(&f.Stdin, FlagQueryStdin, false, "output: print records `-o jsonl` wrote, from stdin; writes nothing")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
 	fs.StringVar(&f.URL, FlagQueryURL, d.URL, "With --open, base URL of the log viewer page (override for a self-hosted mirror)")

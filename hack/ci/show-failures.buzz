@@ -1,0 +1,105 @@
+namespace failures;
+
+import "flags";
+import "fs";
+import "io";
+import "os";
+import "proc";
+import "serialize";
+import "std";
+
+import "assert";
+
+final WORKFLOW = "CI";
+final ARTIFACT_PREFIX = "magus-logs-";
+final RECORDS = "failed-outputs.jsonl";
+final NOT_FOUND = 3;
+final usage = "usage: magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>]";
+
+object Filter {
+    commit: str = "HEAD",
+    run: str = "",
+}
+
+export fun parseFilter(argv: [str]) > Filter !> any {
+    final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run"]);
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
+    }
+    final run = parsed.values["--run"] ?? "";
+    if (run != "" and (std\parseInt(run) ?? 0) <= 0) {
+        throw "failures: --run \"{run}\" is not a run id\n{usage}";
+    }
+    return Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run };
+}
+
+// logArtifacts names the run's unexpired magus-logs artifacts, as the artifacts API lists them.
+export fun logArtifacts(listing: str) > [str] !> any {
+    final names = mut [<str>];
+    foreach (a in serialize\jsonDecode(listing).q("artifacts").listValue()) {
+        final name = a.q("name").stringValue();
+        if (name.startsWith(ARTIFACT_PREFIX) and !a.q("expired").booleanValue()) {
+            names.append(name);
+        }
+    }
+    return names;
+}
+
+fun note(line: str) > void {
+    io\stderr.write(line + "\n") catch void;
+}
+
+fun capture(cmd: str, args: [str]) > str !> any {
+    final res = proc\exec(cmd, args: args, opts: {"quiet": true, "allow_failure": true});
+    if (!res.ok) {
+        throw "failures: {cmd} {args.join(" ")}: exit {res.code}: {res.stderr}";
+    }
+    return res.stdout;
+}
+
+// main copies the records in the run's artifacts to stdout untouched, for
+// `magus query output --stdin`; a commit with no CI run exits 3.
+export fun main(args: [str]) > void !> any {
+    final want = parseFilter(args);
+    var run = want.run;
+    if (run == "") {
+        final sha = capture("git", args: ["rev-parse", "--verify", "{want.commit}^\{commit}"]).trim();
+        final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--commit", sha, "--workflow", WORKFLOW,
+            "--limit", "1", "--json", "databaseId"])).listValue();
+        if (listed.len() == 0) {
+            note("no {WORKFLOW} run for {sha}");
+            os\exit(NOT_FOUND);
+        }
+        run = "{listed[0].q("databaseId").integerValue()}";
+    }
+    final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
+    if (names.len() == 0) {
+        note("run {run} has no {ARTIFACT_PREFIX}* artifact: no shard failed, or it has not finished");
+        return;
+    }
+    final dir = fs\tempDir("show-failures-");
+    capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
+    var found = 0;
+    foreach (f in fs\glob(dir + "/*/" + RECORDS)) {
+        io\stdout.write(fs\readFile(f.value)) catch void;
+        found = found + 1;
+    }
+    fs\removeAll(dir) catch void;
+    if (found == 0) {
+        note("run {run}: {names.join(", ")} hold no {RECORDS}; the run predates the step that writes it");
+    }
+}
+
+final LISTING = "\{\"artifacts\": [\{\"name\": \"magus-logs-01\", \"expired\": false}, \{\"name\": \"magus-history-01\", \"expired\": false}, \{\"name\": \"magus-logs-02\", \"expired\": true}]}";
+
+test "only unexpired magus-logs artifacts are downloaded" {
+    assert\equal(logArtifacts(LISTING) catch [<str>], want: ["magus-logs-01"], message: "names");
+}
+
+test "the run id must be a number" {
+    final f = parseFilter(["--run", "37808757097"]) catch Filter{};
+    assert\equal(f.run, want: "37808757097", message: "run");
+    assert\equal(f.commit, want: "HEAD", message: "default commit");
+    final bad = parseFilter(["--run", "abc"]) catch Filter{ run = "refused" };
+    assert\equal(bad.run, want: "refused", message: "non-numeric run");
+}

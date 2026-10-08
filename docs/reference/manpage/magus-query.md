@@ -82,6 +82,9 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 **--secrets**
 : invocation \<id\>: list only the credential reads (reference and provider, never the value)
 
+**--stdin** *-o jsonl*
+: output: print records \`-o jsonl\` wrote, from stdin; writes nothing
+
 **--url** *string* (default: https://eli.gladman.cc/magus/console/logs/)
 : With --open, base URL of the log viewer page (override for a self-hosted mirror)
 

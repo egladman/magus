@@ -1,0 +1,28 @@
+{
+  "fields": {
+    "attempt": "string",
+    "class_digests": "[]types.ClassDigest",
+    "dirty": "bool",
+    "duration_ms": "int64",
+    "error": "string",
+    "extra_args": "[]string",
+    "failed": "bool",
+    "inv": "string",
+    "key": "string",
+    "key_version": "int",
+    "magus_version": "string",
+    "output": "string",
+    "output_base64": "[]uint8",
+    "platform": "string",
+    "project": "string",
+    "ref": "string",
+    "requires": "[]string",
+    "revision": "string",
+    "schema_version": "int",
+    "spell": "string",
+    "target": "string",
+    "timestamp_ms": "int64",
+    "vcs": "string"
+  },
+  "reserved": []
+}
