@@ -1,11 +1,10 @@
 # Auditing the instructions an agent was given
 
-This is a LENS, like `{{buzz "insight"}}`: it observes and ranks, it does not gate.
+This is a LENS, like `{{buzz "insight"}}`: it observes and ranks; it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
-What it looks at is not code. It is everything loaded into an agent's context as
-authoritative instruction, from sources magus does not own and cannot see the
-contents of in advance.
+It looks at instructions, not code: everything loaded into an agent's context as
+authoritative, from sources magus does not own and cannot read in advance.
 
 {{if .Full}}An agent reads all of it in one window, with no way to tell which line is newer,
 which file outranks which, or which was written for a version of the tools that
@@ -16,8 +15,8 @@ which file wins. A contradiction makes it pick arbitrarily or stall.{{end}}
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list, and the highest-risk surface is usually
-the one nobody remembers is loaded.
+You cannot audit what you cannot list. The riskiest surface is usually the one
+nobody remembers is loaded.
 
 | surface | why it bites |
 | --- | --- |
@@ -38,7 +37,7 @@ the person hitting the contradiction.{{end}}
 
 {{if .Full}}Two documents agreeing with each other and both being wrong is the common case,
 not the exception: they were usually written in the same sitting by the same
-person.{{end}} So resolve every claim against something that executes.
+person.{{end}} Resolve every claim against something that executes.
 
 ```sh
 magus shell "<the exact command a document recommends>"
@@ -50,7 +49,7 @@ Then RUN the commands the instructions tell an agent to run.{{if .Full}} A docum
 that errors is worse than an undocumented one: the agent trusts it, tries it,
 fails, and has to invent a recovery nothing sanctioned.{{end}}
 
-Work outward from what CHANGED (a diff, a changelog, a recent decision) rather than
+Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
@@ -68,19 +67,19 @@ document{{end}}.
 Report findings in this order.{{if .Full}} Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".{{end}}
 
-1. A dead end is a case where A forbids X, B requires X, and no third path exists. The agent
-   must either violate a rule or stall.{{if .Full}} Nothing else on this list is worth
+1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
+   violate a rule or stall.{{if .Full}} Nothing else on this list is worth
    reporting before one of these.{{end}}
-2. A stale instruction names a command that no longer exists, no longer works, or
-   is now denied.{{if .Full}} It is indistinguishable from a dead end until the agent tries it.{{end}}
-3. Split authority is two surfaces describing the same decision differently
-   (one "advised", the other "denied"). The agent cannot tell which is current.
+2. Stale instruction: it names a command that no longer exists, no longer works,
+   or is now denied.{{if .Full}} It is indistinguishable from a dead end until the agent tries it.{{end}}
+3. Split authority: two surfaces describe one decision differently (one
+   "advised", the other "denied"), and the agent cannot tell which is current.
    {{if .Full}}A workspace-local rule contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are in conflict.{{else}}A local rule contradicting a shipped skill is always this.{{end}} Check each
-   local rule's `retire-when` while you are here; the condition may have arrived.
-4. An orphaned replacement is a denial or deprecation that names a tool no
-   instruction anywhere documents.
-5. Silent duplication is the same rule restated in several places.{{if .Full}} It is not yet a
+   local rule's `retire-when` while here; the condition may have arrived.
+4. Orphaned replacement: a denial or deprecation names a tool no instruction
+   documents.
+5. Silent duplication: one rule restated in several places.{{if .Full}} It is not yet a
    contradiction; it is where the next one is born, because an edit updates
    some of them.{{end}}
 
@@ -90,16 +89,16 @@ session", not "how wrong is the sentence".{{end}}
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
   giving one line are one rule at two lengths. That is the design.
-- **A record of history.** "Verified on <date> by doing X" describes what
-  happened, not what to do now. Journal entries are point-in-time by definition.
-- **A stated exception.** "Never pipe output, EXCEPT <case>" reads as a conflict
-  on a grep and is one rule with a carve-out.
+- **A record of history.** "Verified on <date> by doing X" describes what happened,
+  not what to do now. Journal entries are point-in-time by definition.
+- **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
+  to grep and is one rule with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
 
 Fix at the SOURCE and let generation propagate{{if .Full}}; editing an installed copy is
-drift a verify step flags anyway{{end}}. For magus's own skills that means
+drift a verify step flags anyway{{end}}. For magus's own skills that is
 `internal/agent/skills/*/SKILL.md`, then reinstall.
 
 Reinstall with a binary built from the EDITED source, and confirm the content
@@ -114,5 +113,5 @@ most common way an applied fix silently does not apply{{end}}.
 
 Prefer DELETING a contradicting line over reconciling it.{{if .Full}} Two reconciled
 statements are still two statements to keep in sync; one statement cannot
-contradict itself.{{end}} When a rule genuinely must appear twice, make one the source
-and have the other name it rather than restate it.
+contradict itself.{{end}} When a rule must appear twice, make one the source and have
+the other name it, not restate it.

@@ -5,32 +5,35 @@ description: "The working method for building and maintaining magus's agent surf
 
 # Authoring the agent surface
 
-This file encodes the working method behind the magus skills so that any
-model, strong or weak, maintains them the same way. The skills exist to stop
-agents from guessing, so the process that writes them cannot rest on guesses
-either.
+This is the working method behind the magus skills, so any model, strong or weak,
+maintains them the same way. The skills exist to stop agents guessing, so the
+process that writes them cannot guess either.
 
 ## 1. Empiricism before documentation
 
-Never teach behavior you have not executed against a freshly built binary in
-this session. Build HEAD (`magus run go-build .`), start the
-server, call the actual tool (over MCP HTTP as well as the CLI), and paste the
-observed output into your analysis before writing a word of skill text.
+Never teach behavior you have not executed against a freshly built binary in this
+session:
 
-Cautionary precedent, found here: the registry advertised dry_run as "print
-what would run without executing"; the verified reality was zero bytes of
-output AND regenerated files on disk. A skill written from the docs would
-have taught agents a "safe preview" that silently mutates the tree.
+1. Build HEAD (`magus run go-build .`).
+2. Start the server.
+3. Call the actual tool, over MCP HTTP and the CLI.
+4. Paste the observed output into your analysis before writing any skill text.
+
+Precedent: the registry advertised dry_run as "print what would run without
+executing". The verified reality was zero bytes of output AND regenerated files on
+disk. A skill written from the docs would have taught a "safe preview" that
+silently mutates the tree.
 
 ## 2. Hunt the silent failure
 
 Empty output, zero matches, and exit 1 with no text are findings, not
-inconveniences. Probe every claim adversarially before teaching it: when
-`project:docs kind:function render` returned 0, the wrong response was a
-workaround in the skill; the right response was tracing the scorer, fixing
-the filter, and adding a regression test. Fix the tool before teaching the
-workaround. When the fix is out of reach, teach ONLY verified idioms and file
-the gap where a reader finds it (the plans doc, a task, the harness memory).
+inconveniences. Probe every claim adversarially before teaching it.
+
+When `project:docs kind:function render` returned 0, the wrong response was a
+workaround in the skill. The right one traced the scorer, fixed the filter, and
+added a regression test. Fix the tool before teaching the workaround. When the fix
+is out of reach, teach ONLY verified idioms and file the gap where a reader finds
+it (the plans doc, a task, the harness memory).
 
 ## 3. One source of truth, drift-gated
 
@@ -43,17 +46,17 @@ the gap where a reader finds it (the plans doc, a task, the harness memory).
   agent-host agnostic: no host name appears in code. Host-specific glue (hook
   event shapes, config dialects) is documentation over the neutral surfaces:
   explicit install destinations, the agent hook verdict, --from-json
-  extraction, -o template rendering, never a per-host code path.
+  extraction, -o template rendering. Never a per-host code path.
 - Any change to skill content or the tool surface it documents bumps
   agentSkillVersion with a changelog line.
-- Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the
-  live tools. A skill that mentions this repo's specifics is a bug.
+- Skills teach the stable HOW; the workspace WHAT lives in MAGUS.md and the live
+  tools. A skill that mentions this repo's specifics is a bug.
 
 ## 3b. Two forms from one body: mark the why, then shorten the rest
 
 A skill body is a `text/template` rendered against the variant, so a form is an
-ordinary `{{if}}`. Three branching constructs, plus the registry lookups in
-section 3c, and that is the whole vocabulary:
+ordinary `if` action. The whole vocabulary is three branching constructs plus the
+registry lookups in section 3c:
 
 ```markdown
 Run the target first{{if .Full}}, because a raw tool bypasses the cache{{end}}.
@@ -66,15 +69,15 @@ index is authoritative{{else}}: it is the index{{end}}.
 
 Unconditional text is in both forms.
 
-Dropping the `{{else}}` means "full says more here". Reaching for it means "both
-forms say this, at different lengths", and that is the ONLY construct that can
-shorten something both must express. A bare `{{if .Short}}` means "short says this
-and full says nothing", which is almost always a mistake worth catching in
-review.
+- No else arm means "full says more here".
+- An else arm means "both forms say this, at different lengths". It is the ONLY
+  construct that shortens something both must express.
+- A bare `.Short` arm means "short says this and full says nothing". That is
+  almost always a mistake worth catching in review.
 
-Measured 2026-07-31: the ten shipped skills have 137 full-only branches and only
-28 `{{else}}` arms. Most distinctions are still deletion rather than re-wording;
-reach for `{{else}}` whenever a passage survives into short at full length.
+Measured 2026-07-31: the ten shipped skills had 137 full-only branches and only 28
+else arms. Most distinctions are still deletion, not rewording. Reach for an else
+arm whenever a passage survives into short at full length.
 
 A third form costs a constant, not a new markup convention:
 
@@ -84,23 +87,22 @@ A third form costs a constant, not a new markup convention:
 
 ### 3c. Never type a command path; resolve it
 
-A skill is read in someone else's repo, where nobody can check whether the
-command it names still exists. A retyped path is therefore the one kind of error
-that reaches its reader intact and stays wrong. Resolve it instead:
+A skill is read in someone else's repo, where nobody can check that a named command
+still exists. A retyped path is the one error that reaches its reader intact and
+stays wrong. Resolve it instead:
 
 ```markdown
 Run `{{cmd "agent harness verify"}}`, then read what it reports.
 ```
 
-`cmd` looks the path up in `internal/hint`'s `AllCommands` and fails the INSTALL
-when it misses, naming the path it could not resolve. So renaming a verb either
-updates every skill that mentions it or stops the build, and the failure lands on
-whoever moved the command rather than on an agent a month later.
+`cmd` looks the path up in `internal/hint`'s `AllCommands` and fails the INSTALL on
+a miss, naming the path. A renamed verb either updates every skill that mentions it
+or stops the build. The failure lands on whoever moved the command, not on an agent
+a month later.
 
-Register the command in `internal/hint/cli_command.go` first; an unregistered
-path is a lookup failure, not a silent pass. It always renders the PATH spelling
-(`magus ...`), never this process's `./magus`, because the reader's checkout is
-not ours.
+Register the command in `internal/hint/cli_command.go` first; an unregistered path
+is a lookup failure, not a silent pass. It always renders the PATH spelling
+(`magus ...`), never this process's `./magus`: the reader's checkout is not ours.
 
 The whole vocabulary, each resolving against the registry that defines it:
 
@@ -113,132 +115,131 @@ The whole vocabulary, each resolving against the registry that defines it:
 | `{{mgs "MGS2001"}}` | `MGS2001` | the diagnostic registry |
 | `{{mgslink "MGS2001"}}` | a markdown link to its docs | the diagnostic registry |
 
-Each key is the SHORT form and each output is the full one, so the call is never
-the answer retyped. The two diagnostic functions split by job rather than by
-taste: a code inside a graph node id, a URL pattern, or a quoted literal is DATA
-and takes `mgs`, while a code a sentence cites takes `mgslink`, because the URL's
-category segment follows the code's range and no reader can derive it from the
-digits.
+Each key is the SHORT form and each output the full one, so the call is never the
+answer retyped. The two diagnostic functions split by job:
 
-`{{skill}}` resolves only skills magus SHIPS. A local skill name
+- A code inside a graph node id, a URL pattern, or a quoted literal is DATA: use
+  `mgs`.
+- A code a sentence cites takes `mgslink`. The URL's category segment follows the
+  code's range, so no reader can derive it from the digits.
+
+The `skill` lookup resolves only skills magus SHIPS. A local skill name
 (`magus-local-development`) stays literal on purpose: magus does not install it,
-so there is nothing to check it against, and the lookup refusing it is the
-correct answer rather than a gap.
+so there is nothing to check it against.
 
-Adding a function to `skillFuncs` inherits the obligation `validateActionPipe`
-documents: it must render the same text in both forms, or the two forms stop
-describing one behaviour and nothing catches it.
+A new function in `skillFuncs` inherits the obligation `validateActionPipe`
+documents: it renders the same text in both forms. Otherwise the two forms stop
+describing one behavior and nothing catches it.
 
 ### Showing template syntax inside a skill
 
-The body IS a template, including inside fenced code blocks, so a skill that
-documents `{{ }}` syntax must escape it as a string constant. magus-run
-documents the `-o template` flag and magus-buzz-lang documents mustache; both hit
-this:
+The body IS a template, fenced code blocks included. A skill that documents template
+syntax must escape it as a string constant. magus-run documents `-o template` and
+magus-buzz-lang documents mustache; both hit this:
 
 ```markdown
 `-o template='{{"{{.Field}}"}}'`
 ```
 
-Getting it wrong is a loud failure at install (a parse error for an unknown
-function, an execute error for an unknown field), never a silently mangled file.
+Getting it wrong fails loudly at install (a parse error for an unknown function, an
+execute error for an unknown field), never as a silently mangled file.
 
 ### Who the short form is for, and therefore what it cuts
 
-Short is not the beginner form. It is installed for the most capable readers:
-the models that can re-derive an imperative from the tool surface and do not need
-it spelled out. That inverts the obvious instinct, so state the consequence
-plainly: **short sheds ENUMERATION and keeps JUDGMENT.** It is not "the steps
-without the why". A form that keeps the steps and drops the why hands its
-strongest reader the half it could have reconstructed and takes away the half it
-could not.
+Short is not the beginner form. It is installed for the most capable readers,
+which can re-derive an imperative from the tool surface. So **short sheds
+ENUMERATION and keeps JUDGMENT.** It is not "the steps without the why". Dropping
+the why hands the strongest reader the half it could reconstruct and takes away
+the half it could not.
 
 Ask of every branch: could a capable reader work this out from `magus describe`,
-`-h`, or the docs? Then it is enumeration, and short can lose it. Could they
-only learn it by making the mistake? Then it is judgment, and it stays.
+`-h`, or the docs? Then it is enumeration, and short can lose it. Could they only
+learn it by making the mistake? Then it is judgment, and it stays.
 
-Not every rule tolerates losing its rationale, and the split is not stylistic.
+Not every rule tolerates losing its rationale:
 
-- MECHANICAL rules are fully enumerable and self-justifying. `run magus affected
-  ci before calling the work done` determines the action on its own. Mark the
-  why freely.
+- MECHANICAL rules are enumerable and self-justifying. `run magus affected ci
+  before calling the work done` determines the action alone. Mark the why freely.
 - JUDGMENT rules ask the reader to recognize an instance nobody enumerated.
-  `never a whole-tree git op to verify a build` is one: the why (a concurrent
-  agent's untracked work dies) is what lets a reader generalize to a case the
-  rule never listed. Keep a terse version of the why in short via an `{{else}}`
-  arm rather than dropping it.
+  `never a whole-tree git op to verify a build` is one: its why (a concurrent
+  agent's untracked work dies) lets a reader generalize. Keep a terse why in short
+  via an else arm instead of dropping it.
 
-The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader
-on its own and needs no rationale in short; a failure that is silent (an edit
-that stops existing, a guard that fails open, a pipe that turns a failing gate
-into exit 0) can only arrive as text, because nothing in the session ever
-says it.
+The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader and
+needs no rationale in short. A silent failure can only arrive as text: an edit that
+stops existing, a guard that fails open, a pipe that turns a failing gate into exit
+0. Nothing in the session ever says it.
 
-The evidence, for the record: an ablation of repository context files
-(arXiv:2602.11988) found imperative instructions are followed well while
-background and overview prose is not worth its tokens. That licenses cutting
-BACKGROUND (what magus is, why it exists), and it is not a license to cut the
-why of a judgment rule. Short-context compression studies (arXiv:2505.00019,
-arXiv:2502.14255) found terse rewrites degrade short instruction text, so do not
-crush the grammar of what survives.
+The evidence: an ablation of repository context files (arXiv:2602.11988) found
+imperative instructions followed well, while background and overview prose is not
+worth its tokens. That licenses cutting BACKGROUND (what magus is, why it exists),
+not the why of a judgment rule. Short-context compression studies
+(arXiv:2505.00019, arXiv:2502.14255) found terse rewrites degrade short instruction
+text, so keep the grammar of what survives.
 
-### Do not de-grammar the core
+### Write the short form terse, not de-grammared
 
-Dropping articles and connectives to save bytes is NOT the intended use of these
-branches, and the measured effect on weaker models is negative. Shorten by saying
-less, not by writing badly. Plain sentences, ordinary punctuation, in both arms.
+Shorten by saying less, not by writing badly. Dropping articles and connectives to
+save bytes measurably hurts weaker models. Write plain sentences with ordinary
+punctuation in both arms.
+
+The prose judge holds what the short form shows to the terse rules. Its `skill-source`
+and `skill` surfaces, run by hack/lint/markdown-prose.buzz, refuse a sentence over 35
+words, a paragraph or list item over 80, and a wordy phrase (`in order to`, `is able
+to`). Write short declarative sentences and imperative steps. Prefer a list
+when steps are a sequence. Never restate what a heading says.
 
 Rules:
 
-- Never put the LOAD-BEARING instruction inside `{{if .Full}}`: the one command
-  or path without which short cannot act, or the CORRECT half of a
-  WRONG/CORRECT pair. Short must still be able to do the thing.
-- An EXHAUSTIVE enumeration is different, and it is exactly what short sheds:
-  every flag of a command, every kind in a table, every variant of a form. Put
-  it in `{{if .Full}}` and have short name where to get it (`-h`, `magus
-  describe <thing>`, a docs URL) rather than carrying the list. That is
-  progressive disclosure, and it is the intended shape; a capable reader
-  fetches an enumeration far more cheaply than it recovers a judgment.
-- War stories, "otherwise X" clauses, and examples that only illustrate go in
-  `{{if .Full}}`. The why of a judgment rule does NOT: shorten it into an
-  `{{else}}` arm instead.
+- Never put the LOAD-BEARING instruction inside a `.Full` arm: the one command or
+  path short cannot act without, or the CORRECT half of a WRONG/CORRECT pair.
+  Short must still do the thing.
+- An EXHAUSTIVE enumeration is exactly what short sheds: every flag of a command,
+  every kind in a table, every variant of a form. Put it in a `.Full` arm and have
+  short name where to get it (`-h`, `magus describe <thing>`, a docs URL). That is
+  progressive disclosure: a capable reader fetches an enumeration far more cheaply
+  than it recovers a judgment.
+- War stories, "otherwise X" clauses, and illustrative examples go in a `.Full`
+  arm. The why of a judgment rule does NOT: shorten it into an else arm.
 - Keep the imperative grammatical after the cut. `foo{{if .Full}}, because
   bar{{end}}.` reads as `foo.` in short; a mid-clause cut reads as damage.
 - A malformed template is a parse or execute error at install, which also catches
   typos the old scheme let through as literal text.
-- A passage that survives into short at full length is a candidate for an
-  `{{else}}` arm, not evidence the ceiling has been reached.
+- A passage that survives into short at full length is a candidate for an else
+  arm, not proof the ceiling is reached.
 - `TestEveryEmbeddedSkillHasBothForms` fails for any skill whose two forms are
-  byte-identical, so a skill with no marked rationale is caught rather than
-  silently making the short form a lie for that one. `--skill-form` picks what an
-  install writes: `both` (the default: the short body under each skill's own name
-  plus a `<name>-full` twin), `short`, or `full`.
+  byte-identical, so a skill with no marked rationale is caught. `--skill-form`
+  picks what an install writes: `both` (the default: the short body under each
+  skill's own name plus a `<name>-full` twin), `short`, or `full`.
 
 ## 4. Breadcrumbs are load-bearing
 
-magus's cross-link discipline: every surface mints a stable, resolvable ID:
-tool names (internal/hint ToolName constants), CLI paths (internal/hint
-Command values), output refs
-(out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that
-points at another surface goes through one of those IDs so a rename breaks
-the build or a test, never an agent at 2am. Hints stay terse and earned: one
-line, only on an error or a result that mints something chainable. A weaker
-model follows breadcrumbs it could never have planned; leave them.
+Every surface mints a stable, resolvable ID: tool names (internal/hint ToolName
+constants), CLI paths (internal/hint Command values), output refs (out1a2b3c),
+diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that points at another
+surface goes through one of those IDs, so a rename breaks the build or a test,
+never an agent at 2am.
+
+Hints stay terse and earned: one line, only on an error or on a result that mints
+something chainable. A weaker model follows breadcrumbs it could never have
+planned; leave them.
 
 ## 5. Write for the weakest reader
 
-Frontmatter descriptions carry the triggers ("Use when...", "Do NOT use
-for..."). Bodies use imperative fast paths, WRONG/CORRECT pairs, and tables
-over prose. Defer to `-h` and live tools for anything versionable. Plain
-ASCII, no emojis (tests enforce it). Spell every rule out; a rule the reader
-has to infer is inferred differently by every model that reads it.
+- Frontmatter descriptions carry the triggers ("Use when...", "Do NOT use
+  for...").
+- Bodies use imperative fast paths, WRONG/CORRECT pairs, and tables over prose.
+- Defer to `-h` and live tools for anything versionable.
+- Plain ASCII, no emojis (tests enforce it).
+- Spell every rule out: a rule the reader must infer is inferred differently by
+  every model.
 
 ## 5b. Phrase verification as proof, not as care
 
 An instruction phrased as care is satisfiable by prose: an agent asserts it was
-careful and the sentence is met. The same instruction phrased as a proof
-obligation can only be met by evidence, because it names the artifact that
-settles it. Whenever the evidence is cheap to produce, write the obligation.
+careful and the sentence is met. Phrased as a proof obligation, it can only be met
+by evidence, because it names the artifact that settles it. When the evidence is
+cheap, write the obligation.
 
 Worked example, from magus-vcs-hygiene:
 
@@ -248,38 +249,36 @@ CORRECT: Prove drift by regenerating a SECOND time, never by reading the diff
 and judging it.
 ```
 
-Both point at the same procedure, but only the second one fails visibly when
-nobody runs it: there is either a second regeneration in the transcript or there
-is not. Apply it to gates ("show a gate you added FAILING before you trust its
-green"), to collision claims ("the check REPORTS the write sets disjoint" rather
-than "the leases are genuinely independent"), and to reported findings ("carries
-the command that reproduces it").
+Both point at the same procedure. Only the second fails visibly when nobody runs
+it: a second regeneration is in the transcript or it is not. Apply it to:
 
-The limit is cost, and it is a real limit: a judgment rule with no cheap proof
-keeps its judgment framing. `never a whole-tree git op to verify a build` has
-nothing to run, and rewriting it into a fake obligation would trade a rule the
-reader can generalize for a ritual.
+- gates: "show a gate you added FAILING before you trust its green";
+- collision claims: "the check REPORTS the write sets disjoint", not "the leases
+  are genuinely independent";
+- reported findings: "carries the command that reproduces it".
+
+The limit is cost. A judgment rule with no cheap proof keeps its judgment framing.
+`never a whole-tree git op to verify a build` has nothing to run; a fake obligation
+would trade a rule the reader can generalize for a ritual.
 
 ## 6. Record the why, then verify the whole
 
-- Decisions with a why go to the harness memory so the next session,
-  possibly a lesser model, inherits them instead of re-deriving. Read them
-  before re-litigating anything.
+- Decisions with a why go to the harness memory, so the next session, possibly a
+  lesser model, inherits them. Read them before re-litigating anything.
 - After editing skills, in this order:
-  1. `magus run go-build .`: the embedded bodies are go:embed'd, so nothing
-     below reads your edit until the binary carries it.
+  1. `magus run go-build .`: the bodies are go:embed'd, so nothing below reads
+     your edit until the binary carries it.
   2. `magus run go::go-test . --silent -- -run 'TestAgent|TestSkill' ./cmd/magus/`
      (frontmatter, ASCII, byte-identity, install/verify testscripts). The raw
-     `go test ./cmd/magus/` this line used to carry is guard-denied; magus flags
-     go BEFORE the `--`, and everything after it forwards to the test binary.
+     `go test ./cmd/magus/` is guard-denied. magus flags go BEFORE the `--`;
+     everything after it forwards to the test binary.
   3. `./magus agent install .claude/skills --force`: reinstall the dogfooded
      copies, which are stamped and otherwise read as drift.
-  4. Refresh the AGENTS.md managed block: `./magus agent starter` prints the
-     current block (so does `agent install`), and you replace everything
-     between the `magus:skills:begin` and `magus:skills:end` markers with it,
-     leaving the rest of the file alone. magus never writes AGENTS.md, so
-     nothing does this for you; `magus doctor`'s agent-skills advice is what
+  4. Refresh the AGENTS.md managed block. `./magus agent starter` prints the
+     current block (so does `agent install`). Replace everything between the
+     `magus:skills:begin` and `magus:skills:end` markers with it and leave the rest
+     alone. magus never writes AGENTS.md; `magus doctor`'s agent-skills advice
      names the stale block.
-  5. `./magus doctor` says up to date. `magus doctor --fix` runs the remedy
-     each finding names, where one exists.
+  5. `./magus doctor` says up to date. `magus doctor --fix` runs the remedy each
+     finding names, where one exists.
   6. `magus affected ci --no-default-charms` before calling the work done.

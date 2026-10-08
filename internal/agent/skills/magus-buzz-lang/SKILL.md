@@ -1,8 +1,8 @@
 # Writing Buzz
 
 Buzz is a small, statically typed scripting language. It looks like TypeScript or
-Swift, and it is in no model's training data, so code written from habit parses
-just often enough to mislead.{{if .Full}} Measured on 42 short programs written the
+Swift and is in no model's training data, so code written from habit parses often
+enough to mislead.{{if .Full}} Measured on 42 short programs written the
 way a TypeScript, Go or Python author would: the checker rejected 22, and of the 20
 it accepted, 6 failed or printed the wrong thing when run, and every one that called
 its own `main()` ran twice.{{end}} Work in this order: copy the shapes on this page,
@@ -19,16 +19,16 @@ check, fix the first error, run.
 1. Run `--check` after every edit. Fix the FIRST error, then check again{{if .Full}}:
    a parse error early in a file produces later errors that are only echoes of it{{else}};
    later errors are often echoes of it{{end}}.
-2. A clean check is not a working script. The checker does NOT see a method that
-   does not exist on a str, list or map, a free function like `len(xs)`, or a write
-   into a map declared without `mut`. Those fail only when run, with no line
-   number. So run the script, or its tests, before calling it done.
+2. A clean check is not a working script. The checker does NOT see a missing method
+   on a str, list or map, a free function like `len(xs)`, or a write into a map
+   declared without `mut`. Those fail only when run, with no line number. Run the
+   script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
    does not exist. Look it up in the Built-in methods table below.
 
 ## One script with every common shape
 
-Copy from this. Every line of it checks and runs.
+Copy from this. Every line checks and runs.
 
 ```buzz
 import "std";
@@ -116,8 +116,8 @@ belong inside a function.{{end}}
 
 ## Coming from TypeScript, Go, Python or Swift
 
-Each row is a mistake observed in practice, with what Buzz wants and what you
-see if you make it. "nothing" means the checker accepts it and the result is wrong.
+Each row is an observed mistake, what Buzz wants, and what you see. "nothing" means
+the checker accepts it and the result is wrong.
 
 | you write | Buzz | you see |
 | --- | --- | --- |
@@ -174,8 +174,7 @@ template\render(`Hello {{"{{name}}"}}!`, data: {"name": "world"});
 
 {{end}}## Built-in methods
 
-These are the methods values have; anything else is `null is not callable` at run
-time.
+Values have these methods; anything else is `null is not callable` at run time.
 
 | on | methods |
 | --- | --- |
@@ -190,9 +189,9 @@ List callbacks take the index first: `map` and `filter` get `(index, element)`,
 
 ## Host modules: ask, never guess
 
-Every module is imported by its bare name (`import "fs";`), except the data formats,
-which sit under `encoding/` (`import "encoding/json";`). Without the import line the
-name is `undefined`. For what a module offers:
+Import every module by its bare name (`import "fs";`), except the data formats under
+`encoding/` (`import "encoding/json";`). Without the import line the name is
+`undefined`. To see what a module offers:
 
 ```sh
 {{cmd "describe"}} modules -o name    # every module a script can import
@@ -200,9 +199,9 @@ name is `undefined`. For what a module offers:
 ```
 
 The parameter names in a Signature ARE the labels: `fs\writeFile(path, content)` is
-called `fs\writeFile(target, content: text)`. Brackets mark an optional parameter,
-and a variadic one (`fs\join(parts...)`) accepts any label: `fs\join(dir, name: file)`.
-A name the module lacks fails the check with `[BZZ1007] module fs has no member`.
+called `fs\writeFile(target, content: text)`. Brackets mark an optional parameter. A
+variadic one (`fs\join(parts...)`) accepts any label: `fs\join(dir, name: file)`. A
+name the module lacks fails the check with `[BZZ1007] module fs has no member`.
 
 WRONG: `strings\toLower(s)`, `json\encode(v)`, `path\join(a, b)`.
 CORRECT: `s.lower()`, `json\stringify(v)`, `fs\join(a, name: b)`.
@@ -217,8 +216,8 @@ CORRECT: `s.lower()`, `json\stringify(v)`, `fs\join(a, name: b)`.
 
 {{end}}### Calling magus from a script
 
-`magus` is a host module too, so it needs `import "magus";`. Ask the workspace through
-it rather than running the binary as a subprocess{{if .Full}}: the call is
+`magus` is a host module too: it needs `import "magus";`. Ask the workspace through it,
+not by running the binary as a subprocess{{if .Full}}: the call is
 in-process, version-pinned, and has no argument quoting to get wrong{{end}}.
 
 ```buzz
@@ -234,8 +233,8 @@ fun main(args: [str]) > void !> any {
 
 `magus\describe.<noun>` returns the typed record `magus describe <noun> -o json` prints.
 `magus\cmd(sub, args: [...])` runs any other subcommand. Members that declare into a
-loaded workspace (`magus\project`, the provider selections) exist only in a magusfile
-and raise {{mgslink "MGS1022"}} anywhere else.
+loaded workspace (`magus\project`, the provider selections) exist only in a magusfile;
+anywhere else they raise {{mgslink "MGS1022"}}.
 
 ## Test what you write
 
@@ -251,14 +250,16 @@ test "slugify hyphenates" {
 }
 ```
 
-`{{cmd "buzz"}} -t file.buzz` prints `ok` or `fail` per block and a summary line. Do
-not test `magusfile.buzz` itself{{if .Full}}: it is configuration, so a test of it
-tests your configuration, not your logic{{end}}. Move logic worth testing into a
-spell or a sibling module and test that. A module a magusfile imports is tested with
-`{{cmd "buzz"}} -t --embedded render.buzz`{{if .Full}}, because a magusfile's imports
-parse embedded rather than strict, and testing under the strict default would judge
-the module by a mode it never runs in{{else}}, since a magusfile's imports parse
-embedded, not strict{{end}}.
+`{{cmd "buzz"}} -t file.buzz` prints `ok` or `fail` per block and a summary line.
+
+- Do not test `magusfile.buzz` itself{{if .Full}}: it is configuration, so a test of it
+  tests your configuration, not your logic{{end}}. Move logic worth testing into a spell or a
+  sibling module and test that.
+- Test a module a magusfile imports with
+  `{{cmd "buzz"}} -t --embedded render.buzz`{{if .Full}}, because a magusfile's imports
+  parse embedded rather than strict, and testing under the strict default would judge
+  the module by a mode it never runs in{{else}}, since a magusfile's imports parse
+  embedded, not strict{{end}}.
 
 ## Where Buzz code belongs
 
