@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
@@ -177,6 +178,7 @@ func brokerServe(ctx context.Context, args []string) error {
 		broker.WithLogger(slog.Default()),
 		broker.WithVersion(version),
 		broker.WithDrain(drain, globalCfg.ShutdownGrace),
+		broker.WithCrashDir(crashReportDir()),
 	)
 	// The broker's own context may be done (a signal), and Shutdown's wait for a service
 	// still starting returns at once on a done context, so teardown gets a fresh bound.
@@ -308,6 +310,9 @@ func brokerLogPath() string { return stateLogPath("broker.log") }
 // serverLogPath is brokerLogPath's counterpart for a server `server start` detached.
 func serverLogPath() string { return stateLogPath("server.log") }
 
+// crashReportDir is where the broker saves the crash report of a process it watched.
+func crashReportDir() string { return stateLogPath("crashes") }
+
 func stateLogPath(name string) string {
 	dir, err := config.UserStateDir()
 	if err != nil {
@@ -380,6 +385,18 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 	fmt.Fprintf(w, "magus: %s\n", msg)
 }
 
+var upstreamSourceSkill = agent.MustSkill("magus-upstream-source")
+
+// crashHint is what the broker writes after Go's trace when this process crashes: that
+// the defect is magus's, and where this build's source can be read.
+func crashHint(v versionOutput) string {
+	head := fmt.Sprintf("magus %s crashed. This is a defect in magus, not in your workspace.\n", v.Version)
+	if v.Dirty || v.Commit == unknownVersion {
+		return head + "This build's source is not published: it was built from a modified or unstamped tree.\n"
+	}
+	return head + fmt.Sprintf("Its source is %s/tree/%s; the %s skill reads it.\n", v.Repository, v.Commit, upstreamSourceSkill)
+}
+
 // newBrokerClient is the broker client a CLI process opens its workspaces with. It
 // starts a broker when a step or a service finds none, which is how a long-lived
 // process (`magus mcp`, the server) gets one back after the last idled out. announce
@@ -387,6 +404,7 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 func newBrokerClient(announce bool) *broker.Client {
 	return broker.NewClient(broker.DefaultAddr(),
 		broker.WithIdentity(os.Args, version),
+		broker.WithCrashHint(crashHint(newVersionOutput())),
 		broker.WithStart(func(ctx context.Context) bool {
 			pid := ensureBroker(ctx)
 			if announce {

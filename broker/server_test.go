@@ -34,6 +34,9 @@ func TestMain(m *testing.M) {
 	if addr := os.Getenv(activatedEnv); addr != "" {
 		os.Exit(serveActivated(addr))
 	}
+	if addr := os.Getenv(crasherEnv); addr != "" {
+		os.Exit(crashAfterWatch(addr))
+	}
 	testkit.Main(m)
 }
 

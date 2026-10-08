@@ -155,3 +155,21 @@ func TestBrokerIdleExitDefaultsToTheBrokers(t *testing.T) {
 	f := gen.BindBroker(fs)
 	assert.Equal(t, broker.DefaultIdleExit, f.IdleExit)
 }
+
+// The hint names the code only when that code exists at a fetchable commit.
+func TestCrashHint(t *testing.T) {
+	const sha = "d32c55d6700000000000000000000000000000ab"
+	pushed := crashHint(versionOutput{Version: "v0.5.0", Commit: sha, Repository: sourceRepository})
+	assert.Contains(t, pushed, "not in your workspace")
+	assert.Contains(t, pushed, sourceRepository+"/tree/"+sha)
+	assert.Contains(t, pushed, "magus-upstream-source")
+
+	for _, v := range []versionOutput{
+		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: sourceRepository},
+		{Version: unknownVersion, Commit: unknownVersion, Repository: sourceRepository},
+	} {
+		hint := crashHint(v)
+		assert.Contains(t, hint, "not published")
+		assert.NotContains(t, hint, "/tree/")
+	}
+}

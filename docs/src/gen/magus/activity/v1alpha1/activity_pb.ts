@@ -563,8 +563,8 @@ export enum Kind {
   FILE_CHANGE = 11,
 
   /**
-   * A run magus recorded against a job: its check, one of its completion gates, or the
-   * server's own last run of a catalog job. action is the rendered command and preview
+   * A run magus recorded against a job: its check, one of its goals, or the server's own
+   * last run of a catalog job. action is the rendered command and preview
    * names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
    * kind here where the outcome is a fact about the work rather than about the recording.
    *

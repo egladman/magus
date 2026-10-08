@@ -97,51 +97,50 @@ type LeaseCheck struct {
 	NoDefaultCharms bool `json:"no_default_charms,omitzero" yaml:"no_default_charms,omitempty"`
 }
 
-// PrimaryCompletionGateID names the existing singular check when it is projected
-// into the completion-gate model. It is a stable identity, not a user assertion.
-const PrimaryCompletionGateID = "check"
+// PrimaryGoalID names the job's singular check when it is projected into its goals. It
+// is a stable identity, not a user assertion.
+const PrimaryGoalID = "check"
 
-// CompletionGate is one machine-verifiable condition a job must satisfy before it
-// can pass. Criteria remains the human-readable objective; gates bind that objective to
-// recorded Magus output rather than a holder's boolean attestation. The output
-// must have been captured after the job was declared; target execution limits
-// remain the target's run policy rather than a second gate timeout.
-type CompletionGate struct {
+// Goal is one machine-verifiable condition a job must satisfy before it can pass.
+// Criteria remains the human-readable objective; goals bind that objective to recorded
+// Magus output rather than a holder's boolean attestation. The output must have been
+// captured after the job was declared; target execution limits remain the target's run
+// policy rather than a second goal timeout.
+type Goal struct {
 	ID          string   `json:"id"                     yaml:"id"`
 	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"`
-	// Kind names WHAT this gate examines and Expect names what must be true of it. Two
+	// Kind names WHAT this goal examines and Expect names what must be true of it. Two
 	// fields rather than one, because the alternative is a kind per pair: `paths` beside
 	// `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by
 	// multiplication and reads inconsistently the moment it has four members.
 	//
-	// Both are RESOLVED before a row is stored: Resolve fills a gate that named neither,
+	// Both are RESOLVED before a row is stored: Resolve fills a goal that named neither,
 	// so a reader of a stored row never applies a default. A default applied on read is a
 	// default every reader has to know about, and the readers here are the verifier, the
 	// guard, the observer and two schemas.
-	Kind GateKind `json:"kind" yaml:"kind"`
+	Kind GoalKind `json:"kind" yaml:"kind"`
 	// Expect is optional and defaults to the kind's own: passed for check, changed for
 	// paths and symbol. The common goal names only its kind and its subject.
-	Expect GateExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
-	// Check is the run a GateKindCheck gate examines. Zero on every other kind.
+	Expect GoalExpect `json:"expect,omitempty" yaml:"expect,omitempty"`
+	// Check is the run a GoalKindCheck goal examines. Zero on every other kind.
 	Check LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
-	// Paths are the globs a GateKindPaths gate examines. Zero on every other kind.
+	// Paths are the globs a GoalKindPaths goal examines. Zero on every other kind.
 	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
-	// Symbols are the names a GateKindSymbol gate examines, as the knowledge graph
+	// Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph
 	// resolves them. Zero on every other kind.
 	Symbols []string `json:"symbols,omitempty" yaml:"symbols,omitempty"`
 }
 
-// Resolve fills a gate's kind and expectation from what it declared, so every stored gate
-// names both. A gate that named neither is a check, which is what the single Check field
-// meant before gates existed; a gate that named a kind and no expectation takes that
+// Resolve fills a goal's kind and expectation from what it declared, so every stored goal
+// names both. A goal that named neither is a check, which is what the single Check field
+// meant before goals existed; a goal that named a kind and no expectation takes that
 // kind's natural one.
 //
-// Called at the WRITE boundary (Declaration.Apply, ParseMerge, the stored-row fold), never
-// on read. That is the whole reason the enums have no empty member.
-func (g CompletionGate) Resolve() CompletionGate {
+// Called at the WRITE boundary (Declaration.Apply, ParseMerge), never on read. That is the whole reason the enums have no empty member.
+func (g Goal) Resolve() Goal {
 	if g.Kind == "" {
-		g.Kind = GateKindCheck
+		g.Kind = GoalKindCheck
 	}
 	if g.Expect == "" {
 		g.Expect = g.Kind.DefaultExpect()
@@ -149,52 +148,52 @@ func (g CompletionGate) Resolve() CompletionGate {
 	return g
 }
 
-// GateKind names WHAT a completion gate examines, because not every condition a job can be
-// held to is a target run.
+// GoalKind names WHAT a goal examines, because not every condition a job can be held to is
+// a target run.
 //
 // Each kind names an evidence source magus already holds: the output store, the VCS diff,
 // the knowledge graph. A condition magus can observe no evidence for is not declarable
-// here on purpose, and there is deliberately no escape hatch for one. A gate accepting an
+// here on purpose, and there is deliberately no escape hatch for one. A goal accepting an
 // unrecorded exit status would be the easiest kind to satisfy falsely, which is the
-// attestation the whole mechanism replaces; declare a target and use GateKindCheck.
-type GateKind string
+// attestation the whole mechanism replaces; declare a target and use GoalKindCheck.
+type GoalKind string
 
 const (
-	// GateKindCheck examines a recorded run of the gate's check. It is a return code, and
+	// GoalKindCheck examines a recorded run of the goal's check. It is a return code, and
 	// what raises it above one is that magus RECORDED it: the output store holds the
 	// target, the project, the timestamp and the failure bit, so the run can be reopened
 	// and attributed to this job rather than taken on the holder's word.
-	GateKindCheck GateKind = "check"
-	// GateKindPaths examines files, by glob. It is what "this job must actually produce
+	GoalKindCheck GoalKind = "check"
+	// GoalKindPaths examines files, by glob. It is what "this job must actually produce
 	// the migration" looks like when no target can say so.
-	GateKindPaths GateKind = "paths"
-	// GateKindSymbol examines named symbols in the knowledge graph, which is the
+	GoalKindPaths GoalKind = "paths"
+	// GoalKindSymbol examines named symbols in the knowledge graph, which is the
 	// granularity below a file: a function added, renamed or deleted is a fact the graph
 	// holds even when the file it lives in changed for ten other reasons.
-	GateKindSymbol GateKind = "symbol"
+	GoalKindSymbol GoalKind = "symbol"
 )
 
-// GateKinds is the closed set, for the same reason JobStates is one: the validator, the
+// GoalKinds is the closed set, for the same reason JobStates is one: the validator, the
 // published schema and the error each of them raises all quote it, and a vocabulary that
 // drifts rejects a client for a value the schema told it to send.
-func GateKinds() []GateKind {
-	return []GateKind{GateKindCheck, GateKindPaths, GateKindSymbol}
+func GoalKinds() []GoalKind {
+	return []GoalKind{GoalKindCheck, GoalKindPaths, GoalKindSymbol}
 }
 
-// GateExpect names what must be TRUE of what a gate examines. One vocabulary across every
+// GoalExpect names what must be TRUE of what a goal examines. One vocabulary across every
 // kind, so `absent` means the same thing of a file, a symbol and a reference.
-type GateExpect string
+type GoalExpect string
 
 const (
-	// ExpectPassed is a recorded run that finished without failing. GateKindCheck only.
-	ExpectPassed GateExpect = "passed"
+	// ExpectPassed is a recorded run that finished without failing. GoalKindCheck only.
+	ExpectPassed GoalExpect = "passed"
 	// ExpectChanged is "the diff since the job's checkpoint touches this".
-	ExpectChanged GateExpect = "changed"
+	ExpectChanged GoalExpect = "changed"
 	// ExpectPresent is "this is here now", whether or not this job is what put it here.
-	ExpectPresent GateExpect = "present"
+	ExpectPresent GoalExpect = "present"
 	// ExpectAbsent is "this is not here now", which is how a deletion or a removal is
 	// declared as a condition rather than reported as one.
-	ExpectAbsent GateExpect = "absent"
+	ExpectAbsent GoalExpect = "absent"
 	// ExpectUnreferenced is "nothing names this any more", and it belongs to symbols. It
 	// is the one that answers the remainder a partitioned rename leaks: split the work per
 	// project and the callers in no project belong to no job, so every job passes and the
@@ -204,59 +203,59 @@ const (
 	// still the symbol. A `refs` kind read the same field as `symbol` and forced every
 	// reader to treat the two as one, which is a vocabulary that says it has four members
 	// and behaves as though it has three.
-	ExpectUnreferenced GateExpect = "unreferenced"
+	ExpectUnreferenced GoalExpect = "unreferenced"
 )
 
-// GateExpects is the closed set. See GateKinds.
-func GateExpects() []GateExpect {
-	return []GateExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced}
+// GoalExpects is the closed set. See GoalKinds.
+func GoalExpects() []GoalExpect {
+	return []GoalExpect{ExpectPassed, ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced}
 }
 
-// DefaultExpect is what a kind means when a gate names no condition, so the common gate of
+// DefaultExpect is what a kind means when a goal names no condition, so the common goal of
 // each kind declares only its subject. A check is asked whether it passed; files and
 // symbols are asked whether this job changed them, which is the question a job is for.
-func (k GateKind) DefaultExpect() GateExpect {
-	if k == GateKindCheck {
+func (k GoalKind) DefaultExpect() GoalExpect {
+	if k == GoalKindCheck {
 		return ExpectPassed
 	}
 	return ExpectChanged
 }
 
-// Subject is what the gate examines, rendered for a message that has to name it.
-func (g CompletionGate) Subject() []string {
+// Subject is what the goal examines, rendered for a message that has to name it.
+func (g Goal) Subject() []string {
 	switch g.Kind {
-	case GateKindCheck:
+	case GoalKindCheck:
 		if g.Check.Target == "" && g.Check.Script == "" {
 			return nil
 		}
 		return []string{g.Check.String()}
-	case GateKindPaths:
+	case GoalKindPaths:
 		return g.Paths
 	default:
 		return g.Symbols
 	}
 }
 
-// gateAccepts is the kind-to-condition matrix, and the one place it is written down.
+// goalAccepts is the kind-to-condition matrix, and the one place it is written down.
 // Anything outside it is refused at declaration rather than graded into a verdict nobody
-// can act on: `check` + `absent` has no meaning, and a gate nobody can satisfy reads as a
+// can act on: `check` + `absent` has no meaning, and a goal nobody can satisfy reads as a
 // job nobody can finish.
-var gateAccepts = map[GateKind][]GateExpect{
-	GateKindCheck:  {ExpectPassed},
-	GateKindPaths:  {ExpectChanged, ExpectPresent, ExpectAbsent},
-	GateKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced},
+var goalAccepts = map[GoalKind][]GoalExpect{
+	GoalKindCheck:  {ExpectPassed},
+	GoalKindPaths:  {ExpectChanged, ExpectPresent, ExpectAbsent},
+	GoalKindSymbol: {ExpectChanged, ExpectPresent, ExpectAbsent, ExpectUnreferenced},
 }
 
 // EffectiveGoals returns the declared goals plus the primary Check as a goal. Keeping the
 // projection at the model boundary means guards that still read Check retain their
 // capability semantics while every verifier has one complete collection to grade.
-func (u Job) EffectiveGoals() []CompletionGate {
-	gates := cloneGoals(u.Goals)
+func (u Job) EffectiveGoals() []Goal {
+	goals := cloneGoals(u.Goals)
 	if u.Check != nil {
-		primary := CompletionGate{ID: PrimaryCompletionGateID, Check: *u.Check}.Resolve()
-		gates = append([]CompletionGate{primary}, gates...)
+		primary := Goal{ID: PrimaryGoalID, Check: *u.Check}.Resolve()
+		goals = append([]Goal{primary}, goals...)
 	}
-	return gates
+	return goals
 }
 
 // String renders the check as the command a person types and a row stores. Running it
@@ -516,7 +515,7 @@ type JobResult struct {
 	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
 }
 
-// GateEvidence links a completion gate to captured Magus output.
+// GateEvidence links a goal to captured Magus output.
 type GateEvidence struct {
 	GateID    string `json:"gate_id" yaml:"gate_id"`
 	OutputRef string `json:"output_ref" yaml:"output_ref"`
@@ -537,7 +536,7 @@ type JobStatus struct {
 	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when
-	// symbol gates were graded, so a symbol verdict may be drawn from missing facts.
+	// symbol goals were graded, so a symbol verdict may be drawn from missing facts.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Footprint is the declaration each changed line of the job's diff since its checkpoint
 	// lands in. It decides Verified only for a job claiming declarations (see
@@ -557,7 +556,7 @@ type JobStatus struct {
 	Entries []JobEntry `json:"entries,omitempty" yaml:"entries,omitempty"`
 }
 
-// GateStatus reports verification of one completion gate.
+// GateStatus reports verification of one goal.
 type GateStatus struct {
 	ID         string   `json:"id" yaml:"id"`
 	Verified   bool     `json:"verified" yaml:"verified"`
@@ -576,7 +575,7 @@ type JobAttempt struct {
 	Failed      bool   `json:"failed,omitempty" yaml:"failed,omitempty"`
 }
 
-// JobGateAttempt is the stored output record for one completion gate.
+// JobGateAttempt is the stored output record for one goal.
 type JobGateAttempt struct {
 	GateID  string     `json:"gate_id" yaml:"gate_id"`
 	Attempt JobAttempt `json:"attempt" yaml:"attempt"`
@@ -679,7 +678,7 @@ type Job struct {
 	// Goals are the job's definition of done that magus grades: a check that passed, paths
 	// or symbols this job changed, added or removed. Check is graded as one more goal. Named
 	// goals rather than gates so the word never collides with the CI gate.
-	Goals []CompletionGate `json:"goals,omitempty" yaml:"goals,omitempty"`
+	Goals []Goal `json:"goals,omitempty" yaml:"goals,omitempty"`
 	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
 	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
@@ -766,8 +765,8 @@ type Job struct {
 	// store's record rather than anything the holder asserts.
 	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
 	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
-	// GateAttempts are the portable output-store snapshots for every explicit
-	// completion gate. Attempt remains the snapshot for the primary Check.
+	// GateAttempts are the portable output-store snapshots for every explicit goal.
+	// Attempt remains the snapshot for the primary Check.
 	GateAttempts []JobGateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
 	// LastRun is the job's most recent run, nil until one is submitted. It is filled in
 	// two steps because no single writer sees the whole of it: the invocation id at
@@ -868,7 +867,7 @@ type Declaration struct {
 	// both is refused rather than merged, since nothing here can say which one meant it.
 	Validation string `json:"validation,omitempty"`
 	// Goals are what done means, graded by `magus job wait`. See [Job.Goals].
-	Goals []CompletionGate `json:"goals,omitempty"`
+	Goals []Goal `json:"goals,omitempty"`
 	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
 	// it writes the row, so a declaration carries a length and never an instant. Empty is no
 	// bound; there is no default here (a workspace may set jobs.default_timeout).
@@ -939,7 +938,7 @@ func (r Declaration) Validate() error {
 	seen := map[string]bool{}
 	if declared {
 		_ = check
-		seen[PrimaryCompletionGateID] = true
+		seen[PrimaryGoalID] = true
 	}
 	for i, gate := range r.Goals {
 		if err := gate.Validate(); err != nil {
@@ -962,13 +961,13 @@ func (r Declaration) Validate() error {
 	}
 	visiting := make(map[string]bool, len(r.Goals))
 	visited := make(map[string]bool, len(r.Goals))
-	byID := make(map[string]CompletionGate, len(r.Goals))
+	byID := make(map[string]Goal, len(r.Goals))
 	for _, gate := range r.Goals {
 		byID[gate.ID] = gate
 	}
 	var visit func(string) error
 	visit = func(id string) error {
-		if id == PrimaryCompletionGateID {
+		if id == PrimaryGoalID {
 			return nil
 		}
 		if visiting[id] {
@@ -995,41 +994,41 @@ func (r Declaration) Validate() error {
 	return nil
 }
 
-// Validate reports whether a gate can be matched to an output record without
+// Validate reports whether a goal can be matched to an output record without
 // interpreting a shell command.
-func (g CompletionGate) Validate() error {
+func (g Goal) Validate() error {
 	if !ValidJobID(strings.TrimSpace(g.ID)) {
-		return fmt.Errorf("id %q is not a gate id", g.ID)
+		return fmt.Errorf("id %q is not a goal id", g.ID)
 	}
 	// Validates what the row WILL BE, not what arrived: a declaration off the wire has not
 	// been through Resolve yet, and refusing it for naming no kind would refuse the
 	// shorthand the defaults exist to allow. Resolving here is not read-time defaulting;
 	// the stored row is resolved by cloneGoals on the way in.
 	g = g.Resolve()
-	accepted, known := gateAccepts[g.Kind]
+	accepted, known := goalAccepts[g.Kind]
 	if !known {
-		return fmt.Errorf("gate %q names kind %q, and the kinds are %s", g.ID, g.Kind, quoteJoin(GateKinds(), ", "))
+		return fmt.Errorf("goal %q names kind %q, and the kinds are %s", g.ID, g.Kind, quoteJoin(GoalKinds(), ", "))
 	}
 	if !slices.Contains(accepted, g.Expect) {
-		return fmt.Errorf("gate %q is a %s gate expecting %q, and a %s gate expects %s",
+		return fmt.Errorf("goal %q is a %s goal expecting %q, and a %s goal expects %s",
 			g.ID, g.Kind, g.Expect, g.Kind, quoteJoin(accepted, " or "))
 	}
-	// Exactly one subject, named by the kind. A gate carrying two is one whose author
+	// Exactly one subject, named by the kind. A goal carrying two is one whose author
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
-	if g.Kind != GateKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
-		return fmt.Errorf("gate %q is a %s gate and also carries a check; a gate examines one subject", g.ID, g.Kind)
+	if g.Kind != GoalKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
+		return fmt.Errorf("goal %q is a %s goal and also carries a check; a goal examines one subject", g.ID, g.Kind)
 	}
-	if g.Kind != GateKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
-		return fmt.Errorf("gate %q is a %s gate and also carries paths; a gate examines one subject", g.ID, g.Kind)
+	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
+		return fmt.Errorf("goal %q is a %s goal and also carries paths; a goal examines one subject", g.ID, g.Kind)
 	}
-	if g.Kind != GateKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
-		return fmt.Errorf("gate %q is a %s gate and also carries symbols; a gate examines one subject", g.ID, g.Kind)
+	if g.Kind != GoalKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
+		return fmt.Errorf("goal %q is a %s goal and also carries symbols; a goal examines one subject", g.ID, g.Kind)
 	}
 	if len(trimmedNonEmpty(g.Subject())) == 0 {
-		return fmt.Errorf("gate %q is a %s gate and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
 	}
-	if g.Kind == GateKindCheck {
+	if g.Kind == GoalKindCheck {
 		if err := g.Check.validScript(); err != nil || g.Check.Script != "" {
 			return err
 		}
@@ -1200,20 +1199,20 @@ func (r Declaration) ApplySpec(u *Job) {
 	}
 }
 
-func cloneGoals(in []CompletionGate) []CompletionGate {
+func cloneGoals(in []Goal) []Goal {
 	if in == nil {
 		return nil
 	}
-	out := make([]CompletionGate, len(in))
-	for i, gate := range in {
+	out := make([]Goal, len(in))
+	for i, goal := range in {
 		// RESOLVED on the way through, which is what makes this the write boundary the
-		// enums' no-empty-member rule depends on: every path that stores gates (Apply,
-		// ParseMerge, the stored-row fold) clones them through here.
-		out[i] = gate.Resolve()
-		out[i].Check.Args = slices.Clone(gate.Check.Args)
-		out[i].Paths = slices.Clone(gate.Paths)
-		out[i].Symbols = slices.Clone(gate.Symbols)
-		out[i].DependsOn = slices.Clone(gate.DependsOn)
+		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
+		// ParseMerge) clones them through here.
+		out[i] = goal.Resolve()
+		out[i].Check.Args = slices.Clone(goal.Check.Args)
+		out[i].Paths = slices.Clone(goal.Paths)
+		out[i].Symbols = slices.Clone(goal.Symbols)
+		out[i].DependsOn = slices.Clone(goal.DependsOn)
 	}
 	return out
 }

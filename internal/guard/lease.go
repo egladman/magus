@@ -444,7 +444,7 @@ func (r targetRun) allowed(checks []types.LeaseCheck, ownSource bool, produces f
 func rowChecks(row types.Job) []types.LeaseCheck {
 	var out []types.LeaseCheck
 	for _, g := range row.EffectiveGoals() {
-		if g.Kind == types.GateKindCheck && g.Check.Target != "" {
+		if g.Kind == types.GoalKindCheck && g.Check.Target != "" {
 			out = append(out, g.Check)
 		}
 	}
@@ -1197,12 +1197,12 @@ func LeaseGateSource(row types.Job) (string, bool) {
 	// before its goals were read, so a narrow check beside a `ci` check goal took the gate
 	// through the door the check rule holds shut.
 	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != types.GateKindCheck {
+		if gate.Kind != types.GoalKindCheck {
 			continue
 		}
 		t, err := types.ParseTarget(gate.Check.Target)
 		if err == nil && t.Name == types.TargetCI {
-			if gate.ID == types.PrimaryCompletionGateID {
+			if gate.ID == types.PrimaryGoalID {
 				return gate.Check.String(), true
 			}
 			return fmt.Sprintf("goal %q (%s)", gate.ID, gate.Check.String()), true

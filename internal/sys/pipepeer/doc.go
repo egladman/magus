@@ -31,6 +31,25 @@ type Pipe struct {
 	id uint64
 }
 
+// Activity is what a process was doing when Sample read it.
+type Activity struct {
+	// Runnable is set while a thread of it runs, waits for a CPU, or waits on the
+	// kernel without being interruptible: a process on its way somewhere.
+	Runnable bool
+	// Parent is set while it has a child.
+	Parent bool
+	// Switches counts what it has done so far, in context switches and system calls. A
+	// process that does nothing between two samples leaves it where it was.
+	Switches uint64
+}
+
+// StillBlocked reports whether a process sampled as a and then as later sat blocked
+// throughout: nothing of it running, no child working for it, and no step taken between.
+// A shell that does this is waiting on a read, not on its way to exec.
+func (a Activity) StillBlocked(later Activity) bool {
+	return !a.Runnable && !a.Parent && a == later
+}
+
 // SameExecutable reports whether pid is running the same executable file as this
 // process. A copy of the binary at another path is a different file and does not match;
 // a hard link does.

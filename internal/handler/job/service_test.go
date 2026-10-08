@@ -195,16 +195,16 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
-		row.Goals = []types.CompletionGate{
+		row.Goals = []types.Goal{
 			{
 				ID:     "lint",
-				Kind:   types.GateKindCheck,
+				Kind:   types.GoalKindCheck,
 				Expect: types.ExpectPassed,
 				Check:  types.LeaseCheck{Target: "lint", Project: "."},
 			},
 			{
 				ID:     "store-touched",
-				Kind:   types.GateKindPaths,
+				Kind:   types.GoalKindPaths,
 				Expect: types.ExpectChanged,
 				Paths:  []string{"internal/job/store.go"},
 			},

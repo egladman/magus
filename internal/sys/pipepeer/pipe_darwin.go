@@ -20,7 +20,9 @@ const (
 	procInfoCallPIDFDInfo = 3
 
 	procUIDOnly       = 4
+	procPPIDOnly      = 6
 	procPIDListFDs    = 1
+	procPIDTaskInfo   = 4
 	procPIDPathInfo   = 11
 	procPIDFDPipeInfo = 6
 	proxFDTypePipe    = 6
@@ -33,6 +35,13 @@ const (
 	procFDInfoSize    = 8 // struct proc_fdinfo: int32 fd, uint32 type
 	maxPathLen        = 1024
 	procPIDPathBufLen = 4 * maxPathLen
+
+	// struct proc_taskinfo: six uint64 totals, then twelve int32 counters, of which these
+	// are pti_syscalls_unix, pti_csw and pti_numrunning.
+	taskInfoSize           = 6*8 + 12*4
+	taskSyscallsUnixOffset = 6*8 + 7*4
+	taskCSWOffset          = 6*8 + 8*4
+	taskNumRunningOffset   = 6*8 + 10*4
 )
 
 // ReadEnd returns the pipe open at fd in pid. darwin gives each end of a pipe its own
@@ -72,13 +81,46 @@ func (p Pipe) Readers() ([]int, error) {
 
 // ReadBy reports whether pid holds p's read end open right now. A read end's peer is
 // the write end that names the pipe.
-func (p Pipe) ReadBy(pid int) bool {
+func (p Pipe) ReadBy(pid int) bool { return len(p.ReadFDs(pid)) > 0 }
+
+// ReadFDs returns the descriptors at which pid holds p's read end open right now.
+func (p Pipe) ReadFDs(pid int) []int {
+	var fds []int
 	for _, fd := range pipeFDs(pid) {
 		if _, peer, ok := pipeHandles(pid, fd); ok && peer == p.id {
-			return true
+			fds = append(fds, fd)
 		}
 	}
-	return false
+	return fds
+}
+
+// Sample returns what pid is doing now, from its proc_taskinfo and its child list.
+func Sample(pid int) (Activity, error) {
+	buf := make([]byte, taskInfoSize)
+	n, err := procInfo(procInfoCallPIDInfo, pid, procPIDTaskInfo, 0, buf)
+	if err != nil {
+		return Activity{}, fmt.Errorf("pipepeer: task info of %d: %w", pid, err)
+	}
+	if n < taskInfoSize {
+		return Activity{}, fmt.Errorf("pipepeer: short task info for %d", pid)
+	}
+	// A zero-length query sizes a list of every process, not of pid's children; room for
+	// a few is plenty, since one answers.
+	kids := make([]byte, 64*4)
+	n, err = procInfo(procInfoCallListPIDs, procPPIDOnly, pid, 0, kids)
+	if err != nil {
+		return Activity{}, fmt.Errorf("pipepeer: children of %d: %w", pid, err)
+	}
+	parent := false
+	for off := 0; off+4 <= n; off += 4 {
+		parent = parent || int32(binary.LittleEndian.Uint32(kids[off:])) > 0
+	}
+	u32 := func(off int) uint64 { return uint64(binary.LittleEndian.Uint32(buf[off:])) }
+	return Activity{
+		Runnable: u32(taskNumRunningOffset) > 0,
+		Parent:   parent,
+		Switches: u32(taskCSWOffset) + u32(taskSyscallsUnixOffset),
+	}, nil
 }
 
 // Writers returns every process of this user that holds p's write end open. Processes

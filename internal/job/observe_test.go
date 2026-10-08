@@ -24,8 +24,8 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db", "api"},
-		Goals: []types.CompletionGate{
-			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**"}},
+		Goals: []types.Goal{
+			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
 	// The holder says it wrote the migration. The diff says it wrote something else.
@@ -44,8 +44,8 @@ func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db", "api"},
-		Goals: []types.CompletionGate{
-			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**", "api"}},
+		Goals: []types.Goal{
+			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "api"}},
 		},
 	}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql", "api/handler.go"}}
@@ -65,8 +65,8 @@ func TestPathsGateNamesEveryUnmetGlob(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db"},
-		Goals: []types.CompletionGate{
-			{ID: "both", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
+		Goals: []types.Goal{
+			{ID: "both", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**", "db/schema.sql", "db/seed.sql"}},
 		},
 	}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
@@ -88,8 +88,8 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 		ID:         "unit",
 		Created:    1,
 		WritePaths: []string{"db"},
-		Goals: []types.CompletionGate{
-			{ID: "migration", Kind: types.GateKindPaths, Paths: []string{"db/migrations/**"}},
+		Goals: []types.Goal{
+			{ID: "migration", Kind: types.GoalKindPaths, Paths: []string{"db/migrations/**"}},
 		},
 	}
 	rep := types.JobResult{Job: "unit", ChangedPaths: []string{"db/migrations/001.sql"}}
@@ -108,7 +108,7 @@ func TestPathsGateSeparatesNothingChangedFromNobodyLooked(t *testing.T) {
 
 	// Resolved, as every stored gate is: the verifier grades the fields and never defaults
 	// them, so a raw gate here would exercise a shape production cannot produce.
-	gate := types.CompletionGate{ID: "g", Kind: types.GateKindPaths, Paths: []string{"db/**"}}.Resolve()
+	gate := types.Goal{ID: "g", Kind: types.GoalKindPaths, Paths: []string{"db/**"}}.Resolve()
 
 	looked := verifySubjectGate(gate, Observed{ChangedKnown: true, ChangedFrom: "abc1234"})
 	assert.False(t, looked.Verified)
@@ -135,16 +135,16 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 		Symbols:     map[string]SymbolFact{},
 	}
 	graded := 0
-	for _, kind := range types.GateKinds() {
-		if kind == types.GateKindCheck {
+	for _, kind := range types.GoalKinds() {
+		if kind == types.GoalKindCheck {
 			continue // graded against the output store, not against Observed
 		}
-		for _, expect := range types.GateExpects() {
+		for _, expect := range types.GoalExpects() {
 			// ONE subject, matching the kind. Carrying both Paths and Symbols made
 			// Validate refuse every pair as two subjects, so this loop used to `continue`
 			// on every iteration and grade nothing at all.
-			gate := types.CompletionGate{ID: "g", Kind: kind, Expect: expect}
-			if kind == types.GateKindPaths {
+			gate := types.Goal{ID: "g", Kind: kind, Expect: expect}
+			if kind == types.GoalKindPaths {
 				gate.Paths = []string{"nope/**"}
 			} else {
 				gate.Symbols = []string{"Nope"}
@@ -154,7 +154,7 @@ func TestEveryKindAndExpectPairIsGraded(t *testing.T) {
 			}
 			graded++
 			status := verifySubjectGate(gate, seen)
-			if kind == types.GateKindPaths && expect == types.ExpectAbsent {
+			if kind == types.GoalKindPaths && expect == types.ExpectAbsent {
 				// A path the tree was read for and holds nothing of IS absent.
 				assert.True(t, status.Verified, "%s/%s: nothing named is present, so it holds", kind, expect)
 				continue
@@ -186,7 +186,7 @@ func TestGradeGatesReportsAPrimaryCheck(t *testing.T) {
 		types.JobAttempt{}, nil, []types.Job{row}, Observed{})
 
 	require.Len(t, status.Gates, 1, "a job whose only gate is its primary check must report that gate")
-	assert.Equal(t, types.PrimaryCompletionGateID, status.Gates[0].ID)
+	assert.Equal(t, types.PrimaryGoalID, status.Gates[0].ID)
 	assert.False(t, status.Gates[0].Verified, "no run was recorded, so the check is unmet")
 }
 

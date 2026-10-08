@@ -275,7 +275,7 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
 func runsTheGate(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(gate types.CompletionGate) bool {
+	return slices.ContainsFunc(row.EffectiveGoals(), func(gate types.Goal) bool {
 		return gate.Check.Target == types.TargetCI
 	})
 }
@@ -362,7 +362,7 @@ func changedFields(prev, next types.Job) []string {
 // goalsEqual is deliberately explicit instead of reflect.DeepEqual: this path grades every
 // bound worker mutation, and the model is small, typed, and stable. Every field counts: a
 // holder that could rewrite a goal's kind, expectation or subject could grade itself done.
-func goalsEqual(a, b []types.CompletionGate) bool {
+func goalsEqual(a, b []types.Goal) bool {
 	if len(a) != len(b) {
 		return false
 	}

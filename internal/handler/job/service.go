@@ -322,7 +322,7 @@ func lastRun(e trail.Event) *jobv1.JobRun {
 // wireGoals maps the stored goals to the wire shape. check is rendered as the command that
 // runs it, the same way the row's Validation already is for the primary Check field: the
 // wire never carries the unrendered LeaseCheck, so a client needs no second parser for it.
-func wireGoals(gates []types.CompletionGate) []*jobv1.CompletionGate {
+func wireGoals(gates []types.Goal) []*jobv1.CompletionGate {
 	if len(gates) == 0 {
 		return nil
 	}
@@ -337,7 +337,7 @@ func wireGoals(gates []types.CompletionGate) []*jobv1.CompletionGate {
 			Symbols:     g.Symbols,
 			DependsOn:   g.DependsOn,
 		}
-		if g.Kind == types.GateKindCheck && g.Check.Target != "" {
+		if g.Kind == types.GoalKindCheck && g.Check.Target != "" {
 			wire.Check = g.Check.String()
 		}
 		out = append(out, wire)

@@ -186,8 +186,8 @@ func eventDecision(e trail.Event) string {
 	return ""
 }
 
-// RunEvents is every run magus recorded against one job: the primary check, each
-// completion gate, and the server's own last run for a catalog job. They are facts the
+// RunEvents is every run magus recorded against one job: the primary check, each goal,
+// and the server's own last run for a catalog job. They are facts the
 // store already holds, so the feed serves them without asking the output store anything.
 func RunEvents(row types.Job) []FeedEvent {
 	out := make([]FeedEvent, 0, 2+len(row.GateAttempts))
@@ -196,7 +196,7 @@ func RunEvents(row types.Job) []FeedEvent {
 	}
 	for _, gate := range row.GateAttempts {
 		if gate.Attempt.Found {
-			out = append(out, runEvent(row.ID, gate.Attempt, "gate "+gate.GateID))
+			out = append(out, runEvent(row.ID, gate.Attempt, "goal "+gate.GateID))
 		}
 	}
 	if run := row.LastRun; run != nil && run.Ended > 0 {

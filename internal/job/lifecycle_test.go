@@ -56,7 +56,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 		Verified: true,
 		Risks:    []string{},
 		Command:  result.Validation.Command,
-		Gates:    []types.GateStatus{{ID: types.PrimaryCompletionGateID, OutputRef: result.Validation.OutputRef, Verified: true}},
+		Gates:    []types.GateStatus{{ID: types.PrimaryGoalID, OutputRef: result.Validation.OutputRef, Verified: true}},
 	}, status)
 
 	rows, err := NewStore(loc).List()
@@ -65,14 +65,14 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	assert.Equal(t, types.StatePass, rows[0].State)
 }
 
-func TestExitFilesEveryCompletionGateForAWaitInAnotherCheckout(t *testing.T) {
+func TestExitFilesEveryGoalForAWaitInAnotherCheckout(t *testing.T) {
 	t.Parallel()
 
-	row := completionGateRow()
+	row := goalRow()
 	loc := declared(t, row)
-	result := completionGateResult()
+	result := goalResult()
 	attempts := map[string]types.JobAttempt{}
-	for _, snapshot := range completionGateAttempts() {
+	for _, snapshot := range goalAttempts() {
 		snapshot.Attempt.TimestampMs = 9_999_999_999_999
 		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
 	}
@@ -716,20 +716,20 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		{id: "symbol:go a/Lonely().", label: "Lonely", file: "keep.go"},
 		{id: "symbol:go a/LegacyAdapter().", label: "LegacyAdapter", file: "keep.go"},
 	}
-	paths := func(expect types.GateExpect, p string) types.CompletionGate {
-		return types.CompletionGate{ID: "goal", Kind: types.GateKindPaths, Expect: expect, Paths: []string{p}}
+	paths := func(expect types.GoalExpect, p string) types.Goal {
+		return types.Goal{ID: "goal", Kind: types.GoalKindPaths, Expect: expect, Paths: []string{p}}
 	}
-	symbol := func(expect types.GateExpect, name string) types.CompletionGate {
-		return types.CompletionGate{ID: "goal", Kind: types.GateKindSymbol, Expect: expect, Symbols: []string{name}}
+	symbol := func(expect types.GoalExpect, name string) types.Goal {
+		return types.Goal{ID: "goal", Kind: types.GoalKindSymbol, Expect: expect, Symbols: []string{name}}
 	}
-	check := types.CompletionGate{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
+	check := types.Goal{ID: "goal", Check: types.LeaseCheck{Target: "go-test", Project: "."}}
 	run := types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
 	failed := run
 	failed.Failed = true
 
 	for _, tc := range []struct {
 		name       string
-		goal       types.CompletionGate
+		goal       types.Goal
 		checkpoint string
 		checkout   string
 		blind      bool
@@ -770,7 +770,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 			row := types.Job{
 				ID: "goal", Criteria: "the goal holds", WritePaths: []string{"."}, State: types.StateRunning, Created: 1,
 				Checkpoint: cmp.Or(tc.checkpoint, checkpoint), CheckoutRoot: cmp.Or(tc.checkout, worker),
-				Goals: []types.CompletionGate{tc.goal.Resolve()},
+				Goals: []types.Goal{tc.goal.Resolve()},
 			}
 			loc := tmpLoc(t, t.TempDir())
 			plant(t, NewStore(loc), row)

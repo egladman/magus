@@ -14,7 +14,8 @@ after something breaks:
 | git commit, git add, git stash/reset, read a diff          | magus-vcs-hygiene     |
 | build, test, lint, format, or generate anything            | magus-run             |
 | grep for what exists, depends on, or uses X                | magus-query           |
-| answer "how does magus X" from memory                      | magus-docs-lookup     |
+| answer "how does magus X" from memory                      | magus-upstream-docs   |
+| blame magus itself: it crashed, or contradicts its docs    | magus-upstream-source |
 | summarize what merged or landed recently                   | magus-change-summary  |
 | edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
 | recurring guard feedback or a proposed local rule          | magus-workspace-rules |

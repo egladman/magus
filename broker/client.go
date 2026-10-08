@@ -61,9 +61,10 @@ func WithStart(start func(context.Context) bool) ClientOption {
 // When its broker dies, a Client holding claims redials on its own and re-asserts them
 // on the next broker to answer.
 type Client struct {
-	addr  string
-	hello hello
-	start func(context.Context) bool
+	addr      string
+	hello     hello
+	start     func(context.Context) bool
+	crashHint string
 
 	connectMu sync.Mutex
 
@@ -139,7 +140,7 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 	late := func(f frame) {
 		var r claimReply
 		if f.Type == typeClaimReply && decodeBody(f, &r) == nil && r.Verdict.Granted {
-			_, _ = cn.call(context.Background(), c.next(), typeRelease, releaseRequest{ClaimID: r.Verdict.ID}, nil)
+			_, _ = cn.call(context.Background(), c.next(), typeRelease, releaseRequest{ClaimID: r.Verdict.ID})
 		}
 	}
 	if err := cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late); err != nil {
@@ -165,7 +166,7 @@ func (c *Client) Release(ctx context.Context, id string) {
 	if !ok || h.remote == "" || cn == nil {
 		return
 	}
-	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote}, nil)
+	_, _ = cn.call(ctx, c.next(), typeRelease, releaseRequest{ClaimID: h.remote})
 }
 
 // AcquireService starts, or reuses, the shared service spec under key and returns once
@@ -331,6 +332,9 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		h.remote = reply.Verdict.ID
 		c.mu.Unlock()
 	}
+	if c.crashHint != "" {
+		c.watchCrashes(dctx, cn)
+	}
 
 	c.mu.Lock()
 	if c.closed {
@@ -349,7 +353,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	}
 	c.mu.Unlock()
 	for _, id := range released {
-		_, _ = cn.call(dctx, c.next(), typeRelease, releaseRequest{ClaimID: id}, nil)
+		_, _ = cn.call(dctx, c.next(), typeRelease, releaseRequest{ClaimID: id})
 	}
 	return cn, nil
 }

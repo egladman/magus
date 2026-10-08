@@ -259,7 +259,7 @@ func presentIn(root string, row types.Job) ([]string, bool) {
 	tree := os.DirFS(root)
 	var out []string
 	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != types.GateKindPaths {
+		if gate.Kind != types.GoalKindPaths {
 			continue
 		}
 		for _, declared := range gate.Paths {
@@ -286,7 +286,7 @@ func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[str
 	}
 	out := map[string]SymbolFact{}
 	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind != types.GateKindSymbol {
+		if gate.Kind != types.GoalKindSymbol {
 			continue
 		}
 		for _, name := range gate.Symbols {

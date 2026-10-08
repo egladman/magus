@@ -464,6 +464,63 @@ fun collectMarkdown(base: str, rel: str, acc: mut [str]) > void !> any {
     }
 }
 
+// dropIgnored removes from rels (paths relative to base) the pages git ignores, so the
+// lint judges what a fresh checkout holds. A rendered page such as changelog.md is
+// ignored output that goes stale between renders, and CI never has it.
+//
+// Ignored means ignored AND untracked: check-ignore without --no-index leaves a
+// force-added page in. A VCS other than git, or none, filters nothing.
+fun dropIgnored(base: str, rels: [str]) > [str] !> any {
+    if (vcs\name() != "git" or rels.len() == 0) { return rels; }
+    final probe = vcs\cmd(["check-ignore", "--"] + rels, {"dir": base, "quiet": true, "allow_failure": true});
+    // Exit 1 is "nothing ignored"; anything above it is a failed probe, not an answer.
+    if (probe.code > 1) {
+        throw "git check-ignore failed in " + base + ": " + probe.stderr;
+    }
+    final ignored = mut {<str: bool>};
+    foreach (line in probe.stdout.split("\n")) {
+        ignored[line.trim()] = true;
+    }
+    final kept: mut [str] = mut [<str>];
+    foreach (rel in rels) {
+        if (!ignored.hasKey(rel)) { kept.append(rel); }
+    }
+    return kept;
+}
+
+test "dropIgnored skips ignored untracked pages and keeps tracked and force-added ones" {
+    final repo = fs\tempDir("magus-dropignored-");
+    vcs\cmd(["init", "-q"], {"dir": repo, "quiet": true});
+    fs\writeFile(repo + "/.gitignore", "/rendered.md\n/forced.md\n");
+    fs\writeFile(repo + "/rendered.md", "[x](gone.md)\n");
+    fs\writeFile(repo + "/forced.md", "x\n");
+    fs\writeFile(repo + "/tracked.md", "x\n");
+    vcs\cmd(["add", "-f", "--", "forced.md", "tracked.md"], {"dir": repo, "quiet": true});
+    final kept = dropIgnored(repo, ["forced.md", "rendered.md", "tracked.md"]);
+    fs\removeAll(repo);
+    assert\equal(kept.join(","), "forced.md,tracked.md", "only the ignored untracked page is dropped");
+}
+
+// conventionPages lists the pages the conventions lint judges under base: every .md the
+// walk finds, less what git ignores.
+fun conventionPages(base: str) > [str] !> any {
+    final found: mut [str] = mut [<str>];
+    collectMarkdown(base, "", found);
+    return dropIgnored(base, found);
+}
+
+test "conventionPages lists a tracked page and not a stale ignored render" {
+    final repo = fs\tempDir("magus-conventions-");
+    vcs\cmd(["init", "-q"], {"dir": repo, "quiet": true});
+    fs\writeFile(repo + "/.gitignore", "/docs/changelog.md\n");
+    fs\mkdirAll(repo + "/docs/guides");
+    fs\writeFile(repo + "/docs/changelog.md", "See [gone](migrating/gone.md).\n");
+    fs\writeFile(repo + "/docs/guides/tracked.md", "See [gone](migrating/gone.md).\n");
+    final pages = conventionPages(repo + "/docs");
+    fs\removeAll(repo);
+    assert\equal(pages.join(","), "guides/tracked.md", "the ignored render is not judged");
+}
+
 // pathExists is the one filesystem question the conventions lint asks.
 fun pathExists(p: str) > bool !> any {
     return fs\exists(p);
@@ -485,9 +542,7 @@ fun pathExists(p: str) > bool !> any {
 // Every violation is collected before throwing. Failing on the first would turn a
 // three-minute fix into three round trips.
 export fun conventionsCheck(root: str, docs: str) > void !> any {
-    var files: mut [str] = mut [<str>];
-    collectMarkdown(root + "/" + docs, "", files);
-    final sorted = files.sort(fun (a: str, b: str) > bool { return strLess(a, b); });
+    final sorted = conventionPages(root + "/" + docs).cloneMutable().sort(fun (a: str, b: str) > bool { return strLess(a, b); });
 
     final violations: mut [str] = mut [<str>];
     var checked = 0;

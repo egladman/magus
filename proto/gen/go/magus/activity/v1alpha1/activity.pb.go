@@ -79,8 +79,8 @@ const (
 	// the worker being watched, which is the whole reason a person can see what a worker is
 	// doing without asking it. An empty unit means no live job covered the path.
 	Kind_KIND_FILE_CHANGE Kind = 11
-	// A run magus recorded against a job: its check, one of its completion gates, or the
-	// server's own last run of a catalog job. action is the rendered command and preview
+	// A run magus recorded against a job: its check, one of its goals, or the server's own
+	// last run of a catalog job. action is the rendered command and preview
 	// names which of the three it was. OUTCOME_ERROR means the run failed, which is the one
 	// kind here where the outcome is a fact about the work rather than about the recording.
 	Kind_KIND_RUN Kind = 12
