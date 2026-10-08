@@ -296,12 +296,10 @@ linters:
             # since the MCP workers re-exec into internal/interp/mcpclient and
             # internal/interp/transform before the CLI starts, 71 since
             # internal/gcpolicy is a dependency-free leaf imported first so its
-            # init runs early, 72 since main installs the crash hint every goroutine
-            # prints through internal/crash, another dependency-free leaf. Raising it
-            # is a sentence in the commit message.
+            # init runs early. Raising it is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 72
+              max: 71
 
       stutter:
         type: module
