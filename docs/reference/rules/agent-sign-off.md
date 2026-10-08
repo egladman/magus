@@ -1,12 +1,12 @@
 ---
 title: "agent-sign-off: an agent stamping a read receipt or closing an attention request, which only a person may do"
-description: "A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead."
+description: "A deny rule by default: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead."
 tags: [guard, rules, agent-sign-off, deny]
 ---
 
 # agent-sign-off
 
-A deny rule: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead.
+A deny rule by default: it refuses an agent stamping a read receipt or closing an attention request, which only a person may do, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ An agent stamping a read receipt or closing an attention request, which only a p
 ## Why
 
 This is not a permission an agent is missing: there is no spelling of either an agent may use, because an agent stamping the changeset or closing its own block would make the measure mean nothing for everybody, including the human relying on it. Report what is unread instead: `magus diff --impact` names every changed file carrying no receipt, and `magus diff -o json` puts read_state on each file for a caller to branch on. Waiting on a request instead: say you are waiting on its id and hand it back; `magus session dispose <id>` is a person's to run.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"agent-sign-off": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [agent-sign-off]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

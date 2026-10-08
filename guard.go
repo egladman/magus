@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -662,6 +664,55 @@ func LoadApprovedWriteRule(ctx context.Context, root string) (workspace.WriteRul
 	return reg.WriteRule(), nil
 }
 
+// LoadApprovedBuiltins is LoadApprovedSpawnRule for the magus\guard.builtins settings: the
+// approved sources' declaration, resolved over the compiled defaults. With no approval
+// authority it is the defaults, since the working tree that would otherwise decide is the
+// one that did not load.
+func LoadApprovedBuiltins(ctx context.Context, root string) (map[string]builtin.Setting, error) {
+	reg, err := loadApprovedRegistry(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	var declared map[string]builtin.Setting
+	if reg != nil {
+		declared = reg.Builtins()
+	}
+	return builtin.Resolve(declared)
+}
+
+// GuardBuiltins is the compiled rules' effective settings for a hook, nil for the
+// defaults. rules is the working tree's load, nil when it did not load, in which case
+// root's approved sources decide alone, as they do for the function rules.
+//
+// A side that does not resolve leaves the defaults in its place rather than failing: a
+// broken commit must not take down every hook any more than a broken working tree does.
+func GuardBuiltins(ctx context.Context, rules *GuardRules, root string) map[string]builtin.Setting {
+	if rules != nil {
+		effective, _ := rules.EffectiveBuiltins(ctx)
+		return effective
+	}
+	approved, err := LoadApprovedBuiltins(ctx, root)
+	if err != nil {
+		return nil
+	}
+	return approved
+}
+
+// DeclaredBuiltinSettings is each rule the root magusfile sets through
+// magus\guard.builtins, rendered as `magus describe rules` shows it: the decision, then
+// the line limit when one is set.
+func (g *GuardRules) DeclaredBuiltinSettings() map[string]string {
+	declared := g.Builtins()
+	out := make(map[string]string, len(declared))
+	for name, s := range declared {
+		out[name] = string(s.Decision)
+		if s.Lines != 0 {
+			out[name] = fmt.Sprintf("%s, lines %d", s.Decision, s.Lines)
+		}
+	}
+	return out
+}
+
 func loadApprovedRegistry(ctx context.Context, root string) (*workspace.WorkspaceRegistry, error) {
 	approved, err := approvalAuthority(ctx, root, types.VCSOptions{})
 	if err != nil || approved == nil {
@@ -809,6 +860,8 @@ type GuardPolicy struct {
 	SpawnRule   bool
 	CommandRule bool
 	WriteRule   bool
+	// Builtins counts the compiled rules magus\guard.builtins set.
+	Builtins int
 }
 
 // GuardPolicy describes the workspace guard rules this load registered.
@@ -822,20 +875,27 @@ func (m *Magus) GuardPolicy() GuardPolicy {
 		sources = m.policyLog.Files()
 	}
 	var write bool
+	var builtins map[string]builtin.Setting
 	if m.wsReg != nil {
 		write = m.wsReg.WriteRule() != nil
+		builtins = m.wsReg.Builtins()
 	}
-	return buildGuardPolicy(m.ShellRules(), m.SpawnRule() != nil, m.CommandRule() != nil, write, sources)
+	return buildGuardPolicy(m.ShellRules(), m.SpawnRule() != nil, m.CommandRule() != nil, write, builtins, sources)
 }
 
-func buildGuardPolicy(rules []workspace.ShellRule, spawn, command, write bool, sources []interp.SourceFile) GuardPolicy {
-	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write}
-	if len(rules) == 0 && !spawn && !command && !write {
+func buildGuardPolicy(rules []workspace.ShellRule, spawn, command, write bool, builtins map[string]builtin.Setting, sources []interp.SourceFile) GuardPolicy {
+	policy := GuardPolicy{Sources: sources, ShellRules: len(rules), SpawnRule: spawn, CommandRule: command, WriteRule: write, Builtins: len(builtins)}
+	if len(rules) == 0 && !spawn && !command && !write && len(builtins) == 0 {
 		return policy
 	}
 	h := sha256.New()
 	for _, r := range rules {
 		fmt.Fprintf(h, "shell %q %q %q %q %q %q\n", r.Name, r.Decision, r.Program, r.Args, r.Reason, r.Dialect)
+	}
+	// Settings are data, like shell rules, so they count only for themselves.
+	for _, name := range slices.Sorted(maps.Keys(builtins)) {
+		s := builtins[name]
+		fmt.Fprintf(h, "builtin %q %q %d\n", name, s.Decision, s.Lines)
 	}
 	// Registering another rule over the same files is still a new digest. The spawn rule's
 	// lines keep their spelling so its digests stay what they were.
@@ -947,9 +1007,64 @@ func (g *GuardRules) CommandRule() workspace.CommandRule { return g.registry.Com
 // WriteRule returns the magus\guard.write rule, or nil.
 func (g *GuardRules) WriteRule() workspace.WriteRule { return g.registry.WriteRule() }
 
+// Builtins returns the compiled rules magus\guard.builtins set, only those it named, or nil.
+func (g *GuardRules) Builtins() map[string]builtin.Setting { return g.registry.Builtins() }
+
 // Policy describes the rules for the trail's lineage, as Magus.GuardPolicy does.
 func (g *GuardRules) Policy() GuardPolicy {
-	return buildGuardPolicy(g.ShellRules(), g.SpawnRule() != nil, g.CommandRule() != nil, g.WriteRule() != nil, g.sources)
+	return buildGuardPolicy(g.ShellRules(), g.SpawnRule() != nil, g.CommandRule() != nil, g.WriteRule() != nil, g.Builtins(), g.sources)
+}
+
+// ApprovedBuiltins returns the magus\guard.builtins settings as the approved sources
+// declare them, nil when they declare none. When nothing the root load read is pending, or
+// the workspace has no approval authority, that is the working tree's declaration. An
+// error means the approved declaration could not be resolved, which is not the fact that
+// there is none.
+func (g *GuardRules) ApprovedBuiltins(ctx context.Context) (map[string]builtin.Setting, error) {
+	reg, err := approvedRegistryIfChanged(ctx, g.root, ".", g.opts, secret.New(), g.sources, true)
+	if err != nil {
+		return nil, err
+	}
+	if reg == nil {
+		return g.Builtins(), nil
+	}
+	return reg.Builtins(), nil
+}
+
+// EffectiveBuiltins returns every compiled rule's setting as the guard applies it: per
+// rule, the stricter of the approved and the working-tree declaration, each resolved over
+// the compiled defaults, so a loosening waits for approval and a tightening applies at
+// once. Nil when neither side declares anything, which the guard reads as the defaults.
+//
+// When the approved declaration cannot be resolved the defaults stand in for it, beside
+// the error: a working tree can still tighten, and cannot loosen past what magus ships.
+func (g *GuardRules) EffectiveBuiltins(ctx context.Context) (map[string]builtin.Setting, error) {
+	approved, approvedErr := g.ApprovedBuiltins(ctx)
+	working := g.Builtins()
+	if len(approved) == 0 && len(working) == 0 {
+		return nil, approvedErr
+	}
+	effective, err := stricterBuiltins(approved, working)
+	if err != nil {
+		return nil, err
+	}
+	return effective, approvedErr
+}
+
+// stricterBuiltins resolves both declarations and keeps the stricter setting of each rule.
+func stricterBuiltins(approved, working map[string]builtin.Setting) (map[string]builtin.Setting, error) {
+	out, err := builtin.Resolve(approved)
+	if err != nil {
+		return nil, fmt.Errorf("approved magus\\guard.builtins: %w", err)
+	}
+	w, err := builtin.Resolve(working)
+	if err != nil {
+		return nil, err
+	}
+	for name, s := range w {
+		out[name] = builtin.Stricter(out[name], s)
+	}
+	return out, nil
 }
 
 // ApprovedSpawnRule is Magus.ApprovedSpawnRule for these rules. It costs one VCS status

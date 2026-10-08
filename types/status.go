@@ -71,7 +71,7 @@ type StatusSnapshot struct {
 	//
 	// It is here because the failure it makes visible is otherwise invisible. A lock is
 	// held for as long as its process lives, so a process nobody remembers starting
-	// holds one indefinitely, and every other run simply waits. Surfacing who holds
+	// holds one indefinitely, and every other run waits. Surfacing who holds
 	// what turns that from a hang into a fact.
 	Locks []StatusLock `json:"locks,omitempty" yaml:"locks,omitempty"`
 	// BrokerPolicy is the broker setting this report was made under. It is reported even

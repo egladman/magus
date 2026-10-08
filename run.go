@@ -1468,13 +1468,15 @@ func targetDrivenBins(p *types.Project, target string) map[string]bool {
 
 // targetDrivenEnvKeys is the deduped union of EnvKeys over every op target reaches,
 // the same TargetSpellOps walk targetDrivenBins uses for a magusfile body that
-// composes the op under some other target name (lint calling go["go-vet"]). It also
-// matches target directly against every resolved spell's own op names, because a bare
-// op runs with no magusfile body at all to extract from: `magus run go-vet` and the
-// `go::go-vet` spell filter both dispatch straight to the op, magusfile export or not
-// (an export shadows the RUN, per magusfileOverride, but the filter bypasses that
-// shadow, so the direct match is kept unconditional rather than trying to mirror the
-// shadow rule here too: the cost of matching it is at most one unneeded env line).
+// composes the op under some other target name (lint calling go["go-vet"]).
+//
+// It also matches target directly against every resolved spell's own op names, because a
+// bare op runs with no magusfile body at all to extract from. `magus run go-vet` and the
+// `go::go-vet` spell filter both dispatch straight to the op, magusfile export or not.
+// An export shadows the RUN, per magusfileOverride, but the filter bypasses that shadow.
+// The direct match is therefore kept unconditional rather than mirroring the shadow rule
+// here too: the cost of matching it is at most one unneeded env line.
+//
 // Same under-reporting caveat as observationsForTarget: an op reached only through a
 // helper the walk cannot follow is invisible, leaving the target keyed as it was
 // before.
@@ -2384,7 +2386,7 @@ func checkMissingDependencies(ctx context.Context, allProjects []*types.Project,
 // output glob (MGS4002). Runs at graph construction time.
 //
 // Each cache.Step already carries its own Target, so the overlap is reported against
-// the two steps' real targets rather than the whole invocation's scope label: a
+// the two steps' real targets rather than the whole invocation's scope label. A
 // single executeStages call can cover several target stages at once (runResolved
 // groups multi-target requests into one call), so a blanket label would misattribute
 // the overlap to a target that may not even be one of the two involved.
@@ -2880,7 +2882,7 @@ func declaresOutput(p *types.Project, target string) bool {
 // A magusfile target is also bounded one layer down, where a ctx.needs-composed body
 // can carry its own ceiling (internal/interp.declaredTimeout). This site is what
 // covers a SPELL-backed target, which never reaches that closure; both are the same
-// context deadline, so a target covered twice is simply bounded twice.
+// context deadline, so a target covered twice is bounded twice.
 func (m *Magus) withTargetDeadline(ctx context.Context, pol types.Target) (context.Context, context.CancelFunc) {
 	d := m.cfg.TargetTimeout
 	if own := pol.TimeoutDuration(); own > 0 && (d <= 0 || own < d) {

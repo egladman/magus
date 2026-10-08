@@ -110,12 +110,6 @@ var spellMeta = map[string]spellInfo{
 		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts. Signing and attestation pass `--yes` for non-interactive (CI) use.",
 		tags:        []string{"cosign", "sigstore", "signing", "supply-chain"},
 	},
-	"vale": {
-		dir: "vale", language: "",
-		description: "Vale spell: judge prose that a target extracts against a .vale.ini's styles.",
-		intro:       "The `vale` spell forks the Vale prose linter and returns its JSON report, so a target maps each alert back to the text it extracted: comment blocks, commit messages, pull request text. It claims no source globs, and its probed version keys the cache, so upgrading Vale reruns only the targets that call it.",
-		tags:        []string{"vale", "prose", "lint"},
-	},
 	"bash": {
 		dir: "bash", language: "Shell",
 		description: "Bash spell: shellcheck linting for shell scripts.",

@@ -15,7 +15,7 @@ type dependencyWaitKey struct{}
 // One type for both halves, because they are one event. They start together (a body
 // reaches ctx.needs), end together, and scope together (per body). Held apart, the time
 // had to be recorded by hand at each site that ran a dependency, and a site that forgot
-// simply stopped reporting, silently. Do is the only way to run the work, and Do is
+// stopped reporting, silently. Do is the only way to run the work, and Do is
 // what measures it.
 //
 // Safe for concurrent use: the elapsed total is atomic, and the pending request is

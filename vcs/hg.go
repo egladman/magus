@@ -676,7 +676,7 @@ func hgDeletedPaths(ctx context.Context, root string, paths []string) map[string
 }
 
 // Conflicts implements types.ConflictResolver. No merge in progress is not an error:
-// `resolve --list` simply prints nothing, which parses to no conflicts.
+// `resolve --list` prints nothing, which parses to no conflicts.
 func (v hgVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
 	out, err := vcsOutputRaw(ctx, root, "hg", "resolve", "--list")
 	if err != nil {

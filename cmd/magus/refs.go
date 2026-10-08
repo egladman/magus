@@ -255,9 +255,9 @@ func reportRefsMiss(stderr io.Writer, opts OutputOptions, m refsMiss) error {
 }
 
 // refsSymbol picks the symbol `refs` answers for. A name several workspace definitions carry
-// is refused, listing each candidate's id, rather than answered: answering for whichever
+// is refused, listing each candidate's id, rather than answered. Answering for whichever
 // ranked first shows one symbol's references as though they were the name's, which is a
-// narrower answer than the text search refs stands in for, and answering for all of them
+// narrower answer than the text search refs stands in for. Answering for all of them
 // would merge different symbols' sites under one count, which a rename or an edit cannot
 // tell apart. The refusal costs one more call, with an exact id that also routes to that
 // symbol's shards alone. A name one definition carries picks it; a name none carries, or an
@@ -614,7 +614,7 @@ func symbolIndexTimes(ctx context.Context, root string) indexedAtFunc {
 // checkDefinitions sets each site's Status against the file on disk under root, and
 // fills Source when withSource is set. The graph is re-assembled from the working tree on
 // every query while the index keeps the positions of the tree it was built over, so a
-// digest of today's lines proves nothing; what does is the symbol's name still sitting on
+// digest of today's lines proves nothing. What does is the symbol's name still sitting on
 // its start line (else changed) and the file predating its index (else unverified, since
 // an edit inside the body moves the end). A site with no end line is checked and printed
 // over its declaration line alone.

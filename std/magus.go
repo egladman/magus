@@ -232,6 +232,14 @@ var Magus = Module{
 			Impl:    MagusPrecedents,
 		},
 		{
+			Name:    "symbols",
+			Doc:     "Every non-test, non-generated symbol's declaration and doc comment in the workspace's merged symbol indexes, whatever language indexed them, as data: {symbols, indexes}, keyed as JSON is, with no Buzz object mirroring it. Each symbol is {node, source, language, name, kind, owner, doc}: source is the declaration's path and line, since an index records no position inside a doc; kind is function, method, type, interface, struct or value, or empty when the naming index read no shape; owner is the enclosing type of a member; doc is the whole comment with its lines kept. Nothing here judges the text: a magusfile rule reads it and decides. indexes is each declared symbol index as `magus status` judges it, judged just before the graph is read, as magus\\precedents reports it: an index not `up-to-date` gave the symbols nothing or something old, so a gate on them checks indexes first. Test files and declared outputs are never listed. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Args:    nil,
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusSymbols,
+		},
+		{
 			Name: "dir",
 			Doc:  "One workspace directory as the knowledge graph holds it: {path, id, layer, language, imports, importedBy, importsIndexed, calls, calledBy, children, files}. Annotate the result `> Dir`. path is workspace-relative (internal/httpx). imports and importedBy are the package directories it imports and that import it; importsIndexed false means no symbol index read this directory, so empty lists there say nothing. calls and calledBy are DirCall records, one per `magus:calls` marker, with the transport it declares. layer is what magus\\project's \"layers\" declares for it. Raises MGS7005 when the graph holds no dir node for path, naming the nearest one when a typo is likely, so a figure never draws a box for a directory that is not there. Read in-process from the workspace on the context; raises MGS1022 outside one.",
 			Args: []Arg{
@@ -499,8 +507,20 @@ var Magus = Module{
 		},
 		{
 			Name: "guard",
-			Doc:  "Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.",
+			Doc:  "Agent-guard rules for this workspace: additive shell, spawn, command and write rules, and the decision each compiled built-in takes.",
 			Methods: []Method{
+				{
+					Name: "builtins",
+					Doc: "Set compiled guard rules by name: each value is \"off\", \"advise\" or \"deny\", or " +
+						"{\"decision\": ..., \"lines\": int} where the rule takes lines (read-navigation alone). " +
+						"A rule left out keeps the decision `magus describe rules` lists. Declared at the top " +
+						"level of the root magusfile, once. When the magusfile is tracked, each rule takes the " +
+						"stricter of the committed and the working-tree setting, so a loosening applies only " +
+						"once committed. An unknown rule name, an unknown decision, lines on a rule that takes " +
+						"none, declaring twice or from another project is MGS1045.",
+					Args:   []Arg{{Name: "rules", Type: TypeAnyMap}},
+					Extern: true,
+				},
 				{
 					Name:   "shell",
 					Doc:    "Declare one additive shell rule matched on a resolved program name and optional arg subset. Declared at the top level of the root magusfile. decision is deny or advise; optional dialect selects the parser (posix, bash, mksh, zsh, bats).",

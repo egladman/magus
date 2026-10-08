@@ -1277,15 +1277,14 @@ func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 }
 
 // TestHookCmdNeverPreauthorizesAWorkspaceWideDeny is the carve-out. These refuse work that
-// cannot be undone or that silently discards an exit status, and they protect everyone, so
-// a journal entry naming one buys nothing.
+// cannot be undone, and they protect everyone, so a journal entry naming one buys nothing.
 func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t)
 	gate := hint.NewGate(cacheDir, "session-carveout")
 
-	for _, command := range []string{"git stash", "magus affected ci | tail -5", "go test ./..."} {
+	for _, command := range []string{"git stash", "git reset --hard", "git clean -fdx"} {
 		serveNext(t, gate, "fabricated", strings.Fields(command)...)
 		var out bytes.Buffer
 		err := shellStdin(ctx, strings.NewReader(command), &out,
@@ -1482,12 +1481,13 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 	require.Equal(t, "pass\n", out.String(), "a skill load carries nothing to judge")
 }
 
-// TestHookCmd_DeniesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: the first
-// spawn of a session is denied until the multi-agent skill loads, and passes after.
+// TestHookCmd_AdvisesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: with no
+// workspace setting, the first spawn of a session is advised until the multi-agent skill
+// loads, and passes after.
 //
 // The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
 // so nothing about the handed context should change the verdict either way.
-func TestHookCmd_DeniesSpawnBeforeTheBrief(t *testing.T) {
+func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
@@ -1504,11 +1504,10 @@ func TestHookCmd_DeniesSpawnBeforeTheBrief(t *testing.T) {
 	assert.Equal(t, "pass\n", unobserved.String(),
 		"a wiring that cannot report a skill load must not be held to having reported one")
 
-	var denied bytes.Buffer
-	err := shellStdin(ctx, strings.NewReader(envelope), &denied,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"})
-	require.Error(t, err, "a deny is a non-zero exit")
-	assert.Equal(t, "deny\n", denied.String())
+	var advised bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &advised,
+		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+	assert.Equal(t, "advise\n", advised.String())
 
 	loadSkillForTest(t, ctx, dir, "briefless")
 
@@ -1816,7 +1815,8 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	resetWorkspaceMemo(t)
 	primary := initGitRepo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(primary, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), []byte(""), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"),
+		[]byte("import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n"), 0o644))
 	runGit(t, primary, "add", "-A")
 	runGit(t, primary, "commit", "-q", "-m", "init")
 	worktree := filepath.Join(t.TempDir(), "worker")

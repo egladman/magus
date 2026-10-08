@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
@@ -669,7 +670,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 			name: "a denied command",
 			setup: func(t *testing.T) (context.Context, Dependencies, Request) {
 				testkit.Isolate(t)
-				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), Dependencies{}, Request{Input: "magus run ci | tail", Session: "s1"}
+				return WithLocation(t.Context(), t.TempDir(), "/ws", "/ws"), strict(Dependencies{}), Request{Input: "magus run ci | tail", Session: "s1"}
 			},
 			want: Verdict{Decision: "deny"},
 		},
@@ -737,7 +738,7 @@ func TestDryRunRefusesASpawn(t *testing.T) {
 func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	ctx, _ := fleetFixture(t)
 	cacheDir := ctx.Value(locationKey{}).(location).cacheDir
-	deps := testDependencies()
+	deps := strict(testDependencies())
 
 	v := Judge(ctx, deps, Request{Input: "./magus ls jobs -o json > f"})
 	want := hint.Next{
@@ -769,7 +770,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 func TestJudgeDropsARemedyTheRoleMayNotRun(t *testing.T) {
 	worker := narrowLease()
 	ctx, _ := fleetFixture(t, worker)
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	const piped = "magus affected ci | tail -5"
 
 	// The worker first: its firing is the one worded in full.
@@ -866,7 +867,7 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 	dir := t.TempDir()
 	ctx := WithLocation(t.Context(), dir, "/repo", "")
 	judge := func(input string, rewrites bool) Verdict {
-		return Judge(ctx, Dependencies{}, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
+		return Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: rewrites})
 	}
 
 	first := judge("ls -la", true)
@@ -902,6 +903,79 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 		closed = append(closed, resp.StdinClosed)
 	}
 	assert.Equal(t, []bool{true, true, false, false, false}, closed, "the trail records each rewrite and nothing else")
+}
+
+// stdin-closed honors every decision a workspace may set: advise says so once a session,
+// off keeps the rewrite and drops the notice, and deny refuses every line that leaves
+// stdin open, without rewriting it.
+func TestJudgeStdinClosedHonorsEveryDecision(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	refused := Verdict{Decision: "deny", Rule: string(advisoryStdinClosed)}
+	for _, tt := range []struct {
+		decision     builtin.Decision
+		first, again Verdict
+	}{
+		{builtin.Advise,
+			Verdict{Decision: "advise", Context: stdinClosedNotice, Rule: string(advisoryStdinClosed), UpdatedCommand: "exec </dev/null; ls -la"},
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
+		{builtin.Off,
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls -la"},
+			Verdict{Decision: "pass", UpdatedCommand: "exec </dev/null; ls"}},
+		{builtin.Deny, refused, refused},
+	} {
+		t.Run(string(tt.decision), func(t *testing.T) {
+			ctx := WithLocation(t.Context(), t.TempDir(), "/repo", "")
+			deps := withSetting(string(advisoryStdinClosed), tt.decision)
+			judge := func(input string) Verdict {
+				v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1", RewritesInput: true})
+				return Verdict{Decision: v.Decision, Context: v.Context, Rule: v.Rule, UpdatedCommand: v.UpdatedCommand}
+			}
+
+			assert.Equal(t, tt.first, judge("ls -la"))
+			assert.Equal(t, tt.again, judge("ls"))
+		})
+	}
+}
+
+// The notices about the acting lease itself honor every decision a workspace may set:
+// advise says so once a session, off says nothing, and deny refuses every call rather
+// than only the first.
+func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
+	for _, notice := range []struct {
+		rule  hint.MarkerKind
+		lease string
+	}{
+		{advisoryLeaseTerminal, "finished"},
+		{advisoryLeaseInvalid, "lease b!"},
+	} {
+		for _, tt := range []struct {
+			decision     builtin.Decision
+			first, again string
+		}{
+			{builtin.Advise, "advise", "pass"},
+			{builtin.Off, "pass", "pass"},
+			{builtin.Deny, "deny", "deny"},
+		} {
+			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
+				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
+				t.Setenv(trail.EnvBaggage, "")
+				deps := withSetting(string(notice.rule), tt.decision)
+				judge := func() Verdict {
+					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})
+					return Verdict{Decision: v.Decision, Rule: v.Rule}
+				}
+				want := func(decision string) Verdict {
+					if decision == "pass" {
+						return Verdict{Decision: "pass"}
+					}
+					return Verdict{Decision: decision, Rule: string(notice.rule)}
+				}
+
+				assert.Equal(t, want(tt.first), judge())
+				assert.Equal(t, want(tt.again), judge())
+			})
+		}
+	}
 }
 
 // TestClosedStdinLineRunsAsWritten runs each rewritten line in bash with a stdin that has
@@ -1072,4 +1146,176 @@ func TestJobStoreRowsMemo(t *testing.T) {
 	rowsOf()
 	plant(time.Now().Add(-time.Minute), types.Job{ID: "memo-only"})
 	assert.Equal(t, []string{"a", "b"}, ids(rowsOf()), "a memo past its TTL is not trusted")
+}
+
+// recoverableRules are the compiled rules that refused before they advised by default.
+var recoverableRules = []string{
+	"brief-command", "busy-wait", "buzz-unbriefed", "chained-run", "exit-status-echo",
+	"filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
+	"output-pipe", "output-redirect", "process-poll", "raw-tool", "read-navigation",
+	"scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",
+	"spawn-unbriefed", "stage-all", "symbol-search", "throwaway-copy", "unknown-env",
+}
+
+// strict returns deps with every refusing rule set to deny, so a test pins a denial a
+// workspace has to ask for. Advisories keep their defaults: raising them would turn the
+// advisory rows of the same tables into denies.
+func strict(deps Dependencies) Dependencies {
+	deps.Builtins = make(map[string]builtin.Setting)
+	for name, d := range builtin.Defaults() {
+		deps.Builtins[name] = builtin.Setting{Decision: d}
+	}
+	for _, name := range recoverableRules {
+		deps.Builtins[name] = builtin.Setting{Decision: builtin.Deny}
+	}
+	return deps
+}
+
+func TestStrictDeniesEveryRecoverableRule(t *testing.T) {
+	t.Parallel()
+	defaults := builtin.Defaults()
+	deps := strict(Dependencies{})
+
+	for _, name := range recoverableRules {
+		require.Contains(t, defaults, name, "a recoverable rule the table does not carry")
+		assert.Equal(t, builtin.Advise, defaults[name], name)
+		assert.Equal(t, builtin.Deny, deps.Builtins[name].Decision, name)
+	}
+	assert.Len(t, deps.Builtins, len(defaults))
+
+	assert.Empty(t, Evaluate(Dependencies{}, sedInPlace).Deny, "the default advises")
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(deps, sedInPlace).Rule.Name)
+}
+
+// sedInPlace is a recoverable deny on its own line, and nothing else.
+const sedInPlace = `sed -i 's/a/b/' f.go`
+
+func withSetting(rule string, d builtin.Decision) Dependencies {
+	return Dependencies{Builtins: map[string]builtin.Setting{rule: {Decision: d}}}
+}
+
+func TestGradeDeny(t *testing.T) {
+	t.Parallel()
+	deny := ShellVerdict{Deny: "use the editor", Rule: denyRule{Name: denyRuleSedInPlace}}
+
+	for _, tt := range []struct {
+		decision builtin.Decision
+		want     ShellVerdict
+	}{
+		{builtin.Deny, deny},
+		{builtin.Advise, ShellVerdict{Context: "use the editor", Kind: hint.MarkerKind(denyRuleSedInPlace), demoted: true}},
+		{builtin.Off, ShellVerdict{}},
+	} {
+		got := withSetting(string(denyRuleSedInPlace), tt.decision).grade(deny)
+		assert.Equal(t, tt.want, got, tt.decision)
+		assert.Equal(t, got, withSetting(string(denyRuleSedInPlace), tt.decision).grade(got), "grading is idempotent: %s", tt.decision)
+	}
+}
+
+func TestGradeAdvisory(t *testing.T) {
+	t.Parallel()
+	advice := ShellVerdict{Context: "read the map", Kind: advisorySourceRead, Brief: "map"}
+
+	for _, tt := range []struct {
+		decision builtin.Decision
+		want     ShellVerdict
+	}{
+		{builtin.Advise, advice},
+		{builtin.Deny, ShellVerdict{Deny: "read the map", Rule: denyRule{Name: denyRuleName(advisorySourceRead)}}},
+		{builtin.Off, ShellVerdict{}},
+	} {
+		assert.Equal(t, tt.want, withSetting(string(advisorySourceRead), tt.decision).grade(advice), tt.decision)
+	}
+}
+
+func TestGradeDefaultsAndUnknownRules(t *testing.T) {
+	t.Parallel()
+	var deps Dependencies
+
+	assert.True(t, deps.grade(ShellVerdict{Deny: "x", Rule: denyRule{Name: denyRuleSedInPlace}}).demoted, "nil Builtins grades by the defaults")
+	whole := ShellVerdict{Deny: "x", Rule: denyRule{Name: denyRuleWholeTree}}
+	assert.Equal(t, whole, deps.grade(whole))
+	uncatalogued := ShellVerdict{Deny: "x", Rule: denyRule{Name: "not-a-rule"}}
+	assert.Equal(t, uncatalogued, deps.grade(uncatalogued), "a rule the table does not carry keeps its decision")
+}
+
+func TestEvaluateGradesEachSite(t *testing.T) {
+	t.Parallel()
+
+	advised := Evaluate(Dependencies{}, sedInPlace)
+	assert.Empty(t, advised.Deny)
+	assert.True(t, advised.demoted)
+	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), advised.Kind)
+
+	assert.Equal(t, denyRuleSedInPlace, Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Deny), sedInPlace).Rule.Name)
+	assert.Equal(t, ShellVerdict{}, Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace))
+}
+
+func TestDemotedDenyDoesNotHideALaterDeny(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range []string{
+		sedInPlace + " && git reset --hard",
+		"git add -A && git reset --hard",
+		"git add -A && git stash",
+	} {
+		v := Evaluate(Dependencies{}, command)
+		assert.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
+		assert.NotEmpty(t, v.Deny, command)
+	}
+}
+
+func TestDemotedDenyOutranksAdvisories(t *testing.T) {
+	t.Parallel()
+
+	v := Evaluate(Dependencies{}, sedInPlace+" && git commit -m x")
+	assert.True(t, v.demoted, "the held advice outranks the commit advisory")
+	assert.Equal(t, hint.MarkerKind(denyRuleSedInPlace), v.Kind)
+
+	off := Evaluate(withSetting(string(denyRuleSedInPlace), builtin.Off), sedInPlace+" && git commit -m x")
+	assert.Equal(t, advisoryStageClassify, off.Kind, "an off rule leaves the line to the advisory")
+}
+
+func TestDemotedDenyKeepsThePushGate(t *testing.T) {
+	t.Parallel()
+
+	v := Evaluate(Dependencies{}, sedInPlace+" && git push")
+	assert.Equal(t, advisoryPushGate, v.Rule.Name, "Judge upgrades the push gate, so no advice may hide it")
+}
+
+func TestStrongerRanks(t *testing.T) {
+	t.Parallel()
+	deny := ShellVerdict{Deny: "d", Rule: denyRule{Name: denyRuleWholeTree}}
+	demoted := ShellVerdict{Context: "h", Kind: "sed-in-place", demoted: true}
+	push := ShellVerdict{Context: "p", Rule: denyRule{Name: advisoryPushGate}}
+	advisory := ShellVerdict{Context: "a", Kind: advisorySourceRead}
+
+	for _, tt := range []struct {
+		name       string
+		a, b, want ShellVerdict
+	}{
+		{"deny over demoted", demoted, deny, deny},
+		{"deny kept over demoted", deny, demoted, deny},
+		{"demoted over advisory", advisory, demoted, demoted},
+		{"demoted kept over advisory", demoted, advisory, demoted},
+		{"advisory over silence", ShellVerdict{}, advisory, advisory},
+		{"push gate kept over demoted", push, demoted, push},
+		{"first demoted kept", demoted, ShellVerdict{Context: "h2", Kind: "raw-tool", demoted: true}, demoted},
+	} {
+		assert.Equal(t, tt.want, stronger(tt.a, tt.b), tt.name)
+	}
+}
+
+func TestRankGraded(t *testing.T) {
+	t.Parallel()
+	advisory := ShellVerdict{Context: "a", Kind: advisorySourceRead}
+	deny := ShellVerdict{Deny: "d", Rule: denyRule{Name: denyRuleWholeTree}}
+
+	got := Dependencies{}.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout)
+	assert.True(t, got.demoted, "a demoted sibling checkout outranks an advisory")
+	assert.Equal(t, deny, Dependencies{}.rankGraded(deny, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
+
+	strictDeps := withSetting(string(denyRuleSiblingCheckout), builtin.Deny)
+	assert.Equal(t, denyRuleSiblingCheckout, strictDeps.rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout).Rule.Name)
+	assert.Equal(t, advisory, withSetting(string(denyRuleSiblingCheckout), builtin.Off).rankGraded(advisory, denyRuleSiblingCheckout, "relocated", rankSiblingCheckout))
 }

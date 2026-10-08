@@ -10,7 +10,7 @@ import "magus";
 import "./hack/policy/helpers" as helpers;
 import "./hack/magusfile/commits" as conventional;
 
-// One subject cap everywhere: pr-title, the commit-msg hook and Vale read the same one.
+// One subject cap everywhere: pr-title and the commit-msg hook read the same one.
 final maxSubject = conventional\maxLength();
 
 final plainFix = "Write one subject line, lowercase and imperative, in plain ASCII, with clauses joined "
@@ -22,6 +22,9 @@ final nonASCII = $"[^ -~\n\t]";
 // A capital followed by a lowercase letter: `Fix the port` is titlecased, `URL-parse the
 // port` opens with an acronym and passes.
 final titlecased = $"^[^A-Za-z]*[A-Z][a-z]";
+final conventionalPrefix = $"^[a-z]+(\([^)\n]*\))?!?: ";
+final pastOrThirdPerson = $"(?i)^(added|adds|adding|fixed|fixes|fixing|updated|updates|updating|removed|removes|removing|changed|changes|changing|implemented|implements|implementing|refactored|refactors|refactoring|improved|improves|improving|created|creates|creating|introduced|introduces|introducing|renamed|renames|renaming|moved|moves|moving|made|makes|making)\b";
+export final puffery = $"(?i)\b(comprehensive|robust|seamless|seamlessly|powerful|elegant|elegantly|cutting-edge|state-of-the-art|world-class|effortless|effortlessly)\b";
 
 // Syntax is how one tool's commit command spells its options: the long options and the
 // single-letter ones that take a value, attached or as the next word, and whether a second
@@ -151,6 +154,29 @@ export fun messageSlots(p: helpers\Program) > [int] {
     return slots;
 }
 
+// wordingProblems judges the words of one subject: it opens in the imperative and sells
+// nothing. A conventional subject is judged after its `<type>(<scope>)!: ` prefix, which is
+// not part of the description. Pull request titles read the same rule.
+export fun wordingProblems(subject: str, conventional: bool) > [str] {
+    final problems = mut [<str>];
+    var text = subject.trim();
+    if (conventional) {
+        final prefix = conventionalPrefix.match(text);
+        if (prefix != null) {
+            text = text.sub(prefix![0].len());
+        }
+    }
+    final verb = pastOrThirdPerson.match(text);
+    if (verb != null) {
+        problems.append("\"{verb![0]}\": write the subject in the imperative: 'add', not 'added' or 'adds'");
+    }
+    final selling = puffery.match(text);
+    if (selling != null) {
+        problems.append("\"{selling![0]}\": drop it and say what changed");
+    }
+    return problems;
+}
+
 // subjectProblems names what is wrong with one commit's message, read from its arguments
 // after the subcommand. baseBranch is the branch the commit lands on as written, "" when it
 // is made anywhere else. A message that still renders empty is a value only known at run
@@ -192,7 +218,13 @@ fun subjectProblems(call: helpers\VcsCall, syntax: Syntax, baseBranch: str) > [s
         if (problem != "") {
             problems.append("\"{subject}\": {problem}");
         }
+        foreach (problem in wordingProblems(subject, conventional: true)) {
+            problems.append(problem);
+        }
         return problems;
+    }
+    foreach (problem in wordingProblems(subject, conventional: false)) {
+        problems.append(problem);
     }
     if (titlecased.match(subject) != null) {
         problems.append("a capitalized first word: write it lowercase; an acronym may lead");
@@ -324,6 +356,47 @@ test "each subject rule is named when broken" {
     }
     std\assert(askReason(["git", "commit", "-m", "x".repeat(101)]).indexOf("101 characters, past 100") != null, message: "too long");
     std\assert(ask(["git", "commit", "-m", "x".repeat(100)]).decision == "allow", message: "100 is the cap");
+}
+
+test "a subject opens in the imperative" {
+    foreach (subject in ["added a vale spell", "adds a vale spell", "fixing the key", "Made the key stable", "renames the flag", "introduced a cache"]) {
+        final v = ask(["git", "commit", "-m", subject]);
+        std\assert(v.decision == "deny", message: subject);
+        std\assert(v.reason.indexOf("not 'added' or 'adds'") != null, message: "{subject}: {v.reason}");
+    }
+    foreach (subject in ["add a vale spell", "keep the key stable", "fix the port", "move the rule", "address the review", "fixture the key"]) {
+        std\assert(ask(["git", "commit", "-m", subject]).decision == "allow", message: subject);
+    }
+    std\assert(wordingProblems("added a vale spell", conventional: false).len() == 1, message: "past tense");
+    std\assert(wordingProblems("feat(prose): adds a vale spell", conventional: true).len() == 1, message: "third person after a prefix");
+    std\assert(wordingProblems("feat(prose)!: adds a vale spell", conventional: true).len() == 1, message: "a breaking prefix");
+    std\assert(wordingProblems("fix: updated the key", conventional: true).len() == 1, message: "a prefix without a scope");
+    std\assert(wordingProblems("fix(cache): keep the key stable", conventional: true).len() == 0, message: "imperative");
+    std\assert(wordingProblems("added a vale spell", conventional: true).len() == 1, message: "no prefix to strip");
+    std\assert(wordingProblems("keep the key; moved the rule", conventional: false).len() == 0, message: "only the first word counts");
+}
+
+test "a subject sells nothing" {
+    foreach (subject in ["add a robust vale spell", "Add a ROBUST vale spell", "add seamless retries", "add a cutting-edge cache", "add state-of-the-art hashing", "add a powerful flag", "elegantly keep the key", "add comprehensive tests"]) {
+        final v = ask(["git", "commit", "-m", subject]);
+        std\assert(v.decision == "deny", message: subject);
+        std\assert(v.reason.indexOf("drop it and say what changed") != null, message: "{subject}: {v.reason}");
+    }
+    foreach (subject in ["add a vale spell", "add robustness checks", "add a seamlessness test"]) {
+        std\assert(ask(["git", "commit", "-m", subject]).decision == "allow", message: "a whole word only: {subject}");
+    }
+    final problems = wordingProblems("feat(cache): add a robust key", conventional: true);
+    std\assert(problems.len() == 1 and problems[0].indexOf("\"robust\"") != null, message: "names the word");
+    std\assert(wordingProblems("feat(cache)!: added a robust key", conventional: true).len() == 2, message: "both rules");
+}
+
+test "a commit on the base branch has its wording judged after the prefix" {
+    final onBase = fun (subject: str) > GuardVerdict {
+        return decideCommit(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
+    };
+    std\assert(onBase("feat(prose): adds a vale spell").reason.indexOf("not 'added' or 'adds'") != null, message: "third person");
+    std\assert(onBase("fix(cache): add a robust key").reason.indexOf("drop it and say what changed") != null, message: "puffery");
+    std\assert(onBase("fix(cache): keep the key stable").decision == "allow", message: "imperative");
 }
 
 test "a body, a second -m and an attribution are denied" {

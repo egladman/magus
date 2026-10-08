@@ -560,7 +560,7 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 
 // checkEnvVars fails on a MAGUS_* variable that is provably wrong (config.EnvVarProblem:
 // retired, or a near miss), the same set every command refuses at startup, and advises on
-// one magus simply does not read. The second kind may belong to a newer magus or to the
+// one magus does not read. The second kind may belong to a newer magus or to the
 // repository's own tooling, which only a person can tell apart, so it is reported and
 // never gates.
 func (*runner) checkEnvVars() types.Check {

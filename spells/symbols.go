@@ -38,11 +38,18 @@ const (
 // A spell whose index rides beside another spell's on one project declares an op of its
 // own, so each index runs, keys and fails apart. Two spells on one project that run
 // under the same op share its one index, and the first one bound names its language.
+//
+// Envs lists environment overlays, one per build configuration the index must cover.
+// An indexer sees only the files its toolchain compiles, so a Go index built on a Mac
+// never holds a *_linux.go file. With Envs set, magus runs Command once per entry, each
+// into a destination of its own, and merges the results into the one index consumers
+// read; empty runs Command once in the host's environment.
 type SymbolIndexer struct {
-	Format  SymbolFormat `json:"format,omitempty"`
-	Op      string       `json:"op,omitempty"`
-	Command Command      `json:"command,omitempty"`
-	Uses    []string     `json:"uses,omitempty"`
+	Format  SymbolFormat        `json:"format,omitempty"`
+	Op      string              `json:"op,omitempty"`
+	Command Command             `json:"command,omitempty"`
+	Uses    []string            `json:"uses,omitempty"`
+	Envs    []map[string]string `json:"envs,omitempty"`
 }
 
 // DefaultSymbolIndexOp is the op a symbol indexer that declares none runs under.

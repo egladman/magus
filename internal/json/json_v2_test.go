@@ -121,6 +121,9 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
 		// with the codec the binary actually ships to prove structured content survives it.
 		"internal/handler/mcp/mcp_test.go": true,
+		// This repository's prose-rule runner lives in its own module, ships in no binary,
+		// and cannot import this one without the magus module depending on repo policy.
+		"libs/conventions/cmd/judge-docs/main.go": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)

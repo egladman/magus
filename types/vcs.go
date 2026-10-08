@@ -751,7 +751,7 @@ type ChurnReporter interface {
 	// (a git approxidate / RFC3339); commits still caps the result.
 	//
 	// A backend that cannot detect renames reports them as a delete and an add,
-	// which costs lineage but stays correct: PrevPath is simply never set, and
+	// which costs lineage but stays correct: PrevPath is never set, and
 	// FileHotspots then ranks the two names separately rather than wrongly.
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }

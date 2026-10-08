@@ -131,7 +131,7 @@ type Note struct {
 	// it that way and both were wrong: the console showed a reader a path they could not
 	// open, and `notes edit` scaffolded a SECOND note beside the one being edited.
 	//
-	// Empty on a Note that was built rather than read (Scaffold, a new note from stdin),
+	// Empty on a Note built rather than read (Scaffold, a new note from stdin),
 	// where there is no file yet to have a path.
 	Path string `json:"-" yaml:"-"`
 }

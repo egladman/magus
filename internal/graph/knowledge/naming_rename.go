@@ -12,11 +12,11 @@ import (
 // the new one: a comment, a string, or an identifier still spelling the old name.
 //
 // This is the RENAMED rule of this repository's TestCommentsNameSymbolsThatExist run forwards,
-// and it keeps that rule's two narrowings, both measured there: the former name must be
-// COMPOSED (two words or more, since one word is a word everybody uses), and UNIQUE (no symbol
-// the index still defines carries its words in any casing, or a surviving mention may mean that
-// one). Replayed over this repository's history, uniqueness by exact spelling reported
-// describeTargets, a live CLI function, as a leftover of DescribeTargets; by words it does not.
+// and it keeps that rule's two narrowings, both measured there. The former name must be
+// COMPOSED (two words or more, since one word is a word everybody uses). It must also be UNIQUE
+// (no symbol the index still defines carries its words in any casing, or a surviving mention may
+// mean that one). Replayed over this repository's history, uniqueness by exact spelling reported
+// describeTargets, a live CLI function, as a leftover of DescribeTargets. By words it does not.
 type renameCheck struct{}
 
 func (renameCheck) name() string { return types.CheckRenameLeftover }

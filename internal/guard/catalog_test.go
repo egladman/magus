@@ -4,10 +4,12 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +37,6 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 		doc, ok := catalogued[name]
 		assert.Truef(t, ok, "deny rule %q has no catalog row: add one to denyRuleDocs", name)
 		if ok {
-			assert.Equal(t, "deny", doc.Decision, "%q is a deny rule", name)
 			assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 		}
 	}
@@ -43,7 +44,6 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 		doc, ok := catalogued[name]
 		assert.Truef(t, ok, "advisory %q has no catalog row: add one to advisoryDocs", name)
 		if ok {
-			assert.Equal(t, "advise", doc.Decision, "%q is an advisory", name)
 			assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 		}
 	}
@@ -59,6 +59,48 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 	}
 	for _, r := range Rules() {
 		assert.Truef(t, known[r.Name], "catalog row %q names no declared rule or advisory", r.Name)
+	}
+}
+
+// TestCatalogMatchesBuiltinDefaults pins the catalog to the table the rules resolve
+// their decision from: a rule listed in one and not the other is documented with the
+// wrong decision, or resolves to none.
+func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
+	t.Parallel()
+
+	defaults := builtin.Defaults()
+	rows := map[string]string{}
+	for _, r := range Rules() {
+		rows[r.Name] = r.Decision
+	}
+	for name, want := range defaults {
+		got, ok := rows[name]
+		if !assert.Truef(t, ok, "builtin.Defaults names %q and the catalog has no row for it", name) {
+			continue
+		}
+		assert.Equalf(t, string(want), got, "%q: the catalog shows a decision other than its default", name)
+	}
+	for name := range rows {
+		_, ok := defaults[name]
+		assert.Truef(t, ok, "catalog row %q is missing from builtin.Defaults", name)
+	}
+}
+
+// measurementFigure matches the shapes a measured statistic takes in prose: a percentage,
+// or a count grouped by thousands.
+var measurementFigure = regexp.MustCompile(`\d+(\.\d+)?%|\b\d{1,3}(,\d{3})+\b`)
+
+// TestCatalogCarriesNoMeasurements keeps numbers magus measured about its own use out of
+// text the binary ships: a figure goes stale the day the rules change, and a reason does
+// not. The measurements live beside the rule they justify, in the policy that sets it.
+func TestCatalogCarriesNoMeasurements(t *testing.T) {
+	t.Parallel()
+	for _, r := range Rules() {
+		for field, text := range map[string]string{"Why": r.Why, "Catches": r.Catches} {
+			assert.NotContainsf(t, strings.ToLower(text), "measured", "%q: %s reports a measurement", r.Name, field)
+			assert.Emptyf(t, measurementFigure.FindString(text), "%q: %s carries a figure", r.Name, field)
+			assert.Equalf(t, strings.TrimSpace(text), text, "%q: %s ends in whitespace, which the rule page renders", r.Name, field)
+		}
 	}
 }
 
@@ -101,7 +143,7 @@ func TestRuleLookupIsExact(t *testing.T) {
 
 	got, ok := Rule("stage-all")
 	require.True(t, ok)
-	assert.Equal(t, "deny", got.Decision)
+	assert.Equal(t, string(builtin.Defaults()["stage-all"]), got.Decision)
 
 	// Surrounding whitespace is a shell artifact, not a different name.
 	_, ok = Rule("  stage-all\n")

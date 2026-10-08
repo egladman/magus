@@ -275,6 +275,37 @@ func TestDecode_SymbolIndexerDeclaresItsOp(t *testing.T) {
 	require.ErrorContains(t, err, `symbol indexer: op "scip mine"`)
 }
 
+// An indexer's envs decode in order, one overlay per run. An empty overlay or one naming
+// a variable magus sets for the run is refused at load, since either would build an
+// index nobody reads.
+func TestDecode_SymbolIndexerEnvs(t *testing.T) {
+	src := func(envs ...any) mapObj {
+		return mapObj{"name": "myspell", "symbol_indexer": map[string]any{
+			"format":  "scip",
+			"command": map[string]any{"bin": "scip-go"},
+			"envs":    envs,
+		}}
+	}
+	m, err := Decode(src(map[string]any{"GOOS": "linux"}, map[string]any{"GOOS": "windows", "CGO_ENABLED": "0"}))
+	require.NoError(t, err)
+	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows", "CGO_ENABLED": "0"}}, m.SymbolIndexer.Envs)
+
+	_, err = Decode(src(map[string]any{}))
+	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[0] is empty`)
+	_, err = Decode(src(map[string]any{"GOOS": "linux"}, map[string]any{symbols.IndexEnvVar: "/tmp/x"}))
+	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[1] sets MAGUS_SYMBOL_INDEX, which magus sets for each run`)
+	_, err = Decode(src(map[string]any{"GOOS": 1}))
+	require.EqualError(t, err, `spell "myspell": symbol indexer: envs[0].GOOS is not a string`)
+}
+
+// The go spell indexes every GOOS a file suffix can name, so a host indexes the files
+// only another platform compiles.
+func TestBuiltinGoSymbolIndexerCoversEveryOS(t *testing.T) {
+	si := Builtins()["go"].SymbolIndexer
+	require.NotNil(t, si)
+	assert.Equal(t, []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}, si.Envs)
+}
+
 // The shipped indexers that declare no op keep the op and the index file every cached
 // run already recorded, so binding the buzz spell beside them re-keys nothing; buzz
 // declares an op of its own.

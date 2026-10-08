@@ -96,7 +96,7 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 		fmt.Fprintf(&b, "source: %s\n", n.Source)
 	}
 	for _, k := range slices.Sorted(maps.Keys(n.Attrs)) {
-		fmt.Fprintf(&b, "%s: %s\n", k, n.Attrs[k])
+		fmt.Fprintf(&b, "%s: %s\n", k, strings.ReplaceAll(n.Attrs[k], "\n", "\n  "))
 	}
 	for _, u := range packageDocs(out) {
 		fmt.Fprintf(&b, "docs: %s\n", u)

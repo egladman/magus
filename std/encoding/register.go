@@ -44,10 +44,12 @@ import (
 // leafSets lists every std/encoding leaf's contribution, one entry per
 // directory. Adding a tenth leaf package means adding one line here (the
 // SAME kind of single, auditable edit std/module.go's own Register calls are
-// for the 24 modules that self-register), and TestModulesMatchDirectories (in
-// register_test.go) fails if a leaf directory exists here without a matching
-// entry, or an entry here without a matching directory, so the omission
-// cannot pass silently the way it could with a blank-import list.
+// for the 24 modules that self-register).
+//
+// TestModulesMatchDirectories (in register_test.go) fails if a leaf directory
+// exists here without a matching entry, or an entry here without a matching
+// directory, so the omission cannot pass silently the way it could with a
+// blank-import list.
 var leafSets = []func() []std.Module{
 	base64.Modules,
 	csv.Modules,
@@ -63,11 +65,12 @@ var leafSets = []func() []std.Module{
 // Modules returns every module std/encoding contributes to magus's host
 // surface. Each is validated exactly as std.Register validates a module
 // registering the ordinary way (see std.ValidateModule's doc for why this
-// package cannot call Register itself), and a duplicate Name across leaves
-// panics for the same reason std.Register's does: two modules answering to
-// the same bare import name is a program error, not a runtime one, and this
-// runs at package init time, before anything can call it with bad data in
-// hand.
+// package cannot call Register itself).
+//
+// A duplicate Name across leaves panics for the same reason std.Register's
+// does: two modules answering to the same bare import name is a program
+// error, not a runtime one. This runs at package init time, before anything
+// can call it with bad data in hand.
 func Modules() []std.Module {
 	seen := map[string]bool{}
 	var out []std.Module

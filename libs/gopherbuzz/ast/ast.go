@@ -59,7 +59,7 @@ type ReturnStmt struct {
 	Value Node // nil for bare return
 }
 
-// ExprStmt: expr;
+// ExprStmt wraps an expression used as a statement (`expr;`); its value is not bound to a name.
 type ExprStmt struct {
 	Pos
 	Expr Node
@@ -190,9 +190,9 @@ type ObjectDecl struct {
 	// IsProtocol marks a `protocol Name { ... }` declaration. A protocol is exactly
 	// an object with method SIGNATURES and no fields or bodies, so it reuses this
 	// node rather than adding a parallel one: the checker registers it as a named
-	// type the same way, and the compiler skips it because a protocol has no runtime
-	// representation (dispatch on a protocol-typed value is ordinary dynamic
-	// dispatch on whatever object is actually there).
+	// type the same way. The compiler skips it because a protocol has no runtime
+	// representation; dispatch on a protocol-typed value is ordinary dynamic
+	// dispatch on whatever object is actually there.
 	IsProtocol bool
 	// Conforms lists the protocols named in `object<A, B> Name`. Upstream requires
 	// conformance to be DECLARED, not merely structural, so this is what makes an
@@ -485,7 +485,7 @@ type BoolLit struct {
 	Val bool
 }
 
-// NullLit: null
+// NullLit is the `null` literal; the checker types it as Null.
 type NullLit struct{ Pos }
 
 // DoStmt: do { body } until (cond);

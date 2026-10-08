@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +73,7 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 		// Another tree is not this workspace's graph.
 		{`grep -rn 'MGS30[23]' /tmp/other-repo`, denyRule{}},
 	} {
-		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, tt.command)
+		v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), tt.command)
 		if tt.rule == (denyRule{}) {
 			assert.Empty(t, v.Deny, "%q must not deny", tt.command)
 			continue
@@ -81,16 +82,40 @@ func TestSearchTranslationDiagnostics(t *testing.T) {
 	}
 }
 
+// A demoted translation does not end the walk over a line's searches: a later search whose
+// rule still denies wins, and with none the first demoted one answers.
+func TestTranslateWalksPastADemotedTranslation(t *testing.T) {
+	root := repoOperandTree(t)
+	deps := Dependencies{GraphIDs: diagnosticGraph}
+	const listing, literal = `grep -o 'MGS[0-9]' docs/reference/codes/README.md`, `grep -n MGS1046 types/diagnostic.go`
+	line := parseForTest(t, listing+" && "+literal)
+	code, _ := translateSearches(deps, root, parseForTest(t, literal))
+
+	v, ok := translateSearches(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: `query kind=diagnostic 'id=~^diagnostic:MGS[0-9]\d{3}$' -o name`}, v.Rule, "both demoted, the first answers")
+
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleSymbolSearch): {Decision: builtin.Deny}}
+	v, ok = translateSearches(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, code, v)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS1046"}, v.Rule)
+	assert.Equal(t, v, deps.grade(v), "symbol-search still refuses")
+}
+
 // TestSearchTranslationShowsTheQuery pins the owner's command end to end: the deny leads
 // with the runnable query, says why it is the same answer, and carries the answer.
 func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	t.Chdir(repoOperandTree(t))
-	v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
+	v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	assert.Contains(t, v.Deny, `query kind=diagnostic 'id=~^diagnostic:MGS30[23]\d$' -o name`+"` answers this search exactly.")
 	assert.Contains(t, v.Deny, "can match nothing but a diagnostic code")
 	assert.Contains(t, v.Deny, "MGS3022, MGS3023")
 	assert.Contains(t, v.Deny, "Its answer (")
 	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3022\n")
+
+	advised := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
+	requireAdvisedOnce(t, advised, denyRuleSearchTranslation)
 }
 
 // writeTree lays files out under a fresh root and returns it with symlinks resolved.
@@ -132,12 +157,12 @@ func TestSearchTranslationDiagnosticsFollowTheGraph(t *testing.T) {
 	const query = `query kind=diagnostic 'id=~^diagnostic:MGS99[0-9][0-9]$' -o name`
 
 	graph := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901", "diagnostic:MGS9902"}})
-	v := Evaluate(Dependencies{GraphIDs: graph}, command)
+	v := Evaluate(strict(Dependencies{GraphIDs: graph}), command)
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: query}, v.Rule)
 	assert.Contains(t, v.Deny, "\n  diagnostic:MGS9902\n")
 
 	const registered = `grep -rn 'MGS30[23][0-9]' docs/`
-	require.Equal(t, denyRuleSearchTranslation, Evaluate(Dependencies{GraphIDs: diagnosticGraph}, registered).Rule.Name)
+	require.Equal(t, denyRuleSearchTranslation, Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), registered).Rule.Name)
 	unsure := func(ctx context.Context, kind string) ([]string, bool) {
 		ids, _ := diagnosticGraph(ctx, kind)
 		return ids, false
@@ -147,7 +172,7 @@ func TestSearchTranslationDiagnosticsFollowTheGraph(t *testing.T) {
 		"a graph it doubts": {GraphIDs: unsure},
 		"another tree's":    {GraphIDs: graph},
 	} {
-		assert.Empty(t, Evaluate(deps, registered).Deny, name)
+		assert.Empty(t, Evaluate(strict(deps), registered).Deny, name)
 	}
 }
 
@@ -351,12 +376,12 @@ func TestSearchPipelines(t *testing.T) {
 
 	t.Chdir(repoOperandTree(t))
 	for _, command := range []string{`grep -rn 'MGS30[23]' . | head -3`, `grep -rn 'MGS30[23]' . | wc -l`} {
-		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, command)
+		v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), command)
 		assert.Equal(t, denyRuleSearchTranslation, v.Rule.Name, command)
 		assert.Contains(t, v.Deny, "Its answer (", command)
 		assert.Contains(t, v.Deny, "not reproduced", command)
 	}
-	assert.Equal(t, denyRuleSymbolSearch, Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -rn MGS1046 . | wc -l`).Rule.Name)
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), `grep -rn MGS1046 . | wc -l`).Rule.Name)
 }
 
 // TestFindTranslation pins the find arm: a name search whose files are, one for one, the
@@ -463,7 +488,7 @@ func TestSearchTranslationAuditShapes(t *testing.T) {
 		{`grep -rn "\"kind\": \"diagnostic\"" docs/`, false},
 		{`rg -l "MGS30[23]"`, false},
 	} {
-		v := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, tt.command)
+		v := Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), tt.command)
 		isTranslation := v.Rule.Name == denyRuleSearchTranslation
 		assert.Equal(t, tt.deny, isTranslation, tt.command)
 	}

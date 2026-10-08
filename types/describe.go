@@ -410,7 +410,7 @@ func (c Chain) String() string {
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
 // that carries the owning project for both a same-project glob and a cross-project file,
-// maximally explicit: a local input's project is simply itself. Project is the owning
+// maximally explicit: a local input's project is itself. Project is the owning
 // project's path; Glob is the doublestar glob (or exact file) relative to that root. For a
 // same-project input (ctx.readsFiles("glob")) Project is empty at extraction, meaning "this
 // target's own project", and is filled to the project's path when resolved. For a

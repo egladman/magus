@@ -150,9 +150,23 @@ func TestSpawnRuleIsNotAskedAboutACommand(t *testing.T) {
 func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	probe := &spawnRuleProbe{answer: types.GuardVerdict{Decision: types.GuardAllow}}
-	v := Judge(ctx, Dependencies{SpawnRule: probe.rule()}, Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
+	v := Judge(ctx, strict(Dependencies{SpawnRule: probe.rule()}), Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true})
 	assert.Equal(t, verdictWithRule("deny", string(denySpawnUnbriefed)), unworded(v), "the built-in reason stands")
 	assert.Empty(t, probe.asked)
+}
+
+func TestSpawnUnbriefedAdvisesByDefault(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ObservesSkillLoads: true}
+
+	first := Judge(ctx, Dependencies{}, req)
+	// The context is the advice prose; the reason stays empty, which the comparison pins.
+	got := first
+	got.Context, got.Lease, got.LeaseFrom = "", "", ""
+	assert.Equal(t, verdictWithRule("advise", string(denySpawnUnbriefed)), got)
+
+	again := Judge(ctx, Dependencies{}, req)
+	assert.NotEqual(t, string(denySpawnUnbriefed), again.Rule, "once per session")
 }
 
 func TestSpawnRuleDenyAndAdviseReachTheVerdict(t *testing.T) {

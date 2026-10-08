@@ -133,7 +133,7 @@ func (r *runner) checkTerminal() types.Check {
 // drawn wherever the cursor happened to be: a picker, a watch frame. A reserved
 // band can be hit-tested from geometry magus chose; an inline one cannot, so the
 // terminal has to be asked, and a terminal that does not implement the query
-// simply says nothing.
+// says nothing.
 func probeCursorReport() bool {
 	in, err := tty.OpenInput(os.Stdin, os.Stderr, tty.SystemProbe)
 	if err != nil {

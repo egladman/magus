@@ -34,7 +34,7 @@ export function initDiagramZoom(): void {
       '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/>' +
       '</svg><span class="btn-label">Fullscreen</span>';
     button.addEventListener("click", function () {
-      open(svg, titleOf(svg));
+      open(svg, diagramHeading(svg));
     });
     figure.appendChild(button);
   });
@@ -42,7 +42,7 @@ export function initDiagramZoom(): void {
 
 // The renderer already writes an accessible name into <title>; reuse it as the dialog
 // heading rather than inventing a second label that can drift from it.
-function titleOf(svg: SVGElement): string {
+function diagramHeading(svg: SVGElement): string {
   return svg.querySelector("title")?.textContent || "Diagram";
 }
 

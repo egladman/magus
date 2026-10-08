@@ -35,6 +35,7 @@ guard
 guard.advise
 guard.allow
 guard.binary
+guard.builtins
 guard.command
 guard.count
 guard.deny
@@ -87,6 +88,7 @@ service.release
 skills
 stats
 symbolIndexDigest
+symbols
 trail
 trail.mark
 trail.marks

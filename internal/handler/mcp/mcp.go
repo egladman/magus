@@ -374,9 +374,11 @@ func (r *taskRuns) detach(fn server.ToolHandlerFunc) server.ToolHandlerFunc {
 // triggered an operation. It also records one activity Event per call to the
 // activity trail (best-effort; a nil trail is a no-op) as a KIND_MCP_TOOL_CALL
 // (the durable form of the banner that the /dashboard activity view reads, with
-// both sides of the exchange captured as content-addressed blobs) and records
-// the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
-// only; never by argument values or result content). A nil tel is a no-op.
+// both sides of the exchange captured as content-addressed blobs).
+//
+// It also records the call to the magus.mcp.tool.* metric family (attributed by
+// tool + outcome only; never by argument values or result content). A nil tel is
+// a no-op.
 func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		o := originFn(ctx)

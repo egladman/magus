@@ -159,7 +159,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 // double-NUL when null=true). The channel is closed at EOF or ctx cancellation.
 //
 // Cancellation CLOSES r when it can be closed. The ctx checks below only run between
-// reads, so a cancelled stream whose input has simply gone quiet left this goroutine
+// reads, so a cancelled stream whose input has gone quiet left this goroutine
 // parked in a blocking read forever; closing the reader is the only thing that returns
 // it. A reader with no Close keeps that old shape (it parks until EOF) because there is
 // nothing generic to interrupt it with.

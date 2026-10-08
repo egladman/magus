@@ -86,6 +86,35 @@ func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
 	assert.Equal(t, declared, op, "defaultArgs must survive the bind-time handle round trip")
 }
 
+// A workspace-local spell's symbol indexer survives the by-value handle round trip whole:
+// its op, the tools it uses (which must arrive with their probes, or the decode refuses
+// them) and its envs.
+func TestSpellHandleRoundTripKeepsTheSymbolIndexer(t *testing.T) {
+	indexer := &spells.SymbolIndexer{
+		Format:  spells.SymbolFormatSCIP,
+		Op:      "scip-mine",
+		Command: spells.Command{Bin: "scip-mine", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+		Uses:    []string{"go"},
+		Envs:    []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows"}},
+	}
+	tools := map[string]spells.Tool{"go": {
+		Probe:     spells.Command{Bin: "go", Args: []string{"version"}},
+		Key:       spells.VersionKey{UpTo: spells.VersionMinor},
+		Supported: spells.VersionBounds{Min: "1.22"},
+	}}
+	h := spellHandleFromMeta(spells.Descriptor{Name: "myspell", SymbolIndexer: indexer, Tools: tools})
+
+	got, err := spell.DecodeHandle(h)
+	require.NoError(t, err)
+	// Decoding registers the indexer as the spell's symbol-index op under its own name.
+	assert.Equal(t, spells.Descriptor{
+		Name:          "myspell",
+		Ops:           map[string]spells.Op{"scip-mine": {Kind: spells.OpKindSymbolIndex, Command: indexer.Command}},
+		SymbolIndexer: indexer,
+		Tools:         tools,
+	}, got)
+}
+
 // execCtxValue builds what ctx.withEnv/withCwd produce: a marked map carrying only
 // execution overrides.
 func execCtxValue(env map[string]string, cwd string) vm.Value {

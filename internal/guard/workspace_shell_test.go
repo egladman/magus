@@ -86,7 +86,7 @@ func TestWorkspaceShellDenyEscalatesBuiltInAdvise(t *testing.T) {
 
 func TestBuiltInDenyBeatsWorkspaceAdvise(t *testing.T) {
 	t.Parallel()
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	deps.ShellRules = []WorkspaceShellRule{{
 		Name:     "advise-go-test",
 		Decision: "advise",

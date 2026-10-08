@@ -149,7 +149,7 @@ func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 // whenever the plain form would carry YAML meaning. Beyond the structural cases (a ": " opens
 // a mapping, a leading indicator starts a flow collection, tag, anchor, or comment, trailing
 // space is trimmed), a value that resolves as a NON-string scalar (a bare 404, true, or null)
-// must be quoted too: unmarshaled into a string field it errors, and ParseFrontmatter then
+// must be quoted too. Unmarshaled into a string field it errors, and ParseFrontmatter then
 // drops the entire block, losing the page's title and tags silently.
 func yamlScalar(s string) string {
 	if !yamlNeedsQuote(s) {

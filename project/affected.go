@@ -289,7 +289,7 @@ func (idx *projectIndex) projectForFile(file string) (string, bool) {
 //  2. Every project that declares the file from OUTSIDE its own tree seeds it too.
 //     A reaching glob ("../proto/**" declared by docs/) moves that project's cache key
 //     just as surely as a file in its own directory does, so it seeds ALONGSIDE the
-//     containment owner rather than instead of it, and where no directory contains the
+//     containment owner rather than instead of it. Where no directory contains the
 //     file at all, the reaching declarers are the whole answer, in place of the root
 //     project that merely happens to sit above them.
 //  3. Otherwise the root project seeds it anyway. That catch-all is load-bearing and

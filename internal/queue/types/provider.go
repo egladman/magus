@@ -51,7 +51,7 @@ type Provider interface {
 type Mark string
 
 const (
-	MarkNone              Mark = ""                   // none
+	MarkNone              Mark = ""                   // no mark; the change left the queue
 	MarkQueued            Mark = "queued"             // the queue holds the change
 	MarkKickedBack        Mark = "kicked_back"        // the queue kicked the change back
 	MarkNeedsRegeneration Mark = "needs_regeneration" // kicked back with [CodeKickRegeneration]; its author regenerates

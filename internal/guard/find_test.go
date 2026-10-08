@@ -103,7 +103,7 @@ func TestListingsTheGraphAnswers(t *testing.T) {
 		{`fd -H spell spells`, "", nil},
 		{`ls /tmp`, "", nil},
 	} {
-		v := Evaluate(deps, tt.command)
+		v := Evaluate(strict(deps), tt.command)
 		if tt.query == "" {
 			assert.Empty(t, v.Deny, tt.command)
 			continue
@@ -125,7 +125,7 @@ func TestTrackedListingNamesWhatTheGraphLeavesOut(t *testing.T) {
 		`git ls-files internal/api`: "internal/api/testdata/fix.json",
 		`git ls-files | grep half`:  "internal/half/new_unindexed.go",
 	} {
-		v := Evaluate(deps, command)
+		v := Evaluate(strict(deps), command)
 		require.Equal(t, denyRuleSearchTranslation, v.Rule.Name, "%q: %s", command, v.Deny)
 		assert.Contains(t, v.Deny, "answers this search for every matching file the graph indexes.", command)
 		assert.Contains(t, v.Deny, "Version control also tracks 1 matching file the graph does not index, which the query leaves out: "+left+".", command)
@@ -133,24 +133,24 @@ func TestTrackedListingNamesWhatTheGraphLeavesOut(t *testing.T) {
 
 	// An indexed file version control does not track would make the graph answer more.
 	deps.TrackedFiles = func(context.Context, string) ([]string, bool) { return []string{"spells/a/spell.buzz"}, true }
-	assert.Empty(t, Evaluate(deps, `git ls-files spells`).Deny)
+	assert.Empty(t, Evaluate(strict(deps), `git ls-files spells`).Deny)
 
 	// With no answer from version control a named directory is walked instead, and a piped
 	// filter or the whole checkout is not attempted.
 	deps.TrackedFiles = nil
-	assert.Equal(t, denyRuleSearchTranslation, Evaluate(deps, `git ls-files spells`).Rule.Name)
-	assert.Empty(t, Evaluate(deps, `git ls-files | grep spell`).Deny)
+	assert.Equal(t, denyRuleSearchTranslation, Evaluate(strict(deps), `git ls-files spells`).Rule.Name)
+	assert.Empty(t, Evaluate(strict(deps), `git ls-files | grep spell`).Deny)
 }
 
 // The proof walks the disk, so the last build's ids serve whether or not the index is
 // current; only with no index at all does the listing run.
 func TestListingsUseTheLastBuildsIDs(t *testing.T) {
 	_, deps := listingTree(t)
-	assert.Equal(t, denyRuleSearchTranslation, Evaluate(deps, `ls internal/api/gen`).Rule.Name)
+	assert.Equal(t, denyRuleSearchTranslation, Evaluate(strict(deps), `ls internal/api/gen`).Rule.Name)
 
 	deps.IndexedIDs = func(context.Context, string) ([]string, bool) { return nil, false }
 	for _, command := range []string{`ls internal/api/gen`, `ls -R spells`, `git ls-files spells`, `fd -e buzz . spells`} {
-		assert.Empty(t, Evaluate(deps, command).Deny, command)
+		assert.Empty(t, Evaluate(strict(deps), command).Deny, command)
 	}
 }
 

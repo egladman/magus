@@ -20,7 +20,7 @@ import (
 //
 // magus already reports a target that fails and a run that is cancelled. The case with
 // no reporter is the run that is KILLED: SIGKILL cannot be trapped, so a magus the OOM
-// killer takes leaves no last words and a CI job simply stops mid-log. That happened
+// killer takes leaves no last words and a CI job stops mid-log. That happened
 // here: a shard died after "[pass] magus lint" with nothing after it, and the only way
 // to learn what it had been doing was to guess.
 //

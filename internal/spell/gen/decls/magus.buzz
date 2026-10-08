@@ -1287,6 +1287,7 @@ export object Projects {
 export object Rule {
     name: str = "",
     decision: str = "",
+    workspace: str = "",
     catches: str = "",
     why: str = "",
 }
@@ -1484,6 +1485,7 @@ export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult
 export extern fun skills(opts: {str: any} = {<str: any>}) > [Skill] !> any;
 export extern fun stats(kind: str = "") > KnowledgeStats !> any;
 export extern fun symbolIndexDigest() > SymbolIndexDigest !> any;
+export extern fun symbols() > {str: any} !> any;
 export extern fun where(dir: str) > str !> any;
 // Emitting a message without changing control flow: the four levels, plus hint. magus\fatal and magus\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.
 export object log {
@@ -1504,11 +1506,12 @@ export object ci {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.
+// Agent-guard rules for this workspace: additive shell, spawn, command and write rules, and the decision each compiled built-in takes.
 export object guard {
     static extern fun advise(text: str) > GuardVerdict;
     static extern fun allow() > GuardVerdict;
     static extern fun binary() > GuardBinary;
+    static extern fun builtins(rules: {str: any}) > void;
     static extern fun command(rule: fun (req: CommandRequest) > GuardVerdict !> any) > void;
     static extern fun count(key: str) > int;
     static extern fun deny(text: str) > GuardVerdict;

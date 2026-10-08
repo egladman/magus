@@ -57,7 +57,7 @@ func Dir() string {
 // already exists: it neither chmods nor checks ownership. The fallback path
 // is /tmp/magus-$UID, and both the parent (/tmp, world-writable; the
 // sticky bit only stops deleting someone else's files, not creating new
-// ones) and the name (UIDs are enumerable) are attacker-reachable: another
+// ones) and the name (UIDs are enumerable) are attacker-reachable. Another
 // local user can pre-create the directory loosely permissioned, or as a
 // symlink, before magus ever runs, and have magus bind its server/MCP socket
 // inside a directory they control.

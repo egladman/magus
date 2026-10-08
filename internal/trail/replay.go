@@ -236,7 +236,7 @@ type SessionTrail struct {
 	Denied   int `json:"denied"`
 	// Leases are the ledger leases the observations were made under, first seen first.
 	Leases []string `json:"leases,omitempty"`
-	// Spawns are the sub-agents this session started, oldest first.
+	// Spawns are the subagents this session started, oldest first.
 	Spawns []SessionSpawn `json:"spawns,omitempty"`
 }
 
@@ -366,7 +366,7 @@ const agentKindTag = `"kind":"agent_`
 
 // relativize turns a recorded path into the workspace-relative form a review speaks. A path
 // already relative, or one outside the workspace entirely, is returned unchanged; the latter
-// then simply matches nothing, which is the honest outcome for a file this review is not about.
+// then matches nothing, which is the honest outcome for a file this review is not about.
 func relativize(root, p string) string {
 	if p == "" || root == "" || !strings.HasPrefix(p, root) {
 		return p

@@ -50,7 +50,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := denyBriefCommand(testDependencies(), tt.brief)
+		v := denyBriefCommand(strict(testDependencies()), tt.brief)
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
@@ -78,14 +78,25 @@ func TestJudgeRefusesASpawnWhoseBriefTeachesADeniedCommand(t *testing.T) {
 		envelope("SendMessage", "message", "Now run `MAGUS_NO_WAIT=1 ./magus run lint .` again."),
 	} {
 		ctx, _ := spawnFixture(t)
-		v := Judge(ctx, Dependencies{}, Request{Input: input, Host: "claude-code"})
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: input, Host: "claude-code"})
 		assert.Equal(t, verdictWithRule("deny", string(denyRuleBriefCommand)), unworded(v), input)
 		assert.Contains(t, v.Reason, "MAGUS_NO_WAIT")
 	}
 
 	ctx, _ := spawnFixture(t)
-	v := Judge(ctx, Dependencies{}, Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
+	v := Judge(ctx, strict(Dependencies{}), Request{Input: envelope("Agent", "prompt", "Never use `MAGUS_NO_WAIT=1`."), Host: "claude-code"})
 	assert.NotEqual(t, "deny", v.Decision)
+
+	ctx, _ = spawnFixture(t)
+	// A command the default still refuses, since a brief is only as strict as the rules it teaches.
+	taught := envelope("Agent", "prompt", "Clean up first with `git stash`.")
+	first := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(first),
+		"by default the brief is advised, not refused")
+	assert.Contains(t, first.Context, "git stash")
+
+	again := Judge(ctx, Dependencies{}, Request{Input: taught, Host: "claude-code"})
+	assert.NotEqual(t, string(denyRuleBriefCommand), again.Rule, "once per session")
 }
 
 // TestBriefOffCheckIsRefused: the 2026-09-29 briefs told figure workers they "may also run"

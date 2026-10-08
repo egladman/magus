@@ -41,10 +41,10 @@ const symbolStampFormat = "symbol-stamp/3"
 func symbolStampPath(indexPath string) string { return indexPath + ".fresh" }
 
 // symbolIndexStamp is what the stamp file must hold for the index op writes for p to read
-// fresh without a probe: op's step key before run keying (sources by content through the
-// mtime fast path, config, spell definitions and this binary, no tool versions and so no
-// subprocess) and the identity of each completion stamp the step declares, the index among
-// them. "" when the key cannot be computed, which matches no stamp file.
+// fresh without a probe. It combines op's step key before run keying (sources by content
+// through the mtime fast path, config, spell definitions and this binary, no tool versions
+// and so no subprocess) with the identity of each completion stamp the step declares, the
+// index among them. "" when the key cannot be computed, which matches no stamp file.
 func (m *Magus) symbolIndexStamp(ctx context.Context, c *cache.Cache, p *types.Project, op string, memo *cache.SourceMemo) string {
 	step := m.buildStep(p, op)
 	key, _, err := c.StepKeyMemo(ctx, &step, memo)

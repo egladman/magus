@@ -645,7 +645,7 @@ type DiffComment struct {
 // Either field may be empty, and that is ordinary rather than an error: a detached HEAD has no
 // branch, a tree with no remote has no remote, and a workspace with no VCS at all has neither.
 // A provider answers "no review" for all three, which is what the reader sees anyway when the
-// branch simply has no pull request open.
+// branch has no pull request open.
 type ReviewOrigin struct {
 	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
 	Remote string `json:"remote,omitempty" yaml:"remote,omitempty"`
@@ -679,7 +679,7 @@ type ReviewTarget struct {
 	// It is asked of the provider rather than worked out from git because a squash merge leaves
 	// no trace git can follow: the branch is rewritten into one new commit, so its tip is never
 	// an ancestor of the base and it is not patch-equivalent to what landed either. A repository
-	// that squash-merges would simply never notice its own merges.
+	// that squash-merges would never notice its own merges.
 	State string `json:"state,omitempty" yaml:"state,omitempty"`
 	// Author is who opened the review and Viewer is who the credential belongs to, both in the
 	// provider's own terms. Empty when the provider does not answer, and an empty pair means

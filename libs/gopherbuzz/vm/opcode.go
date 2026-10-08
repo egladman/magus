@@ -99,7 +99,7 @@ const (
 	OpNewClosure // push closure from chunk.funs[A], capturing upvalues
 	OpCall       // A = arg count; stack: callee arg0…argN → result
 	OpReturn     // return pop
-	OpReturnNull // return Null
+	OpReturnNull // return Null without popping a value
 
 	// Method invocation: obj.name(args) without materializing a bound method.
 	// A = method-name const index, B = arg count. Stack on entry:

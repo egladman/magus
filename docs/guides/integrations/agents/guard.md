@@ -1,6 +1,6 @@
 ---
 title: The guard
-description: What magus session hook denies, what it explains, and why (the four deny triggers, the file-path surface, the verdict contract a host wires into, and the observations magus records).
+description: "What magus session hook denies, what it advises by default, and why: the five deny grounds, how a workspace sets a built-in rule, the file-path surface, the verdict contract a host wires into, and the observations magus records."
 tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ---
 
@@ -52,34 +52,28 @@ unable to learn something one `magus describe file` away. An agent told why an
 edit was futile does not repeat it; an agent whose call was rejected has only
 lost a turn.
 
+The same holds for a raw `go test`, `git add -A` or a pipe on magus's output.
+Each refuses nothing a later command cannot redo, and the replacement answers
+what the refused call asked, so the guard advises and serves that command. A
+workspace that wants one of them refused says so by name, with
+[`magus\guard.builtins`](#setting-a-built-in-rule); this repository does.
+
 ## The deny triggers
 
-magus denies a call on any one of four independent grounds.
+magus denies a call on one of five grounds, and a rule that fits none of them
+advises.
 
-**It cannot be undone.** The destructive whole-tree VCS operations.
+**It cannot be undone.** The destructive whole-tree VCS operations, a bare
+`git stash` push or pop on a stack every worktree shares, removing a worktree
+magus cannot prove holds nothing that would be lost, a checkout of one merge
+side over a conflicted file, a push at a commit the run log shows no green gate
+for, and a backtick substitution, which can pair with a stray backtick and run
+a command nobody wrote.
 
-**It writes into the working tree outside magus.** Codegen, a formatter with
-`-w`, `--write` or `--fix`, `go mod tidy`, build output landing on a tracked
-path. This is the firm one, and the only one with no judgment in it. A write
-that skips magus is not merely slower: the target that owns that path now
-reports drift it did not cause, the cache holds a result for a tree that no
-longer exists, and affected tracking has no record that anything moved. Reading
-through the wrong tool costs a cache hit; writing through the wrong tool
-corrupts the workspace's account of itself.
-
-**It has an exact working equivalent.** A raw `go test` is harmless and
-reversible, so it fails the first two tests. magus denies it because the
-replacement is complete, which makes the deny free. Where no equivalent exists
-the rule may only advise: magus has no raw-text search, so a repo-wide `grep`
-gets an explanation, and an earlier attempt to deny it was reverted. Denying
-grep was wrong because the deny removed a capability with nothing to route to,
-not because grep is safe.
-
-**It breaks a provenance guarantee.** The first three judge the write: whether
-it can be taken back, whether it bypassed the tool, whether it was redundant.
-This one judges what the write does to the checkout: the artifact's value depends
-on a guarantee about who authored it, and undoing the write does not restore the
-guarantee.
+**It breaks a provenance guarantee.** The first ground judges the write:
+whether it can be taken back. This one judges what the write does to the
+checkout: the artifact's value depends on a guarantee about who authored it,
+and undoing the write does not restore the guarantee.
 
 Its instances are a write into a declared notes store and a read receipt an
 agent mints for itself. Both refuse an agent authoring a human's statement, and
@@ -92,10 +86,28 @@ no rebuild recovers it. One agent-written note does not damage that note; it
 damages a reader's ability to trust any note without checking blame, and a note
 of uncertain authorship is worthless rather than merely weaker.
 
-That trigger licenses less than it might appear. It is not "the file is
+That ground licenses less than it might appear. It is not "the file is
 important", and it is not a general provenance rule; source files carry
 authorship too, and writing them is the job. It applies only where the artifact
 has no other corroboration, which is what makes authorship its entire value.
+
+**It tampers with the guard.** A write into the magus cache dir, into the hook
+wiring the guard is installed by, or to `vcs.enabled: false`; a VCS alias
+defined inline, which hides the command it runs; and a leased worker rewriting
+its own job row. Each rewrites the evidence a later verdict is computed from,
+and no later verdict says so.
+
+**It handles a credential.** An agent minting, printing, rotating or revoking
+a token through the CLI, or reading or writing the files that hold the
+operator token and the token store. An agent holds the grant it was given, and a
+session that mints another holds one nobody handed it.
+
+**It crosses a boundary someone declared.** A leased worker writing outside its
+write paths, pushing, running the gate in place of its check, running a target
+other than the row's check, reading outside a focus lease, or editing a
+declaration another live job claims. The orchestrator drew that line in the job
+store and the guard reads it back; see
+[what the guard enforces under a lease](leases.md#what-the-guard-enforces-under-a-lease).
 
 ## What magus denies
 
@@ -126,12 +138,137 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   without argument: hg has no operation log, and `hg purge` deletes untracked
   files with no backup at all. So the users with no protection were the ones
   whose backend gave them the least.
+- **Writing into the declared notes store** (`knowledge.notes.shared`), however
+  the write is spelled. A file write into the store is caught on the path
+  surface; `magus notes edit` reading piped prose is a command, so it is caught
+  here. The reason names the alternative: `magus notes edit`, for a person to
+  write the note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
+  the rule is armed from that moment, before the store holds a single note,
+  because otherwise an agent could author its first note and the deny would
+  switch on afterwards. A declaration made anywhere else (an explicit
+  `--config`, user-global config) is in effect in every workspace on the
+  machine, so it arms this rule only where the store already exists.
+- **Minting a read receipt** (`magus diff --ack`). A receipt records that a
+  PERSON read a change, so there is no spelling of it an agent may use. The
+  guard is wired into agent hosts, so every command reaching it came from an
+  agent by construction and a person at a terminal never meets this rule. The
+  reason routes to `magus diff --impact`, which names every changed file
+  carrying no receipt, and says to hand that list back rather than stamp it.
+- **Credentials**: the console and connector token `create` and `revoke`
+  commands, `magus config token print`, `generate` and `revoke`, and
+  `magus graph export --open --follow`, whose link carries a sign-in code. Any
+  line, and any editor write, that names the operator token file or the token
+  store is refused too, whatever the command. A bare listing of the state dir
+  passes: it shows file names, and none is a secret. This is a seatbelt for a
+  harness that opted in, not a boundary: a process running as the user can reach
+  the same files.
+- **Guard wiring and the VCS off-switch**: a leased or agent-attributed write to
+  the hook wiring the guard is installed by, and a write setting `vcs.enabled:
+  false` in a `magus.yaml` this workspace reads. With VCS off the guard has no
+  approved copy to compare a policy edit against, so every workspace rule would
+  be read from the working tree alone. A VCS alias defined inline
+  (`git -c alias.x=...`, hg's and sl's `--config alias.x=...`, jj's
+  `--config aliases.x=...`) is refused for the same reason: the alias body hides
+  the command every other rule reads as the subcommand.
+- **Backtick substitution**: inside double quotes a backtick starts a command
+  substitution, and it pairs with the next backtick anywhere on the line, so a
+  pattern or a message carrying a literal backtick can run everything between
+  them. A literal backtick belongs in single quotes; a substitution is
+  `$(...)`.
+- **A push at a commit with no green gate**: the run log names which invocations
+  ran the gate and at which commit. A session no lease binds is asked; a leased
+  worker is refused, since workers do not publish.
+- **Writing into the workspace's magus cache dir** (`.magus/` by default), on
+  either surface and under every role, unbound sessions included. That directory
+  holds the files the guard's own verdicts are computed from: the `lease` marker
+  naming which lease this checkout is bound to, the fire-once advisory markers,
+  the touched-project set, and the served-next journal whose entries
+  pre-authorize commands, plus the activity trail, the run logs, the outputs and
+  the locks. An agent that edits any of it rewrites the evidence it is graded by,
+  and no later verdict says so, which is why this one is not scoped to a boundary:
+  what it protects is whether a boundary was checked at all. It ranks above the
+  lease rules, so a worker whose `write_paths` happen to cover the directory
+  reads what the directory IS rather than a verdict about whose it is. The
+  path surface catches an editor tool's write; the command surface catches a
+  redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
+  (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
+  names the verbs instead: `magus job exec <id>` to take a lease, `magus clean` for
+  the outputs, `magus query output <ref>` for a captured log. Reading is
+  untouched, so `cat` on a log passes. A cache dir relocated by
+  `MAGUS_CACHE_DIR` or `cache.dir` is matched at its resolved location, and the
+  literal `.magus/` name is matched as well, so a command that spells it is
+  refused even where the resolution is unavailable. magus's own commands are not
+  judged here: every `magus run` writes in that directory, and the rule reads
+  redirect targets and coreutil operands, never a `magus` argv.
+- **Rewriting your own job row, while holding a lease**: taking another job's
+  lease with `magus job exec <other-id>`, verifying a result with `magus job
+  wait`, and a `client` call's `magus\job` writes, whichever channel they arrive
+  on. Every lease-scoped rule below reads that row, so an agent that can rewrite
+  it grades itself against a boundary nobody handed it from the next call on. A
+  session holding no lease is untouched entirely, whether that is an
+  orchestrator or a person in their own checkout, because those are the parties
+  that write rows.
+
+  Over MCP the agent's write is the `client` tool calling `magus\job`. The
+  store refuses a write to a row the caller does not own. Dropping declarations
+  the row already carries, which is how a holder releases a path, passes
+  through. Giving a path back cannot widen a role, and whether a particular
+  shrink is legitimate is the store's judgment. Recording the base a lease
+  landed on passes, because it is a procedure the write surface demands.
+  Reading is untouched: `magus\job.list` and `magus ls jobs`.
+
+  The guard parses a `client` script and renders each literal `magus\job.put`,
+  `register`, `clear` and `wait` call as a line the lease rules read, so a
+  worker's widening or forged checkpoint is refused before the store sees it.
+  Only a call addressed to the magus server (`mcp__magus__<tool>`)
+  is graded as a magus call, and the call is normalized to a command line before
+  any rule sees it, so what the activity trail records is what was graded.
+
+## What magus advises by default
+
+These rules match a call the guard could refuse and does not. Each serves the
+command that answers what the call asked, in the same verdict, so the caller loses
+no turn. They are the compiled defaults of `magus describe rules`, and a
+workspace sets any of them to `deny` or `off` with
+[`magus\guard.builtins`](#setting-a-built-in-rule).
+
+| rule                                                                       | advises on                                                             |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`brief-command`](../../../reference/rules/brief-command.md)               | a spawn or continuation brief that teaches a command the guard refuses |
+| [`busy-wait`](../../../reference/rules/busy-wait.md)                       | a loop that only sleeps between polls                                  |
+| [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)             | the first Buzz a session authors, before it read the Buzz skill        |
+| [`chained-run`](../../../reference/rules/chained-run.md)                   | magus runs sequenced with `&&` or `;`                                  |
+| [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)         | a line ending by printing an exit status                               |
+| [`filter-without-input`](../../../reference/rules/filter-without-input.md) | a filter with no file, pipe or redirect                                |
+| [`grep-reader`](../../../reference/rules/grep-reader.md)                   | a definition lookup with a context flag                                |
+| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)   | an inline interpreter rewriting a tracked file                         |
+| [`magus-timeout`](../../../reference/rules/magus-timeout.md)               | magus wrapped in `timeout`                                             |
+| [`output-pipe`](../../../reference/rules/output-pipe.md)                   | magus output piped into a filter                                       |
+| [`output-redirect`](../../../reference/rules/output-redirect.md)           | magus output sent to a file or discarded                               |
+| [`process-poll`](../../../reference/rules/process-poll.md)                 | a process table inspected to wait on magus work                        |
+| [`raw-tool`](../../../reference/rules/raw-tool.md)                         | a toolchain command a spell already wraps                              |
+| [`read-navigation`](../../../reference/rules/read-navigation.md)           | a whole read of a long Go, Buzz or Markdown file                       |
+| [`scripted-rewrite`](../../../reference/rules/scripted-rewrite.md)         | a scripted substitute-and-write                                        |
+| [`search-translation`](../../../reference/rules/search-translation.md)     | a text search a graph query provably answers                           |
+| [`sed-in-place`](../../../reference/rules/sed-in-place.md)                 | `sed -i`                                                               |
+| [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)         | a magus command relocated into another checkout                        |
+| [`spawn-unbriefed`](../../../reference/rules/spawn-unbriefed.md)           | a subagent spawned before the multi-agent skill loaded                 |
+| [`stage-all`](../../../reference/rules/stage-all.md)                       | a whole-tree `git add`                                                 |
+| [`symbol-search`](../../../reference/rules/symbol-search.md)               | a text search for a symbol the graph answers                           |
+| [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)             | a run inside a temp or scratchpad copy                                 |
+| [`unknown-env`](../../../reference/rules/unknown-env.md)                   | a retired or misspelled `MAGUS_*` variable                             |
+
+The rules that explain from the start, such as `capture-filter`, `graph-pipe` and
+`split-run`, are in [What magus explains](#what-magus-explains). What follows
+says what each rule matches; a workspace that set `deny` gets a refusal carrying the
+same served command.
+
 - **Raw language tools**: `go test`, `go build`, `go mod tidy`, `cargo build`,
   `gofmt -w`, `prettier --write`, and the rest. The match is the base PROGRAM a
   registered spell op renders plus the leading argv it renders with it, so the
-  denied spelling is the one a spell would actually launch. A tool a spell
+  matched spelling is the one a spell would actually launch. A tool a spell
   reaches through a runner is therefore matched under the runner:
-  `uv run pytest` and `pnpm exec eslint .` deny, while bare `pytest`, `eslint`
+  `uv run pytest` and `pnpm exec eslint .` match, while bare `pytest`, `eslint`
   and `ruff` pass, because no spell renders those as the program. That is
   silence rather than endorsement; a target still covers the work.
   The reason names the escalation ladder: a top-level target first, then a
@@ -151,8 +288,8 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   and a failing gate reads as exit 0. `magus query output <ref>` is the one
   exemption: a raw captured tool log has no schema to project.
 
-  A text filter aimed at the file a BACKGROUNDED run was captured to denies on the
-  same ground, and it is the shape that gets past the rule above: nothing on
+  A text filter aimed at the file a BACKGROUNDED run was captured to is advised on
+  the same ground (`capture-filter`), and it is the shape that gets past the rule above: nothing on
   `grep -n cause: <capture> | head -8` is a magus invocation. The files are the
   host's task capture (`<id>.output`) and a persisted run log
   (`.magus/logs/<hex>.log`). A failure prints `[fail]`, `cause:`, `output:`,
@@ -162,22 +299,6 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   whole does not: `cat <capture>` and an editor tool's read are both fine.
   Backgrounding the run as `-o jsonl --tee <file>` makes the capture a contract,
   after which `jq` over it is composition.
-- **Writing into the declared notes store** (`knowledge.notes.shared`), however
-  the write is spelled. A file write into the store is caught on the path
-  surface; `magus notes edit` reading piped prose is a command, so it is caught
-  here. The reason names the alternative: `magus notes edit`, for a person to
-  write the note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
-  the rule is armed from that moment, before the store holds a single note,
-  because otherwise an agent could author its first note and the deny would
-  switch on afterwards. A declaration made anywhere else (an explicit
-  `--config`, user-global config) is in effect in every workspace on the
-  machine, so it arms this rule only where the store already exists.
-- **Minting a read receipt** (`magus diff --ack`). A receipt records that a
-  PERSON read a change, so there is no spelling of it an agent may use. The
-  guard is wired into agent hosts, so every command reaching it came from an
-  agent by construction and a person at a terminal never meets this rule. The
-  reason routes to `magus diff --impact`, which names every changed file
-  carrying no receipt, and says to hand that list back rather than stamp it.
 - **In-place stream edits**: `sed -i`, `sed --in-place`. The flag is not
   portable and the two spellings destroy each other's work: GNU reads
   `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the
@@ -187,7 +308,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   Every host driving this guard has a structured editor tool that applies an
   exact replacement and reports what changed. Reading with sed is untouched.
   A **scripted substitute-and-write** is the same edit by another route and
-  denies with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
+  is advised with it: `perl -i` and `ruby -i` outright, and a `python` or `node`
   one-liner whose substitution (`re.sub`, `.replace(`) is followed on the line
   by a `.write(`. Deliberately narrow (an interpreter that only WRITES a file
   is ordinary authoring and passes), so a one-liner that writes before it
@@ -197,26 +318,52 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   earlier on the same line). The verdict would describe a tree nobody ships:
   generated files land in the copy, the cache splits, and duplicated spell
   sources trip MGS1002. To work on a different workspace, pass `--root <path>`.
-  A `cd` into a SIBLING CHECKOUT of this repository (a linked worktree, or the
-  main checkout reached from inside one) denies on the same ground, recognized
-  by reading the shared git directory rather than by the path's name: that
-  tree's `./magus` was linked from ITS sources and its cache is keyed to ITS
-  tree, so the verdict describes neither checkout. That reason outranks the
-  general `cd` deny below, because "do not cd" understates aiming at another
-  tree of this repository.
-- **`cd`**, including a bare `cd <dir>`, `cd <dir> && ...`, a subshell
-  `(cd ... && ...)`, and `bash -c 'cd ...'`. Magus takes the project as an
-  argument; a host shell tool that needs a different directory for one call has
-  a working_directory (or cwd) field. A different workspace is `--root <path>`,
-  not a `cd`. The advise that used to cover only `cd <dir> && magus ...` was
-  tuned out: agents kept prefixing `cd` on every call, which relocates later
-  commands on the line and re-fires shell chpwd hooks.
+  A magus command relocated into a SIBLING CHECKOUT of this repository (a `cd`
+  into a linked worktree, or into the main checkout reached from inside one) is
+  advised on the same ground, recognized by reading the shared git directory
+  rather than by the path's name: that tree's `./magus` was linked from ITS
+  sources and its cache is keyed to ITS tree, so the verdict describes neither
+  checkout. Magus takes the project as an argument, and a host shell tool that
+  needs a different directory for one call has a working_directory (or cwd)
+  field.
+
+## Setting a built-in rule
+
+Every compiled rule has a default decision: `deny`, `advise` or `off`. The two
+lists above are that table. A workspace sets any rule by name with
+`magus\guard.builtins` in its root magusfile:
+
+```buzz
+magus\guard.builtins({
+    "stage-all": "deny",
+    "unknown-env": "off",
+    "read-navigation": {"decision": "deny", "lines": 120},
+})
+```
+
+A value is `"deny"`, `"advise"`, `"off"`, or a record of `decision` and the
+rule's parameters. `lines` is the only parameter today: it sizes the whole read
+`read-navigation` flags, and the binary ships no number for it. A name no rule carries, a value outside the three,
+and a parameter the rule lacks are errors at load, not silent no-ops; the error
+names the nearest rule. `magus describe rules` shows each default.
+
+The declaration follows the other workspace rules. A tightening applies at once;
+a loosening waits until it is committed, because the guard runs the committed copy
+of the magusfile beside the working tree's and keeps the stricter answer. This repository's own
+declaration is `hack/policy/builtins.buzz`: it sets every rule in the table above
+back to `deny`, with the figures that justified each beside it.
+
+## Workspace rules
+
+Rules a workspace adds are additive to the built-ins above.
+
 - **Workspace-declared shell rules** (`magus\guard.shell({...})` in the root
   magusfile): additive deny or advise entries matched against the same parsed
   invocations the built-ins see (`program` plus optional arg subset). They
-  strengthen only: a built-in deny always wins; a workspace deny may escalate a
-  built-in advise or a pass; a workspace advise fills silence only. They cannot
-  disable a compiled rule. Rule ids are recorded as `workspace:<name>` on the
+  strengthen only: a workspace deny may escalate a built-in advise or a pass, and a
+  workspace advise fills silence only. A rule of this kind never changes a compiled
+  rule; setting one of those is [`magus\guard.builtins`](#setting-a-built-in-rule).
+  Rule ids are recorded as `workspace:<name>` on the
   verdict. Declared at magusfile load time, never mid-session, and deliberately
   not `magus.yaml` (runtime knobs) and not a host harness (those are harness
   spells selected with `magus\harness.provider`; several hosts are fine when you
@@ -274,52 +421,6 @@ Then `magus describe harness` (no id) prints every wired host's fragments and th
 one command that merges them; you read it and run it, since magus never writes host
 config.
 
-- **Writing into the workspace's magus cache dir** (`.magus/` by default), on
-  either surface and under every role, unbound sessions included. That directory
-  holds the files the guard's own verdicts are computed from: the `lease` marker
-  naming which lease this checkout is bound to, the fire-once advisory markers,
-  the touched-project set, and the served-next journal whose entries
-  pre-authorize commands, plus the activity trail, the run logs, the outputs and
-  the locks. An agent that edits any of it rewrites the evidence it is graded by,
-  and no later verdict says so, which is why this one is not scoped to a boundary:
-  what it protects is whether a boundary was checked at all. It ranks above the
-  lease rules, so a worker whose `write_paths` happen to cover the directory
-  reads what the directory IS rather than a verdict about whose it is. The
-  path surface catches an editor tool's write; the command surface catches a
-  redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
-  (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
-  names the verbs instead: `magus job exec <id>` to take a lease, `magus clean` for
-  the outputs, `magus query output <ref>` for a captured log. Reading is
-  untouched, so `cat` on a log passes. A cache dir relocated by
-  `MAGUS_CACHE_DIR` or `cache.dir` is matched at its resolved location, and the
-  literal `.magus/` name is matched as well, so a command that spells it is
-  refused even where the resolution is unavailable. magus's own commands are not
-  judged here: every `magus run` writes in that directory, and the rule reads
-  redirect targets and coreutil operands, never a `magus` argv.
-- **Rewriting your own job row, while holding a lease**: taking another job's
-  lease with `magus job exec <other-id>`, verifying a result with `magus job
-  wait`, and a `client` call's `magus\job` writes, whichever channel they arrive
-  on. Every lease-scoped rule below reads that row, so an agent that can rewrite
-  it grades itself against a boundary nobody handed it from the next call on. A
-  session holding no lease is untouched entirely, whether that is an
-  orchestrator or a person in their own checkout, because those are the parties
-  that write rows.
-
-  Over MCP the agent's write is the `client` tool calling `magus\job`. The
-  store refuses a write to a row the caller does not own. Dropping declarations
-  the row already carries, which is how a holder releases a path, passes
-  through. Giving a path back cannot widen a role, and whether a particular
-  shrink is legitimate is the store's judgment. Recording the base a lease
-  landed on passes, because it is a procedure the write surface demands.
-  Reading is untouched: `magus\job.list` and `magus ls jobs`.
-
-  The guard parses a `client` script and renders each literal `magus\job.put`,
-  `register`, `clear` and `wait` call as a line the lease rules read, so a
-  worker's widening or forged checkpoint is refused before the store sees it.
-  Only a call addressed to the magus server (`mcp__magus__<tool>`)
-  is graded as a magus call, and the call is normalized to a command line before
-  any rule sees it, so what the activity trail records is what was graded.
-
 ## What magus explains
 
 An advise verdict carries context your host injects, and all four documented hosts
@@ -345,10 +446,10 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   clean checkout, `update` covers state that depends on what a registry or a
   vulnerability feed serves
   today. Applying a lockfile (`npm ci`, `pnpm install --frozen-lockfile`)
-  re-resolves nothing and passes. `go mod tidy` is the one that denies rather
-  than advises, because a spell op renders it, and its deny reason carries the
-  same `update` route: routing into magus without naming the charm would send
-  you to a target that refuses the write.
+  re-resolves nothing and passes. `go mod tidy` is matched by `raw-tool`
+  because a spell op renders it, and its advice carries the same `update`
+  route, since routing into magus without naming the charm would send you to a
+  target that refuses the write.
 - A tree-identity read (`git rev-parse HEAD`, `git describe`, `git stash
   create`): `magus vcs checkpoint` prints the revision plus a digest of the
   uncommitted patch, which identifies a dirty tree where the revision alone
@@ -460,8 +561,8 @@ The ref is stored in the activity trail under the `grd` prefix, and the line is
 a breadcrumb with the id `deny-verdict`, so `magus session hints` counts how
 often it is read.
 
-The advisories that correct the command itself (a `cd` before magus, a `time`
-wrapper, a chained run) are exempt too, because a second firing reports a
+The advisories that correct the command itself (a `time` wrapper, a chained
+run) are exempt too, because a second firing reports a
 second mistake.
 
 A session is identified by the `session_id` your host reports, on the flag or in
@@ -494,8 +595,8 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
   than blocking on a file it cannot read, because a lease whose boundary
   silently stopped being checked looks exactly like one nobody declared.
 - A write onto another live lease's owned paths by a writer magus cannot
-  attribute to a live lease (naming none, naming an id it cannot parse, or
-  naming a valid id with no live row). That is the same collision the enrolled
+  attribute to a live lease: naming none, naming an id it cannot parse, or
+  naming a valid id with no live row. That is the same collision the enrolled
   case denies, and it advises because magus cannot tell "not in the fleet" from
   "in it and not saying so", and blocking a person in their own checkout is the
   worse of the two ways to be wrong. It also records the write against the
@@ -557,7 +658,7 @@ Wire this to your host's file-editing tool, not its shell tool.
 The input arrives however your host can produce it: as raw text on stdin, or as
 the host's own JSON event. magus reads `tool_input.command`,
 `tool_input.file_path`, `session_id` and `hook_event_name` out of an envelope
-directly, so a host that writes one needs neither `jq` nor `--path`: a payload
+directly, so a host that writes one needs neither `jq` nor `--path`; a payload
 carrying a file path is judged as a write.
 
 The verdict leaves through the standard output arm: `-o json` for a
@@ -624,9 +725,8 @@ role-scoped rules (the gate, version control, the rebind rule, the focus deny)
 stand down. Refusing magus's own suggestion is the tool disagreeing with itself in
 front of a reader who has no way to tell which half to believe.
 
-The workspace-wide denies never yield: whole-tree VCS, a pipe or redirect of
-magus's own output, a raw language tool, a relocated checkout. Those protect
-everyone rather than a role.
+The workspace-wide denies never yield: whole-tree VCS, a stash on the shared
+stack, a push at an ungated commit. Those protect everyone rather than a role.
 
 The clearance is narrow by construction. It covers one command per line, matched
 argv for argv against what was served, with only the binary's spelling normalized
@@ -663,7 +763,7 @@ review, and no local config edit changes what it runs.
 
 Ask where a config came from rather than who can edit it. One you wrote is
 yours. One that arrived in a cloned repository is a stranger's code your host
-may run, the same standing risk as that repo's `Makefile` or git hooks, and
+may run: the same standing risk as that repo's `Makefile` or git hooks, and
 older than agents. Read it before you run it.
 
 ## What magus records
@@ -765,10 +865,12 @@ A later `magus run` request in the same host session is shown as a follow-up,
 not a success: pre-tool hooks cannot observe execution or an exit status. After
 a person makes a durable decision, use the existing workspace-rules loop to
 record it and, when appropriate, write a stamped local skill. A host harness
-update is not itself a decision. Never relax a compiled guard
-locally. To strengthen one for THIS workspace, declare an additive
-`magus\guard.shell({...})` in the root magusfile (deny or advise matched on
-parsed program + args) and commit it; that path cannot disable a built-in.
+update is not itself a decision. Change a compiled rule for THIS
+workspace only by a committed declaration: `magus\guard.builtins({...})` in the
+root magusfile sets it by name (see
+[Setting a built-in rule](#setting-a-built-in-rule)), and an additive
+`magus\guard.shell({...})` (deny or advise matched on parsed program + args)
+adds a rule of your own.
 
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
 rather than a command or a file path is a lease handoff: it appends an

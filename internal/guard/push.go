@@ -51,9 +51,9 @@ const (
 	// gateFailed is a gate run at this commit that FINISHED and did not pass.
 	gateFailed
 	// gateIncomplete is a gate run at this commit that started and wrote no finished
-	// event: still running, or killed. The log cannot tell those apart -- both are simply
-	// a missing record -- so this names the superset rather than claiming the one it
-	// cannot prove. Asking the project lock would distinguish them, which is machinery
+	// event: still running, or killed. The log cannot tell those apart, since both are a
+	// missing record, so this names the superset rather than claiming the one it cannot
+	// prove. Asking the project lock would distinguish them, which is machinery
 	// this rule does not need: neither is coverage.
 	gateIncomplete
 	// gatePassed is a gate run at this commit that finished with every target passing.

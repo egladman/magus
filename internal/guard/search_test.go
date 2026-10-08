@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
@@ -72,7 +73,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		if tt.arg == "stale" {
 			d, want = stale, "Judge"
 		}
-		v := Evaluate(d, tt.command)
+		v := Evaluate(strict(d), tt.command)
 		if want == "" {
 			assert.Empty(t, v.Deny, "%q must not deny", tt.command)
 			continue
@@ -208,7 +209,8 @@ func TestGrepReaderDeniesContextReads(t *testing.T) {
 	piped, _ := grepReaderVerdict(deps, parseForTest(t, `grep -n 'func HandleRequest' -A20 internal/api/handler.go | grep serve`))
 	assert.Contains(t, piped.Deny, "The pipe after the search is not reproduced")
 	// Evaluate reaches it ahead of symbol-search's single-file advice.
-	assert.Equal(t, denyRuleGrepReader, Evaluate(deps, `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`).Rule.Name)
+	assert.Equal(t, denyRuleGrepReader, Evaluate(strict(deps), `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`).Rule.Name)
+	requireAdvisedOnce(t, Evaluate(deps, `grep -n 'func HandleRequest' -A 20 internal/api/handler.go`), denyRuleGrepReader)
 }
 
 // TestJudgeResolvesSearchPathsFromTheCallCwd pins that a relative path resolves from the
@@ -219,7 +221,7 @@ func TestJudgeResolvesSearchPathsFromTheCallCwd(t *testing.T) {
 		"internal/api/handler.go": "package api\n\nfunc HandleRequest() {}\n\nfunc serve() {}\n",
 	})
 	t.Chdir(t.TempDir())
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	deps.SymbolDefined = func(name string) (bool, bool) { return name == "HandleRequest" || name == "serve", true }
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: root})
 	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + filepath.Join(root, "internal", "api") +
@@ -290,6 +292,31 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 	}
 }
 
+// A demoted tree search does not end the walk over a line's searches: a later search whose
+// rule still denies wins, and with none the demoted search outranks plain advice.
+func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n\nfunc serve() { HandleRequest() }\n",
+		"internal/api/config.go":  "package api\n\nfunc ParseConfig() {}\n",
+	})
+	indexed := map[string]bool{"HandleRequest": true, "ParseConfig": true}
+	deps := Dependencies{SymbolDefined: func(name string) (bool, bool) { return indexed[name], true }, Spells: spellCatalog, scope: workspaceScope{root: root}}
+	const tree, file = `grep -rn ParseConfig internal`, `grep -n HandleRequest internal/api/handler.go`
+	line := parseForTest(t, tree+" && "+file)
+	read, _ := searchVerdictAt(deps, root, parseForTest(t, file))
+
+	v, ok := searchVerdictAt(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "ParseConfig"}, v.Rule, "the demoted tree search outranks the precedent advisory")
+	assert.Equal(t, ShellVerdict{Context: v.Deny, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
+
+	deps.Builtins = map[string]builtin.Setting{string(advisoryPrecedent): {Decision: builtin.Deny}}
+	v, ok = searchVerdictAt(deps, root, line)
+	require.True(t, ok)
+	assert.Equal(t, read, v)
+	assert.Equal(t, ShellVerdict{Deny: read.Context, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
+}
+
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:
 // a search whose every path lies outside the workspace has no graph answer here.
 func TestSymbolSearchStaysSilentOutsideTheWorkspace(t *testing.T) {
@@ -297,10 +324,10 @@ func TestSymbolSearchStaysSilentOutsideTheWorkspace(t *testing.T) {
 		SymbolDefined: func(string) (bool, bool) { return true, true },
 		scope:         workspaceScope{root: "/work/repo", home: "/home/me"},
 	}
-	assert.NotEmpty(t, Evaluate(deps, "grep -rn HandleRequest /work/repo/internal").Deny)
-	assert.NotEmpty(t, Evaluate(deps, "grep -rn HandleRequest internal").Deny)
-	assert.Empty(t, Evaluate(deps, "grep -rn HandleRequest /work/other").Deny)
-	v := Evaluate(deps, "grep -rn HandleRequest ~/.claude/projects")
+	assert.NotEmpty(t, Evaluate(strict(deps), "grep -rn HandleRequest /work/repo/internal").Deny)
+	assert.NotEmpty(t, Evaluate(strict(deps), "grep -rn HandleRequest internal").Deny)
+	assert.Empty(t, Evaluate(strict(deps), "grep -rn HandleRequest /work/other").Deny)
+	v := Evaluate(strict(deps), "grep -rn HandleRequest ~/.claude/projects")
 	assert.Empty(t, v.Deny)
 	assert.Empty(t, v.Context, "nor is it advised")
 }
@@ -315,7 +342,7 @@ func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 		"docs/guide.md":           "# Guide\n\n## Setup\n",
 		"notes.txt":               "one\n",
 	})
-	return root, Dependencies{
+	return root, strict(Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return name == "HandleRequest", true },
 		GraphIDs: graphOf(map[string][]string{
 			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
@@ -324,7 +351,7 @@ func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 		Spells:  spellCatalog,
 		scope:   workspaceScope{root: root},
 		callDir: root,
-	}
+	})
 }
 
 // spellCatalog is the built-in spells, whose symbol indexers say which files refs answers for.
@@ -371,7 +398,7 @@ func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
 	git("rebase", "main")
 
 	for _, tt := range staleGraphCommands {
-		v := Evaluate(deps, tt.command)
+		v := Evaluate(strict(deps), tt.command)
 		assert.Empty(t, v.Deny, tt.command)
 		assert.Equal(t, advisoryGraphStale, v.Kind, tt.command)
 		assert.Contains(t, v.Brief, "the graph is stale, a rebase is in progress.", tt.command)
@@ -392,13 +419,13 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 	for _, head := range []string{built, "0123456"} {
 		deps.Revision = func(context.Context, string, string) string { return head }
 		for _, tt := range staleGraphCommands {
-			assert.Equal(t, tt.rule, Evaluate(deps, tt.command).Rule.Name, "%s at %s", tt.command, head)
+			assert.Equal(t, tt.rule, Evaluate(strict(deps), tt.command).Rule.Name, "%s at %s", tt.command, head)
 		}
 	}
 
 	deps.Revision = func(context.Context, string, string) string { return "fedcba9" }
 	for _, tt := range staleGraphCommands {
-		v := Evaluate(deps, tt.command)
+		v := Evaluate(strict(deps), tt.command)
 		if tt.rule == denyRuleSymbolSearch {
 			assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
 			assert.Contains(t, v.Deny, "graph build --silent`, then ", tt.command)
@@ -418,8 +445,8 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
 	const registered = "grep -rn MGS2011 docs/"
 	withCode := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS2011", "diagnostic:MGS9901"}})
-	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}, Evaluate(Dependencies{GraphIDs: withCode}, registered).Rule)
-	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS9901"}, Evaluate(Dependencies{GraphIDs: withCode}, "grep -rn MGS9901 docs/").Rule)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS2011"}, Evaluate(strict(Dependencies{GraphIDs: withCode}), registered).Rule)
+	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "diagnostic:MGS9901"}, Evaluate(strict(Dependencies{GraphIDs: withCode}), "grep -rn MGS9901 docs/").Rule)
 
 	doubted := func(ctx context.Context, kind string) ([]string, bool) {
 		ids, _ := withCode(ctx, kind)
@@ -427,7 +454,7 @@ func TestDiagnosticSearchFollowsTheGraph(t *testing.T) {
 	}
 	without := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901"}})
 	for name, deps := range map[string]Dependencies{"no graph": {}, "a graph it doubts": {GraphIDs: doubted}, "another tree's": {GraphIDs: without}} {
-		assert.Empty(t, Evaluate(deps, registered).Deny, name)
+		assert.Empty(t, Evaluate(strict(deps), registered).Deny, name)
 	}
 }
 
@@ -558,7 +585,7 @@ func TestSearchIntentOnRecordedCommands(t *testing.T) {
 		{`grep -n "^function field\|^function pathField" console/src/plan.ts`, "read", ""},
 		{`grep -rn "fun main\|\"status\"" tools/pull-requests.buzz`, "read", ""},
 	} {
-		v := Evaluate(deps, tt.command)
+		v := Evaluate(strict(deps), tt.command)
 		if tt.arg == "" {
 			assert.NotEqual(t, denyRuleSymbolSearch, v.Rule.Name, "%q (%s) must run: %s", tt.command, tt.class, v.Deny)
 			continue
@@ -599,7 +626,7 @@ func TestSymbolSearchOnAStaleIndex(t *testing.T) {
 		{`grep -rn 'SubagentStop' internal`, stale, "", false},
 		{`grep -rn 'func settleTarget' cmd/magus`, cold, "", true},
 	} {
-		v := Evaluate(tt.deps, tt.command)
+		v := Evaluate(strict(tt.deps), tt.command)
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.command)
 			assert.Equal(t, tt.advised, v.Kind == advisoryPrecedent, tt.command)
@@ -628,9 +655,9 @@ func TestIndexedExtensionsFollowTheSpellCatalog(t *testing.T) {
 		scope:         workspaceScope{root: root},
 		callDir:       root,
 	}
-	assert.Equal(t, denyRuleSymbolSearch, Evaluate(deps, `grep -rn CheckStatus internal`).Rule.Name)
+	assert.Equal(t, denyRuleSymbolSearch, Evaluate(strict(deps), `grep -rn CheckStatus internal`).Rule.Name)
 	deps.Spells = nil
-	assert.Empty(t, Evaluate(deps, `grep -rn CheckStatus internal`).Deny, "with no indexer declared, nothing there is a symbol refs answers")
+	assert.Empty(t, Evaluate(strict(deps), `grep -rn CheckStatus internal`).Deny, "with no indexer declared, nothing there is a symbol refs answers")
 }
 
 // A Buzz name the index does not hold runs as a grep: until scip-buzz is installed and has
@@ -647,10 +674,10 @@ func TestBuzzSearchRedirectsOnlyWhatTheIndexHolds(t *testing.T) {
 	}
 	const search = `grep -rn splitBranch hack`
 
-	assert.Empty(t, Evaluate(deps, search).Deny, "no Buzz index holds splitBranch, so grep is the only answer")
+	assert.Empty(t, Evaluate(strict(deps), search).Deny, "no Buzz index holds splitBranch, so grep is the only answer")
 
 	indexed["splitBranch"] = true
-	v := Evaluate(deps, search)
+	v := Evaluate(strict(deps), search)
 	require.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "splitBranch"}, v.Rule, v.Deny)
 }
 
@@ -664,7 +691,7 @@ func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
 		scope:         workspaceScope{root: root},
 		callDir:       root,
 	}
-	v := Evaluate(deps, `grep -rn 'WritePaths\|Heartbeat' --include=*.go internal/job`)
+	v := Evaluate(strict(deps), `grep -rn 'WritePaths\|Heartbeat' --include=*.go internal/job`)
 	require.Equal(t, denyRuleSymbolSearch, v.Rule.Name)
 	assert.Contains(t, v.Deny, "The text alternatives (`Heartbeat`) are not symbols: search them on their own.")
 	runs := make([]string, len(v.Next))
@@ -680,10 +707,10 @@ func TestMixedSearchServesTheTextOnItsOwn(t *testing.T) {
 // lookup could not name in budget leaves the deny as it was.
 func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
 	stale := func(cause string) ShellVerdict {
-		return Evaluate(Dependencies{
+		return Evaluate(strict(Dependencies{
 			SymbolDefined: func(string) (bool, bool) { return true, false },
 			IndexCause:    func() string { return cause },
-		}, "grep -r HandleRequest internal/")
+		}), "grep -r HandleRequest internal/")
 	}
 	const cause = "Why: no server is running, so the refresh hook synced nothing. Fix: `magus server start`."
 	named := stale(cause)

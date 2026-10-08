@@ -100,7 +100,7 @@ const (
 	// binding, which would be a "flag redefined" panic. What the declaration buys
 	// is documentation: --ignore, --ref and --reference were each bound by a
 	// command and absent from every man page, because a flag the registry could
-	// not express was simply left out of it.
+	// not express was left out of it.
 	FlagCustom FlagKind = "custom"
 )
 

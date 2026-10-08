@@ -714,11 +714,11 @@ var insecureRemoteOverride = ward.Override{
 }
 
 // remoteCacheSigningOpts turns the declared trust set (base64 public keys) plus the
-// signing-key env var into cache options, enforcing that a wired remote backend
-// declares a non-empty trust set so a shared cache never comes up unverified —
-// unless insecure is set, the explicit opt-out that accepts and produces unsigned
-// artifacts (no trust set, no signing key) for trusted single-repo CI or backend
-// validation. That opt-out has to say why; see [ward.RequireReason].
+// signing-key env var into cache options. A wired remote backend must declare a non-empty
+// trust set, so a shared cache never comes up unverified. The exception is insecure, the
+// explicit opt-out that accepts and produces unsigned artifacts (no trust set, no signing
+// key) for trusted single-repo CI or backend validation. That opt-out has to say why; see
+// [ward.RequireReason].
 func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason string) ([]cache.Option, error) {
 	if insecure {
 		if err := ward.RequireReason(insecureRemoteOverride, true, insecureReason); err != nil {

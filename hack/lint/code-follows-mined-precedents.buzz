@@ -27,8 +27,8 @@ final THIS = "hack/lint/code-follows-mined-precedents.buzz";
 // reads keys lint-rules on every Go source the indexes cover: a tree glob stops at a nested
 // project, so each project holding Go is named. proto's Go is all generated.
 export fun reads() > [str] {
-    return ["**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
-        "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go"];
+    return ["**/*.go", "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/figure/**/*.go","libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go"];
 }
 
 // check fails every departure from an established precedent in FAMILIES that SANCTIONED does

@@ -1,12 +1,12 @@
 ---
 title: "read-symbol: a bounded read inside one indexed declaration, which refs --definition --source prints checked"
-description: "An advisory: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked."
+description: "An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked."
 tags: [guard, rules, read-symbol, advise]
 ---
 
 # read-symbol
 
-An advisory: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked.
+An advisory by default: it explains, and blocks nothing, on a bounded read inside one indexed declaration, which refs --definition --source prints checked.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ A bounded read inside one indexed declaration, which refs --definition --source 
 ## Why
 
 Silent inside a method: refs resolves bare names, so its command would print every method of that name.
+
+## Default and override
+
+By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"read-symbol": "deny"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ advise [read-symbol]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

@@ -161,7 +161,7 @@ func scanRelative(prefix, path string) (string, bool) {
 
 // renameChains resolves every historical path in the scan to the name its file ends
 // the window under. The scan is newest-first, so by the time a rename's OLD name is
-// seen its NEW name has already been folded: resolving the new side first and
+// seen its NEW name has already been folded. Resolving the new side first and
 // pointing the old side at that result collapses a chain of any length in one pass,
 // with no fixpoint loop and no risk of cycling on a path that was renamed away and
 // later reused.

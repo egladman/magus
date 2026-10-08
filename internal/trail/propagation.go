@@ -89,7 +89,7 @@ var (
 //
 // A malformed value is DROPPED with a one-time note rather than recorded. Dropping is what keeps
 // the redaction exemption honest for the lease id; the note is what keeps a typo'd
-// environment from looking like a fleet that simply never attributed anything.
+// environment from looking like a fleet that never attributed anything.
 func SpawnFromEnv() Spawn {
 	spawn := parseTraceparent(strings.TrimSpace(os.Getenv(EnvTraceparent)))
 	spawn.Lease, spawn.Spawner = parseBaggage(strings.TrimSpace(os.Getenv(EnvBaggage)))

@@ -49,7 +49,7 @@ type Session struct {
 	// time, each parsed independently. It suppresses the BZZ3001 unused-import
 	// warning in Diagnostics (see checkShared), matching upstream Buzz, which gates
 	// the same warning on `self.flavor != .Repl` (Parser.zig), because a binding
-	// "unused so far" in one line may simply be used by a line not typed yet.
+	// "unused so far" in one line may be used by a line not typed yet.
 	// Default false; set via WithREPL. Distinct from embedded: magus eval and
 	// magusfile loading are also embedded but are NOT a REPL (a whole file is known
 	// up front, so "unused" there is a real finding).
@@ -1198,7 +1198,7 @@ func claimChunk(o *vmpackage.Owner, c *vmpackage.Chunk) {
 // scope (gopherbuzz's own extension over upstream; see importUsageIsReliable). Warnings
 // are suppressed entirely for a REPL session (s.repl); upstream Buzz does the same
 // (Parser.zig gates the same warning on `self.flavor != .Repl`), because a REPL
-// evaluates one statement at a time, so an import "unused so far" may simply be used by
+// evaluates one statement at a time, so an import "unused so far" may be used by
 // a line not typed yet.
 func (s *Session) checkShared(ctx context.Context, code string) (prog *ast.Program, typeErrs []typeError, warnings []typeError, parseErr error) {
 	parseStart := time.Now()

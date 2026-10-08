@@ -454,7 +454,7 @@ func buzzObjectName(t reflect.Type) string {
 //
 // This is what licenses stating the object name in the descriptor at all. The name
 // is already derivable by reflection, so a hand-written copy is only safe while
-// something proves the copy right; otherwise it is a second source of truth that
+// something proves the copy right. Otherwise it is a second source of truth that
 // drifts silently, and a wrong object name is worse than none: it tells an author to
 // annotate `> FileInfo` on a call that returns ExecResult, and the checker then
 // rejects correct code.

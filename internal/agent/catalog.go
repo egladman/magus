@@ -1,9 +1,12 @@
-// Package agent owns the two provider-neutral halves of Magus's agent surface: the
-// agent-skill artifact (this file: command packages supply embedded source files, and
-// this package renders, installs and verifies the generated surface without knowing about
-// a particular CLI host), and the guard verdict wire contract (guard.go, which lives here
-// because `package main` cannot be imported, so a parity check outside cmd/magus would
-// otherwise have to restate it).
+// Package agent owns the two provider-neutral halves of Magus's agent surface.
+//
+// The first is the agent-skill artifact (this file): command packages supply embedded
+// source files, and this package renders, installs and verifies the generated surface
+// without knowing about a particular CLI host.
+//
+// The second is the guard verdict wire contract (guard.go). It lives here because
+// `package main` cannot be imported, so a parity check outside cmd/magus would otherwise
+// have to restate it.
 package agent
 
 import (
@@ -38,15 +41,19 @@ import (
 // (see fullTwinSuffix), and both entries carry a cross-reference in their
 // description. The content digest cannot catch this on its own: it hashes the
 // SOURCE bodies, which did not change, while what an install writes did.
+//
 // 38: magus-commit-composition, restructuring an unpushed branch into reviewable
 // commits from project ownership, declared outputs and blast radius.
+//
 // 39: `magus graph verify` is gone; the installed copies are graded by `magus
 // doctor`'s agent skills check, which every skill that named the old verb now
 // points at.
+//
 // 40: magus-multi-agent learns two lease failure modes observed
 // in the field: a worker's actual base can differ from the handed checkpoint
 // (verify it, or materialize and re-record), and a lease whose environment
 // cannot execute magus gets ROOT-DEFERRED validation up front.
+//
 // 41: the vocabulary drops "unit" for a row of the ledger, in the skill, the
 // ledger table, and the tools it names.
 // 42: the lease runtime reaches the skills: magus-multi-agent
@@ -54,33 +61,40 @@ import (
 // deny/advise split, attention events for a blocked worker, and the session
 // audit of what a lease ran; both it and magus-vcs-hygiene read
 // `magus diff --impact` before landing.
+//
 // 43: the session CLI family (`magus session`, `session attention`, `session
 // dispose`, `session hook`, `session notify`) replaces the sessions/attention/
 // notify/hook top-level verbs in the skill text; there are no compat aliases.
+//
 // 44: enrollment moves to the W3C channels: a worker exports
 // BAGGAGE=magus.lease=<id>, plus TRACEPARENT and magus.spawner when its host
 // has them. The magus-specific environment variable it replaces is gone.
 // 45: the concept is a LEASE (the ledger row, the `--lease` flag, the BAGGAGE
 // member magus.lease), and magus-delegate-multi-agent is renamed
 // magus-multi-agent. Nothing answers to the old names.
+//
 // 46: verification instructions become proof obligations wherever the evidence
-// is cheap: a gate you added is shown FAILING before its green counts
-// (magus-run), drift is proven by a second regenerate rather than by reading
-// the diff (magus-vcs-hygiene), fan-out waits on the collision check REPORTING
+// is cheap. A gate you added is shown FAILING before its green counts
+// (magus-run). Drift is proven by a second regenerate rather than by reading
+// the diff (magus-vcs-hygiene). Fan-out waits on the collision check REPORTING
 // the write sets disjoint and the root reopens a lease's evidence itself
-// (magus-multi-agent), and every audit finding carries the command that
+// (magus-multi-agent). Every audit finding carries the command that
 // reproduces it (magus-context-audit).
+//
 // 47: magus-multi-agent names `magus graph build` as the prerequisite for its
 // central evidence command: in a fresh worktree `magus refs --occurrences`
 // answers "unknown, not absent" rather than reporting the edit sites, and the
 // partition is then built on a silence.
+//
 // 48: magus-query teaches the doc-section layer: every markdown heading is a
 // `docsection` node, so prose is retrieved with `magus query kind=docsection`
 // (a `path#anchor` pointer to one passage) instead of reading the whole file.
+//
 // 49: the query grammar teaches operators: kind=spell (match), kind!=op
 // (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
 // compat alias. `=` reads as a match over a structured graph, and `!=` removes
 // the flag collision the dash negation carried.
+//
 // 50: the memory journal skill, then still named for the agent-industry idiom,
 // gains the `elimination` record: a hypothesis an
 // investigation killed, carrying the why plus an `excerpt` of the evidence that
@@ -90,15 +104,18 @@ import (
 // sends, keeping the rest, so refreshing a status does not drop the body. Clearing
 // a field or changing a type is a delete and a create, and `allow_missing: false`
 // (CLI `--amend`) says the entry is meant to exist.
+//
 // 52: that skill is magus-memory again, and the agent-industry name it carried is
 // gone from every surface a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
 // always been called. Pre-1.0, so the old directory is not carried: install
 // removes it.
+//
 // 53: the SHORT/FULL axis answers to one word per end everywhere: the constants,
 // the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
 // installed file's stamp changes from `simple` to `short`, so every tree grades
 // stale until it is reinstalled.
+//
 // 54: magus-vcs-hygiene teaches how to get back to a recorded state, which nothing
 // on the agent surface said. A checkpoint holds a revision and a patch DIGEST, so it
 // can say whether a tree is the same one and can never give uncommitted work back;
@@ -107,46 +124,58 @@ import (
 // denies. Its DESCRIPTION now names all four backends magus drives, because a
 // description is what a host matches on to decide whether to load a skill at all, and
 // naming only git meant the safety skill never loaded in an hg, sl or jj repository.
+//
 // 55: magus-test-design's body gets the blank lines markdownlint wants around a heading
 // and a fence. A template action on its own line reads as a paragraph, so `{{if .Full}}`
 // flush against a heading left it with nothing above it. The skill has never passed lint
 // since it landed; the gate had not completed in between to say so.
+//
 // 56: magus-architecture-review gains "Say when not to build it". It already applied
 // that test to a graph kind, which earns its place only by answering a question the
 // others cannot; nothing applied it to a mechanism that ACTS.
+//
 // 57: magus-multi-agent says what a lease's validation is FOR. The field declared a
 // narrow target and enforced nothing, so seven fanned-out workers each ran the whole
 // pipeline concurrently; the guard now denies the gate under a lease that declared
 // something narrower, and the skill is where a worker learns why before it is refused.
+//
 // 58: magus-query says every result names its own next step, and that following it is
 // optional. The breadcrumb is a field on the result now, so a reader that never meets
 // the text still meets the suggestion.
 // 59: magus-run stops naming the tail_log tool, which is gone. It was a second door
 // onto the bytes magus\output already returns, keyed by project instead of by ref.
+//
 // 60: magus-buzz-write says `magus` is a host module and the import is what makes the
 // namespace exist. It used to read as "also available in a script", from when the
 // namespace was a session global an import never had to name.
+//
 // 61: magus-run names where a ref comes from when none is in hand: the run that
 // minted it, and `magus session`. Version 59 sent readers to a `magus tail` verb
 // that was removed in v0.4.0.
+//
 // 62: magus-run says a backgrounded run's capture is magus output and meets the
 // same filter rule, with `-o jsonl --tee <file>` as the spelling that makes it a
 // contract.
+//
 // 63: magus-docs-lookup names the doc-section query as the in-workspace route,
 // ahead of the published-site index it used to open with. Measured over 1,907
 // session transcripts: the section query ran 11 times ever while agents read a
 // markdown file under docs/ 964 times, and this skill is what routed them there.
+//
 // 64: magus-multi-agent says owned_paths opens reads too, and that a
 // worker needing to read what it must not write gets a `focus` on its row rather
 // than a wider owned_paths. Measured over 204 session transcripts: reads left the
 // units the session actually wrote to about a fifth of the time, and widening the
 // write paths to open a read is the move that puts two workers on one file.
+//
 // 65: magus-multi-agent renders the worker prompt with `magus ledger brief` and grades
 // the report with `magus ledger accept` instead of demanding four facts in prose, and
 // carries a coalescing rule: partition by write set, then merge what the write sets
 // allow, because a worker's fixed context load is paid whatever the diff's size.
+//
 // 66: magus-multi-agent says delegate. The agent-industry word it replaces is gone;
 // this tool is written for a person first.
+//
 // 67: magus-multi-agent follows the ledger's grading contract onto its new shape.
 // `magus ledger accept` now reads the report from --stdin only and exits 1 for a
 // rejection or 2 for one that will not decode; it derives pass or fail from the
@@ -160,65 +189,79 @@ import (
 // verdict carries the lease it graded against, a served next is pre-authorized,
 // and `magus ledger register` and `magus session hints` are named as the
 // terminal doors they are.
+//
 // 68: magus-multi-agent says a worker hands out part of its OWN lease rather than
 // delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
 // refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
 // not only one bound to the row being graded.
+//
 // 69: magus-multi-agent names a lease's boundary write_paths, read_paths and deny_paths and
 // its model `model`, which is what every magus surface now spells them; the old names are
 // accepted on input for one release and nowhere emitted.
+//
 // 70: magus-workspace-rules makes the recurring guard-feedback loop actionable:
 // a person or unbound orchestrator may explicitly refresh only the Magus-owned
 // host hook entries, while the rule engine, installed skills, memory,
 // and repository instructions remain outside that write set.
+//
 // 78: magus-workspace-rules states the self-improvement loop as a checklist that
 // stops at the first failing line, names who acts on each destination, and ends in
 // proof: show the rule in the file the agent LOADS, then re-run the command the
 // evidence cites. A change that does not move that verdict changed nothing, and
 // the loop it replaced ended before anyone could notice.
+//
 // 79: skill bodies resolve their cross-links instead of retyping them. CLI paths,
 // MCP tool names, sibling skill names and Buzz host calls now go through the
 // registries that define them, so a rename fails the install rather than shipping
 // prose that names something gone. A cited MGS code gains its docs URL, whose
 // category segment the digits do not imply.
+//
 // 80: `magus agent improve` is retired. Its read half is doctor's
 // recurring-guard-denials check, where every other workspace verdict already lives, and
 // its --apply half duplicated `magus agent harness apply` call for call.
 // magus-workspace-rules routes to both.
 // 81: internal/spellruntime is internal/spell. magus-sdk named the old path when
 // explaining what an SDK caller may and may not import.
+//
 // 82: `magus session hook` is `magus shell`, with no alias. The verdict was never
 // session-scoped, and one command now answers a person typing at a prompt and a host's
 // pre-tool-use hook: an operand for the first, stdin for the second, one evaluator
 // behind both. magus-context-audit piped its candidate command into the old path.
+//
 // 83: magus-multi-agent has the root declare a shared surface's names before any job
 // forks, solo changes included, and grades the declaration with the symbol gates that
 // exist: `present` for new names, `absent` for a predictable second copy, `unreferenced`
 // for a replaced helper. It also drops the fan-out and depth caps: a job tree grows as wide
 // and as deep as its partition supports, bounded only by the magus.yaml `jobs:` limits, and
 // teaches `--timeout`, the real-edit check at wait, and releasing a stale job's paths.
+//
 // 84: magus-multi-agent gives each worker its own worktree wherever a write path touches
 // workspace configuration, which `magus job fork` now refuses outright while another live
 // job holds the checkout. It also teaches `magus job exec --session`, since a lease binds
 // per session rather than per checkout, and the once-per-session spawn advisory that
 // reports the union of the write paths already held here.
+//
 // 85: magus-multi-agent makes "how is it going" a READ. Asking a worker costs it the turn
 // it was in and answers with its account of itself; the console link, `magus job watch` and
 // `magus describe job --gates` answer from the filesystem, the guard's trail and recorded
 // evidence, none of which the worker can make quiet. It also states what a contested path
 // means, since a file two live leases cover is attributed to neither.
+//
 // 86: magus-buzz-write and magus-buzz-review teach `magus buzz --check`, which
 // type-checks without running. Review had no way to PROVE a strict-mode finding and
 // said to read for it; running a file whose job is a side effect was never a check of
 // it, and was the only thing standing in for one.
+//
 // 87: magus-multi-agent no longer says magus transitions nothing. Every read of the job
 // store ends a live job it can prove dead (an ended ancestor, a vanished checkout, an
 // untaken job past jobs.stale_after), so a worktree is removed only once its job is done.
 // 88: magus-run's plan pipe runs the plan's shards with `magus run --stdin`; the ci-shard
 // target it named is gone.
+//
 // 89: magus-multi-agent drops `magus job exec --session`. The guard binds whoever runs
 // exec, keyed on the host's session and subagent ids, and a worker its spawn title
 // attributed needs no exec at all.
+//
 // 90: magus-multi-agent declares goals in the job record's `goals`, since the --gate-*
 // flags are gone and a writing job with neither a check nor a goal is refused. It grades
 // `unreferenced` while the old definition still exists, because once it is gone the
@@ -226,50 +269,63 @@ import (
 // 91: magus-multi-agent drops `--gates` from `magus describe job`. The read it named is
 // unconditional now: describe job always prints where each goal stands, graded against
 // the evidence magus holds, alongside the terms it already printed.
+//
 // 92: `magus agent harness apply` and `remove` are gone. magus-workspace-rules sends an
 // adapted harness through `magus describe harness`, which prints the host config and the
 // merge command a person runs; magus never writes host config.
+//
 // 93: the AGENTS.md block links the root MAGUS.md through a `{{routing-index}}` line
 // that `magus agent install` renders only when the workspace declares MAGUS.md as an
 // output, instead of asserting a committed MAGUS.md unconditionally.
+//
 // 94: magus-memory is gone with the memory store. magus-commit-composition,
 // magus-context-audit and magus-workspace-rules point at the harness's own memory
 // where they pointed at the store; the evidence a rule cites is an output ref, a trail
 // timestamp or a graph query.
+//
 // 95: the per-verb MCP tools magus\ already covers are gone. Skills name `client`
 // and the member (`magus\query`, `magus\run`, ...). `{{tool}}` resolves a bare
 // tool name, and `{{buzz}}` resolves a top-level method.
+//
 // 96: where, run_affected, affected_plan, and affected_explain fold into client
 // (`magus\where`, `magus\affected`, `magus\cmd`). config_get is config
 // and console_present is console. The blast radius member is magus\impact.
 // 97: the MCP client does not offer magus\cmd. A magusfile and `magus buzz` still do.
+//
 // 98: `magus agent harness apply` and `remove` are gone; magus-workspace-rules sends a
 // forked harness through `magus describe harness`. magus-run says a direct `client`
 // call is bounded at 10 minutes and names `magus affected list`. magus-query pages
 // with limit and offset, and insight names a `magus buzz` fallback where it has no
 // CLI verb.
+//
 // 99: magus-buzz-write's examples import encoding/json, list with fs\listDir and raise
 // from an exported main, and it points at hack/README.md. magus-run names hack/on-actions
 // and hack/on-linux for proving a command on Linux without a pull request.
+//
 // 100: magus-multi-agent teaches `magus job edit` for widening or revoking a job's write
 // paths; magus-vcs-hygiene says vcs\ref() is null when no name points at the revision;
 // magus-workspace-rules forks a harness spell with `magus spell pull`.
 // 101: magus-architecture-review's insight fence is followed by a blank line, which
 // markdownlint requires.
+//
 // 102: magus-diagram ships: figures with flow, claims, scope, composition and drift.
 // 103: magus-diagram teaches magus/figure: boxes from Dir records, groups by layer or dirs set, edges from the graph.
 // 104: magus-diagram passes title, eyebrow, desc and direction to figure\of and paints with figure\draw.
+//
 // 105: magus-multi-agent moves a live job's boundary and goals with `magus job apply -f`;
 // `magus job edit` is gone.
+//
 // 106: magus-buzz-write is renamed magus-buzz-lang and rebuilt around examples: one
 // reference script, a table of the mistakes TypeScript, Go and Python habits produce
 // with the diagnostic each shows, every built-in method, and the check-fix-run loop.
 // Its examples no longer call main() themselves, which ran it twice.
+//
 // 107: magus-multi-agent teaches the fork job fork accepts: file and glob write paths,
 // `<file>#<declaration>` claims, the --check form, fork before spawn with the description
 // `<parent>/<role> <job>`; its description asks to be loaded before the first subagent
 // spawn, and rules the guard enforces are cut to one line. magus-buzz-lang calls magus
 // through the typed magus\describe.<noun> methods.
+//
 // 108: magus-multi-agent asks a plan's claims to cite the output ref of a run;
 // magus-buzz-lang points at its built-in methods table in prose rather than an anchor.
 // 109: headings across the skills read in sentence case, as the repo's Markdown rules

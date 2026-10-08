@@ -78,12 +78,12 @@ const (
 	// command, so its payload records the requested command or path and the guard's decision, never
 	// an invented exit status. MCP calls remain KindMCPToolCall because their wrapper sees completion.
 	KindAgentCommand Kind = "agent_command"
-	// KindAgentSpawn records that an orchestrating agent handed work to a sub-agent, and WHAT
+	// KindAgentSpawn records that an orchestrating agent handed work to a subagent, and WHAT
 	// CONTEXT it handed over. It is the lease sibling of KindAgentCommand: same producer (a
 	// pre-tool hook), same "observed, not executed" contract, but the thing observed is a context
 	// transfer rather than a command. The handed context lands in the request blob and only its
 	// REF rides the event, because a lease prompt is routinely kilobytes. A continuation, a
-	// message to a sub-agent that already exists, records here too as ActionAgentContinue.
+	// message to a subagent that already exists, records here too as ActionAgentContinue.
 	//
 	// Correlation to a lease is COOPERATIVE, not enforced. Nothing in the host event
 	// names a magus lease, and magus cannot infer one from prose, so the event's Lease is stamped
@@ -377,8 +377,8 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 }
 
 // AgentSpawn is the normalized, host-independent observation that an orchestrating agent handed
-// work to a sub-agent. Child is whatever label the host's event supplied for the callee (a
-// sub-agent type, a task description, the spawning tool's name); Context is the text actually
+// work to a subagent. Child is whatever label the host's event supplied for the callee (a
+// subagent type, a task description, the spawning tool's name); Context is the text actually
 // handed over, which is the whole point of the record and the reason it goes to a blob.
 //
 // There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed

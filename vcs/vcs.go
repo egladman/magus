@@ -316,7 +316,7 @@ func checkRevsetRef(ref string) error {
 // root instead, which is what needs this prefix to translate pathspecs.
 //
 // It asks the driver for its own root rather than reading a marker directory, so a backend
-// whose root is not simply "the dir containing the claim" stays correct.
+// whose root is not just "the dir containing the claim" stays correct.
 //
 // Both sides are symlink-resolved before being related, and that is load-bearing rather
 // than defensive: every backend reports a root with symlinks already resolved, while dir

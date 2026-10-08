@@ -205,9 +205,9 @@ type Target struct {
 	// regression gets a second attempt nobody asked to give it.
 	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"retry_on_volatile"`
 	// RetryOnVolatileReason is the prose the magusfile gave for RetryOnVolatile, and it
-	// is required for the reason SkipCacheReason and DriftReason are: asking magus to
+	// is required for the reason SkipCacheReason and DriftReason are. Asking magus to
 	// rerun a target until it goes green is a claim that THIS TARGET FAILS WITHOUT THE
-	// CODE BEING WRONG, not a preference, and a bare `true` leaves the next reader no
+	// CODE BEING WRONG, not a preference. A bare `true` leaves the next reader no
 	// way to tell a known-volatile suite from a bug somebody stopped chasing.
 	RetryOnVolatileReason string `json:"retry_on_volatile_reason,omitempty" buzz:"retry_on_volatile_reason"`
 	// Advisory keeps this target's failure from failing a composite that reaches it
@@ -647,8 +647,8 @@ func WalkChain(p *Project, target string, lookup func(path string) *Project, fn 
 // composes with ctx.needs, transitively, as workspace-rooted globs.
 //
 // These globs belong in the composing step's cache key. The engine cannot key a
-// skip_cache target's real inputs, since not being keyable is why it opted out, but
-// it can key the artifact the target maintains: with these globs in the parent's
+// skip_cache target's real inputs, since not being keyable is why it opted out. It
+// can key the artifact the target maintains: with these globs in the parent's
 // sources, an artifact that moved turns the parent's hit into a miss, so the parent
 // re-runs against what the gate below actually produced instead of replaying an
 // entry recorded against different bytes.

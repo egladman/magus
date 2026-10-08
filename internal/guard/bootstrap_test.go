@@ -26,7 +26,7 @@ func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 }
 
 func judgeOwnBuild(cwd, command string) ShellVerdict {
-	return judgeOwnBuildWith(testDependencies(), cwd, command)
+	return judgeOwnBuildWith(strict(testDependencies()), cwd, command)
 }
 
 func judgeOwnBuildWith(deps Dependencies, cwd, command string) ShellVerdict {
@@ -36,7 +36,7 @@ func judgeOwnBuildWith(deps Dependencies, cwd, command string) ShellVerdict {
 
 // loadingAs is testDependencies with the workspace load answering err, counting each load.
 func loadingAs(err error, loads *int) Dependencies {
-	deps := testDependencies()
+	deps := strict(testDependencies())
 	deps.Inspect = func(context.Context, string) (types.WorkspaceRepository, error) {
 		*loads++
 		return nil, err
@@ -124,7 +124,7 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 			Argv: bootstrapArgv,
 			Why:  bootstrapWhy,
 		}, v.Next[0], command)
-		assert.Equal(t, Evaluate(testDependencies(), command), judgeOwnBuild(built, command), command)
+		assert.Equal(t, Evaluate(strict(testDependencies()), command), judgeOwnBuild(built, command), command)
 	}
 }
 
@@ -136,7 +136,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: fresh})
 	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + fresh + `","tool_input":{"command":"` + bootstrapCommand + `"}}`
 
-	v := Judge(ctx, testDependencies(), Request{Input: envelope})
+	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
 	assert.Contains(t, v.Context, "Use ./magus from then on")

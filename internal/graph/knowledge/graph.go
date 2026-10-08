@@ -124,14 +124,19 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 }
 
 // sanitizeAttrs copies attrs with every value stripped of control chars and capped, nil
-// when empty. The copy is fresh because the read paths (Output, Select, Neighborhood)
-// return maps that alias the live graph, and a query must not write shared state.
+// when empty; [AttrDoc] keeps its lines, as sanitizeDoc says. The copy is fresh because the
+// read paths (Output, Select, Neighborhood) return maps that alias the live graph, and a
+// query must not write shared state.
 func sanitizeAttrs(attrs map[string]string) map[string]string {
 	if len(attrs) == 0 {
 		return nil
 	}
 	clean := make(map[string]string, len(attrs))
 	for k, v := range attrs {
+		if k == AttrDoc {
+			clean[k] = sanitizeDoc(v)
+			continue
+		}
 		clean[k] = sanitize(v, maxLabelLen)
 	}
 	return clean

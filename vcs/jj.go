@@ -510,7 +510,7 @@ func (v jjVCS) KeepIncoming(ctx context.Context, root string, paths []string) er
 
 // MarkResolved implements types.ConflictResolver as a NO-OP, and that is correct rather
 // than unimplemented. jj has no index and no resolve state: it snapshots the working copy
-// automatically, and a file that no longer carries conflict markers is simply resolved.
+// automatically, and a file that no longer carries conflict markers is resolved.
 // Verified: after restoring one side, `jj resolve --list` stopped reporting the path
 // without anything being marked.
 func (v jjVCS) MarkResolved(_ context.Context, _ string, _ []string) error { return nil }
@@ -647,7 +647,7 @@ func (v jjVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, e
 // ls-files approximates by requiring a deliberate `git add`. A repository whose @- is the
 // root commit reports nothing tracked, which is correct rather than a failure.
 //
-// An argument matching nothing is simply absent rather than an error: jj exits 0, like
+// An argument matching nothing is absent rather than an error: jj exits 0, like
 // git's ls-files and unlike hg's and sl's `files`.
 //
 // Run from the workspace ROOT with rebased pathspecs, for the reason DirtyFiles is: jj

@@ -1,16 +1,27 @@
 ---
 title: "stage-classify: staging without classifying, when generated and source differ"
-description: "An advisory: it explains, and blocks nothing, on staging without classifying, when generated and source differ."
+description: "An advisory by default: it explains, and blocks nothing, on staging without classifying, when generated and source differ."
 tags: [guard, rules, stage-classify, advise]
 ---
 
 # stage-classify
 
-An advisory: it explains, and blocks nothing, on staging without classifying, when generated and source differ.
+An advisory by default: it explains, and blocks nothing, on staging without classifying, when generated and source differ.
 
 ## What it catches
 
 Staging without classifying, when generated and source differ.
+
+## Default and override
+
+By default this rule takes the decision `advise`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"stage-classify": "deny"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -27,3 +38,4 @@ advise [stage-classify]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

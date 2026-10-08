@@ -66,6 +66,8 @@ export fun bootstrapFigure() > figure\Figure !> any {
             why: "the CLI's generated config flags, linked into the same binary")
         .except(figure\without(cmdTools(), drop: [magus\dir("cmd/magus-utils")]),
             why: "docs generators and the browser playground, each built by its own target once ./magus exists; go-build links ./cmd/magus alone")
+        .except([magus\dir("internal/guard/builtin")],
+            why: "each built-in rule's grade; the raw-tool advisory this figure draws is graded there like every other rule")
         .except([magus\dir("cmd/magus-utils")],
             why: "the type generator spells-generate runs through go generate; the Spell bytecode actor stands for that step")
         .except([

@@ -86,9 +86,9 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 }
 
 // checkDriftForCommit is the VCS-facing half of serverCheckDrift, kept separate so it can
-// be exercised against a real repository without needing a full magus workspace:
-// classify and gofmtList are the two things that need one (turning changed paths into
-// their declared source/output role, and asking a real gofmt binary about a file), and a
+// be exercised against a real repository without needing a full magus workspace.
+// classify and gofmtList are the two things that need one: turning changed paths into
+// their declared source/output role, and asking a real gofmt binary about a file. A
 // test supplies its own instead of loading a workspace or shelling a real tool.
 //
 // It returns ok=false, with no error, for every ordinary reason there is nothing to say:

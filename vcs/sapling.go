@@ -236,8 +236,8 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 // RangeDiff implements types.RangeReporter via `sl diff -r "ancestor(base,head)" -r
 // head`, the same Mercurial-inherited ancestor() revset hg's RangeDiff uses. Verified
 // separately against Sapling 0.2.20260811-150444, per this file's own rule about verifying
-// the two backends independently rather than porting one to the other: a repository forked
-// into two single-file branches showed the same failure mode hg's does, where diffing base
+// the two backends independently rather than porting one to the other. A repository forked
+// into two single-file branches showed the same failure mode hg's does: diffing base
 // directly against head (the naive two-point form) reported base's own new file as a
 // deletion, and the ancestor-based form did not.
 //
@@ -828,7 +828,7 @@ func saplingDeletedPaths(ctx context.Context, root string, paths []string) map[s
 }
 
 // Conflicts implements types.ConflictResolver. No merge in progress is not an error:
-// `resolve --list` simply prints nothing, which parses to no conflicts.
+// `resolve --list` prints nothing, which parses to no conflicts.
 //
 // --root-relative pins the paths to the repository root. Sapling reports them relative to
 // the CWD by default, and every other method here takes root-relative paths, so without it

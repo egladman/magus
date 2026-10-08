@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
@@ -135,6 +136,13 @@ func readDeps(root string) Dependencies {
 	}
 }
 
+// pastLines is deps with read-navigation set to judge a whole read only past lines; the
+// binary carries no length of its own.
+func pastLines(deps Dependencies, lines int) Dependencies {
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleReadNavigation): {Decision: builtin.Advise, Lines: lines}}
+	return deps
+}
+
 func TestReadNavigationDeniesWholeReads(t *testing.T) {
 	t.Parallel()
 	root := readFixture(t)
@@ -191,7 +199,7 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 			"What the file holds (2 declarations):\n  1-2: fun run\n  4-133: test \"gate\"",
 		}, []string{"refs"}},
 		// Several files: each is judged, and the first mapped one over the threshold answers.
-		{`cat internal/store/small.go docs/a.md`, deps, []string{pageMap}, nil},
+		{`cat internal/store/small.go docs/a.md`, pastLines(deps, 120), []string{pageMap}, nil},
 		{`cat CLAUDE.md internal/store/store.go`, deps, []string{storeMap}, nil},
 	} {
 		v, ok := readVerdictAt(tt.deps, root, tt.command, DialectBash)
@@ -221,7 +229,7 @@ func TestReadNavigationStaysSilent(t *testing.T) {
 		deps    Dependencies
 	}{
 		// Under the threshold.
-		{`cat internal/store/small.go`, deps},
+		{`cat internal/store/small.go`, pastLines(deps, 120)},
 		// A kind with no parser here.
 		{`cat console/x.ts`, deps},
 		// Written to be read whole.
@@ -335,4 +343,51 @@ func TestReadSymbolAdvisesBoundedReads(t *testing.T) {
 		assert.Contains(t, v.Context, tt.lines, tt.command)
 		assert.Contains(t, v.Context, hint.Refs.With(tt.name, "--definition", "--source"), tt.command)
 	}
+}
+
+// A demoted whole read does not end the walk over a line's reads: a later read whose rule
+// still denies wins, and with none the demoted read outranks plain advice.
+func TestReadVerdictWalksPastADemotedRead(t *testing.T) {
+	t.Parallel()
+	root := readFixture(t)
+	deps := readDeps(root)
+	const line = `cat internal/store/small.go && sed -n 7,30p internal/store/store.go`
+	whole, _ := readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
+	bounded, _ := readVerdictAt(deps, root, `sed -n 7,30p internal/store/store.go`, DialectBash)
+
+	v, ok := readVerdictAt(deps, root, line, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, whole, v, "the demoted whole read outranks the read-symbol advisory")
+
+	deps.Builtins = map[string]builtin.Setting{string(advisoryReadSymbol): {Decision: builtin.Deny}}
+	v, ok = readVerdictAt(deps, root, line, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, bounded, v)
+	assert.Equal(t, ShellVerdict{Deny: bounded.Context, Rule: denyRule{Name: advisoryReadSymbol}}, deps.grade(v))
+}
+
+func TestReadNavigationAdvisesByDefault(t *testing.T) {
+	root := readFixture(t)
+	deps := readDeps(root)
+	deps.callDir = root
+
+	requireAdvisedOnce(t, Evaluate(deps, `cat internal/store/store.go`), denyRuleReadNavigation)
+}
+
+func TestReadNavigationLinesComeFromTheWorkspace(t *testing.T) {
+	t.Parallel()
+	root := readFixture(t)
+	deps := readDeps(root)
+
+	// No lines declared: every whole read of a mapped file is judged, however short.
+	v, ok := readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, denyRuleReadNavigation, v.Rule.Name)
+
+	deps.Builtins = map[string]builtin.Setting{string(denyRuleReadNavigation): {Decision: builtin.Advise, Lines: 120}}
+	_, ok = readVerdictAt(deps, root, `cat internal/store/small.go`, DialectBash)
+	assert.False(t, ok, "under the declared lines")
+	v, ok = readVerdictAt(deps, root, `cat internal/store/store.go`, DialectBash)
+	require.True(t, ok)
+	assert.Equal(t, denyRuleReadNavigation, v.Rule.Name, "past the declared lines")
 }

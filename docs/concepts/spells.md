@@ -30,7 +30,6 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | [`python`](spells/python.md)         | Python         | 7   | Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops.                                                 |
 | [`rust`](spells/rust.md)             | Rust           | 7   | Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops.                                                       |
 | [`typescript`](spells/typescript.md) | TypeScript     | 14  | TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager.                              |
-| [`vale`](spells/vale.md)             | -              | 1   | Vale spell: judge prose that a target extracts against a .vale.ini's styles.                                                        |
 <!-- END SPELL LIST -->
 
 ## Spells vs Targets

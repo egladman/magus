@@ -119,10 +119,10 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // carries a message only with a denial, so the advisory collapsed into a plain allow. A
 // copy that predates this enforces every deny and silently drops every explanation, and
 // nothing in a session reveals that half the contract stopped arriving. Two smaller
-// changes ride along: a write is judged before it lands wherever a pre-write event exists
-// (a deny on an after-the-write event is a warning, not a block), and the brief a
-// compacted session is handed back renders as a JSON envelope on request, for a host that
-// parses a session-start hook's stdout as a reply rather than reading it as context.
+// changes ride along. A write is judged before it lands wherever a pre-write event exists
+// (a deny on an after-the-write event is a warning, not a block). The brief a compacted
+// session is handed back renders as a JSON envelope on request, for a host that parses a
+// session-start hook's stdout as a reply rather than reading it as context.
 //
 // 13: the contract grew a third surface, MCP tool calls, and magus-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
@@ -139,7 +139,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // pointer at the citation index.
 //
 // 15: the contract grew the decision `ask`, which the push gate returns for an ungated
-// push from a session no job lease binds, and every template learned to render it through
+// push from a session no job lease binds. Every template learned to render it through
 // its host's own approval prompt: from the hook where the hook can ask, and elsewhere by
 // answering the approval request a prompt rule the harness writes raises. Every template
 // now refuses a decision it does not know instead of allowing it. A copy that predates
@@ -147,9 +147,9 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // with nobody asked.
 // 16: the Buzz ports take their two per-entry knobs off the wire instead of out of the
 // environment. A hook command is an argv the host splits itself, so a `VAR=value` prefix
-// only works where something re-joins and re-parses it; the ports now decide from the
+// only works where something re-joins and re-parses it. The ports now decide from the
 // event whether to forward the whole envelope (the field HOST_EVENT_PATH names is absent
-// on exactly the surfaces whose payload is not one string) and read their `magus shell`
+// on exactly the surfaces whose payload is not one string). They read their `magus shell`
 // flags from the argv `magus buzz` forwards after `--`. The sh copies are unchanged and
 // keep their variables, because sh is what runs them. This bumps because the CONFIG and
 // the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and

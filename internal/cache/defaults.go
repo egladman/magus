@@ -59,7 +59,7 @@ func MachineCeiling() int {
 //
 // A configured value was previously taken at face value, so `concurrency: 32` in a
 // magus.yaml written on a big machine ran 32 parallel steps on a laptop with 10 cores.
-// That does not fail; it thrashes, and every target simply takes longer, which is the
+// That does not fail; it thrashes, and every target takes longer, which is the
 // failure mode nothing ever gets attributed to. The number also outlives the machine it
 // was chosen on: it travels in the repo, and the person it hurts is whoever has the
 // smallest box.

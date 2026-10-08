@@ -1,16 +1,27 @@
 ---
 title: "hook-wiring-write: a leased or agent-attributed write to the hook wiring the guard is installed by"
-description: "A deny rule: it refuses a leased or agent-attributed write to the hook wiring the guard is installed by, and names what to run instead."
+description: "A deny rule by default: it refuses a leased or agent-attributed write to the hook wiring the guard is installed by, and names what to run instead."
 tags: [guard, rules, hook-wiring-write, deny]
 ---
 
 # hook-wiring-write
 
-A deny rule: it refuses a leased or agent-attributed write to the hook wiring the guard is installed by, and names what to run instead.
+A deny rule by default: it refuses a leased or agent-attributed write to the hook wiring the guard is installed by, and names what to run instead.
 
 ## What it catches
 
 A leased or agent-attributed write to the hook wiring the guard is installed by.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"hook-wiring-write": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -27,3 +38,4 @@ deny [hook-wiring-write]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

@@ -24,6 +24,7 @@ import "std";
 import "magus";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/commits" as subjects;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
 
@@ -60,6 +61,11 @@ final word = $"\S+";
 final heading = $"^ {0,3}#{1,6}(\s|$)";
 final bullet = $"^\s*([-*+]|[0-9]+[.)])\s";
 final codeSpan = $"`[^`]*`";
+// Throat-clearing opens a sentence, so those match only capitalized: "a note that ..."
+// names the notes feature and "this function's job" is a contract. The adverbs are filler
+// wherever they sit.
+final filler = $"\b(Note that|Please note|It should be noted|It is worth noting|It's worth noting|It is important to|It's important to|This function|This method|[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say)\b";
+final subagentSpelling = $"(?i)\bsub-agents?\b";
 final sentenceEnd = $"[.!?]+(\s|$)";
 
 // The flags whose value is text this rule reads, long form first.
@@ -453,6 +459,32 @@ export fun judgeShape(body: str) > Findings {
     return Findings{ denies = denies, advice = advice };
 }
 
+// descriptionWording judges the words of body outside its code blocks and code spans: no
+// selling adjectives, no throat-clearing, and one spelling of subagent.
+export fun descriptionWording(body: str) > [str] {
+    final problems = mut [<str>];
+    final prose = mut [<str>];
+    foreach (b in splitBlocks(body)) {
+        if (b.kind != "code") {
+            prose.append(codeSpan.replaceAll(b.lines.join(" "), with: ""));
+        }
+    }
+    final text = prose.join("\n");
+    final selling = subjects\puffery.match(text);
+    if (selling != null) {
+        problems.append("\"{selling![0]}\": drop it and say what changed");
+    }
+    final clearing = filler.match(text);
+    if (clearing != null) {
+        problems.append("\"{clearing![0]}\": drop it and state the fact");
+    }
+    final spelling = subagentSpelling.match(text);
+    if (spelling != null) {
+        problems.append("\"{spelling![0]}\": Write 'subagent(s)'");
+    }
+    return problems;
+}
+
 // describesBranch reports whether p's pull request is the checkout's branch's, the only one
 // whose diff the rule can read: `gh pr create` without --head, or `gh pr edit` naming no
 // pull request.
@@ -500,6 +532,9 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         problems.append("a spaced hyphen used as a dash: restructure the sentence");
     }
     if (known and body != null) {
+        foreach (problem in descriptionWording(body!)) {
+            problems.append(problem);
+        }
         final shape = judgeShape(body!);
         foreach (problem in shape.denies) {
             problems.append(problem);
@@ -534,6 +569,9 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         final problem = conventional\problem(title!);
         if (problem != "") {
             problems.append("the title fails the check CI runs on it: pr-title: \"{title!}\": {problem}");
+        }
+        foreach (problem in subjects\wordingProblems(title!, conventional: true)) {
+            problems.append("the title: {problem}");
         }
     }
     return Findings{ denies = problems, advice = advice };
@@ -657,6 +695,63 @@ test "each description rule is named when broken" {
         std\assert(reason.indexOf(want) != null, message: "{body}: {reason}");
         std\assert(reason.indexOf("leads with the problem and the change") != null, message: "states the fix");
     }
+}
+
+test "a description is judged for filler, puffery and the spelling of subagent" {
+    final cases = {
+        "Note that the cache keys a run on what it reads.": "\"Note that\": drop it and state the fact",
+        "It simply rereads the file.": "\"simply\"",
+        "Basically the cache keys a run on what it reads.": "\"Basically\"",
+        "Please note the cache keys a run on what it reads.": "\"Please note\"",
+        "It is worth noting that a miss reruns it.": "\"It is worth noting\"",
+        "This function rereads the file.": "\"This function\"",
+        "It hands the work to a sub-agent.": "Write 'subagent(s)'",
+        "It hands the work to Sub-Agents.": "\"Sub-Agents\": Write 'subagent(s)'",
+        "Adds a robust spell.": "\"robust\": drop it and say what changed",
+        "Adds a Seamless cache.": "\"Seamless\"",
+        "Adds a cutting-edge cache.": "\"cutting-edge\"",
+    };
+    foreach (body, want in cases) {
+        final problems = descriptionWording(body);
+        std\assert(problems.len() == 1 and problems[0].indexOf(want) != null, message: "{body}: {problems}");
+        std\assert(judgedReason(goodTitle, body: body).indexOf(want) != null, message: "denied in the guard: {body}");
+    }
+    foreach (body in [
+        "The cache keys a run on what it reads. A miss reruns it.",
+        "It records a note that the queue reads. It is not this function's job.",
+        "It hands the work to subagents.",
+        "The robustness of the key; a seamlessness test.",
+    ]) {
+        std\assert(descriptionWording(body).len() == 0, message: "{body}: {descriptionWording(body)}");
+    }
+    std\assert(descriptionWording("Adds a robust spell and simply a sub-agent.").len() == 3, message: "each rule speaks once");
+}
+
+test "code in a description is not judged for wording" {
+    foreach (body in [
+        "Keeps the `robust` flag and the `sub-agent` key; `Note that` stays.",
+        "Pins the key.\n\n```\nit simply is a robust sub-agent\n```\n\n- Drops the old key.",
+        "Pins the key.\n\n- Keeps `simply` as the name.\n- Keeps `a\nrobust` split over lines.",
+    ]) {
+        std\assert(descriptionWording(body).len() == 0, message: "{body}: {descriptionWording(body)}");
+        std\assert(judgedReason(goodTitle, body: body) == "", message: body);
+    }
+    std\assert(descriptionWording("Pins the key.\n\n```\nsimply\n```\n\nIt is simply done.").len() == 1, message: "prose after a fence is judged");
+}
+
+test "a title is judged for the imperative and puffery after its prefix" {
+    foreach (title, want in {
+        "feat(prose): adds a vale spell": "not 'added' or 'adds'",
+        "feat(prose)!: added a vale spell": "not 'added' or 'adds'",
+        "fix: updated the key": "not 'added' or 'adds'",
+        "fix(cache): add a robust key": "drop it and say what changed",
+        "feat(cache): add a powerful cache": "\"powerful\"",
+    }) {
+        final reason = judgedReason(title, body: "Pins the key.");
+        std\assert(reason.indexOf("the title: ") != null and reason.indexOf(want) != null, message: "{title}: {reason}");
+    }
+    std\assert(judgedReason("fix(cache): keep the key stable", body: "Pins the key.") == "", message: "imperative title");
+    std\assert(judgedReason(goodTitle, body: "Adds the hook.") == "", message: "a body is not held to the imperative");
 }
 
 test "the budget counts the changes the diff proves" {

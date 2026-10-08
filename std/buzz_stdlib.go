@@ -12,12 +12,11 @@ package std
 // os.LookupEnv. Inside a sandbox the magus form is the safer surface.
 //
 // Only genuine duplicates are listed. Entries whose magus behavior the stdlib
-// can't reproduce are deliberately absent: os.exit raises a lifecycle ExitError
-// (Buzz's os.exit hard-exits the process), os.sleep is cancellable (Buzz's
-// blocks), crypto.*_file hashes a file (Buzz's hash only takes a string), and
-// crypto.*_hex returns hex where Buzz's crypto.hash returns the RAW digest
-// bytes; the equivalence once claimed here is what shipped v0.4.2's
-// SHA256SUMS as raw digests.
+// can't reproduce are deliberately absent. os.exit raises a lifecycle ExitError
+// (Buzz's os.exit hard-exits the process). os.sleep is cancellable (Buzz's blocks).
+// crypto.*_file hashes a file (Buzz's hash only takes a string). crypto.*_hex returns
+// hex where Buzz's crypto.hash returns the RAW digest bytes, and listing that pair as
+// equivalent once shipped v0.4.2's SHA256SUMS as raw digests.
 var buzzStdlibEquiv = map[string]string{
 	"fs.exists":              "fs.exists",
 	"fs.mkdir_all":           "fs.makeDirectory",

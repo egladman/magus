@@ -267,46 +267,52 @@ func MagusImportGraph(ctx context.Context) (types.ImportGraph, error) {
 	return kg.ImportGraph(), nil
 }
 
-// precedentWorkspace is the part of *magus.Magus magus\precedents reads beside the graph:
-// a freshen of every index, the freshness verdict `magus status` prints, and which files are
-// declared outputs.
+// precedentWorkspace is the part of *magus.Magus magus\precedents and magus\symbols read beside
+// the graph: a freshen of every index, the freshness verdict `magus status` prints, and which
+// files are declared outputs.
 type precedentWorkspace interface {
 	FreshenSymbolIndexes(ctx context.Context) error
 	SymbolIndexStatusByStamp(ctx context.Context) []types.SymbolIndexStatus
 	ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error)
 }
 
-// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
-// and each declared index's freshness. Every index is freshened first, as magus\diff does, so a
-// caller never runs a graph build of its own; one that could not be made current reads as
-// stale, the freshen's error in its detail. Freshness is judged before the graph is read, so
-// the verdict covers the index the rows came from. Generated files are never counted. The
-// answer is a PrecedentReport as a map: no Buzz object mirrors it.
-func MagusPrecedents(ctx context.Context) (map[string]any, error) {
+// indexedGraph is what a member judging the symbol indexes reads: the graph with its symbols,
+// each declared index's freshness, and the files that are declared outputs.
+type indexedGraph struct {
+	kg        *knowledge.Graph
+	indexes   []types.SymbolIndexStatus
+	generated map[string]bool
+}
+
+// judgedGraph freshens every index, as magus\diff does, so a caller never runs a graph build of
+// its own; one that could not be made current reads as stale, the freshen's error in its
+// detail. Freshness is judged before the graph is read, so the verdict covers the index the
+// answer came from.
+func judgedGraph(ctx context.Context, member string) (indexedGraph, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return nil, errNoWorkspace("precedents")
+		return indexedGraph{}, errNoWorkspace(member)
 	}
 	pw, ok := ws.(precedentWorkspace)
 	if !ok {
-		return nil, errors.New("magus\\precedents: this workspace cannot judge its symbol indexes")
+		return indexedGraph{}, fmt.Errorf("magus\\%s: this workspace cannot judge its symbol indexes", member)
 	}
-	g, err := graphsFromContext(ctx, "precedents")
+	g, err := graphsFromContext(ctx, member)
 	if err != nil {
-		return nil, err
+		return indexedGraph{}, err
 	}
 	freshErr := pw.FreshenSymbolIndexes(ctx)
-	report := types.PrecedentReport{Indexes: pw.SymbolIndexStatusByStamp(ctx)}
+	indexes := pw.SymbolIndexStatusByStamp(ctx)
 	if freshErr != nil {
-		for i := range report.Indexes {
-			if idx := &report.Indexes[i]; idx.Freshness != types.SymbolIndexFresh {
+		for i := range indexes {
+			if idx := &indexes[i]; idx.Freshness != types.SymbolIndexFresh {
 				idx.Detail = strings.TrimSpace(idx.Detail + "\n" + freshErr.Error())
 			}
 		}
 	}
 	kg, err := g.KnowledgeGraphWithSymbols(ctx)
 	if err != nil {
-		return nil, err
+		return indexedGraph{}, err
 	}
 	var files []string
 	for _, n := range kg.Nodes() {
@@ -317,7 +323,7 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 	slices.Sort(files)
 	entries, err := pw.ClassifyFiles(ctx, slices.Compact(files))
 	if err != nil {
-		return nil, fmt.Errorf("magus\\precedents: %w", err)
+		return indexedGraph{}, fmt.Errorf("magus\\%s: %w", member, err)
 	}
 	generated := map[string]bool{}
 	for _, e := range entries {
@@ -325,7 +331,12 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 			generated[e.Path] = true
 		}
 	}
-	report.Precedents = kg.Precedents(knowledge.PrecedentOptions{Generated: generated})
+	return indexedGraph{kg: kg, indexes: indexes, generated: generated}, nil
+}
+
+// reportMap is report as the map a Buzz caller reads, keyed as its JSON is: no Buzz object
+// mirrors it.
+func reportMap(report any) (map[string]any, error) {
 	b, err := json.Marshal(report)
 	if err != nil {
 		return nil, err
@@ -335,6 +346,36 @@ func MagusPrecedents(ctx context.Context) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// MagusPrecedents backs magus\precedents: the precedents the merged symbol indexes establish,
+// and each declared index's freshness, judged as judgedGraph describes. Generated files are
+// never counted. The answer is a PrecedentReport as a map.
+func MagusPrecedents(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "precedents")
+	if err != nil {
+		return nil, err
+	}
+	return reportMap(types.PrecedentReport{
+		Precedents: ig.kg.Precedents(knowledge.PrecedentOptions{Generated: ig.generated}),
+		Indexes:    ig.indexes,
+	})
+}
+
+// MagusSymbols backs magus\symbols: every declaration in the merged symbol indexes with its
+// doc comment, and each declared index's freshness, judged as judgedGraph describes. Test and
+// generated files are never listed. The answer is a SymbolReport as a map.
+func MagusSymbols(ctx context.Context) (map[string]any, error) {
+	ig, err := judgedGraph(ctx, "symbols")
+	if err != nil {
+		return nil, err
+	}
+	decls := ig.kg.SymbolDecls(knowledge.SymbolDeclOptions{Generated: ig.generated})
+	if decls == nil {
+		// No symbols reads as an empty list, never null.
+		decls = []types.SymbolDecl{}
+	}
+	return reportMap(types.SymbolReport{Symbols: decls, Indexes: ig.indexes})
 }
 
 // MagusDir backs magus\dir: one workspace directory as a Dir. dir nodes for Go packages

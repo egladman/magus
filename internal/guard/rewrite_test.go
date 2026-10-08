@@ -133,3 +133,12 @@ func TestRankInterpreterRewriteNeverReplacesADeny(t *testing.T) {
 
 	assert.Equal(t, advisory, rankInterpreterRewrite(advisory, ""))
 }
+
+func TestInterpreterRewriteAdvisesByDefault(t *testing.T) {
+	at := rewriteFixture(t)
+	reason := denyInterpreterRewrite(at, `python3 -c "open('internal/ledger/store.go','w').write(out)"`, DialectBash)
+
+	v := Dependencies{}.rankGraded(ShellVerdict{}, denyRuleInterpreterRewrite, reason, rankInterpreterRewrite)
+
+	requireAdvisedOnce(t, v, denyRuleInterpreterRewrite)
+}

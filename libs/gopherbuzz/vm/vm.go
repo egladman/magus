@@ -78,7 +78,7 @@ type icacheEntry struct {
 // mcacheEntry is one slot in the per-VM member-access inline cache.
 // The verification key is (chunk, def): the cache is indexed by instruction ip
 // alone, and different chunks reuse the same ip range, so an entry must name the
-// chunk it was learned in — two chunks can each have a member access at the same
+// chunk it was learned in. Two chunks can each have a member access at the same
 // ip on the *same* object type but for *different* fields, and a def-only check
 // would serve the other chunk's field index. With the chunk pinned, the def
 // pointer then guards receiver polymorphism at that exact instruction, and idx
@@ -132,7 +132,7 @@ type VM struct {
 	mcache []mcacheEntry
 	// icache is the per-instruction inline cache for OpInvoke on immutable-map
 	// receivers (std-module method calls like math.sqrt). Grow-only, never reset:
-	// a stale entry (different chunk or receiver at this ip) simply fails the
+	// a stale entry (different chunk or receiver at this ip) fails the
 	// (chunk, recv) verification and is relearned, so it can never call the wrong
 	// member. Per-VM, so concurrent VMs sharing a *Chunk never race. See
 	// icacheEntry and OpInvoke.

@@ -657,8 +657,8 @@ func (r *wsRegistry) janitor(ctx context.Context) {
 //
 // This is `magus server reload`. It is eviction rather than a config PATCH on purpose:
 // the server holds open workspaces that each captured a config when they loaded, not a
-// config object to overwrite, so dropping them makes the next load read magus.yaml
-// through exactly the path a cold start uses, and there is no second code path that could
+// config object to overwrite. Dropping them makes the next load read magus.yaml
+// through exactly the path a cold start uses, so no second code path could
 // disagree with it about what the file means.
 //
 // A busy workspace is skipped, not waited for. A run that is already underway keeps the

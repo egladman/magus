@@ -1549,6 +1549,15 @@ func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
 		itemsUses[indexUses] = vm.StrValue(v.Uses[indexUses])
 	}
 	out.MapSet("uses", vm.ListValue(itemsUses))
+	itemsEnvs := make([]vm.Value, len(v.Envs))
+	for indexEnvs := range v.Envs {
+		mappedEnvsItem := vm.NewMap()
+		for keyEnvsItem, itemEnvsItem := range v.Envs[indexEnvs] {
+			mappedEnvsItem.MapSet(keyEnvsItem, vm.StrValue(itemEnvsItem))
+		}
+		itemsEnvs[indexEnvs] = mappedEnvsItem
+	}
+	out.MapSet("envs", vm.ListValue(itemsEnvs))
 	return out
 }
 
@@ -2403,6 +2412,7 @@ func ObjectRuleDoc(v types.RuleDoc) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("decision", vm.StrValue(v.Decision))
+	out.MapSet("workspace", vm.StrValue(v.Workspace))
 	out.MapSet("catches", vm.StrValue(v.Catches))
 	out.MapSet("why", vm.StrValue(v.Why))
 	return out

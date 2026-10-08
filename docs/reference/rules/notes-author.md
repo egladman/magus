@@ -1,12 +1,12 @@
 ---
 title: "notes-author: an agent authoring a human's note, whose only provenance is who wrote it"
-description: "A deny rule: it refuses an agent authoring a human's note, whose only provenance is who wrote it, and names what to run instead."
+description: "A deny rule by default: it refuses an agent authoring a human's note, whose only provenance is who wrote it, and names what to run instead."
 tags: [guard, rules, notes-author, deny]
 ---
 
 # notes-author
 
-A deny rule: it refuses an agent authoring a human's note, whose only provenance is who wrote it, and names what to run instead.
+A deny rule by default: it refuses an agent authoring a human's note, whose only provenance is who wrote it, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ An agent authoring a human's note, whose only provenance is who wrote it.
 ## Why
 
 A note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled: `capture` files a review transcript as a note, where the commit puts a person's name on prose they never read. Read the store instead, and say what belongs in it so the person can write it.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"notes-author": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [notes-author]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

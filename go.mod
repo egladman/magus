@@ -128,8 +128,7 @@ tool (
 
 // These replace directives are LOCAL-DEV ONLY: replace is never transitive, so a
 // downstream `go get` of this module resolves the tagged versions the requires
-// above name (libs/diagnostics/v0.1.0, libs/gopherbuzz/v0.1.0) and never sees
-// them. In this repo they build against the working tree instead, so a change to
+// above name and never sees them. In this repo they build against the working tree instead, so a change to
 // a nested module is exercised by the commit that makes it, with no
 // tag-then-bump round trip. Not something to "clean up": without them every
 // in-repo build (go run ./cmd/magus, magus run build) compiles the last tag, not

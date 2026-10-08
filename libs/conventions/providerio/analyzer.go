@@ -27,7 +27,7 @@ import (
 // httpNames are the net/http selectors that build or hold a client: constructing
 // one, issuing a request through the package-level helpers, or naming the
 // package's defaults. Bare http.Request, http.ResponseWriter, http.Handler and
-// http.Server are not here - a governed package may legitimately serve, and
+// http.Server are not here: a governed package may legitimately serve, and
 // serving is not what this rule is about.
 var httpNames = map[string]bool{
 	"Client":                true,

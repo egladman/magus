@@ -448,7 +448,7 @@ func generatedFromPath(root, spec string) (string, bool) {
 //
 // The match is on the PATH, never on the host or the owner/repo in the URL. A fork, a
 // mirror, or a move between forges changes those, while the claim being checked is only
-// ever "the workspace holds this file". A URL naming some other repository's file simply
+// ever "the workspace holds this file". A URL naming some other repository's file
 // does not exist here and falls through to an upstream link, which is the right answer
 // for it; the residual false positive needs the identical path to exist in both trees,
 // and costs a link classified as internal rather than any action taken on it.

@@ -216,11 +216,11 @@ type SandboxAllow struct {
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 	// Env is the variable that relocates the location (GOCACHE, CARGO_HOME, MISE_DATA_DIR).
 	Env string `json:"env,omitempty" yaml:"env,omitempty"`
-	// Base is the directory Path is relative to, resolved per host: home, userCache and
-	// userConfig (Go's os.UserCacheDir and os.UserConfigDir), xdgCache, xdgData and
-	// xdgState (the XDG layout on every OS), $VAR (that variable's value, the first
-	// entry of a path list; unset, the entry grants nothing), or binRoot (the install
-	// root of Bin found on PATH, the directory above the bin/ its symlinks resolve into).
+	// Base is the directory Path is relative to, resolved per host. The values are home,
+	// userCache and userConfig (Go's os.UserCacheDir and os.UserConfigDir), and xdgCache,
+	// xdgData and xdgState (the XDG layout on every OS). A $VAR is that variable's value,
+	// the first entry of a path list; unset, the entry grants nothing. binRoot is the
+	// install root of Bin found on PATH, the directory above the bin/ its symlinks resolve into.
 	Base string `json:"base,omitempty" yaml:"base,omitempty"`
 	// Bin is the binary a binRoot base is found from.
 	Bin string `json:"bin,omitempty" yaml:"bin,omitempty"`

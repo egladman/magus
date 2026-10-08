@@ -25,11 +25,18 @@
 // dismiss_review's review is the id reviews reported. A change record carries the fields of
 // [types.Change], a merged record those of [types.MergedChange] and an
 // unqueued record those of [types.UnqueuedChange]. app is --app as the person gave it,
-// in the provider's own notation, which the queue never reads. describe's setup, asked
-// for with a status_context, carries [types.Setup] as status_context, credential {id,
-// name?}, required_checks [{context, integration?, events?}], settings [{name, value,
-// want}], app? {slug, id, client_id?, registration_url?, install_url?, environment?,
-// variable?, secret?} and steps [{title, command? or url?}]. A describe that cannot
+// in the provider's own notation, which the queue never reads.
+//
+// describe's setup, asked for with a status_context, carries [types.Setup]:
+//
+//	status_context
+//	credential      {id, name?}
+//	required_checks [{context, integration?, events?}]
+//	settings        [{name, value, want}]
+//	app?            {slug, id, client_id?, registration_url?, install_url?, environment?, variable?, secret?}
+//	steps           [{title, command? or url?}]
+//
+// A describe that cannot
 // describe a setup for that app returns refused instead, carrying
 // [types.SetupRefusedError]: what is missing, where the provider shows it, and the app
 // to ask again with. list_artifacts' run carries

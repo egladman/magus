@@ -1149,8 +1149,8 @@ func mcpFork(params map[string]string) childFork {
 //
 // An ALLOWLIST over what the call carried, not a scan of the keys the guard happens to
 // know: a key outside the three below is a rewrite of something else on the row whatever
-// it holds, and reading a list of known keys instead means every key added to the ledger's
-// merge is cleared here until somebody remembers to add it in two places.
+// it holds. Reading a list of known keys instead would clear every key added to the
+// ledger's merge until somebody remembered to add it in two places.
 func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	declared, present := "", false
 	for key, value := range params {

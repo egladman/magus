@@ -152,12 +152,10 @@ func renderSkill(cat *agent.Catalog, full, short agent.AgentSkill) string {
 // writeVariants writes both forms into one tab strip, so the reader flips
 // between them in place rather than scrolling from one to the other.
 //
-// The comparison a reader wants is "what did the short one drop", and two walls of
-// near-identical text answer that badly however they are stacked: the previous shape
-// printed the full body and hid the short one in a <details>, which meant the two
-// bodies were never in the same position on screen and the difference had to be held
-// in the head. Swapping one for the other at a fixed position makes the diff a
-// flicker.
+// The comparison a reader wants is "what did the short one drop". Two walls of
+// near-identical text answer that badly however they are stacked, because the bodies
+// are never in the same position on screen. Swapping one for the other at a fixed
+// position makes the difference a flicker.
 //
 // No script. The strip is the site's existing radio-and-label pattern: the input is
 // visually hidden, its label is the tab, and the stylesheet shows the panel whose

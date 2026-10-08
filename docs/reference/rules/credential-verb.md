@@ -1,12 +1,12 @@
 ---
 title: "credential-verb: an agent minting, printing, rotating or revoking a credential through the CLI"
-description: "A deny rule: it refuses an agent minting, printing, rotating or revoking a credential through the CLI, and names what to run instead."
+description: "A deny rule by default: it refuses an agent minting, printing, rotating or revoking a credential through the CLI, and names what to run instead."
 tags: [guard, rules, credential-verb, deny]
 ---
 
 # credential-verb
 
-A deny rule: it refuses an agent minting, printing, rotating or revoking a credential through the CLI, and names what to run instead.
+A deny rule by default: it refuses an agent minting, printing, rotating or revoking a credential through the CLI, and names what to run instead.
 
 ## What it catches
 
@@ -15,6 +15,17 @@ An agent minting, printing, rotating or revoking a credential through the CLI.
 ## Why
 
 An agent holds the token it was given, and a session that mints another holds a grant nobody handed it. Refused: the console and connector token `create` and `revoke` commands, `magus graph export --open --follow` (its link carries a sign-in code), and `magus config token print`, `generate` and `revoke`, the operator token that reaches token management. It holds however the binary is spelled: `./magus`, a path, `go run ./cmd/magus`, or inside a `$(...)` substitution. This is a seatbelt for a harness that opted in, not a boundary: a process running as the user can reach the same files.
+
+## Default and override
+
+By default this rule takes the decision `deny`. A workspace sets it by name, in its root
+magusfile, to `deny`, `advise` or `off`:
+
+```buzz
+magus\guard.builtins({"credential-verb": "advise"})
+```
+
+A loosening takes effect once it is committed; a tightening applies at once.
 
 ## Seeing it
 
@@ -31,3 +42,4 @@ deny [credential-verb]: ...
 
 - [All rules](index.md) - what this workspace enforces, deny first
 - [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired
+- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default

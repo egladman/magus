@@ -165,9 +165,10 @@ func refuse(actor Actor, id, rule string) error {
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on (which starts a declared row running), SHRINK its write paths (which is how the skill has it release one), and
-// end itself in fail, no_return, or exited; on any other row it may only CREATE a child of itself
-// inside its own boundary, or, as an [asVerdict] write, pass a row below it. Widening a
+// it landed on (which starts a declared row running), SHRINK its write paths (which is how
+// the skill has it release one), and end itself in fail, no_return, or exited. On any other
+// row it may only CREATE a child of itself inside its own boundary, or, as an [asVerdict]
+// write, pass a row below it. Widening a
 // boundary, changing the plan's shape, and grading its own row are the orchestrator's, which
 // is the asymmetry the whole rule exists for: a worker that can widen its own row has no
 // boundary at all.

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,6 +140,22 @@ func TestSplitRunAcrossCallsFiresOncePerSession(t *testing.T) {
 
 	third := Judge(ctx, deps, Request{Input: "magus run lint web", Host: "test-host", Session: "s1"})
 	assert.Empty(t, third.Context, "a second differing pair in the same session stays silent")
+}
+
+// A workspace that raised split-run to deny is refused on every split call: the
+// once-per-session gate holds advice, never a deny.
+func TestSplitRunRaisedToDenyRefusesEveryFiring(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	deps := withSetting(string(advisorySplitRun), builtin.Deny)
+	judge := func(input string) Verdict {
+		v := Judge(ctx, deps, Request{Input: input, Host: "test-host", Session: "s1"})
+		return Verdict{Decision: v.Decision, Rule: v.Rule}
+	}
+	refused := Verdict{Decision: "deny", Rule: string(advisorySplitRun)}
+
+	assert.Equal(t, Verdict{Decision: "pass"}, judge("magus run lint ."), "a first call has nothing to compare against")
+	assert.Equal(t, refused, judge("magus run lint docs"))
+	assert.Equal(t, refused, judge("magus run lint web"), "the second firing refuses too")
 }
 
 // The same target on the same projects is the same call, not a split one.

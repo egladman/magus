@@ -5,12 +5,13 @@ import "./hack/magusfile/harness" as hostconfig;
 // Aliased: a module and a target function cannot share a name.
 import "./hack/magusfile/toolchain" as toolchains;
 import "./hack/magusfile/commits" as commits;
-import "./hack/prose/vale" as prosevale;
-import "./hack/prose/messages" as prosemessages;
+import "./hack/policy/commits" as wording;
 import "./hack/magusfile/changelog" as changelog;
 import "./hack/magusfile/advisories" as advisories;
 import "spells/git/hooks" as githooks;
 import "./hack/policy/guard" as agentpolicy;
+import "./hack/policy/builtins" as agentbuiltins;
+magus\guard.builtins(agentbuiltins\BUILTINS);
 magus\guard.command(agentpolicy\judge);
 magus\guard.spawn(agentpolicy\judgeSpawn);
 magus\guard.write(agentpolicy\judgeWrite);
@@ -34,7 +35,6 @@ import "magus/spell/cosign";
 import "magus/spell/markdown";
 import "magus/spell/bash";
 import "magus/spell/buzz";
-import "magus/spell/vale";
 
 import "./hack/magusfile/badges" as badges;
 import "./hack/magusfile/coverage" as cov;
@@ -48,7 +48,6 @@ import "spells/golang/gomod";
 
 import "project/libs/gopherbuzz";
 import "project/libs/diagnostics";
-import "project/libs/coldread";
 import "project/libs/conventions";
 import "project/libs/testlayout";
 import "project/libs/scipbuzz";
@@ -122,7 +121,6 @@ magus\project({
         "magus.yaml",
         "Dockerfile",
         "Dockerfile.static",
-        ".vale.ini",
         "hack/docs/screenshot.mjs",
         ".*/hooks.json",
         ".codex/rules/*.rules",
@@ -184,8 +182,7 @@ magus\project({
         },
         "pr-title": {"skip_cache": "judges the pull request event, which no file input carries"},
         "pr-changelog": {"skip_cache": "judges the pull request event and the base ref, which no file input carries"},
-        "pr-description": {"skip_cache": "judges the pull request event, which no file input carries"},
-        "commit-messages": {"skip_cache": "judges commit messages in a revision range, which no file input carries"},        "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
+        "git-hooks-install": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "git-hooks-remove": {"skip_cache": "reconciles the git hooks directory, which is outside the tree and no input carries"},
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
@@ -644,83 +641,23 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
     return event?.q("title").stringValue() ?? "";
 }
 
-// valeOn is the vale spell's op as the function hack/prose's checks take: Vale's JSON
-// report over paths, read with the root .vale.ini.
-fun valeOn(ctx: magus\Context) > fun (paths: [str]) > str !> any {
-    return fun (paths: [str]) > str !> any {
-        final argv = mut ["--config", ".vale.ini"];
-        foreach (p in paths) { argv.append(p); }
-        return vale["vale"](ctx, {"args": argv}).stdout;
-    };
-}
-
-fun prose_verdict(target: str, judged: obj{ blocking: [Finding], advice: [Finding] }) > void !> any {
-    foreach (f in judged.advice) {
-        magus\log.info("{target}: {prosevale\render(f)}");
-    }
-    if (judged.blocking.len() > 0) {
-        throw prosevale\failure(target, findings: judged.blocking);
-    }
-}
-
-// Fails a pull request title that is not a conventional commit subject, or whose wording
-// Vale's title rules reject.
+// Fails a pull request title that is not a conventional commit subject, or whose
+// description opens in the past tense or sells instead of saying what changed.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
+    final problems = mut [<str>];
     final problem = commits\problem(title);
     if (problem != "") {
-        throw "pr-title: \"{title}\": {problem}";
-    }
-    prose_verdict("pr-title", judged: prosemessages\title(fs\tempDir("prose"), title: title, vale: valeOn(ctx)));
-    magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
-}
-
-// Fails a pull request description whose wording Vale rejects: filler, puffery,
-// attribution, non-ASCII. The guard's pull request rules own its length and shape. Reads
-// the body from the file named after `--`, or from the event under the gha charm.
-export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
-    var body = "";
-    var label = "pull request description";
-    if (args.len() > 0) {
-        label = args[0];
-        body = fs\readFile(label);
+        problems.append(problem);
     } else {
-        final event = pull_request_event(ctx, target: "pr-description");
-        if (event == null) {
-            throw "pr-description: no description: pass a file after `--`, or add the gha charm in a pull_request workflow";
+        foreach (wordy in wording\wordingProblems(title, conventional: true)) {
+            problems.append(wordy);
         }
-        body = event?.q("body").stringValue() ?? "";
     }
-    prose_verdict("pr-description",
-        judged: prosemessages\description(fs\tempDir("prose"), body: body, label: label, vale: valeOn(ctx)));
-}
-
-// Fails a commit message in a revision range (`-- <range>`, default <base>..HEAD) that
-// breaks Vale's commit rules: a subject over 100 characters, a body, sentence case, a
-// tense other than the imperative, attribution, puffery or non-ASCII.
-export fun commit_messages(ctx: magus\Context, args: [str]) > void !> any {
-    final revs = if (args.len() > 0) args[0] else vcs\base() + "..HEAD";
-    prose_verdict("commit-messages",
-        judged: prosemessages\commits(fs\tempDir("prose"), revs: revs, vale: valeOn(ctx)));
-}
-
-// Judges comment prose and function names with Vale (hack/prose) after every rule passes
-// its own test cases. It reads every source a spell declares comment syntax for, and
-// fails on any error-level finding.
-export fun prose(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles(".vale.ini", ".vale/styles/**/*.yml", "hack/prose/*.buzz",
-        "**/*.go", "**/*.buzz", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.mjs", "**/*.proto",
-        "console/**/*.ts", "console/**/*.tsx", "docs/**/*.ts", "docs/**/*.mjs", "libs/**/*.go",
-        "libs/**/*.buzz", "proto/**/*.proto");
-    final tests = prosevale\testFindings(vale["vale"](ctx, {"args": prosevale\TEST_ARGS}).stdout);
-    if (tests.len() > 0) {
-        throw prosevale\failure("prose", findings: tests);
+    if (problems.len() > 0) {
+        throw "pr-title: \"{title}\": {problems.join("; ")}";
     }
-    // TODO(prose): ctx.needs the symbol index ops so the name ban reads a current index by
-    // construction. A nested `magus graph build` here is MGS3007, so until then a stale
-    // index is a finding.
-    // The script a person runs by hand, as lint-rules runs hack/lint/run.buzz.
-    magus\cmd("buzz", args: ["hack/prose/run.buzz", "--", "tree"]);
+    magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
 }
 
 // Fails a feat, fix, perf or breaking pull request that ships code without a changelog
@@ -2054,10 +1991,10 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
 // imports this project, so it cannot be a need.
 export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     // test reads every module's Go files, which each library test's own format rewrites.
-    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format);
     // generate first: the denominator reads every Go file the generators write.
-    ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, coldread\test,
+    ctx.needs(generate, test, gopherbuzz\test, diagnostics\test,
         conventions\test, testlayout\test, scipbuzz\test, buzz_test);
     ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
         "gen/site/assets/typescript-coverage.svg");
@@ -2075,8 +2012,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
     final tables = cov\staticBlockTables();
     final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
         [COVERAGE_PROFILE, "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-         "libs/coldread/coverage.out", "libs/conventions/coverage.out",
-         "libs/testlayout/coverage.out", "libs/scipbuzz/coverage.out"]));
+         "libs/conventions/coverage.out", "libs/testlayout/coverage.out",
+         "libs/scipbuzz/coverage.out"]));
     final go_pct = cov\formatPercent(go_totals["covered"], statements: go_totals["statements"]);
     final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
     final typescript_pct = fs\readFile(typescript).trim();
@@ -2094,7 +2031,7 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
-        "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/prose/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
+        "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
@@ -2126,12 +2063,6 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         }
     }
     cover_module("hack/lint/run.buzz", [], {});
-    cover_module("hack/prose/run.buzz", [], {});
-    foreach (mod in fs\glob("hack/prose/*.buzz")) {
-        if (mod.value != "hack/prose/run.buzz") {
-            cover_module(mod.value, ["--embedded"], {});
-        }
-    }
     foreach (dir in ["hack/magusfile", "hack/policy"]) {
         foreach (mod in fs\glob(dir + "/*.buzz")) {
             cover_module(mod.value, ["--embedded"], {});
@@ -2188,8 +2119,6 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
-                   "libs/coldread/go.mod", "libs/coldread/go.sum",
-                   "libs/coldread/**/*.go",
                    "libs/conventions/go.mod", "libs/conventions/go.sum",
                    "libs/conventions/**/*.go");
     // Removed first so the link gets a fresh inode: macOS keys the code signature on the
@@ -2212,14 +2141,14 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/guides/integrations/agents/package.json", "libs/textsearch/package.json",
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
-                   "libs/coldread/magusfile.buzz", "libs/conventions/magusfile.buzz",
+                   "libs/conventions/magusfile.buzz",
                    "libs/diagnostics/magusfile.buzz",
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
                    "libs/scipbuzz/magusfile.buzz",
                    "proto/magusfile.buzz", "docs/tour/*.buzz",
                    ".golangci.yml", ".mockery.yaml", ".markdownlintignore", ".gitattributes", "dprint-base.json",
-                   "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static", ".vale.ini",
+                   "mise.toml", "magus.yaml", "Dockerfile", "Dockerfile.static",
                    "internal/agent/catalog.go", "internal/agent/skills/*/SKILL.md",
                    ".claude/skills/magus-skill-authoring/SKILL.md",
                    ".claude/skills/magus-local-development/SKILL.md",
@@ -2231,20 +2160,24 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/site/diagrams/*.buzz", "libs/figure/figure.buzz",
                    "**/*.md", "console/**/*.md", "docs/**/*.md",
                    "docs/guides/integrations/agents/**/*.md",
-                   "libs/coldread/**/*.md", "libs/conventions/**/*.md",
+                   "libs/conventions/**/*.md",
                    "libs/diagnostics/**/*.md", "libs/figure/**/*.md",
                    "libs/gopherbuzz/**/*.md", "libs/testlayout/**/*.md",
                    "libs/textsearch/**/*.md", "libs/scipbuzz/**/*.md", "proto/**/*.md",
-                   "**/*_test.go", "libs/coldread/**/*_test.go", "libs/conventions/**/*_test.go",
+                   "**/*_test.go", "libs/conventions/**/*_test.go",
                    "libs/diagnostics/**/*_test.go", "libs/figure/**/*_test.go",
                    "libs/gopherbuzz/**/*_test.go", "libs/testlayout/**/*_test.go",
                    "libs/scipbuzz/**/*_test.go",
-                   "**/*.go", "libs/coldread/**/*.go", "libs/conventions/**/*.go",
+                   "**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
+                   "libs/conventions/**/*.go",
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
-                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go");
-    // code-follows-mined-precedents fails on a stale symbol index. magus\precedents freshens
-    // every index here, under this run's lock, so the rule run below finds them current; read
-    // from that child process instead, a rebuild would be refused the lock (MGS3007).
+                   "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
+                   "console/**/*.ts", "docs/**/*.ts",
+                   "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts");
+    // code-follows-mined-precedents and symbol-docs-follow-prose-rules fail on a stale symbol
+    // index. magus\precedents freshens every index here, under this run's lock, so the rules
+    // run below find them current; read from that child process instead, a rebuild would be
+    // refused the lock (MGS3007).
     _ = magus\precedents();
     magus\cmd("buzz", args: ["hack/lint/run.buzz"]);
 }
@@ -2344,7 +2277,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     // lint reads libs/**/*.go and test reads **/*.go, which each nested module's format
     // rewrites (MGS4008).
-    ctx.needs(gopherbuzz\format, diagnostics\format, coldread\format, conventions\format,
+    ctx.needs(gopherbuzz\format, diagnostics\format, conventions\format,
         testlayout\format, scipbuzz\format);
     if (!advisories\inheritedFatal(args)) {
         ctx.needs(lint, build, test, security);

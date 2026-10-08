@@ -14,9 +14,25 @@ fun quote(s: str) > str {
 // describe is the one sentence a page and its frontmatter share, so they cannot disagree.
 fun describe(r: magus\Rule) > str {
     if (r.decision == "deny") {
-        return "A deny rule: it refuses " + r.catches + ", and names what to run instead.";
+        return "A deny rule by default: it refuses " + r.catches + ", and names what to run instead.";
     }
-    return "An advisory: it explains, and blocks nothing, on " + r.catches + ".";
+    return "An advisory by default: it explains, and blocks nothing, on " + r.catches + ".";
+}
+
+// override is the section naming a rule's compiled default and the one call that changes
+// it, showing the decision the rule does not already take.
+fun override(r: magus\Rule) > str {
+    var other = "deny";
+    if (r.decision == "deny") {
+        other = "advise";
+    }
+    return "## Default and override\n\n"
+        + "By default this rule takes the decision `" + r.decision + "`. A workspace sets it by name, in its root\n"
+        + "magusfile, to `deny`, `advise` or `off`:\n\n"
+        + "```buzz\n"
+        + "magus\\guard.builtins(\{\"" + r.name + "\": \"" + other + "\"})\n"
+        + "```\n\n"
+        + "A loosening takes effect once it is committed; a tightening applies at once.\n\n";
 }
 
 // upperFirst capitalizes only a leading ASCII letter: several rules open with a
@@ -40,7 +56,7 @@ export fun renderRule(r: magus\Rule) > str {
     if (r.why != "") {
         page = page + "## Why\n\n" + r.why + "\n\n";
     }
-    return page + "## Seeing it\n\n"
+    return page + override(r) + "## Seeing it\n\n"
         + "A verdict names its rule in brackets, which is how you got here:\n\n"
         + "```text\n"
         + r.decision + " [" + r.name + "]: ...\n"
@@ -49,7 +65,8 @@ export fun renderRule(r: magus\Rule) > str {
         + "`magus describe rules` lists every rule this workspace enforces.\n\n"
         + "## See also\n\n"
         + "- [All rules](index.md) - what this workspace enforces, deny first\n"
-        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n";
+        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n"
+        + "- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default\n";
 }
 
 // pad right-pads a cell to width. Every cell is ASCII, so a byte count is its width.
@@ -94,15 +111,17 @@ export fun renderIndex(rules: [magus\Rule]) > str {
         if (r.decision == "deny") { denies.append(r); } else { advisories.append(r); }
     }
     var page = "---\ntitle: \"Guard rules\"\n"
-        + "description: \"Every rule the guard enforces: what each one catches, whether it refuses or explains, and where the reasoning lives.\"\n"
+        + "description: \"Every rule the guard enforces: what each one catches, whether it denies or advises by default, and where the reasoning lives.\"\n"
         + "tags: [guard, rules, reference]\n---\n\n"
         + "# Guard rules\n\n"
         + "What this workspace enforces. A **deny** refuses the call and names the\n"
-        + "replacement; an **advise** attaches context and blocks nothing.\n\n"
+        + "replacement; an **advise** attaches context and blocks nothing. The tables\n"
+        + "show each rule's compiled default, and a workspace sets any of them with\n"
+        + "`magus\\guard.builtins`.\n\n"
         + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
         + "name is the entry below. `magus describe rules` prints the same list.\n\n"
-        + table("Refuses", rules: denies)
-        + table("Explains", rules: advisories);
+        + table("Denies by default", rules: denies)
+        + table("Advises by default", rules: advisories);
     // One final newline, not the last table's two, which the formatter would trim.
     while (page.endsWith("\n")) {
         page = page.sub(0, len: page.len() - 1);
@@ -149,13 +168,13 @@ fun pipeRule() > magus\Rule {
 test "a deny rule with a why renders its page" {
     final want = "---\n"
         + "title: \"sleep-loop: a loop that only sleeps\"\n"
-        + "description: \"A deny rule: it refuses a loop that only sleeps, and names what to run instead.\"\n"
+        + "description: \"A deny rule by default: it refuses a loop that only sleeps, and names what to run instead.\"\n"
         + "tags: [guard, rules, sleep-loop, deny]\n"
         + "---\n"
         + "\n"
         + "# sleep-loop\n"
         + "\n"
-        + "A deny rule: it refuses a loop that only sleeps, and names what to run instead.\n"
+        + "A deny rule by default: it refuses a loop that only sleeps, and names what to run instead.\n"
         + "\n"
         + "## What it catches\n"
         + "\n"
@@ -164,6 +183,17 @@ test "a deny rule with a why renders its page" {
         + "## Why\n"
         + "\n"
         + "It holds a tool slot.\n"
+        + "\n"
+        + "## Default and override\n"
+        + "\n"
+        + "By default this rule takes the decision `deny`. A workspace sets it by name, in its root\n"
+        + "magusfile, to `deny`, `advise` or `off`:\n"
+        + "\n"
+        + "```buzz\n"
+        + "magus\\guard.builtins(\{\"sleep-loop\": \"advise\"})\n"
+        + "```\n"
+        + "\n"
+        + "A loosening takes effect once it is committed; a tightening applies at once.\n"
         + "\n"
         + "## Seeing it\n"
         + "\n"
@@ -179,7 +209,8 @@ test "a deny rule with a why renders its page" {
         + "## See also\n"
         + "\n"
         + "- [All rules](index.md) - what this workspace enforces, deny first\n"
-        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n";
+        + "- [The guard](../../guides/integrations/agents/guard.md) - how a verdict is reached and wired\n"
+        + "- [Setting a built-in rule](../../guides/integrations/agents/guard.md#setting-a-built-in-rule) - how a workspace changes this default\n";
     final got = renderRule(sleepRule());
     std\assert(got == want, message: got);
 }
@@ -188,44 +219,53 @@ test "an advisory quotes its frontmatter and keeps a leading backtick" {
     final page = renderRule(pipeRule());
     final head = "---\n"
         + "title: \"raw-pipe: `a | b` piped \\\"raw\\\"\"\n"
-        + "description: \"An advisory: it explains, and blocks nothing, on `a | b` piped \\\"raw\\\".\"\n"
+        + "description: \"An advisory by default: it explains, and blocks nothing, on `a | b` piped \\\"raw\\\".\"\n"
         + "tags: [guard, rules, raw-pipe, advise]\n"
         + "---\n"
         + "\n"
         + "# raw-pipe\n"
         + "\n"
-        + "An advisory: it explains, and blocks nothing, on `a | b` piped \"raw\".\n"
+        + "An advisory by default: it explains, and blocks nothing, on `a | b` piped \"raw\".\n"
         + "\n"
         + "## What it catches\n"
         + "\n"
         + "`a | b` piped \"raw\".\n"
         + "\n"
-        + "## Seeing it\n";
+        + "## Default and override\n"
+        + "\n"
+        + "By default this rule takes the decision `advise`. A workspace sets it by name, in its root\n"
+        + "magusfile, to `deny`, `advise` or `off`:\n"
+        + "\n"
+        + "```buzz\n"
+        + "magus\\guard.builtins(\{\"raw-pipe\": \"deny\"})\n"
+        + "```\n";
     std\assert(page.startsWith(head), message: page);
 }
 
 test "the index pads both tables and ends in one newline" {
     final want = "---\n"
         + "title: \"Guard rules\"\n"
-        + "description: \"Every rule the guard enforces: what each one catches, whether it refuses or explains, and where the reasoning lives.\"\n"
+        + "description: \"Every rule the guard enforces: what each one catches, whether it denies or advises by default, and where the reasoning lives.\"\n"
         + "tags: [guard, rules, reference]\n"
         + "---\n"
         + "\n"
         + "# Guard rules\n"
         + "\n"
         + "What this workspace enforces. A **deny** refuses the call and names the\n"
-        + "replacement; an **advise** attaches context and blocks nothing.\n"
+        + "replacement; an **advise** attaches context and blocks nothing. The tables\n"
+        + "show each rule's compiled default, and a workspace sets any of them with\n"
+        + "`magus\\guard.builtins`.\n"
         + "\n"
         + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
         + "name is the entry below. `magus describe rules` prints the same list.\n"
         + "\n"
-        + "## Refuses\n"
+        + "## Denies by default\n"
         + "\n"
         + "| Rule                        | Catches                 |\n"
         + "| --------------------------- | ----------------------- |\n"
         + "| [sleep-loop](sleep-loop.md) | a loop that only sleeps |\n"
         + "\n"
-        + "## Explains\n"
+        + "## Advises by default\n"
         + "\n"
         + "| Rule                    | Catches              |\n"
         + "| ----------------------- | -------------------- |\n"

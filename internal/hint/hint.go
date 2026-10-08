@@ -356,7 +356,7 @@ func WithVariant(v Variant) Option {
 // families agree, or when either side is unknown.
 //
 // This is what the local variant buys that flag inference alone cannot: `sed --in-place`
-// is correct prose on Linux and simply fails on macOS, and the failure arrives as an
+// is correct prose on Linux and fails on macOS, and the failure arrives as an
 // unrecognized-flag error with nothing saying why. Naming it is context, never a refusal:
 // the command may be headed for a container, and a guard that blocked it would be grading
 // a machine it cannot see.
@@ -1085,7 +1085,7 @@ func globToRe(glob string, basenameOnly, foldCase bool) (string, bool) {
 //
 // The filter is an anchored regex rather than project=<path>, because query
 // matches a project EXACTLY and a node resolves to the LONGEST project owning
-// it: with docs and docs/guides/integrations/agents both configured,
+// it. With docs and docs/guides/integrations/agents both configured,
 // project=docs drops every node under the nested project that the grep it
 // replaces WOULD have matched, so the suggestion would be strictly narrower
 // than the search it claims to answer.

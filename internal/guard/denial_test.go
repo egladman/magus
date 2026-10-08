@@ -32,7 +32,7 @@ func TestRepeatedDenyIsKeptPerCaller(t *testing.T) {
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	const session = "8f2c6a1e-3b7d-4c55-9e0a-5d1f2b9c7e41"
 	judge := func(host, transport, input string) string {
-		v := Judge(ctx, testDependencies(), Request{Input: input, Host: host, Form: transport})
+		v := Judge(ctx, strict(testDependencies()), Request{Input: input, Host: host, Form: transport})
 		require.Equal(t, "deny", v.Decision, "%s/%s", host, transport)
 		return v.Reason
 	}
@@ -68,7 +68,7 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	spawn := head + `"tool_name":"Task","tool_input":{"description":"Audit the store","prompt":"Audit internal/job",` +
 		`"subagent_type":"general-purpose"},"tool_use_id":"toolu_02"}`
 	judge := func(transport, event string) Verdict {
-		return Judge(ctx, testDependencies(), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
+		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
 	}
 
 	require.Equal(t, "deny", judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")

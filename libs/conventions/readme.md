@@ -69,3 +69,31 @@ symbol index built from the whole tree (comments naming symbols that exist), and
 rules that also read Buzz, shell or markdown
 (environment sniffing, registered env vars, diagnostic raise sites, rescanning
 string loops).
+
+## prose
+
+`prose` is not an analyzer, and golangci-lint never loads it. It judges one
+symbol from a SCIP index: the doc comment, and the name of a function or
+method. Its rules are this repository's policy, not magus's: the magus module
+never imports `libs/conventions`. `cmd/judge-docs` runs them, fed by
+`hack/lint/symbol-docs-follow-prose-rules.buzz` with the symbols of
+`magus\symbols()` as JSON on stdin; it writes the findings as JSON on stdout. A Go
+symbol and a TypeScript one meet the same rules, and a finding points at the
+declaration because an index records no position inside a doc. `prose` imports
+only the standard library.
+
+| Rule               | Reports                                                        |
+| ------------------ | -------------------------------------------------------------- |
+| `comment-block`    | a doc over 250 words                                           |
+| `comment-sentence` | a doc sentence over 60 words                                   |
+| `filler`           | throat-clearing ("Note that") and filler adverbs ("simply")    |
+| `terms`            | a spelling the glossary replaces ("sub-agent")                 |
+| `name-suffix`      | a function or method name whose last word is Of or For         |
+| `aside`            | a spaced hyphen spelling an em-dash, inline or ending a line   |
+| `history`          | a phrase narrating the change rather than the code ("used to") |
+| `docstub`          | a one-line doc that only repeats the symbol's name             |
+
+Code in a doc, fenced or indented, is never judged. A backtick span still counts
+toward the budgets, but no wording rule reads inside one.
+A doc with a line opening in TODO, FIXME, BUG, `compat(until:`, `compat:` or
+`Deprecated:` is exempt from `history` and `docstub`.

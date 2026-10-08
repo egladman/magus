@@ -25,7 +25,7 @@ func TestGuardDeniesMisconfiguredMagusEnv(t *testing.T) {
 		"bash -c 'MAGUS_NO_WAIT=1 magus run lint .'",
 		"ls && MAGUS_NO_WAIT=1 go version",
 	} {
-		v := Evaluate(testDependencies(), cmd)
+		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_NO_WAIT"}, v.Rule, cmd)
 		assert.Contains(t, v.Deny, "MGS1046", cmd)
 		assert.Contains(t, v.Deny, "config view -h", "a deny routes to the list of names that do exist: %s", cmd)
@@ -47,13 +47,17 @@ func TestGuardDeniesMisconfiguredMagusEnv(t *testing.T) {
 		"grep -rn MAGUS_NO_WAIT docs/",
 		"FOO=1 magus run lint .",
 	} {
-		assert.NotEqual(t, denyRuleUnknownEnv, Evaluate(testDependencies(), cmd).Rule.Name, cmd)
+		assert.NotEqual(t, denyRuleUnknownEnv, Evaluate(strict(testDependencies()), cmd).Rule.Name, cmd)
 	}
 }
 
 // A misspelling names the variable the caller most likely meant.
 func TestMisconfiguredMagusEnvNamesTheClosestKnownName(t *testing.T) {
-	v := Evaluate(testDependencies(), "MAGUS_CACHE_DRI=/tmp/c magus run lint .")
+	v := Evaluate(strict(testDependencies()), "MAGUS_CACHE_DRI=/tmp/c magus run lint .")
 	assert.Equal(t, denyRule{Name: denyRuleUnknownEnv, Arg: "MAGUS_CACHE_DRI"}, v.Rule)
 	assert.Contains(t, v.Deny, "did you mean MAGUS_CACHE_DIR")
+}
+
+func TestUnknownMagusEnvAdvisesByDefault(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(testDependencies(), "MAGUS_NO_WAIT=1 ./magus run test ."), denyRuleUnknownEnv)
 }

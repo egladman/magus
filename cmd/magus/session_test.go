@@ -397,7 +397,9 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 		`{"host":"h1","session":"s1","ts":2,"kind":"shell.command","ref":"r2","text":"ls"}`)
 	require.NoError(t, err)
 
-	denied := loadedEvent(t, root, "s1", 0)
+	// A workspace that declares nothing gets raw-tool's default, an advisory; the rejudge
+	// reads no workspace built-in settings, so a stricter workspace is not reflected here.
+	advised := loadedEvent(t, root, "s1", 0)
 	// "raw-tool" is the wire value the guard reports; denyRuleRawTool is unexported to
 	// internal/guard now, so this package asserts the string.
 	assert.Equal(t, sessions.AgentEvent{
@@ -406,10 +408,10 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 		Ref:     "r1",
 		AtMs:    1,
 		Program: "go",
-		Verdict: "deny",
+		Verdict: "advise",
 		Rule:    "raw-tool",
-		Digest:  denied.Digest, // pinned as a 64-character hash by the test above
-	}, denied)
+		Digest:  advised.Digest, // pinned as a 64-character hash by the test above
+	}, advised)
 
 	plain := loadedEvent(t, root, "s1", 1)
 	assert.Equal(t, "pass", plain.Verdict)
@@ -451,7 +453,7 @@ func TestSessionShowGroupsCommandsByProgram(t *testing.T) {
 
 	assert.Contains(t, out, "host h1")
 	assert.Contains(t, out, "go ")
-	assert.Contains(t, out, "deny 2")
+	assert.Contains(t, out, "advise 2", "raw-tool advises when the workspace sets nothing")
 	assert.Contains(t, out, "host recorded 1 denied")
 	assert.Contains(t, out, "magus-run")
 	assert.Contains(t, out, "internal/foo.go")

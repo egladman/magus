@@ -39,9 +39,8 @@ func TestExcludedModules(t *testing.T) {
 	assert.ElementsMatch(t, []string{
 		"os", "fs", "vcs", "archive", "http", // process / filesystem / network
 		"net", "proc", "term", // same three categories, added later
-		"lcov",     // reads a coverage file from disk
-		"comments", // reads source files from disk
-		"pipe",     // reads and writes the process's own stdio
+		"lcov", // reads a coverage file from disk
+		"pipe", // reads and writes the process's own stdio
 	}, got, "only the process/filesystem/network modules should be excluded")
 
 	// magus is available here (it is in the set), so it must never be reported as

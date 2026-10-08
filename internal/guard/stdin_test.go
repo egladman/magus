@@ -66,7 +66,7 @@ func TestGuardDeniesAFilterWithoutInput(t *testing.T) {
 		// A redirect on one statement feeds that statement only.
 		{"grep a < f; grep b", "grep"},
 	} {
-		v := Evaluate(testDependencies(), tc.command)
+		v := Evaluate(strict(testDependencies()), tc.command)
 		assert.Equal(t, denyRule{Name: denyRuleFilterWithoutInput, Arg: tc.tool}, v.Rule, tc.command)
 		assert.Contains(t, v.Deny, "`"+tc.tool+"`", "the deny names the stage left without input: %s", tc.command)
 	}
@@ -155,7 +155,7 @@ func TestGuardAllowsAFedFilter(t *testing.T) {
 		// A line that does not parse does not run.
 		"cat 'unterminated",
 	} {
-		assert.NotEqual(t, denyRuleFilterWithoutInput, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleFilterWithoutInput, Evaluate(strict(testDependencies()), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -187,4 +187,8 @@ func TestStdinReaderFlagsAreUnambiguous(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestFilterWithoutInputAdvisesByDefault(t *testing.T) {
+	requireAdvisedOnce(t, Evaluate(testDependencies(), "wc -l"), denyRuleFilterWithoutInput)
 }

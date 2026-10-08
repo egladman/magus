@@ -1084,10 +1084,10 @@ func vcsOffSwitchTargets(root string) []string {
 }
 
 // resolvedWriteContent is what target holds once fields lands, or "", false when that
-// cannot be computed: a Write's Content is used whole; an Edit's replacements are applied
-// to what target holds on disk now (applyEdits, claim.go); anything that will not apply
-// (an OldText that is not there, a target that does not exist yet for an Edit) fails
-// open rather than guessing at a result the host itself would have refused.
+// cannot be computed. A Write's Content is used whole. An Edit's replacements are applied
+// to what target holds on disk now (applyEdits, claim.go). Anything that will not apply,
+// such as an OldText that is not there or an Edit to a target that does not exist yet,
+// fails open rather than guessing at a result the host itself would have refused.
 func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 	if fields.Content != "" {
 		return fields.Content, true

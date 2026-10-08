@@ -407,7 +407,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"scip": {Kind: spells.OpKindSymbolIndex, Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP,
-			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"}},
+			Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}, Uses: []string{"go"},
+			Envs: []map[string]string{{"GOOS": "linux"}, {"GOOS": "darwin"}, {"GOOS": "windows"}}},
 	},
 	"markdown": {
 		Name:  "markdown",
@@ -627,14 +628,6 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			{Bin: "yarn", Args: []string{"run"}}, {Bin: "yarn", Args: []string{"test"}},
 			{Bin: "yarn", Args: []string{"start"}},
 			{Bin: "bun", Args: []string{"run"}},
-		},
-	},
-	"vale": {
-		Name:  "vale",
-		Tools: map[string]spells.Tool{"vale": {Probe: spells.Command{Bin: "vale", Args: []string{"--version"}}}},
-		Ops: map[string]spells.Op{
-			"vale": {Command: spells.Command{Bin: "vale", Args: []string{"--output=JSON", "--no-exit"},
-				NeedsArgs: "vale: pass the documents to judge after the op's args", Capture: true}, Capture: true},
 		},
 	},
 }

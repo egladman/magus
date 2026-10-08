@@ -646,8 +646,8 @@ func (h *PrettyHandler) WithGroup(_ string) slog.Handler      { return h }
 // was inert for as long as it existed, because every call site reached slog through
 // Logger.Info/Warn/..., which passes context.Background(); Err() was never non-nil. Once
 // the run path started passing its REAL context (so records could reach the secret
-// resolver), it woke up and began eating exactly the lines that matter most: in a
-// concurrent run, the first failure cancels the errgroup, and every [pass]/[fail] that
+// resolver), it woke up and began eating exactly the lines that matter most. In a
+// concurrent run, the first failure cancels the errgroup. Every [pass]/[fail] that
 // finished afterwards, plus the [summary] footer and the Ctrl-C service-release warning,
 // vanished from the default output while -o json still showed them.
 func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {

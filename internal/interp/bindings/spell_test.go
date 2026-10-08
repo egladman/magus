@@ -18,8 +18,10 @@ import (
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
+	"github.com/scip-code/scip/bindings/go/scip"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // rootOnlyWS is a WorkspaceRepository that answers Root() and an empty project
@@ -853,6 +855,47 @@ func TestDispatchOpHandsEachIndexerOpItsOwnIndex(t *testing.T) {
 
 	assert.FileExists(t, symbols.IndexPath(c.Dir(), projDir, "scip-buzz"))
 	assert.NoFileExists(t, symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp), "the default op's index is not this one")
+}
+
+// An indexer that declares envs runs once under each overlay, and the index consumers
+// read is the merge: a file only the linux run compiles sits beside one only the windows
+// run does, and the file both compile appears once.
+func TestDispatchOpMergesTheSymbolIndexOfEachEnv(t *testing.T) {
+	ctx := context.Background()
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithLocalWrite(true))
+	require.NoError(t, err)
+	ctx = cache.NewContext(ctx, c)
+	projDir := t.TempDir()
+
+	fixtures := t.TempDir()
+	for goos, only := range map[string]string{"linux": "proc_linux.go", "windows": "proc_windows.go"} {
+		idx := &scip.Index{Documents: []*scip.Document{{RelativePath: "proc.go"}, {RelativePath: only}}}
+		data, err := proto.Marshal(idx)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(fixtures, goos+".scip"), data, 0o644))
+	}
+	spec := symbolIndexerSpec(spells.Command{
+		Bin:  "sh",
+		Args: []string{"-c", `cp "$2/$GOOS.scip" "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", fixtures},
+	})
+	spec.SymbolIndexer.Envs = []map[string]string{{"GOOS": "linux"}, {"GOOS": "windows"}}
+
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.DefaultSymbolIndexOp, Dir: projDir})
+	require.NoError(t, err)
+
+	indexPath := symbols.IndexPath(c.Dir(), projDir, spells.DefaultSymbolIndexOp)
+	data, err := os.ReadFile(indexPath)
+	require.NoError(t, err)
+	merged, err := symbols.DecodeIndex(data)
+	require.NoError(t, err)
+	var paths []string
+	for _, doc := range merged.GetDocuments() {
+		paths = append(paths, doc.GetRelativePath())
+	}
+	assert.Equal(t, []string{"proc.go", "proc_linux.go", "proc_windows.go"}, paths)
+	entries, err := os.ReadDir(filepath.Dir(indexPath))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "the per-env indexes are gone once merged")
 }
 
 // symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the
