@@ -108,7 +108,7 @@ var removedMagusfileAPI = []struct {
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the
-// `magus.` root (e.g. "project.register"). The surface lock test uses it to assert the
+// `magus.` root (e.g. "project.register"). The API lock test uses it to assert the
 // table never names something the namespace still binds.
 func RemovedAPINames() []string {
 	out := make([]string, 0, len(removedMagusfileAPI))
@@ -1003,7 +1003,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 	}
 	// Magusfiles run as whole files, not incrementally, so a non-exported,
 	// non-captured top-level var is chunk-private and can use a fast stack slot
-	// instead of an Env binding. The cross-file/cross-target surface is `export`ed
+	// instead of an Env binding. The cross-file/cross-target API is `export`ed
 	// functions, which stay Env-bound. The REPL (NewBuzzReplSession) deliberately
 	// does not enable this: there a later line must resolve earlier names.
 	buzzSess.SetPromoteTopLevel(true)

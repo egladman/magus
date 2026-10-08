@@ -3,7 +3,7 @@
 // userspace copy where no acceleration is available.
 //
 // The platform-specific implementations live in the clone_<goos>.go files; this
-// file owns the package's exported surface so callers see one documented API
+// file owns the package's exported API so callers see one documented API
 // regardless of build target.
 package reflink
 

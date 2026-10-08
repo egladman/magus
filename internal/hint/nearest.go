@@ -45,7 +45,7 @@ func Nearest(typed string, candidates []string) string {
 // Threshold is how many edits Nearest tolerates for an input of this length: at
 // most 2 for short inputs, scaling slowly. Exported so a caller doing its own
 // candidate walk (one that must filter or rank on something besides distance)
-// still applies the same tolerance the rest of the surface does.
+// still applies the same tolerance the rest of the package does.
 func Threshold(typed string) int {
 	if utf8.RuneCountInString(typed) >= 8 {
 		return 3

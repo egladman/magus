@@ -61,7 +61,7 @@ func TestDistanceCountsRunesNotBytes(t *testing.T) {
 }
 
 // TestNearestSuggestsThroughMultibyteInput is the same fix seen from the
-// suggestion surface: a byte-counted distance pushed a name one rune away past
+// suggestion side: a byte-counted distance pushed a name one rune away past
 // the threshold, so the reader got no suggestion at all.
 func TestNearestSuggestsThroughMultibyteInput(t *testing.T) {
 	assert.Equal(t, "日本", Nearest("日本語", []string{"日本", "英語"}))

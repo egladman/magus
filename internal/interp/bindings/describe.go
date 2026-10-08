@@ -17,7 +17,7 @@ import (
 // Hand-bound like buildJob, because a Namespace's methods are Extern by construction.
 // Each closure calls the std function for its noun with the call-time ctx and encodes
 // the result with the generated boundary encoder, so the record a script reads is the
-// one the CLI's -o json prints. withheld is the top-level magus members the surface
+// one the CLI's -o json prints. withheld is the top-level magus members the client
 // does not offer, which describe.module("magus") must not list either.
 func buildDescribe(obs buzz.DirectObserver, withheld []string) vm.Value {
 	d := vm.NewMap()

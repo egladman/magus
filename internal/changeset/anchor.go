@@ -87,7 +87,7 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 // the second @@. Empty where git named none, which is ordinary: the top of a file, a language with
 // no funcname pattern, or a hunk that spans a declaration boundary.
 //
-// Exported because it is what a SURFACE renders in place of the raw header. The @@ coordinates are
+// Exported because it is what a CLIENT renders in place of the raw header. The @@ coordinates are
 // wire syntax: the console already prints line numbers in its gutters, so they are redundant there,
 // and they are unreadable everywhere. What a reader wants from a hunk heading is where they are and
 // what they are inside of.

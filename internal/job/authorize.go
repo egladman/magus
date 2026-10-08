@@ -283,7 +283,7 @@ func runsTheGate(row types.Job) bool {
 // gateCommand renders the command whose output will SATISFY a check. A check is resolved
 // against default_charms the way `magus run` resolves it (see bindsTo), so the command
 // is the declaration itself. Built through hint.Run so a subcommand rename is one edit;
-// types renders its own form because it imports no CLI surface.
+// types renders its own form because it imports no CLI package.
 func gateCommand(c types.LeaseCheck) string {
 	project := c.Project
 	if project == "" {

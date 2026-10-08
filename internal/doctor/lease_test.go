@@ -197,7 +197,7 @@ func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 		Name:    "bound-lease",
 		Status:  types.CheckAdvice,
 		Message: `lease "adj/unwired" is bound here, live and registered, but no host hook config in this checkout invokes the guard`,
-		Details: []string{"the guard-wiring check names what is missing; the MCP surface is not checked here"},
+		Details: []string{"the guard-wiring check names what is missing; MCP calls are not checked here"},
 	}, got)
 }
 

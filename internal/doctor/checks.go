@@ -1903,7 +1903,7 @@ func (r *runner) ownVersion() string {
 // The observer is silent by design when absent, because interrupting on every read would be
 // worse than the gap. The cost of that choice is that a hook writing nothing is
 // indistinguishable from an agent that read nothing, and both are indistinguishable from a
-// human having written the file, so the diff surface's "written by X, after reading Y" claim
+// human having written the file, so the Diff app's "written by X, after reading Y" claim
 // degrades into an agent name and no evidence, with nothing anywhere saying so.
 //
 // Measured in this repository: 3252 events, zero reads, correct wiring, green doctor. The

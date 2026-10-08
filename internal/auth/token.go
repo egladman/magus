@@ -6,7 +6,7 @@
 //
 // Four kinds, told apart by the token's prefix (see format.go):
 //
-//	mgo_ operator  one retrievable file per user, every surface on loopback, never expires
+//	mgo_ operator  one retrievable file per user, every route on loopback, never expires
 //	mgs_ stored    stored hashed in tokens.d, a grant within its minter's, always expires
 //	mgl_ share     server memory only, console=read, the share link's LAN listener only
 //	mgx_ exchange  stored hashed in tokens.d for a minute, traded once for an mgs_ token

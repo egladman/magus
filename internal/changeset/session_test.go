@@ -323,7 +323,7 @@ func TestHumanDraftsSurviveARestart(t *testing.T) {
 	want := types.DiffComment{
 		Path: "a.go",
 		Body: "this is the bit reviewers always ask about",
-		// The anchor rides along, so the surface can still say the code under it moved.
+		// The anchor rides along, so the client can still say the code under it moved.
 		Anchor: types.CommentAnchor{Digest: "d1", Quote: "\treturn nil"},
 	}
 	// The store stamps the id, author and origin; a restart is not judged on them.
@@ -460,7 +460,7 @@ func TestTrackHunksRelocatesADraftWhoseCodeMoved(t *testing.T) {
 }
 
 // A published remark is not re-placed: a colleague may already have replied to it where it sits,
-// and moving our copy would make the two surfaces disagree about what was said where.
+// and moving our copy would make the two clients disagree about what was said where.
 func TestTrackHunksLeavesAPublishedRemarkWhereItWasSent(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore("")

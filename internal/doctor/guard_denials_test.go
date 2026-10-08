@@ -43,7 +43,7 @@ func TestCheckRecurringGuardDenialsIgnoresAOneOffDenial(t *testing.T) {
 }
 
 // TestCheckRecurringGuardDenialsReportsFactsOnly pins the shape this check reports
-// after the agent-improve advice layer was removed: rule, surface, denial count,
+// after the agent-improve advice layer was removed: rule, tool, denial count,
 // session count, and followed rate, nothing more. No destination, no confidence, no
 // advice text; a human reads the facts and decides.
 func TestCheckRecurringGuardDenialsReportsFactsOnly(t *testing.T) {

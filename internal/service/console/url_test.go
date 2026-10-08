@@ -33,7 +33,7 @@ func TestLogViewerURL(t *testing.T) {
 }
 
 // TestLink pins the server-origin grammar Link mints: the ORIGIN is the server's own
-// loopback host, the surface is a /console/<surface>/ path, and only the one-time code rides
+// loopback host, the app is a /console/<app>/ path, and only the one-time code rides
 // the fragment (never the query string, so it is not transmitted on the document GET). There
 // is no #live= host directive; the origin already names which server.
 func TestLink(t *testing.T) {
@@ -43,13 +43,13 @@ func TestLink(t *testing.T) {
 
 	before, after, found := strings.Cut(got, "#")
 	require.True(t, found, "url must have a fragment")
-	assert.NotContains(t, before, "?", "the surface rides the clean path, not a query string")
+	assert.NotContains(t, before, "?", "the app rides the clean path, not a query string")
 	assert.Contains(t, after, "code=mgx_abc123", "the code must live in the fragment")
 }
 
 // TestLinkFragmentThenCode pins the ordering the consolidated grammar promises: content
 // directives lead, in the order given, and the code is emitted LAST. A codeless link is a
-// bare surface path with a directive-only fragment.
+// bare app path with a directive-only fragment.
 func TestLinkFragmentThenCode(t *testing.T) {
 	got := Link(LinkOpts{
 		Host:     "127.0.0.1:7391",
@@ -60,7 +60,7 @@ func TestLinkFragmentThenCode(t *testing.T) {
 	assert.Equal(t, "http://127.0.0.1:7391/console/graph/#flavor=targets&code=mgx_abc123", got)
 
 	bare := Link(LinkOpts{Host: "127.0.0.1:7391", App: "graph"})
-	assert.Equal(t, "http://127.0.0.1:7391/console/graph/", bare, "no code and no directives yields a bare surface path")
+	assert.Equal(t, "http://127.0.0.1:7391/console/graph/", bare, "no code and no directives yields a bare app path")
 }
 
 // TestEncodeComponent pins the encodeURIComponent-equivalent policy shared by every producer
@@ -92,9 +92,9 @@ func TestKnownApps(t *testing.T) {
 	assert.True(t, IsAppRoute("logs"))
 	assert.True(t, IsAppRoute("activity"))
 	assert.True(t, IsAppRoute("tools"))
-	assert.False(t, IsAppRoute("graph/explorer.js"), "a sub-path is a static file, not a surface route")
-	assert.False(t, IsAppRoute(""), "the console root is not a surface route")
-	assert.False(t, IsAppRoute("settings"), "settings is not a clean-path deep-link surface")
+	assert.False(t, IsAppRoute("graph/explorer.js"), "a sub-path is a static file, not an app route")
+	assert.False(t, IsAppRoute(""), "the console root is not an app route")
+	assert.False(t, IsAppRoute("settings"), "settings is not a clean-path deep-link app")
 }
 
 // TestLogViewerURLKeyDirective: the key directive rides the fragment ahead of the
@@ -134,8 +134,8 @@ func TestJobLink(t *testing.T) {
 	assert.Equal(t, "/console/plan/#job=pwa%2Fjob-watch", JobAppLink("pwa/job-watch"))
 	assert.Equal(t, "http://127.0.0.1:7777/console/plan/#job=pwa%2Fjob-watch", JobLink("127.0.0.1:7777", "pwa/job-watch"))
 	assert.Empty(t, JobLink("", "pwa/job-watch"), "no serving server has no origin, so there is no link to print")
-	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the surface link, not this")
-	assert.Contains(t, KnownApps, JobApp, "the Jobs view has to be a surface the server serves the shell for")
+	assert.Empty(t, JobLink("127.0.0.1:7777", ""), "a link to no job in particular is the app link, not this")
+	assert.Contains(t, KnownApps, JobApp, "the Jobs view has to be an app the server serves the shell for")
 }
 
 func TestOpenCommandAs(t *testing.T) {

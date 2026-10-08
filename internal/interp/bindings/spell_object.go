@@ -67,7 +67,7 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	return h
 }
 
-// bindBuzzTargetDispatch wires a Buzz spell handle's runnable surface:
+// bindBuzzTargetDispatch wires a Buzz spell handle's runnable members:
 //
 //   - spell.<target>(opts?): a callable per fork target. This is the way to
 //     invoke an op: docker.build({cwd: "..", args: ["-t", tag, "."]}), go.generate().

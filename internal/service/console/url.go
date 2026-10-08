@@ -98,12 +98,12 @@ type FragmentParam struct {
 }
 
 // Root is the console's own address, the one a person opens when they want the console
-// rather than a particular surface: http://<host>/console/. Empty when there is no host.
+// rather than a particular app: http://<host>/console/. Empty when there is no host.
 //
 // Beside Link rather than spelled at each caller, for the reason Link's own doc gives: the
-// grammar has one home. Link with an empty surface would render "/console//", which some
+// grammar has one home. Link with an empty app would render "/console//", which some
 // servers redirect and some do not, so the root is its own answer rather than a special
-// case of a surface link.
+// case of an app link.
 func Root(host string) string {
 	if host == "" {
 		return ""
@@ -111,13 +111,13 @@ func Root(host string) string {
 	return "http://" + host + "/console/"
 }
 
-// Link assembles a console surface's server-origin deep link:
-// http://<host>/console/<surface>/#[<directives>&]code=<code>. Under the server-origin grammar
+// Link assembles a console app's server-origin deep link:
+// http://<host>/console/<app>/#[<directives>&]code=<code>. Under the server-origin grammar
 // the ORIGIN names which server: the server serves both the console shell (over its loopback
 // /console/) and the data API, so nothing but content state and the exchange code rides the
-// fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
-// surface URL: the server serves the shell for it (SPA fallback) and the console's boot router
-// opens that surface from the path. The code rides the fragment (never transmitted on the
+// fragment; there is no #live= host directive. The clean /console/<app>/ PATH is the canonical
+// app URL: the server serves the shell for it (SPA fallback) and the console's boot router
+// opens that app from the path. The code rides the fragment (never transmitted on the
 // document GET) and is emitted LAST, after any content directives. It is single use and lives a
 // minute, so a link seen in a process list or a log is spent or dead, never a credential.
 //

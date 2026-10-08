@@ -190,7 +190,7 @@ func (in *replInput) close() {
 
 // replCompleter answers Tab from what magus already knows about itself.
 //
-// Every source here is an existing structured surface, which is the reason this is
+// Every source here already exists as structured data, which is the reason this is
 // worth doing at all: completion is a PROJECTION of the session and the workspace,
 // not a second list to keep in sync. Nothing here has to be updated when a target,
 // module or meta-command is added.

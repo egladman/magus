@@ -139,7 +139,7 @@ func LoadStore(dir string) (*Store, error) {
 	return s, nil
 }
 
-// refuseRetiredStore names the pre-grant token files. Their records say which surface a
+// refuseRetiredStore names the pre-grant token files. Their records say which routes a
 // token reached, not what it may do, and there is no minter to check a translated grant
 // against, so they are re-minted rather than migrated.
 func refuseRetiredStore(base string) error {

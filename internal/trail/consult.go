@@ -17,7 +17,7 @@ import (
 // the Redact calls on that path are pass-throughs) and a review payload once carried a live
 // bearer token out of one.
 //
-// What keeps this surface off that path is consultVerbs, a closed set. Every verb in it takes a
+// What keeps this record off that path is consultVerbs, a closed set. Every verb in it takes a
 // graph subject, so the text kept here is a node id, a path, or a query string. Widening that set
 // is what would put arbitrary argument text back into a review, so read the membership rule below
 // before adding to it.
@@ -60,13 +60,13 @@ var consultValueFlags = map[string]bool{
 }
 
 // maxSubjectLen bounds a rendered subject. A subject is a node id or a query string, and the
-// surface it feeds gives each one a single line.
+// client it feeds gives each one a single line.
 const maxSubjectLen = 72
 
 // ConsultGap says WHY an evidence list came back empty.
 //
 // Four different facts produce the same empty list, and only one of them describes the change.
-// A surface that renders one sentence for all four tells a reviewer in a fresh clone that nobody
+// A client that renders one sentence for all four tells a reviewer in a fresh clone that nobody
 // researched this, when the record lives in the tree the work was done in. This repository
 // has paid for a silence that read as a clean bill of health (see [ObservedCounts]).
 type ConsultGap string

@@ -10,7 +10,7 @@ import (
 
 // nearest.go answers the question an empty result leaves open: was the term a
 // typo? A miss that offers nothing back reads as "not in the graph" and sends
-// the reader to grep, which is the habit the graph surface exists to replace.
+// the reader to grep, which is the habit the graph queries exist to replace.
 //
 // Matching itself is untouched. Nothing here can put a node into a result set
 // (these run only after a lookup has already reported nothing) because a near

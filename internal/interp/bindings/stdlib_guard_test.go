@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// guardFixture is a session with the full module surface, a workspace the policy grants,
+// guardFixture is a session with every module, a workspace the policy grants,
 // and a directory outside it.
 type guardFixture struct {
 	sess         *buzz.Session

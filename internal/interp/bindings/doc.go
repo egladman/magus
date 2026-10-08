@@ -5,7 +5,7 @@
 // Layout:
 //   - buzz.go        assembles the magus.* namespace and wires it onto a session;
 //     each sub-namespace it calls lives in its own file.
-//   - modules.go     the host module surface (os/fs/http/…) layered over Buzz's stdlib.
+//   - modules.go     the host modules (os/fs/http/…) layered over Buzz's stdlib.
 //   - imports.go     resolves `import "project/…"` and `import "spells/…"`.
 //   - project.go     magus.project and its option decoding.
 //   - target_ns.go   magus.target/needs/cache and same/cross-project dispatch.

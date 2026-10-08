@@ -37,7 +37,7 @@ const (
 func magusModules(modules ffi.Set) []buzz.Module {
 	mods := hostModuleBinds(modules)
 	// Buzz-implemented modules bind through the SAME list, so a session sees one
-	// surface and nothing downstream can tell which language implemented what.
+	// module list and nothing downstream can tell which language implemented what.
 	// They need no trampoline and no native value: SetModuleDecls on a path with no
 	// native module is executed by resolveImport, which is how magus/spell and
 	// upstream's own assert/suite/testing already ship.
@@ -58,7 +58,7 @@ func magusModules(modules ffi.Set) []buzz.Module {
 }
 
 // hostModuleBinds is the native half of magusModules: one buzz.Module per registry
-// entry, ordered by name. The MCP client surface uses it alone, because the
+// entry, ordered by name. The MCP client uses it alone, because the
 // Buzz-implemented spell modules import the wider host and do not belong there.
 func hostModuleBinds(modules ffi.Set) []buzz.Module {
 	names := make([]string, 0, len(modules))
@@ -188,7 +188,7 @@ func ClientDeniedImportPaths() []string {
 	return slices.Compact(denied)
 }
 
-// InstallClient binds the MCP client surface into sess: magus\ without the
+// InstallClient binds the MCP client's modules into sess: magus\ without the
 // clientWithheld members, PureStdlib, and clientHostModules. Nothing that touches
 // the filesystem, process, network or environment is installed. out receives
 // std.print.
@@ -277,14 +277,14 @@ func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOpti
 	_ = sess.Provide(env, magusModules(cfg.modules)...)
 }
 
-// registerMagusModules installs the magus module surface a Buzz session sees. Buzz's
+// registerMagusModules installs the magus modules a Buzz session sees. Buzz's
 // own stdlib sits under bare names (so a magusfile or spell may `import "std"` /
 // `import "serialize"` / `import "io"`). The magus modules layer on top
 // of those same bare names: `import "os"` carries Buzz's os plus proc.exec/which/…,
 // and modules Buzz's stdlib lacks (http, vcs, archive, env, time, …) become new
-// bare imports. The result is one superset surface, no separate `magus/extra`
+// bare imports. The result is one superset, no separate `magus/extra`
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
-// handler op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
+// handler op path (callBuzzSpellFunc), so both paths stay in lock-step.
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 	RegisterModules(ctx, sess)
 	RegisterSpellSourceModules(sess)
@@ -294,8 +294,8 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 // magusfile) imports for its value types:
 //
 //   - magus/spell (spell.SpellModulePath): the canonical Target/Command/Service/
-//     Charm/PatchOp types a spell op WRITES. Kept separate from the base host-module
-//     surface because a plain script needs none of these until it imports a spell
+//     Charm/PatchOp types a spell op WRITES. Kept separate from the base host
+//     modules because a plain script needs none of these until it imports a spell
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
 //   - magus/lint: the Finding a Buzz lint rule returns.
@@ -334,7 +334,7 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 // MagusModuleKeys returns the member names of the magus.* module as the real
 // Buzz bindings register them. It exists so the wasm playground
 // (internal/playground), which keeps a SEPARATE recording implementation of
-// this same surface, can diff against the source of truth in a guard test —
+// this same module, can diff against the source of truth in a guard test —
 // the two host implementations must not silently drift.
 func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
@@ -344,7 +344,7 @@ func MagusModuleKeys() []string {
 
 // magusNativeModule is the registered magus module value, and a missing one is a
 // panic rather than a zero value: both readers below exist to catch drift, and a zero
-// map would report an empty surface as agreement.
+// map would report an empty member list as agreement.
 func magusNativeModule(sess *buzz.Session) vm.Value {
 	mod, ok := sess.NativeModule("magus")
 	if !ok {

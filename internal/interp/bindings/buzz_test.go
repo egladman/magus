@@ -24,7 +24,7 @@ import (
 func TestMain(m *testing.M) {
 	// os.execute under a policy starts its child as this binary re-run as the launcher.
 	sandbox.MaybeLaunch()
-	// magusfile-api-generate rewrites the surface lock through this variable.
+	// magusfile-api-generate rewrites the API lock through this variable.
 	testkit.Main(m, "UPDATE_MAGUS_API_LOCK")
 }
 
@@ -258,12 +258,12 @@ func TestInstallClientWithholdsCmdAndPry(t *testing.T) {
 	require.True(t, ok)
 	for _, name := range []string{"cmd", "pry"} {
 		_, ok = mod.MapGet(name)
-		assert.False(t, ok, "magus\\%s is on the client surface", name)
+		assert.False(t, ok, "magus\\%s is in the client module", name)
 	}
 	describe, ok := mod.MapGet("describe")
 	require.True(t, ok, "the typed members stay")
 	_, ok = describe.MapGet("file")
-	assert.True(t, ok, "magus\\describe.file is on the client surface")
+	assert.True(t, ok, "magus\\describe.file is in the client module")
 }
 
 // The client refuses every stdlib module it does not provide by name, so a script
@@ -321,9 +321,9 @@ func magusAPINames(t *testing.T) []string {
 // describes removals someone remembered to write down. Deleting a binding is otherwise
 // silent in both directions: Buzz reads a missing member as null, so the magusfiles that
 // still call it keep loading and fail later with "null is not callable", and no test
-// anywhere notices the surface got smaller.
+// anywhere notices the API got smaller.
 //
-// This makes the surface a committed artifact. A removed member fails here, naming the
+// This makes the API a committed artifact. A removed member fails here, naming the
 // member and the table that has to describe it; an added one fails too, which is the
 // cheap price of the snapshot and is settled by regenerating.
 func TestMagusAPILocked(t *testing.T) {
@@ -337,7 +337,7 @@ func TestMagusAPILocked(t *testing.T) {
 	}
 
 	data, err := os.ReadFile(apiLockPath)
-	require.NoError(t, err, "the surface lock must be committed; regenerate with UPDATE_MAGUS_API_LOCK=1 go test ./internal/interp/bindings/")
+	require.NoError(t, err, "the API lock must be committed; regenerate with UPDATE_MAGUS_API_LOCK=1 go test ./internal/interp/bindings/")
 	want := strings.Fields(strings.TrimSpace(string(data)))
 
 	gotSet := map[string]bool{}
@@ -346,7 +346,7 @@ func TestMagusAPILocked(t *testing.T) {
 	}
 	for _, n := range want {
 		assert.Truef(t, gotSet[n],
-			"magus.%s was REMOVED from the magusfile surface.\n"+
+			"magus.%s was REMOVED from the magusfile API.\n"+
 				"A magusfile still calling it loads fine and fails at run time with "+
 				"\"null is not callable\".\n"+
 				"Add it to removedMagusfileAPI in internal/interp/runtime.go so it is "+
@@ -361,7 +361,7 @@ func TestMagusAPILocked(t *testing.T) {
 	}
 	for _, n := range got {
 		assert.Truef(t, wantSet[n],
-			"magus.%s was ADDED to the magusfile surface; regenerate the lock with "+
+			"magus.%s was ADDED to the magusfile API; regenerate the lock with "+
 				"UPDATE_MAGUS_API_LOCK=1 go test ./internal/interp/bindings/", n)
 	}
 }
@@ -369,14 +369,14 @@ func TestMagusAPILocked(t *testing.T) {
 // TestMagusAPIIsDeclared closes the drift class that let magus\review exist for
 // months with no declaration, no doc page and no MCP link back to it.
 //
-// The surface lock above pins WHAT is bound, so a removal is loud. It says nothing
+// The API lock above pins WHAT is bound, so a removal is loud. It says nothing
 // about whether the descriptor knows: a member MapSet here and absent from std.Magus
 // still binds, still runs, and is simply invisible to the checker, to
 // docs/reference/buzz/magus.md, and to everything generated from the descriptor.
 // This asserts the two agree, so a member bound outside the descriptor cannot ship.
 //
 // The comparison is on the BUZZ name, which is what a caller types: the descriptor
-// declares snake_case and the surface exposes camelCase.
+// declares snake_case and the bound API exposes camelCase.
 func TestMagusAPIIsDeclared(t *testing.T) {
 	declared := map[string]bool{}
 	for _, m := range std.Magus.Methods {

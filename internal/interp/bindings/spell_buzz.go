@@ -163,10 +163,10 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
 	sess.AddCompileObserver(buzz.ProfileFromContext(ctx))
-	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
+	// A spell gets SCRIPT mode, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
 	// `import "magus"` fails outright with BZZ2001, which reads as "the module does not
-	// exist": the failure mode buildMagus explicitly rejects for the script surface.
+	// exist": the failure mode buildMagus explicitly rejects for script mode.
 	// Note the in-process readers (ls, targets, graph) still raise here: a spell has no
 	// workspace on its context, so it must reach for the forking members (cmd, describe).
 	// It registers before the modules, which set the magus enums on this namespace.
@@ -226,7 +226,7 @@ func callBuzzSpellFunc(ctx context.Context, src, fn string, req spells.InvokeReq
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded(), buzz.WithParseCache(parsecache.Shared()))
 	defer sess.Close()
 	interp.AttachSessionObservers(ctx, sess, interp.ModeSpell)
-	// Same script surface as the descriptor-extraction session above, so a handler op
+	// Same script mode as the descriptor-extraction session above, so a handler op
 	// body and the spell's top level see one `magus` namespace rather than two.
 	RegisterMagusNamespace(ctx, sess)
 	registerMagusModules(ctx, sess)

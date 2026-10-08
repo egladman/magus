@@ -17,7 +17,7 @@ import (
 // empty value is an explicit clear.
 //
 // It is the ONE decoder both write doors call (internal/handler/mcp/job.go and
-// std/magus.go's MagusPutJob), so a client typing either surface gets the same
+// std/magus.go's MagusPutJob), so a client using either door gets the same
 // accepted fields and the same rejections, rather than two hand-maintained lists that
 // can silently drift apart.
 //

@@ -972,7 +972,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 
 	// The descriptor: identity + outcome of this execution, stored beside the verbatim output
 	// blob. The invocation id traces the output back to the run that produced it (`magus query
-	// output <ref> -o json` and the viewer surface this).
+	// output <ref> -o json` and the viewer show this).
 	d := OutputDescriptor{
 		Project:     s.ProjectPath,
 		Target:      target,

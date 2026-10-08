@@ -1,5 +1,5 @@
 // Package httpx owns the HTTP server core and the DNS-rebind guard shared by
-// magus's server-facing HTTP surfaces. NewServer binds 127.0.0.1 whatever host
+// magus's HTTP servers. NewServer binds 127.0.0.1 whatever host
 // it is handed; only NewNetworkServer binds another, for a caller that decided to
 // serve the network. For a unix socket listener it owns the peer-uid admission
 // (PeerConnContext, PeerGuard) instead, since no network interface reaches one.

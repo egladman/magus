@@ -505,7 +505,7 @@ func (m MCP) HTTPEnabled() bool { return m.HTTP == nil || *m.HTTP }
 // Console controls the console service. The console mounts read-only GET endpoints on the MCP
 // HTTP server (/api/v1/graph, /api/v1/events) plus the typed StatusService, so a browser running
 // the hosted Graph Explorer can read the current workspace, plus the bearer-gated magus.job.v1alpha1 JobService
-// for triggering maintenance jobs (the server's one mutating surface). Loopback only; bearer auth.
+// for triggering maintenance jobs (the server's one mutating route). Loopback only; bearer auth.
 type Console struct {
 	Enabled *bool `json:"enabled" yaml:"enabled"` // pointer distinguishes unset from explicit false; default true when MCP is up
 }

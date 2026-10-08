@@ -170,8 +170,8 @@ func Record(cacheDir string, add []Receipt) error {
 // ReadStates reports each path as one of types.DiffReadUnread, DiffReadRead or
 // DiffReadStale, against the recorded receipts.
 //
-// One definition, because the CLI's --impact report and the console's review surface must
-// agree on what "read" means; two callers deciding for themselves is how one surface comes
+// One definition, because the CLI's --impact report and the console's review app must
+// agree on what "read" means; two callers deciding for themselves is how one of them comes
 // to call a file reviewed while the other calls it stale.
 //
 // A path whose content cannot be resolved is left out entirely rather than called unread: a
@@ -213,7 +213,7 @@ func ReadStates(cacheDir string, paths []string, digestOf func(path string) stri
 // THE OLDEST revision wins where receipts disagree, which happens when somebody acked
 // incrementally across several pushes. Conservative on purpose: a newer checkpoint would hide the
 // changes to whichever file was read earliest. Re-showing something already read costs a moment,
-// and hiding something never read is the failure this whole surface exists to prevent, the same
+// and hiding something never read is the failure these receipts exist to prevent, the same
 // bias Reviewable states for the same reason.
 //
 // A zero checkpoint means no receipt for these paths names a revision: nobody has reviewed them, or
@@ -265,7 +265,7 @@ func DigestFile(abs string) string {
 //
 // The same function DigestFile ends in, so a receipt earned reading a branch and one earned
 // reading the working tree are comparable. Two hashes here would mean a file whose content is
-// identical either way reported as unread when the reader switched surfaces, which is exactly the
+// identical either way reported as unread when the reader switched clients, which is exactly the
 // bookkeeping error the digest exists to prevent.
 func Digest(content []byte) string {
 	sum := sha256.Sum256(content)

@@ -79,7 +79,7 @@ func TestAdvisoryGateHoldsOneFiringAcrossConcurrentCallers(t *testing.T) {
 	assert.Equal(t, 1, said, "exactly one of %d racing callers may spend the firing", callers)
 }
 
-// TestAdvisoryGateExpiresTheAnonymousMarker covers the surface with no session identity.
+// TestAdvisoryGateExpiresTheAnonymousMarker covers the case with no session identity.
 // A host that reports none leaves nothing to tell this run from the next, so that marker
 // expires on a clock instead; otherwise the first session on such a host would silence
 // every session after it, permanently.

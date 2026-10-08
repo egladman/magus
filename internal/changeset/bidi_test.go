@@ -70,8 +70,8 @@ func TestSanitizeBidiLeavesOrdinaryCodeAlone(t *testing.T) {
 }
 
 // TestParseSanitizesBothRenderedForms is the one that matters: the terminal draws Lines and the
-// browser draws Rows, so covering one surface and not the other leaves a reader looking at the
-// deception with no way to tell which surface they are in.
+// browser draws Rows, so covering one client and not the other leaves a reader looking at the
+// deception with no way to tell which client they are in.
 func TestParseSanitizesBothRenderedForms(t *testing.T) {
 	patch := "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n" +

@@ -33,7 +33,7 @@ func init() {
 //     a buzz-local interface here would be a single-implementation wrapper over
 //     hundreds of value-shaped call sites.
 //   - magus/gopherbuzz is an intentionally public, standalone interpreter package;
-//     binding against its real API exercises that public surface directly instead
+//     binding against its real API exercises that public API directly instead
 //     of hiding it behind an internal seam.
 //
 // The generic engine.Session adapter (engine/buzz) still exists for the REPL/pry
@@ -42,7 +42,7 @@ func init() {
 // The namespace builders this calls live alongside, one file per concern:
 // project.go (magus.project), target.go (the magus.Context builder and its
 // ctx.needs/glob dependency primitives, plus cross-project handles),
-// spell_object.go (imported spell handles), modules.go (the host module surface),
+// spell_object.go (imported spell handles), modules.go (the host modules),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).
 func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string]vm.Callable, exports map[string]vm.Value, parseMode bool) {
 	// One host-call observer for this registration, timing every magus.* native
@@ -60,7 +60,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// A target declares its dependencies and cache footprint through the magus.Context
 	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
 	// magus.* global: the signature is the contract magus reads statically to build the
-	// graph, so the declaration surface lives only on the context. The value is stashed
+	// graph, so the declaration API lives only on the context. The value is stashed
 	// under a session-global name execBuzzSrc fetches to prepend at dispatch; it closes
 	// over the same targets/exports/ext so ctx.needs dispatches deps through the pool.
 	sess.SetGlobal(interp.TargetContextGlobal, buildTargetContext(sess, obs, targets, exports, ext))
@@ -69,7 +69,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// `import "os"`, `import "fs"`, `import "http"`, `import "vcs"`, ... A magusfile
 	// selects methods off each module directly (proc.exec, fs.glob, vcs.status).
 	// registerMagusModules layers the magus host methods onto Buzz's stdlib modules (a
-	// superset surface) and is shared with spell-loading, so a magusfile and a handler
+	// superset of them) and is shared with spell-loading, so a magusfile and a handler
 	// op spell see the same modules.
 	registerMagusModules(ctx, sess)
 	// Built-in spells follow the same import idiom as std modules: each spell is
@@ -203,7 +203,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	}))
 
 	// magus.log.*: the one way to emit a message from a magusfile; there is no
-	// separate std log module on this surface. Each level writes into the process
+	// separate std log module in a magusfile. Each level writes into the process
 	// slog logger via emitMagusLog.
 	//
 	// Grouped, and grouped by BEHAVIOR: everything here emits and returns. fatal and
@@ -269,7 +269,7 @@ func dropMembers(mod vm.Value, names []string) vm.Value {
 }
 
 // dropMagusMethods removes the named methods from a describe.module("magus")
-// listing. The registry still declares them; a surface that withholds them does
+// listing. The registry still declares them; a client that withholds them does
 // not offer them.
 func dropMagusMethods(entries []types.ModuleEntry, names []string) []types.ModuleEntry {
 	if len(names) == 0 {

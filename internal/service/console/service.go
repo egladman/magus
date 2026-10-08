@@ -3,7 +3,7 @@
 // graph, a target graph, display journals, viewer links) and knows nothing about HTTP:
 // the route handlers in internal/handler/{status,graph} wrap these methods and own all
 // wire encoding, CORS, and streaming. Keeping this package free of any HTTP dependency
-// makes the read-only bridge surface testable as plain function calls.
+// makes the read-only bridge testable as plain function calls.
 package console
 
 import (
@@ -244,11 +244,11 @@ func (s *Service) Graph(ctx context.Context, flavor, sel string) (types.Knowledg
 }
 
 // WorkingDiff returns the working tree's uncommitted changes as one unified patch, scoped to
-// paths when non-empty. It backs the console's review surface.
+// paths when non-empty. It backs the console's review app.
 //
 // Deliberately NOT cached, unlike Insight beside it. The insight lenses fold a bounded
 // git-log scan that costs the same answer for minutes at a time; a working diff is the thing
-// the reader is editing RIGHT NOW, and a review surface showing a diff from thirty seconds
+// the reader is editing RIGHT NOW, and a review app showing a diff from thirty seconds
 // ago is worse than one that takes another few milliseconds. The backend's own diff is fast
 // because it reads the index, not history.
 func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, error) {
@@ -326,7 +326,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	trail.AttachTouches(&rev, s.magus.Root(), s.magus.CacheDir())
 	// Which of these files somebody has recorded reading, from the same store `magus diff
 	// --ack` writes. The console gets it because "how much of this has anyone read" is a
-	// question a review surface should answer without the reader dropping to a terminal.
+	// question a review app should answer without the reader dropping to a terminal.
 	// The console reads the server's working tree and nothing else, so it names that source
 	// explicitly rather than inheriting a default.
 	root := s.magus.Root()
@@ -335,7 +335,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 		rev.AttachReadState(states)
 	}
 	// Where the reader left off, from the same receipts. It ships to the console for the reason
-	// the read states do: a surface that can show what moved since the last pass and one that
+	// the read states do: a client that can show what moved since the last pass and one that
 	// cannot are not two clients of one review, and the terminal already had it.
 	if store, serr := review.Load(s.magus.CacheDir()); serr == nil {
 		rev.AttachReviewed(store.ReviewedAt(paths))

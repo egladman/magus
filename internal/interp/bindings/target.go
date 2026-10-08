@@ -126,7 +126,7 @@ func buildCI(_ context.Context, obs buzz.DirectObserver) vm.Value {
 // not a member here. A magusfile says WHERE reviews live; it does not conduct one.
 //
 // Wiring none is the ordinary state and never an error: the workspace reviews locally, and
-// nothing about the diff surface changes.
+// nothing in the diff view changes.
 func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
 	review := vm.NewMap()
 	review.MapSet("provider", directVal(obs, "magus.review.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -258,7 +258,7 @@ func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		// Reveal where the credential crosses into a magusfile string. From here it is an
 		// ordinary Buzz str with only redact-at-write behind it, which is the documented
-		// seam: magus\secret.grant is the surface that avoids this crossing entirely.
+		// seam: magus\secret.grant is the call that avoids this crossing entirely.
 		return vm.StrValue(v.Reveal()), nil
 	}))
 	// endpoint() is what a grant is FOR. It returns a loopback base URL a CHILD can
@@ -352,7 +352,7 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 	// and pass an INSTANCE, which is tagObject and NOT tagMap, so an IsMap check rejected
 	// the documented spelling outright. Nothing caught it because every test built the Go
 	// struct directly instead of going through Buzz; magus's own GitHub Actions cache
-	// spell was the first caller to use the surface as written. MapView accepts a map and
+	// spell was the first caller to use the API as written. MapView accepts a map and
 	// an object instance both, which is what this always meant to take.
 	// Length first: indexing args[0] to build the view before checking it exists
 	// panics on a no-argument call instead of reporting the error below.
@@ -621,7 +621,7 @@ func buildBuzzUses(sess *buzz.Session) func(context.Context, []vm.Value) (vm.Val
 // matches as "-<pattern>" suffix shorthand); it RETURNS the list of matching target
 // function handles, so ctx.needs(ctx.glob("*-generate")) depends on every
 // matching target. glob is the ONE place a pattern (a string) enters the dependency
-// surface: it turns a name query into handles, keeping ctx.needs monomorphic; it
+// declarations: it turns a name query into handles, keeping ctx.needs monomorphic; it
 // only ever receives target functions.
 //
 // Patterns that yield no handle raise, naming the patterns. An empty list let
@@ -823,7 +823,7 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) ([]stri
 // ctxMarker identifies a value as a magus.Context, base or derived. An op call needs
 // to tell a leading context from a leading opts table, and with a map-based value model
 // and no protocol conformance in gopherbuzz on this base there is no type to ask. Not
-// part of the authored surface; it disappears when the context becomes a real type.
+// part of the authored API; it disappears when the context becomes a real type.
 const ctxMarker = "__magus_context"
 
 // execRefusedMembers are the ctx members a magus\Exec answers with a refusal rather
@@ -840,7 +840,7 @@ var execRefusedMembers = []string{"needs", "glob", "readsFiles", "writesFiles", 
 
 // TargetContextKeys returns the member names bound on the magus\Context a target
 // receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
-// MagusModuleKeys one surface over: nothing but a test connects the enumerations
+// MagusModuleKeys, for a different set of members: nothing but a test connects the enumerations
 // above to the dry-run host's copy, so a declaration added to one and forgotten in
 // another is silent until someone's body stops tracing.
 func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil, nil).MapKeys() }

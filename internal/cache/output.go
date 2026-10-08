@@ -948,7 +948,7 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 // InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
 // It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it;
-// `magus query output <ref> --identity` and the viewer surface this lineage. Reads off the cache
+// `magus query output <ref> --identity` and the viewer show this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 	_, events, err := s.InvocationEventsByID(inv)

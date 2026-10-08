@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// minInteractiveHeight is the shortest terminal the interactive surfaces still
+// minInteractiveHeight is the shortest terminal the interactive views still
 // work in: the reserved band, the rule the zone draws above it, and a scrolling
 // area worth reading above that.
 //
@@ -46,12 +46,12 @@ func (r *runner) checkTerminal() types.Check {
 		return types.Check{
 			Name:    name,
 			Status:  types.CheckOK,
-			Message: fmt.Sprintf("log format is %q, so magus emits structured records and draws no interactive surface", format),
+			Message: fmt.Sprintf("log format is %q, so magus emits structured records and draws no interactive view", format),
 			Details: []string{formatSource(format), "set log.format to pretty for the pinned band, live status and notifications"},
 		}
 	}
 
-	// Both ends, because the interactive surfaces need to paint AND to listen.
+	// Both ends, because the interactive views need to paint AND to listen.
 	// A pipe on either is the ordinary CI case and not worth a warning.
 	canRender := tty.CanRender(os.Stderr, tty.SystemProbe)
 	canRead := tty.IsTerminalReader(os.Stdin, tty.SystemProbe)

@@ -4,7 +4,7 @@ package hint
 // inside user-facing OUTPUT: hints, error messages, and examples that point
 // the reader at another command to run.
 //
-// Hardcoding these strings let them drift from the real command surface: a
+// Hardcoding these strings let them drift from the real commands: a
 // failing target once printed "magus query <ref>" long after the command had
 // become "magus query output <ref>". An emitter that renders from a Command value
 // here survives a subcommand rename as a single edit, and cmd/magus's drift test
@@ -173,12 +173,12 @@ var (
 // Lookup resolves a space-separated verb path ("agent improve") to the canonical
 // Command, reporting false for a path nobody declared.
 //
-// For a GENERATED surface whose prose names a command: a skill body, a docs page,
+// For GENERATED output whose prose names a command: a skill body, a docs page,
 // a starter block. Retyping the path there is how it goes stale, because nothing
 // connects the sentence to the CLI that moved. Resolving it means a rename either
 // updates the prose or fails the lookup, and the caller decides which.
 //
-// The reader of such a surface is usually another process on another machine, so
+// The reader of such output is usually another process on another machine, so
 // render the result with StringAs(DefaultBinaryName) rather than String(): this
 // process may have been invoked as ./magus, and that path means nothing there.
 func Lookup(path string) (Command, bool) {

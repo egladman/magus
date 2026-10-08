@@ -358,7 +358,7 @@ func TestAPatchMixingBothDialectsKeepsEveryFile(t *testing.T) {
 }
 
 // Intra-line emphasis: which PART of a changed line changed. Computed once, here, and shipped
-// to both surfaces; these cases came from the terminal viewer's own test when the second
+// to both clients; these cases came from the terminal viewer's own test when the second
 // implementation was removed, and they are the behavior both readers now share.
 //
 // The table names what each line's span SELECTS rather than its offsets, because the offsets
@@ -439,7 +439,7 @@ func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
 
 // A thread is anchored to a line of the REVIEW, and the review is not the changeset in front of
 // the reader: the working tree moves, and a pull request covers commits a working diff does not.
-// So placement is resolved here, once, and both surfaces read the answer.
+// So placement is resolved here, once, and both clients read the answer.
 func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n" +

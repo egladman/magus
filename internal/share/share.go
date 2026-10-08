@@ -1,5 +1,5 @@
 // Package share implements the server side of "share to phone": an on-demand,
-// time-boxed LAN listener that serves the console's READ surface to a phone on
+// time-boxed LAN listener that serves the console's READ routes to a phone on
 // the same network, guarded by a single short-lived read-only token.
 //
 // Deliberately a THIRD listener, distinct from the server's loopback-bound standing
@@ -118,7 +118,7 @@ type Link struct {
 // active holds the runtime state of one live share: the closer that tears the
 // listener down plus the token record and mint time. Exactly one is live at a time.
 // It retains the token record (hash and expiry, never the secret) and the mint
-// time so a management surface can list and identify the live share via
+// time so the console's token list can list and identify the live share via
 // [Manager.Active] without reaching into the URL for the secret.
 type active struct {
 	cancel  context.CancelFunc
@@ -126,8 +126,8 @@ type active struct {
 	created time.Time
 }
 
-// TokenInfo is the secret-free description of the active share token, for a management
-// surface (the console Settings token list). ID is the 8-hex identifier used to revoke
+// TokenInfo is the secret-free description of the active share token, for the console
+// Settings token list. ID is the 8-hex identifier used to revoke
 // it; it never contains the token bytes.
 type TokenInfo struct {
 	ID      string
@@ -263,7 +263,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// Static console: unauthenticated. The app shell is not a secret; it reads the
 	// fragment token and replays it as a bearer on the guarded API routes below. It is
 	// the SAME console.StaticHandler the loopback server mounts, so a phone reload of a
-	// clean /console/<surface>/ path hits the shell SPA fallback (not a 404) and gets
+	// clean /console/<app>/ path hits the shell SPA fallback (not a 404) and gets
 	// the same strict CSP.
 	mux.Handle("/console/", console.StaticHandler(consoleDir))
 	// A bare "/" load is a convenience redirect into the app.
@@ -314,7 +314,7 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	// the parent context is already cancelled (server shutting down), the watcher below
 	// must find m.cur pointing at THIS link so Close/CloseIf can tear it down: a
 	// listener published only after the goroutines start could serve on an address no
-	// management surface knows to revoke. There is still exactly one live share:
+	// token list knows to revoke. There is still exactly one live share:
 	// superseding cancels the previous one before this replaces it.
 	m.mu.Lock()
 	superseded := m.cur != nil
@@ -360,7 +360,7 @@ const shutdownGrace = 5 * time.Second
 // Active returns secret-free metadata for the currently live share token, or
 // ok=false when no share is active. A share whose token has already expired (in
 // the brief window before its context fires and clears m.cur) reports ok=false, so
-// a management surface never lists a dead token as if it were revocable.
+// the token list never lists a dead token as if it were revocable.
 func (m *Manager) Active() (TokenInfo, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

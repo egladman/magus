@@ -1283,7 +1283,7 @@ func TestPoolGaugeClampsImpossibleCounts(t *testing.T) {
 	assert.Equal(t, "□ □ □ □ (0/4)", PoolGauge(-1, 4))
 }
 
-// TestPreviewMakesASecondColumn is the "two views, one run" surface: the
+// TestPreviewMakesASecondColumn is the "two views, one run" layout: the
 // failure tree on the left, the selected failure's captured output on the
 // right, in rows this handler already owns.
 func TestPreviewMakesASecondColumn(t *testing.T) {

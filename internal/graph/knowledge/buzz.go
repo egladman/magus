@@ -202,7 +202,7 @@ func enclosingFunction(fnLines []fnLine, line int) string {
 // standard library (mirrors gopherbuzz/std Modules). An unresolved import of one
 // is a compiled-in module, not a dangling workspace file, so it is not flagged
 // MGS7001. Kept as a small static set rather than wired to the gopherbuzz
-// registry: the upstream stdlib surface is stable, and a new module is a rare,
+// registry: the upstream stdlib is stable, and a new module is a rare,
 // deliberate event. magus's own stdlib is the "magus"/"magus/*" namespace.
 var buzzStdlibModules = map[string]bool{
 	"std": true, "math": true, "fs": true, "os": true, "crypto": true,

@@ -82,7 +82,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 })
 
 // charmNamesByTarget extracts the sorted charm names each target declares, for
-// discovery surfaces like `magus describe`.
+// discovery commands like `magus describe`.
 func charmNamesByTarget(targets map[string]spells.Op) map[string][]string {
 	out := make(map[string][]string, len(targets))
 	for name, t := range targets {
@@ -99,7 +99,7 @@ func charmNamesByTarget(targets map[string]spells.Op) map[string][]string {
 	return out
 }
 
-// docsByTarget extracts each target handler's doc comment, for discovery surfaces
+// docsByTarget extracts each target handler's doc comment, for discovery commands
 // like `magus describe`. Targets with no comment are omitted.
 func docsByTarget(targets map[string]spells.Op) map[string]string {
 	out := make(map[string]string, len(targets))

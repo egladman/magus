@@ -84,7 +84,7 @@ type LeaseQuery struct {
 // A record outranks the claim because the claim is the one answer a worker can rewrite
 // from its own shell: a worker bound to one job that could export another's id would be
 // graded against that job's write paths. When a lower source named a different lease than
-// the one that answered, the source is [types.LeaseSourceContested], so a surface can say
+// the one that answered, the source is [types.LeaseSourceContested], so a client can say
 // something was overruled.
 func (q LeaseQuery) Resolve() (string, types.LeaseSource) {
 	sources := []struct {

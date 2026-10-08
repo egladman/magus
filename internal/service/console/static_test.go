@@ -14,7 +14,7 @@ import (
 )
 
 // consoleDir is a built console as the build leaves it: the shell, a stylesheet, and the stub
-// console/scripts/surface-stubs.mjs writes for every surface segment.
+// console/scripts/surface-stubs.mjs writes for every app segment.
 func consoleDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -42,7 +42,7 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 
 // The shell is served with <base href="../">, which resolves to /console/ ONLY when the URL
 // already ends in a slash. Served at a bare /console/diff, every asset resolves one level too
-// high (console.css, theme.js and patternfly.css all 404 at the site root), so the surface
+// high (console.css, theme.js and patternfly.css all 404 at the site root), so the app
 // renders unstyled and never boots. Canonicalize instead.
 func TestAppRouteWithoutTrailingSlashRedirects(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
@@ -74,7 +74,7 @@ func TestCanonicalAppRouteServesTheShell(t *testing.T) {
 	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 }
 
-// A real file must never be mistaken for a surface, in either direction.
+// A real file must never be mistaken for an app, in either direction.
 func TestAssetsAreStillServed(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
 
@@ -82,7 +82,7 @@ func TestAssetsAreStillServed(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), ".a{}")
 
-	// A sub-path under a surface segment is a file request, not a route.
+	// A sub-path under an app segment is a file request, not a route.
 	assert.Equal(t, http.StatusNotFound, get(t, h, "/console/diff/diff.js").Code)
 }
 
@@ -93,15 +93,15 @@ func TestUnknownSegmentIsNotAnAppRoute(t *testing.T) {
 }
 
 // KnownApps is the contract the server, the link minters, and the console's boot router
-// all read. A surface added to the console without being added here is deep-linkable in
+// all read. An app added to the console without being added here is deep-linkable in
 // exactly one direction, which is the kind of gap nobody notices until someone shares a URL.
 func TestKnownAppsCoversTheDiffApp(t *testing.T) {
 	assert.True(t, IsAppRoute("diff"))
-	assert.False(t, IsAppRoute("review"), "the surface was renamed; the old segment is gone")
-	assert.False(t, IsAppRoute(""), "the console root is not a surface route")
+	assert.False(t, IsAppRoute("review"), "the app was renamed; the old segment is gone")
+	assert.False(t, IsAppRoute(""), "the console root is not an app route")
 	assert.False(t, IsAppRoute("diff/diff.js"), "a sub-path is a file, not a route")
 	for _, s := range KnownApps {
-		assert.False(t, strings.Contains(s, "/"), "a surface segment is one path element: %q", s)
+		assert.False(t, strings.Contains(s, "/"), "an app segment is one path element: %q", s)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestStaticHandlerServesOnlyTheShell(t *testing.T) {
 		"/console/", "/console/console.css", "/console/sw.js", "/console/manifest.webmanifest",
 		"/console/assets/icon.svg", "/console/assets/icon-192.png",
 		"/console/graph/explorer.js", "/console/graph/scaffold.html", "/console/graph/",
-		// A directory holding an index.html is a surface route, so the shell answers.
+		// A directory holding an index.html is an app route, so the shell answers.
 		"/console/help/",
 	} {
 		assert.Equal(t, http.StatusOK, get(t, h, p).Code, "shell file %s", p)
