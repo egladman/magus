@@ -86,8 +86,8 @@ each finding names its file and line. `-kind skill` judges a SKILL.md an
 agent loads as written, and `-kind skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
 the skill rules, and what only its full form shows meets the Markdown ones and
-`bare-rule`. `-kind guide` judges a procedural page (`docs/guides/`,
-`docs/setup/`, `docs/migrating/`) on the Markdown rules and the guide rules.
+`bare-rule`. `-kind guide` judges a procedural page (anything under `docs/guides/`) on the
+Markdown rules and the guide rules.
 It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.

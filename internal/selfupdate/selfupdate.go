@@ -269,7 +269,7 @@ func checkNotExpired(expiresAt string) error {
 	}
 	if now := time.Now(); now.After(deadline) {
 		return fmt.Errorf("release index expired at %s (%d days ago); it is republished on release, "+
-			"so this is either a stale mirror or a replay - reinstall from https://eli.gladman.cc/magus/setup/",
+			"so this is either a stale mirror or a replay - reinstall from https://eli.gladman.cc/magus/guides/setup/",
 			expiresAt, int(now.Sub(deadline).Hours()/24))
 	}
 	return nil
