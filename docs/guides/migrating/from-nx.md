@@ -2,7 +2,7 @@
 title: Coming from Nx
 description: A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.
 tags: [nx, migration, monorepo, terminology, comparison, porting]
-aliases: [migrating, migrating/from-nx]
+aliases: [migrating/from-nx]
 ---
 
 # Coming from Nx
