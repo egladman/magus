@@ -963,30 +963,30 @@ func magusOwnSourceTree() bool {
 	return true
 }
 
-// agentSurfaceSources are the files an edit to what agents are TAUGHT lands in: the
+// agentSources are the files an edit to what agents are TAUGHT lands in: the
 // shipped skill bodies, the MCP registry that names what an agent may call, and the
 // hint sources that name the tools and commands hints steer agents toward.
-var agentSurfaceSources = []string{
+var agentSources = []string{
 	"internal/agent/skills/",
 	"internal/handler/mcp/registry.go",
 	"internal/hint/mcp_tool.go",
 	"internal/hint/cli_command.go",
 }
 
-// adviseAgentSurfaceWrite routes an edit to the agent surface through the method that
-// maintains it, or returns "" for every other path.
+// adviseAgentSourceWrite routes an edit to one of the agentSources through the method
+// that maintains them, or returns "" for every other path.
 //
 // The gap it closes is the one the authoring method itself names: both failures here are
 // silent. A skill body is a text/template rendered per form, so a passage added
 // outside a branch changes both and a passage added inside one changes neither, and
 // nothing about the file says so. A content change without a SkillVersion bump leaves
 // every install reporting itself up to date while carrying the previous bytes.
-func adviseAgentSurfaceWrite(path string) string {
+func adviseAgentSourceWrite(path string) string {
 	rel, ok := workspaceRelativeFile(path)
 	if !ok || !magusOwnSourceTree() {
 		return ""
 	}
-	if !slices.ContainsFunc(agentSurfaceSources, func(s string) bool {
+	if !slices.ContainsFunc(agentSources, func(s string) bool {
 		return rel == s || strings.HasPrefix(rel, s)
 	}) {
 		return ""

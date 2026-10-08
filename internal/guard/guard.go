@@ -831,7 +831,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseAgentSurfaceWrite(input); text != "" {
+			if text := adviseAgentSourceWrite(input); text != "" {
 				advice, adviceKind, spoken = deps.heldBy(markers, string(advisorySkillSource)).Once(advisorySkillSource, text), advisorySkillSource, true
 			}
 		}

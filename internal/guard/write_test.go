@@ -820,9 +820,9 @@ func magusTreeFixture(t *testing.T) string {
 	return root
 }
 
-// TestAdviseAgentSurfaceWrite: an edit to what agents are TAUGHT routes through the method
+// TestAdviseAgentSourceWrite: an edit to what agents are TAUGHT routes through the method
 // that maintains it, because both ways to get it wrong here are silent.
-func TestAdviseAgentSurfaceWrite(t *testing.T) {
+func TestAdviseAgentSourceWrite(t *testing.T) {
 	magusTreeFixture(t)
 
 	for _, rel := range []string{
@@ -831,14 +831,14 @@ func TestAdviseAgentSurfaceWrite(t *testing.T) {
 		"internal/hint/mcp_tool.go",
 		"internal/hint/cli_command.go",
 	} {
-		got := adviseAgentSurfaceWrite(rel)
+		got := adviseAgentSourceWrite(rel)
 		assert.Contains(t, got, "magus-skill-authoring", rel)
 		assert.Contains(t, got, "SkillVersion", rel)
 	}
 
-	assert.Empty(t, adviseAgentSurfaceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
-	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/catalog.go"))
-	assert.Empty(t, adviseAgentSurfaceWrite("cmd/magus/agent.go"))
+	assert.Empty(t, adviseAgentSourceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
+	assert.Empty(t, adviseAgentSourceWrite("internal/agent/catalog.go"))
+	assert.Empty(t, adviseAgentSourceWrite("cmd/magus/agent.go"))
 }
 
 // TestAdviseDescriptorWrite: the generator INPUT, not the generated output. The first is
@@ -864,7 +864,7 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 // worth pinning: in anybody else's workspace neither rule can fire at all.
 func TestMagusOwnSourceTreeGatesTheRepoScopedRules(t *testing.T) {
 	inWorkspace(t) // an ordinary workspace: no magusfile, no cmd/magus
-	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/skills/magus-run/SKILL.md"))
+	assert.Empty(t, adviseAgentSourceWrite("internal/agent/skills/magus-run/SKILL.md"))
 	assert.Empty(t, adviseDescriptorWrite("std/fs.go"))
 	assert.Empty(t, adviseDescriptorWrite("proto/magus/v1/run.proto"))
 }
@@ -881,7 +881,7 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
 
-	assert.Contains(t, adviseAgentSurfaceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")), "magus-skill-authoring")
+	assert.Contains(t, adviseAgentSourceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")), "magus-skill-authoring")
 	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")), "SAME commit")
 	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }

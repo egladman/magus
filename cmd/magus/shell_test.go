@@ -875,11 +875,11 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	assert.NotContains(t, run("git stash", "session-2"), "denied again", "a fresh session hears the rule in full")
 }
 
-// TestHookCmdRoutesAnAgentSurfaceWrite pins the WIRING, not the rule: a rule that is
+// TestHookCmdRoutesAnAgentSourceWrite pins the WIRING, not the rule: a rule that is
 // correct and never called is the failure mode this repository has shipped before. It also
-// pins the dedupe on the path surface, where a suppressed advisory must leave silence
+// pins the dedupe on the path input, where a suppressed advisory must leave silence
 // rather than let the next rung speak into it.
-func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
+func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 	t.Chdir(root)
