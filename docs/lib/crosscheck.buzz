@@ -213,7 +213,7 @@ export fun guardParityFindings(templates: {str: str}, guide: str, guideFile: str
             foreach (host in (d["host"] ?? "").split(",")) {
                 if (host == "") { continue; }
                 hosts[host] = true;
-                cov[host + "/" + (d["surface"] ?? "")] = d;
+                cov[host + "/" + (d["input"] ?? "")] = d;
             }
         }
     }
@@ -400,7 +400,7 @@ test "embedFindings wants the body verbatim, trailing newline aside" {
 }
 
 test "guardParityFindings compares cells to declarations both ways" {
-    final templates = {"t.sh": "# magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=none\n"};
+    final templates = {"t.sh": "# magus-guard-coverage: schema=2 host=claude-code,codex input=command deny=model advise=none\n"};
     final guide = "## Parity across hosts\n\n| | command rules | declared-output rule | deny | advise |\n| --- | --- | --- | --- | --- |\n| Claude Code | yes | no | yes | no |\n| Codex | yes | no | yes | yes |\n| Cursor | no | no | no | no |\n";
     final f = guardParityFindings(templates, guide: guide, guideFile: "g.md");
     assert\equal(f.len(), 2, "codex advise disagrees, cursor is undeclared");

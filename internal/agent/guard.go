@@ -25,13 +25,13 @@ const GuardSchemaVersion = 1
 // deny, never as an allow.
 var guardDecisions = []string{"pass", "advise", "deny", "ask"}
 
-// guardSurfaces is every input the guard judges: a shell command, a file path
+// guardInputs is every input the guard judges: a shell command, a file path
 // an edit is about to write (`magus shell --path`), or an MCP tool call
 // (a tool name plus a params object, forwarded whole rather than reduced to a
-// single string). A host wires each surface to a different one of its events,
+// single string). A host wires each input to a different one of its events,
 // and a host that cannot wire one covers less, which is a coverage difference
 // to record, not to hide.
-var guardSurfaces = []string{"command", "path", "mcp"}
+var guardInputs =[]string{"command", "path", "mcp"}
 
 // GuardTemplateVersion is the revision of the hook templates a reader installs
 // into their agent host.
@@ -190,5 +190,5 @@ const GuardTemplateMarker = "magus-guard-template:"
 // GuardDecisions returns every decision a verdict can carry.
 func GuardDecisions() []string { return append([]string(nil), guardDecisions...) }
 
-// GuardSurfaces returns every input the guard judges.
-func GuardSurfaces() []string { return append([]string(nil), guardSurfaces...) }
+// GuardInputs returns every input the guard judges.
+func GuardInputs() []string { return append([]string(nil), guardInputs...) }

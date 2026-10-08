@@ -284,8 +284,12 @@ func TestShippedTemplatesCarryTheCurrentVersion(t *testing.T) {
 }
 
 // guardCoverageMarker introduces a template's machine-readable statement of how
-// much of a verdict it can carry, on one guard surface, for one or more hosts.
+// much of a verdict it can carry, on one guard input, for one or more hosts.
 const guardCoverageMarker = "magus-guard-coverage:"
+
+// guardCoverageSchema is the marker's own format version, apart from the verdict envelope's
+// GuardSchemaVersion. Schema 2 names the guard input with input= where schema 1 said surface=.
+const guardCoverageSchema = "2"
 
 // guardStances are the answers a template may give for a decision: the model
 // sees it, only the person sees it, or it is not delivered at all. "none" is a
@@ -294,7 +298,7 @@ const guardCoverageMarker = "magus-guard-coverage:"
 // indistinguishable from nobody having asked.
 var guardStances = map[string]bool{"model": true, "human": true, "none": true}
 
-// hostCoverage is host -> surface -> decision -> stance.
+// hostCoverage is host -> input -> decision -> stance.
 type hostCoverage map[string]map[string]map[string]string
 
 // parseGuardCoverage reads every coverage declaration out of the hook templates.
@@ -319,12 +323,12 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 				require.True(t, ok, "%s: coverage declaration field %q is not key=value", name, kv)
 				fields[key] = value
 			}
-			require.Equal(t, "1", fields["schema"],
-				"%s declares guard schema %q; the contract is agent.GuardSchemaVersion=%d.\n"+
-					"A schema bump means every host glue must be updated and re-downloaded before it guards again.",
-				name, fields["schema"], GuardSchemaVersion)
-			surface := fields["surface"]
-			require.Contains(t, GuardSurfaces(), surface, "%s declares an unknown guard surface %q", name, surface)
+			require.Equal(t, guardCoverageSchema, fields["schema"],
+				"%s declares coverage schema %q; the marker's schema is %s.\n"+
+					"A schema bump means every template's %s lines must be rewritten at once.",
+				name, fields["schema"], guardCoverageSchema, guardCoverageMarker)
+			input := fields["input"]
+			require.Contains(t, GuardInputs(), input, "%s declares an unknown guard input %q", name, input)
 			require.NotEmpty(t, fields["host"], "%s: coverage declaration names no host", name)
 
 			for _, host := range strings.Split(fields["host"], ",") {
@@ -335,25 +339,25 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 				for _, decision := range GuardDecisions() {
 					stance, ok := fields[decision]
 					require.True(t, ok,
-						"%s declares the %s surface for host %q but says nothing about the %q decision.\n"+
+						"%s declares the %s input for host %q but says nothing about the %q decision.\n"+
 							"Every decision in agent.GuardDecisions needs an explicit stance (model, human, or none):\n"+
-							"an undeclared decision is one this host was never asked about.", name, surface, host, decision)
+							"an undeclared decision is one this host was never asked about.", name, input, host, decision)
 					require.True(t, guardStances[stance], "%s: unknown stance %q for %q (want model, human, or none)", name, stance, decision)
 					stances[decision] = stance
 				}
-				// A host may be served on one surface by two artifacts, because a
+				// A host may be served on one input by two artifacts, because a
 				// template ships in sh and in Buzz and a host wires whichever suits
 				// its machine. What must not differ is what they CLAIM: two artifacts
 				// disagreeing about the same cell leaves the gate unable to say which
 				// is true, which is the state the check below refuses. Agreement is
 				// cheap to state and is what the executed cases already prove.
-				if prior := cov[host][surface]; prior != nil {
+				if prior := cov[host][input]; prior != nil {
 					require.Equal(t, prior, stances,
-						"%s declares the %s surface for host %q differently from the artifact beside it.\n"+
+						"%s declares the %s input for host %q differently from the artifact beside it.\n"+
 							"Two forms of one template must claim the same stances, or nothing can say which the host gets.",
-						name, surface, host)
+						name, input, host)
 				}
-				cov[host][surface] = stances
+				cov[host][input] = stances
 			}
 		}
 	}
@@ -383,13 +387,13 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	cov := parseGuardCoverage(t)
 
-	for host, surfaces := range cov {
-		for _, surface := range GuardSurfaces() {
-			assert.NotNil(t, surfaces[surface],
-				"host %q declares no coverage for the %q guard surface.\n"+
+	for host, inputs := range cov {
+		for _, input := range GuardInputs() {
+			assert.NotNil(t, inputs[input],
+				"host %q declares no coverage for the %q guard input.\n"+
 					"Either a template wires it and needs a %s line, or the host cannot and\n"+
-					"some template must say so - a surface nobody claims is a coverage hole nobody sees.",
-				host, surface, guardCoverageMarker)
+					"some template must say so - an input nobody claims is a coverage hole nobody sees.",
+				host, input, guardCoverageMarker)
 		}
 	}
 
@@ -565,9 +569,9 @@ const transportCases = repoRoot + "/cmd/magus/testdata/script/guard_templates.tx
 func TestTransportCasesCoverTheContract(t *testing.T) {
 	executed, noted := transportCasesByCell(t)
 
-	for _, surface := range GuardSurfaces() {
+	for _, input := range GuardInputs() {
 		for _, decision := range GuardDecisions() {
-			cell := surface + "/" + decision
+			cell := input + "/" + decision
 			if why, allowed := unreachableCases[cell]; allowed {
 				assert.True(t, noted[cell],
 					"%s executes no %q case and unreachableCases says it cannot (%s), but no `# case: %s unreachable - <why>`\n"+
@@ -658,23 +662,23 @@ func TestTransportCasesCoverTheHostContract(t *testing.T) {
 	coverage := parseGuardCoverage(t)
 
 	for host := range buzzGuardHosts(t) {
-		for _, surface := range GuardSurfaces() {
+		for _, input := range GuardInputs() {
 			wired := false
 			for _, decision := range GuardDecisions() {
-				wired = wired || coverage[host][surface][decision] != "none"
+				wired = wired || coverage[host][input][decision] != "none"
 			}
 			if !wired {
 				continue
 			}
 			for _, decision := range GuardDecisions() {
-				cell := surface + "/" + decision
+				cell := input + "/" + decision
 				if _, unreachable := unreachableCases[cell]; unreachable {
 					continue
 				}
 				assert.True(t, executed[host][cell],
-					"%s wires the %s surface, but no `# hosts: %s` fixture executes %s. "+
+					"%s wires the %s input, but no `# hosts: %s` fixture executes %s. "+
 						"Record the host beside the real event that reaches its adapter, or change the declaration.",
-					host, surface, host, cell)
+					host, input, host, cell)
 			}
 		}
 	}

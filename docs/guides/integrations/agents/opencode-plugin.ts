@@ -37,9 +37,9 @@
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none ask=none
+// magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
 // NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
 // intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
 // edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode

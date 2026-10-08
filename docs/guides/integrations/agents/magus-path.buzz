@@ -61,8 +61,8 @@
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
 import "io";
 import "flags";

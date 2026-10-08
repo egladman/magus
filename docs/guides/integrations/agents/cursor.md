@@ -194,9 +194,9 @@ script also accepts `file_path`.
 // Compaction still has no model-facing rehydrate event.
 //
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=cursor surface=mcp deny=model advise=none pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
 
 import "std";
 import "flags";
