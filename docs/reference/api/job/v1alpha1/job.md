@@ -35,7 +35,7 @@ Takes [RunJobRequest](#runjobrequest), returns [RunJobResponse](#runjobresponse)
 
 ### CompletionGate
 
-CompletionGate is one machine-verifiable condition a job's completion is checked against, projected from types.CompletionGate. kind names WHAT it examines and expect names what must be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as the command that runs it, the same way Job.check is - the wire never carries the unrendered form, so a client needs no second parser for it.
+CompletionGate is one machine-verifiable condition a job's completion is checked against, projected from types.Goal. kind names WHAT it examines and expect names what must be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as the command that runs it, the same way Job.check is - the wire never carries the unrendered form, so a client needs no second parser for it.
 
 Source: [job.proto:125](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L125).
 

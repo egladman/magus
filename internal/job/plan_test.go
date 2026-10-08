@@ -118,10 +118,10 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 		}
 		return SymbolFact{DefinedIn: []string{"internal/job/plan.go"}}, true
 	}
-	gate := func(names ...string) []types.CompletionGate {
-		return []types.CompletionGate{
+	gate := func(names ...string) []types.Goal {
+		return []types.Goal{
 			{ID: "check", Check: types.LeaseCheck{Target: "test", Project: "."}},
-			{ID: "sym", Kind: types.GateKindSymbol, Symbols: names},
+			{ID: "sym", Kind: types.GoalKindSymbol, Symbols: names},
 		}
 	}
 
@@ -221,14 +221,14 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 
 	parent := types.Job{
 		ID: "rename", State: types.StateRunning, WritePaths: []string{"."},
-		Goals: []types.CompletionGate{
-			{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OldName"}},
+		Goals: []types.Goal{
+			{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"OldName"}},
 			{ID: "tests", Check: types.LeaseCheck{Target: "test", Project: "."}},
 		},
 	}
 	child := types.Job{
 		ID: "rename/api", Parent: "rename", State: types.StateRunning, WritePaths: []string{"api"},
-		Goals: []types.CompletionGate{{ID: "moved", Kind: types.GateKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
+		Goals: []types.Goal{{ID: "moved", Kind: types.GoalKindPaths, Expect: types.ExpectPresent, Paths: []string{"api"}}},
 	}
 	loc := declared(t, parent, child)
 	read := func(_ context.Context, name string) (SymbolFact, bool) {
@@ -244,8 +244,8 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 	for _, g := range status.Gates {
 		ids = append(ids, g.ID)
 	}
-	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol gates")
-	assert.NotContains(t, ids, "rename/tests", "only symbol gates are inherited")
+	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol goals")
+	assert.NotContains(t, ids, "rename/tests", "only symbol goals are inherited")
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `"OldName" is still defined in api/old.go`)
 }
 
@@ -372,14 +372,14 @@ func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 	t.Parallel()
 
 	check := types.LeaseCheck{Target: "test", Project: "."}
-	goal := types.CompletionGate{ID: "done", Kind: types.GateKindPaths, Paths: []string{"a.go"}}
+	goal := types.Goal{ID: "done", Kind: types.GoalKindPaths, Paths: []string{"a.go"}}
 	for name, tc := range map[string]struct {
 		row     types.Job
 		refused bool
 	}{
 		"a writing job with neither":    {row: types.Job{ID: "w", WritePaths: []string{"a.go"}}, refused: true},
 		"a writing job with a check":    {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Check: &check}},
-		"a writing job with a goal":     {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.CompletionGate{goal}}},
+		"a writing job with a goal":     {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Goals: []types.Goal{goal}}},
 		"a read-only job":               {row: types.Job{ID: "r", ReadOnly: true}},
 		"a job declaring no write path": {row: types.Job{ID: "r"}},
 	} {

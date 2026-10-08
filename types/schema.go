@@ -87,8 +87,8 @@ var JobSchema = SchemaLedger{
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
 	Added:   map[string]int{"entries": 11, "goals": 11, "integration": 11},
-	// The four boundary renames and completion_gates, still folded from stored rows (see
-	// job.foldStoredNames).
+	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
+	// and completion_gates, which a stored row drops unread.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
 	Requires: map[int]string{
 		10: "dead-job-end",
@@ -103,8 +103,7 @@ var DeclarationSchema = SchemaLedger{
 	Type:    reflect.TypeFor[Declaration](),
 	Version: JobSchemaVersion,
 	Added:   map[string]int{"enter": 11, "goals": 11},
-	// goals' old spelling. A declaration is not stored, so nothing folds it: a record
-	// sending it is refused as an unknown member.
+	// goals' spelling frozen in v11. A record sending it is refused as an unknown member.
 	Reserved: []string{"completion_gates"},
 	Requires: JobSchema.Requires,
 }

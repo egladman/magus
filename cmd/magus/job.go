@@ -2030,8 +2030,8 @@ func jobObserver(root string) job.Observer {
 }
 
 func gatesOnCI(row types.Job) bool {
-	return slices.ContainsFunc(row.EffectiveGoals(), func(g types.CompletionGate) bool {
-		return g.Kind == types.GateKindCheck && g.Check.Target == types.TargetCI
+	return slices.ContainsFunc(row.EffectiveGoals(), func(g types.Goal) bool {
+		return g.Kind == types.GoalKindCheck && g.Check.Target == types.TargetCI
 	})
 }
 
@@ -2084,7 +2084,7 @@ func gradesSymbols(rows []types.Job, id string) bool {
 		return false
 	}
 	for _, r := range append([]types.Job{rows[i]}, types.JobAncestors(rows, id)...) {
-		if slices.ContainsFunc(r.Goals, func(g types.CompletionGate) bool { return g.Resolve().Kind == types.GateKindSymbol }) {
+		if slices.ContainsFunc(r.Goals, func(g types.Goal) bool { return g.Resolve().Kind == types.GoalKindSymbol }) {
 			return true
 		}
 	}
@@ -2322,7 +2322,7 @@ func specChange(field string, prev, next types.Job) string {
 	return field + " " + strings.Join(parts, " ")
 }
 
-func goalIDs(goals []types.CompletionGate) []string {
+func goalIDs(goals []types.Goal) []string {
 	ids := make([]string, len(goals))
 	for i, g := range goals {
 		ids[i] = g.ID

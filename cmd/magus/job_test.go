@@ -189,11 +189,11 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	assert.Contains(t, out.String(), "`"+hint.ToolClient.String()+"` MCP tool")
 }
 
-// TestPrintJobStatusFailedGateNamesHowToReadIt pins the completion-gates plan's
-// step 3: a failed gate named an output ref but not how to read it, leaving the
-// holder to reconstruct `magus query output <ref>` by hand. The line must be
-// rendered through hint.QueryOutput (never a hardcoded string), and must appear
-// only for a gate that actually failed and actually carries a ref.
+// TestPrintJobStatusFailedGateNamesHowToReadIt pins step 3 of the plan that added goals:
+// a failed goal named an output ref but not how to read it, leaving the holder to
+// reconstruct `magus query output <ref>` by hand. The line must be rendered through
+// hint.QueryOutput (never a hardcoded string), and must appear only for a goal that
+// actually failed and actually carries a ref.
 func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
 	t.Parallel()
 

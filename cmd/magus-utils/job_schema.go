@@ -68,8 +68,8 @@ const (
 // a state added there reaches the schema with nothing here to change.
 var closedSets = map[string][]string{
 	"JobState":   leaseStateNames(),
-	"GateKind":   gateKindNames(),
-	"GateExpect": gateExpectNames(),
+	"GoalKind":   goalKindNames(),
+	"GoalExpect": goalExpectNames(),
 }
 
 func runJobSchema(args []string) error {
@@ -358,8 +358,8 @@ func leaseStateNames() []string {
 	return names
 }
 
-func gateKindNames() []string {
-	kinds := types.GateKinds()
+func goalKindNames() []string {
+	kinds := types.GoalKinds()
 	names := make([]string, len(kinds))
 	for i, k := range kinds {
 		names[i] = string(k)
@@ -367,8 +367,8 @@ func gateKindNames() []string {
 	return names
 }
 
-func gateExpectNames() []string {
-	expects := types.GateExpects()
+func goalExpectNames() []string {
+	expects := types.GoalExpects()
 	names := make([]string, len(expects))
 	for i, e := range expects {
 		names[i] = string(e)

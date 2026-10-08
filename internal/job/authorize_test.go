@@ -107,7 +107,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
 		"goals": func(u *types.Job) {
-			u.Goals = []types.CompletionGate{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
+			u.Goals = []types.Goal{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},
 	}
 	for field, apply := range cases {
@@ -128,15 +128,15 @@ func TestBoundWorkerCannotLoosenItsGoals(t *testing.T) {
 	t.Parallel()
 
 	row := workerRow()
-	row.Goals = []types.CompletionGate{{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}
+	row.Goals = []types.Goal{{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}
 	loc := declared(t, row)
-	for name, loosen := range map[string]func(*types.CompletionGate){
-		"kind": func(g *types.CompletionGate) {
-			g.Kind, g.Symbols, g.Paths = types.GateKindPaths, nil, []string{"nothing"}
+	for name, loosen := range map[string]func(*types.Goal){
+		"kind": func(g *types.Goal) {
+			g.Kind, g.Symbols, g.Paths = types.GoalKindPaths, nil, []string{"nothing"}
 		},
-		"expect":  func(g *types.CompletionGate) { g.Expect = types.ExpectPresent },
-		"symbols": func(g *types.CompletionGate) { g.Symbols = []string{"NeverExisted"} },
-		"paths":   func(g *types.CompletionGate) { g.Paths = []string{"x"} },
+		"expect":  func(g *types.Goal) { g.Expect = types.ExpectPresent },
+		"symbols": func(g *types.Goal) { g.Symbols = []string{"NeverExisted"} },
+		"paths":   func(g *types.Goal) { g.Paths = []string{"x"} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

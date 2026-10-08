@@ -162,7 +162,7 @@
           "kind": {
             "type": "string",
             "enum": ["check", "paths", "symbol"],
-            "description": "Kind names WHAT this gate examines and Expect names what must be true of it. Two fields rather than one, because the alternative is a kind per pair: `paths` beside `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by multiplication and reads inconsistently the moment it has four members."
+            "description": "Kind names WHAT this goal examines and Expect names what must be true of it. Two fields rather than one, because the alternative is a kind per pair: `paths` beside `exists` beside `absent` beside `no-symbol`, which is a vocabulary that grows by multiplication and reads inconsistently the moment it has four members."
           },
           "expect": {
             "type": "string",
@@ -198,21 +198,21 @@
                 "description": "NoDefaultCharms runs the check with --no-default-charms, so only a run made without the workspace's default_charms satisfies it: the charmless `generate` that compares against HEAD, in a workspace whose default is rw."
               }
             },
-            "description": "Check is the run a GateKindCheck gate examines. Zero on every other kind."
+            "description": "Check is the run a GoalKindCheck goal examines. Zero on every other kind."
           },
           "paths": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Paths are the globs a GateKindPaths gate examines. Zero on every other kind."
+            "description": "Paths are the globs a GoalKindPaths goal examines. Zero on every other kind."
           },
           "symbols": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "description": "Symbols are the names a GateKindSymbol gate examines, as the knowledge graph resolves them. Zero on every other kind."
+            "description": "Symbols are the names a GoalKindSymbol goal examines, as the knowledge graph resolves them. Zero on every other kind."
           }
         }
       },
