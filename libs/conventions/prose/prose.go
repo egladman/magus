@@ -60,6 +60,15 @@ const (
 	// RuleTemplate reports a skill body that does not render, so neither of
 	// its forms can be judged.
 	RuleTemplate Rule = "template"
+	// RuleSecondPerson reports we, us, our or ours in a guide, which speaks to
+	// the reader as you.
+	RuleSecondPerson Rule = "second-person"
+	// RuleStepVerb reports a step of a numbered procedure in a guide that does
+	// not open with its imperative verb.
+	RuleStepVerb Rule = "step-verb"
+	// RuleCondescension reports a word in a guide that tells the reader how
+	// hard a step should feel: easy, simple, obviously, just, please.
+	RuleCondescension Rule = "condescension"
 )
 
 // Surface names the kind of text a rule judges.
@@ -82,13 +91,19 @@ const (
 	// judged on SurfaceSkill; what only the full form shows, on
 	// SurfaceMarkdown.
 	SurfaceSkillSource Surface = "skill-source"
+	// SurfaceGuide is a procedural page, one the reader follows with a
+	// terminal open: Markdown held to the guide rules as well, which keep it
+	// in the second person, its numbered steps imperative and its words free
+	// of condescension.
+	SurfaceGuide Surface = "guide"
 )
 
 var (
 	docOnly = []Surface{SurfaceDoc}
-	written = []Surface{SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
-	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
+	written = []Surface{SurfaceMarkdown, SurfaceGuide, SurfacePullRequest, SurfaceSkill}
+	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfaceGuide, SurfacePullRequest, SurfaceSkill}
 	skill   = []Surface{SurfaceSkill}
+	guide   = []Surface{SurfaceGuide}
 )
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
@@ -117,6 +132,9 @@ var checks = []struct {
 	{RuleTerseParagraph, skill, terseParagraph},
 	{RuleWordy, skill, wordy},
 	{RuleBareRule, skill, bareRule},
+	{RuleSecondPerson, guide, secondPerson},
+	{RuleStepVerb, guide, stepVerb},
+	{RuleCondescension, guide, condescension},
 	// A skill body that does not render is reported before any rule runs; the
 	// entry gives the rule its place in [Rules].
 	{RuleTemplate, nil, nil},

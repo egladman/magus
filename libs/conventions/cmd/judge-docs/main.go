@@ -4,7 +4,8 @@
 // With no flag it reads a JSON array of symbol records on stdin and judges
 // each one's doc, reporting in input order and then the order [prose.Judge]
 // reports them. With -surface markdown it judges the Markdown files its
-// arguments name, in argument order; -surface skill judges them as skills an
+// arguments name, in argument order; -surface guide judges them as procedural
+// pages, held to the guide rules as well; -surface skill judges them as skills an
 // agent loads as written, and -surface skill-source as skill bodies
 // internal/agent renders into a short and a full form, each finding at its
 // source line. With -surface pull-request it reads a pull
@@ -65,7 +66,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("judge-docs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	surface := fs.String("surface", "",
-		"judge `markdown`, skill or skill-source files named as arguments, or a pull-request on stdin")
+		"judge `markdown`, guide, skill or skill-source files named as arguments, or a pull-request on stdin")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -95,7 +96,7 @@ func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, e
 		}
 
 		return judgeSymbols(stdin)
-	case prose.SurfaceMarkdown, prose.SurfaceSkill, prose.SurfaceSkillSource:
+	case prose.SurfaceMarkdown, prose.SurfaceGuide, prose.SurfaceSkill, prose.SurfaceSkillSource:
 		return judgeFiles(paths, surface)
 	case prose.SurfacePullRequest:
 		if len(paths) > 0 {
@@ -109,7 +110,7 @@ func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, e
 
 		return textFindings(pullRequestSource, string(text), surface), nil
 	default:
-		return nil, fmt.Errorf("unknown surface %q: want markdown, skill, skill-source or pull-request", surface)
+		return nil, fmt.Errorf("unknown surface %q: want markdown, guide, skill, skill-source or pull-request", surface)
 	}
 }
 

@@ -122,6 +122,25 @@ func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
 	}
 }
 
+func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "guide.md")
+
+	if err := os.WriteFile(path, []byte("# Guide\n\nThen we run it.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-surface", "guide", path}, strings.NewReader(""), &out, &errOut)
+
+	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"guide","rule":"second-person",` +
+		`"message":"Address the reader as you, not 'we': a guide speaks to the person following it, ` +
+		`and names magus or the project where it means them.","match":"we"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
 func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
 	var out, errOut bytes.Buffer
 
@@ -141,7 +160,7 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
-		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown, skill, skill-source or pull-request\n"},
+		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
 		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -surface markdown\n"},
 		{"a path for a pull request", []string{"-surface", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
 		{"a missing file", []string{"-surface", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
