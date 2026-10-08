@@ -105,7 +105,7 @@ test("runtime harness spells cover read observation and checkpoints", () => {
   assert.match(cursorSpell, /preToolUse/, "cursor spell wires the write guard");
 
   // OpenCode: plugin transport, not managed shell entries. Skills install paths
-  // are the only apply surface (harness_entries is empty, pinned by the spell's
+  // are all it applies (harness_entries is empty, pinned by the spell's
   // own test suite); the plugin calls magus directly.
   const opencodeSpell = readFileSync(
     path.join(repository, "spells/harness/opencode/spell.buzz"),

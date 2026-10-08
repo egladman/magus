@@ -77,7 +77,7 @@
 // be given.
 //
 // __MAGUS_BIN is deliberately NOT called MAGUS_BIN: the whole MAGUS_* space is
-// magus's own configuration surface, so a variable this template invents must stay
+// magus's own settings, so a variable this template invents must stay
 // out of it rather than look like a setting magus reads.
 //
 // On a missing magus this prints a visible notice rather than exiting quietly. A
@@ -89,10 +89,10 @@
 // message, which would turn a Buzz bug into a refusal the person cannot read. Every
 // call that can fail is caught, and the script ends by writing one reply.
 //
-// The line below declares, per guard surface, how much of a verdict this file
+// The line below declares, per guard input, how much of a verdict this file
 // can carry: model (reaches the agent), human (reaches the person only), or none
 // (not delivered). It is machine-read by the host-parity gate, which fails the
-// build when a decision or surface exists in the guard contract that some host
+// build when a decision or input exists in the guard contract that some host
 // was never asked about. Keep it true to what HOST_RESPONSE actually renders.
 //
 // An ask reaches the person on both hosts, by different routes. Claude Code takes
@@ -112,7 +112,7 @@
 // magus-guard-coverage: schema=2 host=codex input=mcp deny=model advise=model pass=none ask=model
 // The mcp rows are real: an mcp__magus__* PreToolUse call carries no tool_input.command,
 // so this file forwards the whole event instead (see hook\wholeEvent), and the same hookSpecificOutput
-// reply it already renders for the command surface carries a deny or an advise on this one too.
+// reply it already renders for the command input carries a deny or an advise on this one too.
 // No rule prompts for an MCP call, so Codex's mcp ask is the deny that names the terminal.
 
 import "std";
@@ -179,7 +179,7 @@ final PERMISSION_UNKNOWN = `{{else}}{"hookSpecificOutput":{"hookEventName":"Perm
 final CONTEXT_SLOT = "__MAGUS_CONTEXT__";
 final CONTEXT_REPLY = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":__MAGUS_CONTEXT__}}`;
 
-// The prose, not the reply: the two surfaces wrap it differently, and holding it once is
+// The prose, not the reply: the two event replies wrap it differently, and holding it once is
 // what keeps them from drifting into two different sentences about one fact.
 final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
 
@@ -338,7 +338,7 @@ object Guard {
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
 // drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
-// failed BOTH attempts and the spawn surface could never recover where Bash did, and a
+// failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
 // binary too old to accept the flag cannot observe a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     final args = mut ["shell"];
@@ -410,7 +410,7 @@ fun contextReply(text: str) > str {
 // noticeReply renders a notice in the dialect of the event that asked for it.
 //
 // A PermissionRequest reply carries a decision and no context field, so the PreToolUse
-// envelope the other surfaces use is one the host rejects outright: on the single surface
+// envelope the other events use is one the host rejects outright: on the single event
 // where the notice is the only thing written, it arrived unreadable. There the prose goes
 // to the person on stderr and stdout carries the envelope that leaves the decision alone.
 fun noticeReply(eventName: str, text: str) > str {

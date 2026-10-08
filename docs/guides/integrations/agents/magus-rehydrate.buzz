@@ -39,7 +39,7 @@
 //
 // NO magus-guard-coverage line, for the same reason magus-checkpoint.buzz has none: a
 // coverage declaration states how much of a VERDICT a host can carry, and this file
-// carries no verdict on no surface. It never denies, never advises, and cannot
+// carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
 // magus-guard-template: 20
@@ -73,7 +73,7 @@ fun parseOptions(args: [str]) > {str: str} {
         return {<str: str>};
     }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares {RULES_FLAG} and {FORMAT_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts {RULES_FLAG} and {FORMAT_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values;

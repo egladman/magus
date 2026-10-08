@@ -90,7 +90,7 @@ other templates.
 // step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
-// Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
+// Covers shell commands AND file writes, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules
 //   edit | write  the declared-output rule
 //
@@ -132,7 +132,7 @@ other templates.
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
 // brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
-// deliberately avoids the MAGUS_* space, which is magus's own config surface.
+// deliberately avoids the MAGUS_* space, which is magus's own settings.
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -494,7 +494,7 @@ export const MagusGuard: Plugin = async () => {
     // The cost is real and is accepted: OpenCode has no post-compaction hook (its Plugin
     // type carries only the two pre-compaction ones), so a compacted OpenCode session gets
     // no brief. It can still ask, and `magus session --brief` prints the same state on
-    // demand, which is the surface every host shares.
+    // demand, which is the command every host shares.
 
     event: async ({ event }) => {
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint

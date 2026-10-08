@@ -15,8 +15,8 @@
 // That rule ADVISES rather than blocks. magus denies only what cannot be undone;
 // a hand-edited generated file is wasteful, not destructive, since regenerating
 // erases it. So it explains that the edit will be overwritten and lets the agent
-// correct itself, rather than treating it as unable to learn. Every rule on this
-// surface says nothing on any uncertainty, no magus, no workspace, an unclaimed
+// correct itself, rather than treating it as unable to learn. Every file-write rule
+// says nothing on any uncertainty, no magus, no workspace, an unclaimed
 // path, because an advisory fired on a guess trains the reader to ignore it.
 //
 // HOST_RESPONSE renders BOTH arms even though the rules shipping today only
@@ -56,7 +56,7 @@
 // note in magus-command.buzz. It records what HOST_RESPONSE RENDERS, not
 // which rules currently fire, so deny=model is true the moment the arm exists.
 //
-// No rule asks on this surface today. The arm exists for the same reason the deny arm did
+// No rule asks on a file write today. The arm exists for the same reason the deny arm did
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
@@ -125,7 +125,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this surface takes; see
+// The host this entry is wired into, the one argument this hook takes; see
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
@@ -141,7 +141,7 @@ fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
@@ -212,7 +212,7 @@ fun main(args: [str]) > void {
     // script made before it existed.
     //
     // The retry tests status AND emptiness together, for the same reason as the command
-    // template now that this surface can deny: a DENY exits non-zero (2) with the verdict
+    // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
     final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
     foreach (flag in rendersAsk) { attributed.append(flag); }
@@ -222,9 +222,9 @@ fun main(args: [str]) > void {
     }
 
     // A pass and a broken guard both render nothing; see magus-command.buzz for why
-    // telling them apart matters. Kept identical here so neither surface grows a behavior
+    // telling them apart matters. Kept identical here so neither template grows a behavior
     // the other lacks. The difference is only that this one has no default message,
-    // because for most hosts an empty response on this surface already means "allow".
+    // because for most hosts an empty response to a file-write hook already means "allow".
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         final failed = env\get("__MAGUS_FAILED_RESPONSE") catch "";
         if (failed != "") { io\stdout.write(failed) catch void; }

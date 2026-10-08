@@ -14,7 +14,7 @@ import "path";
 // a host that sources no such file has no PATH to set. It prints nothing on stdout and
 // exits 0.
 //
-// NO magus-guard-coverage line: it judges nothing on any surface.
+// NO magus-guard-coverage line: it judges nothing on any input.
 //
 // magus-guard-template: 20
 
@@ -31,7 +31,7 @@ fun envFilePath(args: [str]) > str {
         return "";
     }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {ENV_FILE_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {ENV_FILE_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[ENV_FILE_FLAG] ?? "";
