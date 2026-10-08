@@ -34,8 +34,7 @@ func (r StoredOutput) Bytes() []byte {
 }
 
 // OutputDescriptor is a stored target execution's identity and outcome, the metadata
-// behind a target-output ref. Its fields and json names match magus.OutputDescriptor
-// field for field, so either converts to the other.
+// behind a target-output ref. Its json names match cache.OutputDescriptor's.
 type OutputDescriptor struct {
 	Ref         string `json:"ref"`
 	Project     string `json:"project"`

@@ -325,33 +325,9 @@ func ResolveCacheDir(root string, opts ...Option) (string, error) {
 // mismatch worth reporting rather than treating as changed inputs.
 const CacheKeyVersion = cache.KeyVersion
 
-// OutputDescriptor is a stored target execution's identity and outcome: the caller-facing
-// projection of [cache.OutputDescriptor], the metadata behind a target-output ref.
-// Field tags match [cache.OutputDescriptor]'s exactly, so embedding this in a CLI JSON
-// record (`magus query output <ref> -o json`) reproduces the same wire shape.
-type OutputDescriptor struct {
-	Ref         string `json:"ref"`
-	Project     string `json:"project"`
-	Target      string `json:"target,omitempty"`
-	Inv         string `json:"inv,omitempty"` // invocation id of the run that produced this output
-	Failed      bool   `json:"failed"`
-	ErrMsg      string `json:"error,omitempty"` // failure message; empty on success
-	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
-	DurationMs  int64  `json:"duration_ms"`
-
-	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
-	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
-	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
-	MagusVersion string `json:"magus_version,omitempty"`
-
-	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
-	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes at capture time
-
-	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
-	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
-	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, sl, jj
-	Platform  string   `json:"platform,omitempty"`   // GOOS/GOARCH the run executed on
-}
+// OutputDescriptor is a stored target execution's identity and outcome, the metadata
+// behind a target-output ref.
+type OutputDescriptor = types.OutputDescriptor
 
 func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 	return OutputDescriptor{
