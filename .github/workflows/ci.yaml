@@ -491,6 +491,22 @@ jobs:
       # OOM kill, a superseded run - skips this step and takes the only explanation with
       # it. That is exactly the case where the console said nothing useful, so the logs
       # matter most precisely when the job did not fail in the ordinary way.
+      #
+      # Beside the raw logs, the failed targets' output records, which `magus query output
+      # --stdin` prints on another machine. The failed refs come from the run journals.
+      - name: Write the failed targets' output records
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          mkdir -p .magus/logs
+          for journal in .magus/runs/*.jsonl; do
+            magus query invocation "$(basename "$journal" .jsonl)" -o json |
+              jq -r '.events[]? | select(.kind == "result" and .status == "fail") | .ref'
+          done | sort -u | while read -r ref; do
+            magus query output "$ref" -o jsonl
+          done > .magus/logs/failed-outputs.jsonl
+
       - name: Upload magus run logs on failure
         if: failure() || cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
