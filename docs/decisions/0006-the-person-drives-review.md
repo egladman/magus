@@ -54,10 +54,9 @@ standard from one tree leaked into the product.
    must not touch, and I close it by reading, questioning and cutting what came back. The
    agent does the middle, often the largest share, but never the start or the finish. I
    drive the session the whole way; an agent never decides the work is done.
-2. **Two people review.** One person and an agent reviewer let things slip through. A
-   change an agent wrote gets two human reviewers, and an agent's review never counts as
-   one. Agents let us move faster, but speed is not the goal: we still ship deliberately,
-   and quality comes first.
+2. **People answer people.** A reply to a reviewer is typed by the person who sends it.
+   An agent may show a short outline to think with, never text to copy, and it never
+   posts a reply. Choosing the words is part of answering for the change.
 3. **Write for people.** The moment we start writing code with the intent of other
    agents reading that code instead of other humans is the moment we have lost our way
    as software engineers. Code and comments are for a human reader, and text padded for
@@ -120,12 +119,14 @@ from. What it established:
 
 ### 4. Review between people
 
-| Item                                                                                                                                        | State          |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| A reviewer can mark "I am reading this now", so a merge does not land under them; a merge that lands mid-review is reported to the reviewer | proposed       |
-| Measure review time lost to merges that landed during an active review                                                                      | proposed       |
-| A person enables auto-merge; an agent, or tooling acting for one, never does                                                                | done (decided) |
-| A change an agent wrote needs two human approvals; an agent's review is advice and never counts as one                                      | proposed       |
+| Item                                                                                                                                                                                              | State          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| A reviewer can mark "I am reading this now", so a merge does not land under them; a merge that lands mid-review is reported to the reviewer                                                       | proposed       |
+| Measure review time lost to merges that landed during an active review                                                                                                                            | proposed       |
+| A person enables auto-merge; an agent, or tooling acting for one, never does                                                                                                                      | done (decided) |
+| A review thread from the forge shows with its replies under its hunk, and a person can send it to an agent to work the code change                                                                | proposed       |
+| An agent sent a thread gets the context magus can prove, not just the hunk: the touched symbols' definitions, callers and tests, the workspace's conventions and precedents, and the whole change | proposed       |
+| An agent's outline of a reply is a few topics that cannot be copied or inserted; the person types every reply                                                                                     | proposed       |
 
 ### 5. Text a stranger can read
 
