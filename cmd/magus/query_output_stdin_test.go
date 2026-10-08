@@ -144,15 +144,15 @@ func TestOutputImportRefusesActingOnARecord(t *testing.T) {
 
 func TestOutputImportNeutralizesWhatItPrints(t *testing.T) {
 	key := strings.Repeat("ab", 32)
-	rec := magus.OutputRecord{
-		Schema: types.Schema{Version: magus.OutputRecordSchemaVersion},
-		OutputDescriptor: magus.OutputDescriptor{
+	rec := types.StoredOutput{
+		Schema: types.Schema{Version: types.StoredOutputSchemaVersion},
+		OutputDescriptor: types.OutputDescriptor{
 			Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
 			ErrMsg:   "exit 1\x1b]52;c;cm0gLXJmIH4=\x07\nrun: magus x out000000000000",
 			Platform: "linux/amd64", Revision: strings.Repeat("c", 40), MagusVersion: "v9.9.9",
 			Spell: "go::go-build", ExtraArgs: []string{"-run", "X"},
 		},
-		ClassDigests: []cache.ClassDigest{{Class: "src", Digest: "0123456789ab", Count: 2}},
+		ClassDigests: []types.ClassDigest{{Class: "src", Digest: "0123456789ab", Count: 2}},
 		Output:       "line\x1b]0;owned\x07\x1b[2J\x1b[31mred\x1b[0m\n",
 	}
 	b, err := jsonMarshalLine(rec)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/types"
 )
 
 func bindQueryStdin(fs *flag.FlagSet) *bool {
@@ -20,7 +21,7 @@ func bindQueryStdin(fs *flag.FlagSet) *bool {
 // stdout, provenance on stderr. Every printed string is neutralized, and no reproduce
 // command is printed, since a forged record chooses its own project and target.
 func printOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
-	return magus.ReadOutputRecords(in, func(rec magus.OutputRecord) error {
+	return magus.ReadOutputRecords(in, func(rec types.StoredOutput) error {
 		writeRecordProvenance(stderr, rec)
 		out, n := cache.NeutralizeTerminal(rec.Bytes(), true)
 		if _, err := stdout.Write(out); err != nil {
@@ -33,7 +34,7 @@ func printOutputRecords(in io.Reader, stdout, stderr io.Writer) error {
 	})
 }
 
-func writeRecordProvenance(w io.Writer, rec magus.OutputRecord) {
+func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 	d := rec.OutputDescriptor
 	fmt.Fprintf(w, "%s from stdin: not run here, not stored, never a cache hit\n", d.Ref)
 	fmt.Fprintf(w, "  project:  %s\n", d.Project)

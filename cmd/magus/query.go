@@ -404,7 +404,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		}
 		if o.out.Format == FormatJSONL {
 			// A slice, or writeJSONL would stream one of the record's list fields.
-			return emitFormatted(o.out, []magus.OutputRecord{rec})
+			return emitFormatted(o.out, []types.StoredOutput{rec})
 		}
 		return emitFormatted(o.out, rec)
 	}

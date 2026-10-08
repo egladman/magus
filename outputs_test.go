@@ -756,7 +756,7 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	t.Helper()
 	key := strings.Repeat("ab", 32)
 	rec := map[string]any{
-		"schema_version": OutputRecordSchemaVersion,
+		"schema_version": types.StoredOutputSchemaVersion,
 		"ref":            cache.PortableRef(key), "key": key, "attempt": "out1234abcd",
 		"project": "libs/x", "target": "lint", "failed": true, "timestamp_ms": 1, "duration_ms": 2,
 		"output": "FAIL: x\n",
@@ -769,9 +769,9 @@ func outputRecordLine(t *testing.T, mutate func(map[string]any)) string {
 	return string(b) + "\n"
 }
 
-func readRecords(in string) ([]OutputRecord, error) {
-	var got []OutputRecord
-	err := ReadOutputRecords(strings.NewReader(in), func(r OutputRecord) error {
+func readRecords(in string) ([]types.StoredOutput, error) {
+	var got []types.StoredOutput
+	err := ReadOutputRecords(strings.NewReader(in), func(r types.StoredOutput) error {
 		got = append(got, r)
 		return nil
 	})
@@ -788,7 +788,7 @@ func TestOutputImportReadsRecordsInOrder(t *testing.T) {
 }
 
 func TestOutputImportRefusesNewerSchema(t *testing.T) {
-	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["schema_version"] = OutputRecordSchemaVersion + 1 }))
+	_, err := readRecords(outputRecordLine(t, func(r map[string]any) { r["schema_version"] = types.StoredOutputSchemaVersion + 1 }))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "line 1: output record schema_version 2 is newer than this magus reads (1)")
 
@@ -802,7 +802,7 @@ func TestOutputImportRefusesNewerSchema(t *testing.T) {
 // Nothing reaches each when any line is bad, so a caller never prints half an input.
 func TestOutputImportMalformedLineNamesTheLine(t *testing.T) {
 	calls := 0
-	err := ReadOutputRecords(strings.NewReader(outputRecordLine(t, nil)+"{not json\n"), func(OutputRecord) error {
+	err := ReadOutputRecords(strings.NewReader(outputRecordLine(t, nil)+"{not json\n"), func(types.StoredOutput) error {
 		calls++
 		return nil
 	})
@@ -821,7 +821,7 @@ func TestOutputImportRefusesAJSONBomb(t *testing.T) {
 	assert.ErrorContains(t, err, "line 1: not an output record")
 
 	err = readOutputRecords(strings.NewReader(outputRecordLine(t, nil)+outputRecordLine(t, nil)),
-		cache.ImportLimits{LineBytes: 1 << 20, TotalBytes: 1 << 20, Records: 1}, func(OutputRecord) error { return nil })
+		cache.ImportLimits{LineBytes: 1 << 20, TotalBytes: 1 << 20, Records: 1}, func(types.StoredOutput) error { return nil })
 	assert.EqualError(t, err, "line 2: more than 1 records")
 }
 
