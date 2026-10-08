@@ -698,7 +698,7 @@ notes:
           completion to an editor over stdio.
         - |-
           `buf-breaking` op in the buf spell: gates a proto schema against a baseline
-          branch, composable into a `lint` target. See [Breaking changes](docs/migrating/breaking-changes.md).
+          branch, composable into a `lint` target. See [Breaking changes](docs/guides/migrating/breaking-changes.md).
         - |-
           `describe target --explain` prints the charm trace behind a target's resolved
           command, so a stacked argv patch is inspectable before a run.
@@ -2941,7 +2941,7 @@ body: |-
       spell's in-file test blocks, and `magus buzz lsp` serves diagnostics and
       completion to an editor over stdio.
     - `buf-breaking` op in the buf spell: gates a proto schema against a baseline
-      branch, composable into a `lint` target. See [Breaking changes](docs/migrating/breaking-changes.md).
+      branch, composable into a `lint` target. See [Breaking changes](docs/guides/migrating/breaking-changes.md).
     - `describe target --explain` prints the charm trace behind a target's resolved
       command, so a stacked argv patch is inspectable before a run.
     - Silent-failure diagnostics: an invalid charm patch (MGS6001), a `has_charm` typo,
