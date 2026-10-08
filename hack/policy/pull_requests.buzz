@@ -454,13 +454,16 @@ export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
             return [Judged{ rule = "judge", line = 0,
                 message = "the prose judge cannot run: {stale}; run `{judgeDocs\build}`, then retry" }];
         }
+        // No dir: proc\exec resolves a relative cmd against dir, which names libs/conventions
+        // twice when workspace is relative (the pr-description target passes "."), so the
+        // judge must run from the path stale checked.
         final bin = "{dir}/{judgeDocs\binary}";
         final run = proc\exec(bin, args: ["-kind", "pull-request"],
-            dir: dir, opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
+            opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         if (run == null or run!.code != 0) {
             var why = "{bin} did not start";
             if (run != null) {
-                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, dir: dir);
+                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
             }
             return [Judged{ rule = "judge", line = 0,
                 message = "the prose judge did not run ({why}); run libs/conventions/{judgeDocs\binary} -kind pull-request "
@@ -470,17 +473,24 @@ export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
     };
 }
 
-// judgeFailure names why the judge exited non-zero. With allow_failure, proc\exec reports a
-// process that never started (a missing dir or binary) as exit -1 and drops the error, so
-// an empty stderr falls back to the exit code, stdout, and the one start failure the policy
-// can test for itself.
-export fun judgeFailure(code: int, stdout: str, stderr: str, dir: str) > str {
+// judgeFailure names why the judge at bin exited non-zero. With allow_failure, proc\exec
+// reports both a process that never started and one a signal ended as exit -1 and drops
+// the error, so an empty stderr falls back to the exit code, stdout, and what the policy
+// can test for itself: whether bin exists and is executable.
+export fun judgeFailure(code: int, stdout: str, stderr: str, bin: str) > str {
     if (stderr.trim() != "") {
         return stderr.trim();
     }
     var why = "judge-docs exited {code} with nothing on stderr";
     if (code == -1) {
-        why = if (fs\exists(dir) catch false) "{why}: it never started or a signal ended it" else "{why}: it never started, since {dir} does not exist";
+        final info = fs\stat(bin) catch null;
+        if (info == null or info!.is_dir) {
+            why = "{why}: it never started, since {bin} does not exist";
+        } else if ((info!.mode & 0b001001001) == 0) {
+            why = "{why}: it never started, since {bin} is not executable";
+        } else {
+            why = "{why}: {bin} is an executable file, so a signal ended it or the system refused to load it";
+        }
     }
     if (stdout.trim() != "") {
         why = "{why}; stdout: {stdout.trim()}";
@@ -1033,12 +1043,55 @@ test "parseJudged reads each finding's line from its source" {
     std\assert(parseJudged("[]").len() == 0, message: "no finding");
 }
 
-test "a judge that failed is named by its stderr, else its exit, stdout and dir" {
-    std\assert(judgeFailure(code: 1, stdout: "", stderr: " no Go files \n", dir: ".") == "no Go files", message: "stderr wins");
-    final gone = judgeFailure(code: -1, stdout: "", stderr: "", dir: "./gone/libs/conventions");
-    std\assert(gone == "judge-docs exited -1 with nothing on stderr: it never started, since ./gone/libs/conventions does not exist", message: gone);
-    final said = judgeFailure(code: 2, stdout: "bad flag", stderr: "", dir: ".");
+test "a judge that failed is named by its stderr, else by whether its binary exists and runs" {
+    std\assert(judgeFailure(code: 1, stdout: "", stderr: " no Go files \n", bin: ".") == "no Go files", message: "stderr wins");
+    final gone = judgeFailure(code: -1, stdout: "", stderr: "", bin: "./gone/gen/judge-docs");
+    std\assert(gone == "judge-docs exited -1 with nothing on stderr: it never started, since ./gone/gen/judge-docs does not exist", message: gone);
+    final said = judgeFailure(code: 2, stdout: "bad flag", stderr: "", bin: ".");
     std\assert(said == "judge-docs exited 2 with nothing on stderr; stdout: bad flag", message: said);
+
+    final dir = fs\tempDir("judge-failure") catch "";
+    std\assert(dir != "", message: "a temp dir");
+    final bin = "{dir}/judge-docs";
+    fs\writeFile(bin, content: "#!/bin/sh\n") catch void;
+    fs\chmod(bin, mode: 0b110100100) catch void;
+    final flat = judgeFailure(code: -1, stdout: "", stderr: "", bin: bin);
+    std\assert(flat == "judge-docs exited -1 with nothing on stderr: it never started, since {bin} is not executable", message: flat);
+    fs\chmod(bin, mode: 0b111101101) catch void;
+    final killed = judgeFailure(code: -1, stdout: "", stderr: "", bin: bin);
+    std\assert(killed == "judge-docs exited -1 with nothing on stderr: {bin} is an executable file, so a signal ended it or the system refused to load it", message: killed);
+    fs\removeAll(dir) catch void;
+}
+
+// The pr-description target passes the workspace as ".", the guard as an absolute path;
+// both must reach the one built judge, and neither may pass without it.
+test "the judge runs from a relative workspace and its absence is a finding" {
+    final ws = fs\tempDir("judge-runner") catch "";
+    std\assert(ws != "", message: "a temp dir");
+    final dir = "{ws}/libs/conventions";
+    fs\mkdirAll("{dir}/prose") catch void;
+    fs\mkdirAll("{dir}/cmd/judge-docs") catch void;
+    fs\mkdirAll("{dir}/gen") catch void;
+    fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
+    fs\writeFile("{dir}/go.sum", content: "") catch void;
+    fs\writeFile("{dir}/prose/prose.go", content: "package prose\n") catch void;
+    fs\writeFile("{dir}/cmd/judge-docs/main.go", content: "package main\n") catch void;
+    final relative = path\rel(path\abs(".") catch ".", target: ws) catch ws;
+    std\assert(!path\isAbs(relative), message: relative);
+
+    final missing = judgeRunner(relative)("docs: a title\nA body.");
+    std\assert(missing.len() == 1 and missing[0].rule == "judge" and missing[0].message.indexOf("is not built") != null,
+        message: if (missing.len() > 0) missing[0].message else "no finding");
+
+    final bin = "{dir}/{judgeDocs\binary}";
+    fs\writeFile(bin, content: "#!/bin/sh\ncat >/dev/null\n"
+        + "echo '[\{\"source\":\"pull-request:2\",\"rule\":\"hedge\",\"message\":\"Drop it.\",\"match\":\"might\"}]'\n") catch void;
+    fs\chmod(bin, mode: 0b111101101) catch void;
+    fs\writeFile("{dir}/{judgeDocs\inputsFile}", content: (judgeDocs\inputs(dir) catch "") + "\n") catch void;
+    final ran = judgeRunner(relative)("docs: a title\nA body.");
+    std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2,
+        message: if (ran.len() > 0) ran[0].message else "no finding");
+    fs\removeAll(ws) catch void;
 }
 
 test "a description is judged for the selling words the prose judge leaves" {
