@@ -20,8 +20,8 @@ check, fix the first error, run.
    a parse error early in a file produces later errors that are only echoes of it{{else}};
    later errors are often echoes of it{{end}}.
 2. A clean check is not a working script. The checker does NOT see a missing method
-   on a str, list or map, a free function like `len(xs)`, or a write into a map
-   declared without `mut`. Those fail only when run, with no line number. Run the
+   on a str, list or map, or a free function like `len(xs)`. Nor does it see a write
+   into a map declared without `mut`. Those fail only when run, with no line number. Run the
    script, or its tests, before calling it done.
 3. `null is not callable` at run time means you called a method or function that
    does not exist. Look it up in the Built-in methods table below.

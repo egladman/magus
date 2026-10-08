@@ -24,15 +24,16 @@ with its owning project and a role:
   ignore it{{if .Full}}. `.gitattributes` is the one today. It is derived FROM every
   project's declared output globs, so no project can declare it without the
   derivation claiming to be its own product, which is why it needs its own role
-  rather than a wider glob somewhere{{else}}: it is derived from the declared
+  rather than a wider glob somewhere{{else}}. It is derived from the declared
   output globs, so no project can claim it{{end}}.
 - `unclaimed` (no project declares it and magus does not write it): it enters no
-  cache key, but directory containment still seeds its owning project. Touching it
-  reruns targets whose answer cannot have changed ({{mgslink "MGS1028"}}). Declaring it in
-  the owning project's `sources` fixes both halves{{if .Full}}; leaving it undeclared is right when
-  nothing reads it{{end}}. Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}}; build residue should be
-  ignored, and an unclaimed un-ignored file is at risk of being lost{{else}}: an unclaimed
-  un-ignored file is at risk of being lost{{end}}.
+  cache key, but directory containment still seeds its owning project.
+  - Touching it reruns targets whose answer cannot have changed ({{mgslink "MGS1028"}}).
+  - Declaring it in the owning project's `sources` fixes both halves{{if .Full}}; leaving it undeclared is right when
+    nothing reads it{{end}}.
+  - Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}}; build residue should be
+    ignored, and an unclaimed un-ignored file is at risk of being lost{{else}}. An unclaimed
+    un-ignored file is at risk of being lost{{end}}.
 
 {{if .Full}}WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
 CORRECT: note that `docs/gen/**` is a declared output of
@@ -56,8 +57,8 @@ CORRECT: note that `docs/gen/**` is a declared output of
 - Commit regenerated outputs with the source change that produced them.{{if .Full}} CI typically runs the generate target as a drift gate: a source change
   whose outputs were not committed fails there.{{end}}
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
-  generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts it cannot settle. Never merge generated hunks by hand.
+  generated file at once, regenerates ONCE, and records the result. Only the
+  conflicts it cannot settle remain. Never merge generated hunks by hand.
 {{if .Full}}  Do not reach for the merge driver instead: a VCS invokes a driver once per
   conflicted path and never invokes one at all for a file one side deleted, so the
   driver alone cannot finish the job.{{else}}  A merge driver alone cannot finish the job:
@@ -75,16 +76,16 @@ magus vcs add             # stage declared sources AND the outputs they produced
 magus vcs add <path>...   # narrow it
 ```
 
-It stages sources and their generated outputs together (one commit) and REPORTS
+It stages sources and their generated outputs together (one commit). It REPORTS
 every undeclared path instead of sweeping it in{{if .Full}}, which is the one thing
 `git add -A` cannot do{{end}}. Pass `--untracked` when an undeclared path is a new
-source file. Staging specific paths by hand stays fine; the steps below are what it
+source file. Staging specific paths by hand stays fine. The steps below are what it
 automates, and the fallback:
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
 2. Classify every path with `magus describe file` as above. Untracked files that are
-   neither ignored nor declared outputs risk being silently lost: stage them or ask
-   about them, never leave them dangling.
+   neither ignored nor declared outputs risk being silently lost. Stage them or ask
+   about them; never leave them dangling.
 3. Regenerate if any source of a generate target changed, and include the refreshed
    outputs in the same commit.
 4. Review `git status` first, then stage deliberately with `git add -- <paths>`.{{if .Full}} `git add -A` stages every
@@ -96,30 +97,31 @@ automates, and the fallback:
    the rest), and a path you just moved or removed is gone at its old name.
    Whichever you use, confirm with `git diff --cached --stat`: every intended edit,
    renames included (`renamed:`), must be present. `git commit` records what `git
-   diff --cached` shows and does not re-check that your edits landed.{{else}} Avoid staging
-   everything (stray artifacts ride along); a hand-typed path list is not safer,
-   since the first non-matching pathspec aborts the whole call. Confirm with
-   `git diff --cached --stat`: every intended edit, renames included.{{end}}
+   diff --cached` shows and does not re-check that your edits landed.{{else}}
+   - Staging everything lets stray artifacts ride along.
+   - A hand-typed path list is not safer: the first non-matching pathspec aborts the
+     whole call.
+   - Confirm with `git diff --cached --stat`: every intended edit, renames included.{{end}}
 5. Run `magus affected ci` before calling the work done{{if .Full}}: it runs the full
    pipeline over every project the diff reaches, including ones you never edited,
    and after committing confirms HEAD builds; a partial commit that drops a
-   rename or an importer update leaves HEAD non-building{{else}}: it reaches projects you
-   never edited, and confirms HEAD builds; a partial commit that drops a rename
-   leaves HEAD broken{{end}}.
+   rename or an importer update leaves HEAD non-building{{else}}. It reaches projects you
+   never edited, and after committing confirms HEAD builds{{end}}.
 
 Read the change before you stage it. `magus diff --impact` orders the uncommitted
 changeset by what it can BREAK and folds the generated files away. It appends what
-landing it costs:
+landing it costs{{if .Full}}:
 
 - which projects rebuild, and who has been changing them;
 - an estimate from recorded run times;
 - what the workspace's advisors say;
 - any human-authored note anchored to a file or symbol you touched.
 
-{{if .Full}}None of it is a verdict: nothing is gated on it and the exit code is unchanged,
+None of it is a verdict: nothing is gated on it and the exit code is unchanged,
 and each section says when it could not measure something, so an empty one reads as
-"nobody looked" rather than as a clean bill of health.{{else}}It is context, never a verdict. An empty section means nobody could measure it,
-not that nothing was found.{{end}}
+"nobody looked" rather than as a clean bill of health.{{else}}: rebuilds, recent
+editors, a time estimate, advisors and anchored notes. It is context, never a
+verdict. An empty section means nobody could measure it, not that nothing was found.{{end}}
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
 without committing."{{if .Full}} The working tree is ALREADY what you want to verify,
@@ -133,13 +135,13 @@ add`, never the live tree.
 ## VCS facts from Buzz
 
 For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
-use one inline Buzz evaluation. It is dense on purpose: an occasional capability
-query, not an everyday CLI surface.
+use one inline Buzz evaluation{{if .Full}}. It is dense on purpose: an occasional capability
+query, not an everyday CLI surface{{end}}.
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
-
+{{if .Full}}
 - `vcs\diff()` is the configured-base path set.
 - `vcs\isDirty(["path"])` scopes a cleanliness check.
 - `vcs\status()` returns `{clean, files}`, both answers at once.
@@ -151,7 +153,10 @@ magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any {
 - `vcs\ref()` is `null` when no name points at the revision: a detached git HEAD,
   or jj's working copy, usually an anonymous change. There `null` is an ordinary
   answer, not a failure.
-
+{{else}}
+`vcs\ref()` is the git branch, Mercurial named branch, or Jujutsu bookmark. It is
+`null` on a detached HEAD or an anonymous jj change: an ordinary answer, not a failure.
+{{end}}
 Run `magus describe module vcs` for the current method list before reaching for
 anything not named here.
 

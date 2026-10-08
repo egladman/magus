@@ -88,8 +88,8 @@ supplies only the response the subject needs. For every substitute, state:
 Never add an interface only to mock something. It earns its place only when the
 production boundary is independently meaningful.
 
-When an existing concrete collaborator or test arrangement can falsify the contract
-at the selected tier, say so: **do not add or widen `<seam/interface>`; test through
+An existing concrete collaborator or test arrangement may falsify the contract at the
+selected tier. Then say so: **do not add or widen `<seam/interface>`; test through
 `<existing boundary>`**.
 
 ## Assert what the caller can observe
@@ -114,9 +114,9 @@ convention or borrow one from another language. Record the case as:
   volatile invariants asserted separately
 ```
 
-Hand language- or framework-specific mechanics (syntax, helpers, fixture setup,
-naming) to the applicable language guidance. This skill keeps the boundary,
-collaborator, and observable-contract recommendation language agnostic.
+Hand language- or framework-specific mechanics to the applicable language guidance{{if .Full}}
+(syntax, helpers, fixture setup, naming). This skill keeps the boundary,
+collaborator, and observable-contract recommendation language agnostic{{end}}.
 
 ## Deliver the recommendation
 

@@ -3,7 +3,9 @@
 `magus/figure`, a Buzz module embedded in the binary, lays out an architecture figure
 from the knowledge graph's records. A box is a directory the graph holds; a group is
 a set of them. Edges between code boxes are the imports and declared calls those
-records carry. You never place anything or type an edge between two packages: the
+records carry.
+
+You never place anything or type an edge between two packages. The
 module places the figure, or refuses with a finding naming the call to change.
 
 ## When to reach for it
@@ -14,8 +16,8 @@ needs more than the budgets below is two figures, an overview and a detail, each
 its own `figure\of()`; the budgets are the design system's, and past them nobody
 reads the picture.{{end}}
 
-- Use it when prose keeps restating how parts connect, when a doc page describes a
-  request path or a pipeline, or when a reviewer needs to see which packages a
+- Use it when prose keeps restating how parts connect, or a doc page describes a
+  request path or a pipeline. Use it when a reviewer needs to see which packages a
   change crosses.
 - Never draw everything. A figure of the whole workspace blows every budget and
   proves nothing{{if .Full}}; the console already draws the whole project graph
@@ -93,7 +95,7 @@ the title makes. Give every look you use a `.legend(figure\Look.x, label:)` line
 `.edgesFromGraph()` draws every import and every declared `magus:calls` marker
 between two drawn boxes; two or more code boxes require it. Arrows point importer to
 imported. An edge inside one group is not drawn. Every drawn directory needs a
-symbol index: an unindexed one is a finding, never an empty edge list, so run
+symbol index. An unindexed one is a finding, never an empty edge list, so run
 `{{cmd "graph build"}}` first.
 
 - `.hideEdges(src, dst:, why:)` drops graph edges from one list of dirs to another,
@@ -137,18 +139,18 @@ A figure nobody registers is checked by nothing.
 - Find the workspace's registry with `{{cmd "query"}} diagrams`. In magus's own tree
   it is `docs/site/diagrams/all.buzz`: one import plus one entry.
 - `{{cmd "run"}} diagrams-generate docs` lays every figure out from the symbol index.
-  It writes the light, dark and page SVGs, with a JSON receipt beside each: the
-  stamp, the claim counts, the findings, and the index digest it was drawn at.
+  It writes the light, dark and page SVGs, each with a JSON receipt{{if .Full}}: the
+  stamp, the claim counts, the findings, and the index digest it was drawn at{{end}}.
 - A docs page embeds a figure by id with `<!--diagram:<id>-->`.
 
 Source code can point back at a figure with a `magus:diagram <id>` comment beside the
-code a box depicts; a marker whose figure is gone is a finding.
+code a box depicts. A marker whose figure is gone is a finding.
 
 ## The console
 
-The console's Diagrams page draws the workspace itself, with no figure file: the
-project graph, one project's targets, and the package import graph, each through a
-declared lens of scope, focus and depth.
+The console's Diagrams page draws the workspace itself, with no figure file. It shows
+the project graph, one project's targets, and the package import graph. Each view
+goes through a declared lens of scope, focus and depth.
 
 - It needs a running server (`{{cmd "server start"}}`); the import view needs the
   symbol index.

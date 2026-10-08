@@ -1,6 +1,6 @@
 ---
 name: magus-local-development
-description: "Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, when acting on code-review findings against this tree, when touching a Buzz host module descriptor in std/, and when a change ripples into generated output. These rules are workspace-specific and deliberately NOT part of the shipped magus-* skills."
+description: "Rules for DEVELOPING MAGUS ITSELF in this repository: dogfooding, not using magus elsewhere. Use when reviewing or changing magus's own Go source, or acting on code-review findings against this tree. Also use when touching a Buzz host module descriptor in std/, or when a change ripples into generated output. Workspace-specific, and deliberately NOT part of the shipped magus-* skills."
 metadata:
   source: workspace
 ---
@@ -93,8 +93,8 @@ Every one of these was live:
   fatal that kills the server, not a recoverable panic.
 - Client RPCs used ctx only for `Dial`; the blocking read ignored it.
 
-For a package-level `var` cache, memo, or `sync.Once` on the run path, ask what
-happens on the SECOND run in the same process, and on two concurrent ones.
+Check every package-level `var` cache, memo, or `sync.Once` on the run path. Ask
+what happens on the SECOND run in the same process, and on two concurrent ones.
 
 <!-- rule: docs-drift-is-the-most-common-defect; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits 1f32838dd, 24d7a849a, 13930912e, 8a334e846;

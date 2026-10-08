@@ -1,6 +1,6 @@
 ---
 name: shepherd-pull-requests
-description: Shepherd a batch of open pull requests in THIS repository through the magus merge queue, spending agent work only on the pull requests that need code changes. Use when asked to shepherd, merge or ship open pull requests, or to keep a set of them moving until they reach main. hack/ci/pull-requests.buzz decides each pull request's state, action and model; this skill routes to it and says who does what. Hand-authored for this repository and never shipped.
+description: Shepherd open pull requests in THIS repository through the magus merge queue, spending agent work only where code must change. Use when asked to shepherd, merge or ship open pull requests, or to keep them moving until they reach main. hack/ci/pull-requests.buzz decides each one's state, action and model; this skill routes to it. Hand-authored here, never shipped.
 metadata:
   source: workspace
 ---
@@ -47,8 +47,8 @@ fix the pure function that produced it and its test, then run it again.
    ./magus buzz hack/ci/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
    ```
 
-   It queues what is `green` on a current base, reruns a `red` that is not the
-   change's once per head, and prints each command it ran. It never acts on
+   It queues what is `green` on a current base and reruns a `red` that is not the
+   change's, once per head. It prints each command it ran. It never acts on
    `red-inherited`: nothing in the change is broken, and the queue would refuse it
    for main's failures.
 
@@ -69,7 +69,7 @@ fix the pure function that produced it and its test, then run it again.
 
 5. Schedule the next pass with the host's wakeup about every 20 minutes (the
    queue's validation time), or with its pull request monitor. Repeat from 1.
-   - A record with `action: none` needs no agent: it is queued, waiting on the pull
+   - A record with `action: none` needs no agent. It is queued, waiting on the pull
      request below it, `running`, or `red-inherited` with a `merge` for the person.
    - A `draft` or `closed` stage never merges on its own. Tell the person and drop
      it from the selection.

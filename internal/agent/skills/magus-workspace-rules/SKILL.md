@@ -1,8 +1,8 @@
 # Adapting the agent surface to this workspace
 
 The magus skills are one shared body installed identically into every repo. They
-teach the tool, not your workspace: they cannot know that a target here is slow,
-that a directory is off limits, or that one command keeps going wrong.
+teach the tool, not your workspace. They cannot know that a target here is slow, a
+directory is off limits, or one command keeps going wrong.
 
 Fill that gap locally, in the one safe place.{{if .Full}} The other places look editable and are not: they are generated, and a
 generator overwrites its output without asking.{{else}} The others look editable but are generated,
@@ -136,7 +136,7 @@ magusfile, then wired with `{{buzz "harness.provider"}}`. Once `magus.yaml` poin
 import at a workspace path, magus does not own your copy.
 
 Shipped harnesses are not compiled into the binary. They are OCI artifacts imported
-by registry path: `magus.yaml` declares the tag each one tracks and `magus.lock` pins
+by registry path. `magus.yaml` declares the tag each one tracks and `magus.lock` pins
 its digest, so a harness versions apart from the binary:
 
 ```buzz
@@ -168,9 +168,10 @@ To adapt one, declare an override; change no import and no provider call.
 
    The import and `{{buzz "harness.provider"}}(cursor)` stay as they are. A copy at a
    path without this entry is never read.
-3. Edit the workspace spell: matchers, managed host-config fragments, the guard
+3. Edit the workspace spell for whatever the host needs{{if .Full}}: matchers, managed host-config fragments, the guard
    command string, skills form, `harness_mcp` (MCP setup hint, docs pointer, host
-   CLI sketch), whatever the host needs.
+   CLI sketch){{else}}, from matchers and host-config fragments to the guard command
+   and `harness_mcp`{{end}}.
    - Every entry's command either runs a template magus ships or ends with the
      shell comment `# magus:harness`, after a space. describe refuses any other: a
      merge retires only entries it can tell are magus's.
@@ -202,7 +203,7 @@ shipped rule leaves the agent unable to tell which wins.
 
 ## Graduating a rule upstream
 
-A rule earns promotion when it is not about this repo: it names no path, target, or
+A rule earns promotion when it is not about this repo. It names no path, target, or
 convention specific to you, and any magus workspace would want it.
 
 - With a Go toolchain: a pull request against `egladman/magus` editing

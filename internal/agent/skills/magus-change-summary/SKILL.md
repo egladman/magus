@@ -52,7 +52,8 @@ Lead with three to seven grouped changes, not every commit. For each item:
 - Why it matters: user impact, dependency impact, or an explicit uncertainty.
 - A follow-up: a concrete next command when more detail helps.
 
-Use this shape:
+End with a `Watch items` section: hidden affinity, ownership, or trend signals, or
+"None found."{{if .Full}} Use this shape:
 
 ```markdown
 ## Recent changes since <boundary>
@@ -69,6 +70,7 @@ Use this shape:
 
 - <hidden affinity, ownership, or trend signal, or "None found.">
 ```
+{{end}}
 
 Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment a landed feature unless source and graph evidence support it.{{if .Full}}
@@ -79,7 +81,7 @@ new command, target, diagnostic, or workflow.{{end}}
 
 {{if .Full}}A brief is for a person catching up; a changelog entry is a durable record.{{end}} For "add
 this to the changelog", match the file's shape (Keep a Changelog 1.1.0 with SemVer)
-and append under `## [Unreleased]`:
+and append under `## [Unreleased]`{{if .Full}}:
 
 ```markdown
 ### Added
@@ -88,6 +90,7 @@ and append under `## [Unreleased]`:
   replaces.> Set `<config.key>` (env `MAGUS_<CONFIG_KEY>`) to <what the toggle does>;
   <default>.
 ```
+{{else}}. Open with what a user can now do, then why it is the right shape.{{end}}
 
 Rules for an entry, all checkable:
 
@@ -151,10 +154,10 @@ CORRECT: checkpoint at review time, pipe the delta later.
 ## Hand a change to a second reader
 
 `magus diff --prompt` prints a review prompt for a person to paste into any model;
-`--prompt --impact` adds the rationale behind each instruction. It carries the
+`--prompt --impact` adds the rationale behind each instruction.{{if .Full}} It carries the
 reading order, which projects rebuild, what could NOT be measured, and which other
-branches touch the same files{{if .Full}}: the
-context a model cannot work out from a diff alone{{end}}.
+branches touch the same files: the
+context a model cannot work out from a diff alone.{{end}}
 
 magus assembles it and stops: it calls no model and sends nothing{{if .Full}},
 which is what keeps the resulting review something the human wrote rather than

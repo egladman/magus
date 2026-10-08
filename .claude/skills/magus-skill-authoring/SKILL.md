@@ -1,6 +1,6 @@
 ---
 name: magus-skill-authoring
-description: "The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, agent install, or when evaluating what agents can and cannot learn from magus. This skill is hand-authored and committed; it is NOT part of the installed set and never ships in the binary."
+description: "The working method for building and maintaining magus's agent surface in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, or agent install. Also use when evaluating what agents can and cannot learn from magus. Hand-authored and committed; NOT in the installed set, and never shipped in the binary."
 ---
 
 # Authoring the agent surface
@@ -29,11 +29,12 @@ silently mutates the tree.
 Empty output, zero matches, and exit 1 with no text are findings, not
 inconveniences. Probe every claim adversarially before teaching it.
 
-When `project:docs kind:function render` returned 0, the wrong response was a
-workaround in the skill. The right one traced the scorer, fixed the filter, and
-added a regression test. Fix the tool before teaching the workaround. When the fix
-is out of reach, teach ONLY verified idioms and file the gap where a reader finds
-it (the plans doc, a task, the harness memory).
+Fix the tool before teaching the workaround. When `project:docs kind:function render`
+returned 0, the wrong response was a workaround in the skill. The right one traced
+the scorer, fixed the filter, and added a regression test.
+
+When the fix is out of reach, teach ONLY verified idioms. File the gap where a reader
+finds it: the plans doc, a task, the harness memory.
 
 ## 3. One source of truth, drift-gated
 
@@ -141,8 +142,8 @@ magus-buzz-lang documents mustache; both hit this:
 `-o template='{{"{{.Field}}"}}'`
 ```
 
-Getting it wrong fails loudly at install (a parse error for an unknown function, an
-execute error for an unknown field), never as a silently mangled file.
+Getting it wrong fails loudly at install, never as a silently mangled file. An
+unknown function is a parse error; an unknown field is an execute error.
 
 ### Who the short form is for, and therefore what it cuts
 
@@ -166,9 +167,9 @@ Not every rule tolerates losing its rationale:
   via an else arm instead of dropping it.
 
 The sharpest test is silence. A failure that ANNOUNCES itself teaches the reader and
-needs no rationale in short. A silent failure can only arrive as text: an edit that
-stops existing, a guard that fails open, a pipe that turns a failing gate into exit
-0. Nothing in the session ever says it.
+needs no rationale in short. A silent failure can only arrive as text, because
+nothing in the session ever says it. Examples: an edit that stops existing, a guard
+that fails open, a pipe that turns a failing gate into exit 0.
 
 The evidence: an ablation of repository context files (arXiv:2602.11988) found
 imperative instructions followed well, while background and overview prose is not
@@ -184,16 +185,21 @@ save bytes measurably hurts weaker models. Write plain sentences with ordinary
 punctuation in both arms.
 
 The prose judge holds what the short form shows to the terse rules. Its `skill-source`
-and `skill` surfaces, run by hack/lint/markdown-prose.buzz, refuse a sentence over 25
-words, a paragraph or list item over 60, and a wordy phrase (`in order to`, `is able
-to`). Write short declarative sentences and imperative steps. Prefer a list
-when steps are a sequence. Never restate what a heading says.
+and `skill` surfaces run in hack/lint/markdown-prose.buzz. They refuse:
+
+- a sentence over 25 words;
+- a paragraph or list item over 60;
+- a wordy phrase (`in order to`, `is able to`).
+
+Write short declarative sentences and imperative steps. Prefer a list when steps are
+a sequence. Never restate what a heading says. Move examples, history and the
+reasoning behind a rule into a `.Full` arm when the rule stands without them.
 
 Rules:
 
-- Never put the LOAD-BEARING instruction inside a `.Full` arm: the one command or
-  path short cannot act without, or the CORRECT half of a WRONG/CORRECT pair.
-  Short must still do the thing.
+- Never put the LOAD-BEARING instruction inside a `.Full` arm. That is the one
+  command or path short cannot act without, or the CORRECT half of a WRONG/CORRECT
+  pair. Short must still do the thing.
 - An EXHAUSTIVE enumeration is exactly what short sheds: every flag of a command,
   every kind in a table, every variant of a form. Put it in a `.Full` arm and have
   short name where to get it (`-h`, `magus describe <thing>`, a docs URL). That is
@@ -214,11 +220,14 @@ Rules:
 
 ## 4. Breadcrumbs are load-bearing
 
-Every surface mints a stable, resolvable ID: tool names (internal/hint ToolName
-constants), CLI paths (internal/hint Command values), output refs (out1a2b3c),
-diagnostics (MGSxxxx), graph node IDs (kind:name). Prose that points at another
-surface goes through one of those IDs, so a rename breaks the build or a test,
-never an agent at 2am.
+Every surface mints a stable, resolvable ID:
+
+- tool names (internal/hint ToolName constants);
+- CLI paths (internal/hint Command values);
+- output refs (out1a2b3c), diagnostics (MGSxxxx), graph node IDs (kind:name).
+
+Prose that points at another surface goes through one of those IDs. A rename then
+breaks the build or a test, never an agent at 2am.
 
 Hints stay terse and earned: one line, only on an error or on a result that mints
 something chainable. A weaker model follows breadcrumbs it could never have
