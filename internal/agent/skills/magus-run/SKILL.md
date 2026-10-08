@@ -133,8 +133,8 @@ CORRECT: `magus run ci <project>` while working, and `magus affected ci` once do
 
 {{if .Full}}You are a machine reader; no news is good news. Shape the output instead of
 truncating it after the fact:
-
 {{end}}
+
 - `-s` / `--silent`: the default for every CLI run.{{if .Full}} Progress is dropped; a pass
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.{{else}} A pass prints a

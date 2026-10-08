@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 39823
-skill_short_bytes: 28619
+skill_full_bytes: 39836
+skill_short_bytes: 28620
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `9b44fb6e323c` |
+| `skill-content` | `8d66d5ade58b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -327,6 +327,7 @@ binds its child to nothing.
 
    Or fork from a record with `magus job fork --stdin`, the form that carries goals
    (see the next section).
+
    `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
    first a parent id and a role joined by `/`, the second the job id.
@@ -985,7 +986,7 @@ an editor magus cannot attribute.
    ```
 
    Or fork from a record with `magus job fork --stdin`, the form that carries goals
-   (see the next section):
+   (see the next section). For example:
 
    ```sh
    magus job fork --stdin <<'EOF'

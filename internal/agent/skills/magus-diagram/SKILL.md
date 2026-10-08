@@ -127,7 +127,8 @@ figure "server-http": "internal/server" is in scope("internal/**") but nothing d
 figure "t": draws 2 boxes of code and no edge between them; call edgesFromGraph()
 figure "t": "a" has no symbol index, so its imports are unknown and edgesFromGraph() cannot draw them; build it with `magus graph build`
 ```
-{{end}}
+
+{{- end}}
 
 Do what the finding says, at the call it names. A finding ending `layout bug, report
 it` is not yours to fix: reorder declarations or split the figure, and report it.

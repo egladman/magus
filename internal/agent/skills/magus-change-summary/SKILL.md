@@ -70,7 +70,8 @@ End with a `Watch items` section: hidden affinity, ownership, or trend signals, 
 
 - <hidden affinity, ownership, or trend signal, or "None found.">
 ```
-{{end}}
+
+{{- end}}
 
 Do not label a refactor, generated-output refresh, dependency bump, or failed
 experiment a landed feature unless source and graph evidence support it.{{if .Full}}
@@ -81,7 +82,7 @@ new command, target, diagnostic, or workflow.{{end}}
 
 {{if .Full}}A brief is for a person catching up; a changelog entry is a durable record.{{end}} For "add
 this to the changelog", match the file's shape (Keep a Changelog 1.1.0 with SemVer)
-and append under `## [Unreleased]`{{if .Full}}:
+and append under `## [Unreleased]`.{{if .Full}} For example:
 
 ```markdown
 ### Added
@@ -90,7 +91,8 @@ and append under `## [Unreleased]`{{if .Full}}:
   replaces.> Set `<config.key>` (env `MAGUS_<CONFIG_KEY>`) to <what the toggle does>;
   <default>.
 ```
-{{else}}. Open with what a user can now do, then why it is the right shape.{{end}}
+
+{{- else}} Open with what a user can now do, then why it is the right shape.{{end}}
 
 Rules for an entry, all checkable:
 

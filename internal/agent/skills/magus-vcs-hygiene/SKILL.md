@@ -141,7 +141,9 @@ query, not an everyday CLI surface{{end}}.
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
-{{if .Full}}
+
+{{- if .Full}}
+
 - `vcs\diff()` is the configured-base path set.
 - `vcs\isDirty(["path"])` scopes a cleanliness check.
 - `vcs\status()` returns `{clean, files}`, both answers at once.

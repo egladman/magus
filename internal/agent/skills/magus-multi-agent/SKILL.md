@@ -345,7 +345,7 @@ an editor magus cannot attribute{{end}}.
    ```
 
    Or fork from a record with `magus job fork --stdin`, the form that carries goals
-   (see the next section){{if .Full}}:
+   (see the next section).{{if .Full}} For example:
 
    ```sh
    magus job fork --stdin <<'EOF'
@@ -361,8 +361,9 @@ an editor magus cannot attribute{{end}}.
    EOF
    ```
 
-{{else}}.
-{{end}}   `magus job fork --schema` prints every field and the newest `schema_version`.
+   {{- end}}
+
+   `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
    first a parent id and a role joined by `/`, the second the job id.
    - A root job has no parent row, so its first word takes any label

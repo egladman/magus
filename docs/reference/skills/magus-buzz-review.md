@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 18919
-skill_short_bytes: 13031
+skill_full_bytes: 18953
+skill_short_bytes: 13065
 ---
 
 # magus-buzz-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `27ce7a2727b3` |
+| `skill-content` | `eaeafed87a30` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -195,7 +195,7 @@ fixture doing its job, not a defect.
 - **A string is indexed by BYTES; `utf8Len()` is the rune count.** Authority:
   UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach` all work in bytes,
   matching upstream's builtins; `utf8Len()` is the only codepoint-counting member.
-  `"héllo".len()` is 6, not 5.
+  An accented e is two bytes in UTF-8, so `len()` counts it as 2.
 
 - **A bare `as` cast coerces in gopherbuzz; upstream checks it statically.**
   Authority: GOPHERBUZZ. `3.9 as int` silently truncates to `3` here; upstream
@@ -485,7 +485,7 @@ were the language.
 - **A string is indexed by BYTES; `utf8Len()` is the rune count.** Authority:
   UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach` all work in bytes,
   matching upstream's builtins; `utf8Len()` is the only codepoint-counting member.
-  `"héllo".len()` is 6, not 5.
+  An accented e is two bytes in UTF-8, so `len()` counts it as 2.
   This is worth knowing because gopherbuzz USED to index runes, and
   code written against that reads plausibly either way. A loop slicing with
   `sub()` and bounding with `len()` was consistent under both models, so it does

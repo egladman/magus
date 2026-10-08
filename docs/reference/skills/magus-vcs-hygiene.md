@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
 skill_full_bytes: 9737
-skill_short_bytes: 6172
+skill_short_bytes: 6171
 ---
 
 # magus-vcs-hygiene
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `de4b42356589` |
+| `skill-content` | `6fa9771b7c62` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -152,7 +152,6 @@ use one inline Buzz evaluation.
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
-
 `vcs\ref()` is the git branch, Mercurial named branch, or Jujutsu bookmark. It is
 `null` on a detached HEAD or an anonymous jj change: an ordinary answer, not a failure.
 

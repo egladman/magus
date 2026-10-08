@@ -200,7 +200,7 @@ were the language.{{end}}
 - **A string is indexed by BYTES; `utf8Len()` is the rune count.** Authority:
   UPSTREAM. `len()`, `sub()`, `indexOf()`, `byte()` and `foreach` all work in bytes,
   matching upstream's builtins; `utf8Len()` is the only codepoint-counting member.
-  `"héllo".len()` is 6, not 5.
+  An accented e is two bytes in UTF-8, so `len()` counts it as 2.
   {{if .Full}}This is worth knowing because gopherbuzz USED to index runes, and
   code written against that reads plausibly either way. A loop slicing with
   `sub()` and bounding with `len()` was consistent under both models, so it does

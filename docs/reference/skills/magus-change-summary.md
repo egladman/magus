@@ -3,7 +3,7 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7160
+skill_full_bytes: 7173
 skill_short_bytes: 4917
 ---
 
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `112` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `00f7b95be2db` |
+| `skill-content` | `92e6aac3008d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -267,7 +267,7 @@ new command, target, diagnostic, or workflow.
 
 A brief is for a person catching up; a changelog entry is a durable record. For "add
 this to the changelog", match the file's shape (Keep a Changelog 1.1.0 with SemVer)
-and append under `## [Unreleased]`:
+and append under `## [Unreleased]`. For example:
 
 ```markdown
 ### Added
