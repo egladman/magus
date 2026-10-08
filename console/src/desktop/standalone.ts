@@ -1,10 +1,10 @@
 // standalone.ts - wrap a standalone console app (the log viewer, dashboard, graph explorer) as a
 // console PageModule without duplicating its scaffold or pulling its bundle into the console frame.
 // Each of these apps already ships as its own page + esm bundle under gen/<id>/; this factory
-// mounts one as a surface: it lifts the app's <main> from its built page (the app's own .html stays
+// mounts one as an app: it lifts the app's <main> from its built page (the app's own .html stays
 // the ONE scaffold source, so the console never drifts from it), ensures the app's page-scoped
 // stylesheet, dynamically imports the prebuilt bundle BY URL, and boots it via the app's exported
-// activate(). Loading both by URL - not a static import - keeps the surface lazy: the console bundle
+// activate(). Loading both by URL - not a static import - keeps the app lazy: the console bundle
 // stays tiny and an app's heavy code (protobuf, d3) arrives only when its tab is first opened. This
 // file imports nothing heavy (only the erased page types), so the composition root can import it
 // eagerly.
@@ -26,22 +26,22 @@ export interface StandaloneApp {
 }
 
 // The console owns one shared search box, but these apps carry their own filter controls, so a
-// wrapped surface opts out of the shared box for now (wiring the two is a later refinement).
+// wrapped app opts out of the shared box for now (wiring the two is a later refinement).
 const noSearch: SearchProvider<null> = {
   placeholder: "",
   parse: () => null,
   apply: () => ({ matches: 0 }),
 };
 
-// The shape the factory calls on a dynamically imported app bundle. A streaming surface (the
+// The shape the factory calls on a dynamically imported app bundle. A streaming app (the
 // dashboard, the log viewer) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
-// hidden. A surface that opens something with a lifetime (a live SSE stream, the graph's force
-// simulation) exports deactivate() to tear it down when its tab/pane closes; a purely static surface
+// hidden. An app that opens something with a lifetime (a live SSE stream, the graph's force
+// simulation) exports deactivate() to tear it down when its tab/pane closes; a purely static app
 // omits it.
-// A surface that opens a DOCUMENT (the log viewer's run, the graph's selected node) also exports
+// An app that opens a DOCUMENT (the log viewer's run, the graph's selected node) also exports
 // docTitle, a live cell the console reads to title the tab after it. It is a module-level export,
 // not a per-activation return, because these bundles are module singletons: the same cell is there
-// across a close and reopen, so a restored tab is named the moment its surface re-activates.
+// across a close and reopen, so a restored tab is named the moment its app re-activates.
 interface BootModule {
   activate(): void;
   setVisible?(visible: boolean): void;
@@ -49,7 +49,7 @@ interface BootModule {
   docTitle?: TitleSource;
 }
 
-// A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
+// An app that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/.
 export interface ModuleApp {
   id: string; // registry id / pageId, e.g. "activity"
@@ -60,14 +60,14 @@ export interface ModuleApp {
 }
 
 // What a host-building bundle's activate(host) may hand back for ONE mount: nothing (a static
-// surface), its teardown, or a controller carrying the teardown plus that mount's own visibility
+// app), its teardown, or a controller carrying the teardown plus that mount's own visibility
 // switch.
 export interface AppInstance {
   deactivate(): void;
   setVisible?(visible: boolean): void;
 }
 
-// The shape moduleApp calls on a host-building bundle. A surface with something LIVE in it (a
+// The shape moduleApp calls on a host-building bundle. An app with something LIVE in it (a
 // poll timer, a stream) also exposes setVisible so it can go quiet while its pane is backgrounded -
 // and it does so on the INSTANCE, never as a module export, because the console drives visibility
 // per PANE (tileView's applyVisibility calls each pane's controller). One switch shared by however
@@ -77,7 +77,7 @@ interface HostModule {
   activate(host: HTMLElement): AppInstance | (() => void) | void;
 }
 
-// moduleApp wraps a page-less surface: the console dynamically imports its bundle by URL (kept
+// moduleApp wraps a page-less app: the console dynamically imports its bundle by URL (kept
 // lazy, like the others) and calls its exported activate(host). Symmetric with standaloneApp but
 // without the fetch-and-lift, since there is no built page - the bundle owns its scaffold.
 export function moduleApp(s: ModuleApp): PageModule<null, null> {
@@ -96,13 +96,13 @@ export function moduleApp(s: ModuleApp): PageModule<null, null> {
       }
       const mod = (await import(url(s.bundle))) as HostModule;
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
-      // surface hands back.
+      // app hands back.
       const boot = mod.activate(host);
       const instance: AppInstance | null =
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
       return {
         search: noSearch,
-        // PageController's lifecycle is mandatory even when a surface is static. The normalizer
+        // PageController's lifecycle is mandatory even when an app is static. The normalizer
         // makes that contract true for dynamically loaded modules while preserving their simple
         // standalone entry points.
         setVisible: instance?.setVisible?.bind(instance) ?? (() => {}),
@@ -141,10 +141,10 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       // scaffold id) no-ops; we drive activate() ourselves once the scaffold is mounted. On reopen the
       // module is cached (no re-eval), so activate() simply re-binds to the fresh scaffold.
       const mod = (await import(artUrl(s.bundle))) as BootModule;
-      // Fetch the surface's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
+      // Fetch the app's co-located scaffold - a `<main>` fragment (gen/<id>/scaffold.html) that
       // this console project owns, no longer a full standalone page (the decoupled console has none).
       // The console frame provides the outer chrome (title bar, status bar); the fragment is the
-      // surface's own body, appended into the pane host.
+      // app's own body, appended into the pane host.
       const res = await fetch(artUrl(scaffold));
       const doc = new DOMParser().parseFromString(await res.text(), "text/html");
       const main = doc.querySelector("main");
@@ -154,17 +154,17 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
       mod.activate();
       return {
         search: noSearch,
-        // A surface that writes the shared status bar exports setVisible so it can go quiet while
+        // An app that writes the shared status bar exports setVisible so it can go quiet while
         // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live
-        // stream's pill and event count, plus the zoom stepper). A surface that writes none of it
+        // stream's pill and event count, plus the zoom stepper). An app that writes none of it
         // leaves this undefined.
         // Standalone bundles predate the per-pane contract. Give the shell an unconditional
         // lifecycle hook so visibility cannot become an optional convention again.
         setVisible: mod.setVisible ?? (() => {}),
         docTitle: mod.docTitle,
-        // Tear down the surface's own lifetimes first (a live SSE stream, the graph's force simulation)
+        // Tear down the app's own lifetimes first (a live SSE stream, the graph's force simulation)
         // via its exported deactivate(), THEN detach its DOM - so closing a tab/pane leaves nothing
-        // streaming or ticking in the background. A static surface exports no deactivate; the DOM detach
+        // streaming or ticking in the background. A static app exports no deactivate; the DOM detach
         // still happens.
         deactivate() {
           mod.deactivate?.();

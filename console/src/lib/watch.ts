@@ -1,5 +1,5 @@
 // watch.ts - the shell-side notification watchers. These are the notifications the console cannot derive
-// from a surface it happens to have open: they must be observed at the SHELL so they fire whether or not
+// from an app it happens to have open: they must be observed at the SHELL so they fire whether or not
 // you are looking (the "unwatched" half of the admission doctrine). Three server-dependent watchers poll
 // on a slow ticker over the console's existing authenticated transport - no new backend push:
 //   - share-connect: a device first exercising the share token records a TOKEN_LIFECYCLE "share.open"

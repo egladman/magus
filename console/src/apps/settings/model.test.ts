@@ -1,6 +1,6 @@
-// model.test.ts - the export/import core is the only logic on the Settings surface, so it is
+// model.test.ts - the export/import core is the only logic on the Settings app, so it is
 // tested here without a DOM: the envelope round-trips, unknown keys are ignored, missing/wrong-typed
-// keys keep the current value, and a broken envelope is a hard error. The surface's cell wiring lives in
+// keys keep the current value, and a broken envelope is a hard error. The app's cell wiring lives in
 // the browser.
 
 import { test } from "node:test";
@@ -168,7 +168,7 @@ test("import: forward-compat - a newer schemaVersion still applies its known key
   assert.ok(res.ok);
   assert.equal(res.next.host, "localhost:1"); // never hard-fails on version alone; known keys still land
   assert.deepEqual(res.applied, ["host"]);
-  assert.equal(res.newerSchema, SETTINGS_SCHEMA_VERSION + 1); // surface can say the file is from a newer console
+  assert.equal(res.newerSchema, SETTINGS_SCHEMA_VERSION + 1); // app can say the file is from a newer console
   assert.deepEqual(res.unknown, ["futureThing"]);
 });
 
@@ -208,7 +208,7 @@ test("import: a disabled binding (empty-string chord) survives the keymap type c
 // --- computePendingChanges (the transactional diff) ---
 // A diff context with human formatters and one editable command, so the pure function's readable output
 // is asserted without a browser. effectiveChord resolves a command's chord from a user-override keymap
-// (falling back to a default), mirroring what the surface injects.
+// (falling back to a default), mirroring what the app injects.
 const diffCtx: DiffContext = {
   pollLabel: (ms) => ms / 1000 + "s",
   themeLabel: (t) => (t === "auto" ? "System" : t === "light" ? "Light" : "Dark"),

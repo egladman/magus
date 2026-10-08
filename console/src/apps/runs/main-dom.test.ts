@@ -1,20 +1,20 @@
-// main-dom.test.ts - the Runs surface's mount. document/window are registered globally by
+// main-dom.test.ts - the Runs app's mount. document/window are registered globally by
 // test-setup.mjs (node --import), so this runs under node:test like the other *-dom tests. The
 // grouping, filtering and faceting it draws are covered in logs/runindex.test.ts.
 //
-// What is pinned HERE is what a reader ends up looking at, and specifically the things this surface
+// What is pinned HERE is what a reader ends up looking at, and specifically the things this app
 // exists to fix:
 //
 //   - THE FACETS ARE THE ANSWER to "what do I type". They list only values that occur, and clicking
 //     one writes its term into the VISIBLE query box - that is what teaches the syntax, so a
-//     refactor that applied the filter without showing it would defeat the surface.
+//     refactor that applied the filter without showing it would defeat the app.
 //   - THE EMPTY STATES STAY APART. "no server", "nothing kept yet" and "your filter matched
 //     nothing" are three different facts and only the last is the reader's to fix; the last one
 //     also gets a CONTROL, because the way out of an over-narrow query should not be text editing.
 //   - THE THREE COUNTS AGREE. The header, the status facet and what a click leaves are all RUNS. An
 //     earlier version counted outputs in one of the three, which read as the page lying.
 //   - HAND-OFF, NOT RE-HOSTING. Opening output is a real link into the Log Viewer, so it keeps
-//     middle-click and copy-link, and the two surfaces cannot drift on how a run renders.
+//     middle-click and copy-link, and the two apps cannot drift on how a run renders.
 
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
@@ -36,7 +36,7 @@ beforeEach(() => {
 
 // The default-host cell is module state shared with every other DOM test in this process (the suite
 // runs with --experimental-test-isolation=none), so it is restored rather than left pointing a
-// sibling's surface at a server that is not there. The mount is torn down for the same reason: it
+// sibling's app at a server that is not there. The mount is torn down for the same reason: it
 // holds an interval, and a leaked one keeps firing against another file's document.
 afterEach(() => {
   mounted?.deactivate();
@@ -58,7 +58,7 @@ async function settleFilter(): Promise<void> {
 }
 
 // serve answers the two run feeds and refuses everything else, which is what a server that is not
-// there looks like from the browser. The SSE stream is among the refusals on purpose: the surface
+// there looks like from the browser. The SSE stream is among the refusals on purpose: the app
 // must paint from the feeds alone, with the stream only keeping it current afterwards.
 function serve(outputs: unknown[], runs: unknown[]): void {
   setDefaultHost(HOST);
@@ -136,8 +136,8 @@ async function mount(): Promise<HTMLElement> {
   return host;
 }
 
-// remount tears the current surface down before mounting the next, for a test that walks several
-// server states in one go. The teardown lives here rather than inline because a surface left
+// remount tears the current app down before mounting the next, for a test that walks several
+// server states in one go. The teardown lives here rather than inline because an app left
 // running keeps an interval alive against a document the next mount has replaced.
 async function remount(): Promise<HTMLElement> {
   mounted?.deactivate();
@@ -237,7 +237,7 @@ test("the detail pane names the run's facts and links its targets into the viewe
   assert.equal(text(host.querySelector(".console-runs__target-error")), "boom");
 
   // Real links, so middle-click and copy-link work and the viewer stays the one thing that renders
-  // a run. "logs/" not "../logs/": every surface page carries <base href="../">.
+  // a run. "logs/" not "../logs/": every app page carries <base href="../">.
   const links = [...host.querySelectorAll<HTMLAnchorElement>(".console-runs__open")];
   assert.ok(links.length >= 2);
   assert.ok(

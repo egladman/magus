@@ -22,7 +22,7 @@ export function initServiceWorker(): void {
   const ROOT = import.meta.url.replace(/main\.js(\?.*)?$/, "");
   const hadController = !!navigator.serviceWorker.controller;
 
-  // Name the surface the reader is actually on, so the update prompt reads
+  // Name the page the reader is actually on, so the update prompt reads
   // naturally on the app-like pages ("the playground", "the graph explorer")
   // instead of the generic "the docs". The service worker still updates the whole
   // site at once - this is friendlier copy for where the reader stands, not a

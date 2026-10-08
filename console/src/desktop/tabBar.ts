@@ -1,8 +1,8 @@
 // tabBar.ts - the DOM tab bar for the console: it renders a Workspace (tabs.ts) as a row
-// of tabs and drives the pure reducers on interaction. The console owns mounting the active surface;
+// of tabs and drives the pure reducers on interaction. The console owns mounting the active app;
 // this component owns only the bar UI and reports intent through callbacks (select / close).
 //
-// There is no new-tab ("+") affordance: opening a surface is the launcher empty state (zero tabs) or
+// There is no new-tab ("+") affordance: opening an app is the launcher empty state (zero tabs) or
 // the command bar ("Open ...") with a tab already open, so the bar is purely the open tabs.
 //
 // PatternFly (W0 spike): the bar is built from PatternFly's Tabs component classes
@@ -17,7 +17,7 @@ import type { Persisted } from "../lib/persist";
 import { bind, scope } from "./view";
 
 // A tab as the bar renders it: identity, the label it shows, an optional disambiguating hint
-// (see disambiguate), and whether it is the active surface.
+// (see disambiguate), and whether it is the active app.
 export interface TabView {
   id: string;
   title: string;
@@ -27,7 +27,7 @@ export interface TabView {
 
 // A title split into the part a tab shows and the part available to tell it from a same-named
 // sibling. A path-shaped document title ("src/console/main.ts") yields the basename as the label
-// and the directories above it as parents; anything else (a surface name, an output ref) is its
+// and the directories above it as parents; anything else (an app name, an output ref) is its
 // own label with no parents, so it never gets shortened into nonsense.
 interface TitleParts {
   label: string;
@@ -131,7 +131,7 @@ function closeIcon(): SVGElement {
 
 // createTabBar builds the bar bound to the persisted workspace: interactions read-modify-write
 // it through the tabs.ts reducers, then re-render. It subscribes to the cell so a change elsewhere
-// (another browser tab, or the console opening a surface) reflects here too.
+// (another browser tab, or the console opening an app) reflects here too.
 export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): TabBar {
   // PatternFly Tabs root: pf-m-box gives the boxed/raised active-tab look the console wants (an app
   // tab row, not an underline nav). The <ul> is the role=tablist; the bar itself is the PF chrome.

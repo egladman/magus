@@ -3,15 +3,15 @@
  * renderLine / renderContent / fillAnsi are already shared TypeScript: the log viewer, the activity
  * trail, and the dashboard's live-activity preview all build the same .console-render-line,
  * .console-render-badge and .console-render-ansi* markup through them. Their STYLES, though, lived
- * in logs.css - a per-surface sheet - which meant a second surface could only get captured output
+ * in logs.css - a per-app sheet - which meant a second app could only get captured output
  * to look right by loading the whole log viewer's stylesheet. The activity trail does exactly that
- * today (main.ts registers it with css: "logs/logs.css"), and a third surface wanting one styled
+ * today (main.ts registers it with css: "logs/logs.css"), and a third app wanting one styled
  * output line would have had to do the same.
  *
  * So the leaf renderers' styles live next to the leaf renderers. The boundary is deliberate and
  * narrow: ONLY what sections.ts's line-level helpers emit. The panel frame, the scroll body, the
  * foldable section chrome and the empty state stay in logs.css, because those belong to the two
- * surfaces that build a whole log-viewer-shaped page, not to anyone rendering a line of output.
+ * apps that build a whole log-viewer-shaped page, not to anyone rendering a line of output.
  *
  * Consumed by @import from logs.css and dashboard.css, both bundled at build time, so this is one
  * source of truth with no extra runtime request.
@@ -39,7 +39,7 @@
    *
    * These were #fff everywhere, which is correct only while the fills are deep. Light theme fills are
    * deep, so white passed there - but the dark theme deliberately LIGHTENS every status hue so it
-   * reads on a dark surface, and white on a light fill collapses: measured 2.25:1 on pass and 3.47:1
+   * reads on a dark background, and white on a light fill collapses: measured 2.25:1 on pass and 3.47:1
    * on fail, both under WCAG AA's 4.5. Dark ink on those same fills measures 7.8 and 5.1.
    *
    * Not a dark-theme bug as such - it is the general mistake of pinning ink to the page instead of to
@@ -94,7 +94,7 @@
  *
  * Opt-in rather than default because the two consumers have different needs. The log viewer numbers
  * every line, and a line-number gutter already gives the eye a rail to track along; adding stripes
- * there would be a second, redundant tracking aid and a visual change to a surface that did not ask
+ * there would be a second, redundant tracking aid and a visual change to an app that did not ask
  * for one. A live tail in a dashboard tile has NO gutter (a rolling window has no stable numbering
  * to anchor to), so it has nothing to track along - and it is the one that gets read at a distance
  * and while moving, which is exactly when a wrapped line is easy to lose your place in.

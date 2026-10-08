@@ -58,7 +58,7 @@ export interface SharePanel {
 }
 
 // mountSharePanel builds the singleton share panel (hidden) once and returns its
-// controller. The shell wires the status-bar share button (rebuilt per surface) to
+// controller. The shell wires the status-bar share button (rebuilt per app) to
 // toggle() through one delegated click, mirroring how the Panes tray drives its popup.
 export function mountSharePanel(): SharePanel {
   const panel = document.createElement("section");

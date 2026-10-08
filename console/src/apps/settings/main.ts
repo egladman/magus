@@ -5,7 +5,7 @@ import { must } from "../../lib/guards";
 // hot-reload now), Save (persist for the next load), Reset (discard the draft). Nothing reaches the
 // durable cells until Save or Save & Apply.
 //
-// It lives in the SHELL bundle (not a lazy surface bundle) because the Keybindings section embeds
+// It lives in the SHELL bundle (not a lazy app bundle) because the Keybindings section embeds
 // createKeybindingsEditor over a DRAFT-backed keymap cell, so rebinds stage like every other setting and
 // only hit the real shared keymap cell on Save or Save & Apply.
 
@@ -69,8 +69,8 @@ const REPO_URL = "https://github.com/egladman/magus";
 // (optional) are the "start from a preset" seeds: applying one stages that preset's full binding set
 // into the draft, which the operator then edits and Saves like any other change.
 // install is the shell's install-prompt store (lib/install.ts). It is a DEP rather than a module
-// singleton imported here because the offer it holds is captured at shell boot, long before this surface
-// mounts - the shell owns it, this surface only renders it.
+// singleton imported here because the offer it holds is captured at shell boot, long before this app
+// mounts - the shell owns it, this app only renders it.
 export interface SettingsDeps {
   keybindings: KeybindingsDeps;
   presets?: Record<string, Keymap>;
@@ -78,7 +78,7 @@ export interface SettingsDeps {
   install: InstallStore;
 }
 
-// A config surface has nothing to find in the shared search box, so it opts out.
+// A config app has nothing to find in the shared search box, so it opts out.
 const noSearch: SearchProvider<null> = {
   placeholder: "",
   parse: () => null,
@@ -114,9 +114,9 @@ function getThemePref(): ThemePref {
 
 // readLayout / writeLayout move the envelope's `layout` section over the shared cells in
 // layoutPrefs.ts. They are read live and written straight through rather than staged: this
-// surface has no form for them, so there is no draft to hold them in and no Save that would
+// app has no form for them, so there is no draft to hold them in and no Save that would
 // ever commit them. Using the shared cells (not a second persisted() over the same keys) is
-// what keeps the exporter and the owning surfaces agreeing on defaults.
+// what keeps the exporter and the owning apps agreeing on defaults.
 function readLayout(): LayoutSettings {
   return {
     splitMode: splitModeCell.get(),
@@ -177,7 +177,7 @@ function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElem
   return sec;
 }
 
-// buildStackedPanel stacks several titled sections into one tab panel - the settings surface keeps a
+// buildStackedPanel stacks several titled sections into one tab panel - the settings app keeps a
 // small set of tabs (General, Access), so a tab groups its related sections rather than fanning
 // out one tab per section.
 function buildStackedPanel(...sections: HTMLElement[]): HTMLElement {
@@ -194,7 +194,7 @@ interface SettingsTab {
 }
 
 // buildSettingsTabs renders a horizontal tab strip (role=tablist) over the section panels, showing
-// exactly one panel at a time so the surface is a set of focused views rather than one long scroll.
+// exactly one panel at a time so the app is a set of focused views rather than one long scroll.
 // Returns the nav strip, the panels host, and setHidden - the server-gated Access tokens tab calls
 // setHidden(id, true) when the server declines the service, dropping both the tab and its panel;
 // hiding the active tab falls back to the first still-visible one.
@@ -331,7 +331,7 @@ function buildAbout(): HTMLElement {
   return body;
 }
 
-// buildSettings assembles the surface into host and returns a teardown. It stages every edit into a draft
+// buildSettings assembles the app into host and returns a teardown. It stages every edit into a draft
 // and commits (or discards) it as a transaction.
 function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const mac = isMac();
@@ -350,7 +350,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   let committed = readCommitted();
 
   // The draft: scalar fields held here, keymap held in a draft-backed cell so the embedded editor drives
-  // it live within the surface without touching the real shared cell. onChange recomputes the pending diff.
+  // it live within the app without touching the real shared cell. onChange recomputes the pending diff.
   const draftScalar = {
     poll: committed.poll,
     host: committed.host,
@@ -389,7 +389,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
 
   const page = h("div", "console-settings-page");
   page.dataset.app = "settings";
-  // No page heading: the surface's own tab (the top tab bar) already reads "Settings", so an h1 here
+  // No page heading: the app's own tab (the top tab bar) already reads "Settings", so an h1 here
   // just repeats it. The section sub-tabs below carry the naming from here down.
 
   // --- Action bar: a staged-config bar - pending indicator + Save & Apply / Save / Reset ---
@@ -957,8 +957,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     }
     loadDraft(res.next);
     // The layout section is applied immediately rather than staged. It has no form on this
-    // surface, so there is nothing to review it against and nothing that would ever commit it -
-    // staging it would mean silently discarding it. The surfaces that own these cells read them
+    // app, so there is nothing to review it against and nothing that would ever commit it -
+    // staging it would mean silently discarding it. The apps that own these cells read them
     // at mount, so the change shows up on their next open (or a reload), which is the same
     // nudge an imported theme already gets.
     if (res.appliedLayout.length > 0) writeLayout(res.nextLayout);
@@ -1110,7 +1110,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Two tabs. General stacks the staged client sections (server address, appearance, keybindings,
   // backup) plus About; Access hosts the one live server-facing section. The action bar and pending
   // diff stay above the tabs: the staged draft is shared across the staged sections, so its commit
-  // controls are global to the surface, not per-tab.
+  // controls are global to the app, not per-tab.
   const tabs = buildSettingsTabs([
     {
       id: "general",
@@ -1157,7 +1157,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   };
 }
 
-// ensureStylesheet adds the surface's page-scoped stylesheet once (idempotent by id).
+// ensureStylesheet adds the app's page-scoped stylesheet once (idempotent by id).
 function ensureStylesheet(id: string, href: string): void {
   if (document.getElementById(id)) return;
   const link = document.createElement("link");
@@ -1181,9 +1181,9 @@ export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
       const teardown = buildSettings(host, deps);
       return {
         search: noSearch,
-        // The console's surface contract (page.ts). Settings is a form over persisted cells: no
+        // The console's app contract (page.ts). Settings is a form over persisted cells: no
         // timer, no stream, and no slice of the shared status bar, so there is nothing to go quiet
-        // about. The hook is declared anyway so every surface answers the same shape and a future
+        // about. The hook is declared anyway so every app answers the same shape and a future
         // background read has a defined place to be suppressed.
         setVisible(): void {},
         deactivate(): void {

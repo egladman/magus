@@ -1,7 +1,7 @@
 // The guard that keeps fixtures.ts out of the product.
 //
 // It is a second unified-diff reader, kept only so render tests can express a case as a patch.
-// The moment a surface imports it, the console is parsing patches again and can disagree with
+// The moment an app imports it, the console is parsing patches again and can disagree with
 // the server about what a changeset contains - which is the bug the consolidation removed. A
 // comment saying "test only" is a rule with roughly even odds; this is the enforcement point.
 

@@ -59,7 +59,7 @@
       box-shadow: var(--pico-card-box-shadow);
     }
     /* Fullscreen: the panel becomes the whole viewport for an IDE-like editing
-       surface. The API hands it the screen; drop the rounded card framing and let
+       space. The API hands it the screen; drop the rounded card framing and let
        height:100% fill it (the flex children - editor + console - grow as usual).
        The opaque background is required: fullscreen elements are transparent by
        default and would show through to black. */
@@ -491,7 +491,7 @@
     })();
   </script>
   <!-- Fullscreen toggle: expand the editor panel to fill the screen for an
-       IDE-like surface. Pure page-layer concern (the WASM owns the editor, not the
+       IDE-like space. Pure page-layer concern (the WASM owns the editor, not the
        chrome), so it lives here. Native fullscreen already exits on Esc; the button
        label + aria-pressed follow fullscreenchange so both entry paths stay in sync.
        Hidden when the browser lacks the Fullscreen API rather than showing a dead

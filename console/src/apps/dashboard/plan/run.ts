@@ -1,5 +1,5 @@
 // run.ts - the DERIVED run plan: the target DAG magus computes for plain human work. Its wire
-// shape, the read, and the model the Plan surface draws. Everything here is pure and DOM-free, so
+// shape, the read, and the model the Plan app draws. Everything here is pure and DOM-free, so
 // what a reader ends up seeing is decided by code a test can run without a browser (run.test.ts).
 //
 // This is the Jobs view's SECOND tenant, beside the jobs next door. Same visual grammar, two
@@ -14,7 +14,7 @@
 // picture in front of them is live. Naming a target explicitly is an override, not the entry point.
 //
 // The server serves GET /api/v1/plan, but an OLDER one does not, and there it 404s. That is a
-// FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the surface can
+// FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the app can
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
 import { authHeaders, readRefusal } from "../../../lib/server";
@@ -22,7 +22,7 @@ import { str } from "./jobs";
 
 // ---- states ----------------------------------------------------------------
 
-// The four states a target in a resolved plan can be in. There is no no_return here and the surface
+// The four states a target in a resolved plan can be in. There is no no_return here and the app
 // must not invent one: that state belongs to a worker that never came back, and an engine
 // that resolved a DAG always knows what happened to every node in it.
 export const RUN_STATES = ["idle", "running", "pass", "fail"] as const;
@@ -36,7 +36,7 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
 };
 
 // The NON-COLOR channel on a node, the same call the job side makes for the same reason: color
-// alone fails WCAG 1.4.1 on a surface whose entire content is states told apart. The three shared
+// alone fails WCAG 1.4.1 on an app whose entire content is states told apart. The three shared
 // states keep the job marks so a reader who has learned one source has learned both.
 export const RUN_STATE_MARK: Record<RunState, string> = {
   idle: "IDLE",
@@ -89,7 +89,7 @@ export interface RunPlanNode {
   // INDEPENDENT OF state, which is the trap: a RUNNING node carries the ref from the run BEFORE
   // this one, because the run in flight has captured nothing yet. That is deliberate on the wire -
   // it means there is always something to open - but it means nothing here may word this ref as
-  // "this run's log". The surface says "last log", and says so out loud on a running node.
+  // "this run's log". The app says "last log", and says so out loud on a running node.
   readonly ref: string;
 }
 
@@ -113,7 +113,7 @@ export interface RunPlanModel {
 // one function rather than the job side's build pass because a resolved DAG needs none of
 // that assembly: the server already did the resolving, so there is nothing here to infer.
 //
-// Anything that is not the documented shape yields an EMPTY plan, not a throw - a surface that
+// Anything that is not the documented shape yields an EMPTY plan, not a throw - an app that
 // cannot read the plan says so, it does not break.
 export function parseRunPlan(body: unknown): RunPlanModel {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -160,7 +160,7 @@ export function parseRunPlan(body: unknown): RunPlanModel {
   return { target: str(b.target), anchor: normalizeAnchor(b.anchor), nodes, edges, byId, counts };
 }
 
-// emptyRunPlan is the model the surface holds before its first read answers - a real model rather
+// emptyRunPlan is the model the app holds before its first read answers - a real model rather
 // than a null, so every render path is total without a "have we loaded yet" branch.
 export function emptyRunPlan(): RunPlanModel {
   return parseRunPlan(null);

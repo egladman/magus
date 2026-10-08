@@ -1,4 +1,4 @@
-// main.ts - the console's Runs surface: every run this workspace has kept, browsable without a ref.
+// main.ts - the console's Runs app: every run this workspace has kept, browsable without a ref.
 //
 // It exists because the Log Viewer's side panel answers "take me to the next run" well and "I do not
 // know where to start" badly. A rail-width tree can only offer a filter BOX, which asks a reader to
@@ -8,7 +8,7 @@
 //
 // It is an INDEX, not a reader. Selecting a run shows what it did (its targets, outcomes, durations,
 // refs); "Open output" hands off to the Log Viewer through the #inv=/#ref= links it already
-// understands. Neither surface re-hosts the other's rendering, so they cannot drift.
+// understands. Neither app re-hosts the other's rendering, so they cannot drift.
 //
 // Data comes from the same two read-only server feeds the side panel reads (/api/v1/outputs and
 // /api/v1/runs), joined on each output's invocation id, and the grouping/filtering/faceting is the
@@ -69,7 +69,7 @@ interface Refs {
   detail: HTMLElement;
 }
 
-// activate builds the surface into host and returns the console's teardown handle. Everything below
+// activate builds the app into host and returns the console's teardown handle. Everything below
 // is per-activation, so reopening the tab is a clean slate.
 export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
@@ -563,7 +563,7 @@ function openLink(text: string, href: string): HTMLElement {
 // carries its fragment through so a demo selection opens a demo run rather than reaching for a
 // server that is not there.
 //
-// "logs/", NOT "../logs/". Every surface page ships with `<base href="../">` (see
+// "logs/", NOT "../logs/". Every app page ships with `<base href="../">` (see
 // scripts/app-stubs.mjs) so the shell's own relative assets resolve from /console/ - which means
 // a link here already resolves against /console/, and the extra hop landed on /logs/ and 404'd.
 function viewerHref(key: "inv" | "ref", value: string, demo: boolean): string {

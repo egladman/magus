@@ -227,7 +227,7 @@ export function watchRuns(host: string, token: string | null, onChange: () => vo
   };
 }
 
-// tickRelativeTimes keeps every "3m ago" on a surface honest while nobody touches it.
+// tickRelativeTimes keeps every "3m ago" on an app honest while nobody touches it.
 //
 // The labels are computed at paint time, and paint only happens when something changes - so a page
 // left open showed the time it was opened at, indefinitely. Measured: a run stayed at "16s ago"
@@ -252,7 +252,7 @@ export function tickRelativeTimes(root: HTMLElement, everyMs = 15_000): () => vo
 // demoRuns projects the shared scenario's run history (demo-scenario.ts) into the tree's row shape
 // for the server-free showcase (the shared #demo path), so the browser reads as populated without a
 // server AND tells the SAME story as the activity trail, the waterfall, and the dashboard - the refs
-// here are the ones a reader meets on those surfaces. Newest first; timestamps relative to `now`.
+// here are the ones a reader meets on those apps. Newest first; timestamps relative to `now`.
 export function demoRuns(now: number): RunSummary[] {
   return scenarioRuns(now).map((r) => ({
     ref: r.ref,
@@ -576,7 +576,7 @@ function iconButton(
   return b;
 }
 
-// A collapsible master panel docked down the left of a render surface's scroll box: a titled header
+// A collapsible master panel docked down the left of a render app's scroll box: a titled header
 // (refresh + hide icons) over a caller-filled tree, plus a slim reopen rail. The log viewer's run
 // browser and the activity view's event index are the same frame (both load logs.css, so both reuse
 // the .console-log-runs styles); only what fills treeBox differs.
@@ -584,7 +584,7 @@ export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
   // The BODY's header, the index header's opposite number across the splitter. It exists so the two
   // rules land on one line: the index header ended in a hairline that stopped dead at the splitter
-  // with nothing continuing it, which read as a line drawn halfway across the surface (measured at
+  // with nothing continuing it, which read as a line drawn halfway across the app (measured at
   // 8.2px above where the body's first row ended). bodyTitle is the text in it - callers write what
   // the body is currently showing, so the row earns its height instead of being spacing in disguise.
   bodyHead: HTMLElement;
@@ -686,7 +686,7 @@ export function mountCollapsiblePanel(opts: {
     apply("open");
   });
   // The width default is re-evaluated on a breakpoint FLIP, not sampled once. Sampled once, a
-  // window that happened to be narrow while the surface booted left the panel collapsed for the
+  // window that happened to be narrow while the app booted left the panel collapsed for the
   // rest of the session, and a phone rotated to landscape never got it back - both indistinguishable
   // from the panel simply not existing. An explicit open or close still wins, so this only decides
   // for a reader who has not.
@@ -774,7 +774,7 @@ function mountBrowserControls(
   search.className = "pf-v6-c-form-control__text";
   search.placeholder = "Filter runs";
   // The keys are the same shape the log filter uses, so a reader learns one grammar for the
-  // surface; the placeholder stays short and the syntax lives in the tooltip.
+  // app; the placeholder stays short and the syntax lives in the tooltip.
   search.title =
     "Filter the tree. Free text matches the project, target, ref, error and command line. " +
     "Keys: project: target: status:pass|fail trigger: ref: cmd:";

@@ -50,7 +50,7 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
 // aria-expanded (trigger) / aria-hidden (panel) track the state. The panel is shown/hidden with its
 // `hidden` attribute, so the caller owns all visual styling. This is intentionally NARROWER than
 // initRefDrawer's own state machine (which also owns pinning, inline docking, and resize) - it is the
-// shared core, not a replacement for that surface's extra behavior.
+// shared core, not a replacement for that app's extra behavior.
 export interface DrawerToggle {
   open(): void;
   close(): void;
@@ -131,16 +131,16 @@ export function wireDrawerToggle(opts: {
 //
 // The panel shows two things: a documentation search field (searches the docs site's prebuilt
 // index via the shared @magus/textsearch grammar, results open in a new tab) and the
-// ACTIVE surface's reference sections. Each surface scaffold carries help blocks marked
+// ACTIVE app's reference sections. Each app scaffold carries help blocks marked
 // [data-ref-section] (the graph explorer's query/search-syntax help, the log viewer's filter
-// help). Because surfaces mount dynamically, this CLONES the active surface's blocks each time
+// help). Because apps mount dynamically, this CLONES the active app's blocks each time
 // it opens (and refreshes on tab change while docked).
 //
 // Pin/unpin maps onto the Drawer honestly: expanded = docked/inset (pf-m-expanded). "Pinned"
 // persists across tab switches and ignores Escape / outside-click; "unpinned" closes on Escape
 // or a click outside the panel. Cloned example buttons are inert (cloneNode drops listeners), so
 // a click inside the panel on an example carrying a distinguishing data-* (the graph's data-q /
-// data-view) is forwarded to the matching live control in the active surface pane.
+// data-view) is forwarded to the matching live control in the active app pane.
 export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const drawer = document.getElementById("console-refdrawer");
   const panel = document.getElementById("console-refpanel");
@@ -152,27 +152,27 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const closeBtn = document.getElementById("console-refclose");
   const breakoutBtn = document.getElementById("console-refbreakout");
 
-  // The active surface is the one visible pane in the outlet (main.ts hides the others).
+  // The active app is the one visible pane in the outlet (main.ts hides the others).
   const activePane = (): HTMLElement | null =>
     document.querySelector<HTMLElement>("#console-outlet-content div[data-tab-id]:not([hidden])");
 
   const collect = (pane: HTMLElement | null): HTMLElement[] =>
     pane ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")] : [];
 
-  // The shell's own reference (chords, tabs and panes) is not surface-specific, so it trails EVERY
-  // surface's sections rather than belonging to one - and it is the whole of what the launcher shows,
-  // which has no surface and so previously read "No reference for this view".
+  // The shell's own reference (chords, tabs and panes) is not app-specific, so it trails EVERY
+  // app's sections rather than belonging to one - and it is the whole of what the launcher shows,
+  // which has no app and so previously read "No reference for this view".
   const shellBlocks = (): HTMLElement[] => {
     const shell = document.getElementById("console-ref-shell");
     return shell ? [...shell.querySelectorAll<HTMLElement>("[data-ref-section]")] : [];
   };
 
   // Paint the given reference blocks into the panel body. Cloning (not moving) keeps the source
-  // intact so a surface can unmount/remount freely. Nested <details> open so the reference reads
+  // intact so an app can unmount/remount freely. Nested <details> open so the reference reads
   // as content; ids are stripped from clones to avoid duplicates.
   //
   // cloneNode copies no event listeners, so a clickable control inside a reference block only
-  // works if its surface wires it by DELEGATION (document-level, matched with closest()) rather
+  // works if its app wires it by DELEGATION (document-level, matched with closest()) rather
   // than by a querySelectorAll snapshot taken over the sources.
   const paint = (blocks: HTMLElement[]): void => {
     bodyEl.replaceChildren();
@@ -196,7 +196,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     }
   };
 
-  // Show the active surface's reference sections. A freshly opened surface mounts
+  // Show the active app's reference sections. A freshly opened app mounts
   // its scaffold asynchronously (its bundle is a dynamic import), so if the pane has no blocks yet,
   // watch it briefly and repaint once its content lands - otherwise a just-opened tab would read
   // "No reference".
@@ -218,7 +218,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
       });
       watcher = obs;
       obs.observe(pane, { childList: true, subtree: true });
-      // Stop watching a genuinely reference-less surface after it has had time to mount.
+      // Stop watching a genuinely reference-less app after it has had time to mount.
       setTimeout(() => {
         if (watcher === obs) {
           obs.disconnect();
@@ -228,7 +228,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     }
   };
 
-  // Forward a click on a cloned example to the live control in the active surface. Match by the
+  // Forward a click on a cloned example to the live control in the active app. Match by the
   // first distinguishing attribute present; the source control (same attr+value) carries the real
   // listener.
   // No data-lens: it was a second hook on the hubs/orphans chips, and those chips carry
@@ -513,7 +513,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const render = (): void => {
     drawer.classList.toggle("pf-m-expanded", isOpen);
     // Pin is what SNAPS THE LAYOUT TO FIT: pinned docks the panel INLINE (pf-m-inline), so PF's own
-    // drawer mechanics inset the __content and the surfaces reflow to the narrower box. Unpinned drops
+    // drawer mechanics inset the __content and the apps reflow to the narrower box. Unpinned drops
     // pf-m-inline, so the panel floats over the content as an overlay (content keeps full width) - a
     // quick peek that Escape / an outside click dismisses. (PF's CSS-only non-inline drawer parks the
     // panel off the right edge, so the unpinned overlay position is authored in console.css.)
@@ -553,7 +553,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   pinBtn?.addEventListener("click", togglePin);
   // Break out to a tab: promote the console-wide reference into its own persistent, tileable tab, then
   // close the panel (its content now lives in the tab). main.ts supplies onBreakOut (it opens the
-  // reference surface below).
+  // reference app below).
   breakoutBtn?.addEventListener("click", () => {
     opts.onBreakOut?.();
     setOpen(false);
@@ -639,7 +639,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   }
 
   // main.ts dispatches this when the active tab changes; a docked/open panel re-reads the new
-  // surface's help sections.
+  // app's help sections.
   document.addEventListener("console:activetab", () => {
     if (isOpen) refresh();
   });
@@ -651,10 +651,10 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   requestAnimationFrame(() => drawer.classList.remove("console-shell-refdrawer--instant"));
 }
 
-// referenceApp is the "break out to tab" target: a lightweight, single-instance surface that renders
+// referenceApp is the "break out to tab" target: a lightweight, single-instance app that renders
 // the CONSOLE-WIDE reference (the #console-ref-shell sections - chords, tabs/panes, where-your-data-goes),
-// the same always-true help the drawer trails after every surface and the whole of what the launcher
-// shows. It is deliberately NOT a live mirror of the drawer's surface-specific sections: a tab persists by
+// the same always-true help the drawer trails after every app and the whole of what the launcher
+// shows. It is deliberately NOT a live mirror of the drawer's app-specific sections: a tab persists by
 // pageId alone (no payload), so it must re-derive stable content on every mount/reload - and the shell
 // reference is exactly that. main.ts registers it (kept out of the launcher APPS list, so it has no
 // card and is reachable only via the drawer's break-out button) and opens it single-instance.

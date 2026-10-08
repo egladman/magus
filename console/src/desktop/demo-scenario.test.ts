@@ -1,5 +1,5 @@
-// demo-scenario.test.ts - the shared demo scenario is the single source of truth every surface's
-// showcase derives from, so its internal cross-references (the ones that make the surfaces
+// demo-scenario.test.ts - the shared demo scenario is the single source of truth every app's
+// showcase derives from, so its internal cross-references (the ones that make the apps
 // corroborate each other) are worth pinning: refs that the trail points at must exist in the run
 // list, the pruned ref must NOT, run-driving MCP calls must sit just before their runs and agree on
 // duration, and all instants must derive from the injected `now`. Pure data, no DOM: runs under node.
@@ -90,7 +90,7 @@ test("each run-driving MCP call ties to its run by ref, timing, and duration", (
     // The call is recorded at the run's START, so it sits just before the run's completion.
     assert.equal(call.timeMs, run.startMs, "call time is the run start");
     assert.ok(call.timeMs < run.endMs, "call sits before the run's completion timestamp");
-    assert.equal(call.durationMs, run.durationMs, "durations agree across surfaces");
+    assert.equal(call.durationMs, run.durationMs, "durations agree across apps");
   }
 });
 
@@ -105,7 +105,7 @@ test("the failed output lookup names the pruned ref; the sandbox denial mirrors 
   const generate = runs.find((r) => r.target === "generate");
   assert.ok(denial && generate, "both the denial and the denied run exist");
   assert.equal(generate.state, "failed");
-  // Same instant and same story on both surfaces.
+  // Same instant and same story on both apps.
   assert.equal(denial.timeMs, generate.endMs);
   assert.match(must(generate.error), /sandbox/);
 });
@@ -130,7 +130,7 @@ test("insight names scenario files, dates derive from now, and identity:test is 
   assert.ok(flaky.lastPassMs <= NOW, "last pass derives from now");
 });
 
-// The whole point of one shared scenario is that no surface can name a project or target the others
+// The whole point of one shared scenario is that no app can name a project or target the others
 // have never heard of. The dashboard's live gantt schedules from SCENARIO_CATALOG, so every target
 // the scripted history names has to be in it - otherwise the board drifts into a second workspace.
 test("every run in the history is a target the live catalog also knows", () => {

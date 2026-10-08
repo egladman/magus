@@ -2,7 +2,7 @@
 //
 // The element is MOVED, not copied. Its listeners, closures and subscriptions come with it, so a
 // detached panel keeps working with no cross-window channel and nothing to serialize - which is the
-// difference between a primitive any surface can adopt and a per-panel porting exercise.
+// difference between a primitive any app can adopt and a per-panel porting exercise.
 //
 // Document Picture-in-Picture where it exists (Chromium): a real window the reader can drag to another
 // display, with no browser chrome. window.open elsewhere. Both are same-origin, so both can adopt the

@@ -370,7 +370,7 @@ let motionObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
 // installKeybindings' teardown. It adds its own document keydown listener rather than taking
 // the lifecycle signal, so aborting the controller does not reach it: dropping this handle
-// leaves one live matcher per activation, and the console caches surface modules, so every
+// leaves one live matcher per activation, and the console caches app modules, so every
 // close/reopen adds a generation and each chord fires its command one more time.
 let uninstallKeys: (() => void) | null = null;
 
@@ -542,7 +542,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   // A BARE /graph/ (no directive at all) is the cold visit that gets the empty state instead,
   // deferring the graph.json download until the visitor asks. Loading via a reload into boot
   // (not an in-place swap) renders through boot's normal pipeline - projection, fit, interactions.
-  // The server refuses to serve these files too; this keeps an attached surface from asking.
+  // The server refuses to serve these files too; this keeps an attached app from asking.
   if (mayLoadBundledDemo(params) && (wantsDemo(params) || params.view || params.q || params.node)) {
     try {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
@@ -554,7 +554,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
         wantsTargets ? "Loading the magus demo target graph..." : "Loading the magus demo graph...",
       );
       // Resolve relative to THIS bundle (gen/console/graph/), not the document: standalone
-      // the two share a directory, but the console mounts this surface into a page at a different path,
+      // the two share a directory, but the console mounts this app into a page at a different path,
       // where a document-relative "./graph.json" would miss. import.meta.url makes both paths work.
       const r = await fetch(
         new URL(wantsTargets ? "./target-graph.json" : "./knowledge-graph.json", import.meta.url),
@@ -893,7 +893,7 @@ function revealHidden() {
   // they were hidden, and the layout does not run on its own any more.
   sim?.alpha(0.9).restart();
   // Frame it when that finishes. Going from ten nodes to two thousand changes the extent by orders
-  // of magnitude, so this is the single biggest re-framing the surface ever does - and the one the
+  // of magnitude, so this is the single biggest re-framing the app ever does - and the one the
   // boot-time reveal cannot cover, since its own settle fit fired long before.
   armSettleFit();
 }
@@ -1265,7 +1265,7 @@ function startSimulation() {
   // Every simulation gets its final framing armed HERE, on the object that will emit the "end" it
   // hangs on. Arming it at the call sites that start a layout instead loses it the moment two of
   // them race: activate() runs twice on a `magus graph open` deep link - the standalone page boots
-  // the surface, then opening it from the rail activates it again - and the second pass builds a
+  // the app, then opening it from the rail activates it again - and the second pass builds a
   // NEW simulation while the settle fit sits on the discarded one. What that looks like is a graph
   // framed by one of the early beats, at the size it was a third of a second in, and never framed
   // again as it expands: the whole layout ends up two and a half times the canvas.
@@ -2042,7 +2042,7 @@ const SOURCE_PROSE: Record<string, string> = {
 };
 
 // renderOverview fills the detail column when NOTHING is selected. That column used to collapse,
-// which left the surface answering "what am I looking at" nowhere at all: the arrangement, the
+// which left the app answering "what am I looking at" nowhere at all: the arrangement, the
 // coloring and the scope were each legible only as a lit-up button somewhere in the sidebar, and
 // the canvas alone cannot say whether it is showing a filtered subset or a different graph.
 // It states the graph, then every setting currently acting on it, in sentences.
@@ -2356,7 +2356,7 @@ let cameraTween = 0;
 // Each site used to fire-and-forget a setTimeout. Two consequences, both real: cycling force ->
 // layered -> force inside 1.4s let the FIRST switch's beats land during the second and yank a
 // camera the operator had since placed; and deactivate() left them queued to fire against a
-// surface the console had torn down. A pending camera move is only ever wanted by the most recent
+// app the console had torn down. A pending camera move is only ever wanted by the most recent
 // request, so starting a new one cancels the last.
 let cameraBeats: ReturnType<typeof setTimeout>[] = [];
 
@@ -2430,7 +2430,7 @@ function revealWholeGraph() {
   if (p.view || p.q || p.node) return;
   cameraOwnedByOperator = false;
   // The beats are measured from when the canvas HAS A SIZE, not from now. The console can mount
-  // this surface into a pane that is still display:none, and it stays zero-width for as long as
+  // this app into a pane that is still display:none, and it stays zero-width for as long as
   // that takes - measured at over three seconds, past every beat. Scheduling on the wall clock
   // meant all of them fired against a zero viewport, fitView refused each one, and the graph
   // kept whatever framing the cold layout happened to leave it with.
@@ -2476,10 +2476,10 @@ function armSettleFit(): void {
 
 // whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s. Distinct
 // from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching; this one
-// waits out a surface mounted hidden, where there is nothing to be late for.
+// waits out an app mounted hidden, where there is nothing to be late for.
 //
 // A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered,
-// and the whole point here is to wait out a surface
+// and the whole point here is to wait out an app
 // that is not being rendered yet, so an rAF poll deadlocks on exactly the case it exists for.
 function whenCanvasSized(): Promise<void> {
   return new Promise((resolve) => {
@@ -2510,7 +2510,7 @@ function whenCanvasSized(): Promise<void> {
 }
 
 // A fit asked for while the canvas had no box, held until it has one. The console can mount this
-// surface into a pane that is still display:none for seconds, and every fit in that window - a
+// app into a pane that is still display:none for seconds, and every fit in that window - a
 // view's, a focus's, radial's - would otherwise be computed against a zero viewport, clamp to the
 // minimum scale and be silently dropped. Only the LAST one is worth replaying: they supersede.
 let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
@@ -2550,7 +2550,7 @@ function fitView(ids: Set<string> | null, glideMs?: number) {
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
   if (canvas.clientWidth <= 0) {
     // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
-    // into a 340ms glide whenever the surface was mounted hidden - reintroducing, on exactly the
+    // into a 340ms glide whenever the app was mounted hidden - reintroducing, on exactly the
     // slowest path, the camera lurch that snapping exists to avoid.
     pendingFit = { ids, glideMs };
     if (!pendingFitArmed) {
@@ -2903,10 +2903,10 @@ function graphClient() {
   return createClient(GraphService, createServerTransport(liveHost, liveToken));
 }
 
-// rpcOptions carries the surface's lifecycle signal into every RPC, so a request is CANCELLED
+// rpcOptions carries the app's lifecycle signal into every RPC, so a request is CANCELLED
 // rather than merely ignored. The generation counters below discard a stale ANSWER; without this
 // the request itself still runs to completion on the server - one full graph query per keystroke,
-// computed for a result nobody reads - and lands on a surface deactivate() has torn down.
+// computed for a result nobody reads - and lands on an app deactivate() has torn down.
 function rpcOptions() {
   return lifecycleAbort ? { signal: lifecycleAbort.signal } : undefined;
 }
@@ -3812,9 +3812,9 @@ function syncLayoutToggle() {
     btn.disabled = !!reason && !current;
     btn.title = reason ?? LAYOUT_TITLES[mode] ?? "";
   });
-  // Say WHY on the surface, not only on hover - the same reason the graph switch carries a note.
+  // Say WHY on the app, not only on hover - the same reason the graph switch carries a note.
   // Three of the four arrangements are disabled on a workspace-sized graph with nothing selected,
-  // which is the state the surface opens in, and a dead button whose explanation lives in a
+  // which is the state the app opens in, and a dead button whose explanation lives in a
   // tooltip reads as broken rather than as conditional.
   //
   // DISTINCT reasons, not the first one: layered and waves share the node cap but radial has its
@@ -3858,7 +3858,7 @@ function syncGraphKindToggle() {
     btn.disabled = !liveHost;
     btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
   });
-  // Say WHY on the surface, not only on hover. A disabled control whose reason lives in a title=
+  // Say WHY on the app, not only on hover. A disabled control whose reason lives in a title=
   // reads as broken: you click Target, nothing happens, and the explanation is somewhere you have
   // to already suspect. The "?" beside the label is that marker - visible on touch, where a
   // native tooltip never fires - and it carries the reason as its popover (bootWireEvents).
@@ -4570,7 +4570,7 @@ function buildFlowEdges() {
 //   trace:  "magus path"
 //   others: no command (no CLI equivalent maps cleanly)
 //
-// "Earn the prompt" rule (section 0.5): a surface shows the prompt ONLY when its
+// "Earn the prompt" rule (section 0.5): an app shows the prompt ONLY when its
 // behavior corresponds to a real CLI behavior backed by the drift fixture.
 
 function shellQuote(s: string) {
@@ -4597,7 +4597,7 @@ function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: st
       return "magus explain " + shellQuote(nodeId);
     case "trace":
       // Half-picked: name the node already chosen rather than printing a command that throws
-      // away what the surface knows.
+      // away what the app knows.
       if (!nodeId) return "magus path <a> <b>";
       if (!nodeTo) return "magus path " + shellQuote(nodeId) + " <b>";
       return "magus path " + shellQuote(nodeId) + " " + shellQuote(nodeTo);
@@ -5298,14 +5298,14 @@ function clearStaleNotice() {
 }
 
 // publishLiveStatus publishes the live connection state onto the shared console status bar. It
-// paints nothing on the surface itself.
+// paints nothing on the app itself.
 function publishLiveStatus() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
   // reads the same as the dashboard and log viewer.
   if (appVisible) {
     // Connection state only: the bar answers one question, and the workspace identity is already
     // beside it. A snapshot or demo graph has no link of its OWN, so it reports no connection and
-    // the shell's poller answers - claiming the dot to say "not connected" had this surface
+    // the shell's poller answers - claiming the dot to say "not connected" had this app
     // reporting on a server it never asked about.
     const nodes = graph?.nodes.length ?? 0;
     const count = nodes ? nodes + " nodes" : undefined;
@@ -5700,7 +5700,7 @@ function bootWireEvents() {
   // askQuestion (Decision 2: a question may auto-switch the display mode, guarded by
   // layoutBlockedReason) - never the [data-layout] toggle, which switches mode alone.
   //
-  // Must stay delegated: the Reference drawer CLONES this surface's [data-ref-section] blocks,
+  // Must stay delegated: the Reference drawer CLONES this app's [data-ref-section] blocks,
   // and cloneNode copies no listeners, so a querySelectorAll snapshot over the sources reaches
   // no chip in the drawer.
   document.addEventListener(
@@ -5767,7 +5767,7 @@ function bootWireEvents() {
     { signal: lifecycleSignal },
   );
 
-  // Command surface + keybindings, the same shape as the log viewer: each action is a named command
+  // Commands + keybindings, the same shape as the log viewer: each action is a named command
   // (dispatching to the existing control) bound to a single key that dodges browser combos and is
   // guarded against typing. The user's overrides ride the shared persisted keymap.
   const clickGraph = (id: string): void => {
@@ -6156,7 +6156,7 @@ async function bootLive() {
     if (!projectionUnfolded) updateProjectionStatus();
     // Nothing to announce on a successful connect: the console status bar carries a live
     // connection dot that publishStatus already drives, so saying it again here was a second
-    // claim about the same fact taking a line of the surface to do it.
+    // claim about the same fact taking a line of the app to do it.
     else setStatus("");
 
     renderLegend();
@@ -6177,7 +6177,7 @@ async function bootLive() {
     bootWireEvents();
     return true;
   } catch (e) {
-    // Same words and the same guide as the connect prompt every server surface shows. No Retry:
+    // Same words and the same guide as the connect prompt every server app shows. No Retry:
     // live mode here is entered from the link magus printed, so reopening that link is the retry.
     setStatus(
       "The console could not reach " +
@@ -6271,7 +6271,7 @@ function wireGraphModes(signal: AbortSignal): void {
   if (hashParams().figure !== undefined) setGraphMode("figures");
 }
 
-// setVisible is the console's surface contract (page.ts). Here it is not a formality: a graph
+// setVisible is the console's app contract (page.ts). Here it is not a formality: a graph
 // backgrounded mid-settle would go on ticking and repainting a canvas nobody could see, and until
 // this existed only CLOSING the tab stopped it.
 //
@@ -6308,7 +6308,7 @@ export function deactivate(): void {
   // The same singleton hazard, twice more. A builder left open put detailMode in "builder", which
   // survived the close and made renderCard early-return on the REOPENED graph - clicking a node
   // painted nothing until you opened and closed the builder again. And a builder detached into its
-  // own window outlived the surface it drives, still calling applyQuery on a torn-down graph.
+  // own window outlived the app it drives, still calling applyQuery on a torn-down graph.
   queryBuilder?.close();
   detailMode = "auto";
   // The same hazard a third time: a halo left aimed at a node of the CLOSED graph would displace
@@ -6322,7 +6322,7 @@ export function deactivate(): void {
   }
   // The camera's own two kinds of pending work, neither of which this used to stop: the glide is a
   // self-perpetuating rAF chain that would keep calling applyTransform -> draw() on a hidden
-  // canvas, and the beats are timeouts queued to fit a surface the console has torn down.
+  // canvas, and the beats are timeouts queued to fit an app the console has torn down.
   if (cameraTween) {
     cancelAnimationFrame(cameraTween);
     cameraTween = 0;

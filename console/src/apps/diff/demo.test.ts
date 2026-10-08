@@ -50,12 +50,12 @@ test("the generated changeset holds the files the showcase claims", () => {
 });
 
 // The two files that carry NO hunks, for two different reasons. Both render as an empty entry
-// unless the surface reads why they are empty, and "nothing changed" is false in both cases.
+// unless the app reads why they are empty, and "nothing changed" is false in both cases.
 test("the changeset exercises the states that produce no hunks", () => {
   const byPath = new Map(files.map((f) => [f.path, f]));
 
   const golden = byPath.get("libs/authkit/testdata/claims.golden");
-  assert.equal(golden?.binary, true, "a binary file the surface must name as binary");
+  assert.equal(golden?.binary, true, "a binary file the app must name as binary");
   assert.deepEqual(golden?.hunks, []);
 
   const script = byPath.get("tools/migrate/backfill.sh");
@@ -152,7 +152,7 @@ test("demo mode builds rows from the demo payload", () => {
   assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience Audience")));
 });
 
-test("the ranking key is present, so the surface may claim an order", () => {
+test("the ranking key is present, so the app may claim an order", () => {
   assert.ok((session.diff.files ?? []).some((f) => f.reach !== null && f.reach !== undefined));
 });
 
@@ -190,11 +190,11 @@ test("applyDemoOp resolves a comment and answers a suggestion", () => {
 // only thing keeping them equal was a comment saying they were. That is the arrangement this
 // session spent its day removing everywhere else: a stated invariant with nothing enforcing it.
 //
-// It matters because the two are shown side by side. The Insight surface reports libs/authkit as
-// the workspace's top hotspot with 46 commits across 2 authors; the Diff surface annotates the
+// It matters because the two are shown side by side. The Insight app reports libs/authkit as
+// the workspace's top hotspot with 46 commits across 2 authors; the Diff app annotates the
 // same file in the same session. A reader who compares them and finds different numbers has
 // caught the showcase lying, and will reasonably assume the product does too.
-test("the diff annotations agree with the figures every other surface reports", () => {
+test("the diff annotations agree with the figures every other app reports", () => {
   const insight = scenarioInsight(Date.now());
   const claims = insight.hotspots.find((h) => h.name === STORY_FILES.CLAIMS);
   assert.ok(claims, "the scenario no longer ranks the file the story turns on");
@@ -204,21 +204,21 @@ test("the diff annotations agree with the figures every other surface reports", 
 
   const note = (session.diff.files ?? []).find((a) => a.path === STORY_FILES.CLAIMS);
   assert.ok(note, "the annotations no longer cover the file the story turns on");
-  assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight surface");
+  assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight app");
   assert.equal(
     note.churn?.authors,
     claims.authors,
-    "author count disagrees with the Insight surface",
+    "author count disagrees with the Insight app",
   );
   assert.equal(
     note.reach,
     claims.blastRadius,
-    "reach disagrees with the blast radius the Insight surface reports",
+    "reach disagrees with the blast radius the Insight app reports",
   );
 });
 
 // A mode change carries NO hunks, so its row is a filename and a churn count unless the
-// surface says why the file is there - which reads as the surface having dropped something.
+// app says why the file is there - which reads as the app having dropped something.
 // Found by rendering the demo: the binary file beside it already said "binary" and this one
 // said nothing at all.
 //

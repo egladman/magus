@@ -113,7 +113,7 @@ test("accepting installs, and the offer is spent after one prompt", async () => 
   assert.equal(ev.prompts, 1);
 });
 
-test("declining lands in dismissed, so the surface can say reload rather than offer a dead button", async () => {
+test("declining lands in dismissed, so the app can say reload rather than offer a dead button", async () => {
   const { host, fire } = fakeHost();
   const s = createInstallStore(host);
   fire("beforeinstallprompt", fakePrompt("dismissed"));

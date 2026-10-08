@@ -205,20 +205,20 @@ test("advanceSequence passes an unbound idle chord straight through", () => {
   assert.equal(out.fire, null);
 });
 
-// A surface-local key rides on the command so the cheat sheet and the Shortcuts list can show
-// it. Before this the diff viewer - the surface with the most keys in the product - showed
+// An app-local key rides on the command so the cheat sheet and the Shortcuts list can show
+// it. Before this the diff viewer - the app with the most keys in the product - showed
 // none of them: its keys are bare, meaningful only while it has focus, and so belong in no
-// console-wide keymap, and both surfaces render from the keymap.
-test("a command can carry a surface-local key for display", () => {
+// console-wide keymap, and both apps render from the keymap.
+test("a command can carry an app-local key for display", () => {
   registerCommand({ id: "t.appkey", label: "T: local", run: () => {}, key: "v" });
   const found = listCommands().find((c) => c.id === "t.appkey");
   assert.equal(found?.key, "v");
   unregisterCommand("t.appkey");
 });
 
-// It is NOT a keymap entry: resolveCommand must not find it, because the surface dispatches
+// It is NOT a keymap entry: resolveCommand must not find it, because the app dispatches
 // these itself and the console must not also fire them from anywhere on the page.
-test("a surface-local key is not dispatched by the console keymap", () => {
+test("an app-local key is not dispatched by the console keymap", () => {
   registerCommand({ id: "t.appkey2", label: "T: local", run: () => {}, key: "v" });
   assert.equal(resolveCommand({} as Keymap, "v"), null);
   unregisterCommand("t.appkey2");

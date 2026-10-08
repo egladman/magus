@@ -125,7 +125,7 @@ function textInput(name: string, placeholder: string): HTMLInputElement {
   return i;
 }
 
-// build lays the surface out: the bar (figure and lens), the figure's controls in a row above it
+// build lays the app out: the bar (figure and lens), the figure's controls in a row above it
 // (never over it), then the figure beside its node list.
 export function build(host: HTMLElement): DiagramsRefs {
   const page = h("section", "console-diagrams");
@@ -229,7 +229,7 @@ const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
   unreadable: { tone: "danger", title: "Could not read the figure" },
 };
 
-// activate builds the surface into host. Everything is per mount; only the runtime is shared.
+// activate builds the app into host. Everything is per mount; only the runtime is shared.
 export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   let serverHost = resolveServerHost(parseHash()) ?? "";

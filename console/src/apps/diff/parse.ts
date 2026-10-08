@@ -1,10 +1,10 @@
 // parse.ts - the wire shape of a changeset, and the mapping from it into the types the Diff
-// surface renders. Pure: JSON in, a file/hunk tree out, no DOM and no fetch.
+// app renders. Pure: JSON in, a file/hunk tree out, no DOM and no fetch.
 //
 // It does NOT parse a patch. It used to, and the server parsed the same bytes independently in
 // Go, and the two drifted - this side learned Mercurial's headerless dialect and POSIX's
 // tab-delimited timestamps, the Go side did not, so `magus diff` reported an empty changeset on
-// an hg tree while this surface rendered it fine.
+// an hg tree while this app rendered it fine.
 //
 // That was never going to stay cosmetic. A hunk's DIGEST is its identity: it is what a read
 // receipt is keyed by, and what lets a hunk marked here be seen by the CLI and by an agent. Two
@@ -36,7 +36,7 @@ export interface DiffLine {
   // emph is WHICH PART of this line changed, for a line paired with its counterpart across a
   // rewrite. Undefined on most lines, which have nothing to mark.
   //
-  // Computed by the server, like the digest above it. This surface used to work it out and the
+  // Computed by the server, like the digest above it. This app used to work it out and the
   // terminal viewer worked out the same thing separately, agreeing only by hand-transcribed
   // test vectors - so the same changed line could read as two different changes depending on
   // where you opened it, and nothing would ever have said so.
@@ -45,7 +45,7 @@ export interface DiffLine {
 
 export interface Hunk {
   // digest is the hunk's identity, computed by the server over the body EXACTLY as the VCS
-  // emitted it. It is what a read receipt is keyed by. This surface must never recompute it:
+  // emitted it. It is what a read receipt is keyed by. This app must never recompute it:
   // the rows below have had their +/-/space markers stripped, and putting them back does not
   // round-trip - a context line whose producer dropped the trailing space arrives as "" and
   // would be rebuilt as " ", yielding a different digest for the same hunk.
@@ -61,7 +61,7 @@ export interface Hunk {
   readonly header: string; // the raw @@ line, including any trailing section heading
   // declaration is the enclosing declaration git named in header, parsed by the server. Empty
   // where git named none. It is what the heading RENDERS, because the @@ coordinates are wire
-  // syntax and this surface already prints line numbers in its gutters.
+  // syntax and this app already prints line numbers in its gutters.
   readonly declaration: string;
   readonly oldStart: number;
   readonly oldCount: number;
@@ -85,7 +85,7 @@ export interface DiffFile {
   readonly additions: number;
   readonly deletions: number;
   // binary files carry no hunks. Rendering them as an empty diff reads as "nothing changed",
-  // which is false, so the flag is explicit and the surface says so.
+  // which is false, so the flag is explicit and the app says so.
   readonly binary: boolean;
   // mode changes are a real reviewable event (a script becoming executable) that produces no
   // hunks at all, so it would otherwise render as an empty entry.
@@ -121,7 +121,7 @@ interface WireHunk {
   // here; see Hunk.index above for why the array position will not do.
   //
   // lines is on the wire and unused here: it is the body with its +/- markers intact, which the
-  // MCP surface needs and rendering does not - `rows` below is the same body parsed, and that is
+  // MCP tool needs and rendering does not - `rows` below is the same body parsed, and that is
   // what is drawn. It is declared rather than omitted because TypeScript rejects an object
   // literal carrying a property the type does not know, which is what the generated showcase
   // fixture is.

@@ -1,5 +1,5 @@
 // tiling.ts - the split-pane layout as a binary tree, exactly how tiling window
-// managers and VS Code model it: a node is either a LEAF holding one surface, or a
+// managers and VS Code model it: a node is either a LEAF holding one app, or a
 // SPLIT of two children with a direction and a ratio. Every operation here is a PURE
 // function over that tree (no DOM, no mutation - it returns a new tree), so the layout
 // algebra is unit-testable in isolation. Splits carry their own id so a draggable
@@ -84,17 +84,17 @@ export function neighborInDirection(
   return best;
 }
 
-// leaves collects every leaf in document order - "which surfaces are currently tiled".
+// leaves collects every leaf in document order - "which apps are currently tiled".
 export function leaves(p: Pane): Leaf[] {
   if (p.kind === "leaf") return [p];
   return [...leaves(p.a), ...leaves(p.b)];
 }
 
-// leafShowing answers "which pane is showing this surface", or null when none is. Document order, so
-// a surface tiled twice resolves to the leftmost/topmost copy - the one a reader scanning the tab
+// leafShowing answers "which pane is showing this app", or null when none is. Document order, so
+// an app tiled twice resolves to the leftmost/topmost copy - the one a reader scanning the tab
 // finds first.
 //
-// The rail navigates by SURFACE while a tab holds several, so activating the tab answers "which tab"
+// The rail navigates by APP while a tab holds several, so activating the tab answers "which tab"
 // and leaves "which pane" to whatever had focus last: ask for the Graph and you could arrive with the
 // cursor in the Diff beside it, with the rail marking Diff as current. This is the lookup that lets
 // the caller land in the pane actually showing what was asked for.
@@ -103,7 +103,7 @@ export function leafShowing(root: Pane, pageId: string): Leaf | null {
 }
 
 // splitLeaf replaces the leaf `targetId` with a split of [that leaf, a new leaf], so
-// the surface stays put and the new one appears beside/below it. `first` puts the new
+// the app stays put and the new one appears beside/below it. `first` puts the new
 // leaf on the a-side (left/top) rather than the b-side. An unknown target returns the
 // tree unchanged. newSplitId/newLeaf are supplied by the caller to keep this pure.
 export function splitLeaf(
@@ -149,8 +149,8 @@ export function closePane(root: Pane, id: string): Pane | null {
   return walk(root);
 }
 
-// setLeafPage sets the surface of the leaf `id` - how an empty pane (pageId "") becomes a chosen
-// surface once the operator picks one from the in-pane launcher. An unknown id leaves the tree
+// setLeafPage sets the app of the leaf `id` - how an empty pane (pageId "") becomes a chosen
+// app once the operator picks one from the in-pane launcher. An unknown id leaves the tree
 // unchanged. Pure: it returns a new tree, replacing only the matching leaf.
 export function setLeafPage(root: Pane, id: string, pageId: string): Pane {
   const walk = (p: Pane): Pane => {
@@ -175,7 +175,7 @@ export function setRatio(root: Pane, splitId: string, ratio: number): Pane {
 // swapLeaves returns a new tree with the leaf NODES at idA and idB exchanged in position: each keeps
 // its own id and pageId, only their place in the tree trades. This is the "move pane" primitive - the
 // render layer (tileView) reconciles panes by id, so relocating a leaf's position moves its mounted
-// surface (host element, scroll offset, live stream) along with it rather than tearing it down and
+// app (host element, scroll offset, live stream) along with it rather than tearing it down and
 // remounting elsewhere. A no-op (the same tree, unchanged) when either id is not a leaf in the tree,
 // or when idA === idB.
 export function swapLeaves(root: Pane, idA: string, idB: string): Pane {

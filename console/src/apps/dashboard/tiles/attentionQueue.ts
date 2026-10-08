@@ -127,7 +127,7 @@ export function parseStore(body: unknown): string {
 // ---- pure text -------------------------------------------------------------
 
 // ageLabel is how long a request has been waiting, at the coarsest granularity that still
-// answers the question - the same ladder the lease surface reads ages on, over
+// answers the question - the same ladder the lease app reads ages on, over
 // MILLISECONDS rather than seconds because that is the unit this route serves.
 //
 // "" when the row carries no timestamp, so the caller renders nothing rather than a confident

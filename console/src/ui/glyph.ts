@@ -1,7 +1,7 @@
-// glyph.ts - inline-SVG marks that appear on more than one surface, so the same action carries the
+// glyph.ts - inline-SVG marks that appear on more than one app, so the same action carries the
 // same mark wherever a reader meets it. Refresh was an icon in the log viewer's run browser and
-// bare text on both the Runs surface and the dashboard's insight band. A one-off mark still belongs
-// in the surface that uses it.
+// bare text on both the Runs app and the dashboard's insight band. A one-off mark still belongs
+// in the app that uses it.
 
 const NS = "http://www.w3.org/2000/svg";
 

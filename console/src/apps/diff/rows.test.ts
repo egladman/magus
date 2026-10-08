@@ -586,7 +586,7 @@ const THREAD_PATCH = [
   "",
 ].join("\n");
 
-// hunk is the server's answer (diff.PlaceThreads), not something this surface works out. What
+// hunk is the server's answer (diff.PlaceThreads), not something this app works out. What
 // is left here is the grouping, which depends on what is actually on screen.
 function thread(id: string, path: string, hunk: number) {
   return { id, path, hunk, line: 11, author: "dana", body: `remark ${id}` };
@@ -601,7 +601,7 @@ test("a placed thread is grouped onto its hunk", () => {
 });
 
 // The line moved out from under the remark, so the server could not place it. It still belongs
-// to this file and the reader still has to hear it - a surface that dropped it would be
+// to this file and the reader still has to hear it - an app that dropped it would be
 // claiming a colleague said nothing.
 test("an unplaced thread on a visible file falls back to that file", () => {
   const files = patchFixture(THREAD_PATCH);

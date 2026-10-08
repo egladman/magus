@@ -1,4 +1,4 @@
-// main-dom.test.ts - the Tools surface's mount. document/window come from test-setup.mjs (node
+// main-dom.test.ts - the Tools app's mount. document/window come from test-setup.mjs (node
 // --import). The rows are served through the real ListTools transport so the wire mapping is under
 // test too: a fixture written as the server serializes it (protobuf JSON, enums by name) cannot
 // pass while the real feed would not parse.

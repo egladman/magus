@@ -191,7 +191,7 @@
 .console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
 /* Secondary plus an accent edge, NOT the highlight token. highlight--default is #ffe072, a
    saturated yellow that keeps its own value in both themes while the row's text does not - so the
-   selected row was the one row on the surface you could not read, and it collided with the gold
+   selected row was the one row on the view you could not read, and it collided with the gold
    the warnings already own. diff.css rejected the same token for the same reason. */
 .console-plan-list__item[aria-current="true"] {
   background: var(--pf-t--global--background--color--secondary--hover);
@@ -307,8 +307,8 @@
 
 .console-plan-node { cursor: pointer; }
 /* FLOATING, not secondary. Secondary is darker than the stage it sits on (#151515 against
-   #292929), so every node read as a hole punched in the surface with a colored outline round it -
-   an empty black box, not a card. Floating is the token for a surface lifted ABOVE its ground, in
+   #292929), so every node read as a hole punched in the view with a colored outline round it -
+   an empty black box, not a card. Floating is the token for a layer lifted ABOVE its ground, in
    both themes, which is what a node on a canvas is. */
 .console-plan-node__box {
   fill: var(--pf-t--global--background--color--floating--default);

@@ -1,6 +1,6 @@
 // keybindings.ts - the keybinding editor over the console's commands: a per-row table against a
 // Persisted<Keymap> cell. keybindingRows is the pure row model; createKeybindingsEditor is the reusable
-// table + capture core (the live shared cell in the modal, a draft cell in the Settings surface);
+// table + capture core (the live shared cell in the modal, a draft cell in the Settings app);
 // createKeybindingsOverlay wraps it in a modal. Scope: only commands with a CONSOLE_KEYMAP default.
 
 import {
@@ -114,7 +114,7 @@ export interface KeybindingsDeps {
 
 // The reusable editor core: the [data-kbeditor] table and its capture machinery, no modal chrome. It
 // subscribes to the shared keymap and re-renders live; destroy() drops the subscription. Embedded both
-// in the modal overlay and in the Settings surface's Keybindings section.
+// in the modal overlay and in the Settings app's Keybindings section.
 export interface KeybindingsEditor {
   readonly el: HTMLElement;
   // Abandons any in-progress recording and repaints. Distinct from destroy(): the editor
@@ -259,7 +259,7 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
       }
       const row = h("div");
       row.dataset.krow = "";
-      row.dataset.command = r.id; // deep-link target for the Actions surface's per-row "edit shortcut"
+      row.dataset.command = r.id; // deep-link target for the Actions app's per-row "edit shortcut"
       row.append(h("span", undefined, r.label));
 
       const chordCell = h("span");
@@ -341,7 +341,7 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 }
 
 // createKeybindingsOverlay wraps the editor core in a modal overlay matching the cheat sheet. Its editor
-// drives the live shared cell, so rebinds here take effect immediately (unlike the staged Settings surface).
+// drives the live shared cell, so rebinds here take effect immediately (unlike the staged Settings app).
 export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
   const overlay = h("div", "pf-v6-c-backdrop");
   overlay.id = "keybindings-overlay";

@@ -973,7 +973,7 @@ article dd,
   font-size: 0.85rem;
 }
 
-/* The search page is a listing surface, not prose, so it widens past the reading-width
+/* The search page is a listing page, not prose, so it widens past the reading-width
    container to give the two columns room. Higher specificity than Pico's .container
    breakpoints, so no !important needed. */
 .site-search main.container {
@@ -1232,7 +1232,7 @@ article dd,
 }
 
 /* Guided Tour: a numbered card grid of curated, runnable examples. Cards are Pico-style
-   surfaces; the step number reads as a filled badge so the 1..N path is obvious. Each
+   panels; the step number reads as a filled badge so the 1..N path is obvious. Each
    card pins its "Open in Playground" link to the bottom so the cards line up. */
 .tour-grid {
   display: grid;
@@ -2112,7 +2112,7 @@ a code {
   margin-left: auto; /* push to the right edge of the top bar, opposite Open in Playground */
 }
 /* Program output, not more editor: flush against the block above (no top margin) and set
-   on the flat code surface rather than the bars' sectioning fill, so the eye reads block-
+   on the flat code background rather than the bars' sectioning fill, so the eye reads block-
    then-result instead of a third bar. The single top rule is the only separator. */
 .runnable-output {
   margin: 0 0 1rem;
@@ -2215,7 +2215,7 @@ a code {
   text-decoration-style: solid;
   text-decoration-color: var(--pico-primary);
 }
-/* Term surfaces (glossary-terms.js): the hover popover and the click split-reveal share
+/* Term views (glossary-terms.js): the hover popover and the click split-reveal share
    one content style (.gloss-*). The popover is a floating card positioned in JS; the
    reveal is an in-flow panel that parts the page open below the term's block. */
 .glossary-popover {
@@ -2310,7 +2310,7 @@ a code {
   color: var(--pico-color);
 }
 
-/* Shared content, both surfaces: an optional kind label (code entities), the baked-in
+/* Shared content, both views: an optional kind label (code entities), the baked-in
    definition, and a jump to the reference page. */
 .gloss-kind {
   margin: 0 0 0.25rem;
@@ -2887,7 +2887,7 @@ a code {
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Prevent accidental text selection on navigation and action surfaces.
+  /* Prevent accidental text selection on navigation and action controls.
      NEVER applied to content text (article, p, li, etc.). touch-action:
      manipulation disables double-tap-to-zoom on these controls so tap
      targets feel instant. */

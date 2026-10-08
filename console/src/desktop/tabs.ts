@@ -1,20 +1,20 @@
-// tabs.ts - the console workspace model: which surfaces are open as tabs and which is
+// tabs.ts - the console workspace model: which apps are open as tabs and which is
 // active. The state is a plain value (Workspace) mutated only through the PURE reducers
 // below (openTab / closeTab / setActive), so the logic is unit-testable without a DOM;
 // the reducers never mutate their input, they return a new Workspace. A persisted cell
 // (workspaceStore) keeps the whole thing durable so reopening the console restores the
 // exact set of tabs and the active one - the native "your workspace survived a restart"
 // feel. The DOM tab bar that renders a Workspace lives with the console app (Phase 6),
-// which is the only place multiple surfaces share one document; it reads and writes
+// which is the only place multiple apps share one document; it reads and writes
 // through these reducers.
 
 import { persisted, type Persisted } from "../lib/persist";
 import { leaves, type Pane } from "./tiling";
 
-// A tab is one open instance of a surface: `id` is the tab's own identity (so the same
-// surface can be opened twice), `pageId` is the tab's PRIMARY surface (dashboard|graph|logs)
+// A tab is one open instance of an app: `id` is the tab's own identity (so the same
+// app can be opened twice), `pageId` is the tab's PRIMARY app (dashboard|graph|logs)
 // - its identity and title. `layout` is the tab's split-pane tree (tiling.ts): absent means the
-// tab is a single un-split surface (the common case); present means the tab has been tiled, and
+// tab is a single un-split app (the common case); present means the tab has been tiled, and
 // the tree - serialized whole on every change - restores the exact split layout on reload.
 export interface TabState {
   id: string;
@@ -35,7 +35,7 @@ export const emptyWorkspace: Workspace = { tabs: [], activeId: null };
 // It used to arrive pre-split, Dashboard beside Activity. That made the first thing anyone saw a
 // layout they did not ask for and could not account for - and because the workspace persists, it
 // followed them forever. It also made the navigation rail lie: clicking Dashboard opened the TAB that
-// contained it, which was two surfaces, so asking for one thing produced two.
+// contained it, which was two apps, so asking for one thing produced two.
 // A single pane says what the console is; splitting is a thing to discover, not a thing to be handed.
 export function desktopStarterWorkspace(): Workspace {
   const id = "starter";
@@ -91,10 +91,10 @@ export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace
   };
 }
 
-// renameTab retitles a tab. This is the path a surface's open document takes to the tab bar: the
+// renameTab retitles a tab. This is the path an app's open document takes to the tab bar: the
 // console calls it when the focused pane reports a new document (page.ts's TitleSource), so a tab
-// reads as what it is showing rather than as which surface it is - the editor/browser behavior.
-// An unknown id or an unchanged title returns the INPUT unchanged, so a surface that re-reports the
+// reads as what it is showing rather than as which app it is - the editor/browser behavior.
+// An unknown id or an unchanged title returns the INPUT unchanged, so an app that re-reports the
 // same document cannot churn the persisted cell or wake its subscribers.
 //
 // The title is written into the tab itself rather than kept beside the workspace, so it persists:
@@ -115,11 +115,11 @@ export function workspaceStore(): Persisted<Workspace> {
   return persisted<Workspace>("workspace", emptyWorkspace);
 }
 
-// tabHostsApp reports whether a tab already shows a surface, checking its tiled panes when it
-// has a layout and its primary pageId otherwise. Every surface is single-instance (it keeps
+// tabHostsApp reports whether a tab already shows an app, checking its tiled panes when it
+// has a layout and its primary pageId otherwise. Every app is single-instance (it keeps
 // module-level state, so a second instance would fight the first), so this is what "already open"
 // means: the console's open() focuses the hosting tab instead of mounting a duplicate, and the
-// navigation rail marks the same surfaces as open.
+// navigation rail marks the same apps as open.
 export function tabHostsApp(t: TabState, pageId: string): boolean {
   const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
   return ids.includes(pageId);

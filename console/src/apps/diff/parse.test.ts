@@ -53,7 +53,7 @@ test("fromWire maps the changeset into the render tree", () => {
 });
 
 // The digest is the hunk's identity and a read receipt is keyed by it. It comes from the
-// server and must survive the mapping untouched - this surface has no way to recompute it,
+// server and must survive the mapping untouched - this app has no way to recompute it,
 // because the rows have had their markers stripped and putting them back does not round-trip.
 test("fromWire carries the server's hunk digest through unchanged", () => {
   const [f] = fromWire([wireFile()]);
@@ -116,7 +116,7 @@ test("countLines totals every hunk line plus one row per hunk header", () => {
   assert.equal(countLines([]), 0);
 });
 
-// Intra-line emphasis arrives on the wire. This surface used to compute it, and Go computed
+// Intra-line emphasis arrives on the wire. This app used to compute it, and Go computed
 // the same thing separately for the terminal viewer - the two agreeing only by test vectors
 // somebody had transcribed by hand. The server works it out once now, exactly as it works out
 // the hunk digests, and what is left here is carrying the numbers through unchanged.

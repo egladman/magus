@@ -3,7 +3,7 @@
 // The console raises notifications through lib/notifications' NOTIFY_EVENT, and the shell records
 // them against the title-bar bell. Big Picture hides the title bar, so without this module every
 // alert the dashboard raises - a target failing, the server going degraded - would fire into a
-// surface nobody can see. The mode would be at its least useful exactly when it matters most.
+// app nobody can see. The mode would be at its least useful exactly when it matters most.
 //
 // It is deliberately NOT the shell's toast relocated. A toast is designed for someone at a
 // keyboard: small, brief, dismissible, stacking. Every one of those properties is wrong here.
@@ -105,7 +105,7 @@ export function mountAlertRail(): AlertRail {
   let timer: number | null = null;
   // The rail's own dedupe. The notification store drops a repeated key before it ever reaches the
   // bell, and this listener sits alongside that store rather than downstream of it, so without a
-  // matching key set a surface that re-detects the same failure on every status frame would
+  // matching key set an app that re-detects the same failure on every status frame would
   // re-alert the room every second.
   const seen = new Set<string>();
 

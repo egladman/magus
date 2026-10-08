@@ -120,7 +120,7 @@ export class JobFeed {
     void this.stream(host, job, this.abort.signal);
   }
 
-  // stop ends the subscription. Called when the selection moves and when the surface is
+  // stop ends the subscription. Called when the selection moves and when the app is
   // unmounted: a stream nobody is reading is a stream the server is still writing to.
   stop(): void {
     this.abort?.abort();

@@ -5,7 +5,7 @@
 // rows only appear when somebody is already blocked and least wants to find a broken tile.
 //
 // The parser especially. It reads the network, and every field it lets through untyped becomes a
-// row rendering "undefined" or an age computed from a string - on the one surface whose whole job
+// row rendering "undefined" or an age computed from a string - on the one app whose whole job
 // is to say, accurately, that a person is being waited on.
 
 import assert from "node:assert/strict";

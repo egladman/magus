@@ -7,7 +7,7 @@
 // yet.
 //
 // The second call also ATTACHES the session, which is what makes an agent able to find this
-// review. Pairing therefore needs no setup step anyone has to remember: opening the surface is
+// review. Pairing therefore needs no setup step anyone has to remember: opening the app is
 // joining.
 
 import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "../../lib/server";
@@ -190,7 +190,7 @@ export interface ReviewThread {
   readonly line: number;
   // hunk is the index within path's hunks of the one holding line, or -1 when no hunk in this
   // changeset does. Resolved by the server, not here: the arithmetic is the only hard part of
-  // placing a thread, and two surfaces doing it independently is the same remark sitting
+  // placing a thread, and two apps doing it independently is the same remark sitting
   // against different code in the terminal and the browser.
   readonly hunk: number;
   readonly author: string;
@@ -204,7 +204,7 @@ export interface ReviewThread {
 //
 // A closed target always carries a reason - "no review provider wired", "no pull request for
 // this branch", a host that did not answer - and NONE of them is an error. The reader's
-// options are identical in all three, so the surface states the reason and moves on.
+// options are identical in all three, so the app states the reason and moves on.
 export interface ReviewInfo {
   // The review's identity in the provider's own terms, opaque here. A string rather than a
   // number, though GitHub and GitLab both count: Gerrit and Phabricator identify a change by a
@@ -219,14 +219,14 @@ export interface ReviewInfo {
   // the provider does not answer it, which reads as open.
   readonly state?: string;
   readonly reason?: string;
-  // verdicts are the verdicts this reviewer may publish, decided by the server. The surface
+  // verdicts are the verdicts this reviewer may publish, decided by the server. The app
   // renders exactly these and never works the permission out for itself: a rule re-implemented
   // in a browser is one that eventually disagrees with the one the publish path enforces.
   //
   // Absent means a server too old to have an opinion, which reads as remarks only.
   readonly verdicts?: readonly ReviewVerdict[];
   // verdict_limit says WHY the set is only remarks: your own change, or a provider that did not
-  // name either party. Different facts, and a surface that renders them alike misleads.
+  // name either party. Different facts, and an app that renders them alike misleads.
   readonly verdict_limit?: string;
   readonly threads: readonly ReviewThread[];
 }
@@ -263,7 +263,7 @@ import type { WireFile } from "./parse";
 
 export interface DiffResponse {
   // The changeset arrives PARSED. The server owns the reader, including the hunk digests a
-  // read receipt is keyed by, so this surface never hashes anything.
+  // read receipt is keyed by, so this app never hashes anything.
   readonly files: readonly WireFile[];
   // The same changeset as raw text. Unused here, and kept on the type because the route sends
   // it - a caller wanting the interchange format itself has it without a second request.
@@ -361,7 +361,7 @@ export type SessionOp =
 // mutate applies one op and returns the updated session.
 //
 // Failures RESOLVE to null rather than throwing. Every caller is a keypress handler, and a
-// review that threw because a cursor sync failed would take the whole surface down over
+// review that threw because a cursor sync failed would take the whole app down over
 // bookkeeping the reader never asked for. The local view is already correct; the server copy
 // catching up is best-effort.
 export async function mutate(
@@ -392,7 +392,7 @@ export async function mutate(
 // Its own request, made AFTER the diff is on screen. This is the one call that leaves the
 // machine, and a reader must never wait on somebody else's forge to see their own changes.
 //
-// Failure resolves to a closed target rather than throwing, matching the server: the surface
+// Failure resolves to a closed target rather than throwing, matching the server: the app
 // says the review could not be reached and stays a diff viewer, which is what it was before
 // any of this existed.
 export async function fetchReview(host: string, signal: AbortSignal): Promise<ReviewInfo> {

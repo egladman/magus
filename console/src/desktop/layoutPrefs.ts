@@ -2,7 +2,7 @@
 // with by USING the console rather than by opening Settings (a split they dragged, a zoom they
 // set, cards they folded away).
 //
-// They live together for one reason: the Settings surface exports and imports them as the
+// They live together for one reason: the Settings app exports and imports them as the
 // envelope's `layout` section, and it must not re-declare their storage keys and fallbacks to do
 // it. Two `persisted()` cells over one key are two sources of truth for its default, and they
 // drift the moment one side changes - so the owning module and the exporter share the cell

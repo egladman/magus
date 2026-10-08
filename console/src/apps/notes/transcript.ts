@@ -5,13 +5,13 @@
 // structured copy in frontmatter is a copy that drifts from the prose the moment anyone
 // touches either one.
 //
-// So the surface recovers the structure by parsing. That is safe HERE and nowhere else in
+// So the app recovers the structure by parsing. That is safe HERE and nowhere else in
 // this store: the format is magus's own output, and Note.source.kind says which format it is,
 // so this is a program reading back what it wrote rather than guessing at a person's prose. A
 // note without a source block is never fed to this.
 //
 // Every failure returns null and the caller falls back to printing the body verbatim, which
-// is what the surface did before this existed. A capture the parser does not recognize must
+// is what the app did before this existed. A capture the parser does not recognize must
 // still be READABLE; losing the boxes is a cosmetic regression, losing the transcript is not.
 
 // SUPPORTED_KINDS gates the parse. A kind minted by a newer magus reaches the fallback rather

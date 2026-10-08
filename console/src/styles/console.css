@@ -1,11 +1,11 @@
 /* console.css - the console-app-ONLY shell: the slim top app bar and its waffle app launcher,
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
-   server-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
+   server-facing apps (/dashboard/, /logs/, /graph/) - and the playground, which borrows
    the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
-   page loads; console.css holds only what is unique to the app surfaces. */
+   page loads; console.css holds only what is unique to the apps. */
 
 /* The shared sortable table (ui/table.ts). Bundled at build time, so it is inlined here. */
 @import "./table.css";
@@ -32,13 +32,13 @@
      the status bar - so the content read as a slab dropped into the window rather than part of it.
      Depth comes from the boundary instead: a hairline plus a soft cast where the chrome meets the
      content (see the title bar, the status bar and the outlet below). Those edges are the only place
-     a seam belongs - drawn WITHIN the chrome they would cut the continuous surface up again.
+     a seam belongs - drawn WITHIN the chrome they would cut the continuous chrome up again.
      Kept as a name rather than deleted because the padding pair below is what it feeds, and a literal
      0 in two places is the drift this name exists to prevent. */
   --console-shell-gutter: 0;
   /* The left navigation rail, collapsed and expanded. Collapsed is 2.75rem for the same reason the
      title bar is: every row is a tap target. Expanded stays deliberately narrow - the Graph Explorer
-     and the Diff surface open their OWN left sidebars inside the pane, and two wide left columns
+     and the Diff app open their OWN left sidebars inside the pane, and two wide left columns
      side by side is what the rail must not become. */
   --console-sidebar-w: 2.75rem;
   --console-sidebar-expanded-w: 11.5rem;
@@ -51,12 +51,12 @@
 }
 
 /* --- The shared empty state ---------------------------------------------------------------------
-   Every surface's cold state is the same shape: a PF EmptyState over a row of "ways" out of it - each a
+   Every app's cold state is the same shape: a PF EmptyState over a row of "ways" out of it - each a
    bordered card with a label, a command to run (or a button), and a hint. It lives HERE, in the sheet
-   every surface loads, because it belongs to all four. It used to be copy-pasted into logs.css and
+   every app loads, because it belongs to all four. It used to be copy-pasted into logs.css and
    graph.css, where the copies drifted: only one of them stacked on mobile, so the graph's prompt stayed
    two-up and unreadable on a phone. Worse, both sheets are global and never unloaded, so whichever
-   loaded last was silently styling the other surface's empty state anyway. */
+   loaded last was silently styling the other app's empty state anyway. */
 [data-empty-ways] {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem;
   /* auto side margins CENTER the capped-width grid in its block parent - without them it sat flush-left
@@ -112,7 +112,7 @@ body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
 }
 
 /* --- Collapsed toolbar overflow panel (the shared [data-overflow-panel] the toolbar.ts kebab fills).
-   Each surface already stretches the controls INSIDE a group, but nothing stretched the groups
+   Each app already stretches the controls INSIDE a group, but nothing stretched the groups
    themselves: PF's expandable content is a grid whose children size to their content, so on a phone
    the whole stack sat in a ~184px column centred in a 430px panel, with a third of the width dead on
    each side. Stretch at every level so the menu is one full-width column. --- */
@@ -207,12 +207,12 @@ body[data-console-fill] {
      it runs unbroken from the top of the window to the bottom, and the title bar, the content and the
      status bar all stack in the trailing column beside it. The macOS rule is that a single leading
      sidebar may run the full height and take that space from the titlebar; carrying it past the status
-     bar too is what makes the chrome read as one continuous surface wrapping the content rather than
+     bar too is what makes the chrome read as one continuous frame wrapping the content rather than
      three bars that happen to meet.
      The status bar is a grid ROW here rather than a fixed overlay, which is what lets the rail pass
      beside it - a fixed bar spans the window and would cut the rail off short. That is also why the
      height is the full 100svh now instead of the viewport minus a reserved strip.
-     With no rail in the document (a standalone surface page, or any width where it is hidden) the
+     With no rail in the document (a standalone app page, or any width where it is hidden) the
      leading column resolves to zero and the three rows behave exactly as the old column did. */
   height: 100svh;
   display: grid;
@@ -264,12 +264,12 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   margin: 0;
   position: relative; /* positioning context for the graph's absolute cold-state prompt */
 }
-/* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
+/* The same full-height chain for an app mounted as a CONSOLE TAB. The rules above key on
    `body[data-console-fill] > main > .app` (the standalone page's single <main>), but the console mounts a
-   surface deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
-   (div[data-pane-id]), and the surface's own <main> sits inside a pane. A tab may hold one pane or a
-   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach a surface
-   through the tile and its panes, or a canvas-height surface (the graph) or a cold empty state
+   app deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
+   (div[data-pane-id]), and the app's own <main> sits inside a pane. A tab may hold one pane or a
+   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach an app
+   through the tile and its panes, or a canvas-height app (the graph) or a cold empty state
    collapses to nothing. The tab-host rule is guarded :not([hidden]) so an inactive tab keeps its
    display:none (a bare display:flex would outweigh [hidden]). */
 #console-outlet-content > div[data-tab-id]:not([hidden]) {
@@ -290,8 +290,8 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
 #console-outlet div[data-tile-root] > div[data-split-id] { flex: 1 1 auto; }
 /* A split is a CSS grid; tileView sets the row/column template inline (from the split's ratio). */
 #console-outlet div[data-split-id] { display: grid; gap: 0; min-width: 0; min-height: 0; }
-/* A pane holds one surface (or the in-pane launcher). It fills its slot, scrolls internally, and is a
-   positioning + flex context so the surface's <main> and any absolute cold-state prompt lay out. */
+/* A pane holds one app (or the in-pane launcher). It fills its slot, scrolls internally, and is a
+   positioning + flex context so the app's <main> and any absolute cold-state prompt lay out. */
 #console-outlet div[data-pane-id] {
   position: relative;
   min-width: 0;
@@ -307,24 +307,24 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* Every pane insets its content. The inset is the pane's to give, not each surface's to remember:
-     this selector carries an id, so it beats any class a surface sheet can write, and a padding
+  /* Every pane insets its content. The inset is the pane's to give, not each app's to remember:
+     this selector carries an id, so it beats any class an app sheet can write, and a padding
      shorthand over there silently loses its inline longhands to it - which is how the Dashboard's
      headings ended up flush against the edge of a phone screen. Defaulting to a gutter means a
-     surface that declares nothing reads slightly wide, rather than reading as broken.
+     app that declares nothing reads slightly wide, rather than reading as broken.
      --console-pad, not a literal, so the inset tracks the same responsive step as the rest of the
      shell. The full-bleed exemption is the rule directly below. */
   padding-inline: var(--console-pad);
 }
-/* The shell's connect page, standing in a server surface's place (requireServer): centered in the
+/* The shell's connect page, standing in a server app's place (requireServer): centered in the
    pane, and scrolling with it when the ways outgrow a short pane. */
 #console-outlet div[data-pane-id] > [data-connect-page] {
   flex: 1 0 auto;
   padding-inline: var(--console-pad);
 }
-/* Full-bleed surfaces take the whole pane. These paint their own panel edge to edge and meet the
+/* Full-bleed apps take the whole pane. These paint their own panel edge to edge and meet the
    rail; a gutter would show page ground along that seam as a strip in a third colour. Keyed on the
-   panel the surface MOUNTS rather than a flag it sets, because a surface that mounts one of these
+   panel the app MOUNTS rather than a flag it sets, because an app that mounts one of these
    is structurally full-bleed - the same classes the rule below sizes, so one list decides both. */
 #console-outlet div[data-pane-id] > main:has(> .console-graph-app),
 #console-outlet div[data-pane-id] > main:has(> .console-render-panel) {
@@ -346,7 +346,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
      card around that view made tab switches change the outer silhouette (and, in dark mode, look
      like an arbitrary black frame). Dashboard, Diff, and Plan already own only their internal
      regions, so these two do the same when mounted here. Their standalone-page card fallback
-     remains in each surface sheet. */
+     remains in each app sheet. */
   border: 0;
   border-radius: 0;
 }
@@ -407,7 +407,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   scroll-behavior: auto !important;
 }
 
-/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in (a PF Gallery
+/* The in-pane launcher: a fresh split pane is empty and offers the apps to drop in (a PF Gallery
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
@@ -421,7 +421,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   --pf-v6-l-gallery--GridTemplateColumns--min: 17rem;
 }
 /* PF cards ship no border; the home launcher cards add a hairline (console-launcher-card). The compact
-   in-pane picker cards did not, so a split pane's surface picker looked flat and off-language. Match the
+   in-pane picker cards did not, so a split pane's app picker looked flat and off-language. Match the
    hairline + hover here so the two launchers read the same. */
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card {
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -613,7 +613,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    un-migrated log viewer injects its zoom control under; it folds in when logs migrates in W3.) */
 
 /* Help glyph: the small circular "?" beside a query/filter prompt. One shared shape (console-render-*,
-   loaded on every surface) so every console app's help affordance is an identical circle (the graph
+   loaded on every app) so every console app's help affordance is an identical circle (the graph
    query prompt, the log filter). box-sizing:border-box keeps width==height (a true circle) once the
    border is counted. */
 .console-render-help-glyph {
@@ -630,8 +630,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-render-help-glyph[hidden] { display: none; }
 
 /* Help popover: the click-to-toggle panel the shared "?" affordance (ui/help-popover.ts) opens. A hover
-   title= tooltip is invisible on touch, so every surface's "?" now opens this instead. position:fixed +
-   JS-clamped coordinates so it never spills off a phone screen; z-index above the surface chrome/canvas
+   title= tooltip is invisible on touch, so every app's "?" now opens this instead. position:fixed +
+   JS-clamped coordinates so it never spills off a phone screen; z-index above the app chrome/canvas
    but below the app-level modals (cheatsheet/commands sit at z 400). */
 .console-help-popover {
   position: fixed;
@@ -646,7 +646,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-help-popover__body { margin: 0; font-size: 0.8rem; line-height: 1.45; }
 
-/* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
+/* ---- Console app: the tabbed frame that hosts apps --------------------------------------
    Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
    #console-tabs, #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] /
    element selectors under them. Styled against PatternFly tokens (not PF component classes). All tab
@@ -672,9 +672,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* The CONTENT tone, not the chrome tone. A tab is contiguous with the page it shows - that is the
      whole browser-tab metaphor - and it cannot be, on a strip painted the same colour as the rail:
      the active tab was a white island in a grey band that then met a white page at a seam. Painting
-     the strip itself the content colour makes the tab row and the page below it ONE surface, which
+     the strip itself the content colour makes the tab row and the page below it ONE plane, which
      is what the metaphor was always claiming. The frame is now just the rail and the status bar,
-     wrapping that surface on two sides.
+     wrapping that plane on two sides.
      Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
      the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
      advancing. Same logic, opposite assignment, because the ground moved out from under it.
@@ -757,7 +757,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
      a phone's height is worth more than the effect. */
   #console-outlet { padding-block: 0; }
-  /* Widen the PANE to the bezel once a surface is mounted. The pane's own 0.4rem keeps its content
+  /* Widen the PANE to the bezel once an app is mounted. The pane's own 0.4rem keeps its content
      off the glass - only the shell's 0.6rem goes, so this buys 19px of width without pushing
      anything flush. The LAUNCHER keeps the shell gutter (data-no-tabs): it has no pane, and its
      cards want the page grey around them.
@@ -926,7 +926,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    this rather than caused it. */
 /* INACTIVE tabs carry the fill, the current one does not: the strip is the content colour now (see
    #console-titlebar), so it is the tabs you are NOT looking at that have to step back off the page.
-   Transparent here would leave every tab flush with the surface and the active one unmarked. */
+   Transparent here would leave every tab flush with the page and the active one unmarked. */
 #console-tabs .pf-v6-c-tabs__item { background: var(--console-chrome); }
 /* One hairline per tab, on the TRAILING edge only. Not a `:not(:last-child)` separator: the closing
    line past the last tab is wanted, so the run ends somewhere definite instead of trailing off into
@@ -973,7 +973,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    the change focused. Revisit tab overflow scrolling as its own task (see tabBar.ts). */
 
 /* The outlet is the PatternFly Drawer host (#console-refdrawer inside it); the drawer fills the
-   main region, its __content (#console-outlet-content) holds one mounted surface per open tab (a
+   main region, its __content (#console-outlet-content) holds one mounted app per open tab (a
    div[data-tab-id], only the active shows), and its __panel is the Reference panel. */
 /* ROW explicitly: `body[data-console-fill] > main` sets flex-direction:column for the standalone
    single-card pages, and the outlet inherits that rule. It did not matter while the outlet had one
@@ -981,8 +981,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet {
   flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
 }
-/* Everything that describes the EDGE of the content surface lives on the frame, because the frame is
-   that surface. Held on the outlet instead, all three stopped at the outlet's top and left the tab
+/* Everything that describes the EDGE of the content area lives on the frame, because the frame is
+   that area. Held on the outlet instead, all three stopped at the outlet's top and left the tab
    strip above them outside the shape they were describing.
    The cast: LEFT and DOWN only, two directional tokens rather than the even --sm. Upward the frame's
    neighbour is the window edge, and the tab strip inside it is contiguous with its own content, so
@@ -1007,7 +1007,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    a phone screen. Change that breakpoint and this one moves with it.
    The large token doubled: at 9px the curve reads as a rendering artefact, at 18px as a decision. */
 @media (min-width: 48rem) {
-  /* One border and one corner for the whole surface, on the frame. Both mark the boundary with the
+  /* One border and one corner for the whole content area, on the frame. Both mark the boundary with the
      RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
      edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
      nothing on the far side of it while the corner bit a notch out of the content.
@@ -1022,7 +1022,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      out of square chrome, so the content's own corner is the one that rounds. It briefly moved to
      the footer because the cutout exposed the page ground as a dark notch - but that was the
      ground's defect, fixed above by painting the body in the chrome tone the curve reveals. The
-     frame's existing overflow:hidden clips the surface inside the curve. */
+     frame's existing overflow:hidden clips the app inside the curve. */
   #console-frame {
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
   }
@@ -1041,7 +1041,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     z-index: 22;
   }
 }
-/* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
+/* The content CARD - the only curved thing in the shell, and the one element that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
    It is the DRAWER that carries this, not #console-outlet: the outlet holds the shell gutter as
    padding, so painting the card there put the gutter INSIDE the card and left a ring of card color
@@ -1060,7 +1060,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
 /* --- The left navigation rail (#console-sidebar, sidebar.ts) -------------------------------------
    A PF Nav docked at the outlet's left edge, bracketing the tab content against the Reference panel
-   on the right. It is a flex sibling of the Drawer rather than a fixed overlay, so the surfaces
+   on the right. It is a flex sibling of the Drawer rather than a fixed overlay, so the apps
    reflow around it exactly as they already do for a pinned Reference panel - nothing is painted over.
 
    Collapsed (no [data-expanded]) it is an icon strip; expanded it grows to show labels. The width is
@@ -1075,7 +1075,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* --console-chrome, not the raw secondary token, because the rail is the third face of the one
      continuous frame the title bar and status bar make. Those two moved to --console-chrome when the
      dark ground was corrected; the rail did not, so in dark it sat at #151515 between two bars at
-     #242424 - a seam down the left edge of exactly the surface that is meant not to have one. */
+     #242424 - a seam down the left edge of exactly the frame that is meant not to have one. */
   background: var(--console-chrome);
   transition: width 0.14s ease;
   /* PF centers a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
@@ -1105,7 +1105,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   --pf-v6-c-nav__link--ColumnGap: var(--pf-t--global--spacer--sm);
 }
 /* align-content:start because PF's nav list is a GRID: growing it to fill the rail (so it is the part
-   that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
+   that scrolls when the apps outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
 #console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; }
 /* ...but only the DESTINATIONS scroll. The two control groups are flex:0 0 auto above, so a rail with
@@ -1153,7 +1153,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
    the same place whether six lenses are listed or sixteen. The rail's other hairline, separating the
-   surfaces from the controls; the pool reading above it deliberately has none. */
+   apps from the controls; the pool reading above it deliberately has none. */
 #console-sidebar [data-rail-utility] {
   flex: 0 0 auto; overflow: visible;
   padding-block-start: 0;
@@ -1214,7 +1214,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
   content: ""; position: absolute; inset-inline-start: 0; inset-block: 0; inline-size: 3px;
 }
-/* OPEN somewhere else: this surface has a tab, but it is not where you are. Deliberately QUIET - it
+/* OPEN somewhere else: this app has a tab, but it is not where you are. Deliberately QUIET - it
    answers "is it already open" and nothing more, so it should be findable when looked for and
    invisible when not. It used to take the subtle ICON tone, which is #a3a3a3 on the dark chrome and
    read nearly as loudly as the current row. The border tone is the right weight: it is the same value
@@ -1275,7 +1275,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    wants centering in the icon column at both widths. */
 #console-sidebar #console-sidebar-toggle { cursor: pointer; }
 /* No rail on a phone. Even collapsed it is a permanent 44px bite out of a screen that is already
-   giving two rows to the title bar, and every surface it navigates to is one tap away in the
+   giving two rows to the title bar, and every app it navigates to is one tap away in the
    Applications menu on that bar. This has to sit AFTER the rail's own display:flex rather than with
    the other phone rules further up: both selectors are a single id, so the later one wins. */
 @media (max-width: 47.999rem) {
@@ -1291,8 +1291,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (min-width: 48rem) {
   #console-appmenu-btn, #console-appmenu { display: none; }
   /* The settings gear goes too, and for a sharper reason than mere redundancy: Settings is a
-     DESTINATION - it opens as a surface like any other - and destinations belong to the navigation
-     surface, not the toolbar (Apple's HIG draws exactly this line; a toolbar carries actions). The
+     DESTINATION - it opens as an app like any other - and destinations belong to the navigation
+     app, not the toolbar (Apple's HIG draws exactly this line; a toolbar carries actions). The
      rail already lists it, so the gear was the same cog twice on one screen, which is what VS Code's
      own activity-bar guidance names outright: "Don't duplicate an existing icon."
      Below this width the rail is gone and the gear is the only way in, so it comes back. */
@@ -1311,7 +1311,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet-content > div[hidden] { display: none; }
 
 /* Launcher empty state (data-app=home): the heading + lede layout, and the PatternFly Gallery
-   of clickable Cards (home.ts) - no custom card/grid CSS. Unlike a surface tab (which paints its own
+   of clickable Cards (home.ts) - no custom card/grid CSS. Unlike an app tab (which paints its own
    panels over the outlet), the launcher is the outlet's empty state and fills it edge to edge, so it
    supplies the page background itself (the PF primary page token, theme-aware light/dark) - otherwise
    its themed dark-on-light text would sit on the app's dark outlet and vanish in light mode. It takes
@@ -1320,12 +1320,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    screen. Above it the gallery retires (see the breakpoint below) and the two ways-cards that replace it
    are secondary-filled, so the ground goes primary-white there: grey-on-grey left the ways-cards reading
    as bare outlines, and it made the empty state the same tone as the rail, the title bar, and the status
-   bar - one continuous slab of chrome with no content surface anywhere in the window. */
-/* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
+   bar - one continuous slab of chrome with no content area anywhere in the window. */
+/* Fill the outlet so the launcher's background covers the whole panel - otherwise the panel stops
    at its content height and the page shows through below it, reading as two different backgrounds.
    A small inset from the outlet edges plus a generous radius (larger than the card tiles' container
    radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
-   surface floating in the outlet rather than a flush square fill. The radius is built from the large
+   panel floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
 /* The launcher column is CENTERED in a wide window rather than pinned to the left edge: left-aligned it
    left roughly two thirds of a desktop window empty with the cards huddled in one corner, which reads as
@@ -1504,7 +1504,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 
 /* The workspace's sigil, above the heading. Tinted by the inline color sigil.ts sets, so the mark
-   takes the workspace's hue the way every launcher card takes its surface's.
+   takes the workspace's hue the way every launcher card takes its app's.
    It sits in a MEDALLION rather than loose on the page: as a bare line drawing it read as something
    that had come adrift, because nothing on this screen bounds it and it is the only drawn thing on it.
    The disc is the workspace's own hue at low alpha, so the container is part of the mark rather than a
@@ -1662,7 +1662,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .pf-v6-c-menu__item:hover .console-appmenu__ext-icon { color: inherit; }
 
-/* App mode: a dedicated single-surface window (index.html?app=<id>). The tab bar is meaningless
+/* App mode: a dedicated single-app window (index.html?app=<id>). The tab bar is meaningless
    there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
    (app drawer, reference, settings), reading as native chrome. main.ts sets data-appmode on the root. */
 :root[data-appmode] #console-tabs { display: none; }
@@ -1690,8 +1690,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   display: flex; flex-direction: column; gap: 0.15rem;
   padding: 1.15rem 1.25rem;
   /* Set PF's OWN card background variable (a plain `background` here loses to .pf-v6-c-card, so the card
-     fell back to the near-page default grey) to the FLOATING/elevated surface token: each card is a
-     genuinely lighter tile than the page - white on the grey page in light, a raised surface in dark. */
+     fell back to the near-page default grey) to the FLOATING/elevated background token: each card is a
+     genuinely lighter tile than the page - white on the grey page in light, a raised tile in dark. */
   --pf-v6-c-card--BackgroundColor: var(--pf-t--global--background--color--floating--default);
   /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds - it is
      what reads as separation on the low-contrast dark card, and the hover tints it to the card's hue. */
@@ -1709,7 +1709,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   transform: translateY(-3px);
   border-color: var(--card-accent);
   /* Only the BORDER tints to the card's hue; the ground stays neutral - a slight step off the floating
-     card surface (a touch darker in light, a touch lighter in dark), never the accent color washing it. */
+     card background (a touch darker in light, a touch lighter in dark), never the accent color washing it. */
   background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 6%, var(--pf-t--global--background--color--floating--default));
 }
 @media (hover: hover) {
@@ -1806,7 +1806,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-app="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; animation-delay: calc((sibling-index() - 1) * 50ms + 20ms); }
 @keyframes console-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
 
-/* One-shot "living" icon micro-motions on hover - each surface's glyph animates ONCE, in character, and
+/* One-shot "living" icon micro-motions on hover - each app's glyph animates ONCE, in character, and
    settles. data-motion on a single inner element (or the icon slot, for the gear and the note) picks the
    motion. All under 250ms-ish, none loop. Disabled under reduced-motion (below). */
 @media (hover: hover) {
@@ -1991,7 +1991,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   background: color-mix(in srgb, var(--pf-t--color--orange--60) 14%, transparent);
 }
 /* Unpinned = OVERLAY. Pinning adds pf-m-inline (ref-drawer.ts), which lets PF inset the __content so
-   the surfaces reflow narrower (snap-to-fit). Unpinned drops pf-m-inline; PF's CSS-only non-inline
+   the apps reflow narrower (snap-to-fit). Unpinned drops pf-m-inline; PF's CSS-only non-inline
    drawer then parks the expanded panel off the right edge (the __content yields no width), so dock it
    like the notification panel instead (#console-shell-notify in overrides.css): position: fixed,
    clearing the top chrome and the status bar explicitly, right-docked - a quick peek that floats over
@@ -2058,7 +2058,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-refclose .pf-v6-c-button__icon,
 #console-refbreakout .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 
-/* The reference surface (the drawer's "break out to tab" target): the same dense, legible help styling
+/* The reference app (the drawer's "break out to tab" target): the same dense, legible help styling
    the drawer body uses, in a scrolling, width-capped column so a wide/tiled pane stays readable. */
 #console-outlet [data-app="reference"] { height: 100%; overflow: auto; padding: 1rem 1.25rem; }
 #console-outlet [data-app="reference"] .console-shell-refdrawer__body { max-width: 46rem; font-size: 0.85rem; line-height: 1.5; }
@@ -2164,14 +2164,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Shortcuts app (apps/shortcuts/main.ts, data-app="shortcuts"): a first-class tab listing EVERY registered
    command, grouped by area - the token, the prose label, and the chord when one is bound. Reuses the
    keyboard cheat sheet's group/kbd chrome (it is the same row shape, just in a tab instead of a
-   modal); only the three-column row grid and the page frame are authored here. Frames the surface as
+   modal); only the three-column row grid and the page frame are authored here. Frames the app as
    a single scrolling column, same idiom as the Settings page: the pane host already supplies height
    and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
 #console-outlet [data-app="shortcuts"] {
   height: 100%; overflow-y: auto; display: flex; flex-direction: column;
   gap: 1.25rem; padding-block: 1.5rem 2.5rem; padding-inline: var(--console-pad);
 }
-/* The banner: a bordered callout leading the surface, replacing the old read-only lede now that a row
+/* The banner: a bordered callout leading the app, replacing the old read-only lede now that a row
    both runs and (for a rebindable command) edits. The Edit-keybindings button sits at the trailing edge
    so the callout reads as "here's what this page does, and here's the one related control". */
 .console-shortcuts__banner {
@@ -2198,7 +2198,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* Zebra band on alternate rows: the log viewer's readability trick. On these wide lines the token and
    its chord can sit far apart; a faint alternating fill keeps the eye on one row across the gap. Subtle
-   (the secondary surface token) and theme-aware, so it never fights the text. */
+   (the secondary background token) and theme-aware, so it never fights the text. */
 .console-commands-row:nth-child(odd) { background: var(--pf-t--global--background--color--secondary--default); }
 /* Hover is ONE colour on every row, and it is mixed over the ZEBRA tone rather than over transparent.
    Over transparent it composited against whatever the row already had, so hovering a banded row swapped
@@ -2243,7 +2243,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 
 /* Keybindings deep-link highlight: openKeybindings (main.ts) stamps this on the targeted
-   [data-krow] when the Actions surface's per-row "edit shortcut" sends the operator here, then clears
+   [data-krow] when the Actions app's per-row "edit shortcut" sends the operator here, then clears
    it after ~1.2s - the transition below is what makes that clear read as a FADE rather than a cut. The
    base [data-krow] rules live in overrides.css (it owns the keybindings grid); this only adds the
    transition + the highlighted-state paint, so it is additive regardless of sheet load order. */
@@ -2256,8 +2256,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
 
 /* ---- the zoom stepper (console/zoomControl.ts) ----------------------------------------------
-   Shared chrome, so it lives here rather than in any one surface's sheet: the log viewer and the
-   Plan surface both dock it in the status bar, and a copy per surface is how two controls that
+   Shared chrome, so it lives here rather than in any one app's sheet: the log viewer and the
+   Plan app both dock it in the status bar, and a copy per app is how two controls that
    should be identical drift apart. */
 .console-zoom {
   display: inline-flex; align-items: center; gap: 0.1rem; margin: 0;

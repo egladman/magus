@@ -132,7 +132,7 @@ test("the close button is named after the tab's current document", () => {
 });
 
 // The bar binds to the workspace cell, so a rename elsewhere (the console retitling a tab after its
-// surface opened something) has to reach the DOM without anyone re-rendering by hand.
+// app opened something) has to reach the DOM without anyone re-rendering by hand.
 test("renaming a tab in the workspace re-renders the bar", () => {
   const ws = cell({ tabs: [tab("t1", "Log Viewer")], activeId: "t1" });
   const bar = createTabBar(ws, noop);

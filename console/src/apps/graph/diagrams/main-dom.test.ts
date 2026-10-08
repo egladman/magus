@@ -1,4 +1,4 @@
-// main-dom.test.ts - the Diagrams surface mounted against a fake server, and the runtime's
+// main-dom.test.ts - the Diagrams app mounted against a fake server, and the runtime's
 // program. Pinned here:
 //
 //   - THE STATIC RENDER IS THE PAGE. The server's SVG is inline, linked and listed as soon as it
@@ -156,7 +156,7 @@ async function settle(turns = 12): Promise<void> {
 
 // The hooks live in a suite: the dom tests share one process, where a top-level hook would run
 // around every other file's tests too (and theirs around ours, which is why these run after).
-describe("the Diagrams surface", () => {
+describe("the Diagrams app", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();

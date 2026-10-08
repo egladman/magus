@@ -2,7 +2,7 @@
 // current chord, grouped by area. It reads the live command list + merged keymap, so it always shows
 // the effective bindings. Open it by holding "?" (Shift+/) or the footer button; dismiss with the X,
 // a click on the backdrop, or Escape. It is read-only - the keybinding editor (keybindings.ts) is the
-// surface that rebinds and persists.
+// app that rebinds and persists.
 
 import { formatChord, type Command, type Keymap } from "./commands";
 import { h } from "./view";
@@ -58,7 +58,7 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const foot = h(
     "p",
     "console-cheatsheet-box__hint",
-    // Points at Shortcuts, not the Palette: rebinding is what that surface does (each row jumps to the
+    // Points at Shortcuts, not the Palette: rebinding is what that app does (each row jumps to the
     // keybindings editor) and what the Palette, which only runs a command, cannot.
     "Press Esc or click outside to dismiss. Open Shortcuts to rebind.",
   );
@@ -83,10 +83,10 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
     const keymap = deps.keymap();
     const groups = new Map<string, { label: string; chord: string }[]>();
     for (const cmd of deps.commands()) {
-      // A surface-local key WINS over a keymap entry for the same id, which is the opposite
+      // An app-local key WINS over a keymap entry for the same id, which is the opposite
       // of what it looks like it should do.
       //
-      // The surface dispatches these itself, from its own table, and never consults the
+      // The app dispatches these itself, from its own table, and never consults the
       // keymap - so a keymap entry for one of them changes nothing. Preferring the keymap
       // here would print a chord that does not work, which is worse than printing nothing:
       // this sheet's whole job is to say what will happen when you press something.

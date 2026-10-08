@@ -53,10 +53,10 @@ describe("the workspace scope control", () => {
     assert.equal(wrap.hidden, false);
   });
 
-  // The six per-surface "See the demo" buttons are gone; this row is the only way in.
+  // The six per-app "See the demo" buttons are gone; this row is the only way in.
   //
   // Named after the WORKSPACE it opens and tagged "demo" - not called "Demo data" and tagged
-  // "sample", which named neither. Every surface's empty state tells a reader to look for this name,
+  // "sample", which named neither. Every app's empty state tells a reader to look for this name,
   // so the row and the hints have to agree or the instruction sends them hunting for a row that is
   // not there.
   test("the menu offers the demo under the name it lands you in", () => {
@@ -130,7 +130,7 @@ describe("the workspace scope control", () => {
     assert.equal(workspaceScope(), MAGUS);
   });
 
-  // The scope can change from anywhere in the tab - the Connect screen, another surface - and a control
+  // The scope can change from anywhere in the tab - the Connect screen, another app - and a control
   // that only wrote would keep announcing the workspace you left.
   test("the control follows a scope set somewhere else", () => {
     const { picker, btn } = mount();

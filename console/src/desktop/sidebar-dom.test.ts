@@ -37,10 +37,10 @@ function link(host: HTMLElement, pageId: string): HTMLButtonElement {
   return el;
 }
 
-test("renders one PF nav row per surface", () => {
+test("renders one PF nav row per app", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  // Count SURFACE rows, not nav items: the collapse control is a row of the same kind and would
-  // otherwise be counted as a surface that does not exist.
+  // Count APP rows, not nav items: the collapse control is a row of the same kind and would
+  // otherwise be counted as an app that does not exist.
   assert.equal(host.querySelectorAll("[data-rail-app]").length, 3);
   assert.equal(link(host, "dashboard").querySelector("svg") != null, true);
   assert.equal(
@@ -86,13 +86,13 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
   }
 });
 
-test("clicking a row asks the console to open that surface", () => {
+test("clicking a row asks the console to open that app", () => {
   const { host, opened } = mount({ tabs: [], activeId: null });
   link(host, "logs").click();
   assert.deepEqual(opened, ["logs"]);
 });
 
-test("the focused surface is current, an open one is only marked open", () => {
+test("the focused app is current, an open one is only marked open", () => {
   const { host } = mount(
     {
       tabs: [
@@ -258,8 +258,8 @@ test("the reading follows the pool and the rail's own width", () => {
   assert.equal(el.dataset.state, "queued");
 });
 
-// A meta surface belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
-// and macOS sidebars both use. The flag lives on the surface list so the rail is not a second place
+// A meta app belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
+// and macOS sidebars both use. The flag lives on the app list so the rail is not a second place
 // deciding what counts as utility.
 test("utility apps are pinned in their own group", () => {
   const { host } = mount({ tabs: [], activeId: null });

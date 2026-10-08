@@ -1,6 +1,6 @@
-// badges.ts - the counts the navigation rail hangs on a surface's row. One reading per surface, read
-// on the shell's existing readiness interval, so a rail row can say how much is waiting in a surface
-// without that surface's tab being open.
+// badges.ts - the counts the navigation rail hangs on an app's row. One reading per app, read
+// on the shell's existing readiness interval, so a rail row can say how much is waiting in an app
+// without that app's tab being open.
 //
 // Diff is the only one today, and deliberately: a badge earns its place when the number MOVES and the
 // magnitude changes what you do (twelve changed files is a different afternoon from three). A count
@@ -22,7 +22,7 @@ const routeless = new Set<string>();
 // legibility; past this the exact figure has stopped informing the decision anyway.
 export const BADGE_MAX = 99;
 
-// One surface's reading: how many, and what they ARE. The noun exists because the rail row's
+// One app's reading: how many, and what they ARE. The noun exists because the rail row's
 // aria-label overrides its own contents, so a badge rendered as bare text is silent to a screen
 // reader - the row has to fold the count into its name, and "Diff, 12" says less than it should.
 export interface Badge {

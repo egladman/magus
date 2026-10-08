@@ -120,7 +120,7 @@ test("stats exclude generated files from the count", () => {
   assert.equal(s.deletions, 2);
 });
 
-test("stats count public surface", () => {
+test("stats count public API files", () => {
   const cs = order(
     [file("a.ts"), file("b.ts")],
     session([ann("a.ts", { visibility: "public" }), ann("b.ts", { visibility: "internal" })]),
@@ -160,7 +160,7 @@ test("risk chips state facts and name the API", () => {
   );
   assert.deepEqual(
     chips.map((c) => c.text),
-    ["public surface", "43 referents", "62% covered"],
+    ["public API", "43 referents", "62% covered"],
   );
   assert.match(chips[0]?.title ?? "", /Open/);
 });
@@ -192,7 +192,7 @@ test("removed and re-signed public symbols each earn a chip", () => {
   );
   assert.deepEqual(
     chips.map((c) => c.text),
-    ["public surface", "1 removed", "1 re-signed"],
+    ["public API", "1 removed", "1 re-signed"],
   );
   assert.equal(chips[1]?.tone, "danger");
   assert.match(chips[1]?.title ?? "", /Close/);

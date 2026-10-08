@@ -117,7 +117,7 @@
   --demo-accent-strong: #0a5a54;
   --demo-accent-bg: #e6f2f0;
 
-  /* Syntax tokens (muted, all >=4.5:1 on the code surface). */
+  /* Syntax tokens (muted, all >=4.5:1 on the code background). */
   /* comment/keyword/string nudged down from #636d76 / #715bb0 / #3d7a50 so they clear AA on the
      console diff's tinted rows, which share this palette (syntax-palette.test.ts pins them equal).
      1-5% toward black, hue preserved - the docs' own code blocks read identically. */
@@ -193,7 +193,7 @@
     --term-plain-ok: #7fc48d;
 
     /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
-       dark surface while the light body text on top stays legible. Must be repeated here,
+       dark background while the light body text on top stays legible. Must be repeated here,
        not only under [data-theme="dark"]: .glossary-term sets a background and inherits
        its foreground, so an OS-dark visitor who never touched the theme toggle would
        otherwise get the parchment fill from the light block under near-white body text. */
@@ -201,13 +201,13 @@
     --glossary-highlight-strong: rgba(216, 184, 84, 0.33);
     --glossary-highlight-rule: rgba(216, 184, 84, 0.55);
 
-    /* Demo callout accent (dark): a lighter teal that reads on the dark surface. */
+    /* Demo callout accent (dark): a lighter teal that reads on the dark background. */
     --demo-accent: #4bb5aa;
     --demo-accent-strong: #7fd3c9;
     --demo-accent-bg: rgba(75, 181, 170, 0.12);
 
     /* comment lifted from #838e98: it was 4.36:1 on the dark code ground, under AA before the diff
-       surface's row tint even touched it. The console pins its own palette to these tokens
+       app's row tint even touched it. The console pins its own palette to these tokens
        (syntax-palette.test.ts), so the two move together or the build fails. */
     --syn-comment: #9da6ae;
     --syn-keyword: #b79ae6;
@@ -216,7 +216,7 @@
     --syn-function: #7fb2e6;
     --syn-type: #64c1cd;
     --syn-operator: #9aa4af;
-    --syn-removed: #f0a3a0; /* lighter red so a removed line stays legible on the dark surface */
+    --syn-removed: #f0a3a0; /* lighter red so a removed line stays legible on the dark background */
   }
 }
 
@@ -281,12 +281,12 @@
   --term-plain-ok: #7fc48d;
 
   /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
-     dark surface while the light body text on top stays legible. */
+     dark background while the light body text on top stays legible. */
   --glossary-highlight: rgba(216, 184, 84, 0.20);
   --glossary-highlight-strong: rgba(216, 184, 84, 0.33);
   --glossary-highlight-rule: rgba(216, 184, 84, 0.55);
 
-  /* Demo callout accent (dark): a lighter teal that reads on the dark surface. */
+  /* Demo callout accent (dark): a lighter teal that reads on the dark background. */
   --demo-accent: #4bb5aa;
   --demo-accent-strong: #7fd3c9;
   --demo-accent-bg: rgba(75, 181, 170, 0.12);
@@ -327,7 +327,7 @@ article a:visited:hover {
 /* ---- Syntax highlighting (highlight.js token classes) --------------------
    Only the JS is pulled from the CDN; the palette is ours, driven by the
    --syn-* variables above so it tracks light/dark with everything else. The
-   base .hljs is transparent, inheriting Pico's code surface and text color. */
+   base .hljs is transparent, inheriting Pico's code background and text color. */
 .hljs {
   color: var(--pico-code-color);
   background: transparent;
@@ -363,7 +363,7 @@ article a:visited:hover {
    colors, so an added line reads green and a removed line red at a glance. highlight.js
    wraps each whole line in .hljs-addition / .hljs-deletion; display:block makes the tint
    fill the line, and the translucent backgrounds sit legibly on both the light and dark
-   code surface. --syn-string is already the green; --syn-removed adds the red. */
+   code background. --syn-string is already the green; --syn-removed adds the red. */
 .hljs-addition,
 .hljs-deletion {
   display: block;

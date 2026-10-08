@@ -1,4 +1,4 @@
-// demo.test.ts - the sample notes the Notes surface shows without a server. demoNotes is pure
+// demo.test.ts - the sample notes the Notes app shows without a server. demoNotes is pure
 // and DOM-free, so it runs directly under node. Run: `magus run test console`.
 
 import { test } from "node:test";
@@ -7,8 +7,8 @@ import { AnchorStatus, Scope, Staleness } from "@wire/notes/v1alpha1/notes_pb";
 import { demoNotes } from "./demo";
 
 // A demo of five healthy notes shows nothing the empty state did not. These four properties are
-// what makes it a demo of the SURFACE rather than a screenshot of a list.
-test("the sample set exercises what the surface renders", () => {
+// what makes it a demo of the APP rather than a screenshot of a list.
+test("the sample set exercises what the app renders", () => {
   const { notes, stores } = demoNotes();
 
   assert.deepEqual(
@@ -37,7 +37,7 @@ test("the sample set exercises what the surface renders", () => {
   assert.ok(staleness.has(Staleness.PETRIFIED), "a petrified note");
 });
 
-// Every card renders these, and a blank one reads as a broken surface rather than as sample data.
+// Every card renders these, and a blank one reads as a broken app rather than as sample data.
 test("every sample note is renderable", () => {
   const { notes, body } = demoNotes();
   assert.ok(notes.length > 0);
@@ -69,9 +69,9 @@ test("body resolves by name and is empty for an unknown one", () => {
 });
 
 // The sample notes belong to ACME, the workspace every other showcase inhabits, and to the same
-// change those surfaces are showing. They did not before: they were notes about magus's own cache
+// change those apps are showing. They did not before: they were notes about magus's own cache
 // and lockfile, so a reader who clicked from Diff to Notes met a different fictional company one
-// tab over. Each surface was coherent and the product was not.
+// tab over. Each app was coherent and the product was not.
 //
 // Pinned by ANCHORS rather than by prose, because an anchor is what the reader can follow: a note
 // anchored to libs/authkit is one they can carry to the Graph Explorer and find.
@@ -79,7 +79,7 @@ test("the sample notes inhabit the same workspace as every other showcase", () =
   const { notes } = demoNotes();
   const targets = notes.flatMap((n) => n.anchors.map((a) => a.target));
 
-  // The story's shared library and its two downstream consumers, by the names the Diff surface,
+  // The story's shared library and its two downstream consumers, by the names the Diff app,
   // the run tree and the activity trail all use.
   assert.ok(
     targets.includes("libs/authkit"),

@@ -2,13 +2,13 @@
 //
 // SESSION storage, not local: the scope belongs to the BROWSER TAB, so two tabs can sit in two
 // workspaces at once and neither moves when the other switches. That is the whole point of scoping by
-// tab rather than by a control on one surface - you pick a workspace the way you pick an account, and
+// tab rather than by a control on one app - you pick a workspace the way you pick an account, and
 // everything in that tab answers for it.
 //
-// The shell and each surface are SEPARATE BUNDLES with their own module instances, so a module-level
+// The shell and each app are SEPARATE BUNDLES with their own module instances, so a module-level
 // variable set by one is invisible to the others. Both halves therefore read the same sessionStorage
 // key, and a change is announced with a window event: same-tab writes do not fire `storage`, so
-// without the event a surface would never learn the shell had switched.
+// without the event an app would never learn the shell had switched.
 //
 // The empty string means "every workspace this server has loaded" - the server-wide view, and the
 // default. It is a real choice rather than an absence: with one workspace loaded, scoped and unscoped
@@ -39,7 +39,7 @@ export function setWorkspaceScope(root: string): void {
 
 // Which workspaces the server has loaded, announced by whoever learned it first.
 //
-// The shell polls GetStatus every 15s, but a SURFACE often knows sooner and more reliably: the
+// The shell polls GetStatus every 15s, but an APP often knows sooner and more reliably: the
 // dashboard holds an open status stream, and in the offline demo it is the only thing that knows at
 // all, because there is no server to poll. So the list is published rather than owned - the shell's
 // scope picker builds its menu from whatever arrives, from either source.
@@ -62,7 +62,7 @@ export function onWorkspaces(fn: (roots: string[]) => void): () => void {
 }
 
 // onWorkspaceScope subscribes to changes made ANYWHERE in this browser tab - the shell's selector, or
-// a surface that offers its own way in. Returns an unsubscribe.
+// an app that offers its own way in. Returns an unsubscribe.
 export function onWorkspaceScope(fn: (root: string) => void): () => void {
   const handler = (e: Event): void => {
     fn(e instanceof CustomEvent && typeof e.detail === "string" ? e.detail : workspaceScope());

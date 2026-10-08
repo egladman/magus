@@ -537,7 +537,7 @@ export function attentionTile(): Tile {
   // requestRow draws one open request: what to close, how long it has waited, what kind of block
   // it is, the paths the event named, and the first line of what the agent said.
   //
-  // The id is shown in full and in mono, because it is the handle for the OTHER surface: a
+  // The id is shown in full and in mono, because it is the handle for the OTHER app: a
   // person reading this tile on a shared screen closes the request from their terminal with
   // `magus session dispose <id>`, and a truncated id cannot be typed.
   //
@@ -618,7 +618,7 @@ export function attentionTile(): Tile {
 
   // disposeControl is the button and the one-line reason composer behind it.
   //
-  // A composer rather than a prompt(): the diff surface settled this for the same act. A
+  // A composer rather than a prompt(): the diff app settled this for the same act. A
   // prompt() steals focus from the page, cannot show WHICH request is being closed, and hides
   // the message the reason is about while it is being typed. The composer sits in the row.
   //
@@ -686,7 +686,7 @@ export function attentionTile(): Tile {
     if (res.kind === "ok") {
       showToast("Attention", "Disposed " + req.id + ".", "ok");
       // Re-read rather than dropping the row locally: another worktree may have closed
-      // something else in the meantime, and the store is what every surface agrees on.
+      // something else in the meantime, and the store is what every app agrees on.
       lastRead = 0;
       refresh();
       return;

@@ -9,7 +9,7 @@
  *
  * They are COPIED rather than imported, and that is the wart: docs/ and console/ are separate
  * pnpm projects with separate bundles, and docs/package.json states the boundary outright
- * ("the console surfaces ... own their bundles now"). Extracting one shared palette both can
+ * ("the console apps ... own their bundles now"). Extracting one shared palette both can
  * read is the right fix and is a bigger change than this one; until then, these two lists have
  * to be edited together, and syntax-palette.test.ts (this directory) reads both files and
  * fails the build if they stop agreeing. */
@@ -17,10 +17,10 @@
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
   --console-diff-bg: var(--pf-t--global--background--color--primary--default, #ffffff);
-  /* The surface's chrome plane - sidebar, toolbar, peek panel. --console-chrome rather than the raw
+  /* The app's chrome plane - sidebar, toolbar, peek panel. --console-chrome rather than the raw
      secondary token so this joins the shell's frame instead of sitting a plane below it: in dark the
      raw token is #151515 against a rail and title bar at #242424, which drew a seam exactly where the
-     surface meets the shell. Identical to the old value in light, where both resolve to #f2f2f2. */
+     app meets the shell. Identical to the old value in light, where both resolve to #f2f2f2. */
   --console-diff-panel: var(--console-chrome, #f2f2f2);
 
   /* comment/keyword/string are a shade down from #636d76 / #715bb0 / #3d7a50: on a tinted row they
@@ -50,7 +50,7 @@
   --console-syn-function: #7fb2e6;
 }
 
-/* diff.css - the Review surface: a sidebar and a virtualized hunk stream.
+/* diff.css - the Review app: a sidebar and a virtualized hunk stream.
  *
  * Every rule here exists because the virtualizer needs it, not for decoration. The row height
  * is fixed and MUST equal ROW_HEIGHT in main.ts: the scroll geometry is computed from that
@@ -86,7 +86,7 @@
    header is sized by unrelated content - a title here, a row of PF chips there - so nothing
    holds their bottom edges to the same row without an explicit shared height. Without it the
    hairline below stops at the pane boundary and meets .console-diff-sidebar's own border as a
-   T instead of a straight line across the surface. */
+   T instead of a straight line across the app. */
 .console-diff-sidebar__head {
   display: flex;
   align-items: center;
@@ -97,7 +97,7 @@
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
-/* The console's one label voice (tokens.css), not a quieter one of this surface's own. It labels a
+/* The console's one label voice (tokens.css), not a quieter one of this app's own. It labels a
    column, the same job Activity's Events/Details and the log viewer's Recent runs do, and a reader
    switching tabs should meet one treatment rather than three. */
 .console-diff-sidebar__heading {
@@ -137,14 +137,14 @@
 
 .console-diff-sidebar {
   /* Left transparent, sidebar, toolbar and stream read as one sheet with a single hairline
-     between them. The stream keeps the primary surface because that is where the tints have to
+     between them. The stream keeps the primary background because that is where the tints have to
      register; the chrome around it steps back onto secondary. */
   background: var(--console-diff-panel);
   overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   /* No INLINE padding, and that is what makes the head's hairline reach both edges of the column.
      An 8px inset here held the head's border-block-end 8px short at each end, so the line across
-     the surface broke twice - once at the rail and once at the sidebar/stream seam - which is the
+     the app broke twice - once at the rail and once at the sidebar/stream seam - which is the
      opposite of what the shared head height above is for. Each child spends the gutter itself.
 
      The toolbar it has to line up with carries no padding above itself at all - its header row is
@@ -173,7 +173,7 @@
 
 /* The deep-link's role filter, stated over the index it narrows. The same inline-notice shape the
    merged strip takes (a coloured left rule carrying the severity), at the compact tier the sidebar
-   declares, because it heads a rail rather than a surface. */
+   declares, because it heads a rail rather than an app. */
 .console-diff-rolefilter {
   display: flex;
   gap: var(--pf-t--global--spacer--sm);
@@ -346,14 +346,14 @@
   container: diff-main / inline-size;
 }
 
-/* Two strips stacked, plus the occasional sentence under them: a HEAD naming the surface and what
+/* Two strips stacked, plus the occasional sentence under them: a HEAD naming the app and what
    it compares, and a READOUT carrying the counts. It was one box centring a chip row over a
    control row, which is how a reader met eleven chips, six key hints and two buttons with nothing
    saying which of the three kinds of thing each was.
 
    No padding-inline HERE. The gutter is spent by the children, so the head's own hairline reaches
-   both edges of the region it heads (README, "Surface chrome") - a container's inline padding
-   holds a child's border-block-end short at each end, and that is the T-junction this surface had
+   both edges of the region it heads (README, "App chrome") - a container's inline padding
+   holds a child's border-block-end short at each end, and that is the T-junction this app had
    where its head met the sidebar's. */
 .console-diff-toolbar {
   background: var(--console-diff-panel);
@@ -379,9 +379,9 @@
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
-/* The surface's eyebrow, in the console's one label voice (tokens.css) - the slot the dashboard's
-   OPERATIONS and the Runs bar's label hold. The diff was the surface without one, so it was also
-   the surface that opened with an unheaded row of numbers. */
+/* The app's eyebrow, in the console's one label voice (tokens.css) - the slot the dashboard's
+   OPERATIONS and the Runs bar's label hold. The diff was the app without one, so it was also
+   the app that opened with an unheaded row of numbers. */
 .console-diff-toolbar__eyebrow {
   flex: 0 0 auto;
   font-size: var(--console-label-size);
@@ -780,7 +780,7 @@
 /* max-content alone sizes each row to its OWN text, so a row shorter than the diff's longest
    line - a code line, a hunk header, a comment, or a story - stopped short of the scroll width
    that longest line established, and its background (the add/delete tint, or the hunk/comment
-   gray) exposed untinted surface past its own last character when the reader scrolled right.
+   gray) exposed untinted background past its own last character when the reader scrolled right.
    --console-diff-min-row-width (main.ts, from maxLineChars in rows.ts) is that scroll width in
    PIXELS, not ch: ch is relative to each element's OWN font, and a comment or story row renders
    in the body font rather than mono, so the same ch count there resolved to a different, smaller
@@ -803,7 +803,7 @@
  * as undifferentiated text with only the +/- glyph separating added from removed. Every use
  * carries a literal fallback the way overrides.css does.
  *
- * Mixed against the surface rather than hardcoded, so the tint follows the theme in both
+ * Mixed against the background rather than hardcoded, so the tint follows the theme in both
  * directions instead of needing a parallel dark palette.
  *
  * The accent bar is an inset box-shadow, NOT a border: the stream is virtualized against a
@@ -821,12 +821,12 @@
   box-shadow: inset 2px 0 0 var(--console-diff-del);
 }
 
-/* Dark needs a heavier mix than light: 12% over a dark surface is very nearly invisible.
+/* Dark needs a heavier mix than light: 12% over a dark background is very nearly invisible.
    14 and not the 22 this was: every point of tint lightens the ground the CODE is read on, and at
    22 the comment token measured 2.84:1 and keyword 3.97:1 on an added line. 14 is the most tint
    that leaves all five tokens above AA once the comment is lifted (see the palette note at the top
    of this file); above it a second token starts failing and the fix stops being one colour.
-   What is given up is small and is not the only cue: the band drops from 1.36:1 against the surface
+   What is given up is small and is not the only cue: the band drops from 1.36:1 against the background
    to 1.30:1, and the +/- glyph and the 2px inset accent bar are the other two channels. */
 :root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
@@ -1501,7 +1501,7 @@
 
 /* Reduced motion.
  *
- * The surface animates in two places: the scroll container smooth-scrolls on hunk and file
+ * The app animates in two places: the scroll container smooth-scrolls on hunk and file
  * navigation, and PatternFly transitions its labels. A reader who has asked the OS for less
  * motion has asked for exactly that to stop, and a whole diff sliding past on every `[` is
  * the symptom they turned it off to avoid. The JS honors this too (prefersReducedMotion in
@@ -1632,7 +1632,7 @@
   white-space: nowrap;
 }
 
-/* The one line on this surface that says a write leaves the machine. Everything else here is
+/* The one line on this app that says a write leaves the machine. Everything else here is
  * local, so the act that is not must not look like the others. */
 .console-diff-composer__network {
   font-size: var(--pf-t--global--font--size--xs);
@@ -1659,7 +1659,7 @@
 /* The verdict choice in the send box: what this review will SAY. Laid out as a row of radios
    rather than a select, because the options are three and all three should be readable without
    opening anything - a reader deciding whether to approve is making the most consequential
-   choice on this surface. */
+   choice on this app. */
 .console-diff-composer__verdicts {
   display: flex;
   flex-wrap: wrap;

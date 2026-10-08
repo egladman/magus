@@ -1,11 +1,11 @@
-// demo.ts - sample notes for the Notes surface, so it can be seen without a server.
+// demo.ts - sample notes for the Notes app, so it can be seen without a server.
 //
-// These are INVENTED, and the surface says so out loud - loadDemo raises the shell's "demo
+// These are INVENTED, and the app says so out loud - loadDemo raises the shell's "demo
 // data" tag in the status bar, beside the connection state, for as long as they are on screen.
 // That disclosure is not politeness, it is the condition on this file existing at all. A
 // note's only provenance is the person who wrote it - nothing in the repository
 // corroborates one later, which is why agents may read notes and never write them
-// (notes/what-belongs-in-a-note.md). Sample prose shown unlabeled in THIS surface would be
+// (notes/what-belongs-in-a-note.md). Sample prose shown unlabeled in THIS app would be
 // the one lie the store cannot survive, because a reader takes what they see here as
 // something a colleague wrote. Labeled, it is a screenshot with the lights on.
 //
@@ -19,11 +19,11 @@
 // (demo-scenario.ts), and about the same change: one shared library grew an audience list and
 // took a Go token verifier and a TypeScript web client down with it. They used to be notes
 // about magus's own cache and lockfile, which meant a reader who clicked from Diff to Notes
-// met a different fictional company one tab over - the surfaces were each coherent and the
+// met a different fictional company one tab over - the apps were each coherent and the
 // product was not.
 //
 // The timeline is why two of these are stale. verify.go changed 92 minutes ago in the very
-// changeset the Diff surface is showing, so the note anchored to it reads DRIFTED here. The
+// changeset the Diff app is showing, so the note anchored to it reads DRIFTED here. The
 // staleness tiers are demonstrated BY the story rather than beside it.
 
 import { create } from "@bufbuild/protobuf";
@@ -61,7 +61,7 @@ interface NoteSpec {
   // editedDaysAgo is a RELATIVE age, resolved against the clock when demoNotes() runs. A fixed
   // date would drift into "4 years ago" and make the sample set read as an abandoned store.
   // It is not outrunDays: how far a note's subject ran ahead of its prose and when the file was
-  // last touched are different measurements, and the surface shows them in different places.
+  // last touched are different measurements, and the app shows them in different places.
   editedDaysAgo: number;
 }
 
@@ -81,7 +81,7 @@ function anchor(spec: AnchorSpec): Anchor {
     kind: spec.kind,
     target: spec.target,
     status: spec.status,
-    // A node id only for one that resolves: the surface prints it beside the anchor so a
+    // A node id only for one that resolves: the app prints it beside the anchor so a
     // reader can carry it to the Graph Explorer, and a dangling anchor has nothing to carry.
     nodeId: spec.status === AnchorStatus.RESOLVES ? KIND_SLUG[spec.kind] + ":" + spec.target : "",
     detail: spec.detail ?? "",
@@ -89,7 +89,7 @@ function anchor(spec: AnchorSpec): Anchor {
 }
 
 const NOTES: NoteSpec[] = [
-  // The payoff note. A reader meets this change in the Diff surface - Claims growing an audience
+  // The payoff note. A reader meets this change in the Diff app - Claims growing an audience
   // list - and finds here the colleague who wrote down why, which is the entire argument for the
   // notes store existing. Recent, healthy, both anchors resolving: the shape a note is supposed to
   // have, shown before the four ways one can go wrong.
@@ -113,7 +113,7 @@ const NOTES: NoteSpec[] = [
       "that read the field has to change with it, and two of them are not Go.",
   },
   // DRIFTED + OUTRUN, and the story is what caused it: verify.go changed 92 minutes ago in this
-  // very changeset, so the fingerprint this note recorded no longer matches. The surface's staleness
+  // very changeset, so the fingerprint this note recorded no longer matches. The app's staleness
   // tiers are demonstrated by the timeline rather than by an unrelated coincidence.
   {
     name: "verification-asserts-on-audience",
@@ -225,7 +225,7 @@ const NOTES: NoteSpec[] = [
 
 // Both stores DECLARED. An undeclared one renders as "this workspace declares no store", which
 // is a different fact and not the one worth showing. The private store carries a warning
-// because a store that can go wrong is part of what this surface is for.
+// because a store that can go wrong is part of what this app is for.
 const STORES: { scope: Scope; path: string; issues: string[] }[] = [
   { scope: Scope.SHARED, path: "notes", issues: [] },
   {

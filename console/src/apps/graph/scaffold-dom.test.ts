@@ -1,4 +1,4 @@
-// scaffold-dom.test.ts - structural invariants of the graph surface's markup.
+// scaffold-dom.test.ts - structural invariants of the graph app's markup.
 //
 // The Reference drawer (ui/ref-drawer.ts) CLONES every [data-ref-section] block, strips ids
 // from the clone, and leaves the source hidden by overrides.css's
@@ -23,7 +23,7 @@ function parse(): HTMLElement {
 test("no reference block wires a control by id", () => {
   const host = parse();
   const blocks = [...host.querySelectorAll<HTMLElement>("[data-ref-section]")];
-  assert.ok(blocks.length > 0, "expected the surface to carry reference blocks");
+  assert.ok(blocks.length > 0, "expected the app to carry reference blocks");
   for (const block of blocks) {
     const ids = [...block.querySelectorAll("[id]")].map((el) => el.id);
     assert.deepEqual(
@@ -48,7 +48,7 @@ test("Clear is a live control, not reference copy", () => {
 //
 // This used to require the trigger to sit inside the query bar, "next to the input it writes into".
 // It sits in the stage header now. Adjacency to the field is what made it a fourth button hanging
-// off an 18rem input, which is the shape that made the surface's one teaching control read as that
+// off an 18rem input, which is the shape that made the app's one teaching control read as that
 // field's overflow menu. What has to hold is that the trigger EXISTS and is LIVE - the placement is
 // a design call, and pinning it here only made the test a second opinion on that call.
 test("the query builder has a live trigger", () => {

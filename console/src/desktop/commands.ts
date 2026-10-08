@@ -1,4 +1,4 @@
-// commands.ts - the console's single command surface and its keybinding engine. Every console
+// commands.ts - the console's single command registry and its keybinding engine. Every console
 // action (toggle raw view, fold all, focus the filter, split a pane, close a tab) is registered
 // here as a named command; menus, the tab bar, the command bar, and keybindings all dispatch
 // through this one map, so an action is defined once and bound once. It is a registerCommand/
@@ -20,7 +20,7 @@ export interface CommandTarget {
 // act on Enter: the palette asks targets() for the candidates and runs the command with the chosen
 // one's value. The alternative was registering one command per thing you might pick - a command per
 // open tab - which is the wrong shape twice over: it makes the registry churn as tabs open and close,
-// and it puts entries in every catalogue that reads it (the cheat sheet, the Shortcuts surface)
+// and it puts entries in every catalogue that reads it (the cheat sheet, the Shortcuts app)
 // offering to bind a keyboard shortcut to a tab that will not exist in a minute. A tab is an ARGUMENT
 // to "go to tab", not a command in its own right, and one bindable command that asks which is the
 // shape that says so.
@@ -30,17 +30,17 @@ export interface Command {
   group?: string;
   run: (arg?: unknown) => void;
   targets?: () => CommandTarget[];
-  // key is a SURFACE-LOCAL binding the surface dispatches itself, declared here only so the
+  // key is an APP-LOCAL binding the app dispatches itself, declared here only so the
   // cheat sheet can show it.
   //
   // Distinct from a keymap chord, which the console dispatches globally and a person may
-  // rebind. These are bare keys that mean something only while their surface has focus - the
+  // rebind. These are bare keys that mean something only while their app has focus - the
   // diff viewer's ] and [ walk hunks, and would be hostile bound console-wide. They were
-  // therefore in no keymap, and the cheat sheet renders from the keymap, so the surface with
+  // therefore in no keymap, and the cheat sheet renders from the keymap, so the app with
   // the most keys in the product showed none of them.
   //
   // NOT rebindable, and it wins over a keymap entry for the same id wherever both appear.
-  // The surface dispatches from its own table and never reads the keymap, so an override
+  // The app dispatches from its own table and never reads the keymap, so an override
   // there would change what is displayed and nothing about what happens.
   key?: string;
 }
@@ -70,14 +70,14 @@ const SEQ_SEP = " ";
 
 // --- Registry ---------------------------------------------------------------
 // One process-wide command map. registerCommand is idempotent by id (a re-register replaces),
-// so a surface re-activating in the console does not accumulate duplicates.
+// so an app re-activating in the console does not accumulate duplicates.
 //
 // It hangs off the window rather than being a plain module-level `const`, and that is what makes
-// "process-wide" true. Every surface is its own esbuild entry point loaded with a runtime import(),
+// "process-wide" true. Every app is its own esbuild entry point loaded with a runtime import(),
 // so each bundle inlines its OWN copy of this module: a module-level Map gives the shell one
-// registry and each surface another, and a command registered by a surface is then invisible to the
-// shell's command bar and Actions surface - reachable only from that surface's own keydown handler.
-// The built bundles are where to check it: a surface's ids appear in its own bundle and in no other.
+// registry and each app another, and a command registered by an app is then invisible to the
+// shell's command bar and Actions app - reachable only from that app's own keydown handler.
+// The built bundles are where to check it: an app's ids appear in its own bundle and in no other.
 //
 // One well-known key, created on first import by whichever bundle loads first.
 const REGISTRY_KEY = "__magusCommandRegistry";

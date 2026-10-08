@@ -1,4 +1,4 @@
-// fixtures.ts - TEST SCAFFOLDING ONLY. Never import this from a surface.
+// fixtures.ts - TEST SCAFFOLDING ONLY. Never import this from an app.
 //
 // The product has exactly one unified-diff reader and it is in Go (internal/diff). This file
 // is a second one, deliberately, and the distinction that makes that acceptable is narrow:

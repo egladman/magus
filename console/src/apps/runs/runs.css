@@ -1,4 +1,4 @@
-/* runs.css - the Runs surface: a toolbar over a facets / list / detail split.
+/* runs.css - the Runs app: a toolbar over a facets / list / detail split.
    Its own sheet rather than a reuse of logs.css: that sheet's geometry is tuned to a 10-19rem rail
    docked inside the viewer, and this is a full page whose three columns each want their own scroll.
    Shares only the console's semantic tokens, which is the layer meant to be shared. */
@@ -21,7 +21,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  /* The console's one bar height and one surface gutter, so this row measures the same as the log
+  /* The console's one bar height and one app gutter, so this row measures the same as the log
      viewer's controls row and the Notes filter, and its input starts on the same x as the facet
      chips, the list rows and the detail pane below. A floor, because the row wraps on a narrow pane. */
   min-block-size: var(--console-app-bar-h);
@@ -31,7 +31,7 @@
   background: var(--console-chrome);
 }
 /* The bar's leading label. Same slot and same voice as the Dashboard bar's OPERATIONS, so a
-   reader switching tabs meets a titled row on every surface instead of a bare filter field. */
+   reader switching tabs meets a titled row on every app instead of a bare filter field. */
 .console-runs__label {
   flex: 0 0 auto;
   font-size: var(--console-label-size);

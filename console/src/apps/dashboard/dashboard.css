@@ -6,7 +6,7 @@
 /* The Jobs view is a Dashboard mode. */
 @import "./plan/plan.css";
 
-/* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
+/* dashboard.css - page-scoped styles for the /dashboard/ app: the edge-to-edge
    dense tiles and the connect/landing screen.
 
    PatternFly (W3): the tile shells are PatternFly Cards (pf-v6-c-card, built in tiles/card.ts)
@@ -26,7 +26,7 @@ body[data-dash-native] { margin: 0; }
 [data-dash-native] .console-dashboard-main,
 .console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
-/* It carries tabindex="-1" so the surface's own keys (b, p) have somewhere to be dispatched from,
+/* It carries tabindex="-1" so the app's own keys (b, p) have somewhere to be dispatched from,
    and main.ts focuses it on arrival. That is a programmatic focus on a whole page rather than on a
    control, so a ring around everything would say a thing about this element that is not true. */
 .console-dashboard-main { outline: none; }
@@ -43,7 +43,7 @@ body[data-dash-native] { margin: 0; }
 }
 #dash-jobs-host > .console-plan-layout { flex: 1 1 auto; min-height: 0; }
 
-/* The dashboard's SURFACE BAR - the same row every other surface opens with, not a strip of text
+/* The dashboard's APP BAR - the same row every other app opens with, not a strip of text
    above the board. It holds the related-work links at the leading edge and the view control at the
    trailing one (mountTiles appends dashboardHeader here).
 
@@ -51,7 +51,7 @@ body[data-dash-native] { margin: 0; }
    button with its label above it. Together with their margins they spent 189px of a 900px window
    before the first tile, most of it on a 1009px row that was empty for 900 of them.
 
-   FULL-BLEED. The pane insets its content by --console-pad (console.css) and every other surface's
+   FULL-BLEED. The pane insets its content by --console-pad (console.css) and every other app's
    bar reaches the pane's own edges, so this pulls back out through the inset and spends it as its
    own padding instead. Without that its hairline stops short at both ends and reads as a different
    kind of line from the ones on Runs, Notes and the log viewer. */
@@ -879,7 +879,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
  * a private block, which is exactly how the log-viewer button drifted from the Big Picture button
  * it was supposed to match. */
 /* One shape, two SIZES, and the difference is where each one sits. Big Picture is on the dashboard's
-   own control row, which is a surface bar like the Runs filter row, so it takes the default tier.
+   own control row, which is an app bar like the Runs filter row, so it takes the default tier.
    "Open in log viewer" is inside a card, which is a panel, so it takes the compact tier. Both come
    from data-control-size on their container (bigPicture.ts, activity.ts) rather than from a size
    written here - a shared 28px block was what let the two drift from every other bar in the console
@@ -1145,7 +1145,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 
    Hidden by default and revealed only in the wide layout (the media query above): the other two
    layouts have no such split to adjust. Nearly invisible until approached, because this is a
-   presentation surface that is looked at far more often than it is touched - but it opts back into
+   presentation app that is looked at far more often than it is touched - but it opts back into
    pointer events, which the canvas as a whole disables. */
 .console-dashboard-split { display: none; }
 /* Qualified with `#dash-panels >` so it beats the canvas's own `> *` rule (1,1,0), which would

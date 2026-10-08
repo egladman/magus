@@ -1,5 +1,5 @@
 // settings.ts - client-side console settings, persisted via the durable-cell primitive. Pure
-// read/write with no DOM: the Settings surface edits these, and the dashboard
+// read/write with no DOM: the Settings app edits these, and the dashboard
 // transport / boot read them. Distinct from the server's own resolved config (which the status API
 // reports read-only) - these are BROWSER-side UI prefs the operator controls and never leave the
 // machine. The clamp/trim validation lives in the getters, not the storage layer.
@@ -38,7 +38,7 @@ export function getDefaultHost(): string {
   return host.get().trim();
 }
 
-// Each surface bundle holds its own copy of the host cell, and the storage event reaches only OTHER
+// Each app bundle holds its own copy of the host cell, and the storage event reaches only OTHER
 // tabs, so a live change is also announced in-document for the copies in this one.
 export const DEFAULT_HOST_EVENT = "magus:default-host";
 
@@ -68,7 +68,7 @@ export function subscribeDefaultHost(fn: () => void): () => void {
 }
 
 // The last server the dashboard reached, so a reload resumes it. The dashboard writes it; every
-// surface may read it as the fallback after the Settings address.
+// app may read it as the fallback after the Settings address.
 const rememberedHost = persisted<string | null>("dashboard-server", null);
 
 export function getRememberedHost(): string | null {

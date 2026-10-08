@@ -85,7 +85,7 @@ function hostLabel(host: string): string {
 // hostAccent derives a stable display accent from any host id. This is presentation only: the
 // dashboard receives no provider registry and contains no provider-specific styling or allowlist.
 // FNV-1a keeps the same id in the same color across frames while the small palette remains legible
-// against the console's neutral surface.
+// against the console's neutral background.
 function hostAccent(host: string): string {
   const palette = [
     "var(--console-clay)",

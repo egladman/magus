@@ -18,7 +18,7 @@
 // rules, and inline code/emphasis/links. Anything unrecognized degrades to its own text rather
 // than disappearing, because a note losing a line is worse than a note showing a stray asterisk.
 // No dependency: the console carries no markdown library, and a parser plus a sanitizer is a
-// large supply-chain surface for a feature this bounded.
+// large supply-chain exposure for a feature this bounded.
 
 // SAFE_LINK matches the schemes a link may use. Anything else - javascript:, data:, vbscript: -
 // renders as plain text with its label intact, so a hostile href cannot become a live control.

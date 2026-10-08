@@ -68,7 +68,7 @@ export function anchorLine(hunk: Hunk): number | undefined {
 // otherwise names a file that is not in this changeset at all.
 //
 // The third bucket is the one that matters. Silently dropping those threads would make the
-// surface claim a colleague said nothing, which is the single worst thing a review reader can
+// app claim a colleague said nothing, which is the single worst thing a review reader can
 // be told, so the caller lists them instead.
 export interface PlacedThreads {
   readonly atHunk: Map<string, ReviewThread[]>;
@@ -82,7 +82,7 @@ export interface PlacedThreads {
 // placeThreads buckets against the FILE, which is right when the whole file is on screen. Narrow
 // the stream to one hunk and a remark on hunk 3 of the file being read at hunk 1 stays in atHunk
 // under a key the row builder never emits: no row, no chip, no overview entry. "Your colleague
-// said nothing" is the one thing this surface must never say by accident, and that is exactly
+// said nothing" is the one thing this app must never say by accident, and that is exactly
 // what it said until this existed.
 //
 // A remark under the FILE heading stays there - the heading is still on screen.
@@ -97,14 +97,14 @@ export function narrowToHunk(placed: PlacedThreads, keep: string): PlacedThreads
   return { atHunk, atFile: placed.atFile, elsewhere: [...placed.elsewhere, ...spilled] };
 }
 
-// placeThreads sorts already-placed threads into the three buckets this surface renders.
+// placeThreads sorts already-placed threads into the three buckets this app renders.
 //
 // The line-to-hunk ARITHMETIC is not here: the server does it once (diff.PlaceThreads) and
 // ships `hunk` on each thread, for the reason the parser and the intra-line emphasis moved
-// there. Two surfaces computing it independently is the same remark sitting against different
+// there. Two apps computing it independently is the same remark sitting against different
 // code in the terminal and the browser, and nothing would ever have reported the disagreement.
 //
-// What is left is a grouping that depends on what THIS surface is showing: a thread magus could
+// What is left is a grouping that depends on what THIS app is showing: a thread magus could
 // not place belongs under its file when that file is on screen, and is elsewhere when it is not.
 export function placeThreads(
   files: readonly DiffFile[],
@@ -152,7 +152,7 @@ export type Row =
 // Comments are interleaved as rows of their own, directly under the hunk they annotate, rather
 // than floated beside the stream. That placement is the point: a remark read three inches from
 // the code it is about is a remark the reader has to hold in their head, and the whole reason
-// this surface exists is to stop asking them to do that. It costs the comment a row in the
+// this app exists is to stop asking them to do that. It costs the comment a row in the
 // virtualizer's geometry, which is exactly what makes it scroll with the code.
 export function buildRows(
   files: readonly DiffFile[],

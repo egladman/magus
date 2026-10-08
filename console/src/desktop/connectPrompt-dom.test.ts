@@ -1,9 +1,9 @@
-// connectPrompt-dom.test.ts - the one prompt a surface shows while it has no server, and the
+// connectPrompt-dom.test.ts - the one prompt an app shows while it has no server, and the
 // behavior around it that is easy to get wrong.
 //
 // Pinned here: every way forward is a control the reader presses, the docs link is present
 // wherever the reader is stuck, re-rendering the same prompt keeps the same buttons, an address
-// applied in another bundle reaches this one, and a surface never paints an answer from an address
+// applied in another bundle reaches this one, and an app never paints an answer from an address
 // the reader has already moved off.
 
 import assert from "node:assert/strict";
@@ -136,7 +136,7 @@ describe("isUnreachable", () => {
 describe("the default host", () => {
   afterEach(() => setDefaultHost(""));
 
-  // Every surface bundle holds its own copy of the host cell. The in-document event is how an
+  // Every app bundle holds its own copy of the host cell. The in-document event is how an
   // address applied in the shell's copy reaches theirs; dispatching it by hand is what another
   // bundle's setDefaultHost does.
   test("an address announced by another bundle is applied and reaches subscribers", () => {

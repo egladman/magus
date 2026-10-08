@@ -23,7 +23,7 @@ import type { DiffFile } from "./parse";
 // modeChange names a file-mode change, or null when there is nothing to say.
 //
 // A mode change carries NO hunks, so a row without this is a filename and a churn count with
-// nothing explaining why the file is in the changeset - which reads as the surface having
+// nothing explaining why the file is in the changeset - which reads as the app having
 // dropped something. A script gaining +x is a real reviewable event.
 //
 // Here rather than inline in the renderer so it can be pinned: the row it belongs to is inside
@@ -96,7 +96,7 @@ export function order(files: readonly DiffFile[], session: DiffReview | null): O
 // change from the one person who would otherwise have caught it.
 //
 // The predicate is spelled the same way in the terminal viewer (diff.File.Settled), against the
-// same read_state the server computes once. The STATE is shared; only the folding is per surface.
+// same read_state the server computes once. The STATE is shared; only the folding is per app.
 export function settled(annotation: DiffAnnotation | undefined): boolean {
   // role, not a field on the patch file: DiffFile is the PATCH, and whether a path is generated is
   // something only the annotation knows - the same a.role === "output" the grouping above uses.
@@ -128,7 +128,7 @@ export interface ReviewStats {
   readonly generated: number;
   // settled is how many primary files a receipt already covers at their current content. Counted
   // so the toolbar can SAY what it folded: a hidden file nobody was told about is the one failure
-  // this surface cannot have.
+  // this app cannot have.
   readonly settled: number;
   readonly additions: number;
   readonly deletions: number;
@@ -239,12 +239,12 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
       .map((s) => s.label ?? s.id);
     const across = [...new Set((a.symbols ?? []).flatMap((s) => s.public_to ?? []))];
     chips.push({
-      text: "public surface",
+      text: "public API",
       tone: "warn",
       title:
         (api.length > 0 ? `Exported from the module: ${api.slice(0, 8).join(", ")}. ` : "") +
         (across.length > 0 ? `Also used by: ${across.join(", ")}. ` : "") +
-        "A change here is API surface. Consider whether it needs a version bump.",
+        "A change here is public API. Consider whether it needs a version bump.",
     });
 
     // What the change DID to those symbols, when the review had a base graph to compare
@@ -263,7 +263,7 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
         text: `${removed.length} removed`,
         tone: "danger",
         title:
-          `Gone from the public surface: ${removed.slice(0, 8).join(", ")}. ` +
+          `Gone from the public API: ${removed.slice(0, 8).join(", ")}. ` +
           "A consumer calling one of these breaks, which is a major bump.",
       });
     }
@@ -304,7 +304,7 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   // Churn: is this file being rewritten over and over? The rank is shown only when it is
   // high enough to mean something - see types.DiffChurn.notableRankCutoff. The cutoff is
   // duplicated rather than shipped on the wire because it is a DISPLAY decision, and the two
-  // surfaces are allowed to disagree about presentation while agreeing about the data.
+  // apps are allowed to disagree about presentation while agreeing about the data.
   const ch = a.churn;
   if (ch && ch.commits > 0) {
     const notable = (ch.rank ?? 0) > 0 && (ch.rank ?? 0) <= 50;

@@ -2,19 +2,19 @@ import { must } from "../lib/guards";
 // tileView.ts - the DOM renderer for one tab's split-pane layout. A tab's body is a Pane tree
 // (tiling.ts): a single leaf when un-split (the common case) or a tree of splits after the operator
 // tiles it. This module renders that tree into nested CSS grids with draggable dividers, mounts a
-// surface into each leaf, tracks the focused pane, and drives the pure tree ops on split / close /
+// app into each leaf, tracks the focused pane, and drives the pure tree ops on split / close /
 // focus / drag. All the layout MATH is pure and unit-tested in tiling.ts; this file is the DOM/mount
 // layer that reads the tree and calls those ops - the split from the porting-discipline checklist.
 //
 // Two invariants keep tiling smooth:
 //   - Reconcile REUSES cached pane and split elements by id (moving a node with append() preserves
-//     it), so re-rendering after a split never tears down and re-mounts an untouched surface - a
-//     surface keeps its DOM, scroll, and stream across a layout change.
+//     it), so re-rendering after a split never tears down and re-mounts an untouched app - a
+//     app keeps its DOM, scroll, and stream across a layout change.
 //   - A divider drag updates ONLY the dragged split container's grid template (no reconcile), so
 //     panes do not move or remount 60x/sec while dragging; the final ratio persists on pointerup.
 //
 // An empty leaf (pageId "") renders an in-pane launcher - how a fresh split pane becomes a chosen
-// surface. The focused pane owns the shared per-tab status bar (via setVisible), so a background
+// app. The focused pane owns the shared per-tab status bar (via setVisible), so a background
 // streamer in another pane stays quiet, matching the single-tab behavior.
 
 import {
@@ -39,15 +39,15 @@ import { h } from "./view";
 // box agree; the visual line is styled in console.css.
 const DIVIDER = 5;
 
-// A surface the in-pane launcher can drop into an empty pane.
+// An app the in-pane launcher can drop into an empty pane.
 export interface TileApp {
   id: string;
   label: string;
   hint: string;
 }
 
-// What the console injects: how to mount a surface into a host, how to persist the tree, and the
-// launcher's surface list. mountApp returns the surface's controller (or null if it declined /
+// What the console injects: how to mount an app into a host, how to persist the tree, and the
+// launcher's app list. mountApp returns the app's controller (or null if it declined /
 // is unknown), which tileView drives for visibility and teardown.
 export interface TileDeps {
   seed: Pane; // the tab's initial tree: a single leaf, or a restored split tree
@@ -55,10 +55,10 @@ export interface TileDeps {
   mountApp(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
   onLayoutChange(tree: Pane): void; // persist (the console writes it into the tab's layout)
   // The FOCUSED pane's open document changed (page.ts's TitleSource), or focus moved to a pane
-  // showing a different one. A tab holds a whole tree of surfaces but the bar has room for one
+  // showing a different one. A tab holds a whole tree of apps but the bar has room for one
   // name, so the focused pane is the one that speaks for the tab - the same pane that already owns
   // the shared status bar (applyVisibility). title is null when that pane has no document or has
-  // not mounted yet; pageId comes along so the console can fall back to that surface's own name.
+  // not mounted yet; pageId comes along so the console can fall back to that app's own name.
   onTitleChange?(title: string | null, pageId: string): void;
 }
 
@@ -67,20 +67,20 @@ export interface TileView {
   split(dir?: Split["dir"]): void; // split the focused pane; dir defaults to pickAxis(aspect)
   closeFocused(): boolean; // close the focused pane; returns true when it was the LAST pane (tab empties)
   focus(dir: Direction): void; // move focus to the nearest pane in a screen direction
-  move(dir: Direction): void; // swap the focused pane with its screen-direction neighbor, keeping focus on the moved surface
+  move(dir: Direction): void; // swap the focused pane with its screen-direction neighbor, keeping focus on the moved app
   focusParent(): void; // jump focus across the nearest divider to the pane this one was split from
   snapshot(): { tree: Pane; focusId: string }; // read-only tree + focus for a renderer (the panes map)
   focusLeaf(id: string): void; // focus a specific pane by id; no-op for an unknown id
   swap(idA: string, idB: string): void; // exchange two leaves' tree positions (drag-to-move)
   leafPageId(id: string): string | null; // the pageId a leaf holds, or null for an unknown id (drag-to-adopt's read side)
-  adopt(pageId: string, dir?: Split["dir"]): void; // bring a surface INTO this tile as a new pane (drag-to-adopt's write side)
+  adopt(pageId: string, dir?: Split["dir"]): void; // bring an app INTO this tile as a new pane (drag-to-adopt's write side)
   closeLeaf(id: string): boolean; // close a specific pane by id; returns true when it was the LAST pane (tab empties)
   setVisible(visible: boolean): void; // the tab became active (true) or was hidden by another (false)
-  deactivate(): void; // tear down every mounted surface
+  deactivate(): void; // tear down every mounted app
 }
 
-// One mounted pane: its host element (the surface, or the launcher for an empty leaf), the surface
-// controller once resolved, and the surface it currently holds (to detect a pageId change).
+// One mounted pane: its host element (the app, or the launcher for an empty leaf), the app
+// controller once resolved, and the app it currently holds (to detect a pageId change).
 interface PaneRuntime {
   host: HTMLElement;
   controller: PageController<unknown, unknown> | null;
@@ -108,7 +108,7 @@ export function createTileView(deps: TileDeps): TileView {
   let tabVisible = false;
   // The pane whose document title the console is currently subscribed to, the controller that
   // subscription is against, and the unsubscribe. Exactly one is live at a time (see applyTitle).
-  // The CONTROLLER is tracked, not just the pane id: a pane mounts before its surface resolves, so
+  // The CONTROLLER is tracked, not just the pane id: a pane mounts before its app resolves, so
   // the same id legitimately needs re-subscribing once its controller arrives.
   let titledId = "";
   let titledCtl: PageController<unknown, unknown> | null = null;
@@ -125,7 +125,7 @@ export function createTileView(deps: TileDeps): TileView {
   // on drag pointerup (not per move - a drag persists once it settles).
   const commit = (): void => deps.onLayoutChange(tree);
 
-  // treeHasApp guards the launcher against opening a single-instance surface twice in one tab
+  // treeHasApp guards the launcher against opening a single-instance app twice in one tab
   // (two live log viewers would fight over module state).
   const treeHasApp = (pageId: string): boolean => leaves(tree).some((l) => l.pageId === pageId);
 
@@ -215,7 +215,7 @@ export function createTileView(deps: TileDeps): TileView {
   function render(): void {
     el.replaceChildren(buildPane(tree));
     const live = new Set(leaves(tree).map((l) => l.id));
-    // Prune panes whose leaf is gone (closed): tear the surface down and drop the runtime.
+    // Prune panes whose leaf is gone (closed): tear the app down and drop the runtime.
     for (const [id, p] of [...panes]) {
       if (!live.has(id)) {
         p.controller?.deactivate();
@@ -237,13 +237,13 @@ export function createTileView(deps: TileDeps): TileView {
     applyFocus();
     applyVisibility();
     // After a structural change (split, close, adopt, launcher pick) the focused pane may be a
-    // different one, or the same one now holding a different surface - either way the tab's name
+    // different one, or the same one now holding a different app - either way the tab's name
     // is re-derived here rather than at each of those call sites.
     applyTitle();
   }
 
   // syncLeaf brings a pane's content in line with its leaf: an empty pane shows the launcher; a
-  // surface pane mounts once. A pageId change (launcher pick) tears the old content down first.
+  // app pane mounts once. A pageId change (launcher pick) tears the old content down first.
   function syncLeaf(leaf: Leaf): void {
     const p = panes.get(leaf.id);
     if (!p) return;
@@ -261,9 +261,9 @@ export function createTileView(deps: TileDeps): TileView {
     void mountLeaf(leaf.id);
   }
 
-  // mountLeaf activates a surface into an attached, visible host (so a surface that measures its DOM
+  // mountLeaf activates an app into an attached, visible host (so an app that measures its DOM
   // at init sees real dimensions). If the pane vanished while the mount was in flight, the resolved
-  // surface is torn down at once.
+  // app is torn down at once.
   async function mountLeaf(leafId: string): Promise<void> {
     const p = panes.get(leafId);
     if (!p || p.pageId === "" || p.controller || mounting.has(leafId)) return;
@@ -282,7 +282,7 @@ export function createTileView(deps: TileDeps): TileView {
     applyTitle();
   }
 
-  // renderLauncher paints the in-pane surface picker into an empty pane. Surfaces already open in
+  // renderLauncher paints the in-pane app picker into an empty pane. Apps already open in
   // this tab are omitted (single-instance). Choosing one fills the leaf and mounts it via render().
   // PatternFly (W2): the picker is a PF Gallery of clickable Cards, matching the home launcher; the
   // [data-pane-launcher] prompt + [data-open] card hooks (and the choose() behavior) are unchanged.
@@ -291,7 +291,7 @@ export function createTileView(deps: TileDeps): TileView {
     if (!p || p.host.querySelector("[data-pane-launcher]")) return; // already showing
     const wrap = h("div");
     wrap.dataset.paneLauncher = "";
-    wrap.append(h("p", undefined, "Open a surface in this pane"));
+    wrap.append(h("p", undefined, "Open an app in this pane"));
     const list = h("div", "pf-v6-l-gallery pf-m-gutter");
     for (const s of deps.apps) {
       if (treeHasApp(s.id)) continue;
@@ -332,7 +332,7 @@ export function createTileView(deps: TileDeps): TileView {
     }
   }
 
-  // applyVisibility tells each surface whether it OWNS the shared per-tab status bar: the focused
+  // applyVisibility tells each app whether it OWNS the shared per-tab status bar: the focused
   // pane of a visible tab does; every other pane suppresses its shared-status writes (its tiles keep
   // updating). When the whole tab is hidden, no pane owns the bar. Mirrors the single-tab model.
   function applyVisibility(): void {
@@ -343,8 +343,8 @@ export function createTileView(deps: TileDeps): TileView {
   // a background pane loading a different document cannot retitle the tab. Called on every focus
   // move, mount and reconcile; the guard makes the repeats free.
   //
-  // A pane whose surface has no docTitle still emits (null, pageId): that is what tells the console
-  // to put the surface's static name back after focus leaves a document-bearing pane.
+  // A pane whose app has no docTitle still emits (null, pageId): that is what tells the console
+  // to put the app's static name back after focus leaves a document-bearing pane.
   function applyTitle(): void {
     const p = panes.get(focusId);
     const ctl = p?.controller ?? null;
@@ -412,11 +412,11 @@ export function createTileView(deps: TileDeps): TileView {
     }
   }
 
-  // move relocates the focused pane's SURFACE to the neighbor slot in a screen direction, using the
+  // move relocates the focused pane's APP to the neighbor slot in a screen direction, using the
   // same neighbor search as focus(). It is swapLeaves under the hood: because buildPane reconciles
   // panes by id, swapping the two leaf nodes' tree positions carries the mounted host (and thus scroll
   // position, live stream, everything) along with it - a move, not a teardown/remount. focusId itself
-  // never changes: the id travels with its leaf, so focus silently follows the moved surface to its
+  // never changes: the id travels with its leaf, so focus silently follows the moved app to its
   // new position. No-op when nothing lies that way.
   function move(dir: Direction): void {
     const from = panes.get(focusId);
@@ -458,7 +458,7 @@ export function createTileView(deps: TileDeps): TileView {
   }
 
   // swap is the drag-to-move primitive: exchange two leaves' tree positions (swapLeaves already
-  // no-ops for an unknown or equal id), then reconcile. Both surfaces keep their mounted host, scroll,
+  // no-ops for an unknown or equal id), then reconcile. Both apps keep their mounted host, scroll,
   // and stream - buildPane reconciles by leaf id, so a position swap carries the DOM with it.
   function swap(idA: string, idB: string): void {
     tree = swapLeaves(tree, idA, idB);
@@ -466,18 +466,18 @@ export function createTileView(deps: TileDeps): TileView {
     render();
   }
 
-  // leafPageId looks up a leaf's surface without touching focus - moveAppToTab (main.ts) reads
+  // leafPageId looks up a leaf's app without touching focus - moveAppToTab (main.ts) reads
   // this to find out what a drag is carrying, since a drag can originate from ANY pane in the source
   // tab, not just its currently focused one.
   function leafPageId(id: string): string | null {
     return leaves(tree).find((l) => l.id === id)?.pageId ?? null;
   }
 
-  // adopt is drag-to-adopt's drop side: bring a surface INTO this tile as a new pane. A surface
+  // adopt is drag-to-adopt's drop side: bring an app INTO this tile as a new pane. An app
   // already open here just takes focus (single-instance, the same guard the launcher applies) rather
   // than opening a second copy; otherwise the focused leaf splits and the new leaf is seeded with
-  // pageId directly, skipping the launcher's empty-pane step since the surface is already chosen. The
-  // surface RE-MOUNTS fresh here - tileView never migrates a live DOM node across tiles, only tree
+  // pageId directly, skipping the launcher's empty-pane step since the app is already chosen. The
+  // app RE-MOUNTS fresh here - tileView never migrates a live DOM node across tiles, only tree
   // positions within one - which is fine: the caller is moving it FROM another tile entirely.
   function adopt(pageId: string, dir?: Split["dir"]): void {
     if (treeHasApp(pageId)) {
@@ -515,7 +515,7 @@ export function createTileView(deps: TileDeps): TileView {
   }
 
   function deactivate(): void {
-    titleUnsub?.(); // drop the focused pane's title subscription before its surface goes away
+    titleUnsub?.(); // drop the focused pane's title subscription before its app goes away
     titleUnsub = null;
     titledId = "";
     titledCtl = null;

@@ -1,11 +1,11 @@
 /* console.css - the console-app-ONLY shell: the slim top app bar and its waffle app launcher,
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
-   server-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
+   server-facing apps (/dashboard/, /logs/, /graph/) - and the playground, which borrows
    the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
-   page loads; console.css holds only what is unique to the app surfaces. */
+   page loads; console.css holds only what is unique to the apps. */
 
 :root {
   --console-gap: 0.6rem;
@@ -37,13 +37,13 @@
 body:has(.console-bar) {
   --pico-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   /* Monospace too: code, command samples and the log body read in the platform's UI mono (SF Mono,
-     Cascadia, ...) so the whole surface tracks the OS, not a web font. Setting Pico's token makes
+     Cascadia, ...) so the whole page tracks the OS, not a web font. Setting Pico's token makes
      every <code>/<pre> follow it without a per-element rule. */
   --pico-font-family-monospace: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
   font-family: var(--pico-font-family);
 }
 
-/* Native interaction feel (console surfaces only): a single-accent text selection, no mobile
+/* Native interaction feel (console apps only): a single-accent text selection, no mobile
    tap-flash, and no rubber-band overscroll - so the apps read like a desktop window rather than a
    scrolling web page. Scoped to pages carrying the app bar, like the typeface rule above. */
 body:has(.console-bar) {
@@ -63,7 +63,7 @@ body:has(.console-bar) ::selection {
 
 /* App bar: reuse the site header's geometry (.site-header / .nav-right / .nav-toggle /
    #theme-toggle from site.css) and only INVERT the palette - a sectioning-tinted bar that
-   reads as a distinct control surface while staying theme-aware. */
+   reads as a distinct control while staying theme-aware. */
 .console-bar.site-header {
   background: var(--pico-card-sectioning-background-color);
   /* Inverted (inset) shadow: the bar reads as recessed and the page content sits on top of it
@@ -85,7 +85,7 @@ body:has(.console-bar) ::selection {
   color: var(--pico-color); white-space: nowrap;
 }
 /* Shared demo-mode indicator: one affordance across all three console apps, sitting in the app
-   bar beside the title so "this surface is showing synthesized data, not a live server" reads the
+   bar beside the title so "this app is showing synthesized data, not a live server" reads the
    same everywhere (each app's script unhides #console-demo when it enters #demo). A quiet info
    .status-tag with a leading dot - square + normal case like every other chip, not a rounded pill. */
 .console-demo-tag {
@@ -225,7 +225,7 @@ body.console-app button[aria-disabled="true"] {
 .js .console-bar .app-grid .app-cell-current span { font-size: 0.76rem; line-height: 1.15; }
 
 /* Bottom status bar: a slim, fixed strip pinned to the bottom of the viewport, the way a
-   native app / IDE surface carries its liveness (VS Code-style). It holds the server status
+   native app / IDE window carries its liveness (VS Code-style). It holds the server status
    that used to crowd the top app bar - the browser<->server connection with its liveness dot,
    the server's health rollup, and a quiet mode note on the left; the demo-data and offline
    flags on the right when they apply. Sectioning-tinted with a subtle top border so it reads
@@ -291,12 +291,12 @@ body.console-fill > main > .panel {
   margin: 0;
   position: relative; /* positioning context for the graph's absolute cold-state prompt */
 }
-/* The same full-height chain for a surface mounted as a CONSOLE TAB. The rules above key on
+/* The same full-height chain for an app mounted as a CONSOLE TAB. The rules above key on
    `body.console-fill > main > .app` (the standalone page's single <main>), but the console mounts a
-   surface deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
-   (div[data-pane-id]), and the surface's own <main> sits inside a pane. A tab may hold one pane or a
-   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach a surface
-   through the tile and its panes, or a canvas-height surface (the graph) or a cold empty state
+   app deeper: the tab host holds a TILE (div[data-tile-root]) whose leaves are pane containers
+   (div[data-pane-id]), and the app's own <main> sits inside a pane. A tab may hold one pane or a
+   tree of split panes (div[data-split-id] grids). So the flex/height chain must reach an app
+   through the tile and its panes, or a canvas-height app (the graph) or a cold empty state
    collapses to nothing. The tab-host rule is guarded :not([hidden]) so an inactive tab keeps its
    display:none (a bare display:flex would outweigh [hidden]). */
 #console-outlet > div[data-tab-id]:not([hidden]) {
@@ -317,8 +317,8 @@ body.console-fill > main > .panel {
 #console-outlet div[data-tile-root] > div[data-split-id] { flex: 1 1 auto; }
 /* A split is a CSS grid; tileView sets the row/column template inline (from the split's ratio). */
 #console-outlet div[data-split-id] { display: grid; gap: 0; min-width: 0; min-height: 0; }
-/* A pane holds one surface (or the in-pane launcher). It fills its slot, scrolls internally, and is a
-   positioning + flex context so the surface's <main> and any absolute cold-state prompt lay out. */
+/* A pane holds one app (or the in-pane launcher). It fills its slot, scrolls internally, and is a
+   positioning + flex context so the app's <main> and any absolute cold-state prompt lay out. */
 #console-outlet div[data-pane-id] {
   position: relative;
   min-width: 0;
@@ -334,7 +334,7 @@ body.console-fill > main > .panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* A slim side gutter so a surface (esp. the log viewer) stretches nearly edge-to-edge instead of
+  /* A slim side gutter so an app (esp. the log viewer) stretches nearly edge-to-edge instead of
      keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
   padding-inline: 0.4rem;
 }
@@ -367,7 +367,7 @@ body.console-fill > main > .panel {
   outline-offset: -2px;
   z-index: 1;
 }
-/* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in. Center the
+/* The in-pane launcher: a fresh split pane is empty and offers the apps to drop in. Center the
    prompt + its card grid; the li[data-open] cards reuse the shared launcher-card styling below. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pico-muted-color); text-align: center; }
@@ -478,7 +478,7 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 .console-empty-hint { font-size: 0.78rem; color: var(--pico-muted-color); }
 @media (max-width: 640px) { .console-empty-ways { grid-template-columns: 1fr; } }
 
-/* ---- Console app: the tabbed frame that hosts surfaces --------------------------------------
+/* ---- Console app: the tabbed frame that hosts apps --------------------------------------
    Class-free per the semantic-HTML convention: the frame singletons carry ids (#console-titlebar,
    #console-tabs, #console-outlet); the repeated bits are styled by ARIA role / [aria-*] / [data-*] /
    element selectors under them. Styled against --pico-* tokens (not Pico component classes). All tab
@@ -522,7 +522,7 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
   border: 1px solid transparent; border-bottom: 0; cursor: pointer; user-select: none;
 }
 #console-tabs [role="tab"]:hover { color: var(--pico-contrast); background: var(--pico-card-background-color); }
-/* The active tab (aria-selected) is the raised panel surface; the -1px margin sinks it over the
+/* The active tab (aria-selected) is the raised panel; the -1px margin sinks it over the
    strip's bottom border so it reads as continuous with its pane. */
 #console-tabs [role="tab"][aria-selected="true"] {
   color: var(--pico-contrast); background: var(--pico-card-background-color);
@@ -544,12 +544,12 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 #console-tabs [data-new]:hover { color: var(--pico-contrast); }
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--pico-primary); outline-offset: -2px; }
 
-/* The outlet holds one mounted surface per open tab (a div[data-tab-id]); only the active shows. */
+/* The outlet holds one mounted app per open tab (a div[data-tab-id]); only the active shows. */
 #console-outlet { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 #console-outlet > div { position: absolute; inset: 0; overflow: auto; }
 #console-outlet > div[hidden] { display: none; }
 
-/* Home surface (data-app=home): a launcher grid of surface cards (li[data-open]). */
+/* Home app (data-app=home): a launcher grid of app cards (li[data-open]). */
 #console-outlet [data-app="home"] { max-width: 44rem; padding: 2.5rem 1.25rem; }
 #console-outlet [data-app="home"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-app="home"] > p { margin: 0 0 1.5rem; color: var(--pico-muted-color); }
@@ -600,9 +600,9 @@ body.console-fill .graph-app:has(.graph-empty-state:not([hidden])) .graph-empty-
 }
 #command-palette li[data-selected] kbd { background: transparent; color: var(--pico-primary-inverse); border-color: currentColor; }
 
-/* Keybindings editor surface (data-app=keybindings): a scrollable table of the console's commands,
+/* Keybindings editor app (data-app=keybindings): a scrollable table of the console's commands,
    each with its chord and the Record / Clear / Reset controls. Class-free - styled by data-* under the
-   surface id. */
+   app id. */
 #console-outlet [data-app="keybindings"] { max-width: 52rem; padding: 2rem 1.25rem; }
 #console-outlet [data-app="keybindings"] h1 { margin: 0 0 0.2rem; font-size: 1.4rem; }
 #console-outlet [data-app="keybindings"] > p { margin: 0 0 1.25rem; color: var(--pico-muted-color); }

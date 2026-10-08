@@ -9,7 +9,7 @@
 // pays for the load, everyone after that awaits the same promise.
 
 // The playground WASM exposes window.buzz.* inside its Go main(), and wasm_exec.js
-// defines window.Go; declare just the surface these modules touch.
+// defines window.Go; declare just the members these modules touch.
 export interface BuzzOp {
   target?: string;
   name: string;
@@ -114,7 +114,7 @@ export function ensureBuzz(): Promise<void> {
 }
 
 // warmBuzz starts the load speculatively and swallows failures. It exists so a
-// surface can be ready BEFORE the visitor asks for anything: the service worker
+// page can be ready BEFORE the visitor asks for anything: the service worker
 // already precaches buzz.wasm, so on a repeat visit this resolves out of Cache
 // Storage with no network at all, and on a first visit it overlaps the load with
 // however long the person spends reading. Nothing awaits it and nothing reports

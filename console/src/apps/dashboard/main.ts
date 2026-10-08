@@ -60,7 +60,7 @@ import {
   toggleBigPicture,
 } from "./tiles/bigPicture";
 import { registerCommand, unregisterCommand } from "../../desktop/commands";
-// The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
+// The dashboard is only ever mounted as a console app now (the decoupled console has no standalone
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
 // initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
@@ -137,14 +137,14 @@ function setDashboardMode(mode: DashboardMode): void {
 
 // The dashboard's two modes were reachable only by pointer: the Big Picture button and the Jobs
 // tile's cross-link. Both are declared as COMMANDS so they appear in the palette, the Actions
-// surface and the cheat sheet, and both carry a surface-local single key rather than a console-wide
-// chord - the diff surface's shape, and for its reason: a bare "b" must not present a dashboard
+// app and the cheat sheet, and both carry an app-local single key rather than a console-wide
+// chord - the diff app's shape, and for its reason: a bare "b" must not present a dashboard
 // while somebody is reading a log in another pane. The keys are dispatched from #dash-main below,
-// so they mean something only while this surface holds focus, and they are NOT rebindable (nothing
+// so they mean something only while this app holds focus, and they are NOT rebindable (nothing
 // reads the keymap for them, so an override would change the display and not the behavior).
 //
 // b and p are free everywhere they could collide: no dashboard tile binds a bare letter (only
-// Escape, the arrows and Home), the Jobs view mounted inside this surface takes j/k/r/0/+/-/Escape, and
+// Escape, the arrows and Home), the Jobs view mounted inside this app takes j/k/r/0/+/-/Escape, and
 // every CONSOLE_KEYMAP default and preset binding is either modifier-led or - the Vim preset's "g t"
 // - prefixed by g, which is why neither of these is g or t.
 const COMMANDS: readonly { id: string; label: string; key: string; run: () => void }[] = [
@@ -254,7 +254,7 @@ function renderStatusBar(s: DashboardState): void {
 // health dropping, and a target turning FAILED. wireNotifications watches for those TRANSITIONS and
 // pushes an error-tier notification (notifications.ts). It notifies ONLY on the transition - a key per
 // health-state and per failing ref means the same event does not re-fire on every ~1s status frame, or
-// when this surface re-mounts in a session. Demo never notifies (s.conn.state === "demo"): synthesized
+// when this app re-mounts in a session. Demo never notifies (s.conn.state === "demo"): synthesized
 // data must not light the bell. A failing target with an output ref deep-links to the log viewer at that
 // ref (the same href the gantt bar uses); without a ref it stays on the dashboard, so no link is set.
 function wireNotifications(): void {
@@ -349,7 +349,7 @@ function mountTiles(): void {
   // Picture button) is chrome, not a tile in the ordered board below, so it is excluded from the
   // board/Big Picture hide toggle.
   //
-  // It mounts into the surface BAR rather than into the board, at the bar's trailing edge. As its
+  // It mounts into the app BAR rather than into the board, at the bar's trailing edge. As its
   // own row inside #dash-panels it was a second full-width strip carrying one right-aligned
   // button, stacked under the related-work links that are now its other half.
   const header = dashboardHeader();
@@ -560,7 +560,7 @@ function onLiveError(host: string): void {
   showConnectPrompt({ connection: "disconnected", host });
 }
 
-// The scaffold is re-injected each time the console reopens this surface, so the slots are looked
+// The scaffold is re-injected each time the console reopens this app, so the slots are looked
 // up per call rather than held.
 function emptySlots(): EmptyStateSlots {
   return {
@@ -586,8 +586,8 @@ function retryLive(): void {
 
 // ---- service worker --------------------------------------------------------
 // The registration itself lives in lib/sw.ts (the shell registers the same worker at boot, so a console
-// that never opens this surface still has one). What stays HERE is the dashboard's own reaction to a new
-// version, which no other surface wants: this is the screen that is left running unattended.
+// that never opens this app still has one). What stays HERE is the dashboard's own reaction to a new
+// version, which no other app wants: this is the screen that is left running unattended.
 function registerDashboardServiceWorker(): void {
   void registerServiceWorker(new URL("../sw.js", import.meta.url)).then((reg) => {
     if (!reg) return;
@@ -597,7 +597,7 @@ function registerDashboardServiceWorker(): void {
 }
 
 // How often a tab re-checks the server for a new worker. Registration alone does not: the browser
-// revalidates sw.js on navigation, and the surface this matters most for is the one that never
+// revalidates sw.js on navigation, and the app this matters most for is the one that never
 // navigates. A wall display opened on Monday would sit on Monday's bundle until someone walked over
 // and reloaded it, which is precisely what the display exists to avoid.
 //
@@ -675,9 +675,9 @@ function onNewVersion(): void {
 
 // wireKeys registers the two commands and binds their keys on #dash-main, then focuses it so the
 // keys work on arrival rather than only after something inside has been clicked - the same pair of
-// moves the diff surface makes with its scroll container.
+// moves the diff app makes with its scroll container.
 //
-// The listener is on the surface root, not on document: the Jobs view mounted inside it dispatches
+// The listener is on the app root, not on document: the Jobs view mounted inside it dispatches
 // its own single keys from a descendant, and this handler skips an event that one already claimed.
 function wireKeys(): void {
   const main = opt("dash-main");
@@ -714,7 +714,7 @@ export function activate(): void {
   document.documentElement.classList.remove("no-js");
   registerDashboardServiceWorker();
   // Drop the previous generation before building the next one. activate() runs again every
-  // time the console reopens this surface, and the module (with its store and tile list)
+  // time the console reopens this app, and the module (with its store and tile list)
   // outlives the tab.
   releaseTiles();
   disposeJobs();
@@ -835,7 +835,7 @@ export function activate(): void {
 // deactivate tears down the dashboard's live feeds and the demo timer, so closing its console tab or
 // pane leaves no SSE stream reconnecting or synthesized-demo interval ticking in the background.
 // transport.stop() latches the give-up flag and aborts every feed; the demo handle stops its interval.
-// The standalone page never calls this (the surface lives for the page's lifetime); the console's
+// The standalone page never calls this (the app lives for the page's lifetime); the console's
 // dashboard PageModule calls it on deactivate.
 export function deactivate(): void {
   for (const c of COMMANDS) unregisterCommand(c.id);

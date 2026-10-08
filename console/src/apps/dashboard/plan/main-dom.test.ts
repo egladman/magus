@@ -13,12 +13,12 @@
 //   - WHICH SOURCE OPENS is decided by the data. Jobs in hand means there is work to look at;
 //     anything else hands the view to Targets, which is what a person doing plain work came for. An
 //     explicit pick then sticks - the poll must not overrule it.
-//   - The DRAWING IS NOT THE ACCESSIBLE SURFACE. The stage is aria-hidden and the node list beside
+//   - The DRAWING IS NOT WHAT ASSISTIVE TECHNOLOGY READS. The stage is aria-hidden and the node list beside
 //     it carries the same nodes with their states in words.
 //   - FOCUS IS NEVER TAKEN. Mounting and polling must leave the caret where it was; only an
 //     explicit navigation command moves it. That includes a repaint: a poll that returns the same
 //     answer must not rebuild the element a reader is standing on.
-//   - A MOUNT IS ITS OWN SURFACE. Two panes can hold two Jobs views, so a read that answers late
+//   - A MOUNT IS ITS OWN APP. Two panes can hold two Jobs views, so a read that answers late
 //     must not paint over a source the reader has since switched, hiding one pane must not silence
 //     the other, and closing one must not take the shared commands away from the one still open.
 
@@ -43,7 +43,7 @@ beforeEach(() => {
 
 // The default-host cell is module state shared with every other DOM test in this process (the suite
 // runs with --experimental-test-isolation=none), so it is restored after each test rather than left
-// pointing a sibling's surface at a server that is not there.
+// pointing a sibling's app at a server that is not there.
 afterEach(() => {
   setDefaultHost("");
   globalThis.fetch = realFetch;
@@ -676,7 +676,7 @@ test("a job with no filed result shows no result fields", async () => {
   }
 });
 
-// ---- what a job IS, said once, beside the surface it is easiest to confuse with -------------
+// ---- what a job IS, said once, beside the app it is easiest to confuse with -------------
 
 test("the view says what a job is and links to Runs for target runs", async () => {
   serve({ jobs: okJobs([sessionJob("root")]) });
