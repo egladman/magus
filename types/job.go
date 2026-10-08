@@ -137,8 +137,7 @@ type Goal struct {
 // meant before goals existed; a goal that named a kind and no expectation takes that
 // kind's natural one.
 //
-// Called at the WRITE boundary (Declaration.Apply, ParseMerge, the stored-row fold), never
-// on read. That is the whole reason the enums have no empty member.
+// Called at the WRITE boundary (Declaration.Apply, ParseMerge), never on read. That is the whole reason the enums have no empty member.
 func (g Goal) Resolve() Goal {
 	if g.Kind == "" {
 		g.Kind = GoalKindCheck
@@ -1208,7 +1207,7 @@ func cloneGoals(in []Goal) []Goal {
 	for i, goal := range in {
 		// RESOLVED on the way through, which is what makes this the write boundary the
 		// enums' no-empty-member rule depends on: every path that stores goals (Apply,
-		// ParseMerge, the stored-row fold) clones them through here.
+		// ParseMerge) clones them through here.
 		out[i] = goal.Resolve()
 		out[i].Check.Args = slices.Clone(goal.Check.Args)
 		out[i].Paths = slices.Clone(goal.Paths)
