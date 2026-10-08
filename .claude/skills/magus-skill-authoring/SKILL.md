@@ -1,6 +1,6 @@
 ---
 name: magus-skill-authoring
-description: "The working method for building and maintaining what magus installs for agents in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, or agent install. Also use when evaluating what agents can and cannot learn from magus. Hand-authored and committed; NOT in the installed set, and never shipped in the binary."
+description: "The working method for building and maintaining what magus installs for agents in THIS repo: the embedded skills, MCP tools, hints, and MAGUS.md routing. Use when editing anything under internal/agent/skills/, the MCP registry, or agent install, or when evaluating what agents can learn from magus. Hand-authored and committed; NOT in the installed set, and never shipped in the binary."
 ---
 
 # Authoring the skills, MCP tools and hints
@@ -45,7 +45,7 @@ finds it: the plans doc, a task, the harness memory.
   (here: .claude/skills).
 - Every destination receives identical bytes (a test asserts it). magus is
   agent-host agnostic: no host name appears in code. Host-specific glue (hook
-  event shapes, config dialects) is documentation over neutral commands and flags:
+  event shapes, config dialects) is documentation over neutral mechanisms:
   explicit install destinations, the agent hook verdict, --from-json
   extraction, -o template rendering. Never a per-host code path.
 - Any change to skill content or the MCP tools it documents bumps
