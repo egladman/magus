@@ -5,7 +5,7 @@ namespace testing;
 // are soft: a failure is recorded and the run continues, so one case can report
 // several problems at once.
 //
-// The public surface -- the `Tester` object, `init`/`it`/`summary`, and the
+// The public API -- the `Tester` object, `init`/`it`/`summary`, and the
 // `assert*` matchers -- FOLLOWS upstream Buzz's `testing` module, but is not a drop-in
 // replacement for it, and the header used to claim it was ("a program written against
 // upstream runs here unchanged"). Measured against upstream at 0.5.0-265-g294d8f9,
@@ -29,7 +29,7 @@ namespace testing;
 // The implementation is gopherbuzz's own (no upstream source is reused; the rest of
 // gopherbuzz's stdlib is likewise a clean-room implementation of the language).
 //
-// Two further surfaces differ, forced by gopherbuzz's current semantics:
+// Two further behaviors differ, forced by gopherbuzz's current semantics:
 //   - assertOfType takes the expected type as a NAME string. Upstream's
 //     `assertOfType::<int>(v)` DOES work: gopherbuzz erases type arguments, but the
 //     spelling is known statically, and a call binds it to a `typeName: str`

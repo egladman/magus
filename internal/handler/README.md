@@ -63,7 +63,7 @@ Two subpackages mirror neither a proto package nor a route:
 - `internal/handler/mcp`: the MCP request handlers (the tool implementations, the
   descriptor catalog in `registry.go`, the dispatch pipeline in `mcp.go`, and the
   transports in `transport.go`: the streamable-HTTP handler builder + stdio). It
-  mirrors the agent-facing MCP tool surface. Its bearer
+  mirrors the agent-facing MCP tools. Its bearer
   token store lives in `internal/auth`; the guards in `internal/httpx`. The
   handlers adapt existing Magus operations; they do not own copies of the graph,
   runner or stores. The `buzz` tool forks a JSON transform worker, while other MCP

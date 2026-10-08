@@ -12,7 +12,7 @@ import "magus/figure";
 export fun serverHttp() > Figure !> any {
     final guard = magus\dir("internal/httpx");
     final mcp = magus\dir("internal/handler/mcp");
-    return figure\of("server-http", title: "The HTTP surface")
+    return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(figure\without(magus\layer("handler").dirs, drop: [mcp]), label: "Connect RPC")
@@ -20,7 +20,7 @@ export fun serverHttp() > Figure !> any {
 }
 ```
 
-## Surface
+## API
 
 | Call                                   | What it does                                                     |
 | -------------------------------------- | ---------------------------------------------------------------- |

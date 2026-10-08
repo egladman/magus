@@ -1,6 +1,6 @@
 // @error: unknown method next on [int]
 // `list.next` is not part of the language. gopherbuzz used to expose it as an
-// explicit iterator protocol; upstream removed it from the user surface (the same
+// explicit iterator protocol; upstream removed it from the public API (the same
 // change that stopped exposing map.next), so keeping it meant accepting a program
 // upstream rejects - the permissiveness direction that matters most. Nothing in
 // this workspace or upstream's own tests used it.
