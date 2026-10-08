@@ -12,7 +12,7 @@ export fun agentSurfaceFigure() > figure\Figure !> any {
     final mcp = nested + [tools];
     final harness = figure\external("Harness spells", sub: "hook entries per host", look: figure\Look.plain);
     final host = figure\external("Agent host", sub: "Claude Code, Codex, Cursor", tag: "client");
-    return figure\of("agent-surface",
+    return figure\of("agent-integration",
             title: "What an agent host gets, and the gate every call crosses",
             eyebrow: "agents",
             desc: "magus agent install writes the skills and the AGENTS.md block, and magus "
