@@ -25,7 +25,7 @@ block above goes to stderr before anything runs: every path with its tier, the
 class it started from and the fact that decided it, then the commands that run
 instead. The run records its verdict under `ci`, so the
 [redundancy check](../../reference/codes/sandbox/MGS3010.md) and a job's
-completion gate on `ci` read it like any other.
+goal on `ci` read it like any other.
 
 `--no-redundancy-check` runs the full gate: no deferral and no tier reduction.
 
@@ -106,7 +106,7 @@ and the report names each one it skipped.
 - **CI verdict inheritance** skips the fan-out only when the change since the
   branch's last green run is `trivial` (`gate_inherit` in
   [workspace.md](../workspace.md)).
-- **A job's completion gate** on `ci` passes on the branch's newest green `ci` gate
+- **A job's goal** on `ci` passes on the branch's newest green `ci` gate
   when the change since it is `trivial`, even if that gate predates the job.
 
 A merge settles a conflicted file by its class alone, not its tier; see

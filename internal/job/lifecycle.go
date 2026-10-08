@@ -167,7 +167,7 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 			return types.JobAttempt{}, nil, fmt.Errorf("job: each gate_evidence entry requires gate_id and output_ref")
 		}
 		if seen[evidence.GateID] {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for completion gate %q", evidence.GateID)
+			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)
 		}
 		seen[evidence.GateID] = true
 		attempt, err := resolve(ctx, evidence.OutputRef)
@@ -175,7 +175,7 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 			return types.JobAttempt{}, nil, err
 		}
 		if !attempt.Found {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: gate %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
+			return types.JobAttempt{}, nil, fmt.Errorf("job: goal %q output ref %q names no run %s recorded", evidence.GateID, evidence.OutputRef, where)
 		}
 		gates = append(gates, types.JobGateAttempt{GateID: evidence.GateID, Attempt: attempt})
 	}

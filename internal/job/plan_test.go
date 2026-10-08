@@ -244,8 +244,8 @@ func TestGradeGatesInheritsAncestorSymbolGates(t *testing.T) {
 	for _, g := range status.Gates {
 		ids = append(ids, g.ID)
 	}
-	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol gates")
-	assert.NotContains(t, ids, "rename/tests", "only symbol gates are inherited")
+	assert.Contains(t, ids, "rename/gone", "a child is graded against its ancestors' symbol goals")
+	assert.NotContains(t, ids, "rename/tests", "only symbol goals are inherited")
 	assert.Contains(t, strings.Join(status.Violations, "\n"), `"OldName" is still defined in api/old.go`)
 }
 

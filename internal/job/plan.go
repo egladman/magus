@@ -315,19 +315,19 @@ func RefuseForkLimits(rows []types.Job, id, parent string, limits config.Jobs) e
 	return nil
 }
 
-// RefuseAmbiguousSymbols refuses a symbol gate whose bare name resolves to more than one
+// RefuseAmbiguousSymbols refuses a symbol goal whose bare name resolves to more than one
 // definition, naming each. A name the reader cannot answer for is not refused: a cold graph
-// must not block a declaration, and the gate itself still refuses to certify later.
-func RefuseAmbiguousSymbols(ctx context.Context, gates []types.Goal, read SymbolReader) error {
+// must not block a declaration, and the goal itself still refuses to certify later.
+func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read SymbolReader) error {
 	if read == nil {
 		return nil
 	}
 	var refused []string
-	for _, gate := range gates {
-		if gate.Resolve().Kind != types.GoalKindSymbol {
+	for _, goal := range goals {
+		if goal.Resolve().Kind != types.GoalKindSymbol {
 			continue
 		}
-		for _, name := range gate.Symbols {
+		for _, name := range goal.Symbols {
 			if name = strings.TrimSpace(name); name == "" {
 				continue
 			}
@@ -335,14 +335,14 @@ func RefuseAmbiguousSymbols(ctx context.Context, gates []types.Goal, read Symbol
 			if !ok || len(fact.SameNameDefinitions) < 2 {
 				continue
 			}
-			refused = append(refused, fmt.Sprintf("gate %q names %q, which the graph resolves to %d definitions (%s)",
-				gate.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")))
+			refused = append(refused, fmt.Sprintf("goal %q names %q, which the graph resolves to %d definitions (%s)",
+				goal.ID, name, len(fact.SameNameDefinitions), strings.Join(fact.SameNameDefinitions, ", ")))
 		}
 	}
 	if len(refused) == 0 {
 		return nil
 	}
-	return fmt.Errorf("job: %s; name one by the symbol id `%s` prints, or the gate grades whichever definition ranks first",
+	return fmt.Errorf("job: %s; name one by the symbol id `%s` prints, or the goal grades whichever definition ranks first",
 		strings.Join(refused, "; "), hint.Refs.With("<name>"))
 }
 
@@ -372,7 +372,7 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 		}
 	}
 	if len(status.StaleIndexes) > 0 {
-		fmt.Fprintf(out, "\nstale index: the symbol gates were graded against an index older than the sources in %s,"+
+		fmt.Fprintf(out, "\nstale index: the symbol goals were graded against an index older than the sources in %s,"+
 			" so a symbol verdict may be missing sites.\n  refresh and ask again: %s\n",
 			strings.Join(status.StaleIndexes, ", "), hint.GraphBuild)
 	}

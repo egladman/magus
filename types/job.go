@@ -536,7 +536,7 @@ type JobStatus struct {
 	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
 	// StaleIndexes are the projects whose symbol index was older than their sources when
-	// symbol gates were graded, so a symbol verdict may be drawn from missing facts.
+	// symbol goals were graded, so a symbol verdict may be drawn from missing facts.
 	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 	// Footprint is the declaration each changed line of the job's diff since its checkpoint
 	// lands in. It decides Verified only for a job claiming declarations (see
