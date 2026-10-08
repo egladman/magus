@@ -14,7 +14,7 @@ magus serves its tools as an **MCP (Model Context Protocol) server**, so agents 
 
 Both serve the same tools. magus prints what a host needs (`magus mcp --help`) and never writes a host's config file; the snippets below are for you to place.
 
-For the full agent surface built on top of MCP (the installable skills, `MAGUS.md` routing, and the drift check), see [Agents](agents.md).
+For the full agent integration built on top of MCP (the installable skills, `MAGUS.md` routing, and the drift check), see [Agents](agents.md).
 
 ## stdio: the host launches magus
 
@@ -177,7 +177,7 @@ connection; an agent should not start a server merely to unlock a tool.
 | Find and inspect workspace entities       | `client` (`magus\query`, `explain`, `path`, `refs`, `describe`) | `magus query`, `explain`, `path`, `refs`, `describe`                 |
 | Run and inspect a target                  | `client` (`magus\run`, `magus\output`)                          | `magus run`, `magus affected`, `magus query output <ref>`            |
 | Coordinate a job                          | `client` (`magus\job`)                                          | `magus job`                                                          |
-| Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has a broader host surface |
+| Transform data already supplied by a tool | `buzz`                                                          | `magus buzz` with explicit input; the CLI has more host modules      |
 
 `client` is the magus module. Define `main(args: [str])`, `import "magus"`, and
 return a JSON-encodable value. The return is under `json`; `std.print` text is
@@ -247,7 +247,7 @@ Operations no member covers:
 | `status`  | Report the live proc-server pool                                                                                  |
 | `config`  | Read the resolved workspace config (read-only)                                                                    |
 | `diff`    | Join the review session a person has open. `magus\diff` reads the working tree and does not write to that session |
-| `console` | Return a tokenless link to a local console surface when the user asks to see it                                   |
+| `console` | Return a tokenless link to a local console app when the user asks to see it                                       |
 
 `buzz` transforms a result from another MCP tool without a shell. Pass that
 result as `input`; `transform(input: any, args: [str])` returns the JSON value to
@@ -273,7 +273,7 @@ interpreter offers `std`, `math`, `crypto`, `serialize` and `buffer`, but no
 file imports, native FFI or Magus host modules. An `import "magus"` error
 points to the `client` tool: use that for workspace queries and
 actions, then pass its result to `buzz`. The regular `magus buzz`
-CLI retains its full host surface. Each MCP transform has a 30-second limit.
+CLI retains every host module. Each MCP transform has a 30-second limit.
 
 `diff` joins the review session a person has open: `op=state` (default)
 returns the annotated changeset, and `comment`, `suggest`, and `resolve` write
@@ -347,7 +347,7 @@ The endpoint requires a **bearer token** whose grant includes `mcp=write` (see
 [Tokens and grants](../../concepts/tokens.md)). Two kinds hold it:
 
 - **A connector token** (`mgs_...`): a named, hashed-at-rest token you mint per external client (a Claude connector, an IDE). It holds `mcp=write` and nothing else. Only its SHA-256 is stored, so it is shown once at creation; rotate by minting a new one. It always expires: 90 days by default, at most 366.
-- **The operator token** (`mgo_...`): the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every surface, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
+- **The operator token** (`mgo_...`): the one retrievable secret the server generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token`. It holds every scope, token management included, so give an MCP client a connector token instead. An agent session is denied `magus config token print` and `generate` by the guard.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>`. A request without one, or with a token that is wrong, expired or revoked, gets `401`; a valid token without `mcp=write` (a console token) gets `403` [MGS9015](../../reference/codes/auth/MGS9015.md). Manage connector tokens with:
 

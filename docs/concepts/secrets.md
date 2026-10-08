@@ -236,7 +236,7 @@ continue" during a wait. It deliberately does not, for four reasons that compoun
 - **It undoes the point.** The value ends up in your terminal buffer, your scrollback,
   your multiplexer's history, and any screen recording. That is the standing exposure this
   feature exists to remove.
-- **It builds a phishing surface.** Once magus is a thing that asks for credentials at a
+- **It builds a phishing opening.** Once magus is a thing that asks for credentials at a
   prompt, any magusfile can ask for credentials at a prompt that looks exactly like
   magus's. The announcement above is meant to make an unexplained request _suspicious_;
   a paste prompt makes it routine.
@@ -247,7 +247,7 @@ continue" during a wait. It deliberately does not, for four reasons that compoun
   the wrong value is worse than a failure, because everything stays green.
 
 The real need behind the question ("my vault is locked and I just want this build to run")
-has a better answer that already works, is explicit, and leaves no prompt surface:
+has a better answer that already works, is explicit, and leaves no prompt to imitate:
 
 ```sh
 GHCR_TOKEN=... magus run spell-publish:cd

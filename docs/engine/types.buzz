@@ -46,7 +46,7 @@ export object NavLink {
     children: [NavLink] = mut [<NavLink>],
 }
 
-// Config is the whole site-specific surface the engine renders against - the single swap
+// Config is all the site-specific values the engine renders against - the single swap
 // point that makes this SSG reusable. The engine reads it only through Site.config; nothing
 // in engine/ hardcodes a URL, nav link, or title. magus's concrete value lives in
 // site/config.buzz, injected by render.buzz.
@@ -425,12 +425,12 @@ export object Site {
         if (srcRel == this.blog + "/index.md") {
             return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Blog</li>"});
         }
-        // The search page is a top-level tool surface: Home / Search (no Documentation
+        // The search page is a top-level tool page: Home / Search (no Documentation
         // root, it does not hang off the documentation index).
         if (srcRel == "search/index.md") {
             return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Search</li>"});
         }
-        // The tour page is a top-level onboarding surface: Home / Tour.
+        // The tour page is a top-level onboarding page: Home / Tour.
         if (srcRel == "tour/index.md") {
             return template\render(bcTmpl, {"li": li + "<li aria-current=\"page\">Tour</li>"});
         }
@@ -447,7 +447,7 @@ export object Site {
             return template\render(bcTmpl, {"li": li});
         }
 
-        // /development/ contributor surface. Home / Development for the landing (which is
+        // /development/ contributor page. Home / Development for the landing (which is
         // README.md - see renderRoot); Home / Development / <page> for a direct child
         // (Contributing, Projects, or a per-project target catalog). Its own root, not the
         // documentation index.

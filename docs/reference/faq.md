@@ -73,7 +73,7 @@ magus warns. Make the two charms edit different arguments, or drop one. See
 
 Yes, with the `::` hatch: `magus run go::go-vet api` runs the `go` spell's `go-vet`
 op in project `api`. It is an escape hatch for one-off invocation, not the everyday
-surface; a target is the normal way in. See [operations.md](../concepts/operations.md).
+way to run a spell; a target is the normal way in. See [operations.md](../concepts/operations.md).
 
 ## Is my telemetry or cache sent anywhere?
 

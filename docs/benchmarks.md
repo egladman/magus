@@ -1,6 +1,6 @@
 ---
 title: Benchmarks
-description: "What magus measures about itself and publishes: the agent harness benchmark (does the agent surface make an agent cheaper or better on a real repository) and the build-tool comparison, with every run's environment stamped beside its numbers."
+description: "What magus measures about itself and publishes: the agent harness benchmark (does the agent integration make an agent cheaper or better on a real repository) and the build-tool comparison, with every run's environment stamped beside its numbers."
 tags: [benchmarks, agents, harness, performance, measurement]
 ---
 
@@ -13,7 +13,7 @@ version and a machine rather than remembered.
 ## The agent harness benchmark
 
 The question is narrow: given the same model and the same task, does the magus
-agent surface (skills, hooks, the routing index, the guard) make an agent
+agent integration (skills, hooks, the routing index, the guard) make an agent
 cheaper, faster, or more often correct than the same agent with only a
 magusfile? Two arms run every task, `rampant` with the bare workspace and
 `full` with everything `magus agent install` ships. The agent is the same in

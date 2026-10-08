@@ -466,7 +466,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 
 **Workspace spell**: author a `spells/<name>.buzz` spell (imported by path) with an `ops` entry and wire per-project charms there. The spell owns the _command_; charms tune its _args_.
 
-**`::` hatch**: `magus run go::go-vet api` reaches a single spell op directly. It is an escape hatch, not the everyday surface.
+**`::` hatch**: `magus run go::go-vet api` reaches a single spell op directly. It is an escape hatch, not the everyday way to run a spell.
 
 ## Dynamic values: no interpolation, use the language
 

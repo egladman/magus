@@ -1,6 +1,6 @@
 ---
 title: Breaking changes
-description: "How magus makes backward-incompatible changes visible in review before they reach users: buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's public surface."
+description: "How magus makes backward-incompatible changes visible in review before they reach users: buf-breaking for proto schemas and a drift-gated api.lock snapshot for a CLI's subcommands, flags and config keys."
 tags:
   [
     breaking-changes,
@@ -19,7 +19,7 @@ aliases: [migrating/breaking-changes]
 A backward-incompatible change should show up in a pull request diff, not in a bug
 report after release. magus gives you two mechanisms for this, one per artifact you
 publish: `buf-breaking` for a protobuf schema, and a drift-gated `.lock` snapshot
-for a command-line surface. Both turn "did this change break a consumer?" into a
+for a command-line tool. Both turn "did this change break a consumer?" into a
 diff a reviewer reads, so nobody has to remember to check.
 
 ## Proto schemas: buf-breaking
@@ -47,13 +47,13 @@ breaking `.proto` edit fails the same stage that catches a style violation. Poin
 the baseline elsewhere with a function target when a repo uses a different default
 branch or an image baseline.
 
-## CLI surfaces: a drift-gated api.lock
+## The CLI: a drift-gated api.lock
 
-A proto schema has buf to describe its compatibility. A command-line surface has
+A proto schema has buf to describe its compatibility. A command-line tool has
 nothing equivalent, so magus tracks its own with a pattern you can copy for any CLI
 you ship.
 
-`magus-utils api` writes the public surface (every subcommand, flag, project
+`magus-utils api` writes the public names (every subcommand, flag, project
 target, and config key) as a sorted, newline-delimited `.lock` file, the same flat
 format as `urls.lock`. The snapshot lives at
 `internal/cli/testdata/api.lock`, and `TestAPIUpToDate` regenerates it in
@@ -68,14 +68,14 @@ a removed line is a removed one. A reviewer reads the removed lines and decides
 whether the change is acceptable, the same judgment `buf-breaking` automates for
 protos.
 
-To adopt this for your own tool: emit its public surface as a sorted list, commit
+To adopt this for your own tool: emit its public names as a sorted list, commit
 the list, and add a test that regenerates and compares. The list is derived from
 one source of truth (magus builds it from the man page registry plus the config
 keys), so it never drifts from the real CLI.
 
-## Magusfile API: a locked namespace surface
+## Magusfile API: a locked namespace
 
-A magusfile is the third surface magus publishes, and it fails differently from the
+A magusfile is the third compatibility gate, and it fails differently from the
 other two. Buzz reads a missing member as `null` rather than erroring, so deleting a
 binding breaks nothing at load: a magusfile still calling it parses, loads, and passes
 `magus ls`, then fails at run time with `buzz: null is not callable`, a message that
@@ -92,11 +92,11 @@ load, naming what replaced it. The calls it knows are a table in
 That table is hand-maintained, so a lock file makes the next removal impossible to
 make silently. `internal/interp/bindings/testdata/magus-api.lock` is a sorted snapshot
 of every member a magusfile can reach on the magus namespace, and
-`TestMagusSurfaceLocked` rebuilds the namespace and compares. Delete a binding and the
+`TestMagusAPILocked` rebuilds the namespace and compares. Delete a binding and the
 test fails naming the member, pointing at the table that has to describe it:
 
 ```text
-magus.needs was REMOVED from the magusfile surface.
+magus.needs was REMOVED from the magusfile API.
 Add it to removedMagusfileAPI in internal/interp/runtime.go so it is rejected at
 load with MGS1025, document it in docs/reference/codes/magusfile/MGS1025.md, then
 regenerate this lock
@@ -117,7 +117,7 @@ magus deliberately keeps this lightweight. There is no allowlist file to maintai
 and no `doctor` check that a machine has to interpret. Acceptance is a human reading
 a diff:
 
-1. The drift gate fails on any surface change, breaking or not.
+1. The drift gate fails on any change to a snapshot, breaking or not.
 2. You regenerate, and the `.lock` diff joins the pull request.
 3. A reviewer reads it. An added line needs no ceremony. A removed line is a
    backward-incompatible change, so you record it as an entry whose headline

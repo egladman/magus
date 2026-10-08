@@ -123,7 +123,7 @@ Said plainly, no hedging:
 - Services as a first-class declarative op kind, with readiness probes,
   shared-instance dedup, and idle teardown (see [services.md](../../concepts/services.md)),
   rather than a `run-commands` invocation of a script you write yourself.
-- A [knowledge graph](../../concepts/knowledge.md) and MCP agent surface: `magus query` /
+- A [knowledge graph](../../concepts/knowledge.md) and MCP tools for agents: `magus query` /
   `explain` / `path` let an agent (or you) navigate the project/target/spell
   domain instead of grepping.
 - [Volatility detection](../../concepts/volatility.md): magus tracks and reports

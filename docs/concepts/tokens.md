@@ -1,6 +1,6 @@
 ---
 title: Tokens and grants
-description: How the magus server decides who may use which route. Four token classes told apart by prefix, a grant of none, read or write per surface, a need declared by every procedure, one rule for minting, the trust model, and what the activity trail records about each.
+description: How the magus server decides who may use which route. Four token classes told apart by prefix, a grant of none, read or write per scope, a need declared by every procedure, one rule for minting, the trust model, and what the activity trail records about each.
 tags:
   [
     tokens,
@@ -24,9 +24,9 @@ route says what it needs, and why no token can mint a wider one.
 
 ## Grants
 
-A **grant** is one level per surface. Levels are ordered: `none < read < write`.
+A **grant** is one level per scope. Levels are ordered: `none < read < write`.
 
-| Surface   | Levels            | Reaches                                   |
+| Scope     | Levels            | Reaches                                   |
 | --------- | ----------------- | ----------------------------------------- |
 | `tokens`  | none, write       | token management (the TokenService)       |
 | `mcp`     | none, write       | the `/mcp` endpoint                       |
@@ -46,10 +46,10 @@ A grant renders as `mcp=write` or `console=read`; the one below holds everything
 ## Needs
 
 Every Connect procedure and every `/api/` route declares the level it needs on
-one surface, and the server's bearer guard compares that with the presented
+one scope, and the server's bearer guard compares that with the presented
 token's grant. It is the only place magus decides whether a token may use a
 route. The server refuses to start if a procedure has no need, or a need is
-none or names a level its surface lacks, and a server whose workspace failed to
+none or names a level its scope lacks, and a server whose workspace failed to
 load holds every route to the same needs.
 
 | Route                                                                                                        | Needs           |

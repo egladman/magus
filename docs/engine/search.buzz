@@ -12,7 +12,7 @@ import "engine/types" as _;
 import "engine/route" as _;
 import "engine/page" as _;
 
-// renderSearchPage writes gen/search/index.html: the deep-linkable search surface. A tool
+// renderSearchPage writes gen/search/index.html: the deep-linkable search page. A tool
 // page (no markdown source; kept out of the search index, sitemap, and provenance chrome
 // via renderPage()'s srcRel guards). The #search-page container is the signal search.js
 // keys off to switch from the header dropdown to full-page, URL-synced (?q=) results.

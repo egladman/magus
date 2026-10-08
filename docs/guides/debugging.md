@@ -21,7 +21,7 @@ Magus has two entry points into an interactive debugging REPL:
 - [`magus buzz`](#interactive-repl): standalone shell with the magusfile loaded.
 - [`magus\pry()`](#maguspry-breakpoint-in-a-magusfile): `binding.pry`-style breakpoint, opens the same REPL mid-target with frame context attached.
 
-Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL surface. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
+Both share the same evaluator. Pry adds stack-introspection commands (`.where`, `.locals`, `.up`/`.down`, `.step`, ...) on top of the base REPL. The [meta-commands](#meta-commands) and [multiline input](#multiline-input) sections apply to both unless noted.
 
 ## Interactive REPL
 
@@ -115,7 +115,7 @@ away, next to the captured output that explains them:
 
 Select a failure and **enter** reruns just that target with `--step` below,
 **o** prints its captured output into the transcript, and **y** copies it. See
-[Terminal](../concepts/terminal.md) for the full surface.
+[Terminal](../concepts/terminal.md) for everything else it draws.
 
 ## `--step`
 

@@ -531,7 +531,7 @@ jobs:
 
   advice:
     # Non-blocking nudges about THIS PR - one step per check, each silent unless it has
-    # something to say. Named for doctor's [advice] level so the CI surface and the tool
+    # something to say. Named for doctor's [advice] level so the CI comment and the tool
     # share one word for "worth knowing, never a gate". Opt out with the repository
     # variable MAGUS_PR_COMMENTS=false.
     #
@@ -551,7 +551,7 @@ jobs:
     # MAGUS_CACHE_WRITE_ENABLED false here. A scip run records its manifest in the cache and
     # the freshness probe reads it back; with nothing recorded, every index reads as
     # "predates the sources it covers" and ingestion drops it, silently costing this job
-    # reach, public surface and the API delta.
+    # reach, public visibility and the API delta.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -578,7 +578,7 @@ jobs:
           artifact-sha256: ${{ needs.plan.outputs.magus_sha256 }}
           artifact-commit: ${{ github.sha }}
 
-      # Symbols, for BOTH sides. Without an index of this tree every file reads as surface
+      # Symbols, for BOTH sides. Without an index of this tree every file reads as visibility
       # unknown and the exported-api advisor says nothing at all, which is what it has been
       # doing here; without one of the merge base there is nothing to compare a signature
       # against, so no bump can be computed.

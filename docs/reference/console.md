@@ -1,6 +1,6 @@
 ---
 title: Console API
-description: Loopback JSON API the console reads your live workspace through (the graph, insight, diff, run-output, plan and ledger routes). Loopback only, bearer token, GET except where named. Mutation sits on a few bounded surfaces beside it, none of which touches your working tree.
+description: Loopback JSON API the console reads your live workspace through (the graph, insight, diff, run-output, plan and ledger routes). Loopback only, bearer token, GET except where named. Mutation sits in a few bounded services beside it, none of which touches your working tree.
 tags: [console, graph, privacy]
 aliases: [console, browser-bridge]
 ---
@@ -9,7 +9,7 @@ aliases: [console, browser-bridge]
 
 The console is a small set of loopback JSON routes that the magus server
 exposes so the hosted [console](https://eli.gladman.cc/magus/console/) (the
-Graph Explorer and the surfaces beside it) can display your current workspace.
+Graph Explorer and the apps beside it) can display your current workspace.
 
 The console holds no privileged access: it is one client of the same contract
 anyone can code against. The full schema (every service, method, message, and
@@ -21,11 +21,11 @@ table below answers GET only and rejects any other method with a 405, with two
 named exceptions. `POST /api/v1/diff/session` records a person's own review
 state (where they are looking, which hunks they have read, what they said) in
 the cache directory and touches no source file. `POST /api/v1/diff/run` starts
-a run, the one read-surface route that is genuinely mutating, bounded to
+a run, the one route among the read routes that is genuinely mutating, bounded to
 whatever targets the magusfile declares. This is a design decision, not just a
 security posture (see section 0.3 of the PWA plan).
 
-What else can mutate sits beside this read surface rather than in it, and none
+What else can mutate sits beside these read routes rather than among them, and none
 of it runs an arbitrary command or writes into your working tree:
 
 - The [job-control service](#job-control), which submits a fixed set of
@@ -40,7 +40,7 @@ Every one of them is gated behind the same loopback bind and bearer token.
 
 ## What the console serves
 
-Every route on the console's `/api/v1/` surface, enumerated:
+Every route under the console's `/api/v1/` prefix, enumerated:
 
 | Route                              | Content                                                                                                                            |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -61,7 +61,7 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
 | `POST /api/v1/attention`           | Dispose one request (`{"id","reason"}`). Nothing else closes one                                                                   |
 
-One more route sits under `/api/v1/` without belonging to this read surface:
+One more route sits under `/api/v1/` without belonging to these read routes:
 `POST /api/v1/share`, described below. The server's typed Connect
 services (status, activity, metrics, insight, viewer, notes, tool, and
 [job control](#job-control)) are mounted at their own
@@ -122,7 +122,7 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 Separate from the read routes above, the server hosts a **mutating** Connect
 service, `magus.job.v1alpha1.JobService`, so a browser client (or the CLI) can trigger
-background maintenance without an open action endpoint. It is the only surface
+background maintenance without an open action endpoint. It is the only service
 that changes anything magus computed (the others record a person's own review
 state or open a share listener) and it is bounded:
 it submits a fixed set of named jobs, never an arbitrary command.
@@ -155,7 +155,7 @@ a terminal, `magus server job <name>` submits the same jobs down the same path,
 and `magus ls jobs` prints the same two sets. The view exists because the
 console is where the prompt to run one already fires: the server-storage
 notification watches the cache figure from inside the console, and used to end
-by naming a shell command, so the surface that noticed the problem could not act
+by naming a shell command, so the console that noticed the problem could not act
 on it.
 
 ## How it is secured

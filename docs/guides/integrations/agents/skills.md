@@ -6,10 +6,10 @@ tags: [agents, skills, agent install, AGENTS.md, drift, doctor]
 
 # Skills
 
-The skills teach the magus tool surface: query the graph instead of grepping,
+The skills teach the magus tools: query the graph instead of grepping,
 run work through targets instead of raw tools, triage generated files, ground a
 refactor in graph evidence. They never mention workspace specifics, so they go
-stale only when the tool surface changes, and that staleness is detectable.
+stale only when the tools change, and that staleness is detectable.
 
 One shared source is embedded in the binary in the cross-agent Agent Skills
 format (a `SKILL.md` with name and description frontmatter). Every destination
@@ -110,7 +110,7 @@ truthfully infer from a model name.
 something to ask for. It is not an enforcement mechanism. Hosts that can restrict
 skill discovery may expose only the selected form; hosts that cannot should treat
 the choice as guidance rather than claim deterministic selection.
-[Cursor](cursor.md) has no Agent Skills surface at all, so it cannot enforce a
+[Cursor](cursor.md) has no Agent Skills support at all, so it cannot enforce a
 skill-form choice. Its `AGENTS.md` guidance remains user-owned.
 
 **Both are curated.** The short form is not a summary and not model-generated.
@@ -171,7 +171,7 @@ Every installed file, and the `AGENTS.md` block, carries a generated stamp with
 the agent-skill version and the knowledge schema version. `magus doctor`
 compares those against the running binary for every well-known location it finds
 installed (`.agents/skills`, `.claude/skills`, `.opencode/skills`, and the
-`AGENTS.md` block), so a magus upgrade that changes the tool surface shows up as
+`AGENTS.md` block), so a magus upgrade that changes the tools shows up as
 actionable drift rather than silently wrong instructions.
 
 Do not hand-edit installed skills; change flows through re-running install. The
@@ -181,7 +181,7 @@ markers is yours.
 
 ## Where guidance belongs
 
-The skills teach the magus tool surface and nothing else. Keep each kind of
+The skills teach the magus tools and nothing else. Keep each kind of
 guidance at the one layer that owns it, because agents pay for every duplicated
 line in every session.
 

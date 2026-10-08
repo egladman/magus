@@ -153,7 +153,7 @@ What magus guarantees at the boundary:
 - **Clamped prefixes.** `quote_prefixes` is capped in count and length, and an
   empty prefix is rejected: it would match every line.
 
-What magus does **not** guarantee: a spell has the full host module surface,
+What magus does **not** guarantee: a spell has every host module,
 including `proc\exec` and `http`. Loading a spell is trusting it, exactly as with a
 [remote cache provider](../cache/remote.md). Spells are not individually sandboxed;
 they run with the magus process's privileges, constrained only by the

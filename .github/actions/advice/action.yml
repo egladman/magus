@@ -4,7 +4,7 @@ description: >
   has something to say, and each is one input you can turn off by name; the read-only
   ones are on by default, so a new advisor arrives without a workflow edit.
 
-  Named for doctor's [advice] level, so the CI surface and the tool share one word for
+  Named for doctor's [advice] level, so the CI comment and the tool share one word for
   "worth knowing, never a gate".
 
   All advisors write into ONE comment, each owning a section it replaces on every run

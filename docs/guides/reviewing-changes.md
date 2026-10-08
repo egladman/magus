@@ -105,7 +105,7 @@ their evidence render there exactly as they do in the report.
 generated files back in, `esc` returns to the overview, and `q` leaves. Stepping every hunk
 of a file earns that file a receipt without a separate `--ack`.
 
-The viewer joins the same session the console's Diff surface and an agent share, so a hunk
+The viewer joins the same session the console's Diff app and an agent share, so a hunk
 marked in one is marked in the others.
 
 It stands aside wherever it cannot draw (no terminal, `-o json`, `--watch`, a patch
