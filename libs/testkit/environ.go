@@ -133,6 +133,13 @@ func Environ(root string, keep ...string) ([]string, error) {
 // goEnv reports goDirs as the go on PATH resolves them, asking go only when one is
 // unset. It runs in dir, outside any module, so a go.mod's toolchain line cannot
 // trigger a toolchain switch.
+//
+// go keeps its telemetry under the user config dir, which follows HOME, and on its
+// first run there forks a sidecar that outlives go env and writes into it. A caller
+// that points HOME at a directory it then removes loses that race. GOTELEMETRY=off is
+// not read from the environment, and the one override cmd/go honors is
+// TEST_TELEMETRY_DIR: a path under the null device cannot be created, so go starts
+// no counters and no sidecar.
 func goEnv(dir string) (map[string]string, error) {
 	set := make(map[string]string, len(goDirs))
 	for _, name := range goDirs {
@@ -145,6 +152,7 @@ func goEnv(dir string) (map[string]string, error) {
 	}
 	cmd := exec.Command("go", append([]string{"env", "-json"}, goDirs...)...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "TEST_TELEMETRY_DIR="+filepath.Join(os.DevNull, "telemetry"))
 	out, err := cmd.Output()
 	if errors.Is(err, exec.ErrNotFound) {
 		return set, nil

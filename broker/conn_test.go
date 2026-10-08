@@ -43,7 +43,7 @@ func TestCallKeepsAReplyThatArrivedBeforeTheClose(t *testing.T) {
 			_ = peer.Close()
 		}()
 		cn := newConn(&lateWriter{Conn: client, eof: make(chan struct{})}, nil)
-		f, err := cn.call(t.Context(), 1, typeShutdown, nil, nil)
+		f, err := cn.call(t.Context(), 1, typeShutdown, nil)
 		require.NoError(t, err)
 		require.Equal(t, typeShutdownReply, f.Type)
 	}

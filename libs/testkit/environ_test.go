@@ -198,6 +198,29 @@ func TestEnvironAsksGoForUnsetDirs(t *testing.T) {
 	assert.Equal(t, filepath.Join(want, "goenv"), got["GOENV"])
 }
 
+// TestEnvironLeavesTheHomeItAsksGoFromUntouched: go's telemetry writes its counters
+// under the user config dir and then forks a sidecar that keeps writing after go env
+// returns, which races the removal of a HOME that is a t.TempDir. The counter files
+// are written before go env returns, so their absence is the deterministic check.
+func TestEnvironLeavesTheHomeItAsksGoFromUntouched(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("GOCACHE", "")
+	t.Setenv("GOENV", filepath.Join(home, "goenv"))
+	t.Setenv("XDG_CACHE_HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("HOME", home)
+	_, err := Environ(t.TempDir())
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(home)
+	require.NoError(t, err)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	assert.Empty(t, names, "go env wrote into the HOME it was handed")
+}
+
 func TestIsolateRestoresTheEnvironment(t *testing.T) {
 	t.Setenv("FOO", "bar")
 	home := os.Getenv("HOME")

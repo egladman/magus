@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 )
 
@@ -57,10 +58,15 @@ func (cn *conn) read(onLost func(*conn)) {
 	}
 }
 
-// call sends one request and returns its reply frame. When ctx ends first and late is
-// set, late receives the reply once it arrives, so a caller can undo a grant nobody
+// call sends one request and returns its reply frame.
+func (cn *conn) call(ctx context.Context, id uint64, typ string, body any) (frame, error) {
+	return cn.callFiles(ctx, id, typ, body, nil, nil)
+}
+
+// callFiles is call with files passed beside the request. When ctx ends first and late
+// is set, late receives the reply once it arrives, so a caller can undo a grant nobody
 // read.
-func (cn *conn) call(ctx context.Context, id uint64, typ string, body any, late func(frame)) (frame, error) {
+func (cn *conn) callFiles(ctx context.Context, id uint64, typ string, body any, files []*os.File, late func(frame)) (frame, error) {
 	ch := make(chan frame, 1)
 	cn.mu.Lock()
 	select {
@@ -72,7 +78,7 @@ func (cn *conn) call(ctx context.Context, id uint64, typ string, body any, late 
 	cn.pending[id] = ch
 	cn.mu.Unlock()
 
-	if err := cn.w.write(typ, id, body); err != nil {
+	if err := cn.w.writeFiles(typ, id, body, files); err != nil {
 		cn.forget(id)
 		return frame{}, fmt.Errorf("%w: write %s: %w", ErrUnavailable, typ, err)
 	}
@@ -107,7 +113,12 @@ func (cn *conn) call(ctx context.Context, id uint64, typ string, body any, late 
 // roundTrip is call plus decoding: an error frame becomes an *Error, a reply of another
 // type is a protocol error, and the body lands in out when out is non-nil.
 func (cn *conn) roundTrip(ctx context.Context, id uint64, typ string, body any, replyType string, out any, late func(frame)) error {
-	f, err := cn.call(ctx, id, typ, body, late)
+	return cn.roundTripFiles(ctx, id, typ, body, nil, replyType, out, late)
+}
+
+// roundTripFiles is roundTrip with files passed beside the request.
+func (cn *conn) roundTripFiles(ctx context.Context, id uint64, typ string, body any, files []*os.File, replyType string, out any, late func(frame)) error {
+	f, err := cn.callFiles(ctx, id, typ, body, files, late)
 	if err != nil {
 		return err
 	}

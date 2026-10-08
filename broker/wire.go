@@ -32,6 +32,8 @@ const (
 	typeStatusReply    = "status.reply"
 	typeShutdown       = "shutdown"
 	typeShutdownReply  = "shutdown.reply"
+	typeCrashWatch     = "crash.watch"
+	typeCrashReply     = "crash.reply"
 	typeError          = "error"
 )
 
@@ -120,6 +122,14 @@ type shutdownRequest struct {
 // shutdownMagic is the value shutdownRequest.Magic must carry.
 const shutdownMagic = "magus-broker-shutdown-v1"
 
+// crashWatchRequest asks the broker to watch this process for a crash. The frame carries
+// two file descriptors beside it: the read end of the pipe the process's runtime copies
+// a fatal crash report to, then the process's stderr. Hint is written to that stderr
+// after the report, so it reads after Go's own trace.
+type crashWatchRequest struct {
+	Hint string `json:"hint"`
+}
+
 // ErrorCode classifies an error frame, so a client decides what to do from the code
 // rather than from the message.
 type ErrorCode string
@@ -135,6 +145,9 @@ const (
 	CodeNoServices ErrorCode = "no-services"
 	// CodeService is a service that could not be started or never became ready.
 	CodeService ErrorCode = "service"
+	// CodeNoCrashWatch is a crash watch the broker cannot take: the frame arrived without
+	// its two file descriptors, as it does on a platform that cannot pass them.
+	CodeNoCrashWatch ErrorCode = "no-crash-watch"
 	// CodeDraining is a new claim or service reference asked of a broker that is shutting
 	// down: it seats nothing new while the runs it holds finish. The next run to find no
 	// broker starts another.

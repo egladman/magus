@@ -49,6 +49,7 @@ type serveOptions struct {
 	version               string
 	drain                 <-chan struct{}
 	drainGrace            time.Duration
+	crashDir              string
 }
 
 // WithCapacity sizes the host's budget. A non-positive figure leaves that axis
@@ -98,6 +99,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 		executable: exe,
 		started:    time.Now(),
 		conns:      map[net.Conn]*session{},
+		watches:    map[*os.File]struct{}{},
 		stop:       make(chan struct{}),
 		released:   make(chan struct{}, 1),
 		ctx:        ctx,
@@ -161,6 +163,7 @@ loop:
 	}
 	_ = ln.Close()
 	s.closeConns()
+	s.closeWatches()
 	s.wg.Wait()
 	return err
 }
@@ -173,8 +176,11 @@ type server struct {
 	started    time.Time
 	ctx        context.Context
 
-	mu         sync.Mutex
-	conns      map[net.Conn]*session
+	mu    sync.Mutex
+	conns map[net.Conn]*session
+	// watches holds the crash report pipe of every process watched for a crash. A watch
+	// outlives its connection: the report arrives only once the process is gone.
+	watches    map[*os.File]struct{}
 	lastActive time.Time
 	inflight   int
 	closing    bool
@@ -194,6 +200,8 @@ type session struct {
 	hello    hello
 	claims   map[string]struct{}
 	services map[string]int
+	// files hands over the descriptors the connection has passed so far.
+	files func() []*os.File
 }
 
 func (s *server) accept(ln net.Listener) error {
@@ -296,7 +304,14 @@ func (s *server) handle(conn net.Conn) {
 	defer s.wg.Done()
 	defer func() { _ = conn.Close() }()
 
-	r := newFrameReader(conn)
+	rd, files := newConnReader(conn)
+	// A descriptor no crash watch took is closed with the connection.
+	defer func() {
+		for _, f := range files() {
+			_ = f.Close()
+		}
+	}()
+	r := newFrameReader(rd)
 	w := &frameWriter{w: conn}
 	_ = conn.SetReadDeadline(time.Now().Add(helloTimeout))
 	first, err := r.read()
@@ -312,7 +327,7 @@ func (s *server) handle(conn net.Conn) {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	sess := &session{hello: h, claims: map[string]struct{}{}, services: map[string]int{}}
+	sess := &session{hello: h, claims: map[string]struct{}{}, services: map[string]int{}, files: files}
 	s.mu.Lock()
 	s.conns[conn] = sess
 	s.mu.Unlock()
@@ -384,6 +399,23 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		_ = w.write(typeError, f.ID, errorReply{Code: code, Message: fmt.Sprintf(format, args...)})
 	}
 	switch f.Type {
+	case typeCrashWatch:
+		var req crashWatchRequest
+		passed := sess.files()
+		if err := decodeBody(f, &req); err != nil || len(passed) != 2 {
+			for _, p := range passed {
+				_ = p.Close()
+			}
+			if err != nil {
+				fail(CodeMalformed, "broker: decode crash watch: %v", err)
+			} else {
+				fail(CodeNoCrashWatch, "broker: a crash watch passes 2 file descriptors, this one passed %d", len(passed))
+			}
+			return
+		}
+		s.watchCrash(sess.hello, req.Hint, passed[0], passed[1])
+		_ = w.write(typeCrashReply, f.ID, nil)
+
 	case typeClaim:
 		var req claimRequest
 		if err := decodeBody(f, &req); err != nil {

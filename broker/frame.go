@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 
 	"github.com/egladman/magus/internal/json"
@@ -58,6 +59,12 @@ type frameWriter struct {
 }
 
 func (w *frameWriter) write(typ string, id uint64, body any) error {
+	return w.writeFiles(typ, id, body, nil)
+}
+
+// writeFiles writes a frame with files passed beside it, which only a unix socket can
+// carry; with none it is a plain write.
+func (w *frameWriter) writeFiles(typ string, id uint64, body any, files []*os.File) error {
 	f := frame{Type: typ, ID: id}
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -73,6 +80,9 @@ func (w *frameWriter) write(typ string, id uint64, body any) error {
 	line = append(line, '\n')
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if len(files) > 0 {
+		return writeWithFiles(w.w, line, files)
+	}
 	_, err = w.w.Write(line)
 	return err
 }
