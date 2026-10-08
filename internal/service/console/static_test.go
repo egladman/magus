@@ -14,7 +14,7 @@ import (
 )
 
 // consoleDir is a built console as the build leaves it: the shell, a stylesheet, and the stub
-// console/scripts/surface-stubs.mjs writes for every app segment.
+// console/scripts/app-stubs.mjs writes for every app segment.
 func consoleDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

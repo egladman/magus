@@ -136,7 +136,7 @@ var shellExtensions = map[string]bool{
 
 // appRoute returns the canonical /console/<seg>/ path when the console in consoleDir has an
 // app there: a top-level directory holding an index.html stub. The console build writes one
-// stub per app path and mode (console/scripts/surface-stubs.mjs), so the served routes are the
+// stub per app path and mode (console/scripts/app-stubs.mjs), so the served routes are the
 // bundle's own and an app the console adds needs no change here.
 //
 // The path is built from the directory entry read off disk, never from seg. A redirect assembled

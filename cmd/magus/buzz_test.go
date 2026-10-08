@@ -103,10 +103,10 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	return withMagus(t.Context(), m), m, script
 }
 
-// TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` is not a
-// hole in the sandbox. The agent guard allows `magus buzz -` outright and cannot read a
-// script body, so a script that magus never sandboxed was an unrestricted fs/proc/network
-// hole in a workspace that had asked for one. The script runs in this process, which
+// TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` does not
+// escape the sandbox. The agent guard allows `magus buzz -` outright and cannot read a
+// script body, so a script that magus never sandboxed had unrestricted fs, proc and
+// network access in a workspace that had asked for a sandbox. The script runs in this process, which
 // the sandbox never confines, so the binding check is the whole defense here.
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)

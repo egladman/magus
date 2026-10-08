@@ -210,7 +210,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 		}
 		// Serve anyway: a console and an agent that can connect and read the diagnostic
 		// beat a server with nothing listening. The registry holds the failure and retries
-		// once a source changes; the full server takes over when that load succeeds.
+		// once a source changes; every route is served when that load succeeds.
 		slog.Warn("[AGENT] workspace failed to load; serving its failure until a source changes",
 			slog.String("root", root), slog.String("error", err.Error()))
 		serverRegistry.failBridge(root, err)
@@ -259,8 +259,8 @@ func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 }
 
 // serveUnloadedBridge serves the server's endpoints for a workspace that failed to load
-// until the registry reports it ACTIVE, then hands the listener to the full server over
-// that workspace.
+// until the registry reports it ACTIVE, then hands the listener to serveBridge, which serves
+// every route over that workspace.
 func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root string, addr netip.AddrPort) {
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
 	srvCtx, stop := context.WithCancel(ctx)
@@ -291,11 +291,11 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 		}
 	case m := <-active:
 		stop()
-		<-done // the listener is released before the full server binds it
+		<-done // the listener is released before serveBridge binds it
 		if m == nil {
 			return
 		}
-		slog.Info("[AGENT] workspace loaded; serving the full server", slog.String("root", root))
+		slog.Info("[AGENT] workspace loaded; serving every route", slog.String("root", root))
 		startWatch(ctx, m)
 		serveBridge(ctx, cancel, m, addr)
 	}
