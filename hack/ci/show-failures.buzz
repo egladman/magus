@@ -1,7 +1,7 @@
 // Reads why a commit's CI run failed, failure first, so nobody pages through the job log
 // for it. It is this repository's glue, not part of magus:
 //
-//	magus buzz hack/ci/failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]
+//	magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]
 //
 // It finds the CI run for the commit (HEAD by default), takes the jobs that failed, and
 // prints each `[fail]` record magus wrote in their logs: project, target, cause, output
@@ -26,7 +26,7 @@ import "assert";
 final WORKFLOW = "CI";
 final DEFAULT_LINES = 40;
 final NOT_FOUND = 3;
-final usage = "usage: magus buzz hack/ci/failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]";
+final usage = "usage: magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]";
 
 object Failure {
     project: str,

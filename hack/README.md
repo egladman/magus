@@ -91,7 +91,7 @@ and 0004 pin and `flags` cannot express.
 | --- | --- | --- |
 | `hack/ci/merge-queue.buzz` | the merge queue's workflow steps, one subcommand each | network |
 | `magus buzz hack/ci/pull-requests.buzz -- status \| apply \| dashboard \| boxes \| act` | named before the verb rule: each open pull request's state and the action it needs; `apply` queues and reruns; the queue workflows render `dashboard`, and queue-dashboard.yaml answers its boxes with `boxes` and `act` | network |
-| `magus buzz hack/ci/failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>]` | why a commit's CI run failed, failure first: each `[fail]` record in the failed jobs' logs with its output ref, reproduce command and printed output; exits 3 when the commit has no CI run | network |
+| `magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>]` | read-only: why a commit's CI run failed, failure first: each `[fail]` record in the failed jobs' logs with its output ref, reproduce command and printed output; exits 3 when the commit has no CI run | network |
 | `magus buzz hack/ci/labels.buzz -- [--repo <owner/name>]` | named before the verb rule: prints the `gh label` commands for this repository's label taxonomy | none |
 
 `ci/completion-checks/` holds the shell scripts the root `completion-test` target runs in
