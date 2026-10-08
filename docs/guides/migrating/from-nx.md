@@ -2,6 +2,7 @@
 title: Coming from Nx
 description: A terminology map and porting sketch for a team moving a monorepo workspace from Nx to magus, with an honest list of what each tool has that the other does not.
 tags: [nx, migration, monorepo, terminology, comparison, porting]
+aliases: [migrating, migrating/from-nx]
 ---
 
 # Coming from Nx
@@ -21,26 +22,26 @@ plainly, and vice versa.
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | workspace (`nx.json`)                         | workspace (`magus.yaml`)                                                                                                                                                            |
 | project (`project.json` / `package.json`)     | project (a directory whose `magusfile.buzz` registers it)                                                                                                                           |
-| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom; see [targets.md](../concepts/targets.md#the-target-name))                                            |
-| executor / plugin                             | spell op (a [spell](../concepts/spells.md) is a library of tool-native ops)                                                                                                         |
+| target (`project.json` `targets`)             | target (an exported `fun` in the magusfile; seven canonical names plus custom; see [targets.md](../../concepts/targets.md#the-target-name))                                         |
+| executor / plugin                             | spell op (a [spell](../../concepts/spells.md) is a library of tool-native ops)                                                                                                      |
 | `nx:run-commands`                             | `proc\exec(...)` in a target body                                                                                                                                                   |
-| `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering; see [dependencies.md](../concepts/dependencies.md))                    |
+| `dependsOn: ["^build"]`                       | `ctx.needs(...)` (target-level; the `^`-upstream semantics come from `depends_on` plus same-target ordering; see [dependencies.md](../../concepts/dependencies.md))                 |
 | `implicitDependencies`                        | `depends_on` in `magus\project`                                                                                                                                                     |
-| `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](../concepts/workspace.md#magusproject-layering-policy)                                                                    |
+| `inputs` / `namedInputs`                      | a spell's `needs` globs, plus a project's own [`sources`](../../concepts/workspace.md#magusproject-layering-policy)                                                                 |
 | `outputs`                                     | `outputs` / a spell's `provides` globs                                                                                                                                              |
 | `targetDefaults[t].cache: true`               | nothing: caching is already on; see [Caching is on by default](#caching-is-on-by-default-there-is-nothing-to-opt-into)                                                              |
-| `targetDefaults[t].cache: false`              | the `skip_cache` target policy, but only when replay would be _wrong_ (see [cache.md](../concepts/cache.md#opting-out-and-busting))                                                 |
+| `targetDefaults[t].cache: false`              | the `skip_cache` target policy, but only when replay would be _wrong_ (see [cache.md](../../concepts/cache.md#opting-out-and-busting))                                              |
 | `--skip-nx-cache`                             | `--no-cache` (one invocation; still snapshots afterward)                                                                                                                            |
 | `nx affected`                                 | `magus affected`                                                                                                                                                                    |
 | `nx graph`                                    | `magus graph` / `magus affected --graph` / `magus graph export --open`                                                                                                              |
-| Nx Cloud remote cache (Nx Replay)             | [magus remote cache](../concepts/cache/remote.md) (self-hosted providers, Ed25519-signed artifacts)                                                                                 |
+| Nx Cloud remote cache (Nx Replay)             | [magus remote cache](../../concepts/cache/remote.md) (self-hosted providers, Ed25519-signed artifacts)                                                                              |
 | Nx Cloud DTE / Nx Agents                      | `magus affected --plan` (a provider-neutral JSON shard plan; you bring the runners)                                                                                                 |
 | generators / scaffolding                      | fixed, not extensible: `magus init` writes a starter magusfile, `magus init spell <name>` scaffolds one spell stub; there is no generator framework for custom, pluggable scaffolds |
 | task pipeline (`targetDefaults` in `nx.json`) | composed `magus\needs` calls in the magusfile                                                                                                                                       |
 
 ## Model differences
 
-**Config is code, not JSON.** A magusfile is [Buzz](../concepts/engines.md), a small
+**Config is code, not JSON.** A magusfile is [Buzz](../../concepts/engines.md), a small
 embedded scripting language, not a JSON/YAML document a plugin interprets.
 There is no schema to look up; a target is a function, and its dependencies
 are calls you can trace by reading top to bottom.
@@ -51,7 +52,7 @@ you, which is powerful, but the inference is only as good as the plugin's
 understanding of your setup. magus caches exactly what you declare: a spell's
 `needs` and a project's `depends_on` are the whole story, and under-declaring
 an input is the one way to get a stale cache hit (see
-[dependencies.md](../concepts/dependencies.md#caching-interplay)). Nothing is inferred
+[dependencies.md](../../concepts/dependencies.md#caching-interplay)). Nothing is inferred
 from source-code analysis.
 
 ### Caching is on by default; there is nothing to opt into
@@ -76,13 +77,13 @@ If you only distrust the cache for one run, that is `--no-cache`, which still
 refreshes the entry afterward. And if you think a target needs `skip_cache`
 because it produces no files, it does not: a pure orchestration target caches
 correctly with no policy at all. See
-[Opting out and busting](../concepts/cache.md#opting-out-and-busting) for the
+[Opting out and busting](../../concepts/cache.md#opting-out-and-busting) for the
 full set of controls and their scopes.
 
 **A canonical target vocabulary, not free-form names.** Nx targets are
 whatever string a plugin or `project.json` names them. magus has six
 canonical names (`build`, `test`, `lint`, `format`, `clean`, `generate`)
-plus `ci`, with a stated [litmus test](../concepts/targets.md#when-does-a-name-earn-canonical-status)
+plus `ci`, with a stated [litmus test](../../concepts/targets.md#when-does-a-name-earn-canonical-status)
 for adding a seventh; custom names are allowed, but the vocabulary is
 deliberately small so `magus run lint` means the same thing in every project.
 
@@ -91,7 +92,7 @@ unless you add the `rw` charm (`magus run format:rw`); Nx targets run
 whatever their executor does, with no equivalent default-safe mode.
 
 **Sandboxed execution.** On Linux, magus confines spell subprocesses with the
-kernel's landlock LSM (see [sandbox.md](../concepts/sandbox.md)); Nx has no equivalent
+kernel's landlock LSM (see [sandbox.md](../../concepts/sandbox.md)); Nx has no equivalent
 process-level sandbox.
 
 **Single static binary, no Node runtime required.** magus is a compiled Go
@@ -117,15 +118,15 @@ Said plainly, no hedging:
 
 - A signed remote-cache trust model: every remote artifact carries a
   detached Ed25519 signature verified against a configured trust set, not
-  just an access-token-gated store (see [remote-cache.md](../concepts/cache/remote.md)).
+  just an access-token-gated store (see [remote-cache.md](../../concepts/cache/remote.md)).
 - Kernel-level sandboxing of spell subprocesses on Linux (landlock).
 - Services as a first-class declarative op kind, with readiness probes,
-  shared-instance dedup, and idle teardown (see [services.md](../concepts/services.md)),
+  shared-instance dedup, and idle teardown (see [services.md](../../concepts/services.md)),
   rather than a `run-commands` invocation of a script you write yourself.
-- A [knowledge graph](../concepts/knowledge.md) and MCP agent surface: `magus query` /
+- A [knowledge graph](../../concepts/knowledge.md) and MCP agent surface: `magus query` /
   `explain` / `path` let an agent (or you) navigate the project/target/spell
   domain instead of grepping.
-- [Volatility detection](../concepts/volatility.md): magus tracks and reports
+- [Volatility detection](../../concepts/volatility.md): magus tracks and reports
   non-deterministic ("flaky") targets from run history, distinct from a
   hosted retry service.
 - Language-neutral single binary, no Node runtime dependency.
@@ -157,7 +158,7 @@ with declared inputs and outputs:
 
 The equivalent magusfile, in the same project directory: the upstream
 dependency is declared once, at the target that needs it, via a project
-import (see [Dependencies](../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
+import (see [Dependencies](../../concepts/dependencies.md#the-fold-a-cross-project-needs-also-declares-depends_on)):
 
 ```buzz
 import "magus";
@@ -186,14 +187,14 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 `typescript["tsc-build"]`'s `needs`/`provides` globs and `typescript["eslint"]`'s
 claimed files are already declared by the spell; see the
-[`typescript` spell reference](../concepts/spells/typescript.md)
-for the full op list, and [Getting started](../guides/getting-started.md) for a
+[`typescript` spell reference](../../concepts/spells/typescript.md)
+for the full op list, and [Getting started](../getting-started.md) for a
 from-scratch walkthrough.
 
 ## See also
 
-- [Nx integration](../guides/integrations/nx.md): the other direction, and **experimental**. Keep the Nx workspace as it is and let magus adopt its project set through a workspace provider. It ships in no release and is set up by hand.
-- [Getting started](../guides/getting-started.md): install to first `ci` pipeline, magus-native.
-- [Dependencies](../concepts/dependencies.md): the `magus\needs` / `depends_on` model this page's `dependsOn` row maps to.
-- [Remote caching](../concepts/cache/remote.md): the signed trust model behind the Nx Cloud comparison row.
-- [Spells](../concepts/spells.md): the executor/plugin equivalent, and the built-in spell list.
+- [Nx integration](../integrations/nx.md): the other direction, and **experimental**. Keep the Nx workspace as it is and let magus adopt its project set through a workspace provider. It ships in no release and is set up by hand.
+- [Getting started](../getting-started.md): install to first `ci` pipeline, magus-native.
+- [Dependencies](../../concepts/dependencies.md): the `magus\needs` / `depends_on` model this page's `dependsOn` row maps to.
+- [Remote caching](../../concepts/cache/remote.md): the signed trust model behind the Nx Cloud comparison row.
+- [Spells](../../concepts/spells.md): the executor/plugin equivalent, and the built-in spell list.

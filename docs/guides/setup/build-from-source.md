@@ -2,6 +2,7 @@
 title: Build from source
 description: Build magus locally with go build, including the noselfupdate, liblzma, and libzstd build tags.
 tags: [build-from-source, go-build, noselfupdate, liblzma, libzstd, packaging]
+aliases: [setup/build-from-source]
 ---
 
 # Build from source

@@ -7,7 +7,7 @@ tags: [documentation, docs, getting-started, magus, guide, index, overview]
 
 # magus documentation
 
-New to magus? [Install it](setup.md), skim the two core ideas below ([Targets](concepts/targets.md) and [Spells](concepts/spells.md)), or [try it live in the playground](playground.html) without installing anything.
+New to magus? [Install it](guides/setup.md), skim the two core ideas below ([Targets](concepts/targets.md) and [Spells](concepts/spells.md)), or [try it live in the playground](playground.html) without installing anything.
 
 ## Philosophy
 
@@ -24,7 +24,7 @@ That machinery stays transparent. The cache, the server socket, and the run log 
 Prefer a linear, written walkthrough? The [Getting started guide](guides/getting-started.md)
 runs install to first `ci` pipeline as prose. The quick version:
 
-**1. [Install magus](setup.md).** A single self-contained binary. The [Install guide](setup.md) covers install, verification, and updating.
+**1. [Install magus](guides/setup.md).** A single self-contained binary. The [Install guide](guides/setup.md) covers install, verification, and updating.
 
 **2. Initialize your workspace.** From the root of your repo:
 
@@ -99,7 +99,7 @@ Once the basics click, these cover running magus at scale and in CI.
 
 ## Coming from other tools
 
-- [Coming from Nx](migrating/from-nx.md): a terminology map and porting sketch for teams migrating a workspace from Nx.
+- [Coming from Nx](guides/migrating/from-nx.md): a terminology map and porting sketch for teams migrating a workspace from Nx.
 - [Nx integration](guides/integrations/nx.md): **experimental**: map an existing Nx workspace into magus with a [workspace provider](concepts/workspace/providers.md), keeping Nx as the thing that runs the work. Ships in no release; you copy a spell in by hand.
 
 ## Reference

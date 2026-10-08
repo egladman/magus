@@ -11,6 +11,7 @@ tags:
     changelog,
     proto,
   ]
+aliases: [migrating/breaking-changes]
 ---
 
 # Breaking changes
@@ -84,7 +85,7 @@ reports no dependency edge at all and stops running its prerequisites.
 
 Two things keep that from happening quietly.
 
-[MGS1025](../reference/codes/magusfile/MGS1025.md) rejects a known-removed call at
+[MGS1025](../../reference/codes/magusfile/MGS1025.md) rejects a known-removed call at
 load, naming what replaced it. The calls it knows are a table in
 `internal/interp/runtime.go`.
 

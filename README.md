@@ -151,7 +151,7 @@ sh install.sh
 
 Reviewing the downloaded script before executing it lets you audit the URL, verification,
 and installation steps instead of piping an unreviewed network response directly to your shell.
-See the [Install guide](docs/setup.md) for platform details, verification, and updates.
+See the [Install guide](docs/guides/setup.md) for platform details, verification, and updates.
 
 ### A first look
 
@@ -419,7 +419,7 @@ magus run go-build .      # writes ./magus
 
 `go-build` regenerates the compiled built-in spells before it links, so the binary never embeds stale bytecode. It is the target to use over `build`, which also runs the format and image stages.
 
-Do not have a magus yet? [Install a release](https://eli.gladman.cc/magus/setup/) and point it at your checkout: then every build after that is the command above.
+Do not have a magus yet? [Install a release](https://eli.gladman.cc/magus/guides/setup/) and point it at your checkout: then every build after that is the command above.
 
 Failing that, a clone with no magus and no release can bootstrap one with Go directly. This is the only place a raw `go build` (or `go run`) belongs, and only to produce the binary that runs everything after it:
 

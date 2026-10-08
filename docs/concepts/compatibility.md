@@ -170,7 +170,7 @@ An occasional awkward name is cheaper than a migration every user has to perform
 
 ## See also
 
-- [Breaking changes](../migrating/breaking-changes.md): the mechanisms magus gives
+- [Breaking changes](../guides/migrating/breaking-changes.md): the mechanisms magus gives
   _you_ for your own contracts: `buf-breaking` and a drift-gated `api.lock`.
 - [MGS1021](../reference/codes/magusfile/MGS1021.md): the workspace requires a
   newer magus than the one running.

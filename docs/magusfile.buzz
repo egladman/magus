@@ -263,11 +263,11 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Keep in step with the dprint args below.
     ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "decisions/**/*.md", "guides/*.md",
         "guides/integrations/*.md", "guides/integrations/editor/**/*.md", "guides/jobs/**/*.md",
-        "migrating/**/*.md", "reference/**/*.md", "setup/**/*.md");
+        "guides/migrating/**/*.md", "guides/setup/**/*.md", "reference/**/*.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./decisions/**/*.md",
         "./guides/*.md", "./guides/integrations/*.md", "./guides/integrations/editor/**/*.md",
-        "./guides/jobs/**/*.md", "./migrating/**/*.md", "./reference/**/*.md",
-        "./setup/**/*.md"]});
+        "./guides/jobs/**/*.md", "./guides/migrating/**/*.md", "./guides/setup/**/*.md",
+        "./reference/**/*.md"]});
 }
 
 // conventions holds every doc page to docs/conventions.md and to what it documents.

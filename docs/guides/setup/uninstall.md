@@ -2,6 +2,7 @@
 title: Uninstall
 description: What to delete when you remove magus, from the binary and man pages to the XDG state and config paths and the workspace-local build cache.
 tags: [uninstall, remove, xdg, state, config, cache, paths, cleanup]
+aliases: [setup/uninstall]
 ---
 
 # Uninstall
@@ -49,7 +50,7 @@ through.
 | Path                      | Default                 | Holds                                                                                                                                                                                                                                                                                                                                           |
 | ------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `$XDG_STATE_HOME/magus/`  | `~/.local/state/magus/` | `v1.json` under `history/` (run history, read by volatility detection, the CI forecaster, and bisect), `pry_history` (REPL history), `x/` (the `magus x` picker, one file per project), `memory/` (per-repository agent memory), `mcp_token` and `tokens.d/` (the operator token, and one file per stored token), `broker.log` and `server.log` |
-| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../reference/config.md))                                                                                                                                                                                                                                    |
+| `$XDG_CONFIG_HOME/magus/` | `~/.config/magus/`      | the user-global `magus.yaml`, the tier under a workspace's own (see [Configuration](../../reference/config.md))                                                                                                                                                                                                                                 |
 | `$XDG_RUNTIME_DIR/magus/` | `/tmp/magus-<uid>/`     | `broker.sock`, `server.sock`, and `services/`. Recreated on the next broker or server start, and cleared for you at reboot                                                                                                                                                                                                                      |
 
 State and config are separate on purpose: config is the kind of thing you sync or
@@ -64,12 +65,12 @@ Windows has no `XDG_STATE_HOME` by default, so state lands in `%LocalAppData%\ma
 
 The paths above are user-global. Each repository you ran magus in also holds:
 
-| Path                           | What                                                                                                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.magus/`                      | the [build cache](../concepts/cache.md): `cas/`, `manifests/`, `logs/`, and the mtime memo. Lives in the workspace rather than under XDG; override with `MAGUS_CACHE_DIR` |
-| `magus.yaml`, `magusfile.buzz` | written by `magus init`. Your declarations, tracked in git; delete them only if you are removing magus from the repo itself                                               |
-| `.claude/skills/magus-*`       | present only if you ran [`magus agent install`](../guides/integrations/agents.md)                                                                                         |
-| `AGENTS.md`                    | the file is yours and magus never writes it; delete the block you pasted between `<!-- magus:skills:begin ... -->` and `<!-- magus:skills:end -->`                        |
+| Path                           | What                                                                                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.magus/`                      | the [build cache](../../concepts/cache.md): `cas/`, `manifests/`, `logs/`, and the mtime memo. Lives in the workspace rather than under XDG; override with `MAGUS_CACHE_DIR` |
+| `magus.yaml`, `magusfile.buzz` | written by `magus init`. Your declarations, tracked in git; delete them only if you are removing magus from the repo itself                                                  |
+| `.claude/skills/magus-*`       | present only if you ran [`magus agent install`](../integrations/agents.md)                                                                                                   |
+| `AGENTS.md`                    | the file is yours and magus never writes it; delete the block you pasted between `<!-- magus:skills:begin ... -->` and `<!-- magus:skills:end -->`                           |
 
 `magus init` also wires git, in three places a `rm` does not reach:
 
