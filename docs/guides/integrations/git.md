@@ -30,7 +30,7 @@ whether a hook may exist at all.
 A git hook runs on the critical path of a command the user did not ask magus to be part
 of. Someone typed `git checkout`. They are waiting on git, not on a build tool, and
 every millisecond a hook spends is stolen from an operation that had nothing to do with
-us. So the bar is not "fast enough". The bar is:
+magus. So the bar is not "fast enough". The bar is:
 
 > A magus hook may look up something already computed, or hand the work to something
 > else and return. It may not do the work.
@@ -239,8 +239,8 @@ settles such a file when two things hold, the same two the
 
 - the merge settles. Each side's edits are hunks placed by the file's diff driver, and a
   region both sides changed settles only when both made the same change, one side's
-  change holds the other's, or both only added lines where the base had none (ours
-  first, then theirs).
+  change holds the other's, or both only added lines where the base had none (`ours`
+  first, then `theirs`).
 - the change is low risk by magus's one change classifier, the one gate sizing tiers from: generated,
   prose (`gate_low_risk`, markdown by default) or comment-only. Code qualifies only where
   its project lists it in `merge_low_risk`.

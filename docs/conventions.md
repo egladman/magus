@@ -384,7 +384,7 @@ Hand-written Markdown and every pull request's title and description read as pla
 prescriptive technical writing: a stranger understands each sentence without the request,
 the conversation or the tool behind it. The judge is Go, in
 [`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose).
-`judge-docs -surface markdown <file>...` judges files, and `judge-docs -surface
+`judge-docs -kind markdown <file>...` judges files, and `judge-docs -kind
 pull-request` judges a pull request read from stdin, its title on the first line. The
 guard's `pull-request-text` rule runs it on `gh pr create` and `gh pr edit`, and the
 `pr-description` check runs it on every pull request, so the two cannot disagree. Every
@@ -413,8 +413,8 @@ rule is an error:
   merely).
 - `terms`: one spelling per glossary term, such as `subagent`.
 
-A skill is loaded into an agent's context every session, so `judge-docs -surface skill`
-and `-surface skill-source` hold what a skill's short form shows to three more rules: no
+A skill is loaded into an agent's context every session, so `judge-docs -kind skill`
+and `-kind skill-source` hold what a skill's short form shows to three more rules: no
 sentence over 25 words (`terse-sentence`), no paragraph or list item over 60
 (`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as `in order
 to` for `to`). In a skill body under `internal/agent/skills/`, text inside an `{{if .Full}}`
@@ -423,6 +423,15 @@ skill a rule is only what magus enforces (a guard, workspace or lint rule, a dia
 or a rule id) and everything else a skill asks of an agent is an instruction, so
 `bare-rule` refuses `rule` in either form unless a qualifier or a rule id in code names
 the mechanism.
+
+A guide is a procedure the reader follows with a terminal open: every page under
+`docs/guides/`, `docs/setup/` and `docs/migrating/`, and `docs/setup.md`. `judge-docs
+-kind guide` holds it to three rules on top of the Markdown ones: it addresses the
+reader as you, with no `we`, `us` or `our` (`second-person`); each step of a numbered
+procedure opens with its verb, never an article, a pronoun, `You` or a bare code span
+(`step-verb`), while a numbered list with no imperative step is ordered facts and is left
+alone; and no word tells the reader a step is easy (`condescension`: `easy`, `simple`,
+`obviously`, `of course`, `clearly`, `please`, and `just` before a verb).
 
 Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
 The guard and the check also ask, as advice that fails nothing, why a pull request touches

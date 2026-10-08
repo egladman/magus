@@ -325,7 +325,7 @@ const checkFailDoc = "CheckFail and CheckAdvice are a deliberate split, and whic
 	"check had two options: fail (and dictate) or not exist. What actually happened\n" +
 	"is that each one grew its own private escape hatch (no_language for language\n" +
 	"coverage, and briefly allow_bespoke_name for target naming), so the config\n" +
-	"surface grew one key per opinion, and taking magus's advice became mandatory\n" +
+	"file grew one key per opinion, and taking magus's advice became mandatory\n" +
 	"unless you wrote a paragraph explaining yourself. Advice that exits zero needs\n" +
 	"no escape hatch at all.\n" +
 	"\n" +

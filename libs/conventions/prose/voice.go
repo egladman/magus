@@ -52,7 +52,7 @@ var (
 // to report.
 func replyVoice(in input) []Finding {
 	lead := 0
-	if in.surface == SurfacePullRequest {
+	if in.kind == KindPullRequest {
 		lead = leadLine(in.lines)
 	}
 
@@ -61,14 +61,14 @@ func replyVoice(in input) []Finding {
 	for _, ln := range in.prose {
 		switch body := strings.TrimSpace(ln.body()); {
 		case ln.heading:
-			if in.surface == SurfacePullRequest && ln.line != lead {
+			if in.kind == KindPullRequest && ln.line != lead {
 				out = append(out, Finding{
 					Message: fmt.Sprintf("Drop the heading '%s': a description is a lead paragraph and bullets, "+
 						"with no sections.", body),
 					Match: body, Line: ln.line,
 				})
 			}
-		case in.surface == SurfacePullRequest && ln.line > 1 && stockLabel.MatchString(body):
+		case in.kind == KindPullRequest && ln.line > 1 && stockLabel.MatchString(body):
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
@@ -90,7 +90,7 @@ func replyVoice(in input) []Finding {
 			m := replyOpener.FindString(lead)
 
 			line := para.lineAt(start)
-			if m == "" || (in.surface == SurfacePullRequest && line == leadLine(in.lines)) {
+			if m == "" || (in.kind == KindPullRequest && line == leadLine(in.lines)) {
 				continue
 			}
 
@@ -102,7 +102,7 @@ func replyVoice(in input) []Finding {
 		}
 
 		spans := conversation.FindAllStringIndex(para.text, -1)
-		if in.surface == SurfacePullRequest {
+		if in.kind == KindPullRequest {
 			spans = append(spans, youAsked.FindAllStringIndex(para.text, -1)...)
 			slices.SortFunc(spans, func(a, b []int) int { return a[0] - b[0] })
 		}
@@ -151,7 +151,7 @@ var (
 // change. Prose describes the code after the change in the present tense, and
 // names the code as the actor.
 //
-// First person is judged per surface. A pull request describes the change, so
+// First person is judged per kind of text. A pull request describes the change, so
 // its author has no place in it: every first-person singular is reported, and
 // "we" or "our" as the actor of a change. A Markdown page may speak as the
 // project ("we believe", "our users"), the voice docs/doctrine.md and the
@@ -182,7 +182,7 @@ func tense(in input) []Finding {
 			})
 		}
 
-		if in.surface != SurfacePullRequest {
+		if in.kind != KindPullRequest {
 			continue
 		}
 
@@ -270,7 +270,7 @@ var (
 
 // attribution reports credit to a tool or an agent and an account of how the
 // work was produced. This repository's product is about agents, so "agent",
-// "subagent", "prompt" and "session" are its subject matter on every surface:
+// "subagent", "prompt" and "session" are its subject matter in every kind of text:
 // the rule fires on them only in a narrative of the work's making, and a page
 // documents what agents do where a pull request would narrate it.
 func attribution(in input) []Finding {
@@ -284,7 +284,7 @@ func attribution(in input) []Finding {
 	}
 
 	patterns := []*regexp.Regexp{credit, narrative}
-	if in.surface == SurfacePullRequest {
+	if in.kind == KindPullRequest {
 		patterns = append(patterns, workNarrative)
 	}
 
@@ -294,7 +294,7 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if in.surface == SurfacePullRequest {
+		if in.kind == KindPullRequest {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
 				if !strings.HasPrefix(strings.ToLower(para.text[at[2]:]), "claude code") && !within(at[2], spans) {
 					spans = append(spans, at[2:4])

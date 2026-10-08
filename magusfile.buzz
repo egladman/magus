@@ -755,7 +755,7 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the magusfile API surface lock through TestMagusSurfaceLocked.
+// Regenerates the magusfile API lock through TestMagusSurfaceLocked.
 // -count=1 is load-bearing: a cached pass writes no file.
 export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(bindings_generate);
@@ -1073,7 +1073,7 @@ export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast"]);
 }
 
-// Renders the still SVGs of magus's interactive terminal surfaces for the docs.
+// Renders the still SVGs of magus's interactive terminal screens for the docs.
 export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the real PrettyHandler's band.
     ctx.needs(job_generate);

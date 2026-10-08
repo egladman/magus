@@ -83,7 +83,7 @@ func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheTerseRules(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.body, SurfaceSkillSource), tc.want)
+			assertFindings(t, JudgeText(tc.body, KindSkillSource), tc.want)
 		})
 	}
 }
@@ -91,7 +91,7 @@ func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheTerseRules(t *testing.T) {
 func TestJudgeSkillSourceHoldsFullOnlyTextToTheMarkdownRules(t *testing.T) {
 	body := "# Skill\n\nRun it.{{if .Full}} The cache simply keys it, in order to replay.{{end}}\n"
 
-	assertFindings(t, JudgeText(body, SurfaceSkillSource), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillSource), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 	})
 }
@@ -99,7 +99,7 @@ func TestJudgeSkillSourceHoldsFullOnlyTextToTheMarkdownRules(t *testing.T) {
 func TestJudgeSkillSourceReportsSharedTextOnce(t *testing.T) {
 	body := "# Skill\n\nThe cache simply keys it{{if .Full}}, always{{else}}, now{{end}}.\n"
 
-	assertFindings(t, JudgeText(body, SurfaceSkillSource), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillSource), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 	})
 }
@@ -110,7 +110,7 @@ func TestJudgeSkillSourceReportsAtTheSourceLine(t *testing.T) {
 	body := "# Skill\n\n{{if .Full}}One.\n\nTwo.\n\nThree.\n{{end}}\nRun it in order to replay.\n\n" +
 		"{{if .Full}}Long.\n{{else}}Short.\n{{end}}\nThe cache simply keys it.\n"
 
-	assertFindings(t, JudgeText(body, SurfaceSkillSource), []Finding{
+	assertFindings(t, JudgeText(body, KindSkillSource), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 14},
 		{Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 9},
 	})
@@ -126,7 +126,7 @@ func TestJudgeSkillSourceReportsABodyThatDoesNotRender(t *testing.T) {
 
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := JudgeText(body, SurfaceSkillSource)
+			got := JudgeText(body, KindSkillSource)
 			if len(got) != 1 || got[0].Rule != RuleTemplate || !strings.HasPrefix(got[0].Message, "The skill body does not render: ") {
 				t.Errorf("findings = %#v, want one template finding", got)
 			}

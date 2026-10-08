@@ -133,18 +133,14 @@ func endsSentence(token string) bool {
 
 func filler(in input) []Finding {
 	pattern := fillerPattern
-	if in.surface != SurfaceDoc {
+	if in.kind != KindDoc {
 		pattern = writtenFillerPattern
 	}
 
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentions(in.surface)) {
-		for _, at := range pattern.FindAllStringIndex(para.text, -1) {
-			if fillerExempt(para.text, at) {
-				continue
-			}
-
+	for _, para := range paragraphs(in.prose, mentions(in.kind)) {
+		for _, at := range fillerSpans(para.text, pattern) {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop '%s': state the fact.", m), Match: m, Line: para.lineAt(at[0]),
@@ -155,10 +151,24 @@ func filler(in input) []Finding {
 	return out
 }
 
+// fillerSpans returns where pattern finds filler in text, less the words
+// [fillerExempt] reads as carrying meaning.
+func fillerSpans(text string, pattern *regexp.Regexp) [][]int {
+	var out [][]int
+
+	for _, at := range pattern.FindAllStringIndex(text, -1) {
+		if !fillerExempt(text, at) {
+			out = append(out, at)
+		}
+	}
+
+	return out
+}
+
 func terms(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentions(in.surface)) {
+	for _, para := range paragraphs(in.prose, mentions(in.kind)) {
 		for _, at := range termsPattern.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
 
