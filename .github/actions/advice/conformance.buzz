@@ -316,7 +316,7 @@ fun main() > void !> any {
         added.append(magus\canonicalName(n));
     }
 
-    // The same review api-surface reads, computed once per run: the range on the forge, the
+    // The same review exported-api reads, computed once per run: the range on the forge, the
     // working tree locally. Its seed projects are the ones the author edited, which is what
     // keepAdded needs to place a name.
     final review = advice\review(base, head: head);

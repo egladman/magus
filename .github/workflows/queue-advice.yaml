@@ -72,7 +72,7 @@ jobs:
           skip-cache: 'false'
           conformance: 'false'
           missing-target: 'false'
-          api-surface: 'false'
+          exported-api: 'false'
           first-contribution: 'false'
 
   # queue-apply.yaml's dashboard job, run on the events that change a pull request's

@@ -2585,7 +2585,7 @@ var localAdvisors = []string{
 	"skip-cache.buzz",
 	"conformance.buzz",
 	"missing-target.buzz",
-	"api-surface.buzz",
+	"exported-api.buzz",
 }
 
 // runLocalAdvisors runs the read-only PR advisors against the local tree and returns

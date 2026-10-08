@@ -579,7 +579,7 @@ jobs:
           artifact-commit: ${{ github.sha }}
 
       # Symbols, for BOTH sides. Without an index of this tree every file reads as surface
-      # unknown and the api-surface advisor says nothing at all, which is what it has been
+      # unknown and the exported-api advisor says nothing at all, which is what it has been
       # doing here; without one of the merge base there is nothing to compare a signature
       # against, so no bump can be computed.
       #
