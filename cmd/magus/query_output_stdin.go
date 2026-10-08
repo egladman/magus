@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"io"
 	"runtime"
@@ -12,10 +11,6 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/types"
 )
-
-func bindQueryStdin(fs *flag.FlagSet) *bool {
-	return fs.Bool("stdin", false, "output: print the records `magus query output <ref> -o jsonl` wrote, read from stdin; writes nothing")
-}
 
 // printOutputRecords prints each record on in the way a local ref prints: the output on
 // stdout, provenance on stderr. Every printed string is neutralized, and no reproduce

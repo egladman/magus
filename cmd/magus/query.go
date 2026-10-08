@@ -60,7 +60,6 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
-	bindQueryStdin(fs)
 	flags, positionals := partitionFlags(fs, args)
 	kept = make([]string, 0, len(args))
 	for i := 0; i < len(flags); i++ {
@@ -93,10 +92,8 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 func queryCmd(ctx context.Context, root string, args []string) error {
 	args, negations := splitQueryNegations(args)
 	var qf *gen.QueryFlags
-	var fromStdin *bool
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
-		fromStdin = bindQueryStdin(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
 			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json|jsonl] [--open] [--attempts] [--identity] [--publish]")
@@ -140,7 +137,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	// Output-reference retrieval is an EXPLICIT subcommand (`magus query output <ref>`), not a
 	// shape-routed positional, so a search term can never collide with a ref id.
-	if *fromStdin {
+	if qf.Stdin {
 		if len(pos) != 1 || pos[0] != hint.QueryOutput.Leaf() {
 			return usagef("magus query: --stdin applies only to `%s --stdin`, which takes no ref", hint.QueryOutput)
 		}
