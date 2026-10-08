@@ -24,11 +24,11 @@
 // mounted SURFACE ROOT, and the rail lives inside #console-outlet where those rules apply - a row
 // named data-surface="shortcuts" picks up the Shortcuts surface's own layout and breaks.
 
-import { tabHostsSurface, type Workspace } from "./tabs";
+import { tabHostsApp, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
-import { surfaceIconSvg } from "./home";
+import { appIconSvg } from "./home";
 import type { AppManifest } from "../apps/manifest";
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import { dispatchCommand } from "./commands";
 import type { PulseView } from "./pulse";
 import { badgeLabel, type Badge } from "./badges";
@@ -89,14 +89,14 @@ export interface Sidebar {
 // (tileView's onTitleChange), because the persisted Workspace does not carry runtime focus.
 export function sidebarItems(
   ws: Workspace,
-  surfaces: readonly AppManifest[],
+  apps: readonly AppManifest[],
   focusedPageId: string | null,
 ): SidebarItem[] {
-  return surfaces.map((s) => ({
+  return apps.map((s) => ({
     pageId: s.id,
     label: s.label,
     hint: s.hint,
-    open: ws.tabs.some((t) => tabHostsSurface(t, s.id)),
+    open: ws.tabs.some((t) => tabHostsApp(t, s.id)),
     current: focusedPageId === s.id,
   }));
 }
@@ -176,7 +176,7 @@ export interface SidebarState {
   pulse: Signal<PulseView | null>;
   focused: Signal<string | null>;
   badges: Signal<Record<string, Badge>>;
-  surfaces: readonly AppManifest[];
+  apps: readonly AppManifest[];
 }
 
 // createSidebar fills `host` (the #console-sidebar element the page supplies) and keeps it in step
@@ -194,7 +194,7 @@ export function createSidebar(
   state: SidebarState,
   cb: SidebarCallbacks,
 ): Sidebar {
-  const { ws, expanded, pulse, focused, badges, surfaces } = state;
+  const { ws, expanded, pulse, focused, badges, apps } = state;
   const sc: Scope = scope();
 
   // One menu, moved to the pointer, living on <body> rather than in the rail - the same arrangement
@@ -244,7 +244,7 @@ export function createSidebar(
     menuInvoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     menuList.replaceChildren(
       menuItem("Open " + label, () => cb.onOpen(pageId)),
-      menuItem("Open in new window", () => openSurfaceWindow(pageId)),
+      menuItem("Open in new window", () => openAppWindow(pageId)),
     );
     menu.hidden = false;
     // Measured after unhiding so the box has a real size, then pulled back inside the viewport - a row
@@ -290,7 +290,7 @@ export function createSidebar(
   const badgeEls = new Map<string, HTMLElement>();
   const labels = new Map<string, string>();
 
-  for (const s of surfaces) {
+  for (const s of apps) {
     const item = document.createElement("li");
     item.className = "pf-v6-c-nav__item";
 
@@ -307,7 +307,7 @@ export function createSidebar(
 
     const icon = document.createElement("span");
     icon.className = "pf-v6-c-nav__link-icon";
-    icon.innerHTML = surfaceIconSvg(s.glyph, 18);
+    icon.innerHTML = appIconSvg(s.glyph, 18);
 
     const text = document.createElement("span");
     text.className = "pf-v6-c-nav__link-text";
@@ -413,7 +413,7 @@ export function createSidebar(
   host.replaceChildren(toggleList, list, pulseEl, utilityList);
 
   const paintRows = (): void => {
-    for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {
+    for (const item of sidebarItems(ws.get(), apps, focused.get())) {
       const link = links.get(item.pageId);
       if (!link) continue;
       link.classList.toggle("pf-m-current", item.current);

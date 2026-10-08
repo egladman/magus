@@ -11,12 +11,12 @@ import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { setDefaultHost } from "../../lib/settings";
 import { activate } from "./main";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 const HOST = "127.0.0.1:7391";
 const realFetch = globalThis.fetch;
 
-let mounted: SurfaceInstance | null = null;
+let mounted: AppInstance | null = null;
 let host: HTMLElement;
 
 beforeEach(() => {

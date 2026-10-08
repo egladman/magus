@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FrameScheduler } from "./surface-runtime";
+import { FrameScheduler } from "./app-runtime";
 
 type Frame = FrameRequestCallback;
 

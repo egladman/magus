@@ -12,10 +12,10 @@
 import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
 import { activate } from "./main";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 const realFetch = globalThis.fetch;
-let mounted: SurfaceInstance | null = null;
+let mounted: AppInstance | null = null;
 let hostEl: HTMLElement | null = null;
 // The refs GetPayload was asked for, in order: the surface must resolve the ref the reader clicked
 // on, not whichever one it happened to build the control from last.

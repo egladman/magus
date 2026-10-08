@@ -1,5 +1,5 @@
 // A mode is a view an app switches to inside itself: the Dashboard's jobs, the Graph's figures.
-export type SurfaceNavigation = {
+export type AppNavigation = {
   pageId: string;
   mode?: string;
 };
@@ -9,15 +9,15 @@ const modeEventName = "console:surface-mode";
 
 type ModeWindow = Window & { __magusConsoleModeIntent?: Record<string, string> };
 
-export function openSurface(detail: SurfaceNavigation): void {
-  window.dispatchEvent(new CustomEvent<SurfaceNavigation>(eventName, { detail }));
+export function openApp(detail: AppNavigation): void {
+  window.dispatchEvent(new CustomEvent<AppNavigation>(eventName, { detail }));
 }
 
-export function surfaceNavigation(event: Event): SurfaceNavigation | null {
+export function appNavigation(event: Event): AppNavigation | null {
   if (!(event instanceof CustomEvent)) return null;
   const detail = event.detail;
   if (!detail || typeof detail !== "object") return null;
-  const { pageId, mode } = detail as Partial<SurfaceNavigation>;
+  const { pageId, mode } = detail as Partial<AppNavigation>;
   if (typeof pageId !== "string") return null;
   if (mode !== undefined && typeof mode !== "string") return null;
   return { pageId, mode };
@@ -58,4 +58,4 @@ export function onModeRequest(
   );
 }
 
-export { eventName as surfaceNavigationEvent };
+export { eventName as appNavigationEvent };

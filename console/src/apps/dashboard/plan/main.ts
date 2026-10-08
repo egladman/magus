@@ -59,7 +59,7 @@ import { JobFeed } from "./feed";
 import { persisted } from "../../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../../../desktop/zoomControl";
 import { registerCommand, unregisterCommand } from "../../../desktop/commands";
-import { openSurface } from "../../../desktop/surface-navigation";
+import { openApp } from "../../../desktop/app-navigation";
 import { h } from "../../../desktop/view";
 import {
   renderConnectPrompt,
@@ -495,7 +495,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // a run is `magus run` actually executing - a job's check runs as one, but plenty of runs exist
   // for no job at all. See docs/glossary.md's Job and Run entries, which this line is a plain-words
   // echo of. The link is the same cross-surface navigation every other surface uses
-  // (openSurface/data-open-surface), not an anchor href - there is nothing to route to.
+  // (openApp/data-open-surface), not an anchor href - there is nothing to route to.
   const intro = h("p", "console-plan-intro");
   intro.append(
     document.createTextNode(
@@ -507,9 +507,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     "console-plan-intro__link pf-v6-c-button pf-m-link pf-m-inline",
   ) as HTMLButtonElement;
   runsLink.type = "button";
-  runsLink.dataset.openSurface = "runs";
+  runsLink.dataset.openApp = "runs";
   runsLink.append(h("span", "pf-v6-c-button__text", "Runs"));
-  runsLink.addEventListener("click", () => openSurface({ pageId: "runs" }));
+  runsLink.addEventListener("click", () => openApp({ pageId: "runs" }));
   intro.append(runsLink, document.createTextNode("."));
 
   const toolbar = h("div", "console-plan-toolbar");

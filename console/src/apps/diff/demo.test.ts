@@ -122,7 +122,7 @@ test("the demo changeset folds its generated files and leads with the widest one
   const s = stats(cs);
   assert.equal(s.files, 11);
   assert.equal(s.generated, 3);
-  assert.equal(s.publicSurface, 1);
+  assert.equal(s.publicFiles, 1);
   assert.equal(s.untested, 1);
   assert.ok(s.additions > 0 && s.deletions > 0);
 });

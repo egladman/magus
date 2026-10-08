@@ -263,7 +263,7 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       });
 
       // Drag-to-adopt: dropping this tab onto another moves its currently-focused pane into that tab
-      // as a new split pane (main.ts's moveSurfaceToTab, via onAdoptTab). Pointer-based, mirroring the
+      // as a new split pane (main.ts's moveAppToTab, via onAdoptTab). Pointer-based, mirroring the
       // Panes tray's own drag-to-swap (wirePaneCellDrag in main.ts) - setPointerCapture pins move/up to
       // the link the drag STARTED on regardless of where the pointer travels, so elementFromPoint (not
       // event.target) is what finds whichever tab is currently under it. Only the primary button starts

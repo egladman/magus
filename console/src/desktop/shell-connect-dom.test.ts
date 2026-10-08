@@ -25,7 +25,7 @@ interface Stub {
   visible: boolean[];
 }
 
-function stubSurface(id: string): Stub {
+function stubApp(id: string): Stub {
   const stub: Stub = {
     activations: 0,
     deactivations: 0,
@@ -36,7 +36,7 @@ function stubSurface(id: string): Stub {
       async activate(host): Promise<PageController<unknown, unknown>> {
         stub.activations++;
         const main = document.createElement("main");
-        main.dataset.stubSurface = id;
+        main.dataset.stubApp = id;
         main.textContent = "surface data";
         host.append(main);
         return {
@@ -60,8 +60,8 @@ function tileFor(
   const registry = new Map(modules.map((m) => [m.id, m]));
   const tile = createTileView({
     seed: { kind: "leaf", id: "p1", pageId: seedPage },
-    surfaces: [],
-    mountSurface: async (pageId, host) => (await registry.get(pageId)?.activate(host)) ?? null,
+    apps: [],
+    mountApp: async (pageId, host) => (await registry.get(pageId)?.activate(host)) ?? null,
     onLayoutChange() {},
   });
   document.body.append(tile.el);
@@ -94,7 +94,7 @@ describe("the shell connect page", () => {
   });
 
   test("a server surface opened with no address shows the page, not the surface", async () => {
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -108,7 +108,7 @@ describe("the shell connect page", () => {
   });
 
   test("applying an address opens the pending surface, once", async () => {
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -124,7 +124,7 @@ describe("the shell connect page", () => {
   });
 
   test("an address applied while the pane is hidden waits until it is revealed", async () => {
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -142,7 +142,7 @@ describe("the shell connect page", () => {
 
   test("with an address already applied the surface opens directly", async () => {
     setDefaultHost(HOST);
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -152,7 +152,7 @@ describe("the shell connect page", () => {
 
   test("demo mode opens a server surface directly", async () => {
     location.hash = "#demo";
-    const stub = stubSurface("dashboard");
+    const stub = stubApp("dashboard");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "dashboard");
     tiles.push(tile);
     await settle();
@@ -161,7 +161,7 @@ describe("the shell connect page", () => {
   });
 
   test("a surface with no declared need is not wrapped and opens offline", async () => {
-    const stub = stubSurface("logs");
+    const stub = stubApp("logs");
     const wrapped = requireServer(stub.module, undefined);
     assert.equal(wrapped, stub.module);
     const { tile, pane } = tileFor([wrapped], "logs");
@@ -173,7 +173,7 @@ describe("the shell connect page", () => {
 
   test("a server that drops mid-session keeps the open surface and its data", async () => {
     setDefaultHost(HOST);
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -185,7 +185,7 @@ describe("the shell connect page", () => {
   });
 
   test("closing the pane before connecting leaves nothing to open later", async () => {
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tile.deactivate();
     tile.el.remove();
@@ -215,7 +215,7 @@ describe("the shell sign-in gate", () => {
 
   test("an address with no token shows the sign-in state, not the surface", async () => {
     setDefaultHost(HOST);
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -233,7 +233,7 @@ describe("the shell sign-in gate", () => {
 
   test("demo needs no token", async () => {
     location.hash = "#demo";
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();
@@ -243,7 +243,7 @@ describe("the shell sign-in gate", () => {
   test("a refused token tears the surface down and returns to sign-in with a notice", async () => {
     setDefaultHost(HOST);
     sessionStorage.setItem(TOKEN_KEY, "test-token");
-    const stub = stubSurface("runs");
+    const stub = stubApp("runs");
     const { tile, pane } = tileFor([requireServer(stub.module, { purpose: PURPOSE })], "runs");
     tiles.push(tile);
     await settle();

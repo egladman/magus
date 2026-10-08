@@ -5,7 +5,7 @@
 import { reportFailure } from "../../../lib/notifications";
 import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/server";
 import { subscribeDefaultHost } from "../../../lib/settings";
-import type { SurfaceInstance } from "../../../desktop/standalone";
+import type { AppInstance } from "../../../desktop/standalone";
 import { h } from "../../../desktop/view";
 import {
   listDiagrams,
@@ -230,7 +230,7 @@ const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
 };
 
 // activate builds the surface into host. Everything is per mount; only the runtime is shared.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   let serverHost = resolveServerHost(parseHash()) ?? "";
   const refs = build(host);

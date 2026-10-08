@@ -205,14 +205,14 @@ function ready(): boolean {
   return serverAvailable() && !signInRequired();
 }
 
-// surfaceURL is the clean /console/<surface>/ address of this surface on the page's own origin,
+// appURL is the clean /console/<surface>/ address of this surface on the page's own origin,
 // keeping a #port= attach so the signed-in link reaches the same server.
-export function surfaceURL(surface: string): string {
+export function appURL(app: string): string {
   const path = location.pathname;
   const at = path.indexOf("/console/");
   const base = at >= 0 ? path.slice(0, at + "/console/".length) : "/console/";
   const port = parseHash().port;
-  return location.origin + base + surface + "/" + (port ? "#port=" + port : "");
+  return location.origin + base + app + "/" + (port ? "#port=" + port : "");
 }
 
 function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
@@ -236,7 +236,7 @@ function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
 
 // renderSignIn writes the sign-in state: why the surface cannot show anything, and the one command
 // that fixes it. notice says why a signed-in page came back here (a refused token).
-export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: string): void {
+export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: string): void {
   delete slots.actions.dataset.connectPrompt;
   slots.title.textContent = "Sign in to this server";
   slots.message.textContent =
@@ -246,7 +246,7 @@ export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: s
   way.dataset.emptyWay = "";
   const label = h("span", undefined, "Open it signed in");
   label.dataset.emptyWayLabel = "";
-  const cmd = signInCommand(surfaceURL(surface));
+  const cmd = signInCommand(appURL(app));
   const command = h("pre");
   command.dataset.emptyCmd = "";
   command.dataset.signInCommand = "";

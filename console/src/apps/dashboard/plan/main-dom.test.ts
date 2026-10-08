@@ -688,7 +688,7 @@ test("the view says what a job is and links to Runs for target runs", async () =
     assert.match(intro, /the server's own maintenance/);
     assert.match(intro, /Target runs are in Runs/);
     const link = host.querySelector<HTMLButtonElement>(".console-plan-intro__link");
-    assert.equal(link?.dataset.openSurface, "runs");
+    assert.equal(link?.dataset.openApp, "runs");
     let opened: unknown;
     window.addEventListener(
       "console:open-surface",

@@ -40,19 +40,19 @@ import { h } from "./view";
 const DIVIDER = 5;
 
 // A surface the in-pane launcher can drop into an empty pane.
-export interface TileSurface {
+export interface TileApp {
   id: string;
   label: string;
   hint: string;
 }
 
 // What the console injects: how to mount a surface into a host, how to persist the tree, and the
-// launcher's surface list. mountSurface returns the surface's controller (or null if it declined /
+// launcher's surface list. mountApp returns the surface's controller (or null if it declined /
 // is unknown), which tileView drives for visibility and teardown.
 export interface TileDeps {
   seed: Pane; // the tab's initial tree: a single leaf, or a restored split tree
-  surfaces: readonly TileSurface[];
-  mountSurface(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
+  apps: readonly TileApp[];
+  mountApp(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
   onLayoutChange(tree: Pane): void; // persist (the console writes it into the tab's layout)
   // The FOCUSED pane's open document changed (page.ts's TitleSource), or focus moved to a pane
   // showing a different one. A tab holds a whole tree of surfaces but the bar has room for one
@@ -125,9 +125,9 @@ export function createTileView(deps: TileDeps): TileView {
   // on drag pointerup (not per move - a drag persists once it settles).
   const commit = (): void => deps.onLayoutChange(tree);
 
-  // treeHasSurface guards the launcher against opening a single-instance surface twice in one tab
+  // treeHasApp guards the launcher against opening a single-instance surface twice in one tab
   // (two live log viewers would fight over module state).
-  const treeHasSurface = (pageId: string): boolean => leaves(tree).some((l) => l.pageId === pageId);
+  const treeHasApp = (pageId: string): boolean => leaves(tree).some((l) => l.pageId === pageId);
 
   // applyGrid writes a split container's CSS grid template from its direction and ratio: the a-side
   // gets `ratio` of the axis, the divider a fixed track, the b-side the rest. Used both by a full
@@ -269,7 +269,7 @@ export function createTileView(deps: TileDeps): TileView {
     if (!p || p.pageId === "" || p.controller || mounting.has(leafId)) return;
     mounting.add(leafId);
     p.host.replaceChildren();
-    const controller = await deps.mountSurface(p.pageId, p.host);
+    const controller = await deps.mountApp(p.pageId, p.host);
     mounting.delete(leafId);
     if (!panes.has(leafId)) {
       controller?.deactivate();
@@ -293,8 +293,8 @@ export function createTileView(deps: TileDeps): TileView {
     wrap.dataset.paneLauncher = "";
     wrap.append(h("p", undefined, "Open a surface in this pane"));
     const list = h("div", "pf-v6-l-gallery pf-m-gutter");
-    for (const s of deps.surfaces) {
-      if (treeHasSurface(s.id)) continue;
+    for (const s of deps.apps) {
+      if (treeHasApp(s.id)) continue;
       const item = h("div", "pf-v6-c-card pf-m-clickable pf-m-compact");
       item.dataset.open = s.id;
       // A real clickable button (role + tabindex + the Enter/Space handler below); Pico's old
@@ -466,7 +466,7 @@ export function createTileView(deps: TileDeps): TileView {
     render();
   }
 
-  // leafPageId looks up a leaf's surface without touching focus - moveSurfaceToTab (main.ts) reads
+  // leafPageId looks up a leaf's surface without touching focus - moveAppToTab (main.ts) reads
   // this to find out what a drag is carrying, since a drag can originate from ANY pane in the source
   // tab, not just its currently focused one.
   function leafPageId(id: string): string | null {
@@ -480,7 +480,7 @@ export function createTileView(deps: TileDeps): TileView {
   // surface RE-MOUNTS fresh here - tileView never migrates a live DOM node across tiles, only tree
   // positions within one - which is fine: the caller is moving it FROM another tile entirely.
   function adopt(pageId: string, dir?: Split["dir"]): void {
-    if (treeHasSurface(pageId)) {
+    if (treeHasApp(pageId)) {
       const existing = leaves(tree).find((l) => l.pageId === pageId);
       if (existing) setFocus(existing.id);
       render();

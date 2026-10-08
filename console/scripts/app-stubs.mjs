@@ -1,4 +1,4 @@
-// surface-stubs.mjs - emit per-surface index.html stubs for the clean /console/<segment>/ deep
+// app-stubs.mjs - emit per-surface index.html stubs for the clean /console/<segment>/ deep
 // links (the canonical server-origin form magus mints). The server serves the shell for these
 // paths via an SPA fallback, but the HOSTED static host (GitHub Pages, no rewrites) has none, so
 // each surface path needs a PHYSICAL index.html. The stub is the shell index.html with a single
@@ -16,8 +16,8 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-// surfaceSegments lists every clean path segment the app manifests under appsDir declare.
-export async function surfaceSegments(appsDir = "src/apps") {
+// appSegments lists every clean path segment the app manifests under appsDir declare.
+export async function appSegments(appsDir = "src/apps") {
   const segments = [];
   for (const entry of readdirSync(appsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
@@ -29,9 +29,9 @@ export async function surfaceSegments(appsDir = "src/apps") {
   return segments.sort();
 }
 
-if (process.argv[1]?.endsWith("surface-stubs.mjs")) {
+if (process.argv[1]?.endsWith("app-stubs.mjs")) {
   const shell = readFileSync("index.html", "utf8").replace("<head>", '<head>\n  <base href="../">');
-  for (const segment of await surfaceSegments()) {
+  for (const segment of await appSegments()) {
     mkdirSync(join("gen", segment), { recursive: true });
     writeFileSync(join("gen", segment, "index.html"), shell);
   }

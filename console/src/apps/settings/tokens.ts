@@ -43,12 +43,12 @@ function grantLabel(g: Grant | undefined): string {
   const level = (l: Level): string =>
     l === Level.WRITE ? "write" : l === Level.READ ? "read" : "";
   const parts: string[] = [];
-  for (const [surface, l] of [
+  for (const [scope, l] of [
     ["tokens", g.tokens],
     ["mcp", g.mcp],
     ["console", g.console],
   ] as const) {
-    if (level(l)) parts.push(surface + "=" + level(l));
+    if (level(l)) parts.push(scope + "=" + level(l));
   }
   return parts.join(",") || "nothing";
 }

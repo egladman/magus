@@ -25,9 +25,9 @@ Where a new piece goes:
   `/console/plan/` and `/console/diagrams/` still open them.
 
 The directory is the list. The build bundles every `apps/*/main.ts` except a shell-loaded app's
-into `gen/<id>/<id>.js`, `scripts/surface-stubs.mjs` writes a stub for each manifest's segments,
+into `gen/<id>/<id>.js`, `scripts/app-stubs.mjs` writes a stub for each manifest's segments,
 the server serves exactly those stubs, and the router reads the manifests. The one list outside
-the tree is the server's link vocabulary, `KnownSurfaces` in `internal/service/console/url.go`,
+the tree is the server's link vocabulary, `KnownApps` in `internal/service/console/url.go`,
 because the CLI mints links with no console built. `src/apps/apps.test.ts` fails when any of them
 disagrees with the directories, in either direction.
 

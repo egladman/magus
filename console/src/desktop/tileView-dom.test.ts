@@ -13,17 +13,17 @@ import type { PageController } from "./page";
 // has to come after one turn of the event loop.
 const mounted = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-// A stub surface with a document title the test drives. mountSurface resolves on a microtask, like
+// A stub surface with a document title the test drives. mountApp resolves on a microtask, like
 // the real lazy import() does - which is the whole point: a pane exists before its controller.
 function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>>>) {
   const seen: [string | null, string][] = [];
   const deps: TileDeps = {
     seed: { kind: "leaf", id: "p1", pageId: "logs" },
-    surfaces: [
+    apps: [
       { id: "logs", label: "Log Viewer", hint: "" },
       { id: "graph", label: "Graph Explorer", hint: "" },
     ],
-    async mountSurface(pageId): Promise<PageController<unknown, unknown>> {
+    async mountApp(pageId): Promise<PageController<unknown, unknown>> {
       return {
         search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
         docTitle: titles[pageId],
@@ -145,7 +145,7 @@ test("only the focused pane owns visibility while a tiled tab is shown", async (
   };
   const calls: [string, boolean][] = [];
   const { deps } = stubDeps(titles);
-  deps.mountSurface = async (pageId) => ({
+  deps.mountApp = async (pageId) => ({
     search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
     docTitle: titles[pageId],
     setVisible(visible) {

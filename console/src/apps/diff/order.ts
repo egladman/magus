@@ -132,7 +132,7 @@ export interface ReviewStats {
   readonly settled: number;
   readonly additions: number;
   readonly deletions: number;
-  readonly publicSurface: number;
+  readonly publicFiles: number;
   readonly untested: number;
 }
 
@@ -144,14 +144,14 @@ export interface ReviewStats {
 export function stats(cs: OrderedChangeset): ReviewStats {
   let additions = 0;
   let deletions = 0;
-  let publicSurface = 0;
+  let publicFiles = 0;
   let untested = 0;
   let settledCount = 0;
   for (const { file, annotation } of cs.primary) {
     if (settled(annotation)) settledCount++;
     additions += file.additions;
     deletions += file.deletions;
-    if (annotation?.surface === "public") publicSurface++;
+    if (annotation?.visibility === "public") publicFiles++;
     const cov = annotation?.coverage;
     if (cov && cov.total_stmts > 0 && cov.covered_stmts === 0) untested++;
   }
@@ -161,7 +161,7 @@ export function stats(cs: OrderedChangeset): ReviewStats {
     settled: settledCount,
     additions,
     deletions,
-    publicSurface,
+    publicFiles,
     untested,
   };
 }
@@ -233,7 +233,7 @@ export function riskChips(a: DiffAnnotation | undefined): Chip[] {
     });
   }
 
-  if (a.surface === "public") {
+  if (a.visibility === "public") {
     const api = (a.symbols ?? [])
       .filter((s) => s.public_beyond_workspace)
       .map((s) => s.label ?? s.id);

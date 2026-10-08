@@ -52,7 +52,7 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 import { demoEvents } from "./demo";
 
 const PAGE_SIZE = 100;
@@ -433,7 +433,7 @@ interface PayloadControl {
 // this pane when it stops being the visible one. Every surface hands back this shape rather than a
 // bare teardown - a surface with nowhere to put the hook is how the log viewer came to write a
 // backgrounded tab's status bar.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   const refs = buildScaffold(host);
   let stale = false;
   let loadedEvents: ActivityEvent[] = [];

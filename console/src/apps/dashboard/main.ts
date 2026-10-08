@@ -38,7 +38,7 @@ import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { agentsTile } from "./tiles/agents";
 import { jobsTile } from "./tiles/jobs";
-import { onModeRequest, openSurface, takeModeIntent } from "../../desktop/surface-navigation";
+import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
 import { brokerTile } from "./tiles/broker";
@@ -72,7 +72,7 @@ import {
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
 import { activate as activateJobs } from "./plan/main";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 import { publishStatus } from "../../desktop/status";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
@@ -98,17 +98,17 @@ function setConn(conn: ConnView): void {
   store.set({ conn });
 }
 
-// surfaceHidden is set true by the exported setVisible() when the dashboard is mounted in the console
+// appHidden is set true by the exported setVisible() when the dashboard is mounted in the console
 // and its tab is backgrounded. While hidden, renderStatusBar skips the SHARED status-bar writes (the
 // console detaches this tab's status bar, so those el() lookups would resolve to the ACTIVE tab's bar
 // and leak "connected / observing since" into, say, the log viewer). The dashboard's OWN panel reveal
 // and its tiles keep updating in the background. lastState lets setVisible(true) replay the current
 // state so the bar catches up on return. Standalone (no console) this stays false, unchanged.
-let surfaceHidden = false;
+let appHidden = false;
 let lastState: DashboardState | null = null;
 type DashboardMode = "overview" | "jobs";
 let dashboardMode: DashboardMode = "overview";
-let jobsMount: SurfaceInstance | null = null;
+let jobsMount: AppInstance | null = null;
 
 function disposeJobs(): void {
   jobsMount?.deactivate();
@@ -126,7 +126,7 @@ function setDashboardMode(mode: DashboardMode): void {
   jobsHost.hidden = mode !== "jobs";
   if (mode === "jobs") {
     if (!jobsMount) jobsMount = activateJobs(jobsHost);
-    jobsMount.setVisible?.(!surfaceHidden);
+    jobsMount.setVisible?.(!appHidden);
     return;
   }
   // The Jobs view's keyboard commands and poller only make sense while its mode is in front.
@@ -167,7 +167,7 @@ function isDashboardMode(mode: string | null): mode is DashboardMode {
 }
 
 export function setVisible(visible: boolean): void {
-  surfaceHidden = !visible;
+  appHidden = !visible;
   if (visible) transport.resume();
   else transport.suspend();
   jobsMount?.setVisible?.(visible && dashboardMode === "jobs");
@@ -192,7 +192,7 @@ function renderStatusBar(s: DashboardState): void {
   el("dash-panels").hidden = !showPanels;
 
   // Everything below writes the SHARED bottom status bar; skip it while this tab is hidden.
-  if (surfaceHidden) return;
+  if (appHidden) return;
 
   const demoing = s.conn.state === "demo";
 
@@ -506,7 +506,7 @@ function mountTiles(): void {
     bind(viewMode, (mode) => {
       const big = mode === "bigPicture";
       for (const e of boardEls) e.toggleAttribute("data-view-hide", big && !bigPictureEls.has(e));
-      for (const tile of boardOnlyTiles) tile.setVisible?.(!big && !surfaceHidden);
+      for (const tile of boardOnlyTiles) tile.setVisible?.(!big && !appHidden);
     }),
   );
 }
@@ -751,8 +751,8 @@ export function activate(): void {
     button.addEventListener(
       "click",
       () => {
-        const pageId = button.dataset.openSurface;
-        if (pageId) openSurface({ pageId });
+        const pageId = button.dataset.openApp;
+        if (pageId) openApp({ pageId });
       },
       { signal: lifecycleAbort?.signal },
     );

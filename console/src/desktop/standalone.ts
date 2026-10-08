@@ -16,7 +16,7 @@
 
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
-export interface StandaloneSurface {
+export interface StandaloneApp {
   id: string; // registry id / pageId, e.g. "logs"
   title: string; // tab title, e.g. "Log Viewer"
   // Path under gen/ of the bundle exporting activate(), e.g. "logs/logs.js"; scaffold.html sits
@@ -51,7 +51,7 @@ interface BootModule {
 
 // A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/.
-export interface ModuleSurface {
+export interface ModuleApp {
   id: string; // registry id / pageId, e.g. "activity"
   title: string; // tab title, e.g. "Activity"
   // Path under gen/ of the bundle whose activate(host) builds the DOM, e.g. "activity/activity.js".
@@ -62,25 +62,25 @@ export interface ModuleSurface {
 // What a host-building bundle's activate(host) may hand back for ONE mount: nothing (a static
 // surface), its teardown, or a controller carrying the teardown plus that mount's own visibility
 // switch.
-export interface SurfaceInstance {
+export interface AppInstance {
   deactivate(): void;
   setVisible?(visible: boolean): void;
 }
 
-// The shape moduleSurface calls on a host-building bundle. A surface with something LIVE in it (a
+// The shape moduleApp calls on a host-building bundle. A surface with something LIVE in it (a
 // poll timer, a stream) also exposes setVisible so it can go quiet while its pane is backgrounded -
 // and it does so on the INSTANCE, never as a module export, because the console drives visibility
 // per PANE (tileView's applyVisibility calls each pane's controller). One switch shared by however
 // many mounts a bundle has cannot tell them apart: backgrounding one pane silences another that is
 // still on screen.
 interface HostModule {
-  activate(host: HTMLElement): SurfaceInstance | (() => void) | void;
+  activate(host: HTMLElement): AppInstance | (() => void) | void;
 }
 
-// moduleSurface wraps a page-less surface: the console dynamically imports its bundle by URL (kept
-// lazy, like the others) and calls its exported activate(host). Symmetric with standaloneSurface but
+// moduleApp wraps a page-less surface: the console dynamically imports its bundle by URL (kept
+// lazy, like the others) and calls its exported activate(host). Symmetric with standaloneApp but
 // without the fetch-and-lift, since there is no built page - the bundle owns its scaffold.
-export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
+export function moduleApp(s: ModuleApp): PageModule<null, null> {
   const url = (p: string): string => new URL("./" + p, import.meta.url).href;
   const cssId = "surface-css-" + s.id;
   return {
@@ -98,7 +98,7 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
       // Normalized here so the console below has ONE shape to drive, whichever of the three a
       // surface hands back.
       const boot = mod.activate(host);
-      const instance: SurfaceInstance | null =
+      const instance: AppInstance | null =
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
       return {
         search: noSearch,
@@ -115,7 +115,7 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
   };
 }
 
-export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> {
+export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
   // artUrl resolves an artifact under gen/ relative to THIS module's URL at runtime, so
   // the same code works wherever the console is served (a dev port, or the site's /magus/ base path).
   // Computed (not a string literal) so esbuild leaves it a runtime load instead of bundling the built

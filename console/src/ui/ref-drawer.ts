@@ -651,12 +651,12 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   requestAnimationFrame(() => drawer.classList.remove("console-shell-refdrawer--instant"));
 }
 
-// referenceSurface is the "break out to tab" target: a lightweight, single-instance surface that renders
+// referenceApp is the "break out to tab" target: a lightweight, single-instance surface that renders
 // the CONSOLE-WIDE reference (the #console-ref-shell sections - chords, tabs/panes, where-your-data-goes),
 // the same always-true help the drawer trails after every surface and the whole of what the launcher
 // shows. It is deliberately NOT a live mirror of the drawer's surface-specific sections: a tab persists by
 // pageId alone (no payload), so it must re-derive stable content on every mount/reload - and the shell
-// reference is exactly that. main.ts registers it (kept out of the launcher SURFACES list, so it has no
+// reference is exactly that. main.ts registers it (kept out of the launcher APPS list, so it has no
 // card and is reachable only via the drawer's break-out button) and opens it single-instance.
 const noRefSearch: SearchProvider<null> = {
   placeholder: "",
@@ -664,7 +664,7 @@ const noRefSearch: SearchProvider<null> = {
   apply: () => ({ matches: 0 }),
 };
 
-export function referenceSurface(): PageModule<null, null> {
+export function referenceApp(): PageModule<null, null> {
   return {
     id: "reference",
     title: "Reference",

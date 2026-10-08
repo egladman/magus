@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { toolchainTile } from "./toolchain";
-import { surfaceNavigationEvent } from "../../../desktop/surface-navigation";
+import { appNavigationEvent } from "../../../desktop/app-navigation";
 import { initialState, type DashboardState, type LifecycleView, type ToolRowView } from "../state";
 
 function row(over: Partial<ToolRowView> = {}): ToolRowView {
@@ -122,14 +122,14 @@ test("Open Tools asks the shell to open the tools app", () => {
   const listen = (e: Event): void => {
     opened.push((e as CustomEvent).detail);
   };
-  window.addEventListener(surfaceNavigationEvent, listen);
+  window.addEventListener(appNavigationEvent, listen);
   try {
     const open = tile.el.querySelector<HTMLButtonElement>("[data-open-surface]");
-    assert.equal(open?.dataset.openSurface, "tools");
+    assert.equal(open?.dataset.openApp, "tools");
     assert.equal(open?.textContent, "Open Tools");
     open?.click();
   } finally {
-    window.removeEventListener(surfaceNavigationEvent, listen);
+    window.removeEventListener(appNavigationEvent, listen);
   }
   assert.deepEqual(opened, [{ pageId: "tools" }]);
 });

@@ -1,6 +1,6 @@
 import { must, errMessage } from "../../lib/guards";
-import { onModeRequest, openSurface, takeModeIntent } from "../../desktop/surface-navigation";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import { onModeRequest, openApp, takeModeIntent } from "../../desktop/app-navigation";
+import type { AppInstance } from "../../desktop/standalone";
 import { activate as activateFigures } from "./diagrams/main";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
@@ -358,7 +358,7 @@ let liveConnected = false; // true while the SSE stream is open; drives the badg
 let liveFlavor: string | null = null; // null (knowledge) or "targets"
 // Defer hidden live updates until the pane returns.
 let liveRefreshPending = false;
-let surfaceVisible = true;
+let appVisible = true;
 
 // Teardown handles for deactivate() (the console unmounting a graph tab/pane): the stage ResizeObserver
 // and one AbortController whose signal wires every window/document lifecycle listener, so a single
@@ -2180,7 +2180,7 @@ function renderCard(id: string | null) {
     .querySelectorAll<HTMLElement>(".console-graph-card__ref")
     .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
   const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
-  if (notesCardBtn) notesCardBtn.addEventListener("click", () => openSurface({ pageId: "notes" }));
+  if (notesCardBtn) notesCardBtn.addEventListener("click", () => openApp({ pageId: "notes" }));
 }
 
 // ---- selection, search, list, deep links -----------------------------------
@@ -5230,7 +5230,7 @@ function liveConnect() {
     url,
     headers,
     (eventType) => {
-      if (!surfaceVisible) {
+      if (!appVisible) {
         liveRefreshPending = true;
         return;
       }
@@ -5255,7 +5255,7 @@ function liveConnect() {
       liveConnected = true;
       clearStaleNotice();
       publishLiveStatus();
-      if (surfaceVisible) {
+      if (appVisible) {
         liveRefetchGraph();
         fetchLiveStatus();
       } else {
@@ -5302,7 +5302,7 @@ function clearStaleNotice() {
 function publishLiveStatus() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
   // reads the same as the dashboard and log viewer.
-  if (surfaceVisible) {
+  if (appVisible) {
     // Connection state only: the bar answers one question, and the workspace identity is already
     // beside it. A snapshot or demo graph has no link of its OWN, so it reports no connection and
     // the shell's poller answers - claiming the dot to say "not connected" had this surface
@@ -5892,7 +5892,7 @@ function bootWireEvents() {
     // Only ever a STOP. Turning motion off mid-settle cuts the opening burst short, which is the
     // point of the setting; turning it back on has nothing to resume, because a settled graph is
     // what full motion looks like too.
-    if (sim && (!motionEligible() || isDagMode() || !surfaceVisible)) sim.alpha(0).stop();
+    if (sim && (!motionEligible() || isDagMode() || !appVisible)) sim.alpha(0).stop();
     draw();
   });
   motionObserver.observe(root, {
@@ -6206,7 +6206,7 @@ async function bootLive() {
 // view. /console/diagrams/ opens it, and so does a #figure= link, which carries its own graph.
 type GraphMode = "explore" | "figures";
 let graphMode: GraphMode = "explore";
-let figuresMount: SurfaceInstance | null = null;
+let figuresMount: AppInstance | null = null;
 // The console's word on this pane; the explorer is shown only while it is true AND in front.
 let paneVisible = true;
 
@@ -6284,7 +6284,7 @@ export function setVisible(visible: boolean): void {
 }
 
 function showExplorer(visible: boolean): void {
-  surfaceVisible = visible;
+  appVisible = visible;
   if (visible) {
     if (sim) sim.restart(); // finishes an interrupted settle; a no-op on one that finished
     publishLiveStatus();

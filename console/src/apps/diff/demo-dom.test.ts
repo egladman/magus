@@ -130,7 +130,7 @@ test("#demo answers the peek command instead of doing nothing", async () => {
 // The surface used to carry its own "See the demo" button. It does not any more - one entry point for
 // the whole console, the title bar's Workspace menu - so what it owes someone with no server is a
 // SENTENCE naming where a populated version lives, not a dead end. Every /console/<surface>/ path is
-// the shell with a <base> injected (scripts/surface-stubs.mjs), so that menu is always on screen.
+// the shell with a <base> injected (scripts/app-stubs.mjs), so that menu is always on screen.
 test("without #demo and without a server the surface says where a populated one lives", async () => {
   const dispose = activate(document.body);
   await settle();

@@ -398,7 +398,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 
 
 /* Activity surface (loads this shared render sheet - console/main.ts registers it via
-   moduleSurface({ css: "logs/logs.css" })). The trail header is a PF Toolbar: just the
+   moduleApp({ css: "logs/logs.css" })). The trail header is a PF Toolbar: just the
    connection note + Refresh, aligned end on ONE dense row (no in-app title - the tab already
    names the app). This class only subdues the note; everything else is PF + shared
    console-render-*. */

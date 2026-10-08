@@ -6,9 +6,9 @@
 //
 // A plain click on a card opens that surface as a tab. Each card also carries a top-right kebab menu
 // whose one item, "Open in a new window", spawns a dedicated OS/PWA window for that surface
-// (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
+// (openAppWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
 import {
   DEMO_HINT,
@@ -143,11 +143,11 @@ export function launcherTagline(now: Date = new Date(), pick: () => number = Mat
   return eligible[Math.floor(pick() * eligible.length)].text;
 }
 
-// surfaceIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
+// appIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
 // currentColor, round caps. The rail and the launcher both draw through it so the marks match.
 // `size` omitted leaves the svg unsized, which is what the card's corner watermark wants (it is
 // scaled by CSS).
-export function surfaceIconSvg(glyph: string, size?: number): string {
+export function appIconSvg(glyph: string, size?: number): string {
   const dims = size == null ? "" : ' width="' + size + '" height="' + size + '"';
   return (
     '<svg viewBox="0 0 24 24"' +
@@ -289,7 +289,7 @@ export function syncLauncherChord(root: HTMLElement, chord: string): void {
 }
 
 export function buildLauncher(
-  surfaces: readonly AppManifest[],
+  apps: readonly AppManifest[],
   open: (pageId: string) => void,
 ): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
@@ -318,7 +318,7 @@ export function buildLauncher(
   const closeAllMenus = (except?: () => void): void => {
     for (const c of menuClosers) if (c !== except) c();
   };
-  for (const s of surfaces) {
+  for (const s of apps) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
     card.dataset.open = s.id;
@@ -336,7 +336,7 @@ export function buildLauncher(
     const icon = document.createElement("span");
     icon.className = "console-launcher-card__icon";
     if (isWholeMotion(s.motion)) icon.dataset.motion = s.motion;
-    icon.innerHTML = surfaceIconSvg(s.glyph, 24);
+    icon.innerHTML = appIconSvg(s.glyph, 24);
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -354,7 +354,7 @@ export function buildLauncher(
     // icon-scoped so the watermark never animates.
     const mark = document.createElement("span");
     mark.className = "console-launcher-card__watermark";
-    mark.innerHTML = surfaceIconSvg(s.glyph);
+    mark.innerHTML = appIconSvg(s.glyph);
     card.append(mark);
     card.addEventListener("click", () => open(s.id));
     // Enter/Space open the surface only when the CARD itself is focused - a key press on the kebab or a
@@ -417,7 +417,7 @@ export function buildLauncher(
     openWin.addEventListener("click", (ev) => {
       ev.stopPropagation();
       closeMenu();
-      openSurfaceWindow(s.id);
+      openAppWindow(s.id);
     });
     card.append(kebab, menu);
 

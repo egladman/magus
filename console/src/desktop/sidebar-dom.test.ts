@@ -13,7 +13,7 @@ import type { Workspace } from "./tabs";
 import type { PulseView } from "./pulse";
 import type { Badge } from "./badges";
 import { signal } from "./view";
-const SURFACES = [dashboard, logs, settings];
+const APPS = [dashboard, logs, settings];
 
 function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
   const host = document.createElement("nav");
@@ -25,7 +25,7 @@ function mount(ws: Workspace, expanded = false, focusedPageId: string | null = n
   const opened: string[] = [];
   const bar = createSidebar(
     host,
-    { ws: wsCell, expanded: expCell, pulse, focused, badges, surfaces: SURFACES },
+    { ws: wsCell, expanded: expCell, pulse, focused, badges, apps: APPS },
     { onOpen: (id: string) => opened.push(id) },
   );
   return { host, wsCell, expCell, pulse, focused, badges, opened, bar };
@@ -61,14 +61,14 @@ test("each row is named independently of its visible label", () => {
   assert.equal(link(host, "logs").title, "Log Viewer - Read a run's captured output");
 });
 
-// The whole reason surfaceIconSvg was pulled out of the launcher: the rail and the launcher card
+// The whole reason appIconSvg was pulled out of the launcher: the rail and the launcher card
 // mark the same app, and two hand-kept copies of eight glyphs drift the first time one is redrawn.
-// Both sides are built through their REAL entry points - comparing either against surfaceIconSvg
+// Both sides are built through their REAL entry points - comparing either against appIconSvg
 // would only prove that function equals itself. Compared by geometry, since the two draw at
 // different sizes.
 test("a rail row draws the same glyph as that app's launcher card", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  const launcher = buildLauncher(SURFACES, () => {});
+  const launcher = buildLauncher(APPS, () => {});
   const geometry = (el: Element | null | undefined): string[] =>
     el
       ? [...el.querySelectorAll("path, circle, rect, polyline, line")].map(
@@ -76,7 +76,7 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
         )
       : [];
 
-  for (const s of SURFACES) {
+  for (const s of APPS) {
     const rail = geometry(link(host, s.id).querySelector("svg"));
     const card = geometry(
       launcher.querySelector(`[data-open="${s.id}"] .console-launcher-card__icon svg`),
@@ -261,7 +261,7 @@ test("the reading follows the pool and the rail's own width", () => {
 // A meta surface belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
 // and macOS sidebars both use. The flag lives on the surface list so the rail is not a second place
 // deciding what counts as utility.
-test("utility surfaces are pinned in their own group", () => {
+test("utility apps are pinned in their own group", () => {
   const { host } = mount({ tabs: [], activeId: null });
   const utility = host.querySelector("[data-rail-utility]");
   assert.ok(utility);

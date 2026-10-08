@@ -9,10 +9,10 @@ import { logs } from "../apps/logs/app";
 import { graph } from "../apps/graph/app";
 import type { Workspace } from "./tabs";
 
-const SURFACES = [dashboard, logs, graph];
+const APPS = [dashboard, logs, graph];
 
 test("every surface gets a row, in the surface list's order", () => {
-  const items = sidebarItems({ tabs: [], activeId: null }, SURFACES, null);
+  const items = sidebarItems({ tabs: [], activeId: null }, APPS, null);
   assert.deepEqual(
     items.map((i) => i.pageId),
     ["dashboard", "logs", "graph"],
@@ -31,7 +31,7 @@ test("a tab marks its surface open, and the focused surface current", () => {
     ],
     activeId: "b",
   };
-  const by = new Map(sidebarItems(ws, SURFACES, "graph").map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, APPS, "graph").map((i) => [i.pageId, i]));
   assert.deepEqual(
     { open: by.get("logs")?.open, current: by.get("logs")?.current },
     { open: true, current: false },
@@ -70,7 +70,7 @@ test("a tiled tab marks every surface in its layout", () => {
   };
   // A tiled tab holds BOTH surfaces, so both are open - but only the focused one is current. Marking
   // every surface in the tab lit two rows at once with nothing saying where input would land.
-  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, APPS, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("logs")?.open, true);
   assert.equal(by.get("logs")?.current, true);
   assert.equal(by.get("dashboard")?.open, true, "the tab's other pane is open");
@@ -88,7 +88,7 @@ test("a background tab is open but not current", () => {
     ],
     activeId: "a",
   };
-  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, APPS, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("graph")?.open, true);
   assert.equal(by.get("graph")?.current, false);
 });
@@ -100,7 +100,7 @@ test("no focused surface leaves nothing current", () => {
     tabs: [{ id: "a", pageId: "logs", title: "Log Viewer" }],
     activeId: "gone",
   };
-  const items = sidebarItems(ws, SURFACES, null);
+  const items = sidebarItems(ws, APPS, null);
   assert.equal(
     items.some((i) => i.current),
     false,

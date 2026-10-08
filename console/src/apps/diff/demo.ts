@@ -82,7 +82,7 @@ export function demoSession(): DiffReview {
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "public",
+          visibility: "public",
           reach: 38,
           symbols: [
             {
@@ -123,7 +123,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 22,
           symbols: [
             {
@@ -142,7 +142,7 @@ export function demoSession(): DiffReview {
           project: "apps/dashboard",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 14,
           symbols: [
             {
@@ -170,7 +170,7 @@ export function demoSession(): DiffReview {
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
         },
         {
@@ -182,7 +182,7 @@ export function demoSession(): DiffReview {
           project: "services/gateway",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 9,
           churn: { commits: 12, authors: 3, score: 1284 },
           touches: [{ host: AGENT.host, session: AGENT.session }],
@@ -192,7 +192,7 @@ export function demoSession(): DiffReview {
           project: "services/gateway",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
         },
         {
@@ -203,7 +203,7 @@ export function demoSession(): DiffReview {
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 4, authors: 2, score: 96 },
         },
@@ -215,7 +215,7 @@ export function demoSession(): DiffReview {
           project: "tools/migrate",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 2, authors: 1, score: 18 },
         },
@@ -224,7 +224,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 7, authors: 2, score: 210 },
         },
@@ -233,7 +233,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 3,
           churn: { commits: 24, authors: 2, score: 2304, rank: 4 },
           // No reads recorded, so the story row stops at the author rather than inventing a
@@ -245,7 +245,7 @@ export function demoSession(): DiffReview {
           project: "docs",
           role: "unclaimed",
           hint: HINT_UNCLAIMED,
-          surface: "unknown",
+          visibility: "unknown",
           // Prose defines no indexed symbol, so reach is unmeasured rather than zero.
           reach: null,
           churn: { commits: 3, authors: 1, score: 96 },
@@ -255,7 +255,7 @@ export function demoSession(): DiffReview {
           project: "libs/protocol",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
         {
@@ -263,7 +263,7 @@ export function demoSession(): DiffReview {
           project: "apps/dashboard",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
         {
@@ -271,7 +271,7 @@ export function demoSession(): DiffReview {
           project: "docs",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
       ],

@@ -52,7 +52,7 @@ import {
 import { attachHelpPopover } from "../../ui/help-popover";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { h } from "../../desktop/view";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 // FILTER_HELP is the one place the grammar is written down for a reader. The facets teach it by
 // example; this is for the reader who wants the whole vocabulary at once.
@@ -71,7 +71,7 @@ interface Refs {
 
 // activate builds the surface into host and returns the console's teardown handle. Everything below
 // is per-activation, so reopening the tab is a clean slate.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   const demo = wantsDemo(parseHash());
   let host_ = resolveServerHost(parseHash()) ?? "";
@@ -564,7 +564,7 @@ function openLink(text: string, href: string): HTMLElement {
 // server that is not there.
 //
 // "logs/", NOT "../logs/". Every surface page ships with `<base href="../">` (see
-// scripts/surface-stubs.mjs) so the shell's own relative assets resolve from /console/ - which means
+// scripts/app-stubs.mjs) so the shell's own relative assets resolve from /console/ - which means
 // a link here already resolves against /console/, and the extra hop landed on /logs/ and 404'd.
 function viewerHref(key: "inv" | "ref", value: string, demo: boolean): string {
   return "logs/#" + (demo ? "demo&" : "") + key + "=" + encodeURIComponent(value);

@@ -18,7 +18,7 @@ import type { PageController, PageModule, SearchProvider } from "../../desktop/p
 // dispatches a row's command, editableIds gates which rows get a per-row edit-shortcut button (only
 // commands with a CONSOLE_KEYMAP default are rebindable), and onEditKeybindings opens Settings'
 // keybindings editor - with an id, deep-linked and focused on that command's row.
-export interface ShortcutsSurfaceDeps {
+export interface ShortcutsAppDeps {
   commands: () => Command[];
   keymap: () => Keymap;
   mac: boolean;
@@ -57,12 +57,12 @@ function editIcon(): SVGElement {
   return svg;
 }
 
-// createShortcutsSurface builds the PageModule. activate() paints the full command catalogue
+// createShortcutsApp builds the PageModule. activate() paints the full command catalogue
 // into the pane host, grouped by area (first-seen order, so the layout is stable). Each row is a
 // token / label / chord triple, clickable to run the command; a command with no effective chord
 // simply leaves the chord blank, and only a rebindable command grows the trailing edit-shortcut
 // button.
-export function createShortcutsSurface(deps: ShortcutsSurfaceDeps): PageModule<null, null> {
+export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, null> {
   return {
     id: "shortcuts",
     title: "Shortcuts",

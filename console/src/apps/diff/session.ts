@@ -17,7 +17,7 @@ import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "
 // same as the insight and outputs readers beside them.
 
 export type ReviewRole = "source" | "output" | "maintained" | "unclaimed";
-export type ReviewSurface = "internal" | "public" | "unknown";
+export type ReviewVisibility = "internal" | "public" | "unknown";
 
 // ReviewChange mirrors the DiffChange constants: what a changeset did to one symbol, read
 // against a base graph. Absent when the review had no base, which is not "unchanged".
@@ -101,7 +101,7 @@ export interface DiffAnnotation {
   // null when no symbol index was loaded, which is NOT zero: "nothing references this" and
   // "nobody looked" are different facts, and the ordering depends on this one.
   readonly reach: number | null;
-  readonly surface: ReviewSurface;
+  readonly visibility: ReviewVisibility;
   readonly churn?: DiffChurn;
   readonly touches?: readonly DiffTouch[];
   // read_state is whether a person recorded reading this file at the content it holds NOW,

@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 // console, with nothing to say so: a hand-copied value carries no signal when it goes stale.
 // Reading both files and comparing the literal values turns that into a build failure.
 //
-// Paths are relative to the console/ package root (like scripts/surface-stubs.mjs's
+// Paths are relative to the console/ package root (like scripts/app-stubs.mjs's
 // readFileSync("index.html")), not to this file's own location: esbuild bundles every
 // *.test.ts into .testcache with an outbase that varies with how many files are in the
 // build, which would make an import.meta.url-relative path correct in a full test run and

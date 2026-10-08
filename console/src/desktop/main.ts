@@ -22,7 +22,7 @@ import {
   renameTab,
   desktopStarterWorkspace,
   workspaceStore,
-  tabHostsSurface,
+  tabHostsApp,
   type TabState,
 } from "./tabs";
 import { createTabBar, tabViews } from "./tabBar";
@@ -37,7 +37,7 @@ import {
 } from "./home";
 import { APPS } from "../apps/index";
 import { REQUEST_SERVER_SETTINGS_EVENT, requireServer } from "./connectPrompt";
-import { standaloneSurface, moduleSurface } from "./standalone";
+import { standaloneApp, moduleApp } from "./standalone";
 import {
   registerCommand,
   dispatchCommand,
@@ -50,22 +50,22 @@ import {
 } from "./commands";
 import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
-import { settingsSurface } from "../apps/settings/main";
+import { settingsApp } from "../apps/settings/main";
 import { createCheatsheet } from "./cheatsheet";
-import { createShortcutsSurface } from "../apps/shortcuts/main";
+import { createShortcutsApp } from "../apps/shortcuts/main";
 import { createTileView, type TileView } from "./tileView";
 import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
-import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
+import { initRefDrawer, referenceApp } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initWorkspacePicker } from "../ui/workspace-picker";
 import { onWorkspaceScope, onWorkspaces, workspaceScope } from "../lib/scope";
 import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify, reportFailure } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
-import { requestMode, surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
+import { requestMode, appNavigation, appNavigationEvent } from "./app-navigation";
 import { signal } from "./view";
 import {
   parseHash,
@@ -226,11 +226,11 @@ for (const app of APPS) {
   }
 }
 
-// consoleSurfaceFromPath returns what a /console/<segment>/ entry path opens, or null when the page
+// consoleAppFromPath returns what a /console/<segment>/ entry path opens, or null when the page
 // did not boot on such a path (the bare console root, or any other path). It keys on the last path
 // segment being a clean path whose parent segment is "console", so it holds at both the server
 // origin (/console/graph/) and the hosted origin (/magus/console/graph/).
-function consoleSurfaceFromPath(): { pageId: string; mode?: string } | null {
+function consoleAppFromPath(): { pageId: string; mode?: string } | null {
   if (typeof location === "undefined") return null;
   const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   const last = segs[segs.length - 1];
@@ -734,7 +734,7 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
 // openServerSettings jumps a disconnected user straight to the fix: open the Settings surface (as a
 // tab, focusing it if already open - open() is single-instance) then focus + scroll the server-address
 // field once it exists. Settings activates asynchronously (its host pane mounts synchronously, but the
-// controller - and the DOM inside it - resolves via mountSurface's awaited activate() a tick or more
+// controller - and the DOM inside it - resolves via mountApp's awaited activate() a tick or more
 // later; see apps/settings/main.ts), so the field is not guaranteed to exist the instant dispatchCommand
 // returns. Poll a few animation frames rather than assume a fixed delay, and give up quietly past the
 // deadline - the tab is open either way, so a user who does not get auto-focus can still find the field.
@@ -956,10 +956,10 @@ export function startConsole(
   let launcherChordWired = false;
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
-  // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
+  // mountApp is how a tile mounts one surface into a pane host: resolve the registered module and
   // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
-  // the per-surface lazy-import machinery (standalone/moduleSurface) is reused unchanged.
-  async function mountSurface(
+  // the per-surface lazy-import machinery (standalone/moduleApp) is reused unchanged.
+  async function mountApp(
     pageId: string,
     host: HTMLElement,
   ): Promise<PageController<unknown, unknown> | null> {
@@ -982,19 +982,19 @@ export function startConsole(
     const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
     const tile = createTileView({
       seed,
-      surfaces: APPS,
-      mountSurface,
+      apps: APPS,
+      mountApp,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
       onTitleChange: (title, pageId) => {
         retitleTab(tab.id, title, pageId);
         // Fires when focus moves to a pane showing a different surface - exactly when the rail's
         // current row changes. Guarded on the tab being active so a background tab cannot claim it.
-        if (ws.get().activeId === tab.id) focusedSurface.set(pageId || null);
+        if (ws.get().activeId === tab.id) focusedApp.set(pageId || null);
       },
     });
     host.append(tile.el);
     mounts.set(tab.id, { host, status: makeStatusBar(), tile });
-    show(tab.id); // visible + status attached before the tile's surfaces finish activating
+    show(tab.id); // visible + status attached before the tile's apps finish activating
   }
 
   // The window title while running as a dedicated app window (index.html?app=<id>), or null in the
@@ -1110,7 +1110,7 @@ export function startConsole(
     // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
     // so nothing inside it changed. Read it here instead.
     const shot = active?.tile.snapshot();
-    focusedSurface.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
+    focusedApp.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
     syncWindowTitle();
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
@@ -1167,13 +1167,13 @@ export function startConsole(
     activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
   }
 
-  // moveSurfaceToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
+  // moveAppToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
   // (tabBar.ts's onAdoptTab, below) and a Panes-map-cell-on-tab drag (wirePaneCellDrag, further down).
   // It MOVES one leaf's surface: adopt it into the target tab as a new pane, then remove it from the
   // source - closing the source tab outright if that was its only pane. The surface RE-MOUNTS fresh in
   // the target (tileView never migrates a live DOM node across tiles), which is expected: adopt/closeLeaf
   // are pure tree ops, only the pageId travels.
-  function moveSurfaceToTab(sourceTabId: string, sourceLeafId: string, targetTabId: string): void {
+  function moveAppToTab(sourceTabId: string, sourceLeafId: string, targetTabId: string): void {
     if (sourceTabId === targetTabId) return; // dropping a tab/pane onto itself: intra-tab moves are the map's own swap
     const src = mounts.get(sourceTabId);
     const tgt = mounts.get(targetTabId);
@@ -1199,7 +1199,7 @@ export function startConsole(
     onMoveToWindow: (id) => {
       const t = ws.get().tabs.find((x) => x.id === id);
       if (!t) return;
-      openSurfaceWindow(t.pageId);
+      openAppWindow(t.pageId);
       closeTabById(id);
     },
     // Dragging a whole TAB moves its currently-focused pane (a tab has no single "the" surface once
@@ -1207,7 +1207,7 @@ export function startConsole(
     // act on if you split it in place instead of dragging it).
     onAdoptTab: (sourceId, targetId) => {
       const focusId = mounts.get(sourceId)?.tile.snapshot().focusId ?? "";
-      moveSurfaceToTab(sourceId, focusId, targetId);
+      moveAppToTab(sourceId, focusId, targetId);
     },
   });
   tabBarHost.append(bar.el);
@@ -1232,7 +1232,7 @@ export function startConsole(
   // The surface the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
   // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
   // Null with no tab open (the launcher), so nothing is marked.
-  const focusedSurface = signal<string | null>(null);
+  const focusedApp = signal<string | null>(null);
   // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
   // earns a badge and a static one does not.
   const railBadges = signal<Record<string, Badge>>({});
@@ -1313,9 +1313,9 @@ export function startConsole(
         ws,
         expanded: sidebarExpandedCell,
         pulse,
-        focused: focusedSurface,
+        focused: focusedApp,
         badges: railBadges,
-        surfaces: APPS,
+        apps: APPS,
       },
       { onOpen: (id) => open(id) },
     );
@@ -1648,9 +1648,9 @@ export function startConsole(
   panesDone.addEventListener("click", () => closePanesPopup(true));
   panesHead.append(panesTitle, panesDone);
 
-  // surfaceLabel is a map cell's caption: the surface's launcher label, or "Empty" for an unfilled
+  // appLabel is a map cell's caption: the surface's launcher label, or "Empty" for an unfilled
   // leaf (a fresh split's launcher pane, before the operator picks a surface for it).
-  function surfaceLabel(pageId: string): string {
+  function appLabel(pageId: string): string {
     if (pageId === "") return "Empty";
     return APPS.find((app) => app.id === pageId)?.label ?? pageId;
   }
@@ -1697,7 +1697,7 @@ export function startConsole(
       const target = dropTarget;
       clearDrop();
       if (moved) {
-        // A cell dropped onto the tab strip ADOPTS into that tab (moveSurfaceToTab) instead of
+        // A cell dropped onto the tab strip ADOPTS into that tab (moveAppToTab) instead of
         // swapping within the map - the strip sits outside the popup entirely, so this is the one
         // place a map drag reaches past its own tree. Checked before the swap; a drop elsewhere on
         // the same tab (or nowhere) falls through to the ordinary in-map behavior below.
@@ -1706,7 +1706,7 @@ export function startConsole(
           ?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
         const activeTabId = ws.get().activeId;
         if (tabId && activeTabId && tabId !== activeTabId) {
-          moveSurfaceToTab(activeTabId, id, tabId);
+          moveAppToTab(activeTabId, id, tabId);
           return;
         }
         if (target) {
@@ -1769,7 +1769,7 @@ export function startConsole(
     cell.dataset.paneCell = leaf.id;
     cell.setAttribute("role", "button");
     cell.tabIndex = 0;
-    const label = surfaceLabel(leaf.pageId);
+    const label = appLabel(leaf.pageId);
     cell.setAttribute("aria-label", "Focus " + label + " pane");
     if (leaf.id === focusId) cell.dataset.focus = "";
     const text = document.createElement("span");
@@ -2220,7 +2220,7 @@ export function startConsole(
   function open(pageId: string): void {
     const m = registry.get(pageId);
     if (!m) return;
-    const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
+    const hostTab = ws.get().tabs.find((t) => tabHostsApp(t, pageId));
     if (hostTab) {
       activateTab(hostTab.id);
       // ...and land IN it, rather than wherever focus happened to be. leafShowing carries the why.
@@ -2246,8 +2246,8 @@ export function startConsole(
 
   // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
   // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
-  window.addEventListener(surfaceNavigationEvent, (event) => {
-    const detail = surfaceNavigation(event);
+  window.addEventListener(appNavigationEvent, (event) => {
+    const detail = appNavigation(event);
     if (detail?.mode) openMode(detail.pageId, detail.mode);
     else if (detail?.pageId) open(detail.pageId);
   });
@@ -2260,15 +2260,15 @@ export function startConsole(
     const bundle = app.id + "/" + app.id + ".js";
     register(
       load.kind === "page"
-        ? standaloneSurface({ id: app.id, title: app.label, bundle, css: load.css })
-        : moduleSurface({ id: app.id, title: app.label, bundle, css: load.css }),
+        ? standaloneApp({ id: app.id, title: app.label, bundle, css: load.css })
+        : moduleApp({ id: app.id, title: app.label, bundle, css: load.css }),
     );
   }
   // Shortcuts is registered from the shell bundle (not a lazy surface bundle) - it is a thin,
   // static catalogue over the console's own live command list + keymap, the same deps the keyboard
   // cheat sheet above reads, so a separate bundle would get nothing but import overhead.
   register(
-    createShortcutsSurface({
+    createShortcutsApp({
       commands: listCommands,
       keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
       mac: isMac(),
@@ -2281,7 +2281,7 @@ export function startConsole(
   // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
   // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
   register(
-    settingsSurface({
+    settingsApp({
       keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell },
       presets: KEYMAP_PRESETS,
       presetList: KEYMAP_PRESET_LIST,
@@ -2290,7 +2290,7 @@ export function startConsole(
   );
   // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in APPS:
   // no launcher card, no app-menu row, no Open command - reachable only via that button, single-instance.
-  register(referenceSurface());
+  register(referenceApp());
 
   // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
   // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
@@ -2298,14 +2298,14 @@ export function startConsole(
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
   const launchApp = new URLSearchParams(location.search).get("app");
-  const appSurface = launchApp ? APPS.find((app) => app.id === launchApp) : undefined;
-  if (appSurface && registry.has(appSurface.id)) {
-    document.documentElement.dataset.appmode = appSurface.id;
+  const launchedApp = launchApp ? APPS.find((app) => app.id === launchApp) : undefined;
+  if (launchedApp && registry.has(launchedApp.id)) {
+    document.documentElement.dataset.appmode = launchedApp.id;
     // Must be set before mount(): its show() titles the window, and would otherwise read the
     // workspace, which has no tab for this surface.
-    appModeTitle = appSurface.label;
+    appModeTitle = launchedApp.label;
     syncWindowTitle();
-    mount({ id: "app-" + appSurface.id, pageId: appSurface.id, title: appSurface.label });
+    mount({ id: "app-" + launchedApp.id, pageId: launchedApp.id, title: launchedApp.label });
     return;
   }
 
@@ -2316,7 +2316,7 @@ export function startConsole(
   // share flow uses. It COMPOSES with restore below: it opens the surface INTO the restored
   // workspace (open() is single-instance - it activates an already-open tab or adds one), never
   // wiping restored tabs. Refresh, now on the scrubbed base path, restores the workspace as usual.
-  const entrySurface = consoleSurfaceFromPath();
+  const entryApp = consoleAppFromPath();
 
   // Restore the persisted workspace: the tab bar already renders every saved tab (it binds to ws);
   // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
@@ -2332,7 +2332,7 @@ export function startConsole(
     // than an empty launcher: open the Dashboard as the read-only view.
     open("dashboard");
   } else if (
-    !entrySurface &&
+    !entryApp &&
     !hadSavedWorkspace &&
     window.matchMedia(DESKTOP_START_QUERY).matches
   ) {
@@ -2344,16 +2344,16 @@ export function startConsole(
     } else {
       show(null);
     }
-  } else if (!entrySurface) {
+  } else if (!entryApp) {
     show(null);
   }
 
   // Consume the entry path: open its surface into the (possibly restored) workspace, then scrub the
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
   // only the surface segment is dropped.
-  if (entrySurface) {
-    if (entrySurface.mode) openMode(entrySurface.pageId, entrySurface.mode);
-    else open(entrySurface.pageId);
+  if (entryApp) {
+    if (entryApp.mode) openMode(entryApp.pageId, entryApp.mode);
+    else open(entryApp.pageId);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 

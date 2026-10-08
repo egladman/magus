@@ -1167,9 +1167,9 @@ function ensureStylesheet(id: string, href: string): void {
   document.head.append(link);
 }
 
-// settingsSurface builds the Settings PageModule; the shell registers it and drives it through the
+// settingsApp builds the Settings PageModule; the shell registers it and drives it through the
 // single-instance open() path.
-export function settingsSurface(deps: SettingsDeps): PageModule<null, null> {
+export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
   const cssId = "surface-css-settings";
   // A variable (not a string literal) so esbuild leaves it a runtime load: gen/settings/settings.css.
   const cssFile = "settings/settings.css";

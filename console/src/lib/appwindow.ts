@@ -6,7 +6,7 @@
 // bar hidden; "popup" strips the browser's tab/URL chrome, and an installed PWA promotes it to a
 // standalone app window. A stable per-surface window name focuses the existing window on a repeat open
 // instead of stacking copies.
-export function openSurfaceWindow(pageId: string): void {
+export function openAppWindow(pageId: string): void {
   const url = location.pathname + "?app=" + encodeURIComponent(pageId);
   window.open(url, "magus-app-" + pageId, "popup,width=1180,height=800");
 }

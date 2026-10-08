@@ -10,7 +10,7 @@ import { dashboard } from "../apps/dashboard/app";
 import { logs } from "../apps/logs/app";
 import type { PulseView } from "./pulse";
 
-const SURFACES = [dashboard, logs];
+const APPS = [dashboard, logs];
 
 // Scoped, not top-level: with --test-isolation=none a root hook runs before every other file's tests.
 describe("the launcher's live reading", () => {
@@ -19,7 +19,7 @@ describe("the launcher's live reading", () => {
 
   beforeEach(() => {
     opened.length = 0;
-    root = buildLauncher(SURFACES, (id) => opened.push(id));
+    root = buildLauncher(APPS, (id) => opened.push(id));
   });
 
   const row = (): HTMLElement => {

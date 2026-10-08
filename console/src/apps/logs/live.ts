@@ -7,7 +7,7 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
-import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, surfaceLink } from "../../lib/server";
+import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, appLink } from "../../lib/server";
 import { notify, matchAuthorMarker, undeclaredSeedNotice } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
@@ -16,7 +16,7 @@ import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
 import { buildModelMulti } from "./model";
 import { graphAvailable } from "./share";
 import { render, updateTimelineControl } from "./render";
-import { FrameScheduler } from "../../desktop/surface-runtime";
+import { FrameScheduler } from "../../desktop/app-runtime";
 import { publishStatus } from "../../desktop/status";
 
 // How many live events the tail keeps. The buffer was unbounded, and scheduleLiveRender
@@ -112,7 +112,7 @@ function onLiveEvent(type: string, data: string): void {
   if (ev.kind === Kind.SCOPE && ev.undeclared.length > 0) {
     const input = undeclaredSeedNotice(
       ev.undeclared,
-      surfaceLink("diff", liveNotifyHost, { role: "unclaimed" }),
+      appLink("diff", liveNotifyHost, { role: "unclaimed" }),
     );
     if (input) notify(input);
   }
@@ -166,11 +166,11 @@ export function scheduleLiveRender(): void {
 //
 // lastLinkState replays on return, so the bar catches up rather than showing whatever it held when
 // the tab went away.
-let surfaceHidden = false;
+let appHidden = false;
 let lastLinkState: string | null = null;
 
 export function setLiveVisible(visible: boolean): void {
-  surfaceHidden = !visible;
+  appHidden = !visible;
   liveFrame.setVisible(visible);
   if (visible && lastLinkState) setLiveStatus(lastLinkState);
 }
@@ -181,7 +181,7 @@ export function cancelLiveRender(): void {
 
 export function setLiveStatus(linkState: string): void {
   lastLinkState = linkState;
-  if (surfaceHidden) return;
+  if (appHidden) return;
   // Drive the shared console status bar's connection dot (the same element the dashboard uses), so
   // the log viewer reads the same as its sibling apps. A live stream is "connected" (green) with the
   // event count; a finished stream is "done" (still green - it completed cleanly); connecting/

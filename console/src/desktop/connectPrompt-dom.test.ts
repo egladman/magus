@@ -191,8 +191,8 @@ describe("Activity", () => {
   function mount(): HTMLElement {
     const host = document.createElement("div");
     document.body.append(host);
-    const surface = activateActivity(host);
-    deactivate = () => surface.deactivate();
+    const app = activateActivity(host);
+    deactivate = () => app.deactivate();
     return host;
   }
 

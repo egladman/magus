@@ -148,7 +148,7 @@ const CROSSHAIR: readonly string[] = [
   "M2 12h3",
   "M19 12h3",
 ];
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 // The roles a #role= deep-link may name, checked rather than cast: the fragment is whatever the
 // address bar holds, and a value outside the vocabulary must leave the index unfiltered rather than
@@ -398,7 +398,7 @@ function gutter(n: number | null): HTMLElement {
 // pane when it stops being the visible one. Every surface hands back this shape - a bare teardown
 // function is still accepted by the normalizer, but it leaves a surface with nowhere to put the
 // hook, which is how the log viewer ended up writing a backgrounded tab's status bar.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   const controller = new AbortController();
   let disposed = false;
   // Dismissing the merged notice holds for this session only. It is not persisted: the surface
@@ -1094,7 +1094,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     item.append(wrap);
     // Keep the full path in the native tooltip.
     item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-    if (o.annotation?.surface === "public") item.dataset.surface = "public";
+    if (o.annotation?.visibility === "public") item.dataset.surface = "public";
     if (o.annotation?.reach) {
       const r = h("span", "console-diff-sidebar__counts");
       r.textContent = String(o.annotation.reach);
@@ -1407,7 +1407,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   // Keep the patch stable while polling the coordination session.
-  let surfaceVisible = true;
+  let appVisible = true;
   let pollTimer: number | null = null;
   let polling = false;
   const stopPolling = (): void => {
@@ -1416,12 +1416,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
   const schedulePoll = (): void => {
     stopPolling();
-    if (demo || disposed || !surfaceVisible || !state.session || state.collaboration === "stale")
+    if (demo || disposed || !appVisible || !state.session || state.collaboration === "stale")
       return;
     pollTimer = window.setTimeout(() => void pollSession(), 4_000);
   };
   const pollSession = async (): Promise<void> => {
-    if (polling || demo || disposed || !surfaceVisible || !state.session) return;
+    if (polling || demo || disposed || !appVisible || !state.session) return;
     const hp = host_();
     if (!hp) {
       setCollaboration("unavailable");
@@ -1712,10 +1712,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (!ranked()) {
       attention.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
     }
-    if (s.publicSurface > 0) {
+    if (s.publicFiles > 0) {
       attention.push(
         label(
-          `${s.publicSurface} public surface`,
+          `${s.publicFiles} public surface`,
           "pf-m-orange",
           "Files whose changed symbols are reachable outside their project or module",
         ),
@@ -2089,11 +2089,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     box.append(line("to read", `${s.files} files, +${s.additions} -${s.deletions}`));
     if (s.generated > 0)
       box.append(line("folded away", `${s.generated} generated`, "Declared target outputs"));
-    if (s.publicSurface > 0)
+    if (s.publicFiles > 0)
       box.append(
         line(
           "public surface",
-          `${s.publicSurface} files`,
+          `${s.publicFiles} files`,
           "Changed symbols reachable outside their project or module",
         ),
       );
@@ -3236,7 +3236,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   return {
     setVisible(visible: boolean): void {
-      surfaceVisible = visible;
+      appVisible = visible;
       if (visible) startPolling();
       else stopPolling();
     },
