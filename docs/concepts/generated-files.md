@@ -127,7 +127,7 @@ Usual causes, all fixable:
 
 ## Check that your check can fail
 
-That guarantee is worth exactly as much as the check's exit code, and one very common
+That guarantee is worth exactly as much as the check's exit code, and one common
 formatter cannot fail at all:
 
 ```console

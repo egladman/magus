@@ -1,8 +1,18 @@
-// Command judge-docs judges symbol docs against the prose rules. It reads a
-// JSON array of symbol records on stdin and writes a JSON array of findings on
-// stdout, in input order and then the order [prose.Judge] reports them.
+// Command judge-docs judges prose against the prose rules and writes a JSON
+// array of findings on stdout.
 //
-// This repository's lint rule pipes the symbols of `magus\symbols()` through it.
+// With no flag it reads a JSON array of symbol records on stdin and judges
+// each one's doc, reporting in input order and then the order [prose.Judge]
+// reports them. With -surface markdown it judges the Markdown files its
+// arguments name, in argument order; -surface skill judges them as skills an
+// agent loads as written, and -surface skill-source as skill bodies
+// internal/agent renders into a short and a full form, each finding at its
+// source line. With -surface pull-request it reads a pull
+// request on stdin, the title on the first line and the description after it.
+// A finding from text names its file, or "pull-request", and its line as
+// source, `path:line`, the way a symbol's index position reads.
+//
+// This repository's lint rules and its pull request guard and CI step run it.
 // The magus module never imports libs/conventions, so the rules stay this
 // repository's policy.
 package main
@@ -10,9 +20,11 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/egladman/magus/libs/conventions/prose"
 )
@@ -39,18 +51,100 @@ type finding struct {
 	Match    string `json:"match"`
 }
 
+// pullRequestSource names a pull request's findings, which have no file.
+const pullRequestSource = "pull-request"
+
 func main() {
-	os.Exit(run(os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
 // run returns the process exit code: 0 once the findings are written, 1 when
-// stdin is not an array of records.
-func run(stdin io.Reader, stdout, stderr io.Writer) int {
-	records, err := decode(stdin)
+// the flags or the input cannot be read. A finding is not a failure: the
+// caller decides what one costs.
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("judge-docs", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	surface := fs.String("surface", "",
+		"judge `markdown`, skill or skill-source files named as arguments, or a pull-request on stdin")
+
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+
+	out, err := judge(prose.Surface(*surface), fs.Args(), stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "judge-docs: %v\n", err)
 
 		return 1
+	}
+
+	if err := json.NewEncoder(stdout).Encode(out); err != nil {
+		fmt.Fprintf(stderr, "judge-docs: write findings: %v\n", err)
+
+		return 1
+	}
+
+	return 0
+}
+
+func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, error) {
+	switch surface {
+	case "":
+		if len(paths) > 0 {
+			return nil, errors.New("symbols are read from stdin; a path needs -surface markdown")
+		}
+
+		return judgeSymbols(stdin)
+	case prose.SurfaceMarkdown, prose.SurfaceSkill, prose.SurfaceSkillSource:
+		return judgeFiles(paths, surface)
+	case prose.SurfacePullRequest:
+		if len(paths) > 0 {
+			return nil, errors.New("a pull request is read from stdin, not from a path")
+		}
+
+		text, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("read the pull request: %w", err)
+		}
+
+		return textFindings(pullRequestSource, string(text), surface), nil
+	default:
+		return nil, fmt.Errorf("unknown surface %q: want markdown, skill, skill-source or pull-request", surface)
+	}
+}
+
+func judgeFiles(paths []string, surface prose.Surface) ([]finding, error) {
+	out := []finding{}
+
+	for _, path := range paths {
+		text, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", path, err)
+		}
+
+		out = append(out, textFindings(path, string(text), surface)...)
+	}
+
+	return out, nil
+}
+
+func textFindings(name, text string, surface prose.Surface) []finding {
+	out := []finding{}
+
+	for _, f := range prose.JudgeText(text, surface) {
+		out = append(out, finding{
+			Node: name, Source: name + ":" + strconv.Itoa(f.Line), Language: string(surface),
+			Rule: string(f.Rule), Message: f.Message, Match: f.Match,
+		})
+	}
+
+	return out
+}
+
+func judgeSymbols(stdin io.Reader) ([]finding, error) {
+	records, err := decode(stdin)
+	if err != nil {
+		return nil, err
 	}
 
 	out := []finding{}
@@ -71,13 +165,7 @@ func run(stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	if err := json.NewEncoder(stdout).Encode(out); err != nil {
-		fmt.Fprintf(stderr, "judge-docs: write findings: %v\n", err)
-
-		return 1
-	}
-
-	return 0
+	return out, nil
 }
 
 func decode(stdin io.Reader) ([]record, error) {

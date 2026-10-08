@@ -376,7 +376,7 @@ moment it started. `--limit` originally read 0 as "replay everything", so there
 was no way to ask for "only what happens next"; `Follower.Skip` existed in the
 library and the CLI could not reach it.
 
-The semantics are now the ones a subscriber actually needs:
+The semantics are now the ones a subscriber needs:
 
 | `--limit` | on attach                              |
 | --------- | -------------------------------------- |

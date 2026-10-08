@@ -695,7 +695,7 @@ coming back needs.
 
 ## Lease capture
 
-`subagentStart` fires when Cursor hands work to a sub-agent, and carries the
+`subagentStart` fires when Cursor hands work to a subagent, and carries the
 handed `task`, the `subagent_type`, and `parent_conversation_id` for the parent
 side. That is everything magus records as a spawn, under different names, so the
 script reshapes the payload into the canonical envelope before piping it: magus
@@ -705,7 +705,7 @@ would have to enumerate per host.
 It records; it does not judge. A lease prompt is prose, so the verdict is always
 a pass and the arm always allows. To join those events to a job, write the
 marker line documented in [Any other host](any-host.md#lease-capture) at the top
-of the prompt you hand the sub-agent.
+of the prompt you hand the subagent.
 
 This one is **unverified live**. An open Cursor forum report says
 `subagentStart` and `subagentStop` never fire while `beforeShellExecution` from

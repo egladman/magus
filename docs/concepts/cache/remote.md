@@ -36,7 +36,7 @@ boundary, so **every remote artifact must be cryptographically signed by a trust
 key, and wiring a provider without a trust set is refused** (see
 [Signing is required](#signing-is-required-trust-model) below). Neither a developer,
 a fork PR, nor anyone holding raw bucket credentials can publish an artifact that
-any machine will replay.
+any machine replays.
 
 magus itself knows nothing about S3 or GitHub. A provider is a
 [spell](../spells.md) that declares no operations and instead exports the cache
@@ -160,7 +160,7 @@ asymmetric:
 - The **secret** signing seed lives only in trusted CI, as the
   `MAGUS_CACHE_SIGNING_KEY` environment secret. Only a holder of the seed can
   produce a signature. A machine without it (every machine but trusted CI)
-  cannot publish an artifact others will replay; magus won't even attempt
+  cannot publish an artifact others replay, and magus does not attempt
   the upload.
 
 Because verification happens on the consumer, this holds even against an attacker

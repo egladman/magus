@@ -13,6 +13,10 @@ export object AdrProblem {
 final SECTIONS = ["Context", "Decision", "Alternatives", "Consequences", "Open questions", "Amendments"];
 final REQUIRED_SECTIONS = 4;
 final STATES = ["done", "in progress", "planned", "proposed", "not built"];
+final STATUSES = ["proposed", "accepted", "rejected", "superseded", "deprecated"];
+// BODY_BULLETS are the fields that live in front matter; a bullet for one under the H1 is a
+// leftover from the old template.
+final BODY_BULLETS = ["Status", "Date", "Supersedes"];
 
 fun isAsciiDigit(b: int) > bool { return b >= 48 and b <= 57; }
 
@@ -52,12 +56,31 @@ fun sectionRank(title: str) > int {
     return -1;
 }
 
-fun validState(cell: str) > bool {
-    foreach (s in STATES) {
+// oneOf reports whether cell is a member of set, optionally followed by a parenthetical.
+fun oneOf(cell: str, set: [str]) > bool {
+    foreach (s in set) {
         if (cell == s) { return true; }
         if (cell.startsWith(s + " (") and cell.endsWith(")")) { return true; }
     }
     return false;
+}
+
+fun daysIn(year: int, month: int) > int {
+    if (month == 2) {
+        final leap = (year % 4 == 0 and year % 100 != 0) or year % 400 == 0;
+        return if (leap) 29 else 28;
+    }
+    if (month == 4 or month == 6 or month == 9 or month == 11) { return 30; }
+    return 31;
+}
+
+// realDate reports whether s is exactly YYYY-MM-DD and names a day on the calendar.
+fun realDate(s: str) > bool {
+    if (s.len() != 10 or startsWithDate(s) == false) { return false; }
+    final year = std\parseInt(s.sub(0, len: 4)) ?? 0;
+    final month = std\parseInt(s.sub(5, len: 2)) ?? 0;
+    final day = std\parseInt(s.sub(8, len: 2)) ?? 0;
+    return month >= 1 and month <= 12 and day >= 1 and day <= daysIn(year, month: month);
 }
 
 // lastCell is a table row's final cell. An escaped `\|` inside an earlier cell splits
@@ -94,6 +117,8 @@ fun frontMatterProblems(num: str, lines: [str], close: int, problems: mut [AdrPr
     var sawOrder = false;
     var sawDescription = false;
     var sawTags = false;
+    var sawStatus = false;
+    var sawDate = false;
     var i = 1;
     while (i < close) {
         final line = lines[i];
@@ -120,6 +145,24 @@ fun frontMatterProblems(num: str, lines: [str], close: int, problems: mut [AdrPr
             }
         } else if (line.startsWith("description:")) {
             sawDescription = line.sub(12).trim() != "";
+        } else if (line.startsWith("status:")) {
+            sawStatus = true;
+            final v = line.sub(7).trim();
+            if (oneOf(v, set: STATUSES) == false) {
+                problems.append(AdrProblem{ line = n, message = "status is `{v}`; use proposed, accepted, rejected, "
+                    + "superseded or deprecated, optionally followed by a parenthetical" });
+            }
+        } else if (line.startsWith("date:")) {
+            sawDate = true;
+            final v = line.sub(5).trim();
+            if (realDate(v) == false) {
+                problems.append(AdrProblem{ line = n, message = "date is `{v}`; write a real day as `YYYY-MM-DD`" });
+            }
+        } else if (line.startsWith("supersedes:")) {
+            if (line.sub(11).trim() == "") {
+                problems.append(AdrProblem{ line = n,
+                    message = "supersedes is empty; name what this page replaces, or drop the key" });
+            }
         } else if (line.startsWith("tags:")) {
             sawTags = true;
             final v = line.sub(5).trim();
@@ -155,6 +198,12 @@ fun frontMatterProblems(num: str, lines: [str], close: int, problems: mut [AdrPr
     if (sawTags == false) {
         problems.append(AdrProblem{ line = at, message = "front matter has no tags; add `tags: [adr, decision, ...]`" });
     }
+    if (sawStatus == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no status; add `status: proposed`" });
+    }
+    if (sawDate == false) {
+        problems.append(AdrProblem{ line = at, message = "front matter has no date; add `date: YYYY-MM-DD`" });
+    }
     return titleRest;
 }
 
@@ -176,15 +225,13 @@ export fun adrProblems(file: str, md: str) > [AdrProblem] {
     }
     if (close < 0) {
         problems.append(AdrProblem{ line = 1,
-            message = "no front matter; open the page with `---`, title, order, description and tags, `---`" });
+            message = "no front matter; open the page with `---`, title, order, description, tags, status and date, `---`" });
         return problems;
     }
     final titleRest = frontMatterProblems(num, lines: lines, close: close, problems: problems);
     final wantH1 = "# ADR {num}: " + (if (titleRest != "") titleRest else "<title>");
 
     var h1 = 0;
-    var status = false;
-    var date = false;
     var marker = "";
     var lastRank = -1;
     var lastTitle = "";
@@ -210,7 +257,7 @@ export fun adrProblems(file: str, md: str) > [AdrProblem] {
         if (stateTable) {
             if (t.startsWith("|") == false) {
                 stateTable = false;
-            } else if (isSeparatorRow(t) == false and validState(lastCell(t)) == false) {
+            } else if (isSeparatorRow(t) == false and oneOf(lastCell(t), set: STATES) == false) {
                 problems.append(AdrProblem{ line = n, message = "state `{lastCell(t)}` is not done, in progress, "
                     + "planned, proposed or not built; use one, optionally followed by a parenthetical" });
             }
@@ -231,8 +278,13 @@ export fun adrProblems(file: str, md: str) > [AdrProblem] {
             continue;
         }
         if (h1 > 0 and lastTitle == "") {
-            if (line.startsWith("- **Status:**") and line.sub(13).trim() != "") { status = true; }
-            if (line.startsWith("- **Date:**") and startsWithDate(line.sub(11).trim())) { date = true; }
+            foreach (field in BODY_BULLETS) {
+                if (line.startsWith("- **{field}:**")) {
+                    final key = field.lower();
+                    problems.append(AdrProblem{ line = n,
+                        message = "`- **{field}:**` is a body bullet; move it to the `{key}` front matter key" });
+                }
+            }
         }
         if (line.startsWith("## ")) {
             final title = line.sub(3).trim();
@@ -266,12 +318,6 @@ export fun adrProblems(file: str, md: str) > [AdrProblem] {
     if (h1 == 0) {
         problems.append(AdrProblem{ line = at, message = "no H1; write `{wantH1}` after the front matter" });
     }
-    if (status == false) {
-        problems.append(AdrProblem{ line = at, message = "no `- **Status:**` line under the H1; add one before the first section" });
-    }
-    if (date == false) {
-        problems.append(AdrProblem{ line = at, message = "no `- **Date:** YYYY-MM-DD` line under the H1; add one before the first section" });
-    }
     var r = 0;
     while (r < REQUIRED_SECTIONS) {
         if (seen[r] == false) {
@@ -283,8 +329,8 @@ export fun adrProblems(file: str, md: str) > [AdrProblem] {
     return problems;
 }
 
-final GOOD = "---\ntitle: \"ADR 0007: one template\"\norder: 7\ndescription: Why.\ntags: [adr, decision]\n---\n\n"
-    + "# ADR 0007: one template\n\n- **Status:** Accepted\n- **Date:** 2026-10-07\n\n"
+final GOOD = "---\ntitle: \"ADR 0007: one template\"\norder: 7\ndescription: Why.\ntags: [adr, decision]\nstatus: accepted\ndate: 2026-10-07\n---\n\n"
+    + "# ADR 0007: one template\n\n"
     + "## Context\n\nText.\n\n## Decision\n\n### 1. Part\n\n| Item | State |\n|---|---|\n| a | done |\n| b | in progress (#550) |\n\n"
     + "## Alternatives\n\nText.\n\n## Consequences\n\n```md\n## Not a section\n```\n\n## Open questions\n\n1. Q.\n\n"
     + "## Amendments\n\n### 2026-10-08: a change\n\nText.\n";
@@ -326,7 +372,7 @@ test "order must equal the file's number" {
 }
 
 test "a missing description is named at the front matter's close" {
-    onlyProblem(GOOD.replace("description: Why.\n", with: ""), line: 5, has: "no description");
+    onlyProblem(GOOD.replace("description: Why.\n", with: ""), line: 7, has: "no description");
 }
 
 test "tags must include adr" {
@@ -335,34 +381,58 @@ test "tags must include adr" {
 
 test "the H1 must repeat the title" {
     onlyProblem(GOOD.replace("# ADR 0007: one template", with: "# ADR 0007: another"),
-        line: 8, has: "write `# ADR 0007: one template`");
+        line: 10, has: "write `# ADR 0007: one template`");
 }
 
-test "the block under the H1 carries Status and a YYYY-MM-DD Date" {
-    onlyProblem(GOOD.replace("- **Status:** Accepted\n", with: ""), line: 8, has: "Status");
-    onlyProblem(GOOD.replace("2026-10-07", with: "October 7"), line: 8, has: "YYYY-MM-DD");
+test "status takes the allowed values, optionally with a parenthetical" {
+    assert\equal(problemsFor(GOOD.replace("status: accepted", with: "status: accepted (partly built)")).len(), 0,
+        "a parenthetical");
+    onlyProblem(GOOD.replace("status: accepted", with: "status: Accepted"), line: 6, has: "status is `Accepted`");
+}
+
+test "date must be a real YYYY-MM-DD day" {
+    onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: October 7"), line: 7, has: "real day");
+    onlyProblem(GOOD.replace("date: 2026-10-07", with: "date: 2026-02-29"), line: 7, has: "real day");
+    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07", with: "date: 2028-02-29")).len(), 0, "a leap day");
+}
+
+test "a missing status or date is named at the front matter's close" {
+    onlyProblem(GOOD.replace("status: accepted\n", with: ""), line: 7, has: "no status");
+    onlyProblem(GOOD.replace("date: 2026-10-07\n", with: ""), line: 7, has: "no date");
+}
+
+test "supersedes is optional but never empty" {
+    assert\equal(problemsFor(GOOD.replace("date: 2026-10-07\n", with: "date: 2026-10-07\nsupersedes: the old page\n")).len(), 0,
+        "named");
+    onlyProblem(GOOD.replace("date: 2026-10-07\n", with: "date: 2026-10-07\nsupersedes:\n"), line: 8,
+        has: "supersedes is empty");
+}
+
+test "a Status, Date or Supersedes bullet under the H1 is refused" {
+    final md = GOOD.replace("# ADR 0007: one template\n\n", with: "# ADR 0007: one template\n\n- **Status:** Accepted\n\n");
+    onlyProblem(md, line: 12, has: "move it to the `status` front matter key");
 }
 
 test "a section outside the template is refused and named" {
-    onlyProblem(GOOD.replace("### 1. Part", with: "## 1. Part"), line: 19, has: "not a template section");
+    onlyProblem(GOOD.replace("### 1. Part", with: "## 1. Part"), line: 18, has: "not a template section");
 }
 
 test "sections out of order are refused" {
     final md = GOOD.replace("## Alternatives\n\nText.\n\n## Consequences\n\n",
         with: "## Consequences\n\n## Alternatives\n\nText.\n\n");
-    onlyProblem(md, line: 28, has: "comes after `## Consequences`");
+    onlyProblem(md, line: 27, has: "comes after `## Consequences`");
 }
 
 test "a missing required section is named at the H1" {
     final md = GOOD.replace("## Alternatives\n\nText.\n\n", with: "");
-    onlyProblem(md, line: 8, has: "no `## Alternatives` section");
+    onlyProblem(md, line: 10, has: "no `## Alternatives` section");
 }
 
 test "an amendment opens with its date" {
     onlyProblem(GOOD.replace("### 2026-10-08: a change", with: "### A change, 2026-10-08"),
-        line: 42, has: "### YYYY-MM-DD: <what changed>");
+        line: 41, has: "### YYYY-MM-DD: <what changed>");
 }
 
 test "a State column takes only the five states" {
-    onlyProblem(GOOD.replace("| a | done |", with: "| a | shipped |"), line: 23, has: "state `shipped`");
+    onlyProblem(GOOD.replace("| a | done |", with: "| a | shipped |"), line: 22, has: "state `shipped`");
 }

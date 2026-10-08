@@ -113,7 +113,7 @@ half the modules tagged:
 ## The release checks
 
 The refusals above ask whether the version is legal. The release checks ask a
-different question: whether the release that follows this tag actually works.
+different question: whether the release that follows this tag works.
 
 It runs on every `magus run release` that names a module, before any tag exists,
 and prints one line per check: `OK`, `FAIL`, or `NOTE` for a finding worth seeing
@@ -185,7 +185,7 @@ the release published zero assets.
 A release that tags libraries only is reported rather than refused: no root tag
 means `release.yaml` does not run, so there are no published assets to misname.
 
-### What publish will need
+### What publish needs
 
 `magus-utils cut` runs in the publish job, after every binary is built, and
 refuses on two things the release checks can see now:

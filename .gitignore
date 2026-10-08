@@ -83,6 +83,8 @@ coverage.cmd.out
 # The standalone Buzz runner, built by `magus run buzz-build libs/gopherbuzz`.
 # Same rule as /magus above: a build output, never committed.
 /libs/gopherbuzz/buzz
+# The prose judge, built by `magus run judge-build libs/conventions` for the guard to run.
+/libs/conventions/gen/
 
 # release output from `magus run release` — cross-compiled tarballs + SHA256SUMS,
 # published to the GitHub release, never committed

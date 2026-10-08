@@ -92,9 +92,9 @@ load-bearing, and where a judgment call is being asked of it. So the primary
 sheds ENUMERATION and keeps JUDGMENT.
 
 The twin exists because a session that loads the short form can still delegate
-work to a reader that never made that bet. Point a sub-agent at the `-full` name
+work to a reader that never made that bet. Point a subagent at the `-full` name
 and it gets the long form. The twin announces itself in the host's own skill
-listing, so a sub-agent browsing for a skill finds it without being told, and
+listing, so a subagent browsing for a skill finds it without being told, and
 the primary spends no context pointing at it. Twins are loaded on demand rather
 than always, so they do not count against the context cost install reports.
 
@@ -135,7 +135,7 @@ a source its sibling had already outgrown.
 
 ## AGENTS.md is yours
 
-No command writes your `AGENTS.md`, and there will not be one.
+No command writes your `AGENTS.md`, by design.
 `magus agent install` prints the managed magus block (between its begin and end
 markers, on stderr) and you paste it in.
 

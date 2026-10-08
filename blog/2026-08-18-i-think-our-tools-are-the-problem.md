@@ -117,7 +117,7 @@ resolved value next to where each piece of it came from.
 There is a failure I hit over and over, and some of it is how Nx is wired into my
 company's repo rather than Nx itself. Something gets rebased, the installed modules
 drift out of sync, and the next command I run fails with an error that has nothing to
-do with what is actually wrong. The fix is to reinstall. I have learned to reach for
+do with what is wrong. The fix is to reinstall. I have learned to reach for
 that faster than I used to, but coming from Go it was never obvious that I was even
 looking at a Node problem. My suspicion is that people who live in that ecosystem see
 these often enough that they have stopped reading as broken.
@@ -125,7 +125,7 @@ these often enough that they have stopped reading as broken.
 ### The directory you are standing in
 
 Run a command from a subdirectory and Nx does not care where you are. It resolves
-against the workspace root, and if you want it scoped to where you actually stand,
+against the workspace root, and if you want it scoped to where you stand,
 you say so, every time. Every other tool I use treats my working directory as
 meaningful. This one asks me to keep restating it, and the cost is not learning one
 flag, it is paying for that flag on every invocation forever.
@@ -182,7 +182,7 @@ CI is a different argument, because there you can gate who writes. The way magus
 it is the inverse of Nx: a run on main is what populates the shared cache, and a pull
 request may only read from it. I should be straight about the trade, since I spent
 this section complaining about someone else's: you get less out of it that way. The
-quality-of-life win is smaller, and you only really feel the benefit at a scale where
+quality-of-life win is smaller, and you only feel the benefit at a scale where
 you have a lot of pull requests touching genuinely different things. What you get back
 is that nothing a stranger opened can write into the thing everybody trusts.
 
@@ -520,7 +520,7 @@ ask what a change would break, and learn the place myself. `magus query`,
 me most of the time. A teammate on day one and an agent in a fresh session have the
 same problem, and it is the problem I had.
 
-The question I actually keep asking is about blast radius. There are corners of a
+The question I keep asking is about blast radius. There are corners of a
 large codebase I do not know and do not touch, and before I change a file in one of
 them I want to know how far the change reaches and what it lands on. I am not a
 machine. I cannot hold the relationships in a repo of that size in my head, and
@@ -738,7 +738,7 @@ pleases me. Scary good, but scary.
 For what it is worth: I used voice dictation and a model to get these thoughts
 onto the page, then read every line and reworked it by hand. The same goes for the
 project. I use a stupid amount of this tooling, and I leaned on it harder early on
-than I do now. What actually got magus here was iteration, breaking a problem into
+than I do now. What got magus here was iteration, breaking a problem into
 smaller and smaller pieces until the shape fell out, then doing it again. I review
 every line at this point. If my name is on it, it is mine.
 

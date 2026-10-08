@@ -8,40 +8,55 @@
 //   1 + floor(log2(1 + shipped source files));
 //   1 + floor(log2(1 + changed lines / linesPerChange)), over every path not generated.
 // Each term is a lower bound on what a reviewer must check. The paths and lines come from
-// one `git diff --numstat` against the base, run only when a description is longer than
-// its title alone allows. When the diff cannot be read (no base, a failed or empty diff,
-// or a call about another branch's pull request) its terms count as 1 and a description
-// over the budget is advised, never denied: the denial would rest on a fact nobody read.
-// A hook that runs out of time fails open as a whole, as every rule does.
+// one `git diff --numstat` against the base, read for a description of the checkout's own
+// branch. When the diff cannot be read (no base, a failed or empty diff, or a call about
+// another branch's pull request) its terms count as 1 and a description over the budget
+// is advised, never denied: the denial would rest on a fact nobody read. A hook that runs
+// out of time fails open as a whole, as every rule does.
 //
-// The shape: a lead paragraph first, then bullets (a list may follow a one-line lead-in
-// ending in `:`), and at most one closing sentence after them, with no headings. Going over
-// the budget, a missing lead and a heading are denied. Prose outside that shape and a lead
-// or bullet past blockWords are advised, once per pull request.
+// The words are judged by libs/conventions/prose, the judge the pr-description CI step
+// runs too, so the guard and CI cannot disagree: the title and description go to
+// judge-docs as one pull request, and every finding is denied. That covers the lead (a
+// paragraph naming the goal behind the change), headings, reply voice, tense, hedges,
+// filler, the spelling of subagent, and credit to a tool or an agent. This rule keeps
+// what the judge does not read: plain ASCII, the spaced hyphen, selling words, the budget
+// and the title. When the description cannot be read, the whole line is searched for
+// credit instead.
+//
+// The shape past the lead: bullets (a list may follow a one-line lead-in ending in `:`)
+// and at most one closing sentence after them. Prose outside that shape, a lead or
+// bullet past blockWords, and an area the diff touches that the description never names
+// are advised, once per pull request.
 namespace agentpolicy\pullRequests;
 
 import "std";
 import "magus";
 import "vcs";
+import "proc";
+import "fs";
+import "path";
+import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/commits" as subjects;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
+import "./libs/conventions/judge_docs" as judgeDocs;
 
 final fixLine = "Rewrite it: a conventional title (`fix(cache): keep the key stable`), then a paragraph "
-    + "that leads with the problem and the change, one bullet per change and at most one closing "
-    + "sentence, no headings, within the budget the change earns; in plain ASCII, with no names, "
-    + "no credit to a tool or an agent, no attribution line, and no account of how it was made.";
-final shapeLine = "The shape: a lead paragraph with the problem and the change, one bullet per change, "
+    + "naming the goal behind the change and why this code stands in its way, one bullet per change "
+    + "and at most one closing sentence, no headings, within the budget the change earns; in plain "
+    + "ASCII and the present tense, with no names, no credit to a tool or an agent, no attribution "
+    + "line, and no account of how it was made.";
+final shapeLine = "The shape: a lead paragraph with the goal and the change, one bullet per change, "
     + "at most one closing sentence, no headings. This is said once per pull request.";
 
 // The budget's constants, each a norm this repository or its sources already set.
 // wordsPerChange is the 60-word changelog fragment cap (changelogEntryWordCap in
-// cmd/magus-utils/release.go) less its bold headline; leadWords holds the leads of this
-// repository's recent pull requests (13 to 56 words), under two of GOV.UK's 25-word
-// sentences; linesPerChange is Google's "100 lines is usually a reasonable size" for one
-// change (eng-practices, small CLs).
-final leadWords = 40;
+// cmd/magus-utils/release.go) less its bold headline; linesPerChange is Google's "100
+// lines is usually a reasonable size" for one change (eng-practices, small CLs).
+// leadWords is blockWords: the lead names the goal and why this code stands in its way
+// as well as the change, and the 60 pull requests before #557 led with 12 to 63 words.
+final leadWords = 60;
 final wordsPerChange = 50;
 final linesPerChange = 100;
 // A lead or bullet past the fragment cap is carrying more than one change.
@@ -49,9 +64,10 @@ final blockWords = 60;
 // A line whose description could not be read past this length is judged long anyway.
 final maxLine = 3000;
 
-// Credit for the work. A tool name after `.`, `/`, `-` or a word character is a path
-// (`.claude/worktrees`), and "agent" alone is a word this repository's code uses, so only
-// an agent as the subject of the work counts.
+// Credit for the work, searched for only in a line whose description could not be read:
+// the judge's attribution rule reads a description that could. A tool name after `.`, `/`,
+// `-` or a word character is a path (`.claude/worktrees`), and "agent" alone is a word
+// this repository's code uses, so only an agent as the subject of the work counts.
 final credit = $"(?i)(^|[^./\w-])(claude|anthropic|copilot)\b|\b(sub)?agent('s)?\s+(found|implemented|built|fixed|reported|wrote|discovered|verified|measured)|\bbranch report\b";
 final narrative = $"(?i)\b(this session|this week's session|the report above|as reported)\b";
 final attribution = $"(?i)co-authored-by|generated with";
@@ -61,11 +77,6 @@ final word = $"\S+";
 final heading = $"^ {0,3}#{1,6}(\s|$)";
 final bullet = $"^\s*([-*+]|[0-9]+[.)])\s";
 final codeSpan = $"`[^`]*`";
-// Throat-clearing opens a sentence, so those match only capitalized: "a note that ..."
-// names the notes feature and "this function's job" is a contract. The adverbs are filler
-// wherever they sit.
-final filler = $"\b(Note that|Please note|It should be noted|It is worth noting|It's worth noting|It is important to|It's important to|This function|This method|[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say)\b";
-final subagentSpelling = $"(?i)\bsub-agents?\b";
 final sentenceEnd = $"[.!?]+(\s|$)";
 
 // The flags whose value is text this rule reads, long form first.
@@ -163,12 +174,16 @@ fun last(values: [Value]) > str? {
 // Facts is what the branch a pull request is opened from changed against its base: the
 // changelog fragments it adds or edits, the shipped source files it touches, and the lines
 // it adds and deletes outside generated files. known is false when the diff could not be
-// read, and the counts are then zero.
+// read, and the counts are then zero. paths are the changed paths outside generated
+// files, and areas the projects and top-level packages they sit in (see touchedAreas),
+// which only branchDiff fills.
 export object Facts {
     known: bool,
     fragments: int,
     shipped: int,
     lines: int,
+    paths: [str] = [<str>],
+    areas: [str] = [<str>],
 }
 
 export fun unknownFacts() > Facts {
@@ -193,6 +208,7 @@ export fun parseNumstat(numstat: str) > Facts {
     var fragments = 0;
     var shipped = 0;
     var lines = 0;
+    final sources = mut [<str>];
     foreach (row in numstat.split("\n")) {
         final cols = row.split("\t");
         if (cols.len() < 3) {
@@ -205,6 +221,7 @@ export fun parseNumstat(numstat: str) > Facts {
             fragments = fragments + 1;
         }
         if (!generated(path)) {
+            sources.append(path);
             lines = lines + added + (std\parseInt(cols[1]) ?? 0);
             if (entries\ships(path)) {
                 shipped = shipped + 1;
@@ -214,7 +231,185 @@ export fun parseNumstat(numstat: str) > Facts {
     if (paths == 0) {
         return unknownFacts();
     }
-    return Facts{ known = true, fragments = fragments, shipped = shipped, lines = lines };
+    return Facts{ known = true, fragments = fragments, shipped = shipped, lines = lines, paths = sources };
+}
+
+// The section of .gitattributes magus writes from every project's declared outputs, per
+// target ctx.writesFiles included (internal/settle DriverGlobs). An output line sets
+// linguist-generated; a tracked file an output's exclusion carves back out follows as
+// `!linguist-generated`; a vcs.auto_resolve line sets merge=magus alone and is source.
+final attributesFile = ".gitattributes";
+final attributesBegin = "# BEGIN magus-generated";
+final attributesEnd = "# END magus-generated";
+
+// OutputAttributes are the patterns of that section, workspace-relative. managed is false
+// when the file carries no section, and then nothing is known to be generated.
+export object OutputAttributes {
+    managed: bool,
+    outputs: [str],
+    carved: [str],
+}
+
+// outputAttributes reads the managed section of a .gitattributes file's text.
+export fun outputAttributes(text: str) > OutputAttributes {
+    final outputs = mut [<str>];
+    final carved = mut [<str>];
+    var managed = false;
+    var inside = false;
+    foreach (raw in text.split("\n")) {
+        final row = raw.trim();
+        if (row.startsWith(attributesBegin)) {
+            managed = true;
+            inside = true;
+            continue;
+        }
+        if (row.startsWith(attributesEnd)) {
+            inside = false;
+            continue;
+        }
+        if (!inside or row == "" or row.startsWith("#")) {
+            continue;
+        }
+        final fields = row.split(" ");
+        var pattern = fields[0];
+        // magus anchors a slashless pattern with a leading `/`; a doublestar glob is rooted
+        // already.
+        if (pattern.startsWith("/")) {
+            pattern = pattern.sub(1);
+        }
+        if (fields.indexOf("linguist-generated") != null) {
+            outputs.append(pattern);
+        } else if (fields.indexOf("!linguist-generated") != null) {
+            carved.append(pattern);
+        }
+    }
+    return OutputAttributes{ managed = managed, outputs = outputs, carved = carved };
+}
+
+// The directory names the workspace load never descends, as internal/describe
+// loadSkipDirs lists them: a magusfile under one belongs to another tree.
+final skippedDirs = [".claude", ".git", ".hg", ".jj", ".magus", ".sl", "__pycache__", "dist", "node_modules", "target", "vendor"];
+
+// projectRoot reports whether dir, workspace-relative, is a project's root by the rule
+// internal/describe IsProjectRoot applies: it holds magusfile.buzz, magus.yaml, or a
+// magusfiles/ directory with a .buzz file in it. A project a workspace provider reports
+// has no such file, and its paths fall to the project above it.
+fun projectRoot(workspace: str, dir: str) > bool {
+    foreach (seg in dir.split("/")) {
+        if (skippedDirs.indexOf(seg) != null) {
+            return false;
+        }
+    }
+    final abs = "{workspace}/{dir}";
+    if ((fs\isFile("{abs}/magusfile.buzz") catch false) or (fs\isFile("{abs}/magus.yaml") catch false)) {
+        return true;
+    }
+    if (!(fs\isDir("{abs}/magusfiles") catch false)) {
+        return false;
+    }
+    foreach (name in fs\listDir("{abs}/magusfiles") catch [<str>]) {
+        if (name.endsWith(".buzz")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// classify gives each path the record `magus describe file` would, {path, project, role},
+// read in process: magus\describe.file runs a nested magus, which took 10s over 500 paths
+// against the guard's 3s rule timeout, and a rule out of time fails open whole. role is "output" for a path the managed .gitattributes section marks
+// generated, "maintained" for that .gitattributes itself (types.IsMagusMaintained), and
+// "source" otherwise; project is the nearest project root above the path. Lockfiles are
+// left to touchedAreas, which knows them by name.
+export fun classify(workspace: str, paths: [str]) > [any] {
+    final attrs = outputAttributes(fs\readFile("{workspace}/{attributesFile}") catch "");
+    final roots = mut {<str: bool>};
+    final files = mut [<any>];
+    foreach (p in paths) {
+        var role = "source";
+        if (p == attributesFile and attrs.managed) {
+            role = "maintained";
+        } else if ((path\matchesAny(attrs.outputs, path: p) catch false) and !(path\matchesAny(attrs.carved, path: p) catch false)) {
+            role = "output";
+        }
+        var project = ".";
+        final parts = p.split("/");
+        var depth = parts.len() - 1;
+        while (depth > 0) {
+            final dir = parts.sub(0, len: depth).join("/");
+            if (roots[dir] == null) {
+                roots[dir] = projectRoot(workspace, dir: dir);
+            }
+            if (roots[dir]!) {
+                project = dir;
+                break;
+            }
+            depth = depth - 1;
+        }
+        files.append({"path": p, "project": project, "role": role});
+    }
+    return files;
+}
+
+// areasOf returns the areas touchedAreas finds among paths, changed in the checkout at
+// workspace.
+export fun areasOf(workspace: str, paths: [str]) > [str] {
+    return touchedAreas(classify(workspace, paths: paths));
+}
+
+// touchedAreas names the areas a change touches, from records shaped as `magus describe
+// file` prints them (see classify): the owning project, or for the root project the top
+// two directories of the path (a top-level package such as `internal/guard`). Generated
+// outputs, files magus maintains, lockfiles and changelog fragments are left out: each
+// follows from another change, so none asks a question of its own.
+export fun touchedAreas(files: [any]) > [str] {
+    final areas = mut [<str>];
+    foreach (f in files) {
+        final path: str = f["path"] ?? "";
+        final role: str = f["role"] ?? "";
+        final project: str = f["project"] ?? ".";
+        if (path == "" or role == "output" or role == "maintained" or generated(path)
+            or entries\fragments([path]).len() > 0) {
+            continue;
+        }
+        var area = project;
+        if (project == "." or project == "") {
+            final parts = path.split("/");
+            if (parts.len() > 2) {
+                area = parts[0] + "/" + parts[1];
+            } else {
+                area = parts[0];
+            }
+        }
+        if (areas.indexOf(area) == null) {
+            areas.append(area);
+        }
+    }
+    return areas;
+}
+
+// unnamedAreas are the areas text never names, by their path or by their last segment
+// without its extension, so "the guard" names internal/guard.
+export fun unnamedAreas(areas: [str], text: str) > [str] {
+    final lower = text.lower();
+    final unnamed = mut [<str>];
+    foreach (area in areas) {
+        final parts = area.split("/");
+        final base = parts[parts.len() - 1].split(".")[0];
+        if (lower.indexOf(area.lower()) == null and (base == "" or lower.indexOf(base.lower()) == null)) {
+            unnamed.append(area);
+        }
+    }
+    return unnamed;
+}
+
+// areaQuestions asks of each unnamed area what a reviewer asks first.
+export fun areaQuestions(unnamed: [str]) > [str] {
+    final asked = mut [<str>];
+    foreach (area in unnamed) {
+        asked.append("why does this touch {area}? The description never names it; say why, or ignore this if it is plain");
+    }
+    return asked;
 }
 
 // branchDiff reads the Facts of the checkout's branch: one `git diff --numstat` over the
@@ -233,8 +428,92 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
         if (res == null or res!.code != 0) {
             return unknownFacts();
         }
-        return parseNumstat(res!.stdout);
+        final facts = parseNumstat(res!.stdout);
+        return Facts{ known = facts.known, fragments = facts.fragments, shipped = facts.shipped,
+            lines = facts.lines, paths = facts.paths, areas = areasOf(workspace, paths: facts.paths) };
     };
+}
+
+// Judged is one finding of the prose judge, libs/conventions/prose.
+export object Judged {
+    rule: str,
+    line: int,
+    message: str,
+    matched: str = "",
+}
+
+// judgeRunner returns a judge that runs the built libs/conventions/cmd/judge-docs over a
+// pull request's text, the title on the first line. The judge lives in Go, where the
+// Markdown lint and the CI step reach the same rules; a judge that is missing, stale or
+// did not run is a finding, since silence would read as a pass.
+export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
+    final dir = workspace + "/libs/conventions";
+    return fun (text: str) > [Judged] {
+        final stale = judgeDocs\stale(dir);
+        if (stale != "") {
+            return [Judged{ rule = "judge", line = 0,
+                message = "the prose judge cannot run: {stale}; run `{judgeDocs\build}`, then retry" }];
+        }
+        final bin = "{dir}/{judgeDocs\binary}";
+        final run = proc\exec(bin, args: ["-surface", "pull-request"],
+            dir: dir, opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
+        if (run == null or run!.code != 0) {
+            var why = "{bin} did not start";
+            if (run != null) {
+                why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, dir: dir);
+            }
+            return [Judged{ rule = "judge", line = 0,
+                message = "the prose judge did not run ({why}); run libs/conventions/{judgeDocs\binary} -surface pull-request "
+                    + "with the title and description on stdin, and read why" }];
+        }
+        return parseJudged(run!.stdout);
+    };
+}
+
+// judgeFailure names why the judge exited non-zero. With allow_failure, proc\exec reports a
+// process that never started (a missing dir or binary) as exit -1 and drops the error, so
+// an empty stderr falls back to the exit code, stdout, and the one start failure the policy
+// can test for itself.
+export fun judgeFailure(code: int, stdout: str, stderr: str, dir: str) > str {
+    if (stderr.trim() != "") {
+        return stderr.trim();
+    }
+    var why = "judge-docs exited {code} with nothing on stderr";
+    if (code == -1) {
+        why = if (fs\exists(dir) catch false) "{why}: it never started or a signal ended it" else "{why}: it never started, since {dir} does not exist";
+    }
+    if (stdout.trim() != "") {
+        why = "{why}; stdout: {stdout.trim()}";
+    }
+    return why;
+}
+
+// parseJudged reads judge-docs's findings, whose source is `pull-request:<line>`.
+export fun parseJudged(stdout: str) > [Judged] {
+    final rows: [any] = json\parse(stdout) catch [<any>];
+    final found = mut [<Judged>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        final colon = source.indexOf(":");
+        var line = 0;
+        if (colon != null) {
+            line = std\parseInt(source.sub(colon! + 1)) ?? 0;
+        }
+        found.append(Judged{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "", matched = r["match"] ?? "" });
+    }
+    return found;
+}
+
+// judgedProblem renders a finding as a denial line: the title for line 1, the
+// description's line otherwise, counted from the description's first line.
+export fun judgedProblem(f: Judged) > str {
+    if (f.line == 1) {
+        return "the title: {f.message} [{f.rule}]";
+    }
+    if (f.line > 1) {
+        return "description line {f.line - 1}: {f.message} [{f.rule}]";
+    }
+    return "{f.message} [{f.rule}]";
 }
 
 // Units is the count of distinct changes a pull request proves, with each term it is the
@@ -405,8 +684,10 @@ export object Findings {
     advice: [str],
 }
 
-// judgeShape judges body's shape: a lead paragraph, bullets, at most one closing sentence
-// after them, and no headings. A fenced code block may sit anywhere after the lead.
+// judgeShape advises on body's shape past the lead: bullets and at most one closing
+// sentence after them. A fenced code block may sit anywhere after the lead. A missing lead
+// and a heading are the prose judge's (lead-context and reply-voice), so this denies
+// nothing.
 export fun judgeShape(body: str) > Findings {
     final denies = mut [<str>];
     final advice = mut [<str>];
@@ -414,18 +695,10 @@ export fun judgeShape(body: str) > Findings {
     if (blocks.len() == 0) {
         return Findings{ denies = denies, advice = advice };
     }
-    foreach (b in blocks) {
-        if (b.kind == "heading") {
-            denies.append("a heading (`{b.lines[0]}`): a description is a lead paragraph and bullets, with no sections");
-            break;
-        }
-    }
-    if (blocks[0].kind != "paragraph") {
-        denies.append("no lead: open with a paragraph stating the problem and the change, before any bullet, heading or code block");
-    } else {
+    if (blocks[0].kind == "paragraph") {
         final lead = wordsIn(blocks[0].lines.join(" "));
         if (lead > blockWords) {
-            advice.append("a lead of {lead} words, past {blockWords}: state the problem and the change, and move the rest into bullets");
+            advice.append("a lead of {lead} words, past {blockWords}: state the goal and the change, and move the rest into bullets");
         }
     }
     var lastList = -1;
@@ -459,30 +732,32 @@ export fun judgeShape(body: str) > Findings {
     return Findings{ denies = denies, advice = advice };
 }
 
-// descriptionWording judges the words of body outside its code blocks and code spans: no
-// selling adjectives, no throat-clearing, and one spelling of subagent.
-export fun descriptionWording(body: str) > [str] {
-    final problems = mut [<str>];
+// descriptionWording judges the words of body outside its code blocks and code spans for
+// the first selling adjective the prose judge has not already reported: judged holds the
+// words it reported, lowercased. Filler and the spelling of subagent are the judge's.
+export fun descriptionWording(body: str, judged: [str]) > [str] {
     final prose = mut [<str>];
     foreach (b in splitBlocks(body)) {
         if (b.kind != "code") {
             prose.append(codeSpan.replaceAll(b.lines.join(" "), with: ""));
         }
     }
-    final text = prose.join("\n");
-    final selling = subjects\puffery.match(text);
-    if (selling != null) {
-        problems.append("\"{selling![0]}\": drop it and say what changed");
+    foreach (selling in subjects\puffery.matchAll(prose.join("\n")) ?? [<[str]>]) {
+        if (judged.indexOf(selling[0].lower()) == null) {
+            return ["\"{selling[0]}\": drop it and say what changed"];
+        }
     }
-    final clearing = filler.match(text);
-    if (clearing != null) {
-        problems.append("\"{clearing![0]}\": drop it and state the fact");
+    return [<str>];
+}
+
+// alreadyJudged reports whether problem quotes a word the prose judge reported.
+fun alreadyJudged(problem: str, judged: [str]) > bool {
+    foreach (w in judged) {
+        if (problem.lower().indexOf("\"{w}\"") != null) {
+            return true;
+        }
     }
-    final spelling = subagentSpelling.match(text);
-    if (spelling != null) {
-        problems.append("\"{spelling![0]}\": Write 'subagent(s)'");
-    }
-    return problems;
+    return false;
 }
 
 // describesBranch reports whether p's pull request is the checkout's branch's, the only one
@@ -494,10 +769,10 @@ fun describesBranch(p: helpers\Program) > bool {
 
 // textProblems names what is wrong with one call's title and description. files holds the
 // contents of the body files the guard could read; diff reads the branch's Facts against a
-// base (see branchDiff), and is called only for a description its title alone does not
-// cover. A value the parser could not render is unknown, and then the whole line is read
-// in its place.
-export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts) > Findings {
+// base (see branchDiff), and is called only for the checkout's own pull request; judge is
+// the prose judge (see judgeRunner). A value the parser could not render is unknown, and
+// then the whole line is read in its place.
+export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str) > [Judged]) > Findings {
     final problems = mut [<str>];
     final advice = mut [<str>];
     final title = last(flagValues(p.args, flags: titleFlags));
@@ -516,14 +791,24 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
     if (known) {
         text = "{title ?? ""}\n{body ?? ""}";
     }
-    if (credit.match(text) != null) {
-        problems.append("it credits a tool or an agent: describe the change, not how it was produced");
-    }
-    if (narrative.match(text) != null) {
-        problems.append("it narrates the session that wrote it, which a description outlives");
-    }
-    if (attribution.match(text) != null) {
-        problems.append("an attribution line: a description credits nobody");
+    final judgedWords = mut [<str>];
+    if (known and body != null) {
+        foreach (f in judge(text)) {
+            problems.append(judgedProblem(f));
+            if (f.matched != "") {
+                judgedWords.append(f.matched.lower());
+            }
+        }
+    } else {
+        if (credit.match(text) != null) {
+            problems.append("it credits a tool or an agent: describe the change, not how it was produced");
+        }
+        if (narrative.match(text) != null) {
+            problems.append("it narrates the session that wrote it, which a description outlives");
+        }
+        if (attribution.match(text) != null) {
+            problems.append("an attribution line: a description credits nobody");
+        }
     }
     if (nonASCII.match(text) != null) {
         problems.append("a character outside plain ASCII (an em dash, a curly quote, an emoji)");
@@ -532,7 +817,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         problems.append("a spaced hyphen used as a dash: restructure the sentence");
     }
     if (known and body != null) {
-        foreach (problem in descriptionWording(body!)) {
+        foreach (problem in descriptionWording(body!, judged: judgedWords)) {
             problems.append(problem);
         }
         final shape = judgeShape(body!);
@@ -551,16 +836,20 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             }
         }
         final words = wordsIn(prose.join(" "));
-        var units = countUnits(title ?? "", facts: unknownFacts());
-        if (words > wordBudget(units) and describesBranch(p)) {
-            units = countUnits(title ?? "", facts: diff(last(flagValues(p.args, flags: baseFlags)) ?? ""));
+        var facts = unknownFacts();
+        if (describesBranch(p)) {
+            facts = diff(last(flagValues(p.args, flags: baseFlags)) ?? "");
         }
+        final units = countUnits(title ?? "", facts: facts);
         if (words > wordBudget(units)) {
             if (units.facts.known) {
                 problems.append(overBudget(words, units: units));
             } else {
                 advice.append(overBudget(words, units: units));
             }
+        }
+        foreach (question in areaQuestions(unnamedAreas(facts.areas, text: text))) {
+            advice.append(question);
         }
     } else if (!known and line.len() > maxLine) {
         problems.append("the command runs {line.len()} characters: cut the description to what a reviewer needs");
@@ -571,7 +860,9 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             problems.append("the title fails the check CI runs on it: pr-title: \"{title!}\": {problem}");
         }
         foreach (problem in subjects\wordingProblems(title!, conventional: true)) {
-            problems.append("the title: {problem}");
+            if (!alreadyJudged(problem, judged: judgedWords)) {
+                problems.append("the title: {problem}");
+            }
         }
     }
     return Findings{ denies = problems, advice = advice };
@@ -588,16 +879,17 @@ fun adviceKey(p: helpers\Program) > str {
 }
 
 // decidePullRequest denies any pull request title or description that breaks the rules, and
-// advises, once per pull request, a description that departs from the shape. The title
-// answers to the conventional-commit rule the pr-title check applies in CI, through the same
-// function, so the guard and CI cannot disagree.
-export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, once: fun (key: str) > bool) > GuardVerdict {
+// advises, once per pull request, a description that departs from the shape or leaves a
+// touched area unnamed. The title answers to the conventional-commit rule the pr-title check
+// applies in CI, and the description to the judge the pr-description check runs, so the
+// guard and CI cannot disagree.
+export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
     final problems = mut [<str>];
     final advice = mut [<str>];
     var key = "";
     foreach (p in programs) {
         if (writesText(p)) {
-            final found = textProblems(p, line: line, files: files, diff: diff);
+            final found = textProblems(p, line: line, files: files, diff: diff, judge: judge);
             foreach (problem in found.denies) {
                 if (problems.indexOf(problem) == null) {
                     problems.append(problem);
@@ -615,7 +907,7 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
         return magus\guard.deny("This pull request text breaks the description rules:\n  - " + problems.join("\n  - ") + "\n" + fixLine);
     }
     if (advice.len() > 0 and once(key)) {
-        return magus\guard.advise("This pull request description departs from the shape:\n  - " + advice.join("\n  - ") + "\n" + shapeLine);
+        return magus\guard.advise("This pull request description could read better:\n  - " + advice.join("\n  - ") + "\n" + shapeLine);
     }
     return magus\guard.allow();
 }
@@ -633,8 +925,23 @@ fun facts(f: Facts) > fun (base: str) > Facts {
     };
 }
 
+// passing is a prose judge that finds nothing, so a case sees only this rule's own verdicts;
+// libs/conventions/prose tests the judge itself.
+fun passing() > fun (text: str) > [Judged] {
+    return fun (text: str) > [Judged] {
+        return [<Judged>];
+    };
+}
+
+// reporting is a prose judge that reports f whatever it reads.
+fun reporting(f: Judged) > fun (text: str) > [Judged] {
+    return fun (text: str) > [Judged] {
+        return [f];
+    };
+}
+
 fun judged(programs: [helpers\Program], line: str, files: {str: str}) > GuardVerdict {
-    return decidePullRequest(programs, line: line, files: files, diff: facts(unknownFacts()), once: helpers\counter());
+    return decidePullRequest(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter());
 }
 
 fun judgedReason(title: str, body: str) > str {
@@ -642,7 +949,7 @@ fun judgedReason(title: str, body: str) > str {
 }
 
 fun verdictWith(title: str, body: str, f: Facts) > GuardVerdict {
-    return decidePullRequest(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), once: helpers\counter());
+    return decidePullRequest(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), judge: passing(), once: helpers\counter());
 }
 
 // sized is a well-shaped description of n words, n >= 20: a 20-word lead, then bullets of
@@ -679,64 +986,87 @@ test "a conventional title and a plain description pass" {
 
 test "each description rule is named when broken" {
     final cases = {
-        "Claude pinned the key.": "credits a tool",
-        "The subagent found the drift and pinned it.": "credits a tool",
-        "Pins the key; see the branch report.": "credits a tool",
-        "Pins the key, found in this session.": "narrates the session",
-        "Pins the key.\n\nCo-Authored-By: a <b@c>": "an attribution line",
         "Pins the key — for good.": "plain ASCII",
         "Pins the key - for good.": "spaced hyphen",
-        "## Summary\n\nPins the key.": "a heading (`## Summary`)",
-        "- Pins the key.\n- Drops the old one.": "no lead",
-        "```\nkey = digest\n```\n\nPins the key.": "no lead",
+        "Adds a cutting-edge cache.": "\"cutting-edge\"",
     };
     foreach (body, want in cases) {
         final reason = judgedReason(goodTitle, body: body);
         std\assert(reason.indexOf(want) != null, message: "{body}: {reason}");
-        std\assert(reason.indexOf("leads with the problem and the change") != null, message: "states the fix");
+        std\assert(reason.indexOf("naming the goal behind the change") != null, message: "states the fix");
     }
 }
 
-test "a description is judged for filler, puffery and the spelling of subagent" {
+test "every finding of the prose judge is denied with where it sits" {
+    final lead = Judged{ rule = "lead-context", line = 2, message = "It opens with a heading: open with a paragraph." };
+    final v = decidePullRequest(create(goodTitle, body: "## Summary"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(lead), once: helpers\counter());
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.reason.indexOf("description line 1: It opens with a heading: open with a paragraph. [lead-context]") != null, message: v.reason);
+    final title = Judged{ rule = "filler", line = 1, message = "Drop 'robust': state the fact.", matched = "robust" };
+    final t = decidePullRequest(create("fix(cache): add a robust key", body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(title), once: helpers\counter());
+    std\assert(t.reason.indexOf("the title: Drop 'robust': state the fact. [filler]") != null, message: t.reason);
+    std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word the judge reported is not reported twice: {t.reason}");
+}
+
+test "the judge reads the title and the description as one pull request" {
+    final seen = mut [<str>];
+    final recording = fun (text: str) > [Judged] {
+        seen.append(text);
+        return [<Judged>];
+    };
+    decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 1 and seen[0] == goodTitle + "\nPins the key.", message: "{seen}");
+    final unread = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
+    decidePullRequest(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 1, message: "a description nobody could read is not judged");
+}
+
+test "parseJudged reads each finding's line from its source" {
+    final got = parseJudged("[\{\"node\":\"pull-request\",\"source\":\"pull-request:3\",\"language\":\"pull-request\","
+        + "\"rule\":\"hedge\",\"message\":\"Drop 'might fix'.\",\"match\":\"might fix\"}]");
+    std\assert(got.len() == 1 and got[0].rule == "hedge" and got[0].line == 3 and got[0].matched == "might fix", message: "{got.len()}");
+    std\assert(judgedProblem(got[0]) == "description line 2: Drop 'might fix'. [hedge]", message: judgedProblem(got[0]));
+    std\assert(parseJudged("[]").len() == 0, message: "no finding");
+}
+
+test "a judge that failed is named by its stderr, else its exit, stdout and dir" {
+    std\assert(judgeFailure(code: 1, stdout: "", stderr: " no Go files \n", dir: ".") == "no Go files", message: "stderr wins");
+    final gone = judgeFailure(code: -1, stdout: "", stderr: "", dir: "./gone/libs/conventions");
+    std\assert(gone == "judge-docs exited -1 with nothing on stderr: it never started, since ./gone/libs/conventions does not exist", message: gone);
+    final said = judgeFailure(code: 2, stdout: "bad flag", stderr: "", dir: ".");
+    std\assert(said == "judge-docs exited 2 with nothing on stderr; stdout: bad flag", message: said);
+}
+
+test "a description is judged for the selling words the prose judge leaves" {
     final cases = {
-        "Note that the cache keys a run on what it reads.": "\"Note that\": drop it and state the fact",
-        "It simply rereads the file.": "\"simply\"",
-        "Basically the cache keys a run on what it reads.": "\"Basically\"",
-        "Please note the cache keys a run on what it reads.": "\"Please note\"",
-        "It is worth noting that a miss reruns it.": "\"It is worth noting\"",
-        "This function rereads the file.": "\"This function\"",
-        "It hands the work to a sub-agent.": "Write 'subagent(s)'",
-        "It hands the work to Sub-Agents.": "\"Sub-Agents\": Write 'subagent(s)'",
-        "Adds a robust spell.": "\"robust\": drop it and say what changed",
-        "Adds a Seamless cache.": "\"Seamless\"",
+        "Adds a powerful spell.": "\"powerful\": drop it and say what changed",
         "Adds a cutting-edge cache.": "\"cutting-edge\"",
+        "Adds an Elegant key.": "\"Elegant\"",
     };
     foreach (body, want in cases) {
-        final problems = descriptionWording(body);
+        final problems = descriptionWording(body, judged: [<str>]);
         std\assert(problems.len() == 1 and problems[0].indexOf(want) != null, message: "{body}: {problems}");
         std\assert(judgedReason(goodTitle, body: body).indexOf(want) != null, message: "denied in the guard: {body}");
     }
-    foreach (body in [
-        "The cache keys a run on what it reads. A miss reruns it.",
-        "It records a note that the queue reads. It is not this function's job.",
-        "It hands the work to subagents.",
-        "The robustness of the key; a seamlessness test.",
-    ]) {
-        std\assert(descriptionWording(body).len() == 0, message: "{body}: {descriptionWording(body)}");
-    }
-    std\assert(descriptionWording("Adds a robust spell and simply a sub-agent.").len() == 3, message: "each rule speaks once");
+    std\assert(descriptionWording("The elegance of the key.", judged: [<str>]).len() == 0, message: "a noun is not puffery");
+    final rest = descriptionWording("Adds a robust and powerful cache.", judged: ["robust"]);
+    std\assert(rest.len() == 1 and rest[0].indexOf("\"powerful\"") != null, message: "the judge reported robust: {rest}");
 }
 
 test "code in a description is not judged for wording" {
     foreach (body in [
-        "Keeps the `robust` flag and the `sub-agent` key; `Note that` stays.",
-        "Pins the key.\n\n```\nit simply is a robust sub-agent\n```\n\n- Drops the old key.",
-        "Pins the key.\n\n- Keeps `simply` as the name.\n- Keeps `a\nrobust` split over lines.",
+        "Keeps the `powerful` flag and the `elegant` key.",
+        "Pins the key.\n\n```\nit is a powerful key\n```\n\n- Drops the old key.",
+        "Pins the key.\n\n- Keeps `powerful` as the name.\n- Keeps `a\nrobust` split over lines.",
     ]) {
-        std\assert(descriptionWording(body).len() == 0, message: "{body}: {descriptionWording(body)}");
+        std\assert(descriptionWording(body, judged: [<str>]).len() == 0, message: "{body}: {descriptionWording(body, judged: [<str>])}");
         std\assert(judgedReason(goodTitle, body: body) == "", message: body);
     }
-    std\assert(descriptionWording("Pins the key.\n\n```\nsimply\n```\n\nIt is simply done.").len() == 1, message: "prose after a fence is judged");
+    std\assert(descriptionWording("Pins the key.\n\n```\npowerful\n```\n\nIt is a powerful key.", judged: [<str>]).len() == 1, message: "prose after a fence is judged");
 }
 
 test "a title is judged for the imperative and puffery after its prefix" {
@@ -756,7 +1086,7 @@ test "a title is judged for the imperative and puffery after its prefix" {
 
 test "the budget counts the changes the diff proves" {
     final one = countUnits(goodTitle, facts: shipping(1, lines: 40));
-    std\assert(one.count == 2 and wordBudget(one) == 140, message: "one shipped file earns a second change: {one.count}");
+    std\assert(one.count == 2 and wordBudget(one) == 160, message: "one shipped file earns a second change: {one.count}");
     std\assert(countUnits(goodTitle, facts: shipping(0, lines: 0)).count == 1, message: "nothing proven is still one change");
     std\assert(countUnits("fix: a; b; c", facts: shipping(0, lines: 0)).count == 3, message: "each title clause");
     std\assert(countUnits("feat!: drop x", facts: Facts{ known = true, fragments = 1, shipped = 0, lines = 0 }).count == 2, message: "a breaking title adds to the fragments");
@@ -766,18 +1096,18 @@ test "the budget counts the changes the diff proves" {
     foreach (lines, want in {99: 1, 100: 2, 300: 3, 700: 4, 1500: 5}) {
         std\assert(countUnits(goodTitle, facts: shipping(0, lines: lines)).lines == want, message: "{lines} lines");
     }
-    std\assert(wordBudget(countUnits(goodTitle, facts: unknownFacts())) == 90, message: "the title alone earns 90 words");
+    std\assert(wordBudget(countUnits(goodTitle, facts: unknownFacts())) == 110, message: "the title alone earns 110 words");
 }
 
 test "a description past its budget is denied with the budget and why" {
     final small = shipping(0, lines: 10);
-    std\assert(verdictWith(goodTitle, body: sized(90), f: small).decision == "allow", message: "90 is the budget for one change");
-    final over = verdictWith(goodTitle, body: sized(91), f: small);
+    std\assert(verdictWith(goodTitle, body: sized(110), f: small).decision == "allow", message: "110 is the budget for one change");
+    final over = verdictWith(goodTitle, body: sized(111), f: small);
     std\assert(over.decision == "deny", message: over.reason);
-    std\assert(over.reason.indexOf("91 words, past this pull request's budget of 90 (40 + 50 for each of 1 change, the most of 0 changelog fragments, 1 title clause, 0 shipped source files (counting 1) and 10 changed lines outside generated files (counting 1))") != null, message: over.reason);
+    std\assert(over.reason.indexOf("111 words, past this pull request's budget of 110 (60 + 50 for each of 1 change, the most of 0 changelog fragments, 1 title clause, 0 shipped source files (counting 1) and 10 changed lines outside generated files (counting 1))") != null, message: over.reason);
     std\assert(over.reason.indexOf("split the pull request") != null, message: "names the other fix");
-    final wide = verdictWith(goodTitle, body: sized(190), f: shipping(3, lines: 250));
-    std\assert(wide.decision == "allow", message: "three changes earn 190 words: {wide.reason}");
+    final wide = verdictWith(goodTitle, body: sized(210), f: shipping(3, lines: 250));
+    std\assert(wide.decision == "allow", message: "three changes earn 210 words: {wide.reason}");
     std\assert(verdictWith(goodTitle, body: sized(80) + "\n\n```\n" + "code ".repeat(200) + "\n```", f: small).decision == "allow", message: "fenced code is not counted");
 }
 
@@ -790,23 +1120,86 @@ test "a budget the diff could not settle is advice, told once" {
     final once = helpers\counter();
     final edit = helpers\request([["gh", "pr", "edit", "412", "--body", body]]);
     final big = facts(shipping(100, lines: 5000));
-    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, once: once).decision == "advise", message: "another pull request's diff is never read");
-    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, once: once).decision == "allow", message: "said once per pull request");
+    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "advise", message: "another pull request's diff is never read");
+    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "allow", message: "said once per pull request");
 }
 
-test "the diff is read only for a description its title does not cover" {
+test "the diff is read once, and only for the checkout's own pull request" {
     final reads = mut [<str>];
     final counting = fun (base: str) > Facts {
         reads.append(base);
         return shipping(1, lines: 40);
     };
-    decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, once: helpers\counter());
-    std\assert(reads.len() == 0, message: "a short description reads nothing");
-    decidePullRequest(create(goodTitle, body: sized(100)), line: "", files: {<str: str>}, diff: counting, once: helpers\counter());
+    decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 1 and reads[0] == "main", message: "one read, against the pull request's base");
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
-    decidePullRequest(headed, line: "", files: {<str: str>}, diff: counting, once: helpers\counter());
+    decidePullRequest(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 1, message: "another branch's diff is not this checkout's");
+}
+
+test "an area the diff touches and the description never names is a question, not a denial" {
+    final touched = Facts{ known = true, fragments = 0, shipped = 2, lines = 40,
+        paths = ["internal/guard/dir.go", "docs/guard.md"], areas = ["internal/guard", "docs", "libs/conventions"] };
+    final v = verdictWith(goodTitle, body: "The guard keeps the key; the docs say so.", f: touched);
+    std\assert(v.decision == "advise", message: v.reason);
+    std\assert(v.reason.indexOf("why does this touch libs/conventions?") != null, message: v.reason);
+    std\assert(v.reason.indexOf("touch internal/guard") == null and v.reason.indexOf("touch docs") == null, message: "named areas ask nothing: {v.reason}");
+    final named = verdictWith(goodTitle, body: "The guard keeps the key, the docs say so, and conventions pin it.", f: touched);
+    std\assert(named.decision == "allow", message: named.reason);
+}
+
+test "touchedAreas names projects and top-level packages, generated files and fragments aside" {
+    final files: [any] = [
+        {"path": "internal/guard/dir.go", "project": ".", "role": "source"},
+        {"path": "internal/guard/rules/x.go", "project": ".", "role": "source"},
+        {"path": "libs/conventions/prose/voice.go", "project": "libs/conventions", "role": "source"},
+        {"path": "magusfile.buzz", "project": ".", "role": "source"},
+        {"path": "MAGUS.md", "project": ".", "role": "output"},
+        {"path": ".gitattributes", "project": ".", "role": "maintained"},
+        {"path": "docs/pnpm-lock.yaml", "project": "docs", "role": "source"},
+        {"path": "changes/unreleased/writing-rules.md", "project": ".", "role": "source"},
+    ];
+    final got = touchedAreas(files);
+    std\assert(got.join(",") == "internal/guard,libs/conventions,magusfile.buzz", message: got.join(","));
+    std\assert(unnamedAreas(got, text: "The Guard and the magusfile.").join(",") == "libs/conventions", message: "named by last segment, any case");
+}
+
+test "classify reads outputs from the managed attributes and owners from project roots" {
+    final ws = fs\tempDir("areas") catch "";
+    std\assert(ws != "", message: "a temp dir");
+    fs\mkdirAll("{ws}/libs/lib/gen") catch void;
+    fs\mkdirAll("{ws}/tools/magusfiles") catch void;
+    fs\mkdirAll("{ws}/vendor/dep") catch void;
+    fs\mkdirAll("{ws}/internal/guard") catch void;
+    fs\writeFile("{ws}/libs/lib/magusfile.buzz", content: "") catch void;
+    fs\writeFile("{ws}/tools/magusfiles/a.buzz", content: "") catch void;
+    fs\writeFile("{ws}/vendor/dep/magusfile.buzz", content: "") catch void;
+    fs\writeFile("{ws}/.gitattributes", content: "*.go diff=golang\n"
+        + "{attributesBegin} - do not edit\n"
+        + "*.go diff=golang\n"
+        + "/MAGUS.md merge=magus linguist-generated\n"
+        + "libs/lib/gen/** merge=magus linguist-generated\n"
+        + "libs/lib/gen/keep.go !merge !linguist-generated\n"
+        + "notes/*.md merge=magus\n"
+        + "{attributesEnd}\n"
+        + "docs/*.svg linguist-generated\n") catch void;
+
+    final got = mut [<str>];
+    foreach (f in classify(ws, paths: ["MAGUS.md", "docs/MAGUS.md", "libs/lib/gen/a.go", "libs/lib/gen/keep.go",
+        "libs/lib/x.go", "tools/t.go", "vendor/dep/d.go", "internal/guard/dir.go", ".gitattributes",
+        "notes/n.md", "docs/a.svg"])) {
+        got.append("{f["path"] ?? ""}={f["project"] ?? ""}:{f["role"] ?? ""}");
+    }
+    std\assert(got.join(" ") == "MAGUS.md=.:output docs/MAGUS.md=.:source libs/lib/gen/a.go=libs/lib:output "
+        + "libs/lib/gen/keep.go=libs/lib:source libs/lib/x.go=libs/lib:source tools/t.go=tools:source "
+        + "vendor/dep/d.go=.:source internal/guard/dir.go=.:source .gitattributes=.:maintained "
+        + "notes/n.md=.:source docs/a.svg=.:source", message: got.join(" "));
+    std\assert(areasOf(ws, paths: ["MAGUS.md", "libs/lib/x.go", "internal/guard/dir.go", "libs/lib/gen/a.go"]).join(",")
+        == "libs/lib,internal/guard", message: "outputs ask nothing");
+
+    fs\writeFile("{ws}/.gitattributes", content: "*.go diff=golang\n") catch void;
+    std\assert(classify(ws, paths: [".gitattributes"])[0]["role"] == "source", message: "no managed section, nothing magus maintains");
+    fs\removeAll(ws) catch void;
 }
 
 test "parseNumstat counts fragments, shipped files and lines, generated files aside" {
@@ -817,6 +1210,7 @@ test "parseNumstat counts fragments, shipped files and lines, generated files as
     std\assert(f.fragments == 1, message: "a folded fragment is not a change: {f.fragments}");
     std\assert(f.shipped == 2, message: "key.go and the logo ship: {f.shipped}");
     std\assert(f.lines == 64, message: "every line outside generated files: {f.lines}");
+    std\assert(f.paths.len() == 6 and f.paths.indexOf("MAGUS.md") == null, message: "the paths outside generated files: {f.paths}");
     std\assert(!parseNumstat("").known, message: "an empty diff is unknown");
 }
 
@@ -853,13 +1247,18 @@ test "a description read from a heredoc or a body file is judged" {
         slots.append(textSlots(p));
     }
     final filled = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs(line));
-    final v = judged(filled, line: line, files: {<str: str>});
-    std\assert(v.reason.indexOf("credits a tool") != null, message: v.reason);
+    final seen = mut [<str>];
+    final recording = fun (text: str) > [Judged] {
+        seen.append(text);
+        return [<Judged>];
+    };
+    decidePullRequest(filled, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 1 and seen[0] == "fix: pin the key\nClaude pinned the key.", message: "{seen}");
 
     final fromFile = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body-file", "pr.md"]]);
     std\assert(bodyFiles(fromFile)[0] == "pr.md", message: "the file to read");
-    final read = judged(fromFile, line: "", files: {"pr.md": "Claude wanted this."});
-    std\assert(read.reason.indexOf("credits a tool") != null, message: read.reason);
+    decidePullRequest(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 2 and seen[1] == goodTitle + "\nClaude wanted this.", message: "{seen}");
 }
 
 test "an unreadable description is judged from the whole line" {

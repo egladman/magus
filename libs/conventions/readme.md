@@ -72,26 +72,48 @@ string loops).
 
 ## prose
 
-`prose` is not an analyzer, and golangci-lint never loads it. It judges one
-symbol from a SCIP index: the doc comment, and the name of a function or
-method. Its rules are this repository's policy, not magus's: the magus module
-never imports `libs/conventions`. `cmd/judge-docs` runs them, fed by
-`hack/lint/symbol-docs-follow-prose-rules.buzz` with the symbols of
-`magus\symbols()` as JSON on stdin; it writes the findings as JSON on stdout. A Go
-symbol and a TypeScript one meet the same rules, and a finding points at the
-declaration because an index records no position inside a doc. `prose` imports
-only the standard library.
+`prose` is not an analyzer, and golangci-lint never loads it. It judges four
+kinds of text: one symbol from a SCIP index (the doc comment, and the name of a
+function or method), a hand-written Markdown file, a skill, and a pull
+request's title and description. Its rules are this repository's policy, not magus's: the magus
+module never imports `libs/conventions`. `cmd/judge-docs` runs them. With no
+flag it reads the symbols of `magus\symbols()` as JSON on stdin, fed by
+`hack/lint/symbol-docs-follow-prose-rules.buzz`, and a finding points at the
+declaration because an index records no position inside a doc. With
+`-surface markdown` it judges the files its arguments name, and with
+`-surface pull-request` a pull request on stdin, the title on the first line;
+each finding names its file and line. `-surface skill` judges a SKILL.md an
+agent loads as written, and `-surface skill-source` a skill body
+`internal/agent` renders with `text/template`: what its short form shows meets
+the skill rules, and what only its full form shows meets the Markdown ones and
+`bare-rule`. It writes the findings as JSON on stdout.
+A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
+standard library.
 
-| Rule               | Reports                                                        |
-| ------------------ | -------------------------------------------------------------- |
-| `comment-block`    | a doc over 250 words                                           |
-| `comment-sentence` | a doc sentence over 60 words                                   |
-| `filler`           | throat-clearing ("Note that") and filler adverbs ("simply")    |
-| `terms`            | a spelling the glossary replaces ("sub-agent")                 |
-| `name-suffix`      | a function or method name whose last word is Of or For         |
-| `aside`            | a spaced hyphen spelling an em-dash, inline or ending a line   |
-| `history`          | a phrase narrating the change rather than the code ("used to") |
-| `docstub`          | a one-line doc that only repeats the symbol's name             |
+| Rule               | Surfaces     | Reports                                                        |
+| ------------------ | ------------ | -------------------------------------------------------------- |
+| `comment-block`    | doc          | a doc over 250 words                                           |
+| `comment-sentence` | doc          | a doc sentence over 60 words                                   |
+| `filler`           | all          | throat-clearing ("Note that") and filler adverbs ("simply")    |
+| `terms`            | all          | a spelling the glossary replaces ("sub-agent")                 |
+| `name-suffix`      | doc          | a function or method name whose last word is Of or For         |
+| `aside`            | doc          | a spaced hyphen spelling an em-dash, inline or ending a line   |
+| `history`          | doc          | a phrase narrating the change rather than the code ("used to") |
+| `docstub`          | doc          | a one-line doc that only repeats the symbol's name             |
+| `lead-context`     | pull request | a description that does not open with a paragraph of its goal  |
+| `reply-voice`      | Markdown, PR | a reply opener, a conversation, a bold-label list item         |
+| `tense`            | Markdown, PR | the future tense, and the author as the actor of a change      |
+| `hedge`            | Markdown, PR | a softener on a claim ("might fix", "probably")                |
+| `attribution`      | Markdown, PR | credit to a tool, or an account of how the work was made       |
+| `terse-sentence`   | skill        | a sentence over 25 words                                       |
+| `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
+| `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
+| `bare-rule`        | skill        | "rule" with no mechanism named, in either form of a skill      |
+| `template`         | skill source | a body that does not render, so neither form can be judged     |
+
+A skill takes every Markdown and pull request rule but `lead-context`.
+Markdown and pull requests take a wider `filler` list ("actually", "robust")
+than doc comments do. docs/conventions.md states the written rules for authors.
 
 Code in a doc, fenced or indented, is never judged. A backtick span still counts
 toward the budgets, but no wording rule reads inside one.

@@ -283,7 +283,7 @@ Three rules cover the whole surface:
   is already in the form the next command wants. Commands
   that take fuzzy search tokens rather than paths, such as `magus where`, take
   the same bare text.
-- **Quoting a project back to a user**: prefer whatever magus printed. The
+- When you quote a project back to a user, use whatever magus printed. The
   workspace root is the case that bites, because it is the one project whose
   path is a bare `.`; human output renders it as the repository's directory
   name, so a `.` never leaks into a sentence where it reads as punctuation.
@@ -377,7 +377,7 @@ the project DAG, the declared outputs, the affected set, or the blast radius of
 a symbol, because none of that is written in the files; it lives in the graph
 the server keeps warm. So the agent reasons one layer below the structure it is
 trying to understand, and fills the gap by guessing: this file looks generated,
-these two packages probably change together. Those guesses are frequently wrong,
+these two packages change together. Those guesses are frequently wrong,
 and the agent has no way to check them.
 
 The tools answer from what the workspace declares. Ask `client` (`magus\describe.file`)

@@ -80,7 +80,7 @@ binding breaks nothing at load: a magusfile still calling it parses, loads, and 
 `magus ls`, then fails at run time with `buzz: null is not callable`, a message that
 names neither the call nor its replacement. Worse, magus builds the target dependency
 graph by reading `ctx.needs` statically, so a magusfile calling a removed `needs` form
-reports no dependency edge at all and simply stops running its prerequisites.
+reports no dependency edge at all and stops running its prerequisites.
 
 Two things keep that from happening quietly.
 

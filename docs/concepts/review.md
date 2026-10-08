@@ -21,7 +21,7 @@ tags:
 
 You read your own change before sending it, and that is a different job from reading a diff.
 Some of what you notice is for you. The rest is for whoever reviews it next, and that half
-has nowhere to go: you are in a terminal, and your colleagues will read it on a web page you
+has nowhere to go: you are in a terminal, and your colleagues read it on a web page you
 have not opened. So you retype the remark later from memory, or you drop it.
 
 magus already knows the change: which files a target generated, how far each changed symbol
@@ -134,7 +134,7 @@ Cmd or Ctrl with Enter, or the button beside the field, because a field where En
 cannot hold a remark worth writing, and because sending is not something to do by reflex.
 
 **Write** and **Preview** sit above the field. What a remark looks like rendered is what your
-colleague will read, and until you can see it here you are typing blind: a fence reads as three
+colleague reads, and until you can see it here you are typing blind: a fence reads as three
 backticks, a list as a row of hyphens. Threads render the same way, so a colleague's markdown
 arrives as markdown rather than as its own syntax.
 
@@ -193,7 +193,7 @@ you**, and a question left sitting for a day costs your colleague their day too.
 The threads that arrived since you last read the conversation are marked **new** where they sit
 in the diff, so opening it shows you where to look instead of making you re-read.
 
-What counts as new is decided by threads you have actually had on screen, not by a timestamp and
+What counts as new is decided by threads you have had on screen, not by a timestamp and
 not by anything the watcher recorded for itself. That is the same rule as a read mark: it is the
 reader's claim, and nothing else may make it on your behalf.
 
@@ -232,7 +232,7 @@ strip under the toolbar. Merge while you are elsewhere in the console and it is 
 notification panel, silently: a merge changes nothing you were relying on, so it is worth keeping
 and not worth ringing a bell for.
 
-That second one asks the host on a slow clock and only for a branch you actually reviewed:
+That second one asks the host on a slow clock and only for a branch you reviewed:
 opening a review is what opts it in. magus does not go asking a forge about branches you never
 looked at.
 
@@ -346,7 +346,7 @@ changing the same files. What it does NOT carry is the durable half of a review 
 names the magus skills you already have rather than pasting copies of them, because a copy drifts
 from the installed one and spends your context on text your tools already loaded.
 
-## What magus will not do
+## What magus does not do
 
 - **An agent cannot publish.** An agent pairing over MCP reads the review's threads and may
   draft a comment into the shared session. You send it. magus stamps authorship from the

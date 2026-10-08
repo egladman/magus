@@ -21,7 +21,7 @@ authorship is not a weaker note, it is a worthless one.
 
 So the test for what goes here is not "is this important" but "would anyone be able to
 check it later". Write a note when the reason lives in someone's head: why an approach was
-rejected, what a constraint really is, what bit us and is not visible in the code that
+rejected, what a constraint is, what bit us and is not visible in the code that
 resulted. A claim an agent derived does not belong here at all: it cites a ref a later
 reader re-runs, so it lives in the agent's own memory or in the graph, and never pretends
 to be a human one.

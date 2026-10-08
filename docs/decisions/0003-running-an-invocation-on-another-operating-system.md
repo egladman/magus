@@ -3,14 +3,12 @@ title: "ADR 0003: running an invocation on another operating system"
 order: 3
 description: Whether magus should learn to run an invocation on a kernel other than the host's, so a macOS checkout can reproduce a Linux-only failure (landlock, /proc, the unix socket path limit) before CI does. Decides one Engine-API client reached through one user fact, a top-level --platform flag that relays the whole invocation, and symbol indexers that always run from their spell's image; records the prefix script and the provider-spell flag as considered; lists what the reviewers found and how each finding is answered.
 tags: [adr, decision, platform, linux, macos, containers, podman, docker, sandbox, knowledge, scope]
+status: proposed
+date: 2026-09-26
+supersedes: "the two earlier drafts of this page, which decided a repository-local prefix script (B') and recorded a flag relayed through a provider spell (D) as considered."
 ---
 
 # ADR 0003: running an invocation on another operating system
-
-- **Status:** Proposed
-- **Date:** 2026-09-26
-- **Supersedes:** the two earlier drafts of this page, which decided a repository-local
-  prefix script (B') and recorded a flag relayed through a provider spell (D) as considered.
 
 ## Context
 
@@ -53,7 +51,7 @@ command and names the runtime explicitly. Each also paid for it in expectations 
 equivalence it then had to meet.
 
 `docs/scope.md` states that a container gives environment reproducibility, not
-hermeticity, that magus offers no opt-in container isolation, and that magus will not
+hermeticity, that magus offers no opt-in container isolation, and that magus does not
 require a container runtime. This page amends the last of those, and says how much.
 
 ## Decision
@@ -293,7 +291,7 @@ Each line is a reviewer finding, kept or answered.
   with the loudness of version skew, so two backends never alternate on one index.
 - The daemon never pulls. An indexer image is pulled only under `--fetch` on a typed
   invocation, with the registry host, the HTTP status on failure (Docker Hub's anonymous
-  limit will be met by an office behind one egress address) and the elapsed time
+  limit is reached by an office behind one egress address) and the elapsed time
   printed; until then every read says the image is absent and names the command.
 - Every indexer container is resource-bound, so an indexer never takes over the machine.
   The create request sets `Memory` with `MemorySwap` equal to it (no swap), `NanoCpus` and

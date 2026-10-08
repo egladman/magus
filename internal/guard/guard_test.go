@@ -375,10 +375,14 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		})
 	}
 
-	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main.
-	shellIn := func(t *testing.T, branch string) func(command string) Verdict {
+	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main. The
+	// workspace is an empty temporary dir unless one is named.
+	shellIn := func(t *testing.T, branch, workspace string) func(command string) Verdict {
 		t.Helper()
-		ctx, _ := spawnFixture(t)
+		ctx, cacheDir := spawnFixture(t)
+		if workspace != "" {
+			ctx = WithLocation(ctx, cacheDir, workspace, workspace)
+		}
 		deps := Dependencies{
 			CommandRule: m.CommandRule(),
 			CheckoutState: func(context.Context, string) *types.CheckoutState {
@@ -395,7 +399,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
-		run := shellIn(t, "trim-key")
+		run := shellIn(t, "trim-key", "")
 		for _, line := range []string{
 			`git -c user.name=x commit -q -m "URL-parse the port; keep the key"`,
 			`hg -R . --config ui.username=x commit -m "trim a fragment" -y`,
@@ -430,7 +434,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	})
 
 	t.Run("commit-subject on the base branch", func(t *testing.T) {
-		run := shellIn(t, "main")
+		run := shellIn(t, "main", "")
 		for _, line := range []string{
 			`git commit -m "fix(cache): keep the key stable across runs"`,
 			`jj describe -m "feat: add a commit-msg hook"`,
@@ -446,15 +450,52 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		run := shellIn(t, "trim-key")
-		assert.NotEqual(t, "deny", run(`gh pr create --title "fix(cache): pin the key" --body "Pins it."`).Decision, "no first-use gate")
+		// The rule runs the prose judge that `magus run judge-build libs/conventions` links into
+		// the workspace's libs/conventions/gen, so this one holds that module, built output
+		// and all; the root test target needs judge-build. It is not the checkout itself, whose
+		// branch diff would add advice about the areas it touches to every verdict.
+		conventions := filepath.Join(root, "libs", "conventions")
+		ws := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
+		require.NoError(t, os.Symlink(conventions, filepath.Join(ws, "libs", "conventions")))
+		run := shellIn(t, "trim-key", ws)
+		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
+		v := run(describe)
+		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
-		v := run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
+		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
 		assert.Contains(t, v.Reason, `pr-title: "Pin the key": no `+"`<type>: `"+` prefix`)
-		assert.Contains(t, v.Reason, "credits a tool")
+		assert.Contains(t, v.Reason, "Drop 'Claude': describe the change, not who or what produced it. [attribution]")
 		assert.NotContains(t, v.Reason, "Skill(")
-		assert.NotEqual(t, "deny", run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Reads .claude/skills/x/SKILL.md."`).Decision)
+
+		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
+		assert.Equal(t, "pass", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
+
+		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
+		unbuilt := t.TempDir()
+		mod := filepath.Join(unbuilt, "libs", "conventions")
+		require.NoError(t, os.MkdirAll(mod, 0o755))
+		for _, name := range []string{"go.mod", "go.sum", "prose", "cmd"} {
+			require.NoError(t, os.Symlink(filepath.Join(conventions, name), filepath.Join(mod, name)))
+		}
+		v = shellIn(t, "trim-key", unbuilt)(describe)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "libs/conventions/gen/judge-docs is not built; run `magus run judge-build libs/conventions`")
+
+		// The built judge beside a source it was not linked from is as stale as none.
+		require.NoError(t, os.Symlink(filepath.Join(conventions, "gen"), filepath.Join(mod, "gen")))
+		require.NoError(t, os.Remove(filepath.Join(mod, "prose")))
+		require.NoError(t, os.Mkdir(filepath.Join(mod, "prose"), 0o755))
+		sources, err := filepath.Glob(filepath.Join(conventions, "prose", "*.go"))
+		require.NoError(t, err)
+		for _, src := range sources {
+			require.NoError(t, os.Symlink(src, filepath.Join(mod, "prose", filepath.Base(src))))
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(mod, "prose", "zz.go"), []byte("package prose\n"), 0o644))
+		v = shellIn(t, "trim-key", unbuilt)(describe)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run judge-build libs/conventions`")
 	})
 
 	covered["code-comments"] = true

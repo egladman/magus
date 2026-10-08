@@ -38,7 +38,7 @@ it once here and link there for the distributed story.
 - **A hit never runs the body.** On a hit magus restores the recorded outputs and
   emits the result event; the target's `export fun` never executes. The saved work
   _is_ the point.
-- **It is just files.** The store is a directory of blobs, JSON manifests, and
+- **The cache is a set of files.** The store is a directory of blobs, JSON manifests, and
   captured logs under `.magus/`. There is no database and no server in the read
   path. You can `ls` it, `cat` a manifest, and reason about a hit or miss with
   ordinary tools.
@@ -173,9 +173,9 @@ declare the footprint at the target, in literals magus can see.
 The key is the hex SHA-256 of a deterministic, newline-delimited serialization of
 the `Step`. magus writes these lines, in this order, into one hash:
 
-- **`keyVersion`**: an internal schema version. Bumping it (when the set of hashed
+- `keyVersion`: an internal schema version. Bumping it (when the set of hashed
   fields changes) forces a global rebuild.
-- **`os`** and **`arch`**: the host platform, each independently switchable with
+- `os` and `arch`: the host platform, each independently switchable with
   [`cache.include.os.enabled`](../reference/config.md) and
   `cache.include.arch.enabled`. Both default to **off**, so a macOS laptop and a Linux
   runner mint the same key for identical sources, and an output ref names the same run
@@ -183,23 +183,23 @@ the `Step`. magus writes these lines, in this order, into one hash:
   built on, and a replay onto a different one is refused as a miss whatever these say.
   Turn them on for a cache shared across platforms, where one key per platform beats
   every platform colliding on one key and taking that miss.
-- **`projectPath`** and **`target`**: so the same sources under different targets
+- `projectPath` and `target`: so the same sources under different targets
   key separately.
-- **`spell`**: the explicit `spell::op` filter, written only on such runs. An
+- `spell`: the explicit `spell::op` filter, written only on such runs. An
   explicit op bypasses a magusfile export that shadows the same name, so the two
   forms run different definitions under one target name and must not share an
   entry: without this line a compile-only `go::go-build` recorded a pass that the
   real `go-build` target then replayed. Plain target runs hash without it.
-- **`charm:` lines**: the active [charms](charms.md), sorted by name. A
+- `charm:` lines: the active [charms](charms.md), sorted by name. A
   charm-variant run (`lint:rw`) hashes differently from the bare run, because the
   charm changes behavior. Empty charms add nothing, so charm-less runs are
   unaffected.
-- **`arg:` lines**: one per argument after `--` (`magus run test -- -run
+- `arg:` lines: one per argument after `--` (`magus run test -- -run
   TestFoo`), in the order given. Unlike charms and env these are never sorted,
   since `-run X` is not `X -run`; a run with different trailing args must not
   replay another run's result. Empty when no args are forwarded, so an ordinary
   run hashes unaffected.
-- **`src:` lines**: for every file matched by `needs`, its workspace-relative path,
+- `src:` lines: for every file matched by `needs`, its workspace-relative path,
   its content SHA-256, and its executable bit. Files are discovered by a single
   walk, sorted by path, and hashed in parallel. Only the executable bit of the mode
   is folded in (not the full permissions, which would differ across machines with
@@ -213,29 +213,29 @@ the `Step`. magus writes these lines, in this order, into one hash:
 
   This is load-bearing rather than a convenience. A target's BODY is not hashed:
   only its NAME goes into the key, as `target:`, so if the magusfile were not a
-  source, editing what a target actually does would leave the key unmoved and
+  source, editing what a target does would leave the key unmoved and
   replay the previous result. Everything a target does that magus can see comes in
   through the files it reads; the file that DEFINES it has to be one of them.
-- **`env:` lines**: each allow-listed environment variable name and its value,
+- `env:` lines: each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
-- **`obs:` lines**: each observation of a fact outside the tree: a
+- `obs:` lines: each observation of a fact outside the tree: a
   `ctx.observes(key, value)` declaration as `key=value`, and the output of any
   observation probe a spell declares for a tool the target's ops drive,
   sorted. Its own class rather than a fold into `env:` or `exec:`, because an
   observation names a fact outside the tree entirely and changes nothing about how
   the target runs. A target declaring none writes no line, so an ordinary run
   hashes unaffected.
-- **`exec:` lines**: per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
+- `exec:` lines: per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
   sorted. Unlike `env:` lines, which read a variable's live process value at hash
   time, an override's value is fixed in the magusfile source itself, so it hashes
   directly: two runs differing only by a derived override must not share an entry.
-- **`dep:` lines**: the resolved cache keys of upstream dependencies, sorted. This
+- `dep:` lines: the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
-- **`spellDefVersion`**: a binary fingerprint of the spell definition, so a magus
+- `spellDefVersion`: a binary fingerprint of the spell definition, so a magus
   upgrade that changes a spell forces a miss.
-- **`tool:` lines**: `spell:version` strings, sorted, so a toolchain upgrade
+- `tool:` lines: `spell:version` strings, sorted, so a toolchain upgrade
   (a new `go` or `prettier`) invalidates the key even when no source changed.
 
 Because the serialization is stable and sorted, the key is reproducible: identical
@@ -297,8 +297,8 @@ The commonest way to wreck a cache is to reach for the file that pins your tools
 (`mise.toml`, `package.json`, `go.mod`, a lockfile) and declare it an input,
 usually project-wide.
 
-The intent is right: a tool version really is part of what produced the output, and
-a bump really should invalidate. The result is not. A manifest pins _many_ tools,
+The intent is right: a tool version is part of what produced the output, and
+a bump should invalidate. The result is not. A manifest pins _many_ tools,
 and it moves for reasons unrelated to most of them. Wire it into every project and
 one linter bump rebuilds the entire graph: in CI, the difference between an
 affected run and a from-scratch build, for a change that could not have altered
@@ -316,7 +316,7 @@ tools a project genuinely uses:
   external binary.
 - **a manifest that is genuinely a source** of one project (`go.mod` for a Go
   project whose build reads it) belongs in that project's `sources`, where it
-  already is. That is not this anti-pattern: the file really does feed those
+  already is. That is not this anti-pattern: the file does feed those
   targets.
 - **a pin that reaches one target only** wants a per-target declaration, not a
   project-wide one. `magus\inputs` in that target's body keeps a sibling target's
@@ -396,7 +396,7 @@ scanner's vulnerability database, which moves daily and belongs to no spell. A
 cache hit would report yesterday's CVEs against today's image.
 
 The blunt fix is `skip_cache`, and it is a bad trade: it forfeits caching forever
-to avoid staleness that only matters when the fact actually moved. `ctx.observes`
+to avoid staleness that only matters when the fact moved. `ctx.observes`
 makes the invisible input visible instead, so caching becomes correct rather than
 forbidden:
 
@@ -412,7 +412,7 @@ export fun scan(ctx: magus\Context, args: [str]) > void {
 The value joins the key as its own `obs:` line. A value that moves is a miss; a
 value that holds still replays. magus never interprets it; it is a stamp to
 compare, so a version string, a digest, and a date are all equally good, and
-anything that changes when the fact changes will do. `describe target --cache`
+anything that changes when the fact changes works. `describe target --cache`
 reports an `obs` class beside `src` and `env`, so a rerun names the external fact
 instead of blaming a file.
 
@@ -427,7 +427,7 @@ One key declared twice with the same value collapses to a single line; declared
 twice with two different values, both survive, so the key moves when either does.
 That is the same rule `ctx.withEnv` already follows, and it is the safe direction:
 keeping both over-invalidates, where picking a winner would drop a fact the target
-really does depend on.
+depends on.
 
 **It is observation, not verification.** The value is a cheap thing the magusfile
 already knows, stated where the target is declared. Real work (fetching the
@@ -700,7 +700,7 @@ means `magus clean --outputs` (`CleanOutputs`), output-ownership
 path is the one place that stays per-target.
 
 Inputs have just the one role (the cache key), so there is no `AllInputs`: a
-source glob that isn't in a given target's `Step.Sources` simply doesn't key that
+source glob that isn't in a given target's `Step.Sources` doesn't key that
 target, which is a footprint question, never a "what does the project consume"
 one.
 
@@ -826,7 +826,7 @@ is what a drift gate wants anyway.
 What does _not_ work is keeping both and being disciplined about it. The loop is
 structural, so "remember to regenerate and commit again" is a rule that has to
 hold forever, and the failure mode when it lapses is a silent one: the committed
-output simply describes a commit that is no longer the one it sits in.
+output describes a commit that is no longer the one it sits in.
 
 ### The narrower rule this is an instance of
 

@@ -20,7 +20,7 @@ assistant can drive a tool already sitting on your machine. Wrapping a remote AP
 or a service with no command line at all, is a different question with a different
 answer.
 
-## What is actually in there
+## What is in there
 
 magus exposes 22 MCP tools. Here is every one of them against the CLI command it
 corresponds to.

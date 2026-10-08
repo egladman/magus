@@ -28,7 +28,7 @@ This page is about finding that line.
 
 ## The symptom
 
-A target dies with no failing command. In CI the job simply stops, often with
+A target dies with no failing command. In CI the job stops, often with
 
 ```text
 The runner has received a shutdown signal.
@@ -51,11 +51,11 @@ close to taking the machine down; running: .:test; buzz heap: 8402931 objects
 
 Three facts, in the order you need them:
 
-- **the machine is nearly out**: available against total
-- **what was running**: the project and target, read from the registry that
-  survives a `SIGKILL`
-- **whether it was Buzz, and where**: the heap object count and the source
-  position responsible for most of its growth
+- The machine is nearly out of memory, shown as available against total.
+- What was running is the project and target, read from the registry that
+  survives a `SIGKILL`.
+- Whether it was Buzz, and where, is the heap object count and the source
+  position responsible for most of its growth.
 
 That last clause is the one that separates "a subprocess ate the memory" from
 "our own script did", which is otherwise a day of bisecting.
@@ -151,7 +151,7 @@ rescanning loop gets written in the first place.
 ## Scale is what makes it fatal
 
 None of these patterns is wrong in itself. Building a ten-row table with `+` is
-fine and always will be. The cost is the pattern multiplied by the input, so the
+fine and stays fine. The cost is the pattern multiplied by the input, so the
 same three lines are harmless over a config file and fatal over a coverage
 profile.
 
@@ -162,7 +162,7 @@ instead and speaks only when the measurement says something.
 
 ## Declaring what a target needs
 
-A target that legitimately needs a lot of memory can say so, and magus will keep
+A target that legitimately needs a lot of memory can say so, and magus keeps
 peers off the machine while it runs:
 
 ```buzz

@@ -82,7 +82,7 @@ default and, when enabled, ships to _your_ OTLP collector, not a magus-operated
 backend. The [remote cache](../concepts/cache/remote.md) is your storage. See
 [telemetry.md](../concepts/telemetry.md).
 
-## How do I see what a target will actually run before running it?
+## How do I see what a target runs before running it?
 
 `magus describe target <path:target>` renders the fully-resolved command (charms
 applied) without executing. Add `--explain` to trace each charm's edit, or a

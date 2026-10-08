@@ -428,7 +428,7 @@ magus run <name> <project>             → executes the target; spell ops fork
                                           their commands (cached by needs/provides)
 ```
 
-Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is just a function you wrote (valid; call the host modules directly).
+Key invariant: **binding is not running.** A bound spell with no target wired is inert at run time but still shapes the cache key. A target with no spell behind it is a function you wrote (valid; call the host modules directly).
 
 ## Glossary
 

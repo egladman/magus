@@ -71,7 +71,7 @@ The paths above are user-global. Each repository you ran magus in also holds:
 | `.claude/skills/magus-*`       | present only if you ran [`magus agent install`](../guides/integrations/agents.md)                                                                                         |
 | `AGENTS.md`                    | the file is yours and magus never writes it; delete the block you pasted between `<!-- magus:skills:begin ... -->` and `<!-- magus:skills:end -->`                        |
 
-`magus init` also wires git, in three places a `rm` will not reach:
+`magus init` also wires git, in three places a `rm` does not reach:
 
 | Where                                                                                         | What to remove                                                                         |
 | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -106,12 +106,12 @@ nothing else lives there.
 
 ## Other install routes
 
-- **[mise](mise.md)**: `mise unuse -g ubi:egladman/magus` drops the
+- With [mise](mise.md), `mise unuse -g ubi:egladman/magus` drops the
   entry from the config; `mise uninstall ubi:egladman/magus` deletes the installed
   version. You need both. For a per-repository pin, edit that repo's `mise.toml` or
   pass `--path`. The XDG paths above are still yours to clean up.
-- **[Container image](container-image.md)**: remove the image
+- With the [container image](container-image.md), remove the image
   (`docker rmi`/`podman rmi`). It installed nothing on the host, though a bind-mounted
   workspace still carries its own `.magus/`.
-- **Manual install**: delete the binary at whatever path you moved it to, and the man
+- With a manual install, delete the binary at whatever path you moved it to, and the man
   pages if you ran `magus man install`.

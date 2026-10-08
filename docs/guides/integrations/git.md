@@ -36,8 +36,8 @@ us. So the bar is not "fast enough". The bar is:
 > else and return. It may not do the work.
 
 That is checkable by reading the hook, not by timing it. A hook that computes is
-disqualified even when it happens to be quick today, because the thing it calls will get
-slower and nobody will notice until it does.
+disqualified even when it happens to be quick today, because the thing it calls gets
+slower and nobody notices until it does.
 
 **Automatically disqualified**, whatever the measured time:
 
@@ -345,7 +345,7 @@ reported.
 a git config, which is per-clone and cannot be committed, so github.com computes
 mergeability with the plain three-way merge and reports conflicts your local git would
 have settled silently. The same is true of GitLab, Gerrit, and every merge queue. This
-is architectural, not a configuration gap, and no `.gitattributes` change will fix the
+is architectural, not a configuration gap, and no `.gitattributes` change fixes the
 conflict banner on a pull request.
 
 A driver has a second limit: no VCS invokes a content merge driver when one side deleted

@@ -110,7 +110,7 @@ you go looking for why `build` never runs.
 
 `types.WorkspaceRepository` (what `Open` and `Inspect` both satisfy) is an
 embedding of four smaller interfaces, and `types/repository.go` states the
-house rule outright: prefer the narrowest one your code actually uses.
+house rule outright: prefer the narrowest one your code uses.
 
 | Role               | Methods                                                           | Answers                                                   |
 | ------------------ | ----------------------------------------------------------------- | --------------------------------------------------------- |
@@ -217,7 +217,7 @@ that imports `github.com/egladman/magus` as a dependency can discover
 projects and read a magusfile's static target graph
 (`Inspector.TargetGraph`, which parses source without executing it), but it
 cannot make magus dispatch a target that magusfile declares: `ListTargets`
-will not list it, no spell gets attached, and attempting to run it is a
+does not list it, no spell gets attached, and attempting to run it is a
 silent no-op rather than an error. There is currently no exported way to
 even ask "is magusfile evaluation available in this process"; you have to
 know this limitation going in.

@@ -1,6 +1,6 @@
 ---
 title: The CLI in practice
-description: The magus subcommands you actually reach for, grouped by the question you are asking, with the quirks that are not obvious from the help text.
+description: The magus subcommands you reach for most, grouped by the question you are asking, with the quirks that are not obvious from the help text.
 tags:
   [
     cli,
@@ -105,7 +105,7 @@ magus watch | magus affected --stdin build
 ```
 
 `magus x` is the interactive shorthand: pick a project and target from a
-picker. It requires a TTY and will not work in a pipeline.
+picker. It requires a TTY and does not work in a pipeline.
 
 ![The magus x picker: a filter line narrowing the project list as it is typed, the highlighted row a click or Enter would take, and the way out on the bottom rule](../../assets/gen/terminal-picker.svg)
 
@@ -204,7 +204,7 @@ is executing, what is queued, and what is waiting on a slot.
 ## Verbosity
 
 Every command honors the same output flags. Which one to reach for, and what
-each actually prints, is covered in
+each prints, is covered in
 [Logging and verbosity](../reference/logging.md). The short version: `-v` for
 "why did this rebuild", `-vv` when you want to watch the build happen, and
 `--silent` for unattended runs.

@@ -1,10 +1,12 @@
-// Package prose judges the prose of one symbol a SCIP index describes: its doc
-// comment, and the name of a function or method. It reads no source file and
-// parses no language, so every indexer's symbols meet the same rules.
+// Package prose judges prose: the doc comment and name of one symbol a SCIP
+// index describes, a hand-written Markdown file, a skill, or a pull request's
+// title and description. It parses no programming language, so every
+// indexer's symbols meet the same rules.
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
-// fenced block is code. Only the prose that remains is judged.
+// fenced block is code. Markdown is read the same way once what is not prose
+// is blanked (see [JudgeText]). Only the prose that remains is judged.
 package prose
 
 import (
@@ -33,24 +35,94 @@ const (
 	RuleHistory Rule = "history"
 	// RuleDocStub reports a one-line doc that only repeats the symbol's name.
 	RuleDocStub Rule = "docstub"
+	// RuleReplyVoice reports text that answers a prompt the reader never saw.
+	RuleReplyVoice Rule = "reply-voice"
+	// RuleTense reports a claim in the future tense or a first-person account
+	// of a change.
+	RuleTense Rule = "tense"
+	// RuleHedge reports a softener qualifying a claim.
+	RuleHedge Rule = "hedge"
+	// RuleAttribution reports credit to a tool or an agent, or an account of
+	// how the work was produced.
+	RuleAttribution Rule = "attribution"
+	// RuleLeadContext reports a pull request description that does not open
+	// with a paragraph naming the goal behind the change.
+	RuleLeadContext Rule = "lead-context"
+	// RuleTerseSentence reports a skill sentence over 25 words.
+	RuleTerseSentence Rule = "terse-sentence"
+	// RuleTerseParagraph reports a skill paragraph or list item over 60 words.
+	RuleTerseParagraph Rule = "terse-paragraph"
+	// RuleWordy reports a phrase with a shorter equivalent in a skill.
+	RuleWordy Rule = "wordy"
+	// RuleBareRule reports "rule" in a skill with no mechanism named: there a
+	// rule is only what magus enforces, and the rest is an instruction.
+	RuleBareRule Rule = "bare-rule"
+	// RuleTemplate reports a skill body that does not render, so neither of
+	// its forms can be judged.
+	RuleTemplate Rule = "template"
 )
 
-// checks run in this order, which is the order [Judge] reports in.
+// Surface names the kind of text a rule judges.
+type Surface string
+
+const (
+	// SurfaceDoc is a symbol's doc comment.
+	SurfaceDoc Surface = "doc"
+	// SurfaceMarkdown is a hand-written Markdown file.
+	SurfaceMarkdown Surface = "markdown"
+	// SurfacePullRequest is a pull request: its title on the first line, its
+	// description after it.
+	SurfacePullRequest Surface = "pull-request"
+	// SurfaceSkill is a skill's SKILL.md as an agent loads it: Markdown held
+	// to the terse rules, since every word costs context in every session that
+	// loads it.
+	SurfaceSkill Surface = "skill"
+	// SurfaceSkillSource is a skill body internal/agent renders with
+	// text/template into a short and a full form. What the short form shows is
+	// judged on SurfaceSkill; what only the full form shows, on
+	// SurfaceMarkdown.
+	SurfaceSkillSource Surface = "skill-source"
+)
+
+var (
+	docOnly = []Surface{SurfaceDoc}
+	written = []Surface{SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
+	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfacePullRequest, SurfaceSkill}
+	skill   = []Surface{SurfaceSkill}
+)
+
+// checks run in this order, which is the order [Judge] and [JudgeText] report
+// in. A doc keeps the rules it was always judged by: the rules written for
+// Markdown and pull requests would hold every doc comment in the tree to
+// them at once, with no sweep behind it.
 var checks = []struct {
 	rule  Rule
-	judge func(s Symbol, prose []proseLine) []Finding
+	on    []Surface
+	judge func(in input) []Finding
 }{
-	{RuleCommentBlock, commentBlock},
-	{RuleCommentSentence, commentSentence},
-	{RuleFiller, filler},
-	{RuleTerms, terms},
-	{RuleNameSuffix, nameSuffix},
-	{RuleAside, aside},
-	{RuleHistory, history},
-	{RuleDocStub, docStub},
+	{RuleCommentBlock, docOnly, commentBlock},
+	{RuleCommentSentence, docOnly, commentSentence},
+	{RuleFiller, all, filler},
+	{RuleTerms, all, terms},
+	{RuleNameSuffix, docOnly, nameSuffix},
+	{RuleAside, docOnly, aside},
+	{RuleHistory, docOnly, history},
+	{RuleDocStub, docOnly, docStub},
+	{RuleLeadContext, []Surface{SurfacePullRequest}, leadContext},
+	{RuleReplyVoice, written, replyVoice},
+	{RuleTense, written, tense},
+	{RuleHedge, written, hedge},
+	{RuleAttribution, written, attribution},
+	{RuleTerseSentence, skill, terseSentence},
+	{RuleTerseParagraph, skill, terseParagraph},
+	{RuleWordy, skill, wordy},
+	{RuleBareRule, skill, bareRule},
+	// A skill body that does not render is reported before any rule runs; the
+	// entry gives the rule its place in [Rules].
+	{RuleTemplate, nil, nil},
 }
 
-// Rules returns every rule in the order [Judge] reports them.
+// Rules returns every rule in the order [Judge] and [JudgeText] report them.
 func Rules() []Rule {
 	out := make([]Rule, len(checks))
 	for i, c := range checks {
@@ -73,7 +145,7 @@ type Symbol struct {
 	Doc string
 }
 
-// Finding is one rule's verdict on a [Symbol].
+// Finding is one rule's verdict.
 type Finding struct {
 	Rule Rule
 	// Message names the fix.
@@ -81,18 +153,53 @@ type Finding struct {
 	// Match is the offending text, or "" for a rule that judges a budget, where
 	// no one span is at fault.
 	Match string
+	// Line is the 1-based line of the judged text that Match sits on, or that
+	// a skill's over-budget sentence or paragraph opens on, or 0 for a doc
+	// comment's budget. [Judge] leaves it 0: a doc comment's lines are not its
+	// source file's, and the index places the symbol.
+	Line int
 }
 
-// Judge runs every rule over s. Doc rules judge nothing when Doc is empty, and
-// [RuleNameSuffix] judges only a callable. Findings come in [Rules] order, then
-// in the order their text appears in Doc.
-func Judge(s Symbol) []Finding {
-	prose := proseLines(s.Doc)
+// input is what a rule reads.
+type input struct {
+	symbol  Symbol
+	surface Surface
+	prose   []proseLine
+	// lines are the judged text's lines with what is not prose blanked, code
+	// still in place, for a rule that asks what a block is rather than what it
+	// says.
+	lines []string
+}
 
+// Judge runs the doc rules over s. They judge nothing when Doc is empty, and
+// [RuleNameSuffix] judges only a callable. Findings come in [Rules] order,
+// then in the order their text appears in Doc.
+func Judge(s Symbol) []Finding {
+	lines := strings.Split(s.Doc, "\n")
+	out := run(input{symbol: s, surface: SurfaceDoc, prose: readProse(lines, false), lines: lines})
+
+	for i := range out {
+		out[i].Line = 0
+	}
+
+	return out
+}
+
+func run(in input) []Finding {
 	var out []Finding
 
 	for _, c := range checks {
-		for _, f := range c.judge(s, prose) {
+		if !slices.Contains(c.on, in.surface) {
+			continue
+		}
+
+		// A rule may scan its lines and its paragraphs in separate passes, so
+		// its findings are put back in text order. Budgets carry no line and
+		// keep their own order.
+		found := c.judge(in)
+		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
+
+		for _, f := range found {
 			f.Rule = c.rule
 			out = append(out, f)
 		}
@@ -104,8 +211,10 @@ func Judge(s Symbol) []Finding {
 // proseLine is a line of a doc that renders as prose.
 type proseLine struct {
 	text string
-	// start is the offset past the line's indent and any list marker, so a
-	// bullet's own hyphen is never read as an aside.
+	// line is the line's 1-based number in the judged text.
+	line int
+	// start is the offset past the line's indent and any list or heading
+	// marker, so a bullet's own hyphen is never read as an aside.
 	start int
 	// opens is set where no sentence runs on from the line before: on the
 	// first line of a paragraph and on every list item.
@@ -117,6 +226,9 @@ type proseLine struct {
 	paragraph bool
 	// item is set on a line that opens a list item.
 	item bool
+	// heading is set on a Markdown ATX heading, which is a paragraph of its
+	// own.
+	heading bool
 }
 
 // body is the line's prose without its indent or list marker.
@@ -124,15 +236,20 @@ func (ln proseLine) body() string { return ln.text[ln.start:] }
 
 // proseLines returns the lines of doc that are neither blank, fenced, nor
 // preformatted.
-func proseLines(doc string) []proseLine {
-	lines := unfenced(strings.Split(doc, "\n"))
+func proseLines(doc string) []proseLine { return readProse(strings.Split(doc, "\n"), false) }
+
+// readProse is [proseLines] over raw, one entry per line of the judged text.
+// markdown reads an ATX heading as a paragraph of its own; a doc keeps reading
+// one as the line it always was.
+func readProse(raw []string, markdown bool) []proseLine {
+	lines := unfenced(raw)
 	unindent(lines)
 
 	var out []proseLine
 
 	inList, opens, paragraph := false, true, true
 
-	for _, text := range lines {
+	for i, text := range lines {
 		if strings.TrimSpace(text) == "" {
 			// A blank line neither opens nor closes a list: go/doc/comment keeps a
 			// list running across the blank line that separates loose items.
@@ -143,6 +260,18 @@ func proseLines(doc string) []proseLine {
 
 		body := strings.TrimLeft(text, " \t")
 		indent := len(text) - len(body)
+
+		if markdown && indent < 4 {
+			if marker := headingMarker(body); marker > 0 {
+				out = append(out, proseLine{
+					text: text, line: i + 1, start: indent + marker, opens: true, paragraph: true, heading: true,
+				})
+				inList, opens, paragraph = false, true, true
+
+				continue
+			}
+		}
+
 		marker := listMarker(body)
 
 		switch {
@@ -160,12 +289,32 @@ func proseLines(doc string) []proseLine {
 		}
 
 		out = append(out, proseLine{
-			text: text, start: indent + marker, opens: opens, paragraph: paragraph, item: marker > 0,
+			text: text, line: i + 1, start: indent + marker, opens: opens, paragraph: paragraph, item: marker > 0,
 		})
 		opens, paragraph = false, false
 	}
 
 	return out
+}
+
+// headingMarker returns the length of an ATX heading's hashes plus the space
+// after them, or 0 when body is no heading. `#hashtag` is not one.
+func headingMarker(body string) int {
+	n := 0
+	for n < len(body) && body[n] == '#' {
+		n++
+	}
+
+	switch {
+	case n == 0 || n > 6:
+		return 0
+	case n == len(body):
+		return n
+	case body[n] != ' ' && body[n] != '\t':
+		return 0
+	}
+
+	return len(body) - len(strings.TrimLeft(body[n:], " \t"))
 }
 
 // unfenced blanks every line of a fenced code block, fences included, so the
@@ -235,21 +384,52 @@ func commonPrefix(a, b string) string {
 	return a[:n]
 }
 
-// paragraphs joins the bodies of prose into one line per paragraph or list
-// item, so a phrase or sentence wrapped across lines is read whole and none
-// runs from one item into the next. mask rewrites each line before the join.
-func paragraphs(prose []proseLine, mask func(string) string) []string {
-	var out []string
+// paragraph is one paragraph or list item with its lines joined, so a phrase
+// or sentence wrapped across lines is read whole.
+type paragraph struct {
+	text string
+	// head is the line that opens it.
+	head proseLine
+	// starts holds the offset in text where each joined line begins, in order,
+	// beside that line's number.
+	starts []lineStart
+}
+
+type lineStart struct{ offset, line int }
+
+// lineAt returns the line holding offset of text.
+func (p paragraph) lineAt(offset int) int {
+	line := p.head.line
+
+	for _, s := range p.starts {
+		if s.offset > offset {
+			break
+		}
+
+		line = s.line
+	}
+
+	return line
+}
+
+// paragraphs joins the bodies of prose into one paragraph per paragraph or
+// list item, so none runs from one item into the next. mask rewrites each line
+// before the join, preserving its length.
+func paragraphs(prose []proseLine, mask func(string) string) []paragraph {
+	var out []paragraph
 
 	for _, ln := range prose {
 		body := mask(ln.body())
 		if ln.opens || len(out) == 0 {
-			out = append(out, body)
+			out = append(out, paragraph{text: body, head: ln, starts: []lineStart{{0, ln.line}}})
 
 			continue
 		}
 
-		out[len(out)-1] += " " + body
+		p := &out[len(out)-1]
+		p.text += " "
+		p.starts = append(p.starts, lineStart{len(p.text), ln.line})
+		p.text += body
 	}
 
 	return out

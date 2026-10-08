@@ -43,8 +43,8 @@ on `PATH`. Two things that buys, both load-bearing:
   demo magusfile committed here would be picked up as a real project of this repo
   (the same breakage a stale `.claude/worktrees` copy causes, MGS1002).
 - **The cache is genuinely cold.** magus keeps its cache in `.magus/` under the
-  workspace root, so a fresh temp dir means the first run really does the work and
-  the second really replays it. No recording clears the developer's own cache.
+  workspace root, so a fresh temp dir means the first run does the work and
+  the second replays it. No recording clears the developer's own cache.
 
 ## Keeping them useful
 

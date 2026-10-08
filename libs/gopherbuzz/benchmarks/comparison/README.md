@@ -22,10 +22,10 @@ a warm VM while another rebuilds its VM every iteration, you are no longer
 measuring the same thing. To keep every engine on the same footing, each one
 runs under **both** of these protocols, and the harness times them identically:
 
-- **Warm**: the VM is constructed once and reused; only repeated execution on
+- `Warm`: the VM is constructed once and reused; only repeated execution on
   the warm VM is timed (compilation and VM construction are hoisted out of the
   loop). This is the headline steady-state-throughput number.
-- **Fresh**: a new VM is constructed and torn down every iteration, so the
+- `Fresh`: a new VM is constructed and torn down every iteration, so the
   per-run setup cost is folded in. The compiled program is reused across
   iterations where the engine separates the compiled artifact from VM state
   (gopherbuzz, goja, tengo via `Clone`); for engines whose compiled artifact is bound
@@ -64,39 +64,39 @@ but that doesn't port across engines (tengo can't share a defined function or
 collection between compiled units), so a setup/hot split would not be level here.
 Sizes are picked so the intended operation dominates construction.
 
-- **LoopSum**: sum `0..1e6` in a tight numeric loop. The JIT's wheelhouse: a
+- `LoopSum`: sum `0..1e6` in a tight numeric loop. The JIT's wheelhouse: a
   top-level numeric loop with no calls.
-- **Fib**: recursive `fib(30)`. Call-heavy, so gopherbuzz runs it on the
+- `Fib`: recursive `fib(30)`. Call-heavy, so gopherbuzz runs it on the
   interpreter (the JIT does not compile calls yet), an honest control that
   measures raw interpreter dispatch, not the JIT.
-- **Call**: 1e6 iterations of a trivial two-arg `add` call. LoopSum plus a
+- `Call`: 1e6 iterations of a trivial two-arg `add` call. LoopSum plus a
   call/return on every iteration, so the delta from LoopSum is call overhead.
-- **ForeachList**: build a 1000-element list, then sum it by iteration 1000
+- `ForeachList`: build a 1000-element list, then sum it by iteration 1000
   times (1e6 element reads). Stresses list iteration/indexing.
-- **ForeachMap**: iterate a 10-entry map's key/value pairs 1e5 times (1e6
+- `ForeachMap`: iterate a 10-entry map's key/value pairs 1e5 times (1e6
   visits). Stresses map iteration and, for some engines, per-iteration key
   enumeration.
-- **StringInterp**: build an interpolated/concatenated `"item {i}"` string in a
+- `StringInterp`: build an interpolated/concatenated `"item {i}"` string in a
   1e5-iteration loop.
 
 And four heavier **compute kernels**, to show the whole stack's time _and_
 allocation footprint under sustained work:
 
-- **Mandelbrot**: 150×150 escape-time grid, max 100 iterations. Float-heavy
+- `Mandelbrot`: 150×150 escape-time grid, max 100 iterations. Float-heavy
   nested loops, near-zero allocation.
-- **MatMul**: 80×80 integer matrix multiply. Nested loops over 2D lists.
-- **BinaryTrees**: allocate, walk, and discard ~1M small tree nodes. The
+- `MatMul`: 80×80 integer matrix multiply. Nested loops over 2D lists.
+- `BinaryTrees`: allocate, walk, and discard ~1M small tree nodes. The
   allocation/GC-pressure workload.
-- **NBody**: 5-body gravitational simulation, 1e4 steps, with `sqrt`. Float
+- `NBody`: 5-body gravitational simulation, 1e4 steps, with `sqrt`. Float
   arithmetic and array updates (gopherbuzz runs it via a session so it can
   `import "math"`).
 
 And two **string/text** workloads, which stress substring extraction and map
 churn, the area gopherbuzz historically handled worst:
 
-- **KmerCount**: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+- `KmerCount`: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
   map, 50x.
-- **SubstringSearch**: slide over the same string counting a short pattern by
+- `SubstringSearch`: slide over the same string counting a short pattern by
   extracting and comparing each window, 100x (no map).
 
 gopherbuzz is ONE row, `Gopherbuzz`, on every workload. It used to be split into
@@ -165,9 +165,9 @@ Two text-processing workloads added to probe gopherbuzz's string handling head-o
 the heap). Both are split-free and produce identical results across engines,
 guarded by a cross-engine agreement test (`TestExtraStringWorkloadsAgree` in `comparison_test.go`).
 
-- **KmerCount**: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
+- `KmerCount`: slide a 6-wide window over a ~1 KB string, tally the k-mers in a
   map, 50x. Substring extraction + map churn.
-- **SubstringSearch**: slide over the same string counting a short pattern by
+- `SubstringSearch`: slide over the same string counting a short pattern by
   extracting each window and comparing, 100x. Substring extraction, no map.
 
 **Warm: execution time** (ms/op) | **allocation** (B/op), lower is better:

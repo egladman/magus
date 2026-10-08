@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9979
-skill_short_bytes: 7203
+skill_full_bytes: 9739
+skill_short_bytes: 6173
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `110` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `c6cbb7f16799` |
+| `skill-content` | `6ebda74d2371` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -68,45 +68,44 @@ Feed every changed or conflicting path to magus in one call:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
-project and a role:
+MCP: `client` calling `magus\describe.file([paths])`. Each path comes back
+with its owning project and a role:
 
 - `output` (matches a declared outputs glob): the file is GENERATED.
-- `source` (matches a declared sources glob): it feeds cache keys and the
-  affected set. This is the diff worth reading.
+- `source` (matches a declared sources glob): it feeds cache keys and the affected
+  set. This is the diff worth reading.
 - `maintained` (no project declares it, but magus wrote it): commit it, never
-  ignore it: it is derived from the declared
+  ignore it. It is derived from the declared
   output globs, so no project can claim it.
 - `unclaimed` (no project declares it and magus does not write it): it enters no
-  cache key, but directory containment still seeds its owning project, so touching
-  it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
-  owning project's `sources` fixes both halves. Check the VCS ignore rules (`git check-ignore -v <path>`): an unclaimed
-  un-ignored file is at risk of being lost.
+  cache key, but directory containment still seeds its owning project.
+  - Touching it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)).
+  - Declaring it in the owning project's `sources` fixes both halves.
+  - Check the VCS ignore patterns (`git check-ignore -v <path>`). An unclaimed
+    un-ignored file is at risk of being lost.
 
-## Rules for generated files
+## Handling generated files
 
-- Never hand-edit one. Change the source of truth, then run the producing
-  target (usually `magus run generate`).
-- Do not investigate their diffs; regenerate and compare instead. If a generated
-  file changed with no source change, that is the finding.
+- Never hand-edit one. Change the source of truth, then run the producing target
+  (usually `magus run generate`).
+- Do not investigate their diffs; regenerate and compare. A generated file that
+  changed with no source change is the finding.
 - Prove drift by regenerating a SECOND time, never by reading the diff and
   judging it.
   Same diff again with inputs unchanged means environmental (tool
   version, timestamp). Report the tool; never revert the tree to chase it.
-- Commit regenerated outputs together with the source change that produced
-  them.
+- Commit regenerated outputs with the source change that produced them.
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
-  generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts magus cannot settle for you. Never merge generated hunks by hand.
+  generated file at once, regenerates ONCE, and records the result. Only the
+  conflicts it cannot settle remain. Never merge generated hunks by hand.
   A merge driver alone cannot finish the job:
   a VCS never invokes one for a file that one side deleted.
-- `magus clean` removes declared outputs when you want a provably fresh
-  regeneration.
+- `magus clean` removes declared outputs for a provably fresh regeneration.
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+`magus vcs add` does steps 1-2 below plus the staging in one call. It is the
+sanctioned replacement for `git add -A`:
 
 ```sh
 magus vcs add --dry-run   # classify the dirty tree, stage nothing
@@ -114,84 +113,70 @@ magus vcs add             # stage declared sources AND the outputs they produced
 magus vcs add <path>...   # narrow it
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
+It stages sources and their generated outputs together (one commit). It REPORTS
+every undeclared path instead of sweeping it in. Pass `--untracked` when an undeclared path is a new
+source file. Staging specific paths by hand stays fine. The steps below are what it
+automates, and the fallback:
+
+1. List the dirty tree with your VCS (`git status --porcelain`).
+2. Classify every path with `magus describe file` as above. Untracked files that are
+   neither ignored nor declared outputs risk being silently lost. Stage them or ask
+   about them; never leave them dangling.
+3. Regenerate if any source of a generate target changed, and include the refreshed
+   outputs in the same commit.
+4. Review `git status` first, then stage deliberately with `git add -- <paths>`.
+   - Staging everything lets stray artifacts ride along.
+   - A hand-typed path list is not safer: the first non-matching pathspec aborts the
+     whole call.
+   - Confirm with `git diff --cached --stat`: every intended edit, renames included.
+5. Run `magus affected ci` before calling the work done. It reaches projects you
+   never edited, and after committing confirms HEAD builds.
 
 Read the change before you stage it. `magus diff --impact` orders the uncommitted
-changeset by what it can BREAK rather than alphabetically, folds the generated
-files away, and appends what landing it costs: which projects rebuild, who has been
-changing them, an estimate from recorded run times, what the workspace's advisors
-say, and any human-authored note anchored to a file or symbol you touched: context, never a
-verdict, and an empty section means nobody could measure it rather than nothing
-found.
+changeset by what it can BREAK and folds the generated files away. It appends what
+landing it costs: rebuilds, recent
+editors, a time estimate, advisors and anchored notes. It is context, never a
+verdict. An empty section means nobody could measure it, not that nothing was found.
 
-For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
-use one inline Buzz evaluation:
+Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
+without committing." Build in place; a
+whole-tree revert destroys a concurrent agent's untracked work. If you truly need
+a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
+add`, never the live tree.
+
+## VCS facts from Buzz
+
+For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
+use one inline Buzz evaluation.
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
 ```
+`vcs\ref()` is the git branch, Mercurial named branch, or Jujutsu bookmark. It is
+`null` on a detached HEAD or an anonymous jj change: an ordinary answer, not a failure.
 
-Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
-scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
-both answers at once.
-
-Revision state is `vcs\commit()`, one typed record (`id`, `short`, `author`,
-`date`, `subject`, `body`, `parents`) rather than an accessor per field.
-Annotate it `> Commit` for compile-checked field access.
-
-`vcs\ref()` is the movable name pointing at the current revision, and it is
-deliberately not called `branch`: it is a git branch, a Mercurial named branch,
-or a Jujutsu bookmark depending on the backend. It is `null` when no name points
-at the revision: a detached git HEAD, or jj's working copy, which is usually an
-anonymous change, so `null` is an ordinary answer there rather than a failure.
 Run `magus describe module vcs` for the current method list before reaching for
 anything not named here.
-
-The inline form is intentionally dense: it is an occasional capability query,
-not another everyday CLI surface.
-
-1. List the dirty tree with your VCS (`git status --porcelain`).
-2. Classify every path with `magus describe file` as above. Untracked files
-   that are neither ignored nor declared outputs are the ones at risk of being
-   silently lost: stage them or ask about them, never leave them dangling.
-3. Regenerate if any source of a generate target changed, and include the
-   refreshed outputs in the same commit.
-4. Review `git status` first, then stage deliberately with `git add -- <paths>`. Avoid staging
-   everything (stray artifacts ride along); a hand-typed path list is not safer,
-   since the first non-matching pathspec aborts the whole call. Confirm with
-   `git diff --cached --stat`: every intended edit, renames included.
-5. Run `magus affected ci` before calling the work done: it reaches projects you
-   never edited, and confirms HEAD builds; a partial commit that drops a rename
-   leaves HEAD broken.
-
-Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
-build without committing." Build in place; a
-whole-tree revert destroys a concurrent agent's untracked work. If you truly need a
-pristine tree (e.g. to diff regenerated output), use a throwaway
-`git worktree add`, never the live tree.
 
 ## Getting back to a recorded state
 
 A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
-and a DIGEST of the uncommitted patch, not the patch. So a dirty checkpoint tells you
-whether a tree is the same one, and cannot give the work back.
+and a DIGEST of the uncommitted patch, not the patch. A dirty checkpoint says whether
+a tree is the same one, and cannot give the work back.
 
-Commit before you park. Uncommitted work that is not committed is not recoverable from
-anything magus recorded.
+Commit before you park. Uncommitted work is not recoverable from anything magus
+recorded.
 
-ASK magus for the commands rather than composing them: `magus session` names the
-revision and prints the inspect command for THIS workspace's backend, already
-substituted. magus drives git, Mercurial, Sapling and Jujutsu, so a command you compose
-from memory is a guess about which of the four you are in.
+ASK magus for the commands; do not compose them. `magus session` names the revision
+and prints the inspect command for THIS workspace's backend, already substituted.
+magus drives git, Mercurial, Sapling and Jujutsu, so a command from memory is a
+guess about which of the four you are in.
 
 Then, whatever the backend:
 
 1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
-   revision answers "what changed" without touching a tree that may hold a concurrent
-   agent's untracked work.
+   revision answers "what changed" without touching a tree that may hold a
+   concurrent agent's untracked work.
 2. Restore PER FILE, never whole-tree.
 
 `magus affected --explain <project>` shows the chain that put a project in the
@@ -225,34 +210,35 @@ each against the workspace's declared globs:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `client` calling `magus\describe.file([paths])`. Each path comes back with its owning
-project and a role:
+MCP: `client` calling `magus\describe.file([paths])`. Each path comes back
+with its owning project and a role:
 
 - `output` (matches a declared outputs glob): the file is GENERATED.
-- `source` (matches a declared sources glob): it feeds cache keys and the
-  affected set. This is the diff worth reading.
+- `source` (matches a declared sources glob): it feeds cache keys and the affected
+  set. This is the diff worth reading.
 - `maintained` (no project declares it, but magus wrote it): commit it, never
   ignore it. `.gitattributes` is the one today. It is derived FROM every
   project's declared output globs, so no project can declare it without the
   derivation claiming to be its own product, which is why it needs its own role
   rather than a wider glob somewhere.
 - `unclaimed` (no project declares it and magus does not write it): it enters no
-  cache key, but directory containment still seeds its owning project, so touching
-  it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
-  owning project's `sources` fixes both halves; leaving it undeclared is right when
-  nothing reads it. Check the VCS ignore rules (`git check-ignore -v <path>`); build residue should be
-  ignored, and an unclaimed un-ignored file is at risk of being lost.
+  cache key, but directory containment still seeds its owning project.
+  - Touching it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)).
+  - Declaring it in the owning project's `sources` fixes both halves; leaving it undeclared is right when
+    nothing reads it.
+  - Check the VCS ignore patterns (`git check-ignore -v <path>`); build residue should be
+    ignored, and an unclaimed un-ignored file is at risk of being lost.
 
 WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
 CORRECT: note that `docs/gen/**` is a declared output of
 `docs:generate`, skip the diff, and read the source change that caused it.
 
-## Rules for generated files
+## Handling generated files
 
-- Never hand-edit one. Change the source of truth, then run the producing
-  target (usually `magus run generate`).
-- Do not investigate their diffs; regenerate and compare instead. If a generated
-  file changed with no source change, that is the finding (stale or hand-edited
+- Never hand-edit one. Change the source of truth, then run the producing target
+  (usually `magus run generate`).
+- Do not investigate their diffs; regenerate and compare. A generated file that
+  changed with no source change is the finding (stale or hand-edited
   output); `magus run generate` should settle it.
 - Prove drift by regenerating a SECOND time, never by reading the diff and
   judging it. If that second run reproduces the same diff while the target's
@@ -260,22 +246,20 @@ CORRECT: note that `docs/gen/**` is a declared output of
   an embedded timestamp), not your change. Report the tool or version; never
   revert the working tree to chase it.
   Real drift traces to a source edit; environmental drift traces to the toolchain.
-- Commit regenerated outputs together with the source change that produced
-  them. CI typically runs the generate target as a drift gate: a source change
+- Commit regenerated outputs with the source change that produced them. CI typically runs the generate target as a drift gate: a source change
   whose outputs were not committed fails there.
 - On merge conflicts, run `magus vcs resolve`. It settles every conflicted
-  generated file at once, regenerates ONCE, and records the result, leaving only
-  the conflicts magus cannot settle for you. Never merge generated hunks by hand.
+  generated file at once, regenerates ONCE, and records the result. Only the
+  conflicts it cannot settle remain. Never merge generated hunks by hand.
   Do not reach for the merge driver instead: a VCS invokes a driver once per
   conflicted path and never invokes one at all for a file one side deleted, so the
   driver alone cannot finish the job.
-- `magus clean` removes declared outputs when you want a provably fresh
-  regeneration.
+- `magus clean` removes declared outputs for a provably fresh regeneration.
 
 ## Preparing a commit
 
-`magus vcs add` does steps 1-2 and the staging in one call, and is the sanctioned
-replacement for `git add -A`:
+`magus vcs add` does steps 1-2 below plus the staging in one call. It is the
+sanctioned replacement for `git add -A`:
 
 ```sh
 magus vcs add --dry-run   # classify the dirty tree, stage nothing
@@ -283,53 +267,18 @@ magus vcs add             # stage declared sources AND the outputs they produced
 magus vcs add <path>...   # narrow it
 ```
 
-It stages sources and generated outputs together (they belong in one commit) and
-REPORTS every undeclared path instead of sweeping it in, which is the one thing
-`git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
-genuinely a new source file. Staging specific paths by hand stays fine; the long
-form below is what it automates, and what to fall back to.
-
-Read the change before you stage it. `magus diff --impact` orders the uncommitted
-changeset by what it can BREAK rather than alphabetically, folds the generated
-files away, and appends what landing it costs: which projects rebuild, who has been
-changing them, an estimate from recorded run times, what the workspace's advisors
-say, and any human-authored note anchored to a file or symbol you touched.
-None of it is a verdict: nothing is gated on it and the exit code is unchanged,
-and each section says when it could not measure something, so an empty one reads as
-"nobody looked" rather than as a clean bill of health.
-
-For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
-use one inline Buzz evaluation:
-
-```sh
-magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
-```
-
-Use `vcs\diff()` for the configured-base path set, `vcs\isDirty(["path"])` to
-scope a cleanliness check, and `vcs\status()` for `{clean, files}` when you want
-both answers at once.
-
-Revision state is `vcs\commit()`, one typed record (`id`, `short`, `author`,
-`date`, `subject`, `body`, `parents`) rather than an accessor per field.
-Annotate it `> Commit` for compile-checked field access.
-
-`vcs\ref()` is the movable name pointing at the current revision, and it is
-deliberately not called `branch`: it is a git branch, a Mercurial named branch,
-or a Jujutsu bookmark depending on the backend. It is `null` when no name points
-at the revision: a detached git HEAD, or jj's working copy, which is usually an
-anonymous change, so `null` is an ordinary answer there rather than a failure.
-Run `magus describe module vcs` for the current method list before reaching for
-anything not named here.
-
-The inline form is intentionally dense: it is an occasional capability query,
-not another everyday CLI surface.
+It stages sources and their generated outputs together (one commit). It REPORTS
+every undeclared path instead of sweeping it in, which is the one thing
+`git add -A` cannot do. Pass `--untracked` when an undeclared path is a new
+source file. Staging specific paths by hand stays fine. The steps below are what it
+automates, and the fallback:
 
 1. List the dirty tree with your VCS (`git status --porcelain`).
-2. Classify every path with `magus describe file` as above. Untracked files
-   that are neither ignored nor declared outputs are the ones at risk of being
-   silently lost: stage them or ask about them, never leave them dangling.
-3. Regenerate if any source of a generate target changed, and include the
-   refreshed outputs in the same commit.
+2. Classify every path with `magus describe file` as above. Untracked files that are
+   neither ignored nor declared outputs risk being silently lost. Stage them or ask
+   about them; never leave them dangling.
+3. Regenerate if any source of a generate target changed, and include the refreshed
+   outputs in the same commit.
 4. Review `git status` first, then stage deliberately with `git add -- <paths>`. `git add -A` stages every
    untracked file too, so a stray build artifact or scratch file rides along
    silently (this is how a compiled binary once slipped into a commit); use it
@@ -345,31 +294,69 @@ not another everyday CLI surface.
    and after committing confirms HEAD builds; a partial commit that drops a
    rename or an importer update leaves HEAD non-building.
 
-Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a
-build without committing." The working tree is ALREADY what you want to verify,
+Read the change before you stage it. `magus diff --impact` orders the uncommitted
+changeset by what it can BREAK and folds the generated files away. It appends what
+landing it costs:
+
+- which projects rebuild, and who has been changing them;
+- an estimate from recorded run times;
+- what the workspace's advisors say;
+- any human-authored note anchored to a file or symbol you touched.
+
+None of it is a verdict: nothing is gated on it and the exit code is unchanged,
+and each section says when it could not measure something, so an empty one reads as
+"nobody looked" rather than as a clean bill of health.
+
+Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
+without committing." The working tree is ALREADY what you want to verify,
 so run `magus run build` / `magus affected ci` in place; building does not
 require committing first. A whole-tree revert also unrecoverably
-destroys any untracked work a concurrent agent is writing. If you truly need a
-pristine tree (e.g. to diff regenerated output), use a throwaway
-`git worktree add`, never the live tree.
+destroys any untracked work a concurrent agent is writing. If you truly need
+a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
+add`, never the live tree.
+
+## VCS facts from Buzz
+
+For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
+use one inline Buzz evaluation. It is dense on purpose: an occasional capability
+query, not an everyday CLI surface.
+
+```sh
+magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'
+```
+
+- `vcs\diff()` is the configured-base path set.
+- `vcs\isDirty(["path"])` scopes a cleanliness check.
+- `vcs\status()` returns `{clean, files}`, both answers at once.
+- `vcs\commit()` is the revision state as one typed record (`id`, `short`,
+  `author`, `date`, `subject`, `body`, `parents`). Annotate it `> Commit` for
+  compile-checked field access.
+- `vcs\ref()` is the movable name pointing at the current revision: a git branch, a
+  Mercurial named branch, or a Jujutsu bookmark, so it is not called `branch`.
+- `vcs\ref()` is `null` when no name points at the revision: a detached git HEAD,
+  or jj's working copy, usually an anonymous change. There `null` is an ordinary
+  answer, not a failure.
+
+Run `magus describe module vcs` for the current method list before reaching for
+anything not named here.
 
 ## Getting back to a recorded state
 
 A checkpoint RECORDS a position; it never MINTS one. It holds a revision, a branch,
-and a DIGEST of the uncommitted patch, not the patch. So a dirty checkpoint tells you
-whether a tree is the same one, and cannot give the work back. The digest is
+and a DIGEST of the uncommitted patch, not the patch. A dirty checkpoint says whether
+a tree is the same one, and cannot give the work back. The digest is
 a hash of the diff and the text is discarded; untracked files are not even hashed.
 Nothing in magus reads a stored checkpoint except the `magus session` listing. Treat
 "revert to my last checkpoint" as a request magus cannot serve, and say so rather than
 reaching for a whole-tree command that would make it worse.
 
-Commit before you park. Uncommitted work that is not committed is not recoverable from
-anything magus recorded.
+Commit before you park. Uncommitted work is not recoverable from anything magus
+recorded.
 
-ASK magus for the commands rather than composing them: `magus session` names the
-revision and prints the inspect command for THIS workspace's backend, already
-substituted. magus drives git, Mercurial, Sapling and Jujutsu, so a command you compose
-from memory is a guess about which of the four you are in. `magus affected
+ASK magus for the commands; do not compose them. `magus session` names the revision
+and prints the inspect command for THIS workspace's backend, already substituted.
+magus drives git, Mercurial, Sapling and Jujutsu, so a command from memory is a
+guess about which of the four you are in. `magus affected
 --explain` prints the same pair (CLI and GUI) for the affected changeset. Both come from
 one driver method, so they are correct per backend by construction rather than by
 whichever one you happened to learn.
@@ -377,8 +364,8 @@ whichever one you happened to learn.
 Then, whatever the backend:
 
 1. INSPECT out of place, never restore in place. A scratch checkout of the recorded
-   revision answers "what changed" without touching a tree that may hold a concurrent
-   agent's untracked work.
+   revision answers "what changed" without touching a tree that may hold a
+   concurrent agent's untracked work.
 2. Restore PER FILE, never whole-tree. The scoped form is what the guard
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.

@@ -1,12 +1,12 @@
 ---
-title: "How I actually use AI tooling"
+title: "How I use AI tooling"
 description: Not for the code, mostly. What it is good at, what I watch it for, and why accountability is the only rule that matters.
 tags: [opinion]
 date: 2026-08-04
 draft: true
 ---
 
-# How I actually use AI tooling
+# How I use AI tooling
 
 DRAFT. Seed material pulled out of the 0.4.0 post, where it was pulling the
 argument off topic. Needs an opening, an ending, and a lot of work.
@@ -98,7 +98,7 @@ had built compilers and interpreters on their own time, including the honest one
 about what went wrong and which gotchas bite you in which language. I read them.
 Then I fed them in, and we went back and forth over it.
 
-It was slow. Deliberately slow, in very small steps, because I wanted the whys. I
+It was slow. Deliberately slow, in small steps, because I wanted the whys. I
 wanted to know why a thing was done a particular way and not only that it worked,
 and if I could not explain the reason I did not move on.
 
@@ -160,7 +160,7 @@ way.
 
 ## Follow-through
 
-The reason I actually keep using this, and the one I have not seen anybody else
+The reason I keep using this, and the one I have not seen anybody else
 write about. Strong candidate for the emotional center of the piece.
 
 My pattern, for as long as I can remember: get a project to ninety percent, feel
@@ -210,7 +210,7 @@ What I put in CONTRIBUTING.md instead: for your first couple of pull requests,
 keep them small. Baby steps. Ask first. That is not an AI rule, it is a
 trust-building rule, and it happens to solve most of the same problem.
 
-Threads: what does a project actually need from a contributor to make review
+Threads: what does a project need from a contributor to make review
 tractable? Is disclosure useful, or does it just move the burden? Does "small
 first PRs" generalize?
 
@@ -275,7 +275,7 @@ This should probably be the actual ending, with "Everything and nothing" moved u
 ahead of it. The last line is the right note to go out on.
 
 I do not want to be dramatic about it, but I cannot point to a precedent for the
-last two years, and nobody has this worked out yet. Myself very much included.
+last two years, and nobody has this worked out yet. Myself included.
 
 The one place I do feel sure: I cannot fathom going through school with this, and
 I would not have wanted to. Learning needs resistance. You need the friction, the

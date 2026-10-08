@@ -381,7 +381,7 @@ checkout's, read only by callers that report none either: one worker per
 checkout, which is the arrangement the worktree rule asks for anyway.
 
 The base is the half a revision cannot supply on its own. The checkpoint is what
-the orchestrator HANDED the job; the base is what the checkout actually LANDED
+the orchestrator HANDED the job; the base is what the checkout LANDED
 ON, and hosts that isolate workers in per-worker trees routinely branch them
 from an older revision than the tree that was partitioned. Recording it is a
 FACT and not a gate: a divergence records, because refusing would leave the
@@ -501,10 +501,10 @@ and an empty `check`.
 None of that table is visible from the verdict a worker sees, which is exactly
 what makes a wrong lease dangerous: a checkout holding an unknown id, a terminal
 row, or a live row whose base was never recorded all render as an ordinary
-advisory, indistinguishable from a session these rules are actually enforcing
+advisory, indistinguishable from a session these rules are enforcing
 on. `magus doctor`'s **bound-lease** check is the other end of that gap. It
 reads the same row the guard would and says, in one line, whether this
-checkout's lease is live and therefore actually judged, or names why it is not.
+checkout's lease is live and therefore judged, or names why it is not.
 
 ## What the sandbox enforces under a lease
 
@@ -613,7 +613,7 @@ you is the next section's subject.
 ## Goals
 
 A job's acceptance criteria are prose a person grades. A **goal** is the part
-magus grades itself, and `magus job wait` will not record `pass` until every one
+magus grades itself, and `magus job wait` does not record `pass` until every one
 verifies. Goals are data: they live in the job record's `goals`, which
 `magus job fork --stdin`, the `client` tool's `magus\job.put` and a magusfile's `magus\job.put`
 all accept. There are no flags for them. `fork` refuses a job that writes and
@@ -772,7 +772,7 @@ call through an older server is answered by the older build.
 
 ## The spawn is recorded, never judged
 
-Wire your host's sub-agent tool to the same `magus session hook` call as the
+Wire your host's subagent tool to the same `magus session hook` call as the
 rest of [the guard](guard.md). A payload carrying a `prompt` rather than a
 command or a file path is a delegation: magus records it as an `agent_spawn`
 event on the local Activity Trail and returns `pass` without evaluating a single
@@ -789,7 +789,7 @@ prompt IS a spawn, and the callee label the host supplies becomes the event's
 action so a page of them groups by what was spawned.
 
 Joining an event to a job is cooperative. Nothing in a host event names a magus
-job and magus will not infer one from prose, so the job is stamped only when the
+job and magus does not infer one from prose, so the job is stamped only when the
 handed context's FIRST non-blank line reads:
 
 ```text

@@ -35,18 +35,19 @@ export fun reads() > [str] {
 
 // check fails every prose finding that SANCTIONED does not name. magus\symbols supplies the
 // docs and the indexes; the prose rules are this repository's policy, so the judging runs in
-// libs/conventions/cmd/judge-docs. A missing or stale index, a language that judged nothing
-// and a runner that fails are findings, never a pass: a rule reading nothing finds nothing.
+// libs/conventions/cmd/judge-docs, as lint-rules has judge-build link it. A missing or stale
+// index, a language that judged nothing and a runner that fails are findings, never a pass:
+// a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
     final data: {str: any} = magus\symbols();
     final symbols: [any] = data["symbols"] ?? [<any>];
     final indexes: [any] = data["indexes"] ?? [<any>];
-    final run = proc\exec("go", args: ["run", "./cmd/judge-docs"], dir: "libs/conventions",
+    final run = proc\exec("libs/conventions/gen/judge-docs",
         opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
     if (run.code != 0) {
         return [Finding{ path = "libs/conventions/cmd/judge-docs",
             message = "the prose runner exited {run.code}, so no doc was judged: " + run.stderr.trim(),
-            fix = "Run `go run ./cmd/judge-docs` in libs/conventions and read why it stopped." }];
+            fix = "Run `magus run judge-build libs/conventions`, then libs/conventions/gen/judge-docs, and read why it stopped." }];
     }
     final findings: [any] = json\parse(run.stdout);
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);

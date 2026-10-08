@@ -83,10 +83,10 @@ Once a shared service's last dependent releases it, the broker keeps it warm for
 **idle window** (30 minutes by default; override per service with `idle = "45m"`) and
 then reaps it. Teardown has three layers:
 
-- **automatic**: the idle timeout above, plus a crash reaper (below);
-- **all services**: `magus broker stop --services` stops every hosted service (to
+- The idle timeout above and a crash reaper (below) tear services down automatically;
+- `magus broker stop --services` stops every hosted service (to
   drop stale state or free held ports) without shutting the broker down;
-- **whole broker**: `magus broker stop` tears the broker and its services down.
+- `magus broker stop` tears the broker and its services down.
 
 If the broker is killed uncleanly, a new broker replays each hosted service's `stop`
 command on startup to **reap orphans** the dead one left behind. Give a container
@@ -139,9 +139,9 @@ magus is proactive about the two ways services go wrong. Both surface as
 ### Near-duplicate services ([MGS5001](../reference/codes/services/MGS5001.md))
 
 When two or more services look like copies of one another (same image and container
-port but differing in some detail), magus will not silently merge them (the difference
+port but differing in some detail), magus does not silently merge them (the difference
 may be load-bearing, like a different database name). Instead it **warns** at run time,
-scoped to the services actually in that run, and `magus doctor` reports the same across
+scoped to the services in that run, and `magus doctor` reports the same across
 the whole workspace. If the divergence is intentional, mark the service `distinct` with
 a reason:
 

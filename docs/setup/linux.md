@@ -33,7 +33,7 @@ The archive also carries `LICENSE`, `THIRD-PARTY-NOTICES`, `README.md`, and a
 `BUILDINFO` file naming the exact version, commit, platform, and variant. Naming
 `magus` on the `tar` line above extracts just the binary; drop it to unpack all of
 them. `BUILDINFO` is readable without running anything, which is the point if a
-dynamically linked build will not start.
+dynamically linked build does not start.
 
 ## Which `ARCH`
 

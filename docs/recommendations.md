@@ -21,7 +21,7 @@ Everything else about your layout is yours. That leaves real questions unanswere
 may be combined, where a workspace's own error codes come from.
 
 This page answers them the way magus's own workspace does. None of it is checked by
-the tool. Where a recommendation here contradicts something magus actually enforces,
+the tool. Where a recommendation here contradicts something magus enforces,
 the enforcement wins and this page is the bug.
 
 Most of it is about charms, where magus supplies a mechanism and no vocabulary at all.
@@ -66,7 +66,7 @@ if (ctx.hasCharm("dynamic")) {
 }
 ```
 
-The difference shows up at the command line, where it is what people actually
+The difference shows up at the command line, where it is what people
 copy:
 
 ```sh
@@ -80,7 +80,7 @@ magus run release-build           # static, runs anywhere
 magus run release-build:dynamic   # opts into the loader and the system libraries
 ```
 
-This target really did read `has_charm("static")`, and the cost was not
+This target did read `has_charm("static")`, and the cost was not
 theoretical: the bare `magus run release-build` produced the dynamic build, the
 one that needs a loader and system libraries, so the command someone runs without
 reading handed back the artifact most likely to fail on their machine.
@@ -361,7 +361,7 @@ so its magusfile is a working reference rather than a sample:
 - [Targets](concepts/targets.md#the-target-name): the canonical names and the four
   tests a new one has to pass.
 - [Debugging](guides/debugging.md#-step): `--step` walks a target one command at a
-  time, which is how you find out what a charm actually did to the argv.
+  time, which is how you find out what a charm did to the argv.
 - [Tips](guides/tips.md#step-through-a-target-to-diagnose-a-volatile-build): stepping
   through a volatile build, and [the auth realm](guides/tips.md#the-auth-realm-is-not-the-push-path),
   which is the registry-vocabulary problem the channel charms sit next to.

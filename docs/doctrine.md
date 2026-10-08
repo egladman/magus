@@ -240,8 +240,8 @@ and a clone that drops it is a different tool wearing the name.
 
 The test for what to build is therefore whether it is better when copied. A
 vocabulary that another build tool adopts makes every agent better at both. A
-guard rule that another harness lifts protects someone this project will never
-meet. A measurement that kills a feature here saves the same feature elsewhere.
+guard rule that another harness lifts protects someone this project never
+meets. A measurement that kills a feature here saves the same feature elsewhere.
 Each of those returns more to this project when it spreads than it would have
 kept by staying scarce, because the thing magus optimizes for, people who can
 still fix their own software, is not a market to corner.
@@ -404,7 +404,7 @@ A setting magus cannot honor fails the command that read it. It is not logged
 and stepped over, not repaired with a default, not carried as a warning nobody
 reads in a CI log that scrolled past an hour ago.
 
-The reason is what a warning actually communicates. You wrote the setting, so
+The reason is what a warning communicates. You wrote the setting, so
 you believe it is in effect; a warning leaves that belief standing while the
 behavior underneath it is something else. Every subsequent decision rests on
 a premise the tool already knew was false, and the failure surfaces somewhere
@@ -451,7 +451,7 @@ the person: whether a stream is a terminal, what kind and how big, whether it
 is reached over ssh, and which window a once-only notice belongs to. That
 decides how magus talks to them (color, links, hover, which prompt it can
 show), never what work it does. The second is reading the input a caller
-actually sent: a flag, an argument, the event a hook was handed. `NO_COLOR`
+sent: a flag, an argument, the event a hook was handed. `NO_COLOR`
 belongs with them: a person set it to say what they want.
 
 An agent host is a caller like any other, so it says who it is. The hook
@@ -571,7 +571,7 @@ a third longer to do it.[^sankaranarayanan-2026]
 The mechanisms are already on this page. Notes are human-authored by
 construction. `--ack` refuses without a terminal, agent hosts are denied it
 outright, and the count is shown to nobody but the reader. The guard advises
-where advice will do and denies only what cannot be undone. magus never calls a
+where advice suffices and denies only what cannot be undone. magus never calls a
 model, which is what makes the Friday above an option rather than a slogan.
 
 This repository is built with agents at scale: 113,430 agent-run shell commands
@@ -613,7 +613,7 @@ records, so each passes the scope test; none is built:
   it, where the person who can say no is already looking. Not a cap: a
   number nobody can fail to notice.
 - **The savings lens** (criterion 4): what the cache and the affected set
-  actually bought (runs replayed against runs executed, wall time avoided)
+  bought (runs replayed against runs executed, wall time avoided)
   as arithmetic over run records that already exist, interrogable like any
   other verdict. Until it exists, "the cache is worth its complexity" is
   taken on trust, which is the one way this tool asks not to be taken.

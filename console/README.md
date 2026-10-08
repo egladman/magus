@@ -143,9 +143,9 @@ The console has exactly two uppercase voices, and `magus/label-token` (stylelint
 to 35 near-misses across seven sheets: six font sizes between 0.62 and 0.72rem, six tracking values
 between 0.04 and 0.09em, three weights, with adjacent labels on one surface disagreeing.
 
-- **`--console-label-size` / `-weight` / `-tracking`**: a section, column, facet, stat or panel
+- `--console-label-size`, `-weight` and `-tracking`: a section, column, facet, stat or panel
   label. Case and colour are all that separate it from the content around it.
-- **`--console-chip-size` / `-weight` / `-tracking`**: the run inside a chip: a status badge on a
+- `--console-chip-size`, `-weight` and `-tracking`: the run inside a chip: a status badge on a
   log line, a scope pill, a run's verdict. Smaller and heavier, because the fill or outline it sits
   on already does the separating.
 
@@ -207,7 +207,7 @@ skips until `magus run build_playground docs` has run.
   `data-card`).
 - **Accessibility is semantic elements + ARIA**, orthogonal to the classes: keep
   `<header>/<main>/<footer>` landmarks, real `<button>`, `role`/`aria-*`.
-- **Escape hatch:** one small audited `overrides.css` for a genuinely PF-less bit. Prefer a
+- **One small audited `overrides.css` is the escape hatch** for a genuinely PF-less bit. Prefer a
   `pf-v6-u-*` utility or an ID-scoped rule first.
 
 ## Naming methodology (strict: the formula for every class we author)
@@ -226,10 +226,10 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
 console-<area>-<block>[__<element>][--<modifier>]
 ```
 
-- **`console-`**: the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
+- `console-`: the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
   A bare class like `.badge` or `.qchip` is forbidden; `grep -r "class=" | grep -v "pf-v6-\|console-"`
   must eventually return nothing but real HTML attributes.
-- **`<area>`**: the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
+- `<area>`: the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
   The allowed areas are a CLOSED set: pick exactly one:
   - `console-shell-*` the app frame: title bar, tab strip, left navigation rail, status bar,
     floating gear + settings popover, command palette, keybindings overlay, tiling.
@@ -247,13 +247,13 @@ console-<area>-<block>[__<element>][--<modifier>]
     is shared with the layout that places it.
   - `console-render-*` the SHARED render model reused by log + activity (foldable sections,
     status badges, ANSI spans); one home so both surfaces stay in lockstep.
-- **`<block>`**: the component/thing, kebab-case, verbose and explicit. Prefer a full word to an
+- `<block>`: the component/thing, kebab-case, verbose and explicit. Prefer a full word to an
   abbreviation: `console-log-filter`, `console-shell-statusbar`, `console-dashboard-gantt`,
   `console-graph-nodelist`, `console-render-badge`, `console-render-ansi`.
-- **`__<element>`**: a PART of the block (BEM double-underscore): `console-shell-statusbar__dot`,
+- `__<element>`: a PART of the block (BEM double-underscore): `console-shell-statusbar__dot`,
   `console-log-filter__chip`, `console-dashboard-gantt__bar`, `console-graph-nodelist__pill`.
   Elements do NOT nest in the name (never `__row__cell`); flatten to `__cell` under the block.
-- **`--<modifier>`**: a fixed structural/categorical VARIANT (BEM double-hyphen), used ONLY for a
+- `--<modifier>`: a fixed structural/categorical VARIANT (BEM double-hyphen), used ONLY for a
   closed enumerated set: `console-render-ansi__fg--red`, `console-render-badge--pass`,
   `console-dashboard-gantt__bar--failed`. Do NOT use `--modifier` for transient STATE.
 

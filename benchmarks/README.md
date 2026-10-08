@@ -114,11 +114,11 @@ measured once (`Daemon: off`, since they have no daemon mode).
 - **S4-S7 measure the compiler, not magus.** Cold/incremental builds are dominated by `go build`/`tsc`; magus overhead shows cleanest in S1-S3 and the in-process micro-benchmarks.
 - **Same graph, same edges.** Fixture generators emit one `magusfile.buzz` per project mirroring the edges turbo/nx derive from `package.json`/`go.work` exactly, so affected sets are comparable.
 - **`ts` fixture S4-S7 are broken.** `pnpm install` doesn't reliably symlink `@bench/lib-*`, so `tsc -b` fails for all tools. Only S1-S3 are trustworthy on `ts`; `bench.sh` marks S4-S7 as `n/a`.
-- **What's reliable:** the `go` fixture (magus vs make) runs end-to-end. `ts`/`polyglot` and `large-monorepo` need JS toolchains and a dedicated host.
+- Only the `go` fixture (magus vs make) runs end-to-end reliably. `ts`/`polyglot` and `large-monorepo` need JS toolchains and a dedicated host.
 - **Nothing here runs in CI, so a fixture can rot without anything failing.** No workflow references `bench.sh` or the fixtures, and there is no `bench` target. That is not a gap to fill (these benchmarks want a quiet dedicated host, which CI is not) but it does mean the generated magusfiles are only exercised when a person runs them. They had gone stale across three separate changes at once: the removed `magus.project.register`/`magus.needs` API, the `ts` -> `typescript` and `py` -> `python` spell renames, and a cross-project import written workspace-relative when magus resolves it dot-relative, so every generated workspace failed to load until 2026-08. Load one before trusting a run: `./fixtures/go/gen.sh 3 && magus --root fixtures/go/gen ls`.
 - **A failed run is not a fast run.** `bench.sh` passes `--ignore-failure`, so a tool that crashes still produces a timing. The aggregator reads hyperfine's `exit_codes` and prints `FAILED` in place of every timing column, with the exit code below the table; failed rows never sort to the top and never reach the chart.
 - **Published tool versions are probed, not copied.** `BENCHMARKS.md` lists the versions of the tools that produced rows, read from the binaries at aggregation time. `versions.lock` states the intent; it is not evidence that a tool ran.
-- **Tooling:** `bazel`/`moon` installs are environment-sensitive (may show `excluded - install failed`). `turbo`/`nx`/`lage` require pnpm global bin on `PATH`.
+- The `bazel` and `moon` installs are environment-sensitive: a failed install shows `excluded - install failed`. `turbo`, `nx` and `lage` require pnpm's global bin on `PATH`.
 
 ---
 
@@ -186,4 +186,4 @@ which on a 10-core machine is a ~25% wider pool for some of the field.
 `versions.lock` pins GNU Make 4.4.1. macOS ships GNU Make 3.81 as `make`, so a
 mac run needs `MAKE_BIN=gmake` (Homebrew) to compare against the pinned
 version. The version check warns when it does not match, and `BENCHMARKS.md`
-records the version of the binary that actually ran.
+records the version of the binary that ran.

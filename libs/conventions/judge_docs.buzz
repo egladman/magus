@@ -1,0 +1,84 @@
+namespace judgeDocs;
+
+import "std";
+import "fs";
+import "crypto";
+
+// The prose judge as `magus run judge-build libs/conventions` leaves it, relative to
+// libs/conventions: the linked binary, and the digest of the sources it was linked from.
+// A hook runs the binary rather than `go run`, whose compile on a cold Go cache outlasts
+// the rule timeout.
+export final binary = "gen/judge-docs";
+export final inputsFile = "gen/judge-docs.inputs";
+export final build = "magus run judge-build libs/conventions";
+
+// sources lists every file judge-docs is linked from, relative to dir, the
+// libs/conventions module: its go.mod and go.sum and the non-test Go of the two packages
+// it builds.
+// judge-build hashes this list and the guard rehashes it, so neither can drift from the other.
+export fun sources(dir: str) > [str] !> any {
+    final found = mut ["go.mod", "go.sum"];
+    foreach (pkg in ["prose", "cmd/judge-docs"]) {
+        foreach (name in fs\listDir("{dir}/{pkg}")) {
+            if (name.endsWith(".go") and !name.endsWith("_test.go")) {
+                found.append("{pkg}/{name}");
+            }
+        }
+    }
+    return found;
+}
+
+// inputs digests sources by path and content, so an added or renamed file changes it as
+// much as an edit does. A file's mtime plays no part: a cached judge-build replays an
+// identical binary without touching it.
+export fun inputs(dir: str) > str !> any {
+    final lines = mut [<str>];
+    foreach (path in sources(dir)) {
+        lines.append("{path} {crypto\sha256File("{dir}/{path}")}");
+    }
+    return crypto\sha256Hex(lines.join("\n"));
+}
+
+// stale says why the built judge in dir must not run, or "" when it may: it is missing,
+// or the sources it was linked from are not the ones in the tree.
+export fun stale(dir: str) > str {
+    if (!(fs\isFile("{dir}/{binary}") catch false)) {
+        return "libs/conventions/{binary} is not built";
+    }
+    final built = fs\readFile("{dir}/{inputsFile}") catch "";
+    final current = inputs(dir) catch "";
+    if (current == "") {
+        return "the sources of libs/conventions/{binary} could not be read";
+    }
+    if (built.trim() != current) {
+        return "libs/conventions/{binary} was linked from other sources than the tree holds";
+    }
+    return "";
+}
+
+test "a judge that is missing or linked from other sources is stale" {
+    final dir = fs\tempDir("judge") catch "";
+    std\assert(dir != "", message: "a temp dir");
+    fs\mkdirAll("{dir}/prose") catch void;
+    fs\mkdirAll("{dir}/cmd/judge-docs") catch void;
+    fs\mkdirAll("{dir}/gen") catch void;
+    fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
+    fs\writeFile("{dir}/go.sum", content: "") catch void;
+    fs\writeFile("{dir}/prose/prose.go", content: "package prose\n") catch void;
+    fs\writeFile("{dir}/prose/prose_test.go", content: "package prose\n") catch void;
+    fs\writeFile("{dir}/cmd/judge-docs/main.go", content: "package main\n") catch void;
+
+    std\assert((sources(dir) catch [<str>]).join(",") == "go.mod,go.sum,prose/prose.go,cmd/judge-docs/main.go",
+        message: (sources(dir) catch [<str>]).join(","));
+    std\assert(stale(dir) == "libs/conventions/gen/judge-docs is not built", message: stale(dir));
+
+    fs\writeFile("{dir}/{binary}", content: "") catch void;
+    fs\writeFile("{dir}/{inputsFile}", content: (inputs(dir) catch "") + "\n") catch void;
+    std\assert(stale(dir) == "", message: stale(dir));
+
+    fs\writeFile("{dir}/prose/prose_test.go", content: "package prose\n\nconst x = 1\n") catch void;
+    std\assert(stale(dir) == "", message: "a test is not linked in");
+    fs\writeFile("{dir}/prose/rules.go", content: "package prose\n") catch void;
+    std\assert(stale(dir) == "libs/conventions/gen/judge-docs was linked from other sources than the tree holds", message: stale(dir));
+    fs\removeAll(dir) catch void;
+}

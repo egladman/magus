@@ -3,8 +3,8 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10512
-skill_short_bytes: 6654
+skill_full_bytes: 10239
+skill_short_bytes: 6237
 ---
 
 # magus-test-design
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `110` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `3be496d3f995` |
+| `skill-content` | `9141f0079ce1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,23 +56,25 @@ magus agent install --tar | tar -xO -f - magus-test-design/SKILL.md
 ````markdown
 # Designing tests from observable boundaries
 
-Assess a test boundary from the behavior that must be proved, not from the
-package, directory, or test target name. Use this skill when the test tier,
-real/fake/stub decision, complete observable assertion, or coverage placement
-is undecided or under review.
+Choose a test boundary from the behavior that must be proved, not from the package,
+directory, or test target name. Use this skill when the tier, the real/fake/stub
+decision, the complete observable assertion, or coverage placement is undecided or
+under review.
 
-Do not use it for routine implementation of an already-scoped test, merely to
-run or diagnose tests (`magus-run` owns that), or to choose a package boundary
-(`magus-architecture-review` owns that). Use it with architecture review only
-when a package refactor is deliberately intended to improve testability.
+Do not use it:
 
-This skill observes evidence and makes recommendations. It does not choose the
-repository's test policy, enable a service, create credentials, or decide what
-runs locally, on a commit, or in CI.
+- for routine implementation of an already-scoped test;
+- to run or diagnose tests (`magus-run` owns that);
+- to choose a package boundary (`magus-architecture-review` owns that). Pair it
+  with architecture review only when a refactor deliberately targets testability.
+
+This skill observes evidence and recommends. It does not choose the repository's
+test policy, enable a service, create credentials, or decide what runs locally, on a
+commit, or in CI.
 
 ## Gather only the evidence the decision needs
 
-1. State the behavior as an observable contract: triggering input/event,
+1. State the behavior as an observable contract: triggering input or event,
    expected result or state, and visible side effects.
 2. Discover the workspace's test surface before naming a target:
 
@@ -89,17 +91,17 @@ runs locally, on a commit, or in CI.
    magus path <a> <b>
    ```
 
-4. Read the scoped production code and existing tests. Identify effects that
-   change what a lower boundary can prove: process/runtime execution,
-   filesystem, network, time, scheduling, persistence, or a language boundary.
+4. Read the scoped production code and existing tests. Identify effects that change
+   what a lower boundary can prove: process or runtime execution, filesystem,
+   network, time, scheduling, persistence, or a language boundary.
 
 Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`,
-`magus\path`); use the CLI commands above as fallback. Do not start a server
-solely to review test design.
+`magus\path`); fall back to the CLI commands above. Do not start a server only to
+review test design.
 
-An `unknown` result from `magus refs` is missing evidence, not proof of no
-callers. Record it. Do not infer the tier from a filename, existing mock, or
-the existence of a target called `test`.
+An `unknown` from `magus refs` is missing evidence, not proof of no callers: record
+it. Never infer the tier from a filename, an existing mock, or a target called
+`test`.
 
 ## Select the closest boundary that can falsify the contract
 
@@ -109,59 +111,58 @@ the existence of a target called `test`.
 | Integration | a real component/service boundary, binding, or durable effect that must participate to prove the contract | the named collaborators and services, with their setup/authentication requirements made explicit |
 | End-to-end | a user-visible workflow that depends on real dispatch, runtime/process behavior, scheduling, persistence, or another boundary lower tiers cannot establish | the in-scope workflow and observable output |
 
-A unit test that reimplements a collaborator is false confidence. An end-to-end
-test that only checks a local branch is slow duplication. State what this test
-does not prove and where that complementary coverage belongs.
+A unit test that reimplements a collaborator is false confidence. An end-to-end test
+that only checks a local branch is slow duplication. State what the test does not
+prove and where that coverage belongs.
 
 ## Make execution conditions visible
 
-For every recommended test, report the evidence rather than deciding policy:
+For every recommended test, report the evidence; do not decide policy:
 
 - real external services, credentials, authentication, fixtures, or environment;
-- whether a developer can run it locally from a normal checkout, and what setup
-  is required when they cannot;
-- expected cost: time, compute, network, money, or shared-state risk; and
+- whether a developer can run it locally from a normal checkout, and the setup it
+  needs when they cannot;
+- expected cost: time, compute, network, money, or shared-state risk;
 - the declared target or explicit invocation that exposes those conditions.
 
-If a test needs a real service, secret, or externally prepared environment, do
-not call it a unit test. Classify the boundary and state the requirement. Do not
-assume integration or end-to-end tests are always opt-in, scheduled, excluded
-from commits, or excluded from pull requests: recommend a run scope from the
-observed cost and prerequisites, then leave the policy choice to the user.
+A test that needs a real service, secret, or externally prepared environment is not
+a unit test: classify the boundary and state the requirement. Never assume
+integration or end-to-end tests are opt-in, scheduled, or excluded from commits or
+pull requests. Recommend a run scope from the observed cost and prerequisites; the
+user makes the policy choice.
 
 ## Decide which collaborators are real
 
-Use a real collaborator by default. A fake is a behavioral implementation; a
-stub supplies only the response the subject needs. For every substitute, state:
+Use a real collaborator by default. A fake is a behavioral implementation; a stub
+supplies only the response the subject needs. For every substitute, state:
 
 - why the real dependency is unsuitable at this boundary;
 - the contract the substitute preserves;
-- the real-boundary test that checks that contract; and
+- the real-boundary test that checks that contract;
 - the failure mode the substitute cannot reveal.
 
-Do not add an interface solely to mock something. It earns its place only when
-the production boundary is independently meaningful.
+Never add an interface only to mock something. It earns its place only when the
+production boundary is independently meaningful.
 
-When an existing concrete collaborator or test arrangement can falsify the
-contract at the selected tier, say so explicitly: **do not add or widen
-`<seam/interface>`; test through `<existing boundary>`**.
+An existing concrete collaborator or test arrangement may falsify the contract at the
+selected tier. Then say so: **do not add or widen `<seam/interface>`; test through
+`<existing boundary>`**.
 
 ## Assert what the caller can observe
 
 Compare the complete normalized result or state: structured output, persisted
-state, emitted events, and relevant side effects. Do not stop at one field, a
-success boolean, or a call count when the observable contract is richer.
+state, emitted events, relevant side effects. Do not stop at one field, a success
+boolean, or a call count when the contract is richer.
 
 Normalize genuine nondeterminism at the boundary (temporary paths, timestamps,
-unordered iteration, generated IDs). Assert volatile invariants separately.
-Never normalize ordering, errors, or transitions that are part of the contract.
-Internal arrangement is appropriate only for a narrow owned unit invariant.
+unordered iteration, generated IDs), and assert volatile invariants separately.
+Never normalize ordering, errors, or transitions the contract includes. Internal
+arrangement fits only a narrow owned unit invariant.
 
 ## Name and record the proposed case
 
-Propose a test/case name in the repository's existing idiom. Do not impose a
-universal naming convention or infer one from another language or framework.
-Record the case as:
+Propose a case name in the repository's existing idiom; never impose a universal
+convention or borrow one from another language. Record the case as:
 
 ```text
 <proposed repository-idiomatic case name>
@@ -169,28 +170,25 @@ Record the case as:
   volatile invariants asserted separately
 ```
 
-When language- or framework-specific mechanics are the remaining question
-(syntax, helper conventions, fixture setup, or naming), hand that portion to
-the applicable language-specific guidance. This skill keeps the boundary,
-collaborator, and observable-contract recommendation language agnostic.
+Hand language- or framework-specific mechanics to the applicable language guidance.
 
 ## Deliver the recommendation
 
 Report, for each behavior:
 
 1. Observable contract and crossed system boundary.
-2. Evidence used, including index/runtime gaps.
+2. Evidence used, including index or runtime gaps.
 3. Recommended tier and why it can falsify the contract.
 4. Collaborator matrix: `collaborator -> real/fake/stub -> reason -> contract check`.
 5. Full normalized assertion plan and separate volatile invariants.
 6. Proposed repository-idiomatic case name and its explicit case record.
-7. Preservation conclusion: whether an existing boundary is sufficient, or the
-   independently meaningful production reason to introduce or widen one.
+7. Preservation conclusion: whether an existing boundary suffices, or the
+   independent production reason to introduce or widen one.
 8. Execution profile: prerequisites, local reproducibility, cost, and observed
-   target/invocation.
+   target or invocation.
 9. Owning Magus test target, final affected-CI route, and complementary coverage.
 
-Hand execution to `magus-run`; this skill chooses the proof and does not bypass
+Hand execution to `magus-run`. This skill chooses the proof; it never bypasses
 Magus with raw language test commands.
 ````
 
@@ -206,23 +204,25 @@ magus agent install --tar | tar -xO -f - magus-test-design-full/SKILL.md
 ````markdown
 # Designing tests from observable boundaries
 
-Assess a test boundary from the behavior that must be proved, not from the
-package, directory, or test target name. Use this skill when the test tier,
-real/fake/stub decision, complete observable assertion, or coverage placement
-is undecided or under review.
+Choose a test boundary from the behavior that must be proved, not from the package,
+directory, or test target name. Use this skill when the tier, the real/fake/stub
+decision, the complete observable assertion, or coverage placement is undecided or
+under review.
 
-Do not use it for routine implementation of an already-scoped test, merely to
-run or diagnose tests (`magus-run` owns that), or to choose a package boundary
-(`magus-architecture-review` owns that). Use it with architecture review only
-when a package refactor is deliberately intended to improve testability.
+Do not use it:
 
-This skill observes evidence and makes recommendations. It does not choose the
-repository's test policy, enable a service, create credentials, or decide what
-runs locally, on a commit, or in CI.
+- for routine implementation of an already-scoped test;
+- to run or diagnose tests (`magus-run` owns that);
+- to choose a package boundary (`magus-architecture-review` owns that). Pair it
+  with architecture review only when a refactor deliberately targets testability.
+
+This skill observes evidence and recommends. It does not choose the repository's
+test policy, enable a service, create credentials, or decide what runs locally, on a
+commit, or in CI.
 
 ## Gather only the evidence the decision needs
 
-1. State the behavior as an observable contract: triggering input/event,
+1. State the behavior as an observable contract: triggering input or event,
    expected result or state, and visible side effects.
 2. Discover the workspace's test surface before naming a target:
 
@@ -239,17 +239,17 @@ runs locally, on a commit, or in CI.
    magus path <a> <b>
    ```
 
-4. Read the scoped production code and existing tests. Identify effects that
-   change what a lower boundary can prove: process/runtime execution,
-   filesystem, network, time, scheduling, persistence, or a language boundary.
+4. Read the scoped production code and existing tests. Identify effects that change
+   what a lower boundary can prove: process or runtime execution, filesystem,
+   network, time, scheduling, persistence, or a language boundary.
 
 Prefer `client` (`magus\describe.evaluatedTarget`, `magus\explain`, `magus\refs`,
-`magus\path`); use the CLI commands above as fallback. Do not start a server
-solely to review test design.
+`magus\path`); fall back to the CLI commands above. Do not start a server only to
+review test design.
 
-An `unknown` result from `magus refs` is missing evidence, not proof of no
-callers. Record it. Do not infer the tier from a filename, existing mock, or
-the existence of a target called `test`.
+An `unknown` from `magus refs` is missing evidence, not proof of no callers: record
+it. Never infer the tier from a filename, an existing mock, or a target called
+`test`.
 
 ## Select the closest boundary that can falsify the contract
 
@@ -259,59 +259,58 @@ the existence of a target called `test`.
 | Integration | a real component/service boundary, binding, or durable effect that must participate to prove the contract | the named collaborators and services, with their setup/authentication requirements made explicit |
 | End-to-end | a user-visible workflow that depends on real dispatch, runtime/process behavior, scheduling, persistence, or another boundary lower tiers cannot establish | the in-scope workflow and observable output |
 
-A unit test that reimplements a collaborator is false confidence. An end-to-end
-test that only checks a local branch is slow duplication. State what this test
-does not prove and where that complementary coverage belongs.
+A unit test that reimplements a collaborator is false confidence. An end-to-end test
+that only checks a local branch is slow duplication. State what the test does not
+prove and where that coverage belongs.
 
 ## Make execution conditions visible
 
-For every recommended test, report the evidence rather than deciding policy:
+For every recommended test, report the evidence; do not decide policy:
 
 - real external services, credentials, authentication, fixtures, or environment;
-- whether a developer can run it locally from a normal checkout, and what setup
-  is required when they cannot;
-- expected cost: time, compute, network, money, or shared-state risk; and
+- whether a developer can run it locally from a normal checkout, and the setup it
+  needs when they cannot;
+- expected cost: time, compute, network, money, or shared-state risk;
 - the declared target or explicit invocation that exposes those conditions.
 
-If a test needs a real service, secret, or externally prepared environment, do
-not call it a unit test. Classify the boundary and state the requirement. Do not
-assume integration or end-to-end tests are always opt-in, scheduled, excluded
-from commits, or excluded from pull requests: recommend a run scope from the
-observed cost and prerequisites, then leave the policy choice to the user.
+A test that needs a real service, secret, or externally prepared environment is not
+a unit test: classify the boundary and state the requirement. Never assume
+integration or end-to-end tests are opt-in, scheduled, or excluded from commits or
+pull requests. Recommend a run scope from the observed cost and prerequisites; the
+user makes the policy choice.
 
 ## Decide which collaborators are real
 
-Use a real collaborator by default. A fake is a behavioral implementation; a
-stub supplies only the response the subject needs. For every substitute, state:
+Use a real collaborator by default. A fake is a behavioral implementation; a stub
+supplies only the response the subject needs. For every substitute, state:
 
 - why the real dependency is unsuitable at this boundary;
 - the contract the substitute preserves;
-- the real-boundary test that checks that contract; and
+- the real-boundary test that checks that contract;
 - the failure mode the substitute cannot reveal.
 
-Do not add an interface solely to mock something. It earns its place only when
-the production boundary is independently meaningful.
+Never add an interface only to mock something. It earns its place only when the
+production boundary is independently meaningful.
 
-When an existing concrete collaborator or test arrangement can falsify the
-contract at the selected tier, say so explicitly: **do not add or widen
-`<seam/interface>`; test through `<existing boundary>`**.
+An existing concrete collaborator or test arrangement may falsify the contract at the
+selected tier. Then say so: **do not add or widen `<seam/interface>`; test through
+`<existing boundary>`**.
 
 ## Assert what the caller can observe
 
 Compare the complete normalized result or state: structured output, persisted
-state, emitted events, and relevant side effects. Do not stop at one field, a
-success boolean, or a call count when the observable contract is richer.
+state, emitted events, relevant side effects. Do not stop at one field, a success
+boolean, or a call count when the contract is richer.
 
 Normalize genuine nondeterminism at the boundary (temporary paths, timestamps,
-unordered iteration, generated IDs). Assert volatile invariants separately.
-Never normalize ordering, errors, or transitions that are part of the contract.
-Internal arrangement is appropriate only for a narrow owned unit invariant.
+unordered iteration, generated IDs), and assert volatile invariants separately.
+Never normalize ordering, errors, or transitions the contract includes. Internal
+arrangement fits only a narrow owned unit invariant.
 
 ## Name and record the proposed case
 
-Propose a test/case name in the repository's existing idiom. Do not impose a
-universal naming convention or infer one from another language or framework.
-Record the case as:
+Propose a case name in the repository's existing idiom; never impose a universal
+convention or borrow one from another language. Record the case as:
 
 ```text
 <proposed repository-idiomatic case name>
@@ -319,9 +318,8 @@ Record the case as:
   volatile invariants asserted separately
 ```
 
-When language- or framework-specific mechanics are the remaining question
-(syntax, helper conventions, fixture setup, or naming), hand that portion to
-the applicable language-specific guidance. This skill keeps the boundary,
+Hand language- or framework-specific mechanics to the applicable language guidance
+(syntax, helpers, fixture setup, naming). This skill keeps the boundary,
 collaborator, and observable-contract recommendation language agnostic.
 
 ## Deliver the recommendation
@@ -329,18 +327,18 @@ collaborator, and observable-contract recommendation language agnostic.
 Report, for each behavior:
 
 1. Observable contract and crossed system boundary.
-2. Evidence used, including index/runtime gaps.
+2. Evidence used, including index or runtime gaps.
 3. Recommended tier and why it can falsify the contract.
 4. Collaborator matrix: `collaborator -> real/fake/stub -> reason -> contract check`.
 5. Full normalized assertion plan and separate volatile invariants.
 6. Proposed repository-idiomatic case name and its explicit case record.
-7. Preservation conclusion: whether an existing boundary is sufficient, or the
-   independently meaningful production reason to introduce or widen one.
+7. Preservation conclusion: whether an existing boundary suffices, or the
+   independent production reason to introduce or widen one.
 8. Execution profile: prerequisites, local reproducibility, cost, and observed
-   target/invocation.
+   target or invocation.
 9. Owning Magus test target, final affected-CI route, and complementary coverage.
 
-Hand execution to `magus-run`; this skill chooses the proof and does not bypass
+Hand execution to `magus-run`. This skill chooses the proof; it never bypasses
 Magus with raw language test commands.
 
 ## Evidence gate for delegated work
@@ -395,7 +393,7 @@ cannot produce the failure the contract describes.
 | --- | --- | --- |
 | Mock asserts a call count | proves an interaction chosen by the test, not the result a caller receives | assert the complete result; cover the real interaction at integration scope |
 | Snapshot hides volatile data | can bless a change without saying which values matter | normalize only legitimate volatility and assert the remaining structure |
-| Fake service mirrors production rules | duplicates the system under test and drifts | use the real local component or add a named contract/integration test |
+| Fake service mirrors production logic | duplicates the system under test and drifts | use the real local component or add a named contract/integration test |
 | E2E checks only success | proves the workflow exited, not that it produced the required state | assert the full observable result and durable effects |
 
 ### Fill-in report

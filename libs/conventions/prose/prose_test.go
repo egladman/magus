@@ -35,6 +35,8 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 	want := []Rule{
 		RuleCommentBlock, RuleCommentSentence, RuleFiller, RuleTerms,
 		RuleNameSuffix, RuleAside, RuleHistory, RuleDocStub,
+		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
+		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule, RuleTemplate,
 	}
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {
@@ -84,11 +86,11 @@ func TestProseLinesDropCodeAndKeepListItems(t *testing.T) {
 		"  After the fence."
 
 	want := []proseLine{
-		{text: "Intro line.", start: 0, opens: true, paragraph: true},
-		{text: "wraps here.", start: 0},
-		{text: "- an item", start: 2, opens: true, paragraph: true, item: true},
-		{text: "  continues", start: 2},
-		{text: "After the fence.", start: 0, opens: true, paragraph: true},
+		{text: "Intro line.", line: 1, start: 0, opens: true, paragraph: true},
+		{text: "wraps here.", line: 2, start: 0},
+		{text: "- an item", line: 6, start: 2, opens: true, paragraph: true, item: true},
+		{text: "  continues", line: 7, start: 2},
+		{text: "After the fence.", line: 11, start: 0, opens: true, paragraph: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
@@ -103,9 +105,9 @@ func TestProseLinesOpenAnItemPerMarkerLine(t *testing.T) {
 	doc := "Rules are derived:\n    - one property;\n   - the next - here `a  - b`"
 
 	want := []proseLine{
-		{text: "Rules are derived:", start: 0, opens: true, paragraph: true},
-		{text: "    - one property;", start: 6, opens: true, paragraph: true, item: true},
-		{text: "   - the next - here `a  - b`", start: 5, opens: true, item: true},
+		{text: "Rules are derived:", line: 1, start: 0, opens: true, paragraph: true},
+		{text: "    - one property;", line: 2, start: 6, opens: true, paragraph: true, item: true},
+		{text: "   - the next - here `a  - b`", line: 3, start: 5, opens: true, item: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {
@@ -120,11 +122,11 @@ func TestProseLinesOpenAParagraphWhereAListStartsAndEnds(t *testing.T) {
 	doc := "Lead:\n  - one\n    wraps\n  - two\nAfter the list."
 
 	want := []proseLine{
-		{text: "Lead:", start: 0, opens: true, paragraph: true},
-		{text: "  - one", start: 4, opens: true, paragraph: true, item: true},
-		{text: "    wraps", start: 4},
-		{text: "  - two", start: 4, opens: true, item: true},
-		{text: "After the list.", start: 0, opens: true, paragraph: true},
+		{text: "Lead:", line: 1, start: 0, opens: true, paragraph: true},
+		{text: "  - one", line: 2, start: 4, opens: true, paragraph: true, item: true},
+		{text: "    wraps", line: 3, start: 4},
+		{text: "  - two", line: 4, start: 4, opens: true, item: true},
+		{text: "After the list.", line: 5, start: 0, opens: true, paragraph: true},
 	}
 
 	if got := proseLines(doc); !reflect.DeepEqual(got, want) {

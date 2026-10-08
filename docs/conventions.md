@@ -334,12 +334,12 @@ title: "ADR NNNN: <lowercase title>"
 order: <NNNN as a number>
 description: <one paragraph>
 tags: [adr, decision, <topics>]
+status: <proposed, accepted, rejected, superseded or deprecated>
+date: <YYYY-MM-DD>
+supersedes: <what this replaces, optional>
 ---
 
 # ADR NNNN: <lowercase title>
-
-- **Status:** <Proposed, Accepted, ...>
-- **Date:** <YYYY-MM-DD>
 
 ## Context
 
@@ -358,8 +358,13 @@ tags: [adr, decision, <topics>]
 
 - The front matter's `title` carries the file's number and a title that starts lowercase;
   `order` is that number, so the pages sort as they were written; `tags` include `adr`.
-- The H1 repeats the title. The bullet block under it has at least **Status:** and
-  **Date:** (`YYYY-MM-DD`); other lines, such as **Supersedes:**, may follow.
+- The H1 repeats the title.
+- `status`, `date` and `supersedes` follow `tags`, before `aliases`. `status` is one of
+  _proposed_, _accepted_, _rejected_, _superseded_ and _deprecated_, optionally followed by
+  a parenthetical, such as `accepted (partly implemented)`. `date` is the day the ADR was
+  written, as a real `YYYY-MM-DD`. `supersedes` is there only when the ADR replaces
+  something, and names it the way a sentence would. The site prints all three under the
+  title, so the page body carries no Status, Date or Supersedes bullet.
 - The H2 sections are exactly Context, Decision, Alternatives and Consequences, in that
   order, then Open questions if any remain, then Amendments last. Any further structure is
   an H3 under one of them (numbered parts of a decision, each option weighed, when to
@@ -372,6 +377,56 @@ tags: [adr, decision, <topics>]
 
 `magus run conventions docs` enforces all of it as the `adr-template` rule
 ([`docs/lib/adr.buzz`](https://github.com/egladman/magus/blob/main/docs/lib/adr.buzz)).
+
+## Writing rules
+
+Hand-written Markdown and every pull request's title and description read as plain,
+prescriptive technical writing: a stranger understands each sentence without the request,
+the conversation or the tool behind it. The judge is Go, in
+[`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose).
+`judge-docs -surface markdown <file>...` judges files, and `judge-docs -surface
+pull-request` judges a pull request read from stdin, its title on the first line. The
+guard's `pull-request-text` rule runs it on `gh pr create` and `gh pr edit`, and the
+`pr-description` check runs it on every pull request, so the two cannot disagree. Every
+rule is an error:
+
+- `reply-voice`: no opener that answers a request (`This PR`, `This change`, `Here's`,
+  `I've`, `Let me`), no reference to a conversation (`as discussed`, `per your`), and no
+  list item that opens with a bold label (`- **Cache:** on`). A pull request description
+  also carries no heading and no section label such as `Summary` or `Test plan`.
+- `lead-context`: a pull request description opens with a paragraph of at least 12 words
+  naming the goal behind the change and why this code stands in its way. The bullets of
+  what changes follow it.
+- `tense`: the present tense, describing the code after the change, with no `will`. A page
+  may speak as the project (`we believe`), but no author is the actor of a change
+  (`we added`), and a pull request names no author at all.
+- `hedge`: no softener on a claim (`might fix`, `may help`, `probably`, `aims to`,
+  `hopefully`). A `may` that grants a permission or states a contract (`a workspace may
+  declare`, `the value may be empty`) is not one.
+- `attribution`: no credit to a tool and no account of how the work was made
+  (`Co-Authored-By`, `Generated with`, `written with an AI`, `after several iterations`).
+  Agents, subagents, prompts and sessions are what magus is about, so a page names them
+  freely; in a pull request an agent that found or fixed something, or `this session`, is
+  the story of the work and is refused.
+- `filler`: no throat-clearing (`Note that`) and no filler word (`simply`, `actually`,
+  `really`, `very`, `robust`, `seamless`, `leverage`, `utilize`, and `just` meaning
+  merely).
+- `terms`: one spelling per glossary term, such as `subagent`.
+
+A skill is loaded into an agent's context every session, so `judge-docs -surface skill`
+and `-surface skill-source` hold what a skill's short form shows to three more rules: no
+sentence over 25 words (`terse-sentence`), no paragraph or list item over 60
+(`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as `in order
+to` for `to`). In a skill body under `internal/agent/skills/`, text inside an `{{if .Full}}`
+arm is in the full form only and meets the rules above alone, plus `bare-rule`. In a
+skill a rule is only what magus enforces (a guard, workspace or lint rule, a diagnostic,
+or a rule id) and everything else a skill asks of an agent is an instruction, so
+`bare-rule` refuses `rule` in either form unless a qualifier or a rule id in code names
+the mechanism.
+
+Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
+The guard and the check also ask, as advice that fails nothing, why a pull request touches
+a project or top-level package its description never names.
 
 ## Reading time
 

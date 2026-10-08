@@ -32,7 +32,7 @@ not move with it.
 
 ![A magus run: build output scrolling above a dim status row pinned at the bottom of the terminal](../../assets/gen/terminal-run-band.svg)
 
-A dim box encloses the band, so it is obvious at a glance which lines will
+A dim box encloses the band, so it is obvious at a glance which lines
 scroll away and which are being repainted in place. It is drawn with
 box-drawing runes, and the same box is drawn by every interactive surface
 (the band, the failure list, the `magus x` picker), because two surfaces that
@@ -141,7 +141,7 @@ The band is never reserved, notifications are dropped, color and hyperlinks are
 omitted, and every message that matters is printed as an ordinary line. The
 distinction magus keeps is between a RECORD and a VIEW: a failure is a record
 and is always printed somehow, while a repainted status line is a view and is
-simply not shown when there is nowhere to repaint it.
+not shown when there is nowhere to repaint it.
 
 `magus doctor` reports what it found:
 

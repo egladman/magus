@@ -281,7 +281,7 @@ instructions by itself.
 Two flags shape it for this host. `--format json` is required, not cosmetic:
 Codex reads a `SessionStart` hook's stdout as a JSON reply and adds
 `hookSpecificOutput.additionalContext` to the developer context, so plain text
-arrives nowhere. `--rules AGENTS.md` names the instruction file Codex actually
+arrives nowhere. `--rules AGENTS.md` names the instruction file Codex
 reads, since the template's default is another host's.
 
 `compact` is the matcher wired here, matching what this repository dogfoods on
@@ -291,7 +291,7 @@ answers the related question, since a session resumed after a break did not watc
 the tree move while it was away.
 
 Run `magus session --brief` yourself to read exactly what a compacted session
-will be handed.
+is handed.
 
 ## Notifications
 
@@ -326,12 +326,12 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   envelope is likewise rendered from the documented JSON contract.
 - **Lease capture has an event but no context.** `SubagentStart` exists and
   matches on `agent_type`, which retires the older claim here that Codex had no
-  sub-agent lifecycle at all. What its payload carries is `agent_id`,
+  subagent lifecycle at all. What its payload carries is `agent_id`,
   `agent_type` and `permission_mode`: identity, not the work handed over. magus
-  records a spawn from the PROMPT an orchestrator hands a sub-agent, because the
+  records a spawn from the PROMPT an orchestrator hands a subagent, because the
   prompt is the thing worth keeping and the thing a `lease:` marker rides in, so
   there is nothing in this event to record. If a Codex tool ever hands a
-  sub-agent a prompt through `tool_input`, the wiring on
+  subagent a prompt through `tool_input`, the wiring on
   [Claude Code](claude-code.md#lease-capture) captures it here unchanged.
 
 ## Verify

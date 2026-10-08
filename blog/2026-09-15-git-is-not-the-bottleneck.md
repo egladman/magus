@@ -21,7 +21,7 @@ that the arithmetic points somewhere else.
 
 ## What is true in it
 
-The process really was not built for this. A pull request used to cost hours of
+The process was not built for this. A pull request used to cost hours of
 a person's attention, and a twenty-minute check on the end of it was noise. When
 producing a branch costs minutes, the check is most of the cost, and a queue
 that serializes on it stops moving. That part of the take is right, and it is
@@ -121,7 +121,7 @@ whole knowledge graph, and `affected` does not select them for every change
 that feeds it, so CI runs a bare fan-out gate before any shard starts
 (`.github/workflows/ci.yaml`, the "Fail fast on uncommitted generated
 output" step). And the savings
-lens, the number that would say what the cache and the affected set actually
+lens, the number that would say what the cache and the affected set
 bought, is still listed as a debt on the doctrine page. The figures above are
 that lens done by hand, which is why they took a script and not a command.
 

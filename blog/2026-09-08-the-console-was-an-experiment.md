@@ -26,7 +26,7 @@ of it to judge.
 Shipping it decoupled is what keeps the experiment cheap. It is a static build in its
 own project, and every contract between it and the daemon is declared in protobuf, so
 the surface it leans on can stay stable without me breaking it later. Nothing in the
-CLI depends on it. It costs me very little to try and very little to delete, which is
+CLI depends on it. It costs me little to try and little to delete, which is
 the only reason I was willing to find out rather than keep arguing with myself about
 it.
 

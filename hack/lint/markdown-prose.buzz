@@ -1,4 +1,4 @@
-// markdown-prose holds this repository's hand-written Markdown to three rules no
+// markdown-prose holds this repository's hand-written Markdown to four rules no
 // off-the-shelf linter checks, each an error:
 //
 //   - No typographic punctuation outside code: no em or en dash, curly quote or ellipsis
@@ -12,6 +12,18 @@
 //   - Headings in sentence case: after the first word, a word is lowercase unless it is a
 //     proper noun or an identifier in ALLOW. Title Case and SHOUTING read as emphasis the
 //     heading does not mean, and sentence case is what the docs already write.
+//   - The writing rules of docs/conventions.md, which libs/conventions/cmd/judge-docs
+//     judges in one run over every file: no reply to a request or to a conversation the
+//     reader never saw, the present tense, no hedge on a claim, no credit to a tool, no
+//     filler, and one spelling per glossary term. A post under blog/ is first person by
+//     design, so it skips reply-voice, tense and hedge. A judge that does not run is an
+//     error, never a pass.
+//   - A skill is judged on its own surface, since an agent pays for every word on every
+//     load: what its short form shows is held to the terse rules too (a sentence and a
+//     paragraph word cap, and wordy phrases with a shorter equivalent), and "rule"
+//     names only what magus enforces, so a bare one is refused. A skill body
+//     under internal/agent/skills/ renders a short and a full form, so text only the
+//     full form shows is held to the Markdown rules alone.
 //
 // .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
 // enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
@@ -25,12 +37,16 @@ namespace markdownprose;
 
 import "assert";
 import "path";
+import "proc";
 import "std";
+import "encoding/json";
 import "magus/lint";
 import "hack/lint/support" as support;
 
+// reads names the judge's module apart: a tree glob stops at a nested project.
 export fun reads() > [str] {
-    return ["**/*.md", "console/**/*.md", "docs/**/*.md", ".gitattributes", ".markdownlintignore"];
+    return ["**/*.md", "console/**/*.md", "docs/**/*.md", ".gitattributes", ".markdownlintignore",
+        "libs/conventions/go.mod", "libs/conventions/go.sum", "libs/conventions/**/*.go"];
 }
 
 // HAND_WRITTEN are .markdownlintignore entries that are not generated: the changelog
@@ -68,6 +84,24 @@ final ALLOW = [
 final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitHub Enterprise",
     "Goblin Tools", "JSON Patch", "SWE-bench Verified", "VS Code"];
 
+// FIRST_PERSON are the judge's rules a post under blog/ skips: a post is one author's
+// account of what they did and think.
+final FIRST_PERSON = ["reply-voice", "tense", "hedge"];
+
+final JUDGE = "libs/conventions/cmd/judge-docs";
+
+// surface is the judge's surface for the hand-written file at rel: a skill body the
+// agent package renders, a skill an agent loads as written, or any other Markdown.
+export fun surface(rel: str) > str !> any {
+    if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
+        return "skill-source";
+    }
+    if (path\matchesAny([".claude/skills/*/SKILL.md"], path: rel)) {
+        return "skill";
+    }
+    return "markdown";
+}
+
 export fun check(files: [Path]) > [Finding] !> any {
     final generated = mut [<str>];
     final attrs = support\named(files, p: ".gitattributes");
@@ -79,6 +113,9 @@ export fun check(files: [Path]) > [Finding] !> any {
         foreach (g in ignoreGlobs(support\read(ignore!))) { generated.append(g); }
     }
     final found = mut [<Finding>];
+    final markdown = mut {<str: str>};
+    final skills = mut {<str: str>};
+    final sources = mut {<str: str>};
     foreach (f in files) {
         if (!f.value.endsWith(".md") or isGenerated(f.value, globs: generated)) {
             continue;
@@ -86,6 +123,68 @@ export fun check(files: [Path]) > [Finding] !> any {
         foreach (finding in proseFindings(f.value, md: support\read(f))) {
             found.append(finding);
         }
+        final full = path\abs(if (f.base == "") f.value else f.base + "/" + f.value);
+        final on = surface(f.value);
+        if (on == "skill-source") {
+            sources[full] = f.value;
+        } else if (on == "skill") {
+            skills[full] = f.value;
+        } else {
+            markdown[full] = f.value;
+        }
+    }
+    foreach (finding in judge(markdown, module: "libs/conventions", surface: "markdown")) {
+        found.append(finding);
+    }
+    foreach (finding in judge(skills, module: "libs/conventions", surface: "skill")) {
+        found.append(finding);
+    }
+    foreach (finding in judge(sources, module: "libs/conventions", surface: "skill-source")) {
+        found.append(finding);
+    }
+    return found;
+}
+
+// judge runs the writing rules of surface over files, each an absolute path and the
+// workspace path it is reported at, in one run of the judge in module.
+fun judge(files: {str: str}, module: str, surface: str) > [Finding] !> any {
+    if (files.len() == 0) {
+        return [<Finding>];
+    }
+    final args = mut ["-surface", surface];
+    foreach (full in support\sorted(files.keys())) {
+        args.append(full);
+    }
+    final fix = "Run `magus run judge-build libs/conventions`, then {module}/gen/judge-docs -surface {surface} <file>, and read why it stopped.";
+    final run = proc\exec(module + "/gen/judge-docs", args: args,
+        opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (run == null or run!.code != 0) {
+        final why = if (run == null) "the judge binary did not start" else "it exited {run!.code}: " + run!.stderr.trim();
+        return [Finding{ path = JUDGE, message = "the prose judge did not run, so no Markdown was judged; " + why, fix = fix }];
+    }
+    final rows: [any]? = json\parse(run!.stdout) catch null;
+    if (rows == null) {
+        return [Finding{ path = JUDGE, message = "the prose judge printed no JSON array, so no Markdown was judged", fix = fix }];
+    }
+    return judgedFindings(rows!, files: files);
+}
+
+// judgedFindings reports the judge's rows, each at the workspace path of the file it
+// names, less the FIRST_PERSON rules on a post under blog/.
+export fun judgedFindings(rows: [any], files: {str: str}) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (r in rows) {
+        final node: str = r["node"] ?? "";
+        final source: str = r["source"] ?? "";
+        final rule: str = r["rule"] ?? "";
+        final rel = files[node] ?? node;
+        if (rel.startsWith("blog/") and FIRST_PERSON.indexOf(rule) != null) {
+            continue;
+        }
+        final line = if (source.len() > node.len()) std\parseInt(source.sub(node.len() + 1)) ?? 0 else 0;
+        final said: str = r["message"] ?? "";
+        found.append(Finding{ path = rel, line = line, message = "{said} [{rule}]",
+            fix = "Reword it to the writing rules in docs/conventions.md; a quoted word is a mention, not a use." });
     }
     return found;
 }
@@ -467,6 +566,83 @@ test "generated Markdown is skipped by .gitattributes, .markdownlintignore and M
     final paths = mut [<str>];
     foreach (f in got) { paths.append(f.path); }
     assert\equal(paths, want: ["changes/unreleased/frag.md", "docs/page.md"], message: "hand-written only");
+}
+
+fun row(node: str, line: int, rule: str) > {str: any} {
+    return {"node": node, "source": "{node}:{line}", "language": "markdown", "rule": rule,
+        "message": "the judge's message", "match": "x"};
+}
+
+test "a judged finding is reported at its workspace path and line with its rule" {
+    final got = judgedFindings([row("/w/docs/a.md", line: 12, rule: "filler")], files: {"/w/docs/a.md": "docs/a.md"});
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: "docs/a.md", message: "workspace path");
+    assert\equal(got[0].line, want: 12, message: "line");
+    assert\equal(got[0].message, want: "the judge's message [filler]", message: "message and rule");
+}
+
+test "a post under blog/ skips reply-voice, tense and hedge and keeps every other rule" {
+    final files = {"/w/blog/p.md": "blog/p.md", "/w/docs/a.md": "docs/a.md", "/w/docs/blog/b.md": "docs/blog/b.md"};
+    final rows = mut [<any>];
+    foreach (rule in ["reply-voice", "tense", "hedge", "attribution", "filler", "terms"]) {
+        rows.append(row("/w/blog/p.md", line: 1, rule: rule));
+        rows.append(row("/w/docs/a.md", line: 1, rule: rule));
+        rows.append(row("/w/docs/blog/b.md", line: 1, rule: rule));
+    }
+    final kept = mut [<str>];
+    foreach (f in judgedFindings(rows, files: files)) {
+        if (f.path == "blog/p.md") {
+            kept.append(f.message);
+        }
+    }
+    assert\equal(kept, want: ["the judge's message [attribution]", "the judge's message [filler]",
+        "the judge's message [terms]"], message: "the post keeps the rest");
+    assert\equal(judgedFindings(rows, files: files).len(), want: 15, message: "only blog/ at the root is exempt");
+}
+
+test "the judge runs once over every hand-written file and reports at the file's path" {
+    final post = "I think this will probably help.\n";
+    final got = check(support\fixture({
+        "blog/p.md": "# A post\n\n" + post,
+        "docs/page.md": "# A page\n\n" + post,
+        "docs/note.md": "# A note\n\nThe cache is simply a map.\n",
+    }));
+    final where = mut [<str>];
+    foreach (f in got) {
+        where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
+    }
+    assert\equal(where, want: ["docs/note.md:3 [filler]", "docs/page.md:3 [tense]", "docs/page.md:3 [hedge]"],
+        message: "blog/ skips tense and hedge");
+}
+
+test "a judge that does not run is an error, not a pass" {
+    final got = judge({"/w/docs/a.md": "docs/a.md"}, module: "libs/no-such-module", surface: "markdown");
+    assert\equal(got.len(), want: 1, message: "one error");
+    assert\equal(got[0].path, want: JUDGE, message: "at the judge");
+    assert\equal(got[0].message.startsWith("the prose judge did not run"), want: true, message: got[0].message);
+    assert\equal(judge({<str: str>}, module: "libs/no-such-module", surface: "markdown").len(), want: 0,
+        message: "no file, no run");
+}
+
+test "a skill body, a loaded skill and any other page each take their own surface" {
+    assert\equal(surface("internal/agent/skills/magus-run/SKILL.md"), want: "skill-source", message: "a body");
+    assert\equal(surface(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "skill", message: "a loaded skill");
+    assert\equal(surface("internal/agent/agents-section.md"), want: "markdown", message: "not a skill");
+    assert\equal(surface(".claude/skills/x/notes.md"), want: "markdown", message: "not a SKILL.md");
+}
+
+test "a skill's short form is held to the terse rules and its full-only text is not" {
+    final got = check(support\fixture({
+        "internal/agent/skills/magus-x/SKILL.md": "# X\n\nRun it\{\{if .Full}} in order to replay\{\{else}} in order to warm it\{\{end}}.\n",
+        ".claude/skills/y/SKILL.md": "---\nname: y\ndescription: \"Y.\"\n---\n\n# Y\n\nRun it in order to replay.\n",
+        "docs/page.md": "# A page\n\nRun it in order to replay.\n",
+    }));
+    final where = mut [<str>];
+    foreach (f in got) {
+        where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
+    }
+    assert\equal(where, want: [".claude/skills/y/SKILL.md:8 [wordy]", "internal/agent/skills/magus-x/SKILL.md:3 [wordy]"],
+        message: "one wordy finding per skill, none on the page");
 }
 
 test "ignore globs anchor a slashed entry and float a bare one" {

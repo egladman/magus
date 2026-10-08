@@ -271,7 +271,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret {
 
 Now the magusfile says `magus\secret.read("dockerhub-token")` and never learns which
 provider served it. Each provider owns its own naming convention, one file per provider, and
-the credential a developer cannot reach simply fails with a message naming what it wanted,
+the credential a developer cannot reach fails with a message naming what it wanted,
 which is the correct outcome, not a gap.
 
 This is the same principle as [deriving a registry's auth realm](../../guides/tips.md#the-auth-realm-is-not-the-push-path):

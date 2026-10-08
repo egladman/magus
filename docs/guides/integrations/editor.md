@@ -11,13 +11,13 @@ magus ships a language server for the Buzz files you author: magusfiles and
 spells. `magus buzz lsp` speaks the Language Server Protocol over stdio, so any editor
 with a generic LSP client can offer, for a `*.buzz` file:
 
-- **Completion**: module names on `import "..."`, module members after a `.`
+- Completion offers module names on `import "..."`, module members after a `.`
   (`fs.`, `os.`, `charm.`), and bare identifiers, each with its signature and doc.
-- **Hover**: the signature and documentation of the symbol under the cursor.
-- **Signature help**: the callee's parameter list while you type inside a call.
+- Hover shows the signature and documentation of the symbol under the cursor.
+- Signature help shows the callee's parameter list while you type inside a call.
 
 The analysis is the same engine the [interactive playground](../../playground.html)
-uses; `magus buzz lsp` is just the transport that hands it to your editor. It reads the
+uses; `magus buzz lsp` is the transport that hands it to your editor. It reads the
 document text the editor sends and needs no workspace, config, or server.
 
 ## Prerequisites

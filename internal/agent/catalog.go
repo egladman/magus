@@ -332,7 +332,13 @@ import (
 // now require.
 // 110: prose across the skills writes a colon, semicolon, comma or parentheses where it
 // had a spaced hyphen for a dash.
-const SkillVersion = 110
+// 111: skill prose keeps to the writing rules: present tense, no filler, and list items
+// written as sentences or code-span names instead of bold labels.
+// 112: the short form of every skill is terse, at most 25 words a sentence and 60 a
+// paragraph; examples and history moved to the full form.
+// 113: a skill says "rule" only for what magus enforces and calls the rest instructions;
+// magus-workspace-rules says guard.builtins grades the compiled guard rules.
+const SkillVersion = 113
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -741,7 +747,7 @@ func MustSkill(name string) SkillRef {
 }
 
 var skillSources = []skillSource{
-	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
+	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
 	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md"},
 	{name: "magus-test-design", description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior. Use when designing, writing, or reviewing tests that require a real/fake/stub decision, complete observable assertions, or a coverage-gap assessment. Do not use merely to execute or diagnose tests (magus-run), or to choose package seams (magus-architecture-review).", bodyPath: "skills/magus-test-design/SKILL.md"},
 	{name: "magus-buzz-lang", description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts. Use BEFORE writing or editing any .buzz file or a `magus buzz -e` snippet; when a Buzz check or run fails (a BZZ code, `expected '=', got ':'`, `argument 2 must be labeled`, `not allowed at the top level`, `null is not callable`); and for any one-off script in a magus workspace, since Buzz is already installed with the host modules (fs, json, yaml, http, template, vcs). Carries the syntax that differs from TypeScript, Go and Python, every built-in method, a reference script, and the check-fix-run loop. Do NOT use to review existing Buzz (magus-buzz-review).", bodyPath: "skills/magus-buzz-lang/SKILL.md"},

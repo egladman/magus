@@ -3,13 +3,11 @@ title: "ADR 0001: bounded concurrency with recursive invocation"
 order: 1
 description: Where magus takes a concurrency slot, and why it stops taking one for a target's whole body and starts taking one around the work that executes. Records the forces behind the isolation gate, the slot yield and the deadlock detectors, the alternatives rejected since May 2026, what other build systems that support recursive invocation do, and the staged path that keeps each step reversible.
 tags: [adr, decision, concurrency, deadlock, scheduler, recursion, slots, isolation]
+status: proposed
+date: 2026-09-19
 ---
 
 # ADR 0001: bounded concurrency with recursive invocation
-
-- **Status:** Proposed
-- **Date:** 2026-09-19
-- **Supersedes:** nothing. This is the first ADR in this repository.
 
 ## Context
 

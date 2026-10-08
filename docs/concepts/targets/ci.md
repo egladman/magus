@@ -164,7 +164,7 @@ broke it has moved on; the next person to pull is the one who finds out. Reverti
 is a merge commit and a conversation, where a red PR would have been a rebase.
 
 The subtle part is that the PR gate is not weak. It is passing honestly; it is
-just gating a pipeline that is not the one protecting main. Two workflows drift
+gating a pipeline that is not the one protecting main. Two workflows drift
 apart the way any two copies do, and nothing in either file says the other exists.
 
 **The distinction that matters is not PR versus main, it is verification versus
@@ -176,7 +176,7 @@ in front of the merge. If a step can go red for a code reason, running it only o
 main means you have chosen to find out late.
 
 A useful test: **could you run the main-branch pipeline against a pull request?**
-If the honest answer is no, ask which part is actually delivery. Usually it is a
+If the honest answer is no, ask which part is delivery. Usually it is a
 small tail, and everything before it could have run on the PR all along.
 
 **magus:** both branches run the same contract.
@@ -250,7 +250,7 @@ workflow fixes never need backporting. It does deliver that, and with thin
 workflows you rarely need it.
 
 Know the trade before adopting it. You lose the ability to reproduce what a
-release actually passed: re-running `v2`'s pipeline a year later runs today's
+release passed: re-running `v2`'s pipeline a year later runs today's
 logic, not the logic that approved it, which is exactly the property an audit or
 a regression hunt wants. It also makes the pinned version ambiguous, since the
 branch's magusfile may target a magus the shared workflow no longer installs.

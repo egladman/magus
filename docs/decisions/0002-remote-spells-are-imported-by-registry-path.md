@@ -3,13 +3,12 @@ title: "ADR 0002: remote spells are imported by registry path"
 order: 2
 description: How a magusfile names a spell published to an OCI registry. The import path is the registry path, the way a Go import path is its repository; a dot in the first element marks a spell as remote; magus.yaml declares it, magus.lock pins its digest, and only the update charm resolves a tag. Records the precedents, the Buzz resolver facts the design rests on, and the alternatives rejected.
 tags: [adr, decision, spells, oci, imports, buzz, lockfile, supply-chain]
+status: accepted
+date: 2026-09-22
+supersedes: 'the `import "oci://<registry>/<repository>@sha256:<digest>" as x;` form drafted in the remote spells change, which never shipped.'
 ---
 
 # ADR 0002: remote spells are imported by registry path
-
-- **Status:** Accepted
-- **Date:** 2026-09-22
-- **Supersedes:** the `import "oci://<registry>/<repository>@sha256:<digest>" as x;` form drafted in the remote spells change, which never shipped.
 
 ## Context
 
@@ -57,7 +56,7 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    import "ghcr.io/egladman/magus/spells/go";  // binds `go`
    ```
 
-2. **Three kinds of import, each readable from the path alone:**
+2. **Imports come in three kinds, each readable from the path alone.**
    - a dot in the first element (`ghcr.io/...`) is a **remote** spell;
    - the `magus/` prefix (`magus/spell/go`) is **embedded**, provided by the binary, and keeps
      its current spelling;
@@ -105,8 +104,8 @@ fetched from its host, and one without (`fmt`, `net/http`) is the standard libra
    nested spell shadowed higher in the tree. An override is never inferred from a file
    existing, because a stray directory would then change what runs with nothing in any
    import or manifest diff to show it.
-8. **Misconfiguration is an error, each with its own code and doc page:** a dotted import
-   with no `magus.yaml` entry; a declared spell with no lock entry, or whose lock entry was
+8. **Misconfiguration is an error, each with its own code and doc page.** The cases are
+   a dotted import with no `magus.yaml` entry; a declared spell with no lock entry, or whose lock entry was
    written for a different tag; an override whose `path` holds no spell; an undeclared
    shadow of an embedded or declared spell.
 

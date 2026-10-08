@@ -192,7 +192,7 @@ on its bearer token alone (see [MCP](../guides/integrations/mcp.md#security-keep
 - `http://localhost:<port>` (local site development)
 - `http://127.0.0.1:<port>` (local site development)
 
-Any other origin gets no CORS headers. The browser will block its own
+Any other origin gets no CORS headers. The browser blocks its own
 cross-origin request before any data is read.
 
 **Chrome Private Network Access.** When Chrome sends the
@@ -205,7 +205,7 @@ permission prompt in Chrome when you first connect the explorer.
 ## Safari limitation
 
 Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed
-content). The console will not work in Safari's live mode. Use
+content). The console does not work in Safari's live mode. Use
 `magus graph export --open --serve` instead, which runs an ephemeral loopback server
 with a matching same-origin response and opens the graph via a `#src=` fragment
 that is served directly.
@@ -312,7 +312,7 @@ complete network permission, in one line.
    `<meta http-equiv="Content-Security-Policy" ...>` tag (it sits right after
    `<meta name="generator" content="magus">`). Its `connect-src` clause (the
    directive that governs `fetch`/`XMLHttpRequest`/SSE, the ways a page
-   could actually exfiltrate data) reads
+   could exfiltrate data) reads
    `connect-src 'self' http://127.0.0.1:* http://[::1]:*`: this page's own
    origin, plus your machine's loopback address, and nothing else.
    `default-src 'self'` closes the same same-origin-only gap for anything not
@@ -467,7 +467,7 @@ same-origin assets, serves HTML network-first, and serves everything else
 cache-first. There is nothing else in it. If this site ever moves to a host
 that supports real HTTP response headers, the CSP (and a policy that also
 covers the service worker, via `Service-Worker-Allowed` scoping and a
-worker-side CSP) will be promoted to headers and the `<meta>` tag kept only
+worker-side CSP) is promoted to headers and the `<meta>` tag stays only
 as a fallback for hosts that cannot set headers.
 
 ### The opt-out: remove us entirely

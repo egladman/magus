@@ -3,10 +3,10 @@
 Same model, same tasks, two provisioning recipes. The question is not "is magus
 good" but two falsifiable claims:
 
-1. **Context economy**: the agent with the magus surface spends fewer tokens
-   and dollars to reach the same outcome.
-2. **Outcome quality**: it succeeds more often and violates fewer repo
-   invariants.
+1. The agent with the magus surface spends fewer tokens and dollars to reach the
+   same outcome (context economy).
+2. The same agent succeeds more often and violates fewer repo invariants
+   (outcome quality).
 
 If the numbers say the surface costs more for the same outcomes, that is a
 finding. Design and citations: `plans/harness-effectiveness-benchmark-2026-09-02.md`
@@ -161,7 +161,7 @@ arms comparable; without one the weaker arm just spends more. `BENCH_TIMEOUT_S`
 Caveat, and it is a real gap: **`claude` 2.1.212 exposes no `--max-turns`.**
 `agent.sh` passes the flag if a future CLI grows it and otherwise prints a
 notice; `max_turns` is still recorded in `meta.json` so a transcript says which
-caps were actually live. Until then the dollar cap and the wall clock are the
+caps were live. Until then the dollar cap and the wall clock are the
 only enforced bounds.
 
 ## Swapping the agent

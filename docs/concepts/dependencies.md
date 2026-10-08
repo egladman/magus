@@ -37,7 +37,7 @@ imported at the top of the magusfile, whose exported targets it binds as
 callable handles) is **statically extracted** and **unioned into the
 consuming project's `DependsOn`** at workspace-open time
 (`applyCrossProjectDependencies`, called from `Magus.Open`'s `load`). You
-declare the dependency once, at the target that actually needs it, and it
+declare the dependency once, at the target that needs it, and it
 counts toward the affected closure and cache-key propagation exactly as if
 you had also written a `depends_on` entry; you never write both.
 
@@ -76,7 +76,7 @@ consequences worth stating plainly:
 
 - **Cacheable `needs` children of an uncached parent are independently
   cached.** An uncached parent (including `skip_cache`) always enters its
-  body, so each cacheable same-project child it actually reaches through
+  body, so each cacheable same-project child it reaches through
   `needs` runs through its own cache entry. The runtime call decides the branch
   and glob result first, then the child gets its own hit, miss, snapshot, and
   remote push. Children of an ordinary cacheable parent still run inside that
@@ -276,7 +276,7 @@ bare names would turn every umbrella target into a self-dependency. To depend on
 `build` itself, pass the function: `ctx.needs(build)`.
 
 **A negation is a name or a glob, never suffix shorthand.** `"!index-generate"`
-excludes the target actually called `index-generate`. If negation used the include
+excludes the target called `index-generate`. If negation used the include
 rule it would compile to `^.*-index-generate$` and quietly subtract nothing, which is
 the one outcome a subtraction must never produce. To exclude a family, spell it
 the way you would include one: `"!*-generate"`.

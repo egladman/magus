@@ -115,7 +115,7 @@ a future it does not know about.
 A declaration nobody remembers to update is worthless, so the newer binary keeps
 it honest: it does know which release introduced each module and key a workspace
 uses, so `magus doctor` reports a floor that is lower than what the workspace
-actually requires. The old binary reads the floor; the new binary proves the floor
+requires. The old binary reads the floor; the new binary proves the floor
 is accurate.
 
 ## Client and server
@@ -138,7 +138,7 @@ right refresh. Instead the protobuf contract applies, an older console keeps
 working against a newer server, and the console compares the build it was compiled
 against with the one the server reports. When the server is newer it offers a
 reload rather than silently rendering a stale view. This matters more than it
-sounds: the console is a PWA whose service worker will happily serve a bundle from
+sounds: the console is a PWA whose service worker serves a bundle from
 months ago.
 
 The support window for the wire API is the current release and the one before it.

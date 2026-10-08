@@ -3,8 +3,8 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4360
-skill_short_bytes: 3755
+skill_full_bytes: 4190
+skill_short_bytes: 3394
 ---
 
 # magus-commit-composition
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `110` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `a1fee706a772` |
+| `skill-content` | `73042740fbed` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,33 +56,28 @@ magus agent install --tar | tar -xO -f - magus-commit-composition/SKILL.md
 ````markdown
 # Composing unpushed commits into reviewable chunks
 
-A reviewer reads commits, not diffs. Work committed in the order it occurred to
-you arrives as a log nobody can review: a rename spread over four commits, a fix
-buried in a regeneration, notes-to-self between two real changes. This decides
-what belongs in each commit so every one is a single idea a reviewer can accept
-or reject on its own.
+A reviewer reads commits, not diffs. This skill decides
+what belongs in each commit, so every commit is one idea a reviewer can accept or
+reject alone. The workspace models its own boundaries: use them, not directory
+names.
 
-The workspace already models its own boundaries. Use that rather than guessing
-from directory names.
-
-magus does not rewrite history for you. It tells you where the seams are and
-proves afterwards that nothing was lost; your VCS performs the edit.
+magus does not rewrite history for you. It shows the seams and proves afterwards that
+nothing was lost; your VCS performs the edit.
 
 ## Two constraints that decide most groupings
 
-**Only unpushed work is eligible.** Published commits are fixed. Establish what
-is unpushed before planning anything.
+**Only unpushed work is eligible.** Published commits are fixed. Establish what is
+unpushed before planning.
 
-**Generated output belongs with the source that moved it.** This is not
-cosmetic: split them and the source commit fails its own drift gate.
+**Generated output belongs with the source that moved it.** Split them and the
+source commit fails its own drift gate.
 
 ```sh
 magus describe file <changed-path>...
 ```
 
-Every `output` path joins the `source` change that invalidated it. A commit whose
-whole content is regeneration means that pairing was missed; fold it into the
-change that caused it.
+Every `output` path joins the `source` change that invalidated it. A commit that is
+all regeneration missed that pairing: fold it into the change that caused it.
 
 ## Ask the workspace where the seams are
 
@@ -97,22 +92,25 @@ Three signals, strongest first:
 
 - **Project ownership.** Changes in projects with no dependency edge between them
   are separate commits. Read the edges from `magus describe project`.
-- **Blast radius.** Candidate groups that reach disjoint project sets are
-  genuinely separable; groups that reach the same set usually want to be one
-  commit.
-- **Symbol coupling.** A rename's sites belong together however many directories
+- **Blast radius.** Groups that reach disjoint project sets are separable; groups
+  that reach the same set usually want one commit.
+- **Symbol coupling.** A rename's sites belong together, however many directories
   they span.
 
 ## Where this stops
 
-**Two changes inside one file cannot be separated by path.** A file carrying both
-a rename and a behavior fix needs hunk-level work or the honest admission that
-they ship together. Recognize it while planning.
+**Two changes inside one file cannot be separated by path.** A file carrying a
+rename and a behavior fix needs hunk-level work, or they ship together. Recognize it
+while planning.
 
-Prefer the cheapest operation that makes the branch reviewable. In rising order
-of risk: reword a message, fold a regeneration into its neighbor, drop a commit
-whose content the final tree does not keep, reorder independent commits, split
-one commit into several.
+Prefer the cheapest operation that makes the branch reviewable. In rising order of
+risk:
+
+1. Reword a message.
+2. Fold a regeneration into its neighbor.
+3. Drop a commit whose content the final tree does not keep.
+4. Reorder independent commits.
+5. Split one commit into several.
 
 ## Before you start, and after you finish
 
@@ -122,26 +120,25 @@ Record the identity of the state you are about to rewrite:
 magus vcs checkpoint          # revision, branch, dirty flag, patch digest; writes nothing
 ```
 
-Then restructure with your VCS. When it stops on a conflicted generated file,
-settle it with magus rather than by hand:
+Restructure with your VCS. When it stops on a conflicted generated file, settle it
+with magus, not by hand:
 
 ```sh
 magus vcs resolve             # settles the conflicted declared outputs, regenerates once
 ```
 
-**Prove the content survived.** A restructure must change history and nothing
-else, and a lost commit still leaves a tree that builds:
+**Prove the content survived.** A restructure changes history and nothing else, and
+a lost commit still leaves a tree that builds:
 
 ```sh
 magus graph diff --rev <checkpoint-revision>
 ```
 
-Everything it reports must be a change you intended. Nodes missing that you did
-not remove mean the restructure dropped work: return to the recorded revision and
-start again rather than reconciling by hand.
+Everything it reports must be a change you intended. Missing nodes you did not
+remove mean the restructure dropped work: return to the recorded revision and start
+again, never reconcile by hand.
 
-Finish by staging through the workspace's own declarations and re-running the
-gate:
+Finish by staging through the workspace's declarations and re-running the gate:
 
 ```sh
 magus vcs add
@@ -151,12 +148,12 @@ magus affected ci
 ## What does not belong in a commit at all
 
 Session notes and scratch plans are not repository content unless the repository
-already tracks them. Untracked session state belongs in your
-harness's own memory, not the branch.
+already tracks them. Untracked session state belongs in your harness's
+memory, not the branch.
 
 ## See also
 
-- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
+- magus-vcs-hygiene covers classifying paths and staging one commit safely.
 ````
 
 
@@ -173,33 +170,30 @@ magus agent install --tar | tar -xO -f - magus-commit-composition-full/SKILL.md
 
 A reviewer reads commits, not diffs. Work committed in the order it occurred to
 you arrives as a log nobody can review: a rename spread over four commits, a fix
-buried in a regeneration, notes-to-self between two real changes. This decides
-what belongs in each commit so every one is a single idea a reviewer can accept
-or reject on its own.
-
-The workspace already models its own boundaries. Use that rather than guessing
-from directory names.
+buried in a regeneration, notes-to-self between two real changes. This skill decides
+what belongs in each commit, so every commit is one idea a reviewer can accept or
+reject alone. The workspace models its own boundaries: use them, not directory
+names.
 
 magus does not rewrite history for you, the same way it reports what a
-change affects without editing it. It tells you where the seams are and
-proves afterwards that nothing was lost; your VCS performs the edit.
+change affects without editing it. It shows the seams and proves afterwards that
+nothing was lost; your VCS performs the edit.
 
 ## Two constraints that decide most groupings
 
-**Only unpushed work is eligible.** Published commits are fixed. Establish what
-is unpushed before planning anything; a branch with no upstream has
+**Only unpushed work is eligible.** Published commits are fixed. Establish what is
+unpushed before planning; a branch with no upstream has
 published nothing.
 
-**Generated output belongs with the source that moved it.** This is not
-cosmetic: split them and the source commit fails its own drift gate.
+**Generated output belongs with the source that moved it.** Split them and the
+source commit fails its own drift gate.
 
 ```sh
 magus describe file <changed-path>...
 ```
 
-Every `output` path joins the `source` change that invalidated it. A commit whose
-whole content is regeneration means that pairing was missed; fold it into the
-change that caused it.
+Every `output` path joins the `source` change that invalidated it. A commit that is
+all regeneration missed that pairing: fold it into the change that caused it.
 
 ## Ask the workspace where the seams are
 
@@ -215,24 +209,29 @@ Three signals, strongest first:
 - **Project ownership.** Changes in projects with no dependency edge between them
   are separate commits. Read the edges from `magus describe project`,
   which frequently disagrees with what the directory layout suggests.
-- **Blast radius.** Candidate groups that reach disjoint project sets are
-  genuinely separable; groups that reach the same set usually want to be one
-  commit.
-- **Symbol coupling.** A rename's sites belong together however many directories
+- **Blast radius.** Groups that reach disjoint project sets are separable; groups
+  that reach the same set usually want one commit.
+- **Symbol coupling.** A rename's sites belong together, however many directories
   they span. If refs reports a project not-indexed, run `magus graph
   build` first: `unknown, not absent` is not an empty result.
 
 ## Where this stops
 
-**Two changes inside one file cannot be separated by path.** A file carrying both
-a rename and a behavior fix needs hunk-level work or the honest admission that
-they ship together. Recognize it while planning; discovering it
+**Two changes inside one file cannot be separated by path.** A file carrying a
+rename and a behavior fix needs hunk-level work, or they ship together. Recognize it
+while planning; discovering it
 mid-restructure turns a cleanup into a recovery.
 
-Prefer the cheapest operation that makes the branch reviewable. In rising order
-of risk: reword a message, fold a regeneration into its neighbor, drop a commit
-whose content the final tree does not keep, reorder independent commits, split
-one commit into several. Most branches need only the first three.
+Prefer the cheapest operation that makes the branch reviewable. In rising order of
+risk:
+
+1. Reword a message.
+2. Fold a regeneration into its neighbor.
+3. Drop a commit whose content the final tree does not keep.
+4. Reorder independent commits.
+5. Split one commit into several.
+
+Most branches need only the first three.
 
 ## Before you start, and after you finish
 
@@ -242,27 +241,26 @@ Record the identity of the state you are about to rewrite:
 magus vcs checkpoint          # revision, branch, dirty flag, patch digest; writes nothing
 ```
 
-Then restructure with your VCS. When it stops on a conflicted generated file,
-settle it with magus rather than by hand:
+Restructure with your VCS. When it stops on a conflicted generated file, settle it
+with magus, not by hand:
 
 ```sh
 magus vcs resolve             # settles the conflicted declared outputs, regenerates once
 ```
 
-**Prove the content survived.** A restructure must change history and nothing
-else, and a lost commit still leaves a tree that builds, which is why
+**Prove the content survived.** A restructure changes history and nothing else, and
+a lost commit still leaves a tree that builds, which is why
 a green suite is not evidence here:
 
 ```sh
 magus graph diff --rev <checkpoint-revision>
 ```
 
-Everything it reports must be a change you intended. Nodes missing that you did
-not remove mean the restructure dropped work: return to the recorded revision and
-start again rather than reconciling by hand.
+Everything it reports must be a change you intended. Missing nodes you did not
+remove mean the restructure dropped work: return to the recorded revision and start
+again, never reconcile by hand.
 
-Finish by staging through the workspace's own declarations and re-running the
-gate:
+Finish by staging through the workspace's declarations and re-running the gate:
 
 ```sh
 magus vcs add
@@ -273,13 +271,13 @@ magus affected ci
 
 Session notes and scratch plans are not repository content unless the repository
 already tracks them; check the path's history on the base branch
-before assuming either way. Untracked session state belongs in your
-harness's own memory, not the branch, and dropping those commits is
+before assuming either way. Untracked session state belongs in your harness's
+memory, not the branch, and dropping those commits is
 often the single largest reduction available.
 
 ## See also
 
-- **magus-vcs-hygiene**: classifying paths and staging one commit safely.
+- magus-vcs-hygiene covers classifying paths and staging one commit safely.
 ````
 
 

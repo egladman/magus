@@ -48,7 +48,7 @@ a directory that owns one. A **spell** binds a toolchain (go, ts, rs, py, ...) s
 a project gets that toolchain's operations without writing them.
 
 magus knows each target's declared inputs and outputs, so it caches results and
-can compute which projects a change actually affects. That is the whole value
+can compute which projects a change affects. That is the whole value
 proposition, and it is also why running the raw tool underneath defeats it.
 
 Which looks like this: a cold run does the work, the same command again replays
@@ -189,7 +189,7 @@ Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and
 fails when it is older than your working tree, because a stale guard enforces
 stale rules while looking perfectly healthy. The **guard wiring** check answers
-a different question: whether anything actually invokes it. It probes the resolved
+a different question: whether anything invokes it. It probes the resolved
 binary with a known-denied command and inventories every host hook config it
 finds, advising when none exists (correct rules, nothing asking them) and
 failing when a config points at a template file that is stale or missing.

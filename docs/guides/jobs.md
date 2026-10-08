@@ -21,7 +21,7 @@ tags:
 
 A job is a written agreement about a piece of work: which files it changes, which
 revision it starts from, and what has to be true before anyone calls it done. You
-declare one with `magus job fork`, take it in the checkout you will edit with
+declare one with `magus job fork`, take it in the checkout where you edit with
 `magus job exec`, hand back what happened with `magus job exit`, and have
 `magus job wait` check the result against the agreement. `magus ls jobs` is the
 board. Every step is a command you type; magus records and answers, and moves

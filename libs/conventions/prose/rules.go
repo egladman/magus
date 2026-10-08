@@ -13,13 +13,52 @@ const (
 	maxSentenceWords = 60
 )
 
-// fillerPattern matches case-sensitively. Throat-clearing opens a sentence
+// fillerWords match case-sensitively. Throat-clearing opens a sentence
 // (`Note that`, `This function`), so those match only capitalized:
 // `a note that` names the notes feature, and `this function's job` is a
 // contract. The adverbs are filler wherever they sit.
-var fillerPattern = regexp.MustCompile(`\b(?:Note that|Please note|It should be noted|It is worth noting|` +
+const fillerWords = `Note that|Please note|It should be noted|It is worth noting|` +
 	`It's worth noting|It is important to|It's important to|This function|This method|` +
-	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say)\b`)
+	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say`
+
+// writtenFillerWords widen fillerWords for Markdown and pull requests with
+// adverbs and selling words, which are filler wherever they sit, so they match
+// in either case like the adverbs. Doc comments keep the narrower list until a
+// sweep clears the wider one from them.
+const writtenFillerWords = `[Jj]ust|[Rr]eally|[Vv]ery|[Aa]ctually|[Rr]obust(?:ly)?|` +
+	`[Cc]omprehensive(?:ly)?|[Ss]eamless(?:ly)?|[Ll]everag(?:e|es|ed|ing)|[Uu]tiliz(?:e|es|ed|ing)`
+
+var (
+	fillerPattern        = regexp.MustCompile(`\b(?:` + fillerWords + `)\b`)
+	writtenFillerPattern = regexp.MustCompile(`\b(?:` + fillerWords + `|` + writtenFillerWords + `)\b`)
+)
+
+// mereLead is the word before a "just" that means merely: a copula, or the
+// contracted one in "it's" and "isn't".
+var mereLead = wordSet("is", "are", "was", "were", "be", "s", "t")
+
+// sameLead is the word before a "very" that means the same one.
+var sameLead = wordSet("the", "this", "that")
+
+// fillerExempt reports a widened word used in a sense that carries meaning.
+// Lowercase "just" means recency ("you just installed"), only
+// ("extracts just the binary") or contrast ("not just cores") everywhere but
+// after a copula, where it means merely ("it is just files"), unless it
+// compares ("just as true") or dates a participle ("were just squashed").
+// "Just" opening a sentence is an imperative's minimizer. "very" after the,
+// this or that means the same one.
+func fillerExempt(text string, at []int) bool {
+	switch text[at[0]:at[1]] {
+	case "just":
+		next := strings.TrimRight(strings.Fields(text[at[1]:] + " .")[0], ".,;:!?)")
+
+		return !mereLead[prevWord(text, at[0])] || next == "as" || strings.HasSuffix(next, "ed")
+	case "very", "Very":
+		return sameLead[prevWord(text, at[0])]
+	}
+
+	return false
+}
 
 // termsPattern holds the spellings docs/glossary.md replaces. "Magus" is left
 // out: in a doc it usually names the Go type, which no rule can tell from the
@@ -33,10 +72,10 @@ var nameSuffixPattern = regexp.MustCompile(`\b(?:\w*[a-z0-9](?:Of|For)|\w+_(?:of
 
 // commentBlock budgets each paragraph rather than the whole doc, the scope
 // Vale judged the rule at.
-func commentBlock(_ Symbol, prose []proseLine) []Finding {
+func commentBlock(in input) []Finding {
 	var words []int
 
-	for _, ln := range prose {
+	for _, ln := range in.prose {
 		if ln.paragraph || len(words) == 0 {
 			words = append(words, 0)
 		}
@@ -57,12 +96,12 @@ func commentBlock(_ Symbol, prose []proseLine) []Finding {
 	return out
 }
 
-func commentSentence(_ Symbol, prose []proseLine) []Finding {
+func commentSentence(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(prose, keep) {
+	for _, para := range paragraphs(in.prose, keep) {
 		n := 0
-		for _, token := range strings.Fields(para) {
+		for _, token := range strings.Fields(para.text) {
 			n++
 
 			if !endsSentence(token) {
@@ -85,48 +124,64 @@ func commentSentence(_ Symbol, prose []proseLine) []Finding {
 }
 
 // endsSentence reports whether token closes a sentence, looking past closing
-// quotes and brackets.
+// quotes, brackets and emphasis.
 func endsSentence(token string) bool {
-	token = strings.TrimRight(token, `"')]`+"`")
+	token = strings.TrimRight(token, `"')]*_`+"`")
 
 	return strings.HasSuffix(token, ".") || strings.HasSuffix(token, "!") || strings.HasSuffix(token, "?")
 }
 
-func filler(_ Symbol, prose []proseLine) []Finding {
+func filler(in input) []Finding {
+	pattern := fillerPattern
+	if in.surface != SurfaceDoc {
+		pattern = writtenFillerPattern
+	}
+
 	var out []Finding
 
-	for _, para := range paragraphs(prose, blankBackticks) {
-		for _, m := range fillerPattern.FindAllString(para, -1) {
-			out = append(out, Finding{Message: fmt.Sprintf("Drop '%s': state the fact.", m), Match: m})
+	for _, para := range paragraphs(in.prose, mentions(in.surface)) {
+		for _, at := range pattern.FindAllStringIndex(para.text, -1) {
+			if fillerExempt(para.text, at) {
+				continue
+			}
+
+			m := para.text[at[0]:at[1]]
+			out = append(out, Finding{
+				Message: fmt.Sprintf("Drop '%s': state the fact.", m), Match: m, Line: para.lineAt(at[0]),
+			})
 		}
 	}
 
 	return out
 }
 
-func terms(_ Symbol, prose []proseLine) []Finding {
+func terms(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(prose, blankBackticks) {
-		for _, m := range termsPattern.FindAllString(para, -1) {
+	for _, para := range paragraphs(in.prose, mentions(in.surface)) {
+		for _, at := range termsPattern.FindAllStringIndex(para.text, -1) {
+			m := para.text[at[0]:at[1]]
+
 			want := "subagent"
 			if strings.HasSuffix(strings.ToLower(m), "s") {
 				want += "s"
 			}
 
-			out = append(out, Finding{Message: fmt.Sprintf("Write '%s', not '%s'.", want, m), Match: m})
+			out = append(out, Finding{
+				Message: fmt.Sprintf("Write '%s', not '%s'.", want, m), Match: m, Line: para.lineAt(at[0]),
+			})
 		}
 	}
 
 	return out
 }
 
-func nameSuffix(s Symbol, _ []proseLine) []Finding {
-	if !s.Callable {
+func nameSuffix(in input) []Finding {
+	if !in.symbol.Callable {
 		return nil
 	}
 
-	m := nameSuffixPattern.FindString(s.Name)
+	m := nameSuffixPattern.FindString(in.symbol.Name)
 	if m == "" {
 		return nil
 	}

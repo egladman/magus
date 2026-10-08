@@ -78,7 +78,7 @@ why the ablation is a 0/1 ladder rather than a menu of independent switches:
 - **Skill bodies name MCP tools.** The installed skills tell an agent to prefer
   `client` (`magus\query`) and to check `magus status --probe=mcp`. With MCP
   unregistered, the full arm's agent is told about tools it does not have; the
-  skills say to continue with the CLI fallback, which is what it will do.
+  skills say to continue with the CLI fallback, which is what it does.
 - **The CLAUDE.md block and the skills share one content digest.** They are
   stamped together by `magus agent install`, so they move as one version.
 - **The magus binary is on PATH in BOTH arms.** The rampant agent may discover

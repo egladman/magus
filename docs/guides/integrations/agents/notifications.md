@@ -74,5 +74,5 @@ Resolve the binary the way the guard does: prefer a repo-local `./magus`, then
 PATH, and do nothing if neither exists. Do not fall back to a fixed path like
 `/tmp/magus`; a stale binary there runs happily and enforces months-old rules
 while looking perfectly healthy. `magus doctor`'s **guard binary** check reports
-which binary a hook would actually run and fails when it is older than your
+which binary a hook would run and fails when it is older than your
 working tree.
