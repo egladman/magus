@@ -104,8 +104,8 @@ standard library.
 | `tense`            | Markdown, PR | the future tense, and the author as the actor of a change      |
 | `hedge`            | Markdown, PR | a softener on a claim ("might fix", "probably")                |
 | `attribution`      | Markdown, PR | credit to a tool, or an account of how the work was made       |
-| `terse-sentence`   | skill        | a sentence over 35 words                                       |
-| `terse-paragraph`  | skill        | a paragraph or list item over 80 words                         |
+| `terse-sentence`   | skill        | a sentence over 25 words                                       |
+| `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
 | `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
 | `template`         | skill source | a body that does not render, so neither form can be judged     |
 

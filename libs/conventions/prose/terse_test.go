@@ -8,12 +8,12 @@ import (
 
 func sentenceOver(line, words int) Finding {
 	return Finding{Rule: RuleTerseSentence, Line: line, Message: fmt.Sprintf(
-		"Keep a skill sentence to 35 words (this one has %d): split it, or make its steps a list.", words)}
+		"Keep a skill sentence to 25 words (this one has %d): split it, or make its steps a list.", words)}
 }
 
 func paragraphOver(line, words int) Finding {
 	return Finding{Rule: RuleTerseParagraph, Line: line, Message: fmt.Sprintf(
-		"Keep a skill paragraph to 80 words (this one has %d): cut what a heading or a list already says, "+
+		"Keep a skill paragraph to 60 words (this one has %d): cut what a heading or a list already says, "+
 			"or split the steps into a list.", words)}
 }
 
@@ -22,15 +22,15 @@ func TestTerseSentenceReportsASentenceOverTheCap(t *testing.T) {
 		name, text string
 		want       []Finding
 	}{
-		{"at the cap", longSentence(35), nil},
-		{"over the cap", longSentence(36), []Finding{sentenceOver(1, 36)}},
+		{"at the cap", longSentence(25), nil},
+		{"over the cap", longSentence(26), []Finding{sentenceOver(1, 26)}},
 		{"the second sentence, wrapped", "Short one.\n" + wordRun(20) + "\n" + longSentence(20),
 			[]Finding{sentenceOver(2, 40)}},
-		{"a sentence opening on a later line", "Short one.\n\n" + longSentence(36), []Finding{sentenceOver(3, 36)}},
-		{"a code span is one word", wordRun(30) + " `" + wordRun(20) + "` end.", nil},
+		{"a sentence opening on a later line", "Short one.\n\n" + longSentence(26), []Finding{sentenceOver(3, 26)}},
+		{"a code span is one word", wordRun(20) + " `" + wordRun(20) + "` end.", nil},
 		{"a bold sentence ends at its stop", "**" + longSentence(20) + "** " + longSentence(20), nil},
-		{"a sentence with no closing stop", wordRun(36), []Finding{sentenceOver(1, 36)}},
-		{"each list item is its own", "- " + longSentence(30) + "\n- " + longSentence(30), nil},
+		{"a sentence with no closing stop", wordRun(26), []Finding{sentenceOver(1, 26)}},
+		{"each list item is its own", "- " + longSentence(20) + "\n- " + longSentence(20), nil},
 	}
 
 	for _, tc := range cases {
@@ -45,10 +45,10 @@ func TestTerseParagraphReportsAParagraphOverTheCap(t *testing.T) {
 		name, text string
 		want       []Finding
 	}{
-		{"at the cap", sentences(80), nil},
-		{"over the cap", "Lead.\n\n" + sentences(90), []Finding{paragraphOver(3, 90)}},
-		{"a list item over the cap", "- " + sentences(90) + "\n- Short.", []Finding{paragraphOver(1, 90)}},
-		{"items under the cap in a list over it", "- " + sentences(50) + "\n- " + sentences(50), nil},
+		{"at the cap", sentences(60), nil},
+		{"over the cap", "Lead.\n\n" + sentences(70), []Finding{paragraphOver(3, 70)}},
+		{"a list item over the cap", "- " + sentences(70) + "\n- Short.", []Finding{paragraphOver(1, 70)}},
+		{"items under the cap in a list over it", "- " + sentences(40) + "\n- " + sentences(40), nil},
 	}
 
 	for _, tc := range cases {
@@ -73,9 +73,9 @@ func TestTerseRulesSkipWhatIsNotASentence(t *testing.T) {
 }
 
 func TestTerseRulesJudgeTheFrontMatterDescription(t *testing.T) {
-	page := "---\nname: x\ndescription: \"" + longSentence(36) + "\"\n---\n\n# X\n"
+	page := "---\nname: x\ndescription: \"" + longSentence(26) + "\"\n---\n\n# X\n"
 
-	assertFindings(t, JudgeText(page, SurfaceSkill), []Finding{sentenceOver(3, 36)})
+	assertFindings(t, JudgeText(page, SurfaceSkill), []Finding{sentenceOver(3, 26)})
 }
 
 func TestWordyNamesTheShorterPhrase(t *testing.T) {
@@ -125,7 +125,7 @@ func TestWordyPhrasesEachNameAShorterPhrase(t *testing.T) {
 }
 
 func TestTerseRulesJudgeOnlyASkill(t *testing.T) {
-	text := longSentence(36) + "\n\nRun it in order to replay.\n"
+	text := longSentence(26) + "\n\nRun it in order to replay.\n"
 
 	for _, s := range []Surface{SurfaceMarkdown, SurfacePullRequest} {
 		for _, f := range JudgeText(text, s) {

@@ -415,7 +415,7 @@ rule is an error:
 
 A skill is loaded into an agent's context every session, so `judge-docs -surface skill`
 and `-surface skill-source` hold what a skill's short form shows to three more rules: no
-sentence over 35 words (`terse-sentence`), no paragraph or list item over 80
+sentence over 25 words (`terse-sentence`), no paragraph or list item over 60
 (`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as `in order
 to` for `to`). In a skill body under `internal/agent/skills/`, text inside an `{{if .Full}}`
 arm is in the full form only and meets the rules above alone.

@@ -48,9 +48,9 @@ const (
 	// RuleLeadContext reports a pull request description that does not open
 	// with a paragraph naming the goal behind the change.
 	RuleLeadContext Rule = "lead-context"
-	// RuleTerseSentence reports a skill sentence over 35 words.
+	// RuleTerseSentence reports a skill sentence over 25 words.
 	RuleTerseSentence Rule = "terse-sentence"
-	// RuleTerseParagraph reports a skill paragraph or list item over 80 words.
+	// RuleTerseParagraph reports a skill paragraph or list item over 60 words.
 	RuleTerseParagraph Rule = "terse-paragraph"
 	// RuleWordy reports a phrase with a shorter equivalent in a skill.
 	RuleWordy Rule = "wordy"

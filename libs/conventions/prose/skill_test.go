@@ -65,7 +65,7 @@ func TestJudgeSkillSourceHoldsOnlyTheShortFormToTheTerseRules(t *testing.T) {
 	long := longSentence(maxSkillSentenceWords + 1)
 	terse := Finding{
 		Rule: RuleTerseSentence, Line: 3,
-		Message: "Keep a skill sentence to 35 words (this one has 36): split it, or make its steps a list.",
+		Message: "Keep a skill sentence to 25 words (this one has 26): split it, or make its steps a list.",
 	}
 
 	cases := []struct {

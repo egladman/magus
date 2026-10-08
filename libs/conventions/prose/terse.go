@@ -6,13 +6,14 @@ import (
 	"strings"
 )
 
-// Caps measured 2026-10-07 over the short form of the 18 skills, a code span
+// Measured 2026-10-07 over the short form of the 18 skills, a code span
 // counted as one word: 1264 sentences ran p50 14 words, p90 30, p95 35, p99
-// 51; 642 paragraphs and list items ran p50 27, p90 64, p95 78, p99 125. Each
-// cap sits near p95, so the long tail is a finding and an ordinary step is not.
+// 51; 642 paragraphs and list items ran p50 27, p90 64, p95 78, p99 125. Caps
+// near p95 trimmed only the long tail, 5.5% of the bytes. Every load spends
+// these words, so the caps sit below p90 and hold a skill to a terse runbook.
 const (
-	maxSkillSentenceWords  = 35
-	maxSkillParagraphWords = 80
+	maxSkillSentenceWords  = 25
+	maxSkillParagraphWords = 60
 )
 
 // wordyPhrases are phrases with a shorter equivalent, each with what to write

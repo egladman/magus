@@ -184,8 +184,8 @@ save bytes measurably hurts weaker models. Write plain sentences with ordinary
 punctuation in both arms.
 
 The prose judge holds what the short form shows to the terse rules. Its `skill-source`
-and `skill` surfaces, run by hack/lint/markdown-prose.buzz, refuse a sentence over 35
-words, a paragraph or list item over 80, and a wordy phrase (`in order to`, `is able
+and `skill` surfaces, run by hack/lint/markdown-prose.buzz, refuse a sentence over 25
+words, a paragraph or list item over 60, and a wordy phrase (`in order to`, `is able
 to`). Write short declarative sentences and imperative steps. Prefer a list
 when steps are a sequence. Never restate what a heading says.
 
