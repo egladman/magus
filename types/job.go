@@ -711,12 +711,6 @@ type Job struct {
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
 	// that could assert it could assert the proof it stands for. See [JobWriteProof].
-	//
-	// Written as `lane_proof` through schema 8. A schema-8 row decodes with this UNSET
-	// rather than through a legacy fold: unlike the Declaration fields, which a person
-	// authors and would lose work by, this one is store-computed, informational, and
-	// already renders as "-" when empty. Carrying a second key for it would add a decode
-	// path with no reader to justify it. JobSchemaVersion is 9 for exactly this.
 	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is

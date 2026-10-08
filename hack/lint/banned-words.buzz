@@ -43,10 +43,7 @@ final LANES_ARE_ROUTING = ["libs/figure/figure.buzz"];
 
 // SANCTIONED holds each finding kept on purpose, by "<path>: <matched text>", with why. An
 // entry that no longer has a finding is itself a finding, so the list only shrinks.
-export final SANCTIONED = {
-    "types/job.go: lane_proof": "write_proof's stored key through schema 8, which older rows still carry",
-    "types/schema.go: lane_proof": "a reserved stored key: schema 8 rows wrote write_proof under it",
-};
+export final SANCTIONED = {<str: str>};
 
 final DETERMINER_ONE = std\pattern(`(?i)\b(?:a|an|this|every|each|one|another|neither|either|per)\s+surface\b`);
 final DETERMINER_MANY = std\pattern(`(?i)\b(?:both|two|three|four|five|these|those|several|all)\s+surfaces\b`);
