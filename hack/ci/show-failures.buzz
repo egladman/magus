@@ -1,21 +1,8 @@
-// Reads why a commit's CI run failed, failure first, so nobody pages through the job log
-// for it. It is this repository's glue, not part of magus:
-//
-//	magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]
-//
-// It finds the CI run for the commit (HEAD by default), takes the jobs that failed, and
-// prints each `[fail]` record magus wrote in their logs: project, target, cause, output
-// ref, the command that reproduces it, and the output the failure printed. A run still in
-// progress is read job by job, since a finished job's log is there before the run ends.
-// A commit with no CI run says so and exits 3.
-//
-// The log slice starts after the previous record's `ref` line and ends at the
-// `##[endgroup]` that closes the failure's group: the Actions annotator opens that group
-// without a start marker, so the start is the one thing it has to guess. Every decision
-// is a pure function tested at the bottom; the gh and git calls are not.
 namespace failures;
 
 import "flags";
+import "fs";
+import "io";
 import "os";
 import "proc";
 import "serialize";
@@ -24,178 +11,42 @@ import "std";
 import "assert";
 
 final WORKFLOW = "CI";
-final DEFAULT_LINES = 40;
+final ARTIFACT_PREFIX = "magus-logs-";
+final RECORDS = "failed-outputs.jsonl";
 final NOT_FOUND = 3;
-final usage = "usage: magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>] [--project <p>] [--target <t>] [--lines <n>]";
-
-object Failure {
-    project: str,
-    target: str,
-    cause: str = "",
-    ref: str = "",
-    reproduce: str = "",
-    excerpt: [str] = [<str>],
-}
+final usage = "usage: magus buzz hack/ci/show-failures.buzz -- [--commit <rev>] [--run <id>]";
 
 object Filter {
     commit: str = "HEAD",
     run: str = "",
-    project: str = "",
-    target: str = "",
-    lines: int = DEFAULT_LINES,
-}
-
-// cleanLine drops what the Actions log wraps around a line: the timestamp, a byte order
-// mark ahead of it, and ANSI color escapes.
-export fun cleanLine(raw: str) > str {
-    var line = raw;
-    final stamp = line.indexOf("Z ");
-    if (stamp != null and stamp! <= 31 and line.indexOf("T") != null and line.indexOf("T")! <= 13) {
-        line = line.sub(stamp! + 2);
-    }
-    final esc = std\char(27);
-    final chars = mut [<str>];
-    var i = 0;
-    while (i < line.len()) {
-        final c = line.sub(i, len: 1);
-        if (c == esc and i + 1 < line.len() and line.sub(i + 1, len: 1) == "[") {
-            i = i + 2;
-            while (i < line.len()) {
-                final k = line.sub(i, len: 1);
-                i = i + 1;
-                if (k >= "@" and k <= "~") {
-                    break;
-                }
-            }
-        } else {
-            chars.append(c);
-            i = i + 1;
-        }
-    }
-    return chars.join("");
-}
-
-// noise reports the lines that say nothing about why a target failed.
-export fun noise(line: str) > bool {
-    return line.trim() == "" or line.startsWith("[info] ") or line.startsWith("ref  ")
-        or line.indexOf("not in the remote cache") != null;
-}
-
-// excerpt is the output the failure at lines[at] printed: from the previous record's ref
-// line to the endgroup that closes the failure's group, minus noise, cut to max lines.
-export fun excerpt(lines: [str], at: int, max: int) > [str] {
-    var end = -1;
-    var i = at - 1;
-    while (i >= 0) {
-        if (lines[i].trim() == "##[endgroup]") {
-            end = i;
-            break;
-        }
-        i = i - 1;
-    }
-    if (end < 0) {
-        return [<str>];
-    }
-    var start = 0;
-    i = end - 1;
-    while (i >= 0) {
-        if (lines[i].startsWith("ref  ") or lines[i].startsWith("[pass] ") or lines[i].startsWith("[fail] ")) {
-            start = i + 1;
-            break;
-        }
-        i = i - 1;
-    }
-    final kept = mut [<str>];
-    i = start;
-    while (i < end) {
-        if (!noise(lines[i])) {
-            kept.append(lines[i]);
-        }
-        i = i + 1;
-    }
-    if (kept.len() <= max) {
-        return kept;
-    }
-    final cut = mut [<str>];
-    i = 0;
-    while (i < max) {
-        cut.append(kept[i]);
-        i = i + 1;
-    }
-    cut.append("... {kept.len() - max} more lines");
-    return cut;
-}
-
-// parseFailures reads each `[fail] <project> <target> (...)` record in a cleaned log.
-export fun parseFailures(lines: [str], max: int) > [Failure] {
-    final acc = mut [<Failure>];
-    var i = 0;
-    while (i < lines.len()) {
-        if (lines[i].startsWith("[fail] ")) {
-            final words = lines[i].sub(7).split(" ");
-            if (words.len() >= 2) {
-                final f = mut Failure{ project = words[0], target = words[1], excerpt = excerpt(lines, at: i, max: max) };
-                var j = i + 1;
-                while (j < lines.len() and j < i + 8 and !lines[j].startsWith("[")) {
-                    final t = lines[j].trim();
-                    if (t.startsWith("cause: ")) {
-                        f.cause = t.sub(7);
-                    } else if (t.startsWith("output: ")) {
-                        f.ref = t.sub(8);
-                    } else if (t.startsWith("reproduce: ")) {
-                        f.reproduce = t.sub(11);
-                    }
-                    j = j + 1;
-                }
-                acc.append(f);
-            }
-        }
-        i = i + 1;
-    }
-    return acc;
-}
-
-// wanted reports whether f passes the --project and --target filters; a target matches
-// with or without its charm suffix, so `format` finds `format:gha`.
-export fun wanted(f: Failure, project: str, target: str) > bool {
-    if (project != "" and f.project != project) {
-        return false;
-    }
-    return target == "" or f.target == target or f.target.startsWith("{target}:");
-}
-
-export fun render(f: Failure, job: str) > str {
-    final rows = mut ["{f.project} {f.target}  (job: {job})"];
-    if (f.cause != "") {
-        rows.append("  cause: {f.cause}");
-    }
-    if (f.ref != "") {
-        rows.append("  output: {f.ref}");
-    }
-    if (f.reproduce != "") {
-        rows.append("  reproduce: {f.reproduce}");
-    }
-    foreach (line in f.excerpt) {
-        rows.append("    {line}");
-    }
-    return rows.join("\n");
 }
 
 export fun parseFilter(argv: [str]) > Filter !> any {
-    final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run", "--project", "--target", "--lines"]);
+    final parsed = flags\parse(argv, switches: [<str>], valued: ["--commit", "--run"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "failures: does not take {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{usage}";
-    }
-    final lines = std\parseInt(parsed.values["--lines"] ?? "{DEFAULT_LINES}") ?? 0;
-    if (lines <= 0) {
-        throw "failures: --lines is a positive number\n{usage}";
     }
     final run = parsed.values["--run"] ?? "";
     if (run != "" and (std\parseInt(run) ?? 0) <= 0) {
         throw "failures: --run \"{run}\" is not a run id\n{usage}";
     }
-    return Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run,
-        project = parsed.values["--project"] ?? "", target = parsed.values["--target"] ?? "", lines = lines };
+    return Filter{ commit = parsed.values["--commit"] ?? "HEAD", run = run };
+}
+
+// logArtifacts names the run's unexpired magus-logs artifacts, as the artifacts API lists them.
+export fun logArtifacts(listing: str) > [str] !> any {
+    final names = mut [<str>];
+    foreach (a in serialize\jsonDecode(listing).q("artifacts").listValue()) {
+        final name = a.q("name").stringValue();
+        if (name.startsWith(ARTIFACT_PREFIX) and !a.q("expired").booleanValue()) {
+            names.append(name);
+        }
+    }
+    return names;
+}
+
+fun note(line: str) > void {
+    io\stderr.write(line + "\n") catch void;
 }
 
 fun capture(cmd: str, args: [str]) > str !> any {
@@ -206,125 +57,49 @@ fun capture(cmd: str, args: [str]) > str !> any {
     return res.stdout;
 }
 
-fun logLines(job: str) > [str] !> any {
-    final body = capture("gh", args: ["api", "--allow-escape-sequences", "repos/\{owner}/\{repo}/actions/jobs/{job}/logs"]);
-    final cleaned = mut [<str>];
-    foreach (raw in body.split("\n")) {
-        cleaned.append(cleanLine(raw));
-    }
-    return cleaned;
-}
-
+// main copies the records in the run's artifacts to stdout untouched, for
+// `magus query output --stdin`; a commit with no CI run exits 3.
 export fun main(args: [str]) > void !> any {
     final want = parseFilter(args);
     var run = want.run;
-    var sha = want.commit;
     if (run == "") {
-        sha = capture("git", args: ["rev-parse", "--verify", "{want.commit}^\{commit}"]).trim();
+        final sha = capture("git", args: ["rev-parse", "--verify", "{want.commit}^\{commit}"]).trim();
         final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--commit", sha, "--workflow", WORKFLOW,
-            "--limit", "1", "--json", "databaseId,status,conclusion,url"])).listValue();
+            "--limit", "1", "--json", "databaseId"])).listValue();
         if (listed.len() == 0) {
-            std\print("no {WORKFLOW} run for {sha}");
+            note("no {WORKFLOW} run for {sha}");
             os\exit(NOT_FOUND);
         }
         run = "{listed[0].q("databaseId").integerValue()}";
     }
-    final jobs = serialize\jsonDecode(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/jobs?per_page=100"])).q("jobs").listValue();
-    var pending = 0;
-    var failed = 0;
-    var shown = 0;
-    final seen = mut [<str>];
-    foreach (j in jobs) {
-        if (j.q("status").stringValue() != "completed") {
-            pending = pending + 1;
-        }
-        if (j.q("conclusion").stringValue() != "failure") {
-            continue;
-        }
-        failed = failed + 1;
-        final name = j.q("name").stringValue();
-        final id = "{j.q("id").integerValue()}";
-        final lines = logLines(id) catch [<str>];
-        if (lines.len() == 0) {
-            std\print("job {name} failed; its log is not available yet");
-            continue;
-        }
-        foreach (f in parseFailures(lines, max: want.lines)) {
-            if (!wanted(f, project: want.project, target: want.target)) {
-                continue;
-            }
-            final key = "{f.project} {f.target} {f.ref}";
-            if (seen.indexOf(key) != null) {
-                continue;
-            }
-            seen.append(key);
-            std\print(render(f, job: name));
-            shown = shown + 1;
-        }
+    final names = logArtifacts(capture("gh", args: ["api", "repos/\{owner}/\{repo}/actions/runs/{run}/artifacts?per_page=100"]));
+    if (names.len() == 0) {
+        note("run {run} has no {ARTIFACT_PREFIX}* artifact: no shard failed, or it has not finished");
+        return;
     }
-    if (failed == 0 and pending == 0) {
-        std\print("run {run} has no failed job");
-    } else if (shown == 0 and failed > 0) {
-        std\print("{failed} job(s) failed with no magus failure record; the failing step is not a target (see gh run view {run})");
+    final dir = fs\tempDir("show-failures-");
+    capture("gh", args: ["run", "download", run, "--pattern", "{ARTIFACT_PREFIX}*", "--dir", dir]);
+    var found = 0;
+    foreach (f in fs\glob(dir + "/*/" + RECORDS)) {
+        io\stdout.write(fs\readFile(f.value)) catch void;
+        found = found + 1;
     }
-    if (pending > 0) {
-        std\print("run {run} is still in progress: {pending} job(s) not finished");
+    fs\removeAll(dir) catch void;
+    if (found == 0) {
+        note("run {run}: {names.join(", ")} hold no {RECORDS}; the run predates the step that writes it");
     }
 }
 
-final LOG = [
-    "2026-10-08T16:36:30.1234567Z ref  out7491f55b4d1e",
-    "2026-10-08T16:36:34.7000056Z from docs/concepts/compatibility.md:",
-    "2026-10-08T16:36:34.7000056Z " + std\char(27) + "[1mdiff line" + std\char(27) + "[0m",
-    "2026-10-08T16:36:34.7000056Z [info] [MGS2003] env vars stripped",
-    "2026-10-08T16:36:35.1586805Z ##[endgroup]",
-    "2026-10-08T16:36:35.1734839Z ##[error]dprint exited 20",
-    "2026-10-08T16:36:35.2214089Z [fail] docs format:gha (ran, 26s)",
-    "2026-10-08T16:36:35.2306375Z   cause: dprint exited 20",
-    "2026-10-08T16:36:35.2336446Z   output: out3e9bad331748",
-    "2026-10-08T16:36:35.2436322Z   reproduce: magus run format:gha docs",
-];
+final LISTING = "\{\"artifacts\": [\{\"name\": \"magus-logs-01\", \"expired\": false}, \{\"name\": \"magus-history-01\", \"expired\": false}, \{\"name\": \"magus-logs-02\", \"expired\": true}]}";
 
-fun cleaned() > [str] {
-    final acc = mut [<str>];
-    foreach (raw in LOG) {
-        acc.append(cleanLine(raw));
-    }
-    return acc;
+test "only unexpired magus-logs artifacts are downloaded" {
+    assert\equal(logArtifacts(LISTING) catch [<str>], want: ["magus-logs-01"], message: "names");
 }
 
-test "a log line loses its timestamp and color" {
-    final lines = cleaned();
-    assert\equal(lines[1], want: "from docs/concepts/compatibility.md:", message: "timestamp");
-    assert\equal(lines[2], want: "diff line", message: "color");
-}
-
-test "a failure record carries its cause, ref, reproduce command and the output before it" {
-    final found = parseFailures(cleaned(), max: 10);
-    assert\equal(found.len(), want: 1, message: "one record");
-    assert\equal(found[0].project, want: "docs", message: "project");
-    assert\equal(found[0].target, want: "format:gha", message: "target");
-    assert\equal(found[0].cause, want: "dprint exited 20", message: "cause");
-    assert\equal(found[0].ref, want: "out3e9bad331748", message: "ref");
-    assert\equal(found[0].reproduce, want: "magus run format:gha docs", message: "reproduce");
-    assert\equal(found[0].excerpt, want: ["from docs/concepts/compatibility.md:", "diff line"], message: "excerpt");
-}
-
-test "an excerpt is cut to the line limit and says how much it dropped" {
-    final found = parseFailures(cleaned(), max: 1);
-    assert\equal(found[0].excerpt, want: ["from docs/concepts/compatibility.md:", "... 1 more lines"], message: "cut");
-}
-
-test "a target filter matches with or without its charm" {
-    final f = Failure{ project = "docs", target = "format:gha" };
-    assert\equal(wanted(f, project: "", target: "format"), want: true, message: "bare target");
-    assert\equal(wanted(f, project: "docs", target: "format:gha"), want: true, message: "full target");
-    assert\equal(wanted(f, project: "console", target: ""), want: false, message: "other project");
-    assert\equal(wanted(f, project: "", target: "lint"), want: false, message: "other target");
-}
-
-test "a failure with no group before it has no excerpt" {
-    final found = parseFailures(["[fail] docs lint (ran, 1s)", "  cause: boom"], max: 10);
-    assert\equal(found[0].excerpt.len(), want: 0, message: "no excerpt");
-    assert\equal(found[0].cause, want: "boom", message: "cause");
+test "the run id must be a number" {
+    final f = parseFilter(["--run", "37808757097"]) catch Filter{};
+    assert\equal(f.run, want: "37808757097", message: "run");
+    assert\equal(f.commit, want: "HEAD", message: "default commit");
+    final bad = parseFilter(["--run", "abc"]) catch Filter{ run = "refused" };
+    assert\equal(bad.run, want: "refused", message: "non-numeric run");
 }
