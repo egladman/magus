@@ -93,7 +93,7 @@ func TestRunJudgesMarkdownFilesInArgumentOrder(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"-surface", "markdown", b, a}, strings.NewReader(""), &out, &errOut)
+	code := run([]string{"-kind", "markdown", b, a}, strings.NewReader(""), &out, &errOut)
 
 	want := `[` +
 		`{"node":"` + b + `","source":"` + b + `:1","language":"markdown","rule":"reply-voice","message":"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.","match":"**Cache:**"},` +
@@ -113,7 +113,7 @@ func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"-surface", "skill-source", path}, strings.NewReader(""), &out, &errOut)
+	code := run([]string{"-kind", "skill-source", path}, strings.NewReader(""), &out, &errOut)
 
 	want := `[{"node":"` + path + `","source":"` + path + `:7","language":"skill-source","rule":"wordy",` +
 		`"message":"Write 'to', not 'in order to'.","match":"in order to"}]` + "\n"
@@ -131,7 +131,7 @@ func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"-surface", "guide", path}, strings.NewReader(""), &out, &errOut)
+	code := run([]string{"-kind", "guide", path}, strings.NewReader(""), &out, &errOut)
 
 	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"guide","rule":"second-person",` +
 		`"message":"Address the reader as you, not 'we': a guide speaks to the person following it, ` +
@@ -144,7 +144,7 @@ func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
 	var out, errOut bytes.Buffer
 
-	code := run([]string{"-surface", "pull-request"}, strings.NewReader("fix: pin the key\n## Summary\n"), &out, &errOut)
+	code := run([]string{"-kind", "pull-request"}, strings.NewReader("fix: pin the key\n## Summary\n"), &out, &errOut)
 
 	want := `[{"node":"pull-request","source":"pull-request:2","language":"pull-request","rule":"lead-context",` +
 		`"message":"It opens with a heading: open the description with a paragraph naming the goal behind the change ` +
@@ -160,10 +160,10 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
-		{"unknown surface", []string{"-surface", "doc"}, "judge-docs: unknown surface \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
-		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -surface markdown\n"},
-		{"a path for a pull request", []string{"-surface", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
-		{"a missing file", []string{"-surface", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
+		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
+		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -kind markdown\n"},
+		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
+		{"a missing file", []string{"-kind", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
 	}
 
 	for _, tc := range cases {

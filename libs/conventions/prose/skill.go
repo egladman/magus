@@ -45,9 +45,9 @@ func judgeSkillSource(text string) []Finding {
 	var found []Finding
 
 	seen := map[Finding]bool{}
-	judged := append(judgeForm(forms[0], SurfaceSkill), judgeForm(forms[1], SurfaceMarkdown)...)
+	judged := append(judgeForm(forms[0], KindSkill), judgeForm(forms[1], KindMarkdown)...)
 
-	for _, f := range judgeForm(forms[1], SurfaceSkill) {
+	for _, f := range judgeForm(forms[1], KindSkill) {
 		if f.Rule == RuleBareRule {
 			judged = append(judged, f)
 		}
@@ -72,10 +72,10 @@ func judgeSkillSource(text string) []Finding {
 	return found
 }
 
-// judgeForm runs surface's rules over a render and moves each finding to the
+// judgeForm runs kind's rules over a render and moves each finding to the
 // source line it came from.
-func judgeForm(form skillForm, surface Surface) []Finding {
-	found := JudgeText(form.text, surface)
+func judgeForm(form skillForm, kind Kind) []Finding {
+	found := JudgeText(form.text, kind)
 
 	for i := range found {
 		if l := found[i].Line; l > 0 && l <= len(form.lines) {

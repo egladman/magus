@@ -6,30 +6,30 @@ import (
 	"strings"
 )
 
-// JudgeText runs the rules that apply to surface over text, a Markdown file or
+// JudgeText runs the rules that apply to kind over text, a Markdown file or
 // a pull request with its title on the first line and its description after
 // it. Front matter, code (fenced, indented and in backticks), tables, HTML
 // comments and tags, link targets and URLs are not prose and are never judged.
 // Findings come in [Rules] order, then in the order their text appears, each
 // with its line in text.
 //
-// SurfaceDoc reads text as a doc comment, by the rules [Judge] applies to one.
-// SurfaceSkillSource renders text in both of a skill's forms first, and each
+// KindDoc reads text as a doc comment, by the rules [Judge] applies to one.
+// KindSkillSource renders text in both of a skill's forms first, and each
 // finding's line is its line in the source.
-func JudgeText(text string, surface Surface) []Finding {
+func JudgeText(text string, kind Kind) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
-	switch surface {
-	case SurfaceDoc:
-		return run(input{symbol: Symbol{Doc: text}, surface: surface, prose: readProse(raw, false), lines: raw})
-	case SurfaceSkillSource:
+	switch kind {
+	case KindDoc:
+		return run(input{symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw})
+	case KindSkillSource:
 		return judgeSkillSource(strings.Join(raw, "\n"))
 	}
 
-	lines := markdownProse(raw, surface != SurfacePullRequest)
+	lines := markdownProse(raw, kind != KindPullRequest)
 	prose := readProse(lines, true)
 
-	if surface == SurfacePullRequest {
+	if kind == KindPullRequest {
 		// The title is a paragraph of its own, however close the description
 		// starts below it.
 		for i := range prose {
@@ -41,7 +41,7 @@ func JudgeText(text string, surface Surface) []Finding {
 		}
 	}
 
-	return run(input{surface: surface, prose: prose, lines: lines})
+	return run(input{kind: kind, prose: prose, lines: lines})
 }
 
 var (
@@ -215,11 +215,11 @@ func blankQuoted(s string) string {
 // never read as the author's own words.
 func mentionsMasked(s string) string { return blankQuoted(blankBackticks(s)) }
 
-// mentions returns the mask filler and terms read surface through. Written
+// mentions returns the mask filler and terms read kind through. Written
 // text reads a quoted word as a mention; a doc comment keeps reading it as used,
 // as it always has.
-func mentions(surface Surface) func(string) string {
-	if surface == SurfaceDoc {
+func mentions(kind Kind) func(string) string {
+	if kind == KindDoc {
 		return blankBackticks
 	}
 

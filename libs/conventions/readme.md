@@ -80,19 +80,19 @@ module never imports `libs/conventions`. `cmd/judge-docs` runs them. With no
 flag it reads the symbols of `magus\symbols()` as JSON on stdin, fed by
 `hack/lint/symbol-docs-follow-prose-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. With
-`-surface markdown` it judges the files its arguments name, and with
-`-surface pull-request` a pull request on stdin, the title on the first line;
-each finding names its file and line. `-surface skill` judges a SKILL.md an
-agent loads as written, and `-surface skill-source` a skill body
+`-kind markdown` it judges the files its arguments name, and with
+`-kind pull-request` a pull request on stdin, the title on the first line;
+each finding names its file and line. `-kind skill` judges a SKILL.md an
+agent loads as written, and `-kind skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
 the skill rules, and what only its full form shows meets the Markdown ones and
-`bare-rule`. `-surface guide` judges a procedural page (`docs/guides/`,
+`bare-rule`. `-kind guide` judges a procedural page (`docs/guides/`,
 `docs/setup/`, `docs/migrating/`) on the Markdown rules and the guide rules.
 It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
-| Rule               | Surfaces     | Reports                                                        |
+| Rule               | Kinds        | Reports                                                        |
 | ------------------ | ------------ | -------------------------------------------------------------- |
 | `comment-block`    | doc          | a doc over 250 words                                           |
 | `comment-sentence` | doc          | a doc sentence over 60 words                                   |

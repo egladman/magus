@@ -142,7 +142,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// TestDecodeHookEnvelopeReadsEveryWritePathSpelling: the path surface used to see
+// TestDecodeHookEnvelopeReadsEveryWritePathSpelling: the path decoder used to see
 // `file_path` alone, so a host tool naming its target anything else fell through to
 // NothingToJudge and every write rule went unrun.
 func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {

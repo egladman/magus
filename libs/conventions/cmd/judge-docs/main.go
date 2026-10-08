@@ -3,12 +3,12 @@
 //
 // With no flag it reads a JSON array of symbol records on stdin and judges
 // each one's doc, reporting in input order and then the order [prose.Judge]
-// reports them. With -surface markdown it judges the Markdown files its
-// arguments name, in argument order; -surface guide judges them as procedural
-// pages, held to the guide rules as well; -surface skill judges them as skills an
-// agent loads as written, and -surface skill-source as skill bodies
+// reports them. With -kind markdown it judges the Markdown files its
+// arguments name, in argument order; -kind guide judges them as procedural
+// pages, held to the guide rules as well; -kind skill judges them as skills an
+// agent loads as written, and -kind skill-source as skill bodies
 // internal/agent renders into a short and a full form, each finding at its
-// source line. With -surface pull-request it reads a pull
+// source line. With -kind pull-request it reads a pull
 // request on stdin, the title on the first line and the description after it.
 // A finding from text names its file, or "pull-request", and its line as
 // source, `path:line`, the way a symbol's index position reads.
@@ -65,14 +65,14 @@ func main() {
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("judge-docs", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	surface := fs.String("surface", "",
+	kind := fs.String("kind", "",
 		"judge `markdown`, guide, skill or skill-source files named as arguments, or a pull-request on stdin")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	out, err := judge(prose.Surface(*surface), fs.Args(), stdin)
+	out, err := judge(prose.Kind(*kind), fs.Args(), stdin)
 	if err != nil {
 		fmt.Fprintf(stderr, "judge-docs: %v\n", err)
 
@@ -88,17 +88,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, error) {
-	switch surface {
+func judge(kind prose.Kind, paths []string, stdin io.Reader) ([]finding, error) {
+	switch kind {
 	case "":
 		if len(paths) > 0 {
-			return nil, errors.New("symbols are read from stdin; a path needs -surface markdown")
+			return nil, errors.New("symbols are read from stdin; a path needs -kind markdown")
 		}
 
 		return judgeSymbols(stdin)
-	case prose.SurfaceMarkdown, prose.SurfaceGuide, prose.SurfaceSkill, prose.SurfaceSkillSource:
-		return judgeFiles(paths, surface)
-	case prose.SurfacePullRequest:
+	case prose.KindMarkdown, prose.KindGuide, prose.KindSkill, prose.KindSkillSource:
+		return judgeFiles(paths, kind)
+	case prose.KindPullRequest:
 		if len(paths) > 0 {
 			return nil, errors.New("a pull request is read from stdin, not from a path")
 		}
@@ -108,13 +108,13 @@ func judge(surface prose.Surface, paths []string, stdin io.Reader) ([]finding, e
 			return nil, fmt.Errorf("read the pull request: %w", err)
 		}
 
-		return textFindings(pullRequestSource, string(text), surface), nil
+		return textFindings(pullRequestSource, string(text), kind), nil
 	default:
-		return nil, fmt.Errorf("unknown surface %q: want markdown, guide, skill, skill-source or pull-request", surface)
+		return nil, fmt.Errorf("unknown kind %q: want markdown, guide, skill, skill-source or pull-request", kind)
 	}
 }
 
-func judgeFiles(paths []string, surface prose.Surface) ([]finding, error) {
+func judgeFiles(paths []string, kind prose.Kind) ([]finding, error) {
 	out := []finding{}
 
 	for _, path := range paths {
@@ -123,18 +123,18 @@ func judgeFiles(paths []string, surface prose.Surface) ([]finding, error) {
 			return nil, fmt.Errorf("read %s: %w", path, err)
 		}
 
-		out = append(out, textFindings(path, string(text), surface)...)
+		out = append(out, textFindings(path, string(text), kind)...)
 	}
 
 	return out, nil
 }
 
-func textFindings(name, text string, surface prose.Surface) []finding {
+func textFindings(name, text string, kind prose.Kind) []finding {
 	out := []finding{}
 
-	for _, f := range prose.JudgeText(text, surface) {
+	for _, f := range prose.JudgeText(text, kind) {
 		out = append(out, finding{
-			Node: name, Source: name + ":" + strconv.Itoa(f.Line), Language: string(surface),
+			Node: name, Source: name + ":" + strconv.Itoa(f.Line), Language: string(kind),
 			Rule: string(f.Rule), Message: f.Message, Match: f.Match,
 		})
 	}

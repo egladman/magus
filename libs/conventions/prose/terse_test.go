@@ -35,7 +35,7 @@ func TestTerseSentenceReportsASentenceOverTheCap(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, SurfaceSkill), tc.want)
+			assertFindings(t, JudgeText(tc.text, KindSkill), tc.want)
 		})
 	}
 }
@@ -53,7 +53,7 @@ func TestTerseParagraphReportsAParagraphOverTheCap(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, SurfaceSkill), tc.want)
+			assertFindings(t, JudgeText(tc.text, KindSkill), tc.want)
 		})
 	}
 }
@@ -69,13 +69,13 @@ func TestTerseRulesSkipWhatIsNotASentence(t *testing.T) {
 		"- `magus run " + long + "`\n" +
 		"- `magus run go-build .`, `magus affected ci`.\n"
 
-	assertFindings(t, JudgeText(page, SurfaceSkill), nil)
+	assertFindings(t, JudgeText(page, KindSkill), nil)
 }
 
 func TestTerseRulesJudgeTheFrontMatterDescription(t *testing.T) {
 	page := "---\nname: x\ndescription: \"" + longSentence(26) + "\"\n---\n\n# X\n"
 
-	assertFindings(t, JudgeText(page, SurfaceSkill), []Finding{sentenceOver(3, 26)})
+	assertFindings(t, JudgeText(page, KindSkill), []Finding{sentenceOver(3, 26)})
 }
 
 func TestWordyNamesTheShorterPhrase(t *testing.T) {
@@ -94,7 +94,7 @@ func TestWordyNamesTheShorterPhrase(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.match, func(t *testing.T) {
-			assertFindings(t, JudgeText(tc.text, SurfaceSkill), []Finding{{
+			assertFindings(t, JudgeText(tc.text, KindSkill), []Finding{{
 				Rule: RuleWordy, Message: fmt.Sprintf("Write %s, not '%s'.", tc.want, tc.match), Match: tc.match, Line: 1,
 			}})
 		})
@@ -104,7 +104,7 @@ func TestWordyNamesTheShorterPhrase(t *testing.T) {
 func TestWordyReadsAWrappedPhraseAndSkipsAMention(t *testing.T) {
 	text := "Run it in order\nto replay.\n\nWrite \"to\", not \"in order to\", and not `in order to`.\n"
 
-	assertFindings(t, JudgeText(text, SurfaceSkill), []Finding{{
+	assertFindings(t, JudgeText(text, KindSkill), []Finding{{
 		Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 1,
 	}})
 }
@@ -127,7 +127,7 @@ func TestWordyPhrasesEachNameAShorterPhrase(t *testing.T) {
 func TestTerseRulesJudgeOnlyASkill(t *testing.T) {
 	text := longSentence(26) + "\n\nRun it in order to replay.\n"
 
-	for _, s := range []Surface{SurfaceMarkdown, SurfacePullRequest} {
+	for _, s := range []Kind{KindMarkdown, KindPullRequest} {
 		for _, f := range JudgeText(text, s) {
 			if f.Rule == RuleTerseSentence || f.Rule == RuleWordy {
 				t.Errorf("%s: %s judged it", s, f.Rule)

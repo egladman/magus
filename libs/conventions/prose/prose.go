@@ -71,39 +71,39 @@ const (
 	RuleCondescension Rule = "condescension"
 )
 
-// Surface names the kind of text a rule judges.
-type Surface string
+// Kind names the kind of text a rule judges.
+type Kind string
 
 const (
-	// SurfaceDoc is a symbol's doc comment.
-	SurfaceDoc Surface = "doc"
-	// SurfaceMarkdown is a hand-written Markdown file.
-	SurfaceMarkdown Surface = "markdown"
-	// SurfacePullRequest is a pull request: its title on the first line, its
+	// KindDoc is a symbol's doc comment.
+	KindDoc Kind = "doc"
+	// KindMarkdown is a hand-written Markdown file.
+	KindMarkdown Kind = "markdown"
+	// KindPullRequest is a pull request: its title on the first line, its
 	// description after it.
-	SurfacePullRequest Surface = "pull-request"
-	// SurfaceSkill is a skill's SKILL.md as an agent loads it: Markdown held
+	KindPullRequest Kind = "pull-request"
+	// KindSkill is a skill's SKILL.md as an agent loads it: Markdown held
 	// to the terse rules, since every word costs context in every session that
 	// loads it.
-	SurfaceSkill Surface = "skill"
-	// SurfaceSkillSource is a skill body internal/agent renders with
+	KindSkill Kind = "skill"
+	// KindSkillSource is a skill body internal/agent renders with
 	// text/template into a short and a full form. What the short form shows is
-	// judged on SurfaceSkill; what only the full form shows, on
-	// SurfaceMarkdown.
-	SurfaceSkillSource Surface = "skill-source"
-	// SurfaceGuide is a procedural page, one the reader follows with a
+	// judged as KindSkill; what only the full form shows, as
+	// KindMarkdown.
+	KindSkillSource Kind = "skill-source"
+	// KindGuide is a procedural page, one the reader follows with a
 	// terminal open: Markdown held to the guide rules as well, which keep it
 	// in the second person, its numbered steps imperative and its words free
 	// of condescension.
-	SurfaceGuide Surface = "guide"
+	KindGuide Kind = "guide"
 )
 
 var (
-	docOnly = []Surface{SurfaceDoc}
-	written = []Surface{SurfaceMarkdown, SurfaceGuide, SurfacePullRequest, SurfaceSkill}
-	all     = []Surface{SurfaceDoc, SurfaceMarkdown, SurfaceGuide, SurfacePullRequest, SurfaceSkill}
-	skill   = []Surface{SurfaceSkill}
-	guide   = []Surface{SurfaceGuide}
+	docOnly = []Kind{KindDoc}
+	written = []Kind{KindMarkdown, KindGuide, KindPullRequest, KindSkill}
+	all     = []Kind{KindDoc, KindMarkdown, KindGuide, KindPullRequest, KindSkill}
+	skill   = []Kind{KindSkill}
+	guide   = []Kind{KindGuide}
 )
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
@@ -112,7 +112,7 @@ var (
 // them at once, with no sweep behind it.
 var checks = []struct {
 	rule  Rule
-	on    []Surface
+	on    []Kind
 	judge func(in input) []Finding
 }{
 	{RuleCommentBlock, docOnly, commentBlock},
@@ -123,7 +123,7 @@ var checks = []struct {
 	{RuleAside, docOnly, aside},
 	{RuleHistory, docOnly, history},
 	{RuleDocStub, docOnly, docStub},
-	{RuleLeadContext, []Surface{SurfacePullRequest}, leadContext},
+	{RuleLeadContext, []Kind{KindPullRequest}, leadContext},
 	{RuleReplyVoice, written, replyVoice},
 	{RuleTense, written, tense},
 	{RuleHedge, written, hedge},
@@ -180,9 +180,9 @@ type Finding struct {
 
 // input is what a rule reads.
 type input struct {
-	symbol  Symbol
-	surface Surface
-	prose   []proseLine
+	symbol Symbol
+	kind   Kind
+	prose  []proseLine
 	// lines are the judged text's lines with what is not prose blanked, code
 	// still in place, for a rule that asks what a block is rather than what it
 	// says.
@@ -194,7 +194,7 @@ type input struct {
 // then in the order their text appears in Doc.
 func Judge(s Symbol) []Finding {
 	lines := strings.Split(s.Doc, "\n")
-	out := run(input{symbol: s, surface: SurfaceDoc, prose: readProse(lines, false), lines: lines})
+	out := run(input{symbol: s, kind: KindDoc, prose: readProse(lines, false), lines: lines})
 
 	for i := range out {
 		out[i].Line = 0
@@ -207,7 +207,7 @@ func run(in input) []Finding {
 	var out []Finding
 
 	for _, c := range checks {
-		if !slices.Contains(c.on, in.surface) {
+		if !slices.Contains(c.on, in.kind) {
 			continue
 		}
 

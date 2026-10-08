@@ -46,7 +46,7 @@ func TestJudgeTextSkipsWhatIsNotProse(t *testing.T) {
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 32},
 	}
 
-	assertFindings(t, JudgeText(markdownPage, SurfaceMarkdown), want)
+	assertFindings(t, JudgeText(markdownPage, KindMarkdown), want)
 }
 
 // A page's description is the sentence a search result shows, so it is prose; every
@@ -55,23 +55,23 @@ func TestJudgeTextJudgesTheFrontMatterDescription(t *testing.T) {
 	page := "---\ntitle: Simply a page\ndescription: \"How the cache simply stores blobs: by key.\"\n" +
 		"tags: [simply]\n---\n\n# Cache\n"
 
-	assertFindings(t, JudgeText(page, SurfaceMarkdown),
+	assertFindings(t, JudgeText(page, KindMarkdown),
 		[]Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3}})
 }
 
 func TestJudgeTextReadsAPullRequestTitleAsItsFirstLine(t *testing.T) {
 	got := JudgeText("fix: simply pin the key\nPinning the key keeps two racing workers from writing "+
-		"different blobs, so the cache now sorts its inputs.", SurfacePullRequest)
+		"different blobs, so the cache now sorts its inputs.", KindPullRequest)
 
 	assertFindings(t, got, []Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 1}})
 }
 
-// TestJudgeTextOnADocMatchesJudge pins that the doc surface reads text the way
+// TestJudgeTextOnADocMatchesJudge pins that the doc kind reads text the way
 // Judge reads a doc, with the line it found each span on.
 func TestJudgeTextOnADocMatchesJudge(t *testing.T) {
 	doc := "Resolve returns the path.\n\nIt simply\nrereads a sub-agent - basically twice."
 
-	got := JudgeText(doc, SurfaceDoc)
+	got := JudgeText(doc, KindDoc)
 	want := []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 		{Rule: RuleFiller, Message: "Drop 'basically': state the fact.", Match: "basically", Line: 4},

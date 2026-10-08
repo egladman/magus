@@ -455,7 +455,7 @@ export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
                 message = "the prose judge cannot run: {stale}; run `{judgeDocs\build}`, then retry" }];
         }
         final bin = "{dir}/{judgeDocs\binary}";
-        final run = proc\exec(bin, args: ["-surface", "pull-request"],
+        final run = proc\exec(bin, args: ["-kind", "pull-request"],
             dir: dir, opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         if (run == null or run!.code != 0) {
             var why = "{bin} did not start";
@@ -463,7 +463,7 @@ export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
                 why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, dir: dir);
             }
             return [Judged{ rule = "judge", line = 0,
-                message = "the prose judge did not run ({why}); run libs/conventions/{judgeDocs\binary} -surface pull-request "
+                message = "the prose judge did not run ({why}); run libs/conventions/{judgeDocs\binary} -kind pull-request "
                     + "with the title and description on stdin, and read why" }];
         }
         return parseJudged(run!.stdout);
