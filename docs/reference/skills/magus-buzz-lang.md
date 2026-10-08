@@ -3,7 +3,7 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12599
+skill_full_bytes: 12601
 skill_short_bytes: 10390
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `114` |
+| `agent-skill-version` | `115` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `e410aad3013d` |
+| `skill-content` | `5b2aed6e0d51` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -512,7 +512,7 @@ Escalate deliberately:
 | question | where |
 | --- | --- |
 | what a module offers, what a method takes and RETURNS | `magus describe module <name>`, generated from the bindings |
-| how a feature works: error sets, fibers, generics, the sandbox | the magus-docs-lookup skill |
+| how a feature works: error sets, fibers, generics, the sandbox | the magus-upstream-docs skill |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
 ### Calling magus from a script

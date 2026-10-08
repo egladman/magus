@@ -1,15 +1,15 @@
 ---
-title: magus-docs-lookup
-generated_from: internal/agent/skills/magus-docs-lookup/SKILL.md
+title: magus-upstream-docs
+generated_from: internal/agent/skills/magus-upstream-docs/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
-tags: [agents, skills, magus-docs-lookup]
-skill_full_bytes: 3993
-skill_short_bytes: 3173
+tags: [agents, skills, magus-upstream-docs]
+skill_full_bytes: 4688
+skill_short_bytes: 3743
 ---
 
-# magus-docs-lookup
+# magus-upstream-docs
 
-Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).
+Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it, or when the docs and your magus binary disagree. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `114` |
+| `agent-skill-version` | `115` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `321836eb7fe1` |
+| `skill-content` | `39a0ab3fe8ed` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -41,16 +41,16 @@ Both are hand-authored from one source body. The short form is the always-loaded
 
 <article class="landing-tabs">
 <header>
-<input type="radio" name="magus-docs-lookup-variant" id="magus-docs-lookup-tab-short" checked>
-<label for="magus-docs-lookup-tab-short">Short form</label>
-<input type="radio" name="magus-docs-lookup-variant" id="magus-docs-lookup-tab-full">
-<label for="magus-docs-lookup-tab-full">Full form</label>
+<input type="radio" name="magus-upstream-docs-variant" id="magus-upstream-docs-tab-short" checked>
+<label for="magus-upstream-docs-tab-short">Short form</label>
+<input type="radio" name="magus-upstream-docs-variant" id="magus-upstream-docs-tab-full">
+<label for="magus-upstream-docs-tab-full">Full form</label>
 </header>
 
 <section class="landing-tabpanel">
 
 ```sh
-magus agent install --tar | tar -xO -f - magus-docs-lookup/SKILL.md
+magus agent install --tar | tar -xO -f - magus-upstream-docs/SKILL.md
 ```
 
 ````markdown
@@ -123,6 +123,19 @@ Every page has three axes:
 
 Land via `llms.txt`, then sweep siblings via "In this section".
 
+## The published site follows main, not your build
+
+The site and its source links (`/blob/main/`) are rendered from main. The binary
+you run may be older. When they disagree, trust what the binary prints, such as
+`magus <command> -h`.
+
+To read a linked file as your build has it, replace `blob/main` with
+`blob/<commit>`. Take the commit from `magus version -o json`. Find the symbol by
+name, because line numbers move.
+
+If the docs and the behavior still disagree after that, and you have a
+reproduction, the magus-upstream-source skill traces the code at your build.
+
 ## In the magus repo
 
 `docs/` Markdown is the source of truth; `docs/gen/` is generated (never edit it;
@@ -138,7 +151,7 @@ page from the graph.
 <section class="landing-tabpanel">
 
 ```sh
-magus agent install --tar | tar -xO -f - magus-docs-lookup-full/SKILL.md
+magus agent install --tar | tar -xO -f - magus-upstream-docs-full/SKILL.md
 ```
 
 ````markdown
@@ -219,6 +232,20 @@ Every page has three axes, so from one page you can reach its whole area:
 
 So: land via `llms.txt`, read the page, then use "In this section" to sweep its
 siblings; do not re-search for each one.
+
+## The published site follows main, not your build
+
+The site and its source links (`/blob/main/`) are rendered from main. The binary
+you run may be older: a flag, an op or a diagnostic can differ between a page
+and your build. When they disagree, trust what the binary prints, such as
+`magus <command> -h`.
+
+To read a linked file as your build has it, replace `blob/main` with
+`blob/<commit>`. Take the commit from `magus version -o json`. Find the symbol by
+name: line numbers move between versions, so the link's anchor points at main's line.
+
+If the docs and the behavior still disagree after that, and you have a
+reproduction, the magus-upstream-source skill traces the code at your build.
 
 ## In the magus repo
 

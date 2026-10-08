@@ -175,3 +175,52 @@ func accessMode(pid int, fd string) (uint64, bool) {
 	}
 	return 0, false
 }
+
+// ReadFDs returns the descriptors at which pid holds p's read end open right now.
+func (p Pipe) ReadFDs(pid int) []int {
+	dir := procPath(pid, "fd")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var fds []int
+	for _, e := range entries {
+		ino, ok := pipeInode(filepath.Join(dir, e.Name()))
+		if !ok || ino != p.id || !readable(pid, e.Name()) {
+			continue
+		}
+		if fd, err := strconv.Atoi(e.Name()); err == nil {
+			fds = append(fds, fd)
+		}
+	}
+	return fds
+}
+
+// Sample returns what pid is doing now, from /proc. A kernel built without the children
+// list reports every process as a parent, which only keeps a caller waiting longer.
+func Sample(pid int) (Activity, error) {
+	stat, err := os.ReadFile(procPath(pid, "stat"))
+	if err != nil {
+		return Activity{}, fmt.Errorf("pipepeer: read stat of %d: %w", pid, err)
+	}
+	i := bytes.LastIndexByte(stat, ')')
+	fields := strings.Fields(string(stat[i+1:]))
+	if i < 0 || len(fields) == 0 {
+		return Activity{}, fmt.Errorf("pipepeer: malformed stat for %d", pid)
+	}
+	status, err := os.ReadFile(procPath(pid, "status"))
+	if err != nil {
+		return Activity{}, fmt.Errorf("pipepeer: read status of %d: %w", pid, err)
+	}
+	a := Activity{Runnable: fields[0] == "R" || fields[0] == "D"}
+	kids, err := os.ReadFile(procPath(pid, "task", strconv.Itoa(pid), "children"))
+	a.Parent = err != nil || len(bytes.TrimSpace(kids)) > 0
+	for line := range strings.SplitSeq(string(status), "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if ok && (k == "voluntary_ctxt_switches" || k == "nonvoluntary_ctxt_switches") {
+			n, _ := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			a.Switches += n
+		}
+	}
+	return a, nil
+}

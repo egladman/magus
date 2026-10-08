@@ -57,7 +57,7 @@ bug in place.
 In `std/`, a method's `Name` and `Doc` are codegen inputs, not documentation.
 
 - `Doc:` reaches generated `.d.ts`, `docs/reference/buzz/*.md` via
-  `cmd/magus-docs-lookup`, and LSP hover text. A wrong `Doc` teaches every Buzz
+  `cmd/magus-docs`, and LSP hover text. A wrong `Doc` teaches every Buzz
   author the inverse contract.
 - `Name:` changes the Buzz-facing identifier: a BREAKING change with no migration
   path. MGS1025's removed-API table covers only the `magus.*` namespace, and

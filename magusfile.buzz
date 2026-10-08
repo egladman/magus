@@ -228,7 +228,7 @@ fun version() > str !> any {
 
 fun commit() > str !> any {
     try {
-        return vcs\commit().short;
+        return vcs\commit().id;
     } catch (e) {
         return "unknown";
     }
@@ -838,7 +838,8 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".claude/skills/magus-commit-composition*/**",
         ".claude/skills/magus-change-summary*/**",
         ".claude/skills/magus-context-audit*/**",
-        ".claude/skills/magus-docs-lookup*/**",
+        ".claude/skills/magus-upstream-docs*/**",
+        ".claude/skills/magus-upstream-source*/**",
         ".claude/skills/magus-multi-agent*/**",
         ".claude/skills/magus-query*/**",
         ".claude/skills/magus-run*/**",
@@ -853,7 +854,8 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".agents/skills/magus-commit-composition*/**",
         ".agents/skills/magus-change-summary*/**",
         ".agents/skills/magus-context-audit*/**",
-        ".agents/skills/magus-docs-lookup*/**",
+        ".agents/skills/magus-upstream-docs*/**",
+        ".agents/skills/magus-upstream-source*/**",
         ".agents/skills/magus-multi-agent*/**",
         ".agents/skills/magus-query*/**",
         ".agents/skills/magus-run*/**",
@@ -868,7 +870,8 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".opencode/skills/magus-commit-composition*/**",
         ".opencode/skills/magus-change-summary*/**",
         ".opencode/skills/magus-context-audit*/**",
-        ".opencode/skills/magus-docs-lookup*/**",
+        ".opencode/skills/magus-upstream-docs*/**",
+        ".opencode/skills/magus-upstream-source*/**",
         ".opencode/skills/magus-multi-agent*/**",
         ".opencode/skills/magus-query*/**",
         ".opencode/skills/magus-run*/**",

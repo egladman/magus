@@ -298,6 +298,24 @@ func TestReadByMagus(t *testing.T) {
 	}
 }
 
+// TestPipeReaderProofLetsABlockedForkGo: a shell stage that never execs, like a `while
+// read` loop, sits blocked on the pipe, and the writer stops waiting for it at once
+// rather than at pipeExecWait.
+func TestPipeReaderProofLetsABlockedForkGo(t *testing.T) {
+	r, w := shellPipe(t)
+	reader := exec.Command("bash", "-c", "while read -r l; do :; done | cat")
+	reader.Stdin = r
+	startStage(t, reader)
+	_ = r.Close()
+	start := time.Now()
+	if ReadByMagus(context.Background(), w) {
+		t.Errorf("a while-read loop reads the pipe, but ReadByMagus = true")
+	}
+	if took := time.Since(start); took >= pipeExecWait/2 {
+		t.Errorf("ReadByMagus took %v to let a blocked fork go, want well under %v", took, pipeExecWait)
+	}
+}
+
 // TestRecordUpstream proves the writing end of stdin: a stage of this executable whose
 // argv writes records, and never one whose argv does not or a stage of another tool.
 func TestRecordUpstream(t *testing.T) {

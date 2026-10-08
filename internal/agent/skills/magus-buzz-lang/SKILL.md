@@ -211,7 +211,7 @@ CORRECT: `s.lower()`, `json\stringify(v)`, `fs\join(a, name: b)`.
 | question | where |
 | --- | --- |
 | what a module offers, what a method takes and RETURNS | `{{cmd "describe"}} module <name>`, generated from the bindings |
-| how a feature works: error sets, fibers, generics, the sandbox | the {{skill "docs-lookup"}} skill |
+| how a feature works: error sets, fibers, generics, the sandbox | the {{skill "upstream-docs"}} skill |
 | what THIS workspace declares (targets, spells, projects) | the {{skill "query"}} skill |
 
 {{end}}### Calling magus from a script

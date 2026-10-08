@@ -77,6 +77,20 @@ Every page has three axes{{if .Full}}, so from one page you can reach its whole 
 {{if .Full}}So: land via `llms.txt`, read the page, then use "In this section" to sweep its
 siblings; do not re-search for each one.{{else}}Land via `llms.txt`, then sweep siblings via "In this section".{{end}}
 
+## The published site follows main, not your build
+
+The site and its source links (`/blob/main/`) are rendered from main. The binary
+you run may be older{{if .Full}}: a flag, an op or a diagnostic can differ between a page
+and your build{{end}}. When they disagree, trust what the binary prints, such as
+`magus <command> -h`.
+
+To read a linked file as your build has it, replace `blob/main` with
+`blob/<commit>`. Take the commit from `{{cmd "version"}} -o json`. Find the symbol by
+name{{if .Full}}: line numbers move between versions, so the link's anchor points at main's line{{else}}, because line numbers move{{end}}.
+
+If the docs and the behavior still disagree after that, and you have a
+reproduction, the {{skill "upstream-source"}} skill traces the code at your build.
+
 ## In the magus repo
 
 `docs/` Markdown is the source of truth; `docs/gen/` is generated (never edit it;
