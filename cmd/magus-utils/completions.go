@@ -34,18 +34,18 @@ var shellMarker = emit.CommentMarker("#", "subcommands")
 
 func runCompletions(args []string) error {
 	fs := flag.NewFlagSet("completions", flag.ExitOnError)
-	surfacePath := fs.String("surface", "surface.go", "Go declaration of the CLI surface")
+	subcommandsPath := fs.String("subcommands", "subcommands.go", "Go declaration of the CLI's subcommand table")
 	outDir := fs.String("out", "completions", "Directory holding the completion scripts")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	subs, err := readSurface(*surfacePath)
+	subs, err := readSubcommands(*subcommandsPath)
 	if err != nil {
 		return err
 	}
 	if len(subs) == 0 {
-		return fmt.Errorf("completions: no subcommands found in %s; the parse is wrong, not the surface", *surfacePath)
+		return fmt.Errorf("completions: no subcommands found in %s; the parse is wrong, not the table", *subcommandsPath)
 	}
 
 	renderers := map[string]func([]subcommandDoc) string{
@@ -75,8 +75,8 @@ func runCompletions(args []string) error {
 	return nil
 }
 
-// readSurface reads the subcommand table out of the CLI surface declaration.
-func readSurface(path string) ([]subcommandDoc, error) {
+// readSubcommands reads the subcommand table out of the CLI's Go declaration of it.
+func readSubcommands(path string) ([]subcommandDoc, error) {
 	file, err := godecl.Parse(path)
 	if err != nil {
 		return nil, err

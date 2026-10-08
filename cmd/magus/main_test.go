@@ -1256,11 +1256,11 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 }
 
 // TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
-// dispatchSub routed with no matching entry in surface.go's subcommands: `magus mcp`
+// dispatchSub routed with no matching entry in subcommands.go's subcommands: `magus mcp`
 // worked when typed, but help, did-you-mean, the man pages, and every completion
 // script (all derived from subcommands / knownSubcommands) never mentioned it.
 // dispatchSub's switch and knownSubcommands are two separate declarations that can
-// drift exactly the way the three copies surface.go's own doc comment already
+// drift exactly the way the three copies subcommands.go's own doc comment already
 // describes; this closes that gap mechanically instead of relying on someone
 // remembering to update both.
 //
@@ -1336,7 +1336,7 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from surface.go) = %v\n"+
-			"a case dispatchSub routes must have an entry in surface.go's subcommands, and vice versa", got, want)
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
+			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
 	}
 }

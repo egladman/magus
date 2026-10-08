@@ -31,7 +31,7 @@ const (
 // subcommand added here shows up in help, in did-you-mean, and in every shell without
 // anyone remembering to update five files.
 //
-//go:generate go run ../magus-utils completions -surface surface.go -out completions
+//go:generate go run ../magus-utils completions -subcommands subcommands.go -out completions
 var subcommands = []subcommand{
 	{Group: groupWork, Name: "ls", Short: "list all discovered projects"},
 	{Group: groupWork, Name: "describe", Short: "define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)"},

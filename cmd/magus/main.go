@@ -16,7 +16,7 @@
 //	magus doctor                        validate the workspace
 //
 // magus help prints the full top-level surface, in the order and with the
-// descriptions subcommands in surface.go declares as the single source of
+// descriptions subcommands in subcommands.go declares as the single source of
 // truth, kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
