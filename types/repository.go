@@ -2,7 +2,7 @@ package types
 
 import "context"
 
-// This file collects the repository-style domain interfaces — the access surfaces
+// This file collects the repository-style domain interfaces — the access points
 // consumers depend on, implemented by concrete types elsewhere (e.g. *Workspace,
 // internal/graph/dependency). Interfaces that are ports/callbacks rather than repositories
 // (SpellDriver, VCSDriver, MergeDriverInstaller, Observer, TargetNameNormalizer) stay

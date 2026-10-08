@@ -72,7 +72,7 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 - Verifying the console: the service worker precaches and serves stale bundles.
   Serve `console/gen` on a fresh port, or unregister the SW and clear caches.
 
-## Agent surface
+## Agent integration
 
 - If a convention matters, give it an enforcement point; `internal/guard/dir.go`
   is the worked example. Measured 2026-08-24: a rule that lives only in prose has

@@ -1421,7 +1421,7 @@ func (s *Session) Warnings() []Diagnostic {
 // here, against whatever the file said at the time.
 func (s *Session) Diagnostics(code string) []Diagnostic {
 	// Diagnostics takes no per-call ctx (see the doc comment above); it runs
-	// against the session's own lifetime like the rest of the no-ctx surface.
+	// against the session's own lifetime like the rest of the no-ctx API.
 	_, errs, warnings, parseErr := s.checkShared(s.ctx, code)
 	if parseErr != nil {
 		return []Diagnostic{parseDiagnostic(parseErr)}
@@ -2475,7 +2475,7 @@ func bzzExists(path string) bool { _, err := os.Stat(path); return err == nil }
 // optionally multiple times without re-parsing.
 func (s *Session) Compile(code string) (*vmpackage.Chunk, error) {
 	// Compile takes no per-call ctx (public signature, unchanged); it runs
-	// against the session's own lifetime like the rest of the no-ctx surface.
+	// against the session's own lifetime like the rest of the no-ctx API.
 	return s.compileShared(s.ctx, code)
 }
 

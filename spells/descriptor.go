@@ -61,7 +61,7 @@ const (
 // to sit in types, referenced as types.* throughout, on the theory that magus-utils
 // types needed a neutral package to reflect from without an embed/codegen cycle;
 // the generator reads spells.* directly instead, and the cycle never materialized.
-// (Run is the old name for Command, and has not existed since the op surface
+// (Run is the old name for Command, and has not existed since ops
 // collapsed to one kind.)
 //
 // See doc.go for why the move happened and why the dependency runs one way.

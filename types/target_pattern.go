@@ -62,7 +62,7 @@ func MatchTargetPatterns(names, patterns []string) ([]string, error) {
 
 // compileTargetPatterns splits a pattern list into the anchored regexps to include and the
 // ones to subtract. Every pattern is QuoteMeta'd before "*" is translated, so an authored
-// regexp is matched as literal text: the surface is glob, not regex, and the compiled result
+// regexp is matched as literal text: the syntax is glob, not regex, and the compiled result
 // is always valid however the pattern was written.
 func compileTargetPatterns(patterns []string) (include, exclude []*regexp.Regexp) {
 	for _, pat := range patterns {

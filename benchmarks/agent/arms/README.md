@@ -3,7 +3,7 @@
 An arm is a provisioning recipe applied to a fresh worktree of the benchmark
 fixture (a magus-ified TypeScript monorepo, not this repository), plus a probe
 that proves the worktree is in that arm. The two arms differ ONLY in the agent
-surface; the fixture, the model, the prompts, and the budget caps are held
+integration; the fixture, the model, the prompts, and the budget caps are held
 identical by the runner.
 
 ```sh
@@ -69,12 +69,12 @@ How the absence is guaranteed, and how the probes prove it:
 
 ## Confounds
 
-These are properties of the surface, not defects in the scripts, and they are
+These are properties of the integration, not defects in the scripts, and they are
 why the ablation is a 0/1 ladder rather than a menu of independent switches:
 
 - **Guard advisories name skills.** An advisory says "load the magus-query
-  skill". Hooks-on with skills-off is a surface that routes to files that are
-  not there, so it is a partial surface rather than a clean control.
+  skill". Hooks-on with skills-off is an integration that routes to files that are
+  not there, so it is a partial integration rather than a clean control.
 - **Skill bodies name MCP tools.** The installed skills tell an agent to prefer
   `client` (`magus\query`) and to check `magus status --probe=mcp`. With MCP
   unregistered, the full arm's agent is told about tools it does not have; the

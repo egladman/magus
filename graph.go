@@ -233,7 +233,7 @@ func (w *warmGraph) Get(ctx context.Context, refresh bool) (*knowledge.Graph, er
 }
 
 // Healthy reports the warm graph's watcher state for the server's /readyz readiness
-// surface: watching is true once a file watcher is invalidating the cache on source
+// endpoint: watching is true once a file watcher is invalidating the cache on source
 // changes, valid is true when the cache currently holds a fresh graph (so the next Get
 // answers from memory instead of rebuilding). Guarded by the same mutex as Get/cached.
 func (w *warmGraph) Healthy() (watching, valid bool) {
@@ -320,7 +320,7 @@ func (w *warmGraph) stopWatching() {
 }
 
 // KnowledgeGraphHealthy reports the server's warm-knowledge-graph watcher state, for the
-// /readyz readiness surface's "knowledge_graph" component. It goes through
+// /readyz readiness endpoint's "knowledge_graph" component. It goes through
 // warmKnowledgeGraph (the same lazily-created holder KnowledgeGraph reads), so calling it
 // before WatchKnowledgeGraph has ever run reports watching=false rather than panicking on
 // a nil holder, and calling it after does not create a second holder (sync.Once).

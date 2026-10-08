@@ -235,16 +235,16 @@ test "harness_skills installs both forms under .agents/skills" {
 
 test "every glue command names this host on its argv, and rehydrate takes none" {
     final named = " --agent-name {mgs_getName()}";
-    assert\isTrue(codex_guard_command().endsWith(named), "command surface");
-    assert\isTrue(codex_path_command().endsWith(named), "path surface");
-    assert\isTrue(codex_observe_command().endsWith(named), "read surface");
+    assert\isTrue(codex_guard_command().endsWith(named), "command hook");
+    assert\isTrue(codex_path_command().endsWith(named), "path hook");
+    assert\isTrue(codex_observe_command().endsWith(named), "read hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
 }
 
 test "guard commands name the Buzz glue as a plain argv" {
-    assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command surface");
-    assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path surface");
+    assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command hook");
+    assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path hook");
     assert\isTrue(codex_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart needs JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");

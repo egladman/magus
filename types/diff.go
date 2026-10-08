@@ -134,7 +134,7 @@ type DiffSymbol struct {
 	RefCount  int `json:"ref_count"  yaml:"ref_count"`
 	FileCount int `json:"file_count" yaml:"file_count"`
 	// PublicTo are the other workspace projects that reference this symbol, sorted. Non-empty
-	// is what makes a file's surface public, and naming them answers the reader's actual next
+	// is what makes a file's API public, and naming them answers the reader's actual next
 	// question (who breaks) rather than only how many.
 	PublicTo []string `json:"public_to,omitempty" yaml:"public_to,omitempty"`
 	// PublicFileCount is how many referencing files sit outside the defining project.
@@ -146,7 +146,7 @@ type DiffSymbol struct {
 	// whole reason both exist. A symbol can be referenced by no other project and still be
 	// public API that a downstream module imports; measured on this repository, every referent
 	// of the root package sits in the root project, so cross-project exposure alone reported
-	// the published SDK surface as internal. Conflating the two answers the wrong question:
+	// the published SDK as internal. Conflating the two answers the wrong question:
 	// "who in this workspace breaks" is not "who in the world breaks".
 	PublicBeyondWorkspace bool `json:"public_beyond_workspace,omitempty" yaml:"public_beyond_workspace,omitempty"`
 	// Change is what this changeset did to the symbol, one of the DiffChange constants. A
@@ -311,7 +311,7 @@ type DiffTouch struct {
 	Transcript string `json:"transcript,omitempty" yaml:"transcript,omitempty"`
 	// Read are the paths the session reached BEFORE the write, most recent first. Capped:
 	// the last handful is the context that explains the edit, and the whole session's
-	// reach is a different question with a different surface.
+	// reach is a different question with a different answer.
 	Read []string `json:"read,omitempty" yaml:"read,omitempty"`
 	// Ran are the PROGRAMS the session ran before the write, most recent first and capped:
 	// "go", "grep", "perl", never their arguments. Carrying the raw command line makes
@@ -465,7 +465,7 @@ func (v DiffUncoveredReason) Sentence() string {
 //
 // The zero value means there is no earlier pass to subtract: nobody has reviewed these files, or
 // the reviewing was done against a working tree, which has no revision to name. Neither is
-// "nothing changed", and a surface must not render it as reassurance.
+// "nothing changed", and a client must not render it as reassurance.
 type DiffReviewed struct {
 	// At is the revision the reader last got through, oldest where receipts disagree.
 	At VCSCheckpoint `json:"at,omitzero" yaml:"at,omitzero"`
@@ -486,7 +486,7 @@ const (
 	// DiffAuthorUnattributed is a write through the review route (the console or the
 	// terminal review). It is a draft its reader may publish or discard.
 	DiffAuthorUnattributed DiffAuthor = "unattributed"
-	// DiffAuthorAgent is a write from the MCP surface.
+	// DiffAuthorAgent is a write through the MCP tools.
 	DiffAuthorAgent DiffAuthor = "agent"
 )
 
@@ -655,7 +655,7 @@ type ReviewOrigin struct {
 //
 // "No provider wired", "no pull request for this branch" and "the host was unreachable" are
 // all an empty ID with a Reason, deliberately. None is a thing the reader did wrong, and a
-// surface that renders them differently would be inventing a distinction its user does not
+// client that renders them differently would be inventing a distinction its user does not
 // have: what they can do next is identical in all three.
 type ReviewTarget struct {
 	// ID is the review's identity in the provider's own terms, opaque to magus and passed
@@ -745,7 +745,7 @@ func (r ReviewTarget) PermittedVerdict(want ReviewVerdict) ReviewVerdict {
 
 // AllowedVerdicts lists every verdict this reviewer may publish, remarks first.
 //
-// DERIVED from PermittedVerdict rather than restating its rule, so a surface offering the choices
+// DERIVED from PermittedVerdict rather than restating its rule, so a client offering the choices
 // and the publish path enforcing them cannot drift apart. A client renders exactly this list; it
 // is never handed the author and viewer names to compare for itself, because a permission rule
 // re-implemented in a browser is one that eventually disagrees with the one that matters.
@@ -761,7 +761,7 @@ func (r ReviewTarget) AllowedVerdicts() []ReviewVerdict {
 
 // VerdictLimit explains why AllowedVerdicts is only remarks, or "" when it is not limited.
 //
-// The two reasons are different facts and a surface that renders them alike misleads: "this is
+// The two reasons are different facts and a client that renders them alike misleads: "this is
 // your own change" is how review is supposed to work, while "magus could not tell who opened
 // this" is a gap in what the provider answered: the same distinction the branch lookup's
 // unsupported marker exists to preserve.
@@ -769,7 +769,7 @@ func (r ReviewTarget) VerdictLimit() string {
 	mine, known := r.OpenedByViewer()
 	switch {
 	case !known:
-		// Carries its code, so a surface can link the reader to the page explaining why not
+		// Carries its code, so a client can link the reader to the page explaining why not
 		// knowing resolves the same way as knowing it is yours.
 		return string(ReviewAuthorshipUnknown) +
 			": magus could not tell who opened this review, so it will not approve on your behalf"
@@ -814,8 +814,8 @@ type ReviewThread struct {
 	// Hunk is the index WITHIN Path's hunks of the one containing Line, or -1 when no hunk in
 	// this changeset does.
 	//
-	// Resolved by magus rather than by each surface, because the arithmetic is the only hard
-	// part of placing a thread and two surfaces doing it independently is how the same remark
+	// Resolved by magus rather than by each client, because the arithmetic is the only hard
+	// part of placing a thread and two clients doing it independently is how the same remark
 	// comes to sit against different code in the terminal and the browser. -1 is ordinary: the
 	// working tree moves after a colleague writes, and a review covers commits a working diff
 	// does not.
@@ -837,7 +837,7 @@ type ReviewThread struct {
 // suggestion renders as a peripheral affordance the human accepts with one key, and ignoring
 // it costs nothing.
 //
-// This is the review-surface reading of the guard's own rule: deny only what cannot be
+// This is the review reading of the guard's own rule: deny only what cannot be
 // undone, explain everything else. Yanking a viewport cannot be undone, because the reader's
 // place in the diff was in their head.
 type DiffSuggestion struct {
@@ -887,7 +887,7 @@ type DiffReview struct {
 	//
 	// ONE watermark, deliberately. The obvious alternative (letting the job that watches the
 	// forge record what it has reported) means everything is already marked seen by the time
-	// the reader opens the diff, so the surface could never show them what arrived. The job
+	// the reader opens the diff, so the client could never show them what arrived. The job
 	// reads this instead and reports what lies outside it.
 	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
 	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`

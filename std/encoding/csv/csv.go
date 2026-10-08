@@ -27,7 +27,7 @@ import (
 //
 // The options are ORDINARY OPTIONAL ARGUMENTS, not an opts map. Most of the
 // stdlib's older methods take {str: any} bags, which means a misspelled key is
-// silent; a declared argument is checked. New surface should not add to that.
+// silent; a declared argument is checked. New members should not add to that.
 var Module = std.Module{
 	Name: "csv",
 	WASM: true,

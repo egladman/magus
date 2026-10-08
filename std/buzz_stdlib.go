@@ -9,7 +9,7 @@ package std
 // magus keeps its own form even where a Buzz equivalent exists, because several
 // are sandbox-aware where the bare stdlib is not: env.get/lookup honor the env
 // allowlist (a stripped secret reads as unset), whereas Buzz's os.env is raw
-// os.LookupEnv. Inside a sandbox the magus form is the safer surface.
+// os.LookupEnv. Inside a sandbox the magus form is the safer choice.
 //
 // Only genuine duplicates are listed. Entries whose magus behavior the stdlib
 // can't reproduce are deliberately absent. os.exit raises a lifecycle ExitError

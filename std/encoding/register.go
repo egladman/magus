@@ -63,7 +63,7 @@ var leafSets = []func() []std.Module{
 }
 
 // Modules returns every module std/encoding contributes to magus's host
-// surface. Each is validated exactly as std.Register validates a module
+// module set. Each is validated exactly as std.Register validates a module
 // registering the ordinary way (see std.ValidateModule's doc for why this
 // package cannot call Register itself).
 //

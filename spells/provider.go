@@ -25,7 +25,7 @@ const ListProjectsContract = "list_projects"
 // magusfile author would have written in magus\project({...}), reported by the tool
 // that already knows them. Buzz sees it as `object Project` in magus/spell (the Go
 // name carries the adjective because types.Project and types.ProjectEntry already
-// exist; the authoring surface does not need it).
+// exist; the spell API does not need it).
 //
 // The fields match that options map one for one, so a workspace has ONE vocabulary for
 // configuring a project. Two are missing: "targets" and "watch_ignore" are magus

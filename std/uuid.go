@@ -18,7 +18,7 @@ func init() { Register(UUID) }
 // ids, cache-busting suffixes, and artifact names. Native Buzz can only produce a
 // bounded random int, so anything needing a collision-free id previously reached
 // for os.time() hacks. Host-only (excluded from the browser playground) so its
-// nondeterminism never leaks into the "planned, not run" dry-run surface.
+// nondeterminism never leaks into the "planned, not run" dry-run output.
 var UUID = Module{
 	Name: "uuid",
 	WASM: true,

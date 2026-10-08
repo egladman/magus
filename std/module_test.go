@@ -209,7 +209,7 @@ func TestValidateModuleRejectsMismatchedDeclarations(t *testing.T) {
 	}
 }
 
-// TestValidateModuleRejectsMalformedMCPTools covers the agent-surface half of
+// TestValidateModuleRejectsMalformedMCPTools covers the MCP-tool half of
 // validation.
 func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 	base := Method{Name: "look", Doc: "d", Impl: covImplStrStr, Args: []Arg{{Name: "s", Type: TypeString}}, Returns: []Ret{{Type: TypeString}}}
@@ -319,7 +319,7 @@ func TestTypeTagGoType(t *testing.T) {
 // covArrow is signature.go's return separator, surrounding spaces included.
 const covArrow = " -> "
 
-// TestNoModuleDeclaresFields keeps the host surface to members Buzz can declare.
+// TestNoModuleDeclaresFields keeps the host modules to members Buzz can declare.
 //
 // A Method becomes `export extern fun name() > str` in the generated declarations,
 // so the checker knows its type and a caller's mistake is a compile error. A Field
@@ -334,7 +334,7 @@ const covArrow = " -> "
 // reference and the editor hovers all render from those doc-strings, and a magusfile
 // written against them compiled clean and failed at RUNTIME with "str is not
 // callable", inside a branch that only executes in CI. Both are Methods now, and
-// `vcs.name()` is what the surface both documents and accepts.
+// `vcs.name()` is what the module both documents and accepts.
 //
 // The Field machinery is still wired (magus-docs, langservice-manifest, and the
 // ModuleFieldEntry boundary type all render it) because removing it would change a

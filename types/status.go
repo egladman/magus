@@ -101,8 +101,8 @@ type StatusSnapshot struct {
 	// as MCPEndpoint because it answers the same question about a different listener.
 	//
 	// It is reported because the address existed only in the server's log, on a line
-	// nobody reads ("static console mounted"), so the one surface built for a person to
-	// look at was the one surface nothing told them how to reach.
+	// nobody reads ("static console mounted"), so the one page built for a person to
+	// look at was the one nothing told them how to reach.
 	Console *ConsoleStatus `json:"console,omitempty" yaml:"console,omitempty"`
 }
 

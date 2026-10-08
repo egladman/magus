@@ -385,7 +385,7 @@ func WithOpaque() Option {
 }
 
 // WithInternal marks a registration as dispatch plumbing rather than a spell a
-// user binds, keeping it out of every surface that enumerates spells.
+// user binds, keeping it out of every listing of spells.
 //
 // It exists for exactly one registration: `magusfile`. A spell is defined as a
 // library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint);

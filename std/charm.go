@@ -61,7 +61,7 @@ var Charm = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Charm"}}, Impl: CharmSet,
 		},
 		{
-			// "drop", not "remove": the Buzz surface exposes this as a map member
+			// "drop", not "remove": Buzz exposes this as a map member
 			// (charm.drop), and "remove" would be shadowed by the built-in map
 			// .remove() method, so a charm.remove call could never reach this.
 			Name:    "drop",

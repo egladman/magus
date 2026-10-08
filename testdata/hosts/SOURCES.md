@@ -11,7 +11,7 @@ Two origins, and the difference is the whole point of the table:
   transcribed it, so it cannot be partial or stale the way a reading can: its source is a pinned package and the drift
   gate compares the bytes. Prefer this over `derived` wherever a host exports anything machine-readable.
 - `published` is the host's own artifact, fetched verbatim. A failure against one of these is ours.
-- `derived` is OURS, transcribed by hand because that host publishes no schema for that surface. A failure against one of
+- `derived` is OURS, transcribed by hand because that host publishes no schema for that file. A failure against one of
   these means either magus drifted or our transcription is stale, and the `url` is where to settle it. Do not present
   these as the host's contract.
 
@@ -167,7 +167,7 @@ see.
 | `@cursor/sdk` | 1.0.31 | `dist/esm/357.js` | `beforeShellExecution:"beforeShellExecution"` | `5f626fef84ff0feba2b294dcb1029a59152ff743fbaffbfc9826defc8307544d` |
 
 OpenCode has no hook config file at all: a plugin intercepts tool calls, so there is nothing here to schema-check. Its
-plugin surface is typed instead, and the check already exists elsewhere: `docs/guides/integrations/agents` type-checks
+plugin API is typed instead, and the check already exists elsewhere: `docs/guides/integrations/agents` type-checks
 `opencode-plugin.ts` against the `Plugin` type from `@opencode-ai/plugin` (pinned at 1.18.30, the current release when
 this was read) on every `magus run lint`.
 `https://opencode.ai/config.json` is a real draft 2020-12 schema for `opencode.json`, and magus ships no such file, so

@@ -182,10 +182,10 @@ type Namespace struct {
 
 // Method declares one host function bound into the VM.
 type Method struct {
-	// Name is the canonical snake_case identifier (e.g. "read_file"); the Buzz
-	// surface exposes it as camelCase derived from this (readFile).
+	// Name is the canonical snake_case identifier (e.g. "read_file"); Buzz
+	// exposes it as camelCase derived from this (readFile).
 	Name string
-	// BuzzName, when non-empty, is the verbatim Buzz-surface name, overriding the
+	// BuzzName, when non-empty, is the verbatim Buzz name, overriding the
 	// camelCase derivation from Name. The magus DSL keeps a few snake_case
 	// primitives (has_charm) that magusfiles and the static charm extractor match
 	// by literal name; those set BuzzName so codegen doesn't rewrite them.
@@ -219,7 +219,7 @@ type Method struct {
 	// implementation the host binds.
 	//
 	// It exists because a member needing a dynamic binding (one closing over
-	// per-Open state, or binding differently per surface) otherwise had to be
+	// per-Open state, or binding differently per mode) otherwise had to be
 	// MapSet and was invisible to the checker. That is how `crypto\hash`, a
 	// function the crypto module has never had, type-checked inside a spell.
 	//
@@ -286,17 +286,17 @@ type Module struct {
 	// getRandomValues. The test is whether the BROWSER can provide it, not whether
 	// the operation sounds pure.
 	WASM bool
-	// MCPTools is the module's AGENT surface: the tools an MCP client sees. The
+	// MCPTools is the module's MCP tools, the ones an MCP client sees. The
 	// generated registry (internal/handler/mcp/gen) is emitted from this, so the
 	// tool catalog derives from the same descriptor as the bindings, the checker
 	// declarations and the reference docs.
 	MCPTools []MCPTool
 }
 
-// MCPTool is one tool on a module's MCP surface.
+// MCPTool is one MCP tool of a module.
 //
 // It hangs off the MODULE rather than being a flag on Method because the two
-// surfaces are not in bijection: every remaining tool needs state or a process
+// sets are not in bijection: every remaining tool needs state or a process
 // boundary no Buzz member has (the diff tool wants the server's live review
 // session; client runs a script in its own worker).
 type MCPTool struct {

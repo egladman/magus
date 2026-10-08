@@ -5334,7 +5334,7 @@ fun diamond() > mut Sketch {
 fun serverHttpTwin(observed: Observed = Observed{}) > mut Sketch {
     return flow("server-http", observed: observed)
         .eyebrow("magus server")
-        .title("The HTTP surface, and the one route without a guard")
+        .title("The HTTP routes, and the one route without a guard")
         .desc("Agents and the console reach /mcp, the /api/v1 read views, the review and "
             + "plan routes and eleven typed Connect services through the DNS-rebind, "
             + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
@@ -5811,7 +5811,7 @@ fun serverHttpComposed() > mut Sketch {
     final mounts = "the server mounts every handler; the figure draws the request path";
     return flow("server-http", observed: Observed{ nodes = nodes, edges = edges, stamp = "sha256:0929" })
         .eyebrow("magus server")
-        .title("The HTTP surface, and the one route without a guard")
+        .title("The HTTP routes, and the one route without a guard")
         .node("agent", label: "AI agents", sub: "Claude Code, IDE", tag: "client")
         .node("console", label: "Console PWA", sub: "dashboard, review", tag: "client")
         .node("probe", label: "kubelet", sub: "scripts, probes", tag: "client", role: Role.external)
@@ -6677,7 +6677,7 @@ test "a bent-route label never touches a stroke" {
 }
 
 
-// The figure surface. Everything above is the layout and the renderer, private to this
+// The figure API. Everything above is the layout and the renderer, private to this
 // module; everything below is what an author calls.
 
 // Look picks a box's treatment. focal takes the accent, two per figure counting focal
@@ -7718,7 +7718,7 @@ fun handlers() > magus\Layer { return newLayer("handler", dirs: [mcpDir(), graph
 fun serverHttp(layer: magus\Layer) > mut Figure !> str {
     final guard = guardDir();
     final mcp = mcpDir();
-    return of("server-http", title: "The HTTP surface")
+    return of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(without(layer.dirs, drop: [mcp]), label: "Connect RPC")

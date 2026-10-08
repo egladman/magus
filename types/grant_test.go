@@ -33,7 +33,7 @@ func (Grant) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(all[r.Intn(len(all))])
 }
 
-// Generate draws any need over the three surfaces and the three levels.
+// Generate draws any need over the three scopes and the three levels.
 func (Need) Generate(r *rand.Rand, _ int) reflect.Value {
 	scopes := []Scope{ScopeTokens, ScopeMCP, ScopeConsole}
 	return reflect.ValueOf(Need{Scope: scopes[r.Intn(3)], Level: Level(r.Intn(3))})
@@ -98,7 +98,7 @@ func TestGrantValidateRefusesLevelsAScopeHasNoMeaningFor(t *testing.T) {
 }
 
 // A guard built on a zero or invalid need would admit every credential, so Validate refuses
-// each: none is not a need, and a surface or level magus does not know is not one either.
+// each: none is not a need, and a scope or level magus does not know is not one either.
 func TestNeedValidateRefusesZeroAndInvalid(t *testing.T) {
 	t.Parallel()
 	for _, n := range []Need{

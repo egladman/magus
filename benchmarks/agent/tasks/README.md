@@ -19,7 +19,7 @@ hand-applied to `gen/`: `rm -rf gen/ && ./setup.sh` reproduces the whole task se
 
 A run is a detached `git worktree add` of that clone, so several runs of one task can
 proceed at once and no run has `node_modules`. Every check is stdlib node plus git for
-that reason, and runs identically whatever agent surface the arm provisions.
+that reason, and runs identically whatever agent integration the arm provisions.
 
 ## Answer format
 

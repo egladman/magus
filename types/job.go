@@ -1631,7 +1631,7 @@ func NewJobList(jobs []Job) JobList {
 // Only a [JobState.Editing] job is in a pair. A released, exited or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
-// would make the surface noisiest exactly when the plan is winding down. A job blocked on
+// would make the report noisiest exactly when the plan is winding down. A job blocked on
 // a dependency is not in any pair either: it claims nothing until that dependency passes.
 func jobOverlaps(jobs []Job) []JobOverlap {
 	claims := func(j Job) bool {

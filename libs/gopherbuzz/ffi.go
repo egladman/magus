@@ -1,6 +1,6 @@
 package buzz
 
-// FFI public surface for the buzz package.
+// FFI public API for the buzz package.
 //
 // The implementation lives in magus/buzz/vm (ffi.go, ffi_purego.go).
 // This file re-exports the types and functions that form the public API of

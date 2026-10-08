@@ -82,7 +82,7 @@ func TestVCSResolution_ZeroValue(t *testing.T) {
 
 // TestClassifyDrift pins the fork that `magus vcs add` and the generate gate now share.
 // They used to answer the same question in two places, so the same condition could be
-// reported two different ways depending on which surface you met it on.
+// reported two different ways depending on which client you met it on.
 func TestClassifyDrift(t *testing.T) {
 	// An input moved too: regeneration is expected, and the output belongs in the commit.
 	code, msg := ClassifyDrift(true, "v0.3.0")

@@ -26,7 +26,7 @@
 // laptop where no Actions token exists and never will. Folding these four ops into that spell
 // would make them permanently inert in the only place they are used.
 //
-// The directory says which surface each speaks to, matching spells/gitlab/ci beside them:
+// The directory says which product each speaks to, matching spells/gitlab/ci beside them:
 // vendor, then the product or API the spell talks to.
 //
 // # Enterprise

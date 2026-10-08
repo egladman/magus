@@ -379,7 +379,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						extra = append(extra, r)
 					}
 				}
-				// Unconditional: the footprint half of the ctx surface is a no-op at run
+				// Unconditional: the footprint half of the ctx API is a no-op at run
 				// time, so a computed argument is unreadable rather than merely unread and
 				// the target would cache against a footprint narrower than what it touches.
 				// Scoping this on p.TargetPolicies[...].SkipCache looks equivalent and is
@@ -719,7 +719,7 @@ func concatSource(src *interp.Source) string {
 // is checked against, and that check has two call sites: the console's run route and the server's
 // job dispatch. The dispatch admits only argvs the jobs registry recognises, deliberately, "so the
 // fire-and-forget job RPC can never be used to run an arbitrary command"; a console button able to
-// name any command would hand a browser-reachable surface exactly that. Both sites asking THIS is
+// name any command would hand a browser-reachable route exactly that. Both sites asking THIS is
 // what keeps the capability strictly smaller than a terminal's `magus run`.
 func (m *Magus) ProjectTargets(ctx context.Context, project string) []string {
 	graph, err := m.TargetGraph(ctx)

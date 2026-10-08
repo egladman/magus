@@ -17,7 +17,7 @@ import (
 
 func init() { Register(Term) }
 
-// Term is the "term" host module: the terminal surface magus already renders its
+// Term is the "term" host module: the terminal renderer magus already draws its
 // own output with, exposed so a magusfile can use it too.
 //
 // None of this is new machinery. internal/interactive/tty carries the picker, the

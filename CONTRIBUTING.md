@@ -57,7 +57,7 @@ with whichever `go` leads `PATH`, which is how CI once built golangci-lint with 
 different toolchain than the one it analyzed with, and panicked. `mise install`
 gets you both binaries at the pinned versions.
 
-## Adding to a public surface
+## Adding to the public interface
 
 magus promises that a magusfile which works today keeps working, and there is no
 plan for a 2.0. [docs/concepts/compatibility.md](https://github.com/egladman/magus/blob/main/docs/concepts/compatibility.md)
@@ -83,20 +83,20 @@ ones, a new protobuf field takes a new number, a new flag joins the current set.
 If you find yourself changing what an existing name means, that is the thing the
 promise forbids, and the answer is a second name rather than a redefinition.
 
-**Three gates catch a break before review does**, one per surface:
+**Three compatibility gates catch a break before review does**, one per public interface:
 
-| Surface        | Gate                                                                                                       |
+| Interface      | Gate                                                                                                       |
 | -------------- | ---------------------------------------------------------------------------------------------------------- |
 | CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
 | protobuf       | `buf breaking`, composed into `lint`                                                                       |
 | magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                               |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
-removed public surface. Regenerate it with `go generate ./internal/cli/...`
+removed part of the public interface. Regenerate it with `go generate ./internal/cli/...`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 
-**The fourth surface has no gate: `std/` host-module method names.** A whole-tree
+**A fourth public interface has no gate: `std/` host-module method names.** A whole-tree
 review in August 2026 established this, and it is worth knowing before you touch a
 descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
 becomes the identifier every magusfile calls, so renaming it breaks them, and
@@ -155,7 +155,7 @@ about, say so in the pull request; it is much cheaper to argue about it now than
 to keep it forever.
 
 **Deprecating** means "there is a better way now", not "this stops working". Keep
-the old surface working, point at the replacement where someone meets it rather
+the old behavior working, point at the replacement where someone meets it rather
 than only in the changelog, and list it under **Deprecated**.
 
 ## Performance changes need evidence
@@ -358,7 +358,7 @@ and put it in exactly one place.
 
 Prefer a **noun on an existing verb** over a new subcommand. `magus ls targets`
 rather than `magus targets`, because the latter invites `magus spells`, then
-`magus charms`, and the surface becomes a pile of noun-commands with no rule to
+`magus charms`, and the CLI becomes a pile of noun-commands with no rule to
 learn. One verb, a noun that says what.
 
 Enumeration is spelled `ls` everywhere: `magus ls`, `magus run ls`,
@@ -571,8 +571,8 @@ pkg/foo               # a nested project, measured from the workspace root
 ./pkg/foo  ../foo     # measured from the cwd
 ```
 
-Every project-arg surface takes those, and every surface that prints a project
-prints the bare path, rendered via `types.ProjectLabel`, which reads the root
+Every command that takes a project argument accepts those, and every command that
+prints a project prints the bare path, rendered via `types.ProjectLabel`, which reads the root
 as the workspace directory's name rather than a bare `.`. What magus prints is
 what magus takes, so nothing has to be rewritten between the two.
 

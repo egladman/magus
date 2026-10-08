@@ -73,7 +73,7 @@ var TargetPolicyOptions = []ProjectOption{
 //
 // The third dimension of the same divergence, found permissive rather than strict: the
 // engine rejected an unknown bound key and the dry-run host walked "tools" not at all,
-// so `{"go": {"minn": "1.21"}}` passed the Playground and every other preview surface
+// so `{"go": {"minn": "1.21"}}` passed the Playground and every other preview
 // and then failed the real run. A shared table makes both sides answer alike.
 //
 // No Since column because both members shipped with the mechanism. Add one the moment a

@@ -21,7 +21,7 @@ var serializeSource string
 // would stack-overflow, which in Go is a FATAL, unrecoverable error, so the
 // path is tracked and the cycle is reported as an ordinary error instead.
 // Named for upstream's declared CircularReference error (see boxedInit's doc
-// comment above): gopherbuzz's serialize surface never actually raised it
+// comment above): gopherbuzz's serialize module never actually raised it
 // until now.
 var errCircularReference = errors.New("serialize: circular reference")
 

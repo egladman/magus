@@ -418,7 +418,7 @@ func ParseTarget(s string) (Target, error) {
 }
 
 // ExecResult is the serializable {stdout, stderr, code, ok} shape every magus exec
-// surface returns (proc.exec, magus.cmd, a captured spell op); ok is code == 0. It is
+// call returns (proc.exec, magus.cmd, a captured spell op); ok is code == 0. It is
 // the boundary mirror of the richer internal run.ExecResult.
 //
 // The Buzz `object ExecResult` mirror is generated from this struct by

@@ -611,7 +611,7 @@ func (v Value) String() string {
 // place (list.append et al.), so `[any] l = mut []; l.append(l);` is a real
 // reference cycle: naive recursion here would stack-overflow, which in Go is a
 // FATAL, unrecoverable error, not something a recover() can paper over. String
-// backs str(), print, and string interpolation — upstream-visible surface — so
+// backs str(), print, and string interpolation — upstream-visible behavior — so
 // unlike an internal safety check, this must render something rather than
 // error: a revisited collection prints a placeholder and recursion stops there.
 func (v Value) stringPath(path []Value) string {

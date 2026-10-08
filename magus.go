@@ -178,8 +178,8 @@ type Magus struct {
 	server Server
 }
 
-// Server is the HTTP surface `magus server` hosts over this workspace: the MCP endpoint,
-// the console and its API routes. The CLI injects it under `magus server` ONLY, so
+// Server is the set of HTTP routes `magus server` hosts over this workspace: the MCP
+// endpoint, the console and its API. The CLI injects it under `magus server` ONLY, so
 // ordinary command paths never construct one, and it is an interface so the root magus
 // package need not import the handler packages that depend on it. The concrete
 // *server.Server satisfies it.
@@ -1010,7 +1010,7 @@ func (m *Magus) JobLimits() config.Jobs { return m.cfg.Jobs }
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
 // is clean.
 //
-// It is the SELF-REVIEW half of the review surface: what you are about to commit, before
+// It is the SELF-REVIEW half of the review API: what you are about to commit, before
 // any provider is involved. The committed-range half (base..head, a pull request) is a
 // different question and deliberately not folded in here: a range diff has to name two
 // revisions, and answering both through one signature would make the common case carry
@@ -1027,7 +1027,7 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
 		//nolint:nilerr // a workspace with no VCS has nothing to review, which is a clean
-		// tree rather than a failure; erroring would make the review surface unopenable in
+		// tree rather than a failure; erroring would make the review unopenable in
 		// exactly the workspaces where it has least to say.
 		return "", nil
 	}
@@ -1066,7 +1066,7 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 //
 // Empty rather than an error whenever the answer cannot be had: no VCS, a backend without the
 // capability, a repository with no other branches. The three are the same to the reader, and a
-// surface that has nothing to say about competition should say nothing. That is also why a
+// client that has nothing to say about competition should say nothing. That is also why a
 // backend lacking BranchChangeReporter must not be reported as "nothing competes": those are
 // different facts, and the caller can only tell them apart by getting nothing at all here.
 //
@@ -1085,10 +1085,10 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 	out, err := res.VCS.BranchChanges(ctx, m.ws.Root, res.Base, limit)
 	if errors.Is(err, types.ErrVCSUnsupported) {
 		// NAMED, not swallowed. A backend that cannot answer and a repository where nothing
-		// competes are different facts, and a surface shown the same emptiness for both tells
+		// competes are different facts, and a client shown the same emptiness for both tells
 		// the reader "nothing competes", reassurance magus has not earned. The caller reports
 		// which backend fell short so the gap is legible rather than invisible.
-		// Coded, so a surface can render the gap as a gap rather than as an empty answer, and
+		// Coded, so a client can render the gap as a gap rather than as an empty answer, and
 		// so the reader has a page explaining why an empty list here would have been a lie.
 		// Still wraps ErrVCSUnsupported: callers match the sentinel, not the prose.
 		return nil, fmt.Errorf("%w: %w",
@@ -1111,7 +1111,7 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 // A gap is REFUSED rather than answered empty, which is the opposite of BranchChanges. There,
 // silence and "nothing competes" are both true-ish and the caller can tell them apart by getting
 // nothing at all. Here an empty string reads as "this branch changed nothing", and reporting a
-// colleague's work as untouched is the one wrong answer this surface must never give.
+// colleague's work as untouched is the one wrong answer this method must never give.
 func (m *Magus) RangeDiff(ctx context.Context, base, head string, paths []string) (string, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
@@ -1447,7 +1447,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			n := s.FileCount // a fresh pointer, never a write through the shared baseline
 			f.Reach = &n
 		}
-		// One symbol crossing a project boundary makes the whole file public surface: a
+		// One symbol crossing a project boundary makes the whole file public: a
 		// reviewer needs to know the file contains something a consumer can see, and burying
 		// that because its neighbors are internal is how the signal gets missed.
 		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
@@ -1734,7 +1734,7 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 // unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
 // is a fact rather than a heuristic. Every other language returns false, which reads as "not
 // known to be module API" and never as "internal": the caller keeps PublicTo, which
-// is language-neutral, and the surface stays honest about what was not checked.
+// is language-neutral, and the answer stays honest about what was not checked.
 //
 // Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a
 // convention it merely encourages. TypeScript's `export` keyword does not qualify, because
@@ -1775,7 +1775,7 @@ func exportedFromModule(path, label, id string) bool {
 // than to the root, and a nested project consuming its parent's symbol reads as external.
 //
 // A file owned by nothing is NOT counted as external. It affects no target and rebuilds
-// nothing, so calling it a downstream consumer would inflate the surface with paths that
+// nothing, so calling it a downstream consumer would inflate the count with paths that
 // cannot break.
 func (m *Magus) externalReferents(g *knowledge.Graph, symbolID, owner string) ([]string, int) {
 	refs, ok := g.Refs(symbolID)

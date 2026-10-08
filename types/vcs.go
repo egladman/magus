@@ -766,7 +766,7 @@ type BranchChange struct {
 	// of somebody else's.
 	//
 	// It decides what the answer is AS OF, which the two kinds do not share: a local branch is
-	// current, and a remote-tracking one is exactly as fresh as the reader's last fetch. A surface
+	// current, and a remote-tracking one is exactly as fresh as the reader's last fetch. A client
 	// that rendered both with one caption would be overstating half of them.
 	Local bool `json:"local,omitempty"`
 }

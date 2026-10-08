@@ -98,7 +98,7 @@ export fun planArgs(dir: str, depth: str) > [str] {
 }
 
 // candidateMagus is a magus command run by the candidate's own magus. The job's magus is
-// main's, and a change that adds host surface its own magusfile uses cannot even be
+// main's, and a change that adds a host module member its own magusfile uses cannot even be
 // loaded by it. Validation runs the change's code anyway; apply never does, and keeps
 // main's binary. `go run` builds it as one argv, since a hook gets no shell, into the
 // GOCACHE of the candidate's own home, which the queue gives every hook. The spell

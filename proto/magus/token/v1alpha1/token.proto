@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the server's stored tokens and its live share link. It is a second door onto
+// API over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //
@@ -37,7 +37,7 @@ service TokenService {
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse);
 }
 
-// Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+// Level is how much of one scope a grant reaches. Levels are ordered: a higher level includes
 // every lower one. The zero value is none.
 enum Level {
   LEVEL_UNSPECIFIED = 0; // none
@@ -45,7 +45,7 @@ enum Level {
   LEVEL_WRITE = 2;
 }
 
-// Grant is what a token may do: one level per surface, as the server enforces it.
+// Grant is what a token may do: one level per scope, as the server enforces it.
 message Grant {
   Level tokens = 1;
   Level mcp = 2;
@@ -63,8 +63,8 @@ enum CredentialClass {
 
 // TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
 // revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
-// hash), the class, the grant, the expiry, and the name. A list is still an intelligence
-// surface, so it omits the full hash, any filesystem path, and the creation time.
+// hash), the class, the grant, the expiry, and the name. A list is still a source of intelligence
+// for an attacker, so it omits the full hash, any filesystem path, and the creation time.
 message TokenInfo {
   // 2 (identifier) and 3 (scope) gave way to id and grant; 4 (created) leaked timing a list UI
   // does not need; 6 (last_used) was never populated.

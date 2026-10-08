@@ -20,7 +20,7 @@ const (
 // scopes is the order a Grant renders and parses in.
 var scopes = []Scope{ScopeTokens, ScopeMCP, ScopeConsole}
 
-// Level is how much of one surface a credential may use. Levels are ordered: a higher level
+// Level is how much of one scope a credential may use. Levels are ordered: a higher level
 // includes every lower one.
 type Level uint8
 
@@ -69,8 +69,8 @@ func (l *Level) UnmarshalText(b []byte) error {
 	return nil
 }
 
-// Grant is what a credential may do: one level per surface. The zero value grants nothing.
-// It is a struct so a new surface is a compile error at every site that builds one.
+// Grant is what a credential may do: one level per scope. The zero value grants nothing.
+// It is a struct so a new scope is a compile error at every site that builds one.
 type Grant struct {
 	Tokens  Level `json:"tokens,omitzero" yaml:"tokens,omitempty"`
 	MCP     Level `json:"mcp,omitzero" yaml:"mcp,omitempty"`
@@ -87,7 +87,7 @@ var (
 	GrantSocketPeer = Grant{MCP: LevelWrite, Console: LevelWrite}
 )
 
-// Level returns the grant's level on s, and LevelNone for a surface it does not know.
+// Level returns the grant's level on s, and LevelNone for a scope it does not know.
 func (g Grant) Level(s Scope) Level {
 	switch s {
 	case ScopeTokens:
@@ -100,7 +100,7 @@ func (g Grant) Level(s Scope) Level {
 	return LevelNone
 }
 
-// Validate refuses a level a surface has no meaning for. Token management and MCP have no read
+// Validate refuses a level a scope has no meaning for. Token management and MCP have no read
 // half, so tokens=read and mcp=read are errors, as is any level past write.
 func (g Grant) Validate() error {
 	var errs []error
@@ -122,11 +122,11 @@ func validLevel(s Scope, l Level) error {
 	return nil
 }
 
-// Allows reports whether g reaches n: its level on n's surface is at least n's level. A need
+// Allows reports whether g reaches n: its level on n's scope is at least n's level. A need
 // of LevelNone is met by every grant.
 func (g Grant) Allows(n Need) bool { return g.Level(n.Scope) >= n.Level }
 
-// Within reports whether g is at most outer on every surface: everything g may do, outer may
+// Within reports whether g is at most outer on every scope: everything g may do, outer may
 // do too.
 func (g Grant) Within(outer Grant) bool {
 	for _, s := range scopes {
@@ -137,7 +137,7 @@ func (g Grant) Within(outer Grant) bool {
 	return true
 }
 
-// String renders the surfaces g grants, as "mcp=write,console=read", and "" for nothing.
+// String renders the scopes g grants, as "mcp=write,console=read", and "" for nothing.
 func (g Grant) String() string {
 	var parts []string
 	for _, s := range scopes {
@@ -158,8 +158,8 @@ type Need struct {
 // String renders the need as "console=write".
 func (n Need) String() string { return string(n.Scope) + "=" + n.Level.String() }
 
-// Validate refuses a need no grant is meant to meet or every grant meets: an unknown surface,
-// a level the surface has no meaning for, and LevelNone, which would admit any credential.
+// Validate refuses a need no grant is meant to meet or every grant meets: an unknown scope,
+// a level the scope has no meaning for, and LevelNone, which would admit any credential.
 func (n Need) Validate() error {
 	if !slices.Contains(scopes, n.Scope) {
 		return fmt.Errorf("need: unknown scope %q", n.Scope)
@@ -200,13 +200,13 @@ const (
 	KindSocketPeer CredentialKind = "socket-peer"
 )
 
-// CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP surface and nothing
+// CredentialStdio is what a `magus mcp` tool call is admitted as: the MCP scope and nothing
 // past it, the grant a connector token holds. It has no ID because it has no secret, and one
 // process serves one caller.
 var CredentialStdio = Credential{Kind: KindStdio, Grant: GrantConnector}
 
 // CredentialSocketPeer is what a request on a magus unix socket is admitted as once its peer's
-// uid matches the server's: MCP and the console surfaces, never token management. A build step
+// uid matches the server's: the MCP and console scopes, never token management. A build step
 // runs as the same user and can reach the socket, and minting a token would let it keep access
 // past the run, which is also why landlock keeps it from the operator file. It has no ID
 // because it has no secret.

@@ -110,7 +110,7 @@ fun claude_agent_command() > str {
 }
 
 // The lifecycle wrappers judge nothing, which is why they are built from
-// claude_buzz_command directly: their names are their own rather than a surface of the
+// claude_buzz_command directly: their names are their own rather than an entry of the
 // hook template.
 fun claude_rehydrate_command() > str {
     return claude_buzz_command("magus-rehydrate", flags: [<str>]);
@@ -284,8 +284,8 @@ test "a Read is both recorded and judged" {
 }
 
 test "guard commands name the Buzz glue, never the sh copies" {
-    assert\isTrue(claude_guard_command().indexOf("magus-command.buzz") != null, "command surface");
-    assert\isTrue(claude_path_command().indexOf("magus-path.buzz") != null, "path surface");
+    assert\isTrue(claude_guard_command().indexOf("magus-command.buzz") != null, "command hook");
+    assert\isTrue(claude_path_command().indexOf("magus-path.buzz") != null, "path hook");
     assert\isTrue(claude_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(claude_guard_command().indexOf(".sh") == null, "no POSIX shell dependency");
     assert\isTrue(claude_guard_command().indexOf(" -s docs/") != null, "quiet interpreter");
@@ -318,7 +318,7 @@ test "the spawn entry also sees every continuation" {
 }
 
 test "the one per-entry flag rides after the argv separator" {
-    // Only the spawn surface declares a capability, and it is the only entry that differs
+    // Only the spawn hook declares a capability, and it is the only entry that differs
     // from the bare guard command at all.
     assert\equal(claude_agent_command(), claude_guard_command() + " --observes-skill-loads",
         "the spawn entry is the guard command plus one forwarded flag");
@@ -328,11 +328,11 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
     // The glue reads the host from this argument and nowhere else, and refuses a call
     // without it, so every entry that reaches the glue carries the declaration's own name.
     final named = " -- --agent-name {mgs_getName()}";
-    assert\isTrue(claude_guard_command().endsWith(named), "command, mcp and skill surfaces");
-    assert\isTrue(claude_path_command().endsWith(named), "path surface");
-    assert\isTrue(claude_observe_command().endsWith(named), "read surface");
+    assert\isTrue(claude_guard_command().endsWith(named), "command, mcp and skill hooks");
+    assert\isTrue(claude_path_command().endsWith(named), "path hook");
+    assert\isTrue(claude_observe_command().endsWith(named), "read hook");
     assert\isTrue(claude_checkpoint_command().endsWith(named), "Stop checkpoint");
-    assert\isTrue(claude_agent_command().indexOf(named) != null, "spawn surface");
+    assert\isTrue(claude_agent_command().indexOf(named) != null, "spawn hook");
     assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null,
         "rehydrate reads no host, and would report the argument as unsupported");
 }
@@ -377,12 +377,12 @@ test "the interpreter is the same string on every machine" {
     // checkout computed the other one and reported the harness uncovered. The host
     // expands CLAUDE_PROJECT_DIR, so the string names no machine's layout.
     final head = "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/";
-    // Every surface, because one command built by hand rather than through the helper
+    // Every hook, because one command built by hand rather than through the helper
     // is one entry describe keeps replacing against a config that already holds it.
-    assert\isTrue(claude_guard_command().startsWith(head), "command mcp and skill surfaces");
-    assert\isTrue(claude_agent_command().startsWith(head), "spawn surface");
-    assert\isTrue(claude_path_command().startsWith(head), "path surface");
-    assert\isTrue(claude_observe_command().startsWith(head), "read surface");
+    assert\isTrue(claude_guard_command().startsWith(head), "command mcp and skill hooks");
+    assert\isTrue(claude_agent_command().startsWith(head), "spawn hook");
+    assert\isTrue(claude_path_command().startsWith(head), "path hook");
+    assert\isTrue(claude_observe_command().startsWith(head), "read hook");
     assert\isTrue(claude_rehydrate_command().startsWith(head), "SessionStart rehydrate");
     assert\isTrue(claude_checkpoint_command().startsWith(head), "Stop checkpoint");
     assert\isTrue(claude_session_command().startsWith(head), "SessionStart PATH");
@@ -435,7 +435,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop and Subage
     assert\equal(post_path[1], "PostToolUse", "a finished spawn reports its child's id");
     final post_entries = post["entries"] as [any];
     assert\equal(post_entries.len(), 1, "only the spawn matcher runs after the call");
-    assert\equal(post_entries[0]["matcher"] as? str, SPAWN_MATCHER, "the same tools the spawn surface matches");
+    assert\equal(post_entries[0]["matcher"] as? str, SPAWN_MATCHER, "the same tools the spawn hook matches");
     final start = entries[2];
     final start_path = start["path"] as [str];
     assert\equal(start_path[1], "SessionStart", "PATH on a fresh start, rehydrate on compact");
