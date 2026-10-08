@@ -65,7 +65,9 @@ type ProcessStdio struct {
 //
 // When a record stage writes Stdin directly, it then starts reading its records (see
 // ReadRecords), after the walk: reading them puts a relay in Stdin's place, which no
-// walk can follow back.
+// walk can follow back. When another magus stage writes Stdin directly, it keeps a
+// second descriptor on the pipe instead. Either is what the writer waits to see before
+// it exits (see AwaitReaderProof).
 func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 	p := &pipeline{ready: make(chan struct{})}
 	s.pipeline = p
@@ -89,11 +91,15 @@ func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 		ups, _ := walkUpstream(ctx, in, takesLocks)
 		p.add(ups)
 		if recordsFrom == 0 {
+			if slices.ContainsFunc(ups, func(u upstreamStage) bool { return u.depth == 0 }) {
+				p.holdProof(stdin)
+			}
 			return
 		}
 		r, err := ReadRecords(stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "magus: pid %d upstream writes records this process cannot read: %v\n", recordsFrom, err)
+			p.holdProof(stdin)
 			return
 		}
 		p.mu.Lock()
@@ -201,7 +207,8 @@ func RecordPipeExit(root string, cfg config.Config, status int, signal string) {
 // does anything on a platform where the kernel cannot prove it.
 //
 // It blocks while a reader is a shell child that has yet to exec its command, up to
-// pipeExecWait, since the shell forks every stage of a pipeline at once.
+// pipeExecWait, since the shell forks every stage of a pipeline at once and a stage may
+// run other commands before it execs.
 func ReadByMagus(ctx context.Context, out *os.File) bool {
 	_, ok := ReaderArgv(ctx, out)
 	return ok
@@ -230,6 +237,41 @@ func ReaderArgv(ctx context.Context, out *os.File) (argv []string, ok bool) {
 		return true
 	})
 	return argv, ok
+}
+
+// AwaitReaderProof holds this process, a stage writing out, until every magus reading out
+// as its stdin whose argv proves answers true for has proven this stage upstream of it,
+// or has exited, or limit has passed. A reader proves its upstream from the kernel, which
+// it cannot do once this stage has exited, and it may get to that late on a loaded
+// machine. It has proven it once it holds the pipe at a descriptor besides stdin, or no
+// longer at stdin (see ProveUpstream). limit only frees a writer whose reader failed its
+// proof. It returns at once where the kernel cannot prove a pipe's peers.
+func AwaitReaderProof(out *os.File, proves func(argv []string) bool, limit time.Duration) {
+	self := os.Getpid()
+	p, err := pipepeer.WriteEnd(self, int(out.Fd()))
+	if err != nil {
+		return
+	}
+	readers, err := p.Readers()
+	if err != nil {
+		return
+	}
+	unproven := func(pid int) bool {
+		fds := p.ReadFDs(pid)
+		return len(fds) == 1 && fds[0] == 0
+	}
+	pending := slices.DeleteFunc(readers, func(pid int) bool {
+		if pid == self || !unproven(pid) || !pipepeer.SameExecutable(pid) {
+			return true
+		}
+		argv, err := pipepeer.Args(pid)
+		return err != nil || !proves(argv)
+	})
+	deadline := time.Now().Add(limit)
+	for len(pending) > 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+		pending = slices.DeleteFunc(pending, func(pid int) bool { return !unproven(pid) })
+	}
 }
 
 // RecordUpstream returns the pid of a magus stage writing in directly, proven from the
@@ -343,14 +385,24 @@ func (b *byteRelay) pump(w io.WriteCloser) {
 }
 
 // pipeExecWait bounds how long a peer proof waits for a shell child to exec its command.
-// A fork reaches exec within milliseconds; the bound only matters to a peer that never
-// execs, like a subshell, whose own children are what the proof finds meanwhile.
-const pipeExecWait = 250 * time.Millisecond
+// The proof waits for the exec itself, however long a loaded machine or a subshell like
+// `(sleep 1; exec magus ...)` takes to reach it: a peer judged before it execs is judged
+// by the shell it still is. A fork that sits blocked instead, like a bash `while read`
+// loop, is let go once seen blocked for pipeBlockedFor. The bound only frees a proof
+// whose peer keeps working without ever exec'ing, like `(make; cat out)`.
+const pipeExecWait = 3 * time.Second
+
+// pipeBlockedFor is how long a fork must sit blocked, with no child and not one step
+// taken, before a peer proof stops waiting for it to exec. A fork on its way to exec is
+// runnable even when a loaded machine gives it no CPU, so this only has to outlast a
+// fork's brief waits on the kernel before its exec.
+const pipeBlockedFor = 50 * time.Millisecond
 
 // pollPeers asks peers until one matches, skipping those skip names. It keeps asking
-// only while some peer is a fork that has not exec'd yet.
+// only while some peer is a fork that has not exec'd yet and is not sitting blocked.
 func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match func(pid int) bool) bool {
 	deadline := time.Now().Add(pipeExecWait)
+	blocked := map[int]blockedFork{}
 	for {
 		pids, err := peers()
 		if err != nil {
@@ -365,7 +417,7 @@ func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match fun
 			// this executable when its parent is one: a magus forking a target, a test
 			// binary forking the next command.
 			if pipepeer.ExecPending(pid) {
-				pending = true
+				pending = pending || !sitsBlocked(blocked, pid)
 				continue
 			}
 			if match(pid) {
@@ -381,6 +433,28 @@ func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match fun
 		case <-time.After(5 * time.Millisecond):
 		}
 	}
+}
+
+// blockedFork is the first sample of a fork seen blocked, and when it was taken.
+type blockedFork struct {
+	first pipepeer.Activity
+	since time.Time
+}
+
+// sitsBlocked reports whether the fork pid has sat blocked since the first of these
+// samples for pipeBlockedFor, recording the samples in seen. A fork that cannot be
+// sampled never counts as blocked.
+func sitsBlocked(seen map[int]blockedFork, pid int) bool {
+	now, err := pipepeer.Sample(pid)
+	if err != nil {
+		return false
+	}
+	b, ok := seen[pid]
+	if !ok || !b.first.StillBlocked(now) {
+		seen[pid] = blockedFork{first: now, since: time.Now()}
+		return false
+	}
+	return time.Since(b.since) >= pipeBlockedFor
 }
 
 // WithProcessStdio gives the run its process's standard streams. See ProcessStdio.
@@ -930,6 +1004,36 @@ type pipeline struct {
 	// records reads the stdin recordsFrom writes, when that stage writes records.
 	records     *report.Reader
 	recordsFrom int
+	// proof is a second descriptor on stdin's pipe, held from the end of the walk until
+	// stdin closes. It is how the stage writing stdin sees the walk is done (see
+	// AwaitReaderProof).
+	proof *os.File
+}
+
+// holdProof keeps a second descriptor on stdin's pipe, so the stage writing it sees this
+// process has proven it. A record reader needs none: its relay moves stdin off the pipe.
+func (p *pipeline) holdProof(stdin *os.File) {
+	dup, restore, err := dupForDrain(stdin)
+	if err != nil {
+		return
+	}
+	// The dup is never read; stdin keeps the blocking mode it had.
+	_ = restore()
+	p.mu.Lock()
+	p.proof = dup
+	p.mu.Unlock()
+}
+
+// releaseProof closes the descriptor holdProof kept, with stdin, so a stage this process
+// stops reading sees the pipe close as it would at exit.
+func (p *pipeline) releaseProof() {
+	p.mu.Lock()
+	proof := p.proof
+	p.proof = nil
+	p.mu.Unlock()
+	if proof != nil {
+		_ = proof.Close()
+	}
 }
 
 func (p *pipeline) add(ups []upstreamStage) {
@@ -1080,6 +1184,7 @@ func (p *pipeline) stopReading(stdin *os.File) func() {
 	sp := p.spool
 	p.mu.Unlock()
 	closeStdin := func() {
+		p.releaseProof()
 		if stdin != nil {
 			_ = stdin.Close()
 		}

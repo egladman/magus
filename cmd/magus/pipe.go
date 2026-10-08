@@ -30,20 +30,35 @@ type (
 // writes to and the one writing to it.
 func proveStdio(ctx context.Context, args []string) context.Context {
 	ctx = context.WithValue(ctx, pipeStageKey{}, startPipeStage(ctx, args))
-	argv := append([]string{os.Args[0]}, args...)
-	sub, subArgs := peekSub(args)
-	locks := (sub == "run" || sub == "affected") && takesProjectLocks(argv)
-	if !locks && !tradesRecords(args) && !handlesPlan(sub, subArgs) {
+	if !provesUpstream(append([]string{os.Args[0]}, args...)) {
 		return ctx
 	}
 	s := &magus.ProcessStdio{Stdin: os.Stdin, Stdout: os.Stdout, TakesLocks: takesProjectLocks}
-	// Only run and buzz read records: affected takes its input from the VCS or, with
-	// --stdin, as paths.
-	if (sub == "run" || sub == "buzz") && tradesRecords(args) {
+	if readsPipeRecords(args) {
 		s.WritesRecords = writesPipeRecords
 	}
 	s.ProveUpstream(ctx)
 	return context.WithValue(ctx, processStdioKey{}, s)
+}
+
+// provesUpstream reports whether a magus invoked with argv (argv[0] first) proves the
+// magus stages upstream of it at start, as proveStdio does.
+func provesUpstream(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	args := argv[1:]
+	sub, subArgs := peekSub(args)
+	locks := (sub == "run" || sub == "affected") && takesProjectLocks(argv)
+	return locks || tradesRecords(args) || handlesPlan(sub, subArgs)
+}
+
+// readsPipeRecords reports whether a magus invoked with args reads the records a record
+// stage writing its stdin writes. Only run and buzz do: affected takes its input from
+// the VCS or, with --stdin, as paths.
+func readsPipeRecords(args []string) bool {
+	sub, _ := peekSub(args)
+	return (sub == "run" || sub == "buzz") && tradesRecords(args)
 }
 
 // writesPipeRecords is pipeRecordStage over a full argv, as the kernel reports one.
@@ -54,9 +69,8 @@ func writesPipeRecords(argv []string) bool { return len(argv) > 0 && pipeRecordS
 type pipeStage struct {
 	done chan struct{}
 	// records is set when stdout carries records: this process is a record stage and a
-	// magus reads its stdout. proved is when the reader was proven.
+	// magus reads its stdout.
 	records bool
-	proved  time.Time
 }
 
 // startPipeStage starts proving who reads stdout. A process that is no record stage
@@ -70,7 +84,7 @@ func startPipeStage(ctx context.Context, args []string) *pipeStage {
 	go func() {
 		defer close(s.done)
 		if magus.ReadByMagus(ctx, os.Stdout) {
-			s.records, s.proved = true, time.Now()
+			s.records = true
 		}
 	}()
 	return s
@@ -98,18 +112,20 @@ func pipeRecordsIn(ctx context.Context) (*report.Reader, int) {
 	return s.Records()
 }
 
-// pipeReaderGrace is how long a record stage outlives the proof of its reader. The
-// reader proves its upstream from the kernel, which it cannot do once the upstream has
-// exited, and it does so within milliseconds of starting.
-const pipeReaderGrace = 250 * time.Millisecond
+// pipeReaderProofWait bounds how long a record stage waits for the magus reading its
+// stdout to prove it. A reader proves its upstream as soon as it starts, however long
+// that takes on a loaded machine; the bound only frees a writer whose reader failed its
+// proof and still holds the pipe, waiting for the end of a stream it never reads.
+const pipeReaderProofWait = 10 * time.Second
 
-// linger holds a record stage back from exiting until its reader has had the time to
-// prove it. A stage that ran longer than that pays nothing.
+// linger holds a record stage back from exiting until every magus reading its stdout
+// has proven it, which none can do once this stage has exited: a reader slowed by load
+// past any fixed grace would otherwise find no upstream at all.
 func (s *pipeStage) linger() {
 	if !s.writesRecords() {
 		return
 	}
-	time.Sleep(time.Until(s.proved.Add(pipeReaderGrace)))
+	magus.AwaitReaderProof(os.Stdout, provesUpstream, pipeReaderProofWait)
 }
 
 // pipeRecordStage reports whether a magus invoked with args (argv without argv[0])

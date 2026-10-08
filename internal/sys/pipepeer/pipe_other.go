@@ -17,6 +17,12 @@ func (Pipe) Readers() ([]int, error) { return nil, ErrUnsupported }
 // ReadBy is always false here.
 func (Pipe) ReadBy(_ int) bool { return false }
 
+// ReadFDs returns nil: no descriptor can be proven.
+func (Pipe) ReadFDs(_ int) []int { return nil }
+
+// Sample returns ErrUnsupported.
+func Sample(_ int) (Activity, error) { return Activity{}, ErrUnsupported }
+
 // Writers always fails with ErrUnsupported here.
 func (Pipe) Writers() ([]int, error) { return nil, ErrUnsupported }
 

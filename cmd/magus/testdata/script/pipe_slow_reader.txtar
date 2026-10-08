@@ -1,0 +1,58 @@
+# A magus stage proves the stage writing its stdin from the kernel, which it cannot do
+# once that stage has exited, so the writer waits for its reader: for the reader to
+# exec, however long that takes, then for the reader to prove it. The sleeps stand in
+# for a reader slow to start on a loaded machine.
+[windows] skip 'no kernel API proves the peers of an anonymous pipe'
+
+# A record reader slow to exec still reads records rather than prose, and hands the run
+# after it the projects the first run ran on.
+exec bash -c 'set -o pipefail; magus run format a | (sleep 1; exec magus buzz relay.buzz) | magus run lint'
+cmp log/order want-relay
+
+# A reader that walks upstream only for its locks, slow to exec, still sees its
+# upstream fail.
+! exec bash -c 'magus buzz boom.buzz | (sleep 1; exec magus affected lint)'
+stderr 'MGS3030'
+
+# Run back to back on a loaded machine, such a reader sees its failed upstream every
+# time, however late it gets to look.
+exec bash -c 'for i in 1 2 3 4 5 6; do if magus buzz boom.buzz 2>/dev/null | magus affected lint 2>err; then echo "pass $i missed its failed upstream"; exit 1; fi; grep -q MGS3030 err || { cat err; exit 1; }; done'
+
+-- want-relay --
+format a
+lint a
+-- relay.buzz --
+import "pipe";
+
+fun main(args: [str]) > void !> any {
+    foreach (rec in pipe\all()) {
+        pipe\emit(rec);
+    }
+}
+-- boom.buzz --
+fun main(args: [str]) > void !> any {
+    throw "boom";
+}
+-- log/.keep --
+-- magus.yaml --
+{}
+-- .gitignore --
+.magus/
+-- magusfile.buzz --
+import "magus";
+magus\project({"name": "pipe-root"});
+-- a/magusfile.buzz --
+import "magus";
+import "proc";
+
+magus\project({"targets": {
+    "format": {"skip_cache": "logs per invocation"},
+    "lint": {"skip_cache": "logs per invocation"},
+}});
+
+fun mark(what: str) > void !> any {
+    proc\exec("sh", ["-c", "echo {what} >> ../log/order"]);
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void !> any { mark("format a"); }
+export fun lint(ctx: magus\Context, args: [str]) > void !> any { mark("lint a"); }
