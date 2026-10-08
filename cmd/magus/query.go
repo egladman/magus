@@ -60,6 +60,7 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
 	gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
+	bindQueryStdin(fs)
 	flags, positionals := partitionFlags(fs, args)
 	kept = make([]string, 0, len(args))
 	for i := 0; i < len(flags); i++ {
@@ -92,11 +93,14 @@ func splitQueryNegations(args []string) (kept, negations []string) {
 func queryCmd(ctx context.Context, root string, args []string) error {
 	args, negations := splitQueryNegations(args)
 	var qf *gen.QueryFlags
+	var fromStdin *bool
 	pos, err := cmdParse("query", args, func(fs *flag.FlagSet) {
 		qf = gen.BindQuery(fs, gen.QueryDefaults{URL: defaultLogViewerURL})
+		fromStdin = bindQueryStdin(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus query <terms> [flags]")
-			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json] [--open] [--attempts] [--identity] [--publish]")
+			fmt.Fprintln(os.Stderr, "       magus query output <ref> [-o json|jsonl] [--open] [--attempts] [--identity] [--publish]")
+			fmt.Fprintln(os.Stderr, "       magus query output --stdin")
 			fmt.Fprintln(os.Stderr, "       magus query invocation <id> [-o json] [--secrets]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeQueryDefinition)
@@ -113,6 +117,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintf(os.Stderr, "  %-38s open it in the browser log viewer\n", hint.QueryOutput.With("out1a2b3c", "--open"))
 			fmt.Fprintf(os.Stderr, "  %-38s list the ref's stored attempts\n", hint.QueryOutput.With("out1a2b3c", "--attempts"))
 			fmt.Fprintf(os.Stderr, "  %-38s the run's identity + cache-key digests\n", hint.QueryOutput.With("out1a2b3c", "--identity"))
+			fmt.Fprintf(os.Stderr, "  %-38s print records from -o jsonl; writes nothing\n", hint.QueryOutput.With("--stdin"))
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintf(os.Stderr, "`%s <id>` reads one run's journal back by the id shown as\n", hint.QueryInvocation.Leaf())
 			fmt.Fprintf(os.Stderr, "`inv:` in %s:\n", hint.QueryOutput.With("<ref>", "--identity"))
@@ -135,6 +140,23 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 
 	// Output-reference retrieval is an EXPLICIT subcommand (`magus query output <ref>`), not a
 	// shape-routed positional, so a search term can never collide with a ref id.
+	if *fromStdin {
+		if len(pos) != 1 || pos[0] != hint.QueryOutput.Leaf() {
+			return usagef("magus query: --stdin applies only to `%s --stdin`, which takes no ref", hint.QueryOutput)
+		}
+		if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
+			// A record on stdin is untrusted: printed, never published or handed to a browser.
+			return usagef("magus query output --stdin: --attempts, --identity, --publish, --open and --print act on a stored run; a record on stdin is only printed")
+		}
+		outOpts, oerr := outputOptionsOrDefault()
+		if oerr != nil {
+			return oerr
+		}
+		if outOpts.Format != FormatText {
+			return usagef("magus query output --stdin: -o %s is not supported; it prints each record's output, and the records themselves are already the structured form", outOpts.Format)
+		}
+		return printOutputRecords(os.Stdin, os.Stdout, os.Stderr)
+	}
 	if len(pos) >= 1 && pos[0] == hint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
 			fmt.Fprintf(os.Stderr, "%s: expected exactly one ref (e.g. %s)\n", hint.QueryOutput, hint.QueryOutput.With("out1a2b3c"))
@@ -303,15 +325,6 @@ type outputRefOpts struct {
 	out        OutputOptions // -o: text prints raw bytes, json/yaml prints the descriptor record
 }
 
-// outputRefRecord is the -o json/yaml projection of a stored output: its descriptor plus the
-// captured output as an opaque verbatim field. The descriptor DESCRIBES the run (project/target/
-// status/timing); the output is the payload, never parsed, so structure lives in the record,
-// not in an interpretation of the bytes.
-type outputRefRecord struct {
-	magus.OutputDescriptor
-	Output string `json:"output"`
-}
-
 // queryOutputRef retrieves a target's captured output by reference id (or unique prefix). The
 // default prints the exact bytes to stdout (pipe-friendly); -o json/yaml prints the descriptor
 // record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
@@ -319,13 +332,13 @@ type outputRefRecord struct {
 func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
 	// What this verb emits by default is the raw bytes a run captured, and bytes have no
 	// fields to template and no identity to name. Only the record WRAPPING them has a
-	// shape, which is why json and yaml work and the rest are refused rather than
+	// shape, which is why json, jsonl and yaml work and the rest are refused rather than
 	// silently answered with the bytes: the accepted-and-ignored failure -o exists to
 	// avoid, and worse here than elsewhere because the fallback looks like real output.
 	switch o.out.Format {
-	case FormatText, FormatJSON, FormatYAML:
+	case FormatText, FormatJSON, FormatJSONL, FormatYAML:
 	default:
-		return usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json and yaml (the record around the bytes) are the only structured forms", o.out.Format)
+		return usagef("magus query output: -o %s is not supported; a captured log has no fields to render, so json, jsonl and yaml (the record around the bytes) are the only structured forms", o.out.Format)
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -384,12 +397,20 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// Remote-aware: a ref unknown locally may have been published from CI or a
 	// teammate's machine, so the print path consults the remote bundle namespace
 	// before reporting it missing.
+	if o.out.Format != FormatText {
+		rec, rerr := m.OutputRecordByRef(ctx, ref)
+		if rerr != nil {
+			return reportRefLookupError(ctx, m, ref, rerr)
+		}
+		if o.out.Format == FormatJSONL {
+			// A slice, or writeJSONL would stream one of the record's list fields.
+			return emitFormatted(o.out, []magus.OutputRecord{rec})
+		}
+		return emitFormatted(o.out, rec)
+	}
 	data, desc, err := m.OutputByRefRemote(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
-	}
-	if o.out.Format == FormatJSON || o.out.Format == FormatYAML {
-		return emitFormatted(o.out, outputRefRecord{OutputDescriptor: desc, Output: string(data)})
 	}
 	// On stderr, after the bytes: stdout stays pipe-clean, and a reader who has just
 	// looked at what a run PRODUCED is one step from wanting to run it. Only worth
