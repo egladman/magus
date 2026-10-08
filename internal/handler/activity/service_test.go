@@ -427,7 +427,7 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 // TestEncodeKindCoversEveryTrailKind: a kind with no proto value encodes to
 // KIND_UNSPECIFIED, which is indistinguishable from "unset" and cannot be selected with
 // ActivityQuery.kinds, so the event is written, stored, and then invisible to the one
-// surface that exists to read it. KindCredentialGrant shipped that way and the docs
+// client that exists to read it. KindCredentialGrant shipped that way and the docs
 // promised a governance view that did not exist.
 //
 // Guards every kind, not just that one, so the next producer cannot repeat it.

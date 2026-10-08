@@ -1,4 +1,4 @@
-# Adapting the agent surface to this workspace
+# Adapting the agent integration to this workspace
 
 The magus skills are one shared body installed identically into every repo. They
 teach the tool, not your workspace. They cannot know that a target here is slow, a
@@ -184,7 +184,7 @@ To adapt one, declare an override; change no import and no provider call.
      The token stays a secret ref (`MAGUS_MCP_TOKEN`).
    - Commit the `magus.yaml` entry and the forked spell together.
 
-{{if .Full}}That is the whole self-improvement surface for Buzz harnesses: the `magus.yaml`
+{{if .Full}}That is the whole self-improvement mechanism for Buzz harnesses: the `magus.yaml`
 declaration is the ownership switch, and the one line a reviewer sees. A Magus upgrade
 never changes a pinned harness; a newer shipped spell arrives only when someone runs
 the lock target with `:update`, and your workspace fork is unaffected until you

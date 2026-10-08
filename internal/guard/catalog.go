@@ -42,7 +42,7 @@ var denyRuleDocs = []types.RuleDoc{
 		Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
 			"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, and its deny says only what holds for it: the loop occupies a tool slot for the whole wait. " +
 			"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
-			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor surface is for. " +
+			"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor is for." +
 			"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules."},
 	{Name: string(denyRuleCacheDirWrite), Catches: "a write into this checkout's magus cache dir, which magus alone owns"},
 	{Name: string(denyRuleChainedRun),
@@ -138,7 +138,7 @@ var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleTokenState),
 		Catches: "an agent reading or writing the token secrets: the operator token file or the token store",
 		Why: "The operator token file (`magus/mcp_token` in the user state dir) and the token store (`magus/tokens.d`) are the credentials the server checks, so reading one hands a session a grant and writing one mints a token. " +
-			"Refused on both graded surfaces: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
+			"Refused for both kinds of call: an editor write aimed at them, and any shell line that names them, whatever the command (`cat`, `cp`, a redirect, an interpreter's inline script). A path is matched by name anywhere in a word and by resolving it against where the call runs. " +
 			"A bare listing passes (`ls`, `du`, `stat`, `test` of the state dir or a token file), alone or piped into a text filter such as `head` or `grep`: it shows file names, and none is a secret, since the operator file is always `mcp_token` and a store entry is `<token name>.json`, the name `magus config mcp connector ls` already prints. A listing inside a substitution, or piped into anything else (`| xargs cat`), is refused like any mention. " +
 			"Reads through a host's read tool are not graded: that hook only records, by contract. This is a seatbelt, not a boundary against a process running as the user."},
 	{Name: string(denyRuleOutputPipe),
@@ -261,7 +261,7 @@ var denyRuleDocs = []types.RuleDoc{
 			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite),
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
-		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back on both surfaces, a file write and a shell line, in the same words. " +
+		Why: "The boundary is the orchestrator's declaration in the job store; the guard reads it back for a file write and for a shell line, in the same words. " +
 			"A leased write before the job has reported the base it landed on is refused under the same name, since nothing yet records which revision the work applies to."},
 	{Name: string(denyRuleWholeTree),
 		Catches: "a whole-tree VCS reset, checkout, restore or clean, which cannot be undone",

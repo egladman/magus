@@ -1914,7 +1914,7 @@ func TestGuardAllowsSessionAttention(t *testing.T) {
 }
 
 // Reading the report is exactly what an agent SHOULD do, so the deny must not reach it. A
-// rule that swallowed the read path would push agents off the surface entirely, which is the
+// rule that swallowed the read path would push agents off reading the report entirely, which is the
 // opposite of the point: an agent that cannot mint a receipt should still be able to say
 // which files carry none.
 func TestGuardAllowsReadingTheReport(t *testing.T) {

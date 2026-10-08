@@ -94,12 +94,12 @@ var hookConfigExemptions = map[string]map[string]string{
 }
 
 // mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
-// wired under it guards a different surface from the same template, so the name
+// wired under it guards a different input from the same template, so the name
 // below carries it and the parity gate can see the two apart.
 const mcpToolMatcherPrefix = "mcp__magus__"
 
 // configJobs returns the JOBS a hook config's commands invoke, keyed by the template
-// and, where the matcher selects magus's MCP tools, by that surface too.
+// and, where the matcher selects magus's MCP tools, by that input too.
 //
 // Keyed by job rather than by file because a template wired twice under different
 // matchers is two jobs: claude-code runs magus-command.buzz on Bash AND on the
@@ -368,14 +368,14 @@ func parseGuardCoverage(t *testing.T) hostCoverage {
 // TestHostGluesCoverTheGuardContract is the host-parity gate.
 //
 // magus's guard rules come from one binary and are identical for every host;
-// what differs is how much of a verdict a host's hook surface can carry. That
+// what differs is how much of a verdict a host's hook can carry. That
 // difference was recorded only in prose (a table in the guide that nothing
-// checked), so adding a decision kind or a guard surface could leave a host
+// checked), so adding a decision kind or a guard input could leave a host
 // silently uncovered, and the first person to notice would be a user whose
 // session was not guarded.
 //
 // This makes the contract in internal/agent the thing every artifact answers
-// to. A new decision or surface must be added there first (the cmd/magus test
+// to. A new decision or input must be added there first (the cmd/magus test
 // TestGuardDecisionsCoverEveryVerdictTheHookEmits forces that much), and the
 // moment it is, every template owes it an explicit stance and the guide's table
 // owes it a column. A glue left untouched fails `go test`.
@@ -450,7 +450,7 @@ var failOpenRetryRe = regexp.MustCompile(`runOnce\(|judge\(guard, extra: `)
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: a console
 // warning, or the fallback a Buzz template hands envOr for one of the
 // __MAGUS_*_RESPONSE envelopes. That fallback is a CALL, because the
-// PermissionRequest surface has no context field to carry prose and takes the same
+// PermissionRequest hook has no context field to carry prose and takes the same
 // notice by another route.
 var failOpenNoticeRe = regexp.MustCompile(`console\.warn|unguarded\(\)|text: UNAVAILABLE_TEXT`)
 
@@ -465,7 +465,7 @@ var failOpenComputedNoticeRe = regexp.MustCompile(`failureNotice\(guard\b`)
 // An exemption rather than a fix, because the decision is recorded with its
 // tradeoff named and pinned by an executed case: cmd/magus/testdata/script/
 // guard_templates.txtar asserts the path template's silence under a missing
-// magus, on the grounds that an empty response on that surface already means
+// magus, on the grounds that an empty response there already means
 // allow for most hosts and an announcement on every file edit was judged the
 // worse noise. Overturning that is a decision for whoever made it; leaving it
 // undeclared here is what this table refuses.
@@ -602,7 +602,7 @@ func TestTransportCasesCoverTheContract(t *testing.T) {
 	}
 }
 
-// unreachableCases records a surface-and-decision cell the cases cannot execute,
+// unreachableCases records an input-and-decision cell the cases cannot execute,
 // and why. Every other cell owes a real case.
 var unreachableCases = map[string]string{
 	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +

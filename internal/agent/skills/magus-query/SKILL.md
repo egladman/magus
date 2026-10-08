@@ -4,7 +4,7 @@ magus keeps a deterministic, cache-backed graph of its own domain. Query it to f
 and relate entities instead of grepping source.{{if .Full}} This skill teaches HOW to use
 the tools; the verbs below say WHAT is in this specific workspace. The division is
 strict, so this skill never goes stale when a workspace changes, only when the
-tool surface does.{{end}}
+tool set does.{{end}}
 
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), ask the graph FIRST.
 That covers "what exists", "what depends on X", "where is Y used", and "how do A and
@@ -223,8 +223,8 @@ declared only, never blame-inferred.{{end}}
 ## What other sessions already did here
 
 Agents before you left a record{{if .Full}}. Where a workspace declares a session adapter,
-`magus graph build` folds each host's transcripts into a local store, and two
-surfaces read it back{{else}}, where the workspace declares a session adapter{{end}}:
+`magus graph build` folds each host's transcripts into a local store, and
+`magus explain` and `magus session` read it back{{else}}, where the workspace declares a session adapter{{end}}:
 
 - `magus explain <node>` ends with an `agent sessions:` line when any loaded session
   touched that file{{if .Full}}: reads, writes, distinct sessions, how long ago, and any write

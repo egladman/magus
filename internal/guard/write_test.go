@@ -47,7 +47,7 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 	// The embedded SOURCE an installed copy is generated from carries no frontmatter, and
 	// its prose may quote the stamp; only the frontmatter is the stamp.
 	source := write("internal/agent/skills/magus-workspace-rules/SKILL.md",
-		"# Adapting the agent surface\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
+		"# Adapting the agent integration\n\nIf a file's frontmatter says `source: magus`, it is not yours.\n\nsource: magus\n")
 	assert.Empty(t, adviseInstalledSkillWrite(source))
 	quoted := write(".claude/skills/team-rules/SKILL.md", "---\nname: team-rules\n---\n\nsource: magus\n")
 	assert.Empty(t, adviseInstalledSkillWrite(quoted), "a stamp in the body is prose")
@@ -290,7 +290,7 @@ func TestGradeLeasedWriteUnenrolled(t *testing.T) {
 // TestGradeLeasedWriteInvalidLeaseID pins the treated-as-absent contract. A typo'd id must
 // not silently buy un-enrolled treatment: erroring would block the tool call over metadata,
 // so the write is graded as naming no lease and the notice saying so comes from
-// adviseInvalidLease, which hookCmd fires on BOTH surfaces.
+// adviseInvalidLease, which hookCmd fires for BOTH kinds of call.
 func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
@@ -337,7 +337,7 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, "client tool", "the advisory must name the surface that re-declares the plan")
+	assert.Contains(t, got.Context, "client tool", "the advisory must name the tool that re-declares the plan")
 }
 
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
@@ -490,7 +490,7 @@ func TestAdviseInstructionWrite(t *testing.T) {
 	}
 }
 
-// TestDenyNotesWrite covers the only deny on the path surface. The negative cases matter
+// TestDenyNotesWrite covers the only deny among the file-write rules. The negative cases matter
 // more than the positive one: this rule blocks work, so it must be silent in every
 // workspace that did not opt in by DECLARING a store.
 func TestDenyNotesWrite(t *testing.T) {
@@ -592,8 +592,8 @@ func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
 	assert.Empty(t, denyNotesWrite(deps, "internal/foo.go"))
 }
 
-// TestGuardDeniesAuthoringANote closes the surface the path rule cannot see: these verbs
-// author through a COMMAND, so denyNotesWrite's file-write surface never meets them.
+// TestGuardDeniesAuthoringANote closes the gap the path rule cannot see: these verbs
+// author through a COMMAND, so denyNotesWrite's file-write rule never meets them.
 func TestGuardDeniesAuthoringANote(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
@@ -854,7 +854,7 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 	}
 
 	assert.Empty(t, adviseDescriptorWrite("std/fs_test.go"), "a test beside a descriptor feeds no generator")
-	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its surface")
+	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its API")
 	assert.Empty(t, adviseDescriptorWrite("proto/README.md"))
 	assert.Empty(t, adviseDescriptorWrite("internal/cache/cache.go"))
 }
@@ -1213,8 +1213,8 @@ func TestVCSOffSwitchDeniesLeasedWrite(t *testing.T) {
 
 // TestVCSOffSwitchDeniesAgentAttributedEdit covers the other half of "leased or
 // agent-attributed": no lease is named, but the process carries spawn ancestry
-// (trail.SpawnFromEnv), the same claim adviseUnleasedWorker already reads elsewhere on
-// this path surface. The edit is a replacement applied to what the file holds on disk,
+// (trail.SpawnFromEnv), the same claim adviseUnleasedWorker already reads elsewhere among
+// the file-write rules. The edit is a replacement applied to what the file holds on disk,
 // not a whole-file write, so this also proves resolvedWriteContent applies it correctly.
 func TestVCSOffSwitchDeniesAgentAttributedEdit(t *testing.T) {
 	root := vcsOffSwitchWorkspace(t)

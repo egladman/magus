@@ -227,7 +227,7 @@ func TestServeStdioRefusesOptionsWithoutAWorkspace(t *testing.T) {
 // all, and a console token's grant.
 func TestAuthorizeHoldsEveryCallToToolNeed(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, types.GrantConnector, types.CredentialStdio.Grant, "stdio reaches the MCP surface and nothing past it")
+	assert.Equal(t, types.GrantConnector, types.CredentialStdio.Grant, "stdio reaches the MCP tools and nothing past them")
 	assert.True(t, types.CredentialStdio.Grant.Allows(ToolNeed))
 
 	ran := 0

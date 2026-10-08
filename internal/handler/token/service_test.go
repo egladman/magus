@@ -279,7 +279,7 @@ func TestCreateTokenNeverExceedsTheCallersGrant(t *testing.T) {
 	assert.Empty(t, stored(t))
 }
 
-// Which door: this surface mints console grants only, even for the operator.
+// Which door: this service mints console grants only, even for the operator.
 func TestCreateTokenRefusesWhatTheConsoleMayNotMint(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	for name, g := range map[string]*tokenv1.Grant{
@@ -333,7 +333,7 @@ func TestCreateTokenDiskFailureIsInternal(t *testing.T) {
 }
 
 // A minted console token opens the console and is refused at /mcp and token management; a
-// viewer opens the read surface only.
+// viewer opens the read routes only.
 func TestCreateTokenMintsTheGrantItNames(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	exp := timestamppb.New(time.Now().Add(time.Hour))

@@ -15,10 +15,10 @@ which file wins. A contradiction makes it pick arbitrarily or stall.{{end}}
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list. The riskiest surface is usually the one
+You cannot audit what you cannot list. The riskiest source is usually the one
 nobody remembers is loaded.
 
-| surface | why it bites |
+| source | why it bites |
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
@@ -53,7 +53,7 @@ Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
-grep -rn "<the command or rule>" <every surface you enumerated>
+grep -rn "<the command or rule>" <every source you enumerated>
 ```
 
 ## Rank what you find
@@ -72,7 +72,7 @@ session", not "how wrong is the sentence".{{end}}
    reporting before one of these.{{end}}
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied.{{if .Full}} It is indistinguishable from a dead end until the agent tries it.{{end}}
-3. Split authority: two surfaces describe one decision differently (one
+3. Split authority: two sources describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
    {{if .Full}}A workspace-local instruction contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are in conflict.{{else}}A local instruction contradicting a shipped skill is always this.{{end}} Check each

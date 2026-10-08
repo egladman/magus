@@ -17,9 +17,9 @@ import (
 
 // consoleHost stamps the disposing invocation as having come through the console.
 //
-// sessions.InvocationStart.Host names the surface that drove an invocation, and the CLI
+// sessions.InvocationStart.Host names the client that drove an invocation, and the CLI
 // leaves it empty because nothing on its run path knows the answer. This route DOES know
-// its surface, so it is recorded as a fact at the moment of the write, beside the
+// its client, so it is recorded as a fact at the moment of the write, beside the
 // credential the bearer guard verified. Neither says a person acted: any process of the
 // account can read a console token, so the record names the door and the credential, and
 // the OS user says whose account it was.
@@ -36,7 +36,7 @@ const consoleHost = "console"
 // POST {"id":"<id or prefix>","reason":"<text>"} disposes one, and is a HUMAN act. Nothing
 // magus does closes a request: an event whose whole meaning is "blocked on a person" stops
 // meaning that the moment the tool answers it (docs/doctrine.md, "Manual on purpose"). This
-// route exists because the console IS the person's surface, alongside the CLI, not as an
+// route exists because the console IS the person's own client, alongside the CLI, not as an
 // automation door. There is deliberately no dispose-all, no expiry and no filter that could
 // clear the queue without reading it.
 //
@@ -110,7 +110,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A repository nobody has raised a block in serves "requests":[] rather than null: an
-	// empty queue is the GOOD state and the surface renders a list either way. AttentionQueue
+	// empty queue is the GOOD state and the console renders a list either way. AttentionQueue
 	// already returns an empty slice rather than a nil one, so this needs no normalizing.
 	handler.WriteJSON(w, r, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})
 }

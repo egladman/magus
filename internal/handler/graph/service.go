@@ -48,7 +48,7 @@ func (s *Service) graph(ctx context.Context, input string) (*knowledge.Graph, bo
 }
 
 // answer reports what was actually searched and lets knowledge.Answer judge it, so this
-// surface cannot reach a different verdict than the CLI or the MCP tools about one graph.
+// service cannot reach a different verdict than the CLI or the MCP tools about one graph.
 //
 // The probe is skipped when the symbol layer could not have held the answer: `kind:author`
 // returning nothing has no bearing on a missing symbol index, and caveating it would point

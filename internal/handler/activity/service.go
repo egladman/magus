@@ -5,7 +5,7 @@
 // view would silently under-report every other workspace. It is READ-only and maps the on-disk
 // trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary: the store
 // owns the format, this owns the wire.
-// Mounted on the console's human-facing API surface by the server, never under /mcp.
+// Mounted on the console's human-facing routes by the server, never under /mcp.
 package activity
 
 import (

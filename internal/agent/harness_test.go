@@ -524,7 +524,7 @@ func TestHarnessDescriptorRefusesAnUnmarkedEntry(t *testing.T) {
 // TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified pins the opencode.json defect:
 // a descriptor with no config.path at all wires no guard, and reporting that as
 // HarnessVerified (the behavior this test used to assert) is the single most
-// misleading verdict this surface could give: every deny and advise rule reads
+// misleading verdict this status could give: every deny and advise rule reads
 // as enforced when nothing here can enforce anything. It must read as its own,
 // distinct status instead.
 func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {

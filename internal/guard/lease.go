@@ -619,8 +619,8 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // parse is one it cannot look up either, and blocking a tool call over unparsable metadata
 // is the failure the fail-open contract is written against.
 //
-// It refuses WORK and never the remedy. command is the shell line on the command surface
-// and "" on the write surface, where every call is work by definition. A rule that refused
+// It refuses WORK and never the remedy. command is the shell line for a shell-command call
+// and "" for a file write, where every call is work by definition. A rule that refused
 // the line it prints locked a checkout out of its own repair: the plan moved house once and
 // the bound worker could not read the plan, print a schema, or bind again, because each of
 // those is a command and every command was refused.
@@ -705,8 +705,8 @@ var (
 // adviseInvalidLease says that an id magus cannot parse was treated as naming no lease.
 //
 // Treated as absent rather than rejected: an id magus cannot parse is one it cannot look
-// up either, and erroring would block the tool call over metadata. Said on EVERY surface,
-// from Judge: it used to be produced inside gradeLeasedWrite, so a command-surface call
+// up either, and erroring would block the tool call over metadata. Said for EVERY kind of call,
+// from Judge: it used to be produced inside gradeLeasedWrite, so a shell-command call
 // under a typo'd id ran fully un-enrolled with no notice at all.
 func adviseInvalidLease(actingLease string) string {
 	if actingLease == "" || types.ValidJobID(actingLease) {
@@ -1698,13 +1698,13 @@ func vcsMutation(c hint.Invocation) string {
 }
 
 // denyWriteOutsideLease refuses a shell line that writes outside the acting lease's
-// write paths, in the words the path surface would have used for the same file.
+// write paths, in the words the file-write rules would have used for the same file.
 //
 // A shell line is graded because a host reports no PATH for one: without this, a bound
 // worker that redirects, tees, sed -i's or cp's into a sibling's tree passes while the
 // identical editor-tool write is denied.
 //
-// It calls the path surface's own grader rather than deciding anything itself, so the two
+// It calls the file-write rules' own grader rather than deciding anything itself, so the two
 // cannot drift about who owns a path or how the refusal reads, and the extraction that
 // finds the written words is the cache-dir rule's, shared for the same reason.
 //

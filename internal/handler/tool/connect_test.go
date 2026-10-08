@@ -212,7 +212,7 @@ func TestListToolsKeysTheCacheBySpell(t *testing.T) {
 }
 
 // A tool keyed by a declared constant has no argv to run, so it is not shown. `magus
-// describe tools` skips it for the same reason; the two surfaces must agree about which
+// describe tools` skips it for the same reason; the two views must agree about which
 // tools exist.
 func TestListToolsSkipsAToolWithNoArgvToRun(t *testing.T) {
 	sp := spells.NewSpell("typescript", spells.WithTools(map[string]spells.Tool{

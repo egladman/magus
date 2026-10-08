@@ -372,7 +372,7 @@ func TestEveryRouteRefusesAnAnonymousCaller(t *testing.T) {
 	testkit.Isolate(t)
 	root := fixtureWorkspace(t)
 
-	// A built console as the build leaves it: the shell, the graph surface's stub, and the
+	// A built console as the build leaves it: the shell, the Graph app's stub, and the
 	// hosted demo's data beside them.
 	consoleDir := t.TempDir()
 	for name, body := range map[string]string{
@@ -547,7 +547,7 @@ const (
 	foreignHost   = "evil.example"
 )
 
-// TestMCPAuthRunsBeforeTheHandler mounts the loopback surface around a handler that counts its
+// TestMCPAuthRunsBeforeTheHandler mounts the loopback routes around a handler that counts its
 // calls in place of MCP, then sends every mounted route every method from a foreign Origin and
 // a forged Host, as every kind of bearer. Only a credential holding mcp=write reaches the
 // handler; every other request, and every preflight, is answered before it.
@@ -1050,7 +1050,7 @@ func serverSocket(t *testing.T) (*proc.Server, string, *http.Client) {
 }
 
 // TestServerSocketCarriesMCPAndTheAPIs mounts a loaded server on a real server socket and
-// drives each surface there without a token: an MCP session whose tool call the trail
+// drives each kind of route there without a token: an MCP session whose tool call the trail
 // attributes to the socket peer, a Connect call, and a proc route beside them. The socket's
 // route table is the loopback one minus the browser-only /api routes, Need for Need. The
 // loopback /mcp still refuses the same tokenless request.

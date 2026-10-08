@@ -40,8 +40,8 @@ var hookWiringFiles = []struct {
 	{".cursor/hooks.json", "a host's hook wiring"},
 	{".cursor/hooks/", "a guard script a host's hooks run"},
 	{".codex/hooks.json", "a host's hook wiring"},
-	{".opencode/plugins/", "a host plugin carrying both guard surfaces"},
-	{".config/opencode/plugins/", "a host plugin carrying both guard surfaces"},
+	{".opencode/plugins/", "a host plugin carrying both the file-write and shell-command guards"},
+	{".config/opencode/plugins/", "a host plugin carrying both the file-write and shell-command guards"},
 }
 
 // hookWiringSubject names what a path IS when it is host guard wiring, or "" otherwise.

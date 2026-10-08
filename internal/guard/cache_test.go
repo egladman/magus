@@ -62,7 +62,7 @@ func TestNamesWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 	}
 }
 
-// TestDenyCacheDirCommandReadsTheParsedLine covers the command surface on its own: what
+// TestDenyCacheDirCommandReadsTheParsedLine covers the shell-command rule on its own: what
 // WRITES in there, what merely reads, and the magus argv that must never match however
 // much it writes.
 //
@@ -200,7 +200,7 @@ func TestWritesToFileClassifiesEveryRedirectOperator(t *testing.T) {
 
 // TestRankCacheDirWriteOutranksEveryOtherDeny is the one ranking inversion in the guard,
 // and the reason is that both verdicts refuse the same line: the in-place refusal routes
-// the reader to an editor tool, which is the surface that would refuse the same bytes
+// the reader to an editor tool, which would refuse the same bytes
 // again.
 func TestRankCacheDirWriteOutranksEveryOtherDeny(t *testing.T) {
 	existing := ShellVerdict{Deny: "sed -i is imprecise", Rule: denyRule{Name: denyRuleSedInPlace}}

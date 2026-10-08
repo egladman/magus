@@ -25,10 +25,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The path surface of `magus shell`: every rule that judges a file an edit is
+// The file-write rules of `magus shell`: every rule that judges a file an edit is
 // about to write. The order they speak in is Judge's, not theirs, so each answers
 // only about the path it was handed and returns "" when it has nothing to say. The
-// command surface is internal/guard/shell.go.
+// shell-command rules are in internal/guard/shell.go.
 
 // adviseGeneratedWrite explains why editing path is wasted effort, or "" when
 // there is nothing to say. Not a heuristic: magus knows every target's declared
@@ -119,7 +119,7 @@ func workspaceDeclaresNotes(root string) bool {
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
 // for every other path.
 //
-// The only DENY on the path surface, and it fits neither standing trigger: a note in git is
+// The only DENY among the file-write rules, and it fits neither standing trigger: a note in git is
 // recoverable, and there is no agent-writable substitute to route to. The trigger is a third
 // one: a note is the one thing in the graph
 // nothing in the repository corroborates, so its only provenance is the person who wrote it,
@@ -289,7 +289,7 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 	}
 
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
-	// The notice that says so is adviseInvalidLease, fired from Judge so both surfaces
+	// The notice that says so is adviseInvalidLease, fired from Judge so both kinds of call
 	// get it.
 	if !types.ValidJobID(actingLease) {
 		actingLease = ""
@@ -1012,7 +1012,7 @@ func adviseDescriptorWrite(path string) string {
 	switch {
 	case strings.HasPrefix(rel, "proto/") && strings.HasSuffix(rel, ".proto"):
 	// A Buzz host module descriptor sits directly in std/; a test beside it feeds no
-	// generator, and a subdirectory is a module's implementation rather than its surface.
+	// generator, and a subdirectory is a module's implementation rather than its API.
 	case strings.HasPrefix(rel, "std/") && strings.HasSuffix(rel, ".go") &&
 		!strings.HasSuffix(rel, "_test.go") && !strings.Contains(strings.TrimPrefix(rel, "std/"), "/"):
 	default:
@@ -1114,7 +1114,7 @@ func resolvedWriteContent(target string, fields writeFields) (string, bool) {
 // under an unrelated key never fires it. Every other edit to these files passes exactly
 // as before, and so does this same edit from a session naming no lease and carrying no
 // spawn ancestry: a person editing their own checkout is owed silence, the same
-// exemption every other rule on this path surface gives them.
+// exemption every other file-write rule gives them.
 //
 // "Agent-attributed" reads trail.SpawnFromEnv, the ancestry claim adviseUnleasedWorker
 // above already teaches an unleased worker to declare: a parent span id means some tool

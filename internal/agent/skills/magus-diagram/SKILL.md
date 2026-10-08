@@ -42,7 +42,7 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final mcp = magus\dir("internal/handler/mcp");
     final handlers = magus\layer("handler").dirs;
     final agent = figure\external("AI agents", look: figure\Look.plain);
-    return figure\of("server-http", title: "The HTTP surface")
+    return figure\of("server-http", title: "The HTTP routes")
         .box(guard, label: "Guard", focal: true)
         .box(mcp, label: "/mcp")
         .group(figure\without(handlers, drop: [mcp]), label: "Console routes")

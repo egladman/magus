@@ -1,4 +1,4 @@
-// Package job is the console-facing JobService handler: the server's CONTROL surface, the
+// Package job is the console-facing JobService handler: the server's CONTROL service, the
 // mutating sibling of the read-only activity/status/viewer handlers. Its RPCs submit background
 // maintenance jobs (graph sync, activity-trail rotate, cache clear) through the same
 // fire-and-forget, coalescing proc mechanism the CLI's `magus job run` uses, so a double-click never
@@ -107,7 +107,7 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 
 // rows reads the job store, empty when there is none or it will not read. A listing that
 // drops the delegated jobs beats one that fails: the catalog beside it is still true, and
-// the server's maintenance surface must not go dark because a plan file is unreadable.
+// the server's maintenance service must not go dark because a plan file is unreadable.
 func (s *Service) rows() []types.Job {
 	if s.store == nil {
 		return nil
@@ -395,8 +395,8 @@ func (s *Service) runningByArgv(ctx context.Context) map[string]string {
 // on it is collision-free where a space join would conflate ["a","b"] with ["a b"].
 func argvKey(argv []string) string { return strings.Join(argv, "\x00") }
 
-// consoleURL is where a caller watches the job it just submitted: the console's runs
-// surface, scoped to this invocation.
+// consoleURL is where a caller watches the job it just submitted: the console's Runs
+// app, scoped to this invocation.
 //
 // Empty when there is no invocation, which is the one case the proto's "empty when no
 // console is mounted" covers: a submit the server could not name cannot be linked to. It

@@ -105,8 +105,8 @@ decides whether the top-level goal is complete.{{else}}The loop: define, partiti
 
 ## Declare the interface before any job forks
 
-When a change adds a shared surface, the ROOT names it before any edit. A shared
-surface is a module several call sites use, a type, an event, or an exported
+When a change adds a shared API, the ROOT names it before any edit. A shared
+API is a module several call sites use, a type, an event, or an exported
 function. Name:
 
 - the path;
@@ -125,7 +125,7 @@ Then make the declaration gradeable, so the names are a contract, not a suggesti
   symbol the work must reuse. No gate grades reuse itself{{if .Full}}: `present`
   holds for a symbol that existed before the job began, and a reference count
   cannot tell the defining file or an import from real use{{end}}.
-- `symbol` + `unreferenced` for each helper the shared surface replaces.
+- `symbol` + `unreferenced` for each helper the shared API replaces.
 
 Check each declared name with `magus refs` before forking. A bare name that resolves
 to more than one definition is graded against one of them, silently.
@@ -228,12 +228,12 @@ Map work to provider capabilities without assuming model names:
 | Model | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
-| standard | isolated implementation with a clear contract and bounded project surface |
+| standard | isolated implementation with a clear contract and a bounded set of projects |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
-If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis: evidence gathering, scouting, and review get a read-only tool
-surface where the host offers one. Never downgrade the root integration pass or final
+If the host cannot select models or reasoning effort, keep its default. Tool access
+is a separate axis: evidence gathering, scouting, and review get read-only tools
+where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no

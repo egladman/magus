@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 )
 
-// The checkout's own magus cache dir, on both surfaces.
+// The checkout's own magus cache dir, for both file writes and shell commands.
 //
 // Every marker in here is an INPUT to the verdicts the agent is graded by, so an agent
 // that edits them rewrites its own evidence, and nothing in a later verdict says it
@@ -83,7 +83,7 @@ func namesWorkspaceCacheDir(location location, candidate string) bool {
 // its own copy of this literal unexported, so this one exists only to be printed.
 const advisoryMarkerDirName = "advisories"
 
-// cacheDirDenial is the single text both surfaces refuse with, naming what was aimed at the
+// cacheDirDenial is the single text a file write and a shell line both refuse with, naming what was aimed at the
 // dir. One text because the mistake is one mistake however it is spelled: a host's editor
 // tool and a shell redirect reach the same bytes.
 func cacheDirDenial(what string) string {
@@ -98,7 +98,7 @@ func cacheDirDenial(what string) string {
 		what, advisoryMarkerDirName)
 }
 
-// denyCacheDirPath is the path surface: the reason a file write into the cache dir is
+// denyCacheDirPath is the file-write rule: the reason a file write into the cache dir is
 // refused, or "" for every other path.
 //
 // Ranked above the lease rules in Judge, so a bound worker whose write paths happen to
@@ -110,7 +110,7 @@ func denyCacheDirPath(location location, writePath string) string {
 	return cacheDirDenial(strings.TrimSpace(writePath))
 }
 
-// denyCacheDirCommand is the command surface: the reason a shell line writes into the
+// denyCacheDirCommand is the shell-command rule: the reason a shell line writes into the
 // cache dir, or "" when it does not.
 //
 // Two shapes reach those bytes. A redirect names the file directly, and a command takes it
@@ -131,7 +131,7 @@ func denyCacheDirCommand(location location, command string, d Dialect) string {
 //
 // It OUTRANKS an existing deny, which no other rule here does. `sed -i .magus/lease` earns
 // the in-place refusal too, and that text sends the reader to an editor tool, which is the
-// same write through the surface that would refuse it again.
+// same write through a tool that would refuse it again.
 func rankCacheDirWrite(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" {
 		return v

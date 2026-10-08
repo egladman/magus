@@ -309,6 +309,6 @@ func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
 	for _, op := range []string{"reply", "publish", "approve"} {
 		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "body": "on it"})
-		require.Error(t, err, "op %q must not be reachable from the agent surface", op)
+		require.Error(t, err, "op %q must not be reachable from the MCP tools", op)
 	}
 }

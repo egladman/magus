@@ -97,7 +97,7 @@ func TestTokenStateListingPasses(t *testing.T) {
 	}
 }
 
-// The editor surface: a write aimed at the token state is refused, by name or by resolving it.
+// The editor write: a write aimed at the token state is refused, by name or by resolving it.
 func TestTokenStatePathsAreDenied(t *testing.T) {
 	state, at := tokenStateFixture(t)
 	for _, p := range []string{

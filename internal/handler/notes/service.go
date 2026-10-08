@@ -3,7 +3,7 @@
 // one on this machine.
 //
 // It is the deliberate opposite of the memory handler beside it. Memory is agent-written, so
-// a browser edit/delete surface is its safety valve against records nobody curates. A note is
+// a browser edit/delete route is its safety valve against records nobody curates. A note is
 // human-written, and that guarantee IS its value: a note is the one node class the knowledge
 // graph does not derive from the workspace, so nothing here corroborates it later and its
 // only provenance is the person who wrote it. A browser write would put an unattributable
@@ -369,7 +369,7 @@ func scopeName(s notesv1.Scope) string {
 }
 
 // issueLine flattens one scan finding into the sentence a store card shows. The severity is
-// folded into the wording rather than carried as a field: this surface reports problems, and a
+// folded into the wording rather than carried as a field: this service reports problems, and a
 // client that renders warnings differently from errors would be inviting a reader to ignore
 // half of them.
 func issueLine(iss store.Issue) string {

@@ -801,7 +801,7 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 
 // TestDenyLeaseScopedRebindStaysQuiet covers every silence. A read is not a rebind, an
 // unbound caller is the party that writes rows, and `op=exec` is the worker's own
-// procedure, demanded by the checkpoint denial on the write surface.
+// procedure, demanded by the checkpoint denial on a file write.
 func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	me := narrowLease().ID
@@ -1073,8 +1073,8 @@ func writePathFleet() []types.Job {
 // boundary was enforced only where a host reported a path, so every spelling below reached
 // a sibling's tree unjudged while the identical editor write was refused.
 //
-// Each row asserts BOTH surfaces and that they refuse in the SAME words. A rule that lands
-// on one surface and not the other is exactly how the gap happened, and a reason that
+// Each row asserts BOTH the shell line and the file write, and that they refuse in the SAME
+// words. A rule that lands on one and not the other is exactly how the gap happened, and a reason that
 // drifts between them teaches two different lessons for one mistake.
 func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
 	ctx, root := fleetFixture(t, writePathFleet()...)
@@ -1126,17 +1126,17 @@ func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
 	} {
 		onCommand := denyWriteOutsideLease(ctx, Dependencies{}, "lease-b", tc.command)
 		require.NotEmpty(t, onCommand,
-			"the COMMAND surface passed %q, which writes outside the acting lease's write paths.\n"+
+			"the shell-command rules passed %q, which writes outside the acting lease's write paths.\n"+
 				"A boundary enforced only where the host reports a PATH is one a shell line walks straight through, and that is the gap this table exists to catch. If you taught a rule a new writer spelling, teach writeTargetCandidates about it too.",
 			tc.command)
 
 		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
 		require.Equal(t, "deny", onPath.Decision,
-			"the PATH surface passed %s, so this row is no longer testing two surfaces against one another", tc.path)
+			"the file-write rules passed %s, so this row is no longer testing two rule sets against one another", tc.path)
 		normalized = normalized || leaseAge.MatchString(onPath.Reason)
 		assert.Equal(t, withoutLeaseAge(onPath.Reason), withoutLeaseAge(onCommand),
-			"the two surfaces refused %q in DIFFERENT words.\n"+
-				"It is one mistake however it is spelled, so it gets one explanation. The command surface is meant to call gradeLeasedWrite, the path surface's own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
+			"the two rule sets refused %q in DIFFERENT words.\n"+
+				"It is one mistake however it is spelled, so it gets one explanation. The shell-command rules are meant to call gradeLeasedWrite, the file-write rules' own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
 			tc.command)
 	}
 
@@ -1146,11 +1146,11 @@ func TestDenyWriteOutsideLeaseCatchesEveryWriterForm(t *testing.T) {
 }
 
 // leaseAge matches the owner's age in a refusal, which is read from the clock as the
-// message is built. The unit stays outside the capture, so two surfaces that render the
+// message is built. The unit stays outside the capture, so two rule sets that render the
 // same elapsed time differently (0s against 0ms, 90s against 1m30s) still differ.
 var leaseAge = regexp.MustCompile(`was last updated \d+s ago`)
 
-// withoutLeaseAge blanks that figure. The two surfaces render their refusal at different
+// withoutLeaseAge blanks that figure. The two rule sets render their refusal at different
 // moments, so an age that ticks over between them is a difference in the clock, not in
 // the wording the comparison is about.
 func withoutLeaseAge(reason string) string {

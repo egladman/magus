@@ -77,7 +77,7 @@ func TestWriteRuleSeesTheWrittenText(t *testing.T) {
 	}
 }
 
-// The write surface carries the payload's subagent id as the command surface does.
+// The file-write rules carry the payload's subagent id as the shell-command rules do.
 func TestWriteRuleSeesTheHostsSubagentID(t *testing.T) {
 	ctx, root, _ := writeFixture(t)
 	probe := &writeRuleProbe{}
@@ -98,7 +98,7 @@ func canonicalDir(dir string) string {
 	return resolved
 }
 
-// Strengthen only, on the write surface too: a deny blocks, and a read is never asked.
+// Strengthen only, for file writes too: a deny blocks, and a read is never asked.
 func TestWriteRuleStrengthensOnly(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
 	probe := &writeRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "Add a fragment instead."}}
