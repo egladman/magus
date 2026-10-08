@@ -86,7 +86,9 @@ each finding names its file and line. `-surface skill` judges a SKILL.md an
 agent loads as written, and `-surface skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
 the skill rules, and what only its full form shows meets the Markdown ones and
-`bare-rule`. It writes the findings as JSON on stdout.
+`bare-rule`. `-surface guide` judges a procedural page (`docs/guides/`,
+`docs/setup/`, `docs/migrating/`) on the Markdown rules and the guide rules.
+It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
@@ -109,9 +111,17 @@ standard library.
 | `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
 | `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
 | `bare-rule`        | skill        | "rule" with no mechanism named, in either form of a skill      |
+| `second-person`    | guide        | we, us, our or ours where a guide addresses you                |
+| `step-verb`        | guide        | a numbered step that opens with no verb ("1. The target...")   |
+| `condescension`    | guide        | a word telling the reader a step is easy ("easy", "simple")    |
 | `template`         | skill source | a body that does not render, so neither form can be judged     |
 
-A skill takes every Markdown and pull request rule but `lead-context`.
+A skill and a guide take every Markdown and pull request rule but `lead-context`.
+A numbered list is a procedure, and `step-verb` judges it, only when one of its
+items opens with an imperative; a recap, a precedence order or a list of reasons
+is left alone. `condescension` leaves a word `filler` reports to it, and a
+`second-person` "we" that `tense` reports to that rule, so one word gives one
+finding.
 Markdown and pull requests take a wider `filler` list ("actually", "robust")
 than doc comments do. docs/conventions.md states the written rules for authors.
 

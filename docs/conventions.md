@@ -424,6 +424,15 @@ or a rule id) and everything else a skill asks of an agent is an instruction, so
 `bare-rule` refuses `rule` in either form unless a qualifier or a rule id in code names
 the mechanism.
 
+A guide is a procedure the reader follows with a terminal open: every page under
+`docs/guides/`, `docs/setup/` and `docs/migrating/`, and `docs/setup.md`. `judge-docs
+-surface guide` holds it to three rules on top of the Markdown ones: it addresses the
+reader as you, with no `we`, `us` or `our` (`second-person`); each step of a numbered
+procedure opens with its verb, never an article, a pronoun, `You` or a bare code span
+(`step-verb`), while a numbered list with no imperative step is ordered facts and is left
+alone; and no word tells the reader a step is easy (`condescension`: `easy`, `simple`,
+`obviously`, `of course`, `clearly`, `please`, and `just` before a verb).
+
 Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
 The guard and the check also ask, as advice that fails nothing, why a pull request touches
 a project or top-level package its description never names.
