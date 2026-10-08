@@ -146,7 +146,7 @@ func TestStampTableStopsAtTheBody(t *testing.T) {
 func TestARenamedSkillPageCarriesNoRedirect(t *testing.T) {
 	out := generate(t)
 
-	assert.NotContains(t, page(t, out, "magus-docs-lookup.md"), "aliases:")
+	assert.NotContains(t, page(t, out, "magus-upstream-docs.md"), "aliases:")
 	assert.NotContains(t, page(t, out, "magus-query.md"), "aliases:")
 }
 

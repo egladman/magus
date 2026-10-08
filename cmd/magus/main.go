@@ -46,6 +46,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -69,10 +70,31 @@ func main() {
 	os.Exit(runCLI())
 }
 
+// reportCrash prints, ahead of Go's trace, that a panic is a defect in magus and where
+// this build's code can be read, then re-panics so the trace and exit status stay Go's.
+// It sees only the main goroutine: a panic elsewhere exits before any defer here runs.
+func reportCrash() {
+	if r := recover(); r != nil {
+		fmt.Fprint(os.Stderr, crashHint(newVersionOutput()))
+		panic(r)
+	}
+}
+
+var upstreamSourceSkill = agent.MustSkill("magus-upstream-source")
+
+func crashHint(v versionOutput) string {
+	head := fmt.Sprintf("magus %s crashed. This is a defect in magus, not in your workspace.\n", v.Version)
+	if v.Dirty || v.Commit == unknownVersion {
+		return head + "This build's source is not published: it was built from a modified or unstamped tree.\n"
+	}
+	return head + fmt.Sprintf("Its source is %s/tree/%s; the %s skill reads it.\n", v.Repository, v.Commit, upstreamSourceSkill)
+}
+
 // runCLI is the CLI entry point as a function returning an exit code, so both main
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	defer reportCrash()
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
 	}

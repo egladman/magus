@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -37,6 +38,31 @@ func selfBuild() types.MagusBuild {
 	return b
 }
 
+// builtDirty reports whether b was built from a modified tree, whose source exists only
+// on the machine that built it. go-build marks that in the version (describe's -dirty
+// suffix); a bare `go build` leaves it in the VCS stamp instead.
+func builtDirty(b types.MagusBuild) bool {
+	if strings.HasSuffix(b.Version, "-dirty") {
+		return true
+	}
+	if b.Version != unknownVersion {
+		return false
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return false
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.modified" {
+			return s.Value == "true"
+		}
+	}
+	return false
+}
+
+// sourceRepository is where this binary's commit can be fetched, provided it was pushed.
+const sourceRepository = "https://github.com/egladman/magus"
+
 // unknownVersion is the unstamped-build default, and the dev-build sentinel the proc
 // adoption gate keys on to fingerprint one (proc.devVersionSentinel); keep the two in
 // sync. Named because a server reports it too, and the two must not be compared.
@@ -62,9 +88,13 @@ var (
 // convenience for a human, and a caller parsing json should not have to discover that
 // a field exists only at a higher verbosity.
 type versionOutput struct {
-	Version   string `json:"version"    yaml:"version"`
-	Commit    string `json:"commit"     yaml:"commit"`
-	BuildDate string `json:"build_date" yaml:"build_date"`
+	Version string `json:"version"    yaml:"version"`
+	// Commit is the full revision: a forge serves a shallow fetch only by the whole id.
+	Commit string `json:"commit"     yaml:"commit"`
+	// Dirty means the tree held uncommitted changes, so Commit is not this binary's source.
+	Dirty      bool   `json:"dirty"      yaml:"dirty"`
+	Repository string `json:"repository" yaml:"repository"`
+	BuildDate  string `json:"build_date" yaml:"build_date"`
 	// No omitempty: a local build reports built_by as "" rather than dropping the key,
 	// so `-o json` and `-o template` see one record shape either way.
 	BuiltBy string `json:"built_by"   yaml:"built_by"`
@@ -92,8 +122,10 @@ type versionEmbedded struct {
 
 // newVersionOutput is this binary's stamp, without the server half.
 func newVersionOutput() versionOutput {
+	b := selfBuild()
 	return versionOutput{
-		Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz",
+		Version: b.Version, Commit: b.Commit, Dirty: builtDirty(b), Repository: sourceRepository,
+		BuildDate: b.Date, BuiltBy: builtBy, Engine: "buzz",
 		Embedded: versionEmbedded{FigureSHA256: figure.SourceSHA256()},
 	}
 }

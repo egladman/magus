@@ -92,3 +92,29 @@ func TestProbeServerVersionReportsALiveServer(t *testing.T) {
 
 	assert.Equal(t, serverProbe{version: "v9.9.9"}, probeServerVersion(context.Background()))
 }
+
+// A source lookup fetches by commit, so a build whose tree was modified must say so:
+// that commit is not the code it runs.
+func TestBuiltDirty(t *testing.T) {
+	assert.True(t, builtDirty(types.MagusBuild{Version: "v0.5.0-rc.2-2-gd32c55d67-dirty"}))
+	assert.True(t, builtDirty(types.MagusBuild{Version: "v0.5.0-dirty"}))
+	assert.False(t, builtDirty(types.MagusBuild{Version: "v0.5.0"}))
+	assert.False(t, builtDirty(types.MagusBuild{Version: "v0.5.0-rc.2-2-gd32c55d67"}))
+}
+
+func TestCrashHint(t *testing.T) {
+	const sha = "d32c55d6700000000000000000000000000000ab"
+	pushed := crashHint(versionOutput{Version: "v0.5.0", Commit: sha, Repository: sourceRepository})
+	assert.Contains(t, pushed, "not in your workspace")
+	assert.Contains(t, pushed, sourceRepository+"/tree/"+sha)
+	assert.Contains(t, pushed, "magus-upstream-source")
+
+	for _, v := range []versionOutput{
+		{Version: "v0.5.0-dirty", Commit: sha, Dirty: true, Repository: sourceRepository},
+		{Version: unknownVersion, Commit: unknownVersion, Repository: sourceRepository},
+	} {
+		hint := crashHint(v)
+		assert.Contains(t, hint, "not published")
+		assert.NotContains(t, hint, "/tree/")
+	}
+}
