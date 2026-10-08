@@ -631,7 +631,7 @@ type shardDetail struct {
 	// Spells say what the shard will actually execute, so the environment it needs can
 	// be checked before it starts rather than after it fails.
 	Spells []string `json:"spells,omitempty"`
-	// Writes is the collision surface: the declared output globs of every project in
+	// Writes is the write set shards collide on: the declared output globs of every project in
 	// the shard. This is the field that earns the briefing. Two shards are safe to run
 	// together exactly when these do not overlap, and magus is the only party that knows
 	// them: whoever splits the work up otherwise hands out units and hopes.
@@ -1466,7 +1466,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 	// Per-TARGET writes as well as project-wide ones. A project that declares its outputs
 	// per target (ctx.writesFiles(...)) has an EMPTY project-level Outputs, so a
 	// project-only join reported this workspace's root shard as writing nothing while it
-	// rewrites MAGUS.md and gen/*.json. A collision surface that omits the busiest writer
+	// rewrites MAGUS.md and gen/*.json. A write set that omits the busiest writer
 	// is worse than none: it reads as a cleared shard.
 	writesByProject := map[string][]string{}
 	if graph, gerr := m.TargetGraph(ctx); gerr == nil {

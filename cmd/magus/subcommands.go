@@ -1,6 +1,6 @@
 package main
 
-// subcommand is one entry in magus's top-level surface.
+// subcommand is one entry in magus's top-level subcommands.
 type subcommand struct {
 	Name  string
 	Short string // the one-line description shown by `magus help`
@@ -18,7 +18,7 @@ const (
 	groupSetup     = "Setup and maintenance"
 )
 
-// subcommands is the SINGLE source of truth for magus's top-level surface, in the
+// subcommands is the SINGLE source of truth for magus's top-level subcommands, in the
 // order `magus help` lists them.
 //
 // Three copies of this list used to exist and all three had drifted: usage() had the

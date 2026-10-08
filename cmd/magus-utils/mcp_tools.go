@@ -3,7 +3,7 @@
 // mapped to the JSON schema scalars the MCP tool builder understands.
 //
 // The catalog was hand-written (22 descriptors, ~22 KB of prose) and was the one
-// magus surface that did not derive from the descriptor every other surface does:
+// part of magus that did not derive from the descriptor every other part does:
 // the runtime bindings, the checker declarations, and the reference docs all come
 // from std. A hand-written twenty-third copy is how the tail_log tool lived on as a
 // duplicate of the output tool long after the duplication was admitted in writing.

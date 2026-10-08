@@ -460,7 +460,7 @@ const consoleReadyTimeout = 20 * time.Second
 
 // ensureConsoleServer brings the server up when a command needs the console.
 //
-// The console IS the server's own surface, so `graph export --follow` is a plain request
+// The console IS the server's own front end, so `graph export --follow` is a plain request
 // for a server and starting one is doing what was asked rather than a side effect.
 // Commands that merely run FASTER with a server never call this, which is why an ordinary
 // build (and therefore CI) never starts one.
@@ -804,8 +804,8 @@ func consoleWatchURL() string {
 // the console is disabled or there is no address to build one from.
 //
 // It exists because the address was only ever in the server's log, on a line written for a
-// machine ("static console mounted path=/console/"), so the one surface built for a person
-// to look at was the one surface nothing told them how to reach.
+// machine ("static console mounted path=/console/"), so the one page built for a person
+// to look at was the one nothing told them how to reach.
 func consoleRootURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
@@ -813,7 +813,7 @@ func consoleRootURL() string {
 	return console.Root(mcpAddrString())
 }
 
-// consoleDiffURL builds the console Diff surface URL for the working changeset, with the same
+// consoleDiffURL builds the console Diff app URL for the working changeset, with the same
 // degrade as consoleWatchURL: "" when the console is disabled, and never a token in the link.
 func consoleDiffURL() string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
@@ -1090,7 +1090,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Open() {
 		return nil
 	}
-	// Reachability is READ here, unlike on the surfaces that render what they could get. An
+	// Reachability is READ here, unlike in the views that render what they could get. An
 	// unreachable forge answers with an EMPTY list, and every number below is derived from that
 	// list, so reporting anyway meant "3 remarks live only on the host" when the true figure was
 	// fifteen, or silence about a merge whose whole conversation was unreadable. "Nothing was

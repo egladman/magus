@@ -12,7 +12,7 @@ import (
 )
 
 // The interactive showcase: a real session, driven by real keystrokes, that
-// walks the surfaces a reader cannot see in a transcript.
+// walks the views a reader cannot see in a transcript.
 //
 // core-loop.capture shows what magus PRINTS. This shows what it DRAWS (the
 // pinned band, the failure tree beside its captured output, the picker
@@ -20,13 +20,13 @@ import (
 // of which are the reason the terminal work exists.
 //
 // The frames are marked as they are taken rather than inferred afterwards.
-// There is no prompt to split on inside an interactive surface, so the recorder
+// There is no prompt to split on inside an interactive view, so the recorder
 // says "here" at the moment it has finished typing and the screen has settled;
 // frameMark is a byte no terminal tool emits, so it cannot collide with output.
 const (
 	frameMark = "\x00FRAME\x00"
 
-	// Larger than the core loop's terminal, because these surfaces are the
+	// Larger than the core loop's terminal, because these views are the
 	// subject rather than the backdrop: the two-view band needs width for both
 	// columns, and the tree needs height to show grouping.
 	showCols = 132
@@ -106,7 +106,7 @@ func showcaseScript() []showcaseStep {
 		{keys: "magus run ci" + enter, settle: 2 * time.Second, frame: true},
 
 		// 3. Failures pinned, and the prompt that makes them actionable. This
-		//    is the surface a transcript cannot show: the tree grouped by
+		//    is the view a transcript cannot show: the tree grouped by
 		//    project, the selected failure's captured output beside it.
 		{keys: "magus run audit" + enter, settle: 3 * time.Second, frame: true},
 

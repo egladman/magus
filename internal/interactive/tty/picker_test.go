@@ -467,13 +467,13 @@ func TestPickerWithoutQueryStillFilters(t *testing.T) {
 }
 
 // TestSelectMarkIsOneGlyphEverywhere guards the thing that made the two
-// surfaces feel like two products: the picker and the run's failure band are
+// views feel like two products: the picker and the run's failure band are
 // lists a reader drives the same way, and they were marking the current row
 // with different characters.
 func TestSelectMarkIsOneGlyphEverywhere(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, 1, len([]rune(SelectMark)),
-		"one column, so a surface can pad it to its own row shape")
+		"one column, so a view can pad it to its own row shape")
 	assert.NotContains(t, SelectMark, ">",
 		"a keyboard character standing in for a pointer is what this replaced")
 }
@@ -481,7 +481,7 @@ func TestSelectMarkIsOneGlyphEverywhere(t *testing.T) {
 // pickerChrome is what the box costs the picker in rows: a rule above and a
 // rule below. The prompt moved onto the top rule and the way out onto the
 // bottom, so the list itself keeps every line it had: the net cost is one row,
-// and the surface now looks like the run's band because it IS the same box.
+// and the picker now looks like the run's band because it IS the same box.
 const pickerChrome = pickerRules
 
 // TestPickerDrawsTheSameBoxAsTheBand is the integration this closes: two lists a

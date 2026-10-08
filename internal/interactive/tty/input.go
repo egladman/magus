@@ -541,7 +541,7 @@ func twoInts(s string) (int, int, bool) {
 //
 // It exists because the failure mode is a HANG. A terminal that does not
 // implement the query says nothing, and a blocking read on it never
-// returns, so an interactive surface that asked would freeze with no output
+// returns, so an interactive view that asked would freeze with no output
 // and no way out, which is the worst thing in this package's power to do. A
 // terminal that does answer does so in microseconds, so this is generous.
 const cprTimeout = 250 * time.Millisecond

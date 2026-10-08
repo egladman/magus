@@ -50,7 +50,7 @@ func TestStarterMagusfileNoRemovedAPI(t *testing.T) {
 }
 
 // loadStarterEmbedded runs src through the same embedded-mode session the magusfile
-// engine uses (the surface `magus buzz --embedded` drives): parse, check, and run the
+// engine uses (the mode `magus buzz --embedded` drives): parse, check, and run the
 // top level. It returns the diagnostic Exec raises, if any. This is the real loader,
 // not a string scan: it is what surfaces a checker diagnostic like BZZ1006 that a
 // parse (buzz.ParseEmbedded) and a grep both miss.

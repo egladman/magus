@@ -168,7 +168,7 @@ func paint(s string, sgr tty.SGR) string {
 
 // gutter is the two columns every row starts with: the mark on the row a keypress acts on,
 // blank everywhere else. Same glyph the picker and the run's failure band use, so one
-// gesture looks like one affordance across every interactive surface.
+// gesture looks like one affordance across every interactive view.
 func gutter(cursor bool) string {
 	if cursor {
 		return tty.SelectMark + " "

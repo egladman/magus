@@ -33,11 +33,11 @@ import (
 )
 
 // buzzCmd runs Buzz source from a file, stdin, or an inline snippet using the
-// Buzz interpreter with the full magus module surface (Buzz stdlib plus every
+// Buzz interpreter with the full set of magus modules (Buzz stdlib plus every
 // magus host module: fs, os, http, markdown, template, ...) and the magus.*
 // namespace. The magus.* members that declare into a workspace being loaded
 // (magus\project and the provider selections) raise MGS1022 here, since a script
-// has no magusfile to declare into. The REPL is the surface that does load one.
+// has no magusfile to declare into. The REPL is the mode that does load one.
 //
 // This is the in-binary form of the former standalone magus-buzz tool, folded into
 // the main command (like `kubectl kustomize`) so a clean Buzz runner is always
@@ -606,7 +606,7 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 	return ""
 }
 
-// installBuzzHost registers the module surface a script can import.
+// installBuzzHost registers the modules a script can import.
 //
 // The stdlib and the spell declaration text are always installed: the first is
 // what a hook imports, and the second is a few string stores. The magus
@@ -923,7 +923,7 @@ func buzzCheckFile(ctx context.Context, path string, embedded bool) ([]buzz.Diag
 //
 // Those paths are bound by the workspace loader from the resolved spell registry
 // (internal/interp/runtime.go), so a bare session has nothing to resolve them
-// against and reports BZZ2001. The import is fine; this surface just cannot see it.
+// against and reports BZZ2001. The import is fine; this mode just cannot see it.
 //
 // The code is matched in EITHER position, because an unresolved import arrives by two
 // routes that disagree about where it lands. A checker error carries it in Code; an
@@ -941,7 +941,7 @@ func buzzSpellImportUnresolved(d buzz.Diagnostic) bool {
 // buzzSpellImportNote follows an unresolved spell import.
 //
 // It is printed rather than suppressed, and the diagnostic still fails, because the
-// same code covers a genuine typo (`magus/spell/gooo`) and this surface cannot tell
+// same code covers a genuine typo (`magus/spell/gooo`) and this mode cannot tell
 // the two apart. What it CAN do is name the check that does settle it.
 //
 // That check is reassuring, and it bounds what this verb is for. A file importing a

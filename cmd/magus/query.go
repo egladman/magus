@@ -559,7 +559,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 	if len(secrets) == 0 {
 		// Say it plainly rather than printing an empty heading. "No credential reads" is a
 		// real audit answer, and the reader must be able to tell it apart from "not recorded".
-		// Same noun as the populated branch below, and as the rest of the CLI surface: this
+		// Same noun as the populated branch below, and as the rest of the CLI: this
 		// line used to say "no credential was resolved", which read as a different fact.
 		fmt.Println("secrets: no credential reads during this run")
 	} else {
@@ -965,7 +965,7 @@ type explainResult struct {
 	Found bool                         `json:"found"`
 	// Answer judges the lookup: on a miss, whether the node is absent or merely unseen; on
 	// a hit, whether the index it came from is current. explain's record carries no answer
-	// of its own, so this is the one every other surface builds.
+	// of its own, so this is the one every other client builds.
 	Answer  types.KnowledgeAnswer `json:"answer"`
 	Nearest string                `json:"nearest,omitempty"`
 }
@@ -1076,7 +1076,7 @@ func openForRead(ctx context.Context, root string) (graphWorkspace, error) {
 }
 
 // openWorkspaceForRead opens the workspace eagerly for a read that needs the whole
-// repository surface (refs, which reads symbols and classifies files). It is the same
+// set of workspace operations (refs, which reads symbols and classifies files). It is the same
 // Open-loaded handle startup used to preload for these verbs, so the local read is the one
 // it always was; the preload just no longer runs for a read a server answers.
 func openWorkspaceForRead(ctx context.Context, root string) (types.WorkspaceRepository, error) {
@@ -1096,7 +1096,7 @@ func asMagus(ws types.WorkspaceRepository) (*magus.Magus, error) {
 	return m, nil
 }
 
-// fullWorkspace is the whole repository surface behind a graph workspace, opening a lazy
+// fullWorkspace is the whole set of workspace operations behind a graph workspace, opening a lazy
 // one: for the reads that need more than the Inspector (the global graph unions
 // WorkspaceRepository handles).
 func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepository, error) {
@@ -1198,7 +1198,7 @@ func envDigest(value string) string {
 }
 
 // readConfigDigest fingerprints the configuration a graph read depends on. The fields
-// cleared here shape the process (logging, concurrency, the server and its surfaces) and
+// cleared here shape the process (logging, concurrency, the server and its endpoints) and
 // never an answer; a difference anywhere else makes a server decline. "" when cfg cannot
 // be encoded, which no server accepts.
 func readConfigDigest(cfg config.Config) string {

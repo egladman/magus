@@ -263,10 +263,10 @@ func TestHookCmd(t *testing.T) {
 
 // TestShellJudgesAnOperandTheSameAsStdin is the claim the command is named for: a person
 // typing the command and a host piping it get ONE verdict from one evaluator, not two
-// surfaces that agree today.
+// code paths that agree today.
 //
 // The operand wins over stdin rather than being rejected, which is the reverse of what
-// the hook surface did. Rejecting it was right while stdin was the only contract; once a
+// the hook command did. Rejecting it was right while stdin was the only contract; once a
 // person is the other caller, a terminal's stdin is a keyboard, and reading it would hang
 // on a command that was already supplied.
 func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
@@ -597,12 +597,12 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-// TestHookCmd_RecordsSpawnFromEnvelope covers the spawn surface end to end: a host payload
+// TestHookCmd_RecordsSpawnFromEnvelope covers the spawn hook end to end: a host payload
 // carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
 // blob and the cooperative lease marker stamped onto the event.
 //
 // It also pins two things that must NOT happen. The prompt below quotes `git stash`, which the
-// command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
+// command guard denies. A spawn is not a guard input, so the verdict is a pass and the
 // spawn is recorded rather than blocked for describing a denied command; and that stays true
 // whether or not the caller named a model, which is a claim this guard grades nothing on.
 //
@@ -1193,8 +1193,8 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 // with nothing said about it.
 func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	for name, args := range map[string][]string{
-		"the command surface": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
-		"the path surface":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},
+		"the shell-command input": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
+		"the file-write input":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
@@ -1226,7 +1226,7 @@ func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 }
 
 // TestHookCmdDeniesTheGateThroughTheMCPDoor is the hole the tool-name decode closes: the
-// same work the lease-scoped gate rule refuses on the command surface, asked for through
+// same work the lease-scoped gate rule refuses for shell commands, asked for through
 // the tool that does it. It passed unjudged while the coverage line said deny=model.
 func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 	global = globalFlags{}
@@ -1296,7 +1296,7 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 
 // TestHookCmdDeniesAWiringWriteUnderALease proves the WIRING, the way the gate rule's own
 // test does: a rule nothing calls never fires however well it is tested. It also pins the
-// rank, since the lease ledger speaks first on this surface and a boundary that happens to
+// rank, since the lease ledger speaks first on file writes and a boundary that happens to
 // contain the file must not clear it.
 func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	global = globalFlags{}

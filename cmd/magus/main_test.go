@@ -581,7 +581,7 @@ func TestUsagePrintersThatReturnAnExitPath(t *testing.T) {
 }
 
 // assertPlainASCII enforces the workspace rule that user-facing message strings carry
-// no em-dashes, curly quotes, or other non-ASCII. Help text is the surface most likely
+// no em-dashes, curly quotes, or other non-ASCII. Help text is the place most likely
 // to acquire them, and a terminal that cannot render one prints a replacement glyph.
 func assertPlainASCII(t *testing.T, s string) {
 	t.Helper()

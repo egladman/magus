@@ -24,11 +24,11 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-// SpellCatalog yields the built-in spell op surface (import name -> op names) the
+// SpellCatalog yields the built-in spell ops (import name -> op names) the
 // dry-run tracer needs to build spell stubs. It is the single seam between the tracer
 // and the built-in registry: production wires the real registry (builtinCatalog), and
 // a test injects a controlled set via WithCatalog. It replaces the old hand-written
-// manifest + drift-gate test, so the tracer's built-in surface cannot drift from the
+// manifest + drift-gate test, so the tracer's built-in ops cannot drift from the
 // registry.
 type SpellCatalog interface {
 	BuiltinOps() map[string][]string
@@ -105,7 +105,7 @@ func installHostModule(sess *buzz.Session, name string, reg ffi.Registration, mo
 // PlaygroundHostModules names every magus host module the browser playground makes
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
 // installHost registers as a native module like the rest, so the playground is a
-// blank slate and every surface it offers is reached by an explicit import, the same
+// blank slate and every module it offers is reached by an explicit import, the same
 // import a magusfile writes. With PlaygroundSourceModules it is the single truth for what
 // runs in the playground, and the langservice manifest diffs against both to decide which
 // modules are reference-only there. Because magus is listed here (it is
@@ -147,7 +147,7 @@ type evalConfig struct {
 	// path: install the tracing magus/spell host, probe every target, and return
 	// the host-op Trace instead.
 	tracer bool
-	// catalog supplies the built-in spell surface; nil means the real registry
+	// catalog supplies the built-in spell ops; nil means the real registry
 	// (builtinCatalog). Set by WithCatalog for tests that drive a controlled set.
 	catalog SpellCatalog
 }
@@ -161,7 +161,7 @@ func (c *evalConfig) spellCatalog() SpellCatalog {
 }
 
 // EvalOption configures Eval. Options are additive: each turns on a capability
-// over the plain-language base, so a caller opts into exactly the host surface its
+// over the plain-language base, so a caller opts into exactly the host modules its
 // snippet needs.
 type EvalOption func(*evalConfig)
 
@@ -246,12 +246,12 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 }
 
 // plainSession is the language playground's session: Buzz stdlib, the WASM-compatible host
-// modules, the pure magus surface and the vetted Buzz-implemented modules. The caller closes it.
+// modules, the pure magus API and the vetted Buzz-implemented modules. The caller closes it.
 func plainSession(ctx context.Context, out io.Writer) *buzz.Session {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	buzzstd.RegisterWithOutput(sess, out)
 	registerWASMCompatibleMagusModules(ctx, sess)
-	// The pure-compute half of the magus surface, registered as a MODULE so plain
+	// The pure-compute half of the magus API, registered as a MODULE so plain
 	// mode resolves `import "magus"` the way a magusfile does. It was previously a
 	// global, which made the import optional here and only here: a snippet that ran
 	// under the Run button then failed when pasted into a magusfile, so the page

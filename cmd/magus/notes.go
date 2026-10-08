@@ -399,7 +399,7 @@ func notesGet(root string, args []string) error {
 //
 // This is the entire "no text editor" story. Notes are markdown files at real paths, so the
 // tool that edits them is the one the author already uses (vim, VS Code, Obsidian, anything)
-// and magus writes no editing surface of its own.
+// and magus writes no editor of its own.
 func notesEdit(ctx context.Context, root string, args []string) error {
 	var editShared, editPrivate *bool
 	var anchors stringList
@@ -461,7 +461,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// A pipe is the non-interactive way to author a note: `pg_dump ... | magus notes edit`
 	// is the same act as opening the editor, just without a terminal to open one in. It is
 	// still a PERSON writing: an agent reaching for this is denied by the command guard,
-	// which is where the write boundary is enforced for the command surface (the path rule
+	// which is where the write boundary is enforced for shell commands (the file-write rule
 	// only sees file writes, and a pipe is not one).
 	if !stdinIsTerminal() {
 		return notesWriteFromStdin(ctx, root, dir, target, pos[0], path, anchors)

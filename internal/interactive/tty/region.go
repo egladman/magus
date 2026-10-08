@@ -232,7 +232,7 @@ type Span struct {
 	// then have to be kept in step with the layout. Callers set a key, ask
 	// [Zone.HitSpan] what a click landed on, and never see a column.
 	//
-	// Keeping the two together is the point: a hint the surface draws and a
+	// Keeping the two together is the point: a hint the view draws and a
 	// hint it responds to cannot drift apart if they are the same span.
 	Key string
 }
@@ -608,7 +608,7 @@ const (
 	boxV = "\u2502"
 	// ROUNDED corners. Square ones (U+250C and friends) read as a table cell
 	// (a form to be filled in) while the arc reads as a panel, which is what
-	// this is. It is the single cheapest change that makes a terminal surface
+	// this is. It is the single cheapest change that makes a terminal view
 	// look designed rather than drawn, and it costs the same one column.
 	boxTL = "\u256d"
 	boxTR = "\u256e"

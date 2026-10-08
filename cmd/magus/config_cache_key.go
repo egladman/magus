@@ -47,7 +47,7 @@ func configCacheKey(_ context.Context, _ string, args []string) error {
 }
 
 // signingKeyOutput is the generated keypair as a record, so `-o template` can hand
-// the seed to a secret store over a pipe. The JSON TAGS are the template surface
+// the seed to a secret store over a pipe. The JSON TAGS are the template fields
 // (`-o template` projects the -o json names, so it is `{{.seed}}`, not
 // `{{.Seed}}`), and renaming one breaks a documented command line. Treat the
 // tags as API.

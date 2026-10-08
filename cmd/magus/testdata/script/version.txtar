@@ -42,7 +42,7 @@ stdout '"engine": "buzz"'
 # answered, so a caller parses one shape whether or not a server is up.
 stdout '"server": ""'
 
-# Snake-case keys, matching every other structured surface: build_date, not BuildDate.
+# Snake-case keys, matching every other structured output: build_date, not BuildDate.
 ! stdout 'BuildDate'
 
 exec magus version -o yaml

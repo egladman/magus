@@ -442,11 +442,11 @@ func renderIndex(modules []std.Module) string {
 		// The two source trees behind every module page: std/ for a Buzz-implemented
 		// module, internal/hostmodules/ for a Go-implemented one.
 		GeneratedFrom: "std/**/*.go, internal/hostmodules/**/*.go",
-		Description:   "Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
+		Description:   "Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API.",
 		Tags:          []string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
 	})
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
-	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name (`import \"fs\"`, then `fs\\glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
+	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name (`import \"fs\"`, then `fs\\glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both sets of methods, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")
 
 	// Render each category as its own section so the page has real headings (and
 	// thus a useful TOC). Track what's placed so nothing is dropped.

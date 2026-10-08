@@ -45,7 +45,7 @@ import (
 // diffCmd implements `magus diff`: the working tree's changes, annotated and ordered by
 // what they can break.
 //
-// It is the TERMINAL client of the same annotation join the console's Diff surface reads
+// It is the TERMINAL client of the same annotation join the console's Diff app reads
 // and an agent joins over MCP. One computation, three transports, so a person reviewing in a
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
@@ -288,7 +288,7 @@ func gitExternalDiffRefusal(rest []string) error {
 // diffTUITerm is the terminal the viewer was handed, split by descriptor, because the viewer
 // uses two of them and one probe does not answer for both.
 type diffTUITerm struct {
-	// Reads is the shared interactive gate every stepping surface asks for: stdin and stderr
+	// Reads is the shared interactive gate every stepping view asks for: stdin and stderr
 	// are both terminals.
 	Reads bool
 	// Paints is stdout, which the viewer draws the changeset on. It is a separate condition
@@ -497,7 +497,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 // is why the habit of re-reading everything feels normal.
 //
 // It NAMES the command rather than narrowing the changeset itself. Silently showing a subset of
-// what was asked for would be the one failure this surface cannot afford: a reader who was shown
+// what was asked for would be the one failure this report cannot afford: a reader who was shown
 // less than they asked for, and not told, concludes they have seen a file they have not.
 //
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
@@ -733,7 +733,7 @@ func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
 				return nil
 			}
 			// A rule rather than a screen clear: clearing destroys the scrollback a reader may
-			// still be reading, and this surface is meant to be scrolled.
+			// still be reading, and this report is meant to be scrolled.
 			fmt.Println()
 			fmt.Println(strings.Repeat("-", 60))
 			fmt.Println()
@@ -748,7 +748,7 @@ func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
 // identity when the terminal cannot use one.
 //
 // A path printed as bare text is a path the reader has to retype or hand to an editor
-// themselves, and this surface prints nothing BUT paths. delta has had OSC 8 links for years
+// themselves, and this report prints nothing BUT paths. delta has had OSC 8 links for years
 // and they are the cheapest legibility win available here.
 //
 // The gate is tty.WantsHyperlinks, which already refuses a pipe, TERM=screen, and (the
@@ -771,7 +771,7 @@ func pathLinker(root string) func(string) string {
 // runDiffTUI opens the interactive reader over the working tree's changeset.
 //
 // This is what makes "three clients, one session" true for a terminal. `magus diff` already
-// shared the COMPUTATION with the console and the MCP surface; what it did not share was the
+// shared the COMPUTATION with the console and the MCP tools; what it did not share was the
 // coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
 func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
@@ -1244,8 +1244,8 @@ func diffUsage(w io.Writer) {
 		"Generated files - declared target outputs - are folded away:",
 		"reading one is reading a machine's restatement of a change made elsewhere, so the source edit is what to read.")
 	fmt.Fprintln(w, "")
-	// Name the ranking key exactly, and name what is NOT one. Only reach ranks; listing public
-	// surface and coverage as "the evidence behind its rank" has a reader who sees a hot file
+	// Name the ranking key exactly, and name what is NOT one. Only reach ranks; listing exported
+	// API and coverage as "the evidence behind its rank" has a reader who sees a hot file
 	// sitting eighth conclude the ranking weighed churn and dismissed it. Printing a number
 	// beside a rank it did not earn teaches the wrong model.
 	tty.Prose(w, tty.SystemProbe,
@@ -1254,7 +1254,7 @@ func diffUsage(w io.Writer) {
 		"Build the index with `"+hint.GraphBuild.String()+"`.")
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
-		"Public surface, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
+		"Exported API, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
 		"None of them is a sort key.")
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
@@ -1508,7 +1508,7 @@ func diffAPILines(api *types.DiffAPI) []string {
 //
 // One definition for the printer and the interactive reader, so both show the SAME sentences:
 // two renderings of "12 files reference its widest changed symbol" would drift, and the drift
-// would be invisible until somebody compared two surfaces side by side.
+// would be invisible until somebody compared two views side by side.
 func diffFileFacts(f types.DiffFile) []string {
 	var facts []string
 	if f.Visibility == types.DiffVisibilityPublic {
@@ -1528,11 +1528,11 @@ func diffFileFacts(f types.DiffFile) []string {
 		}
 		switch {
 		case len(api) > 0:
-			facts = append(facts, "PUBLIC SURFACE: exports "+strings.Join(capSlice(api, 6), ", "))
+			facts = append(facts, "EXPORTED API: exports "+strings.Join(capSlice(api, 6), ", "))
 		case len(across) > 0:
-			facts = append(facts, "PUBLIC SURFACE: used by "+strings.Join(across, ", "))
+			facts = append(facts, "EXPORTED API: used by "+strings.Join(across, ", "))
 		default:
-			facts = append(facts, "PUBLIC SURFACE")
+			facts = append(facts, "EXPORTED API")
 		}
 		// Only the changes a consumer can see. A private helper listed here would sit beside
 		// the bump it did not move, and read as the reason for it.
@@ -1720,7 +1720,7 @@ const impactListCap = 10
 //
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
-// impact nobody runs, and this surface reports context rather than passing judgement.
+// impact nobody runs, and this command reports context rather than passing judgement.
 func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffImpact {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
@@ -2743,7 +2743,7 @@ func shareReview(rev types.Diff) (func(), error) {
 // its compilation raised, and the error that ended it. Nothing here writes or exits: all
 // three are the caller's to report.
 //
-// The session is built as `magus buzz <file>` builds one (same module surface, same
+// The session is built as `magus buzz <file>` builds one (same modules, same
 // strict parse mode, warnings drained at the same point, `fun main() > int` read rather
 // than discarded), so an advisor cannot behave one way in CI and another way here. Two
 // differences remain, both deliberate:
@@ -2930,7 +2930,7 @@ func bulkReasons(cacheDir string, rev types.Diff) []string {
 // collectReview tallies the read state already folded onto the changeset by annotateDiff.
 //
 // It reads DiffFile.ReadState rather than consulting the store a second time, so the
-// terminal report and the console's review surface cannot disagree about which files
+// terminal report and the console's review app cannot disagree about which files
 // somebody has read: they are looking at one join.
 //
 // nil when no file carries a state at all, which the renderer states as unmeasured rather

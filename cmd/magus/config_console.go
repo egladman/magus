@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// config_console.go is the console's own token surface, deliberately NOT under `config mcp`:
+// config_console.go is the console's own token commands, deliberately NOT under `config mcp`:
 // a console token holds console=write or console=read and is refused at /mcp, so minting one
 // through a command spelled "mcp connector" would teach the opposite. Both commands read and
 // write one store, and each lists and revokes all of it.
@@ -142,7 +142,7 @@ func configConsoleTokenCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "Grant console=read: it can READ the console and cannot submit jobs, edit memory,")
 		fmt.Fprintln(os.Stderr, "or open a share. It is refused at /mcp.")
 	} else {
-		fmt.Fprintln(os.Stderr, "Grant console=write: it reaches every console surface and is refused at /mcp.")
+		fmt.Fprintln(os.Stderr, "Grant console=write: it reaches every console app and is refused at /mcp.")
 	}
 	return nil
 }

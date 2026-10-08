@@ -432,7 +432,7 @@ func spellSyntaxSummary(t types.Spell) string {
 // today, alongside the cache-key fragment each produces.
 //
 // Declared and observed are different questions, and only the second one debugs
-// anything. The existing surface answers the first with a bare boolean, which says a
+// anything. The existing output answers the first with a bare boolean, which says a
 // probe exists and nothing about what it reports, so a toolchain that has drifted
 // from what the project pins is invisible even though its value is sitting in every
 // cache key. It is also the first thing to check for MGS1009 (a target that never

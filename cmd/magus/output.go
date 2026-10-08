@@ -406,7 +406,7 @@ func templateJoin(list any, sep string) string {
 
 // writeTemplateFields prints the fields available to -o template / -o json for v,
 // instead of rendering v: what bare "-o template" (no body) produces, the template
-// surface documenting itself. It REFLECTS v's type directly (the same approach config
+// fields documenting themselves. It REFLECTS v's type directly (the same approach config
 // uses in collectSchema), so it works for ANY output type without a curated set, and
 // lists each exported field by its json-tag key (the vocabulary -o json and -o
 // template share) with its type. Referenced struct types are listed too, so a nested
@@ -595,7 +595,7 @@ func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {
 	}
 	if input == "template" {
 		// Bare "-o template" (no body): print the output's templatable fields
-		// instead of rendering: the self-documentation of the template surface.
+		// instead of rendering: the self-documentation of the template fields.
 		return OutputOptions{Format: FormatTemplate, Template: ""}, nil
 	}
 	for _, v := range CommonFormats {

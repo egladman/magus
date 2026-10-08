@@ -171,7 +171,7 @@ func publishServerTrailBase() {
 // startBridge opens the server's own workspace, keeps its graph and symbol indexes
 // current, and serves MCP, the console and the APIs over loopback HTTP, and MCP and the APIs
 // on the server's own socket, when mcp.enabled allows. Called from
-// the server surface. cancel is the CancelFunc for the server's context; it is called if
+// the server command. cancel is the CancelFunc for the server's context; it is called if
 // the HTTP server exits for any reason other than ctx cancellation, so the server shuts
 // down rather than running on with MCP unavailable.
 //
@@ -210,7 +210,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 		}
 		// Serve anyway: a console and an agent that can connect and read the diagnostic
 		// beat a server with nothing listening. The registry holds the failure and retries
-		// once a source changes; the full surface takes over when that load succeeds.
+		// once a source changes; the full server takes over when that load succeeds.
 		slog.Warn("[AGENT] workspace failed to load; serving its failure until a source changes",
 			slog.String("root", root), slog.String("error", err.Error()))
 		serverRegistry.failBridge(root, err)
@@ -258,8 +258,8 @@ func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	return true
 }
 
-// serveUnloadedBridge serves the server's surface for a workspace that failed to load
-// until the registry reports it ACTIVE, then hands the listener to the full surface over
+// serveUnloadedBridge serves the server's endpoints for a workspace that failed to load
+// until the registry reports it ACTIVE, then hands the listener to the full server over
 // that workspace.
 func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root string, addr netip.AddrPort) {
 	status := serverSnapshot(os.Getenv(proc.SocketEnv))
@@ -291,11 +291,11 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 		}
 	case m := <-active:
 		stop()
-		<-done // the listener is released before the full surface binds it
+		<-done // the listener is released before the full server binds it
 		if m == nil {
 			return
 		}
-		slog.Info("[AGENT] workspace loaded; serving the full surface", slog.String("root", root))
+		slog.Info("[AGENT] workspace loaded; serving the full server", slog.String("root", root))
 		startWatch(ctx, m)
 		serveBridge(ctx, cancel, m, addr)
 	}

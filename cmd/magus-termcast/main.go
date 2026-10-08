@@ -4,7 +4,7 @@
 //	magus-termcast shots [-out dir]
 //
 // With no subcommand it turns a recorded magus session into the animated SVG
-// the README leads with. The shots subcommand renders the interactive surfaces
+// the README leads with. The shots subcommand renders the interactive views
 // as stills for the documentation; shots.go says why those are staged rather
 // than recorded.
 //
@@ -243,7 +243,7 @@ func checkClean(capture string) error { return checkNoise(capture, false) }
 //
 // allowFailures separates the two kinds of recording. In the core loop a
 // "[fail]" means the recording machine is broken; in the showcase the failures
-// ARE the subject; it exists to demonstrate the surfaces that only appear when
+// ARE the subject; it exists to demonstrate the views that only appear when
 // something breaks. A "[warn]" is an environment problem in both.
 func checkNoise(capture string, allowFailures bool) error {
 	var bad []string

@@ -15,7 +15,7 @@ import (
 
 // TestShotsUpToDate is the drift gate every generated file in this repo carries.
 //
-// These render magus's own interactive surfaces, so a change to how the zone
+// These render magus's own interactive views, so a change to how the zone
 // lays out a band, or to what the failure prompt says, silently makes the
 // documentation show something the terminal no longer does. Committed output
 // with no gate is committed output that rots, which is exactly what happened
@@ -94,13 +94,13 @@ func TestShotsIgnoreShellColorSettings(t *testing.T) {
 }
 
 // TestShotsAreNotBlank guards the failure mode a picture cannot show you: every
-// surface here stands down without a terminal, so a probe that stopped
+// view here stands down without a terminal, so a probe that stopped
 // answering would render empty frames and the gate would happily pin them.
 func TestShotsAreNotBlank(t *testing.T) {
 	t.Parallel()
 	shots, err := renderShots()
 	require.NoError(t, err)
-	// Three surfaces, each in both palettes.
+	// Three views, each in both palettes.
 	require.Len(t, shots, 6)
 
 	for name, svg := range shots {

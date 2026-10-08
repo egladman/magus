@@ -19,7 +19,7 @@ import (
 // because it is the coordinate talk is anchored by, and the caller supplies it from the patch.
 func testFiles() []File {
 	return []File{
-		{Path: "a.go", Facts: []string{"PUBLIC SURFACE", "in root"}, Hunks: []Hunk{
+		{Path: "a.go", Facts: []string{"EXPORTED API", "in root"}, Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-one", "+two"}, Digest: "da0"},
 			{Index: 1, Header: "@@ -9 +9 @@", Lines: []string{"-three", "+four"}, Digest: "da1"},
 		}},
@@ -54,7 +54,7 @@ func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: 
 // TestCursorPublishesThePatchIndexNotTheRowPosition pins the coordinate the shared session is
 // keyed by. Hunk.Index and the position in Hunks agree while the viewer holds every hunk of
 // every file, so only a fixture where they differ can tell the two apart, and Index is the one
-// the console and the MCP surface resolve talk by, the same one talkRows joins on.
+// the console and the MCP tools resolve talk by, the same one talkRows joins on.
 func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
@@ -524,7 +524,7 @@ func fileRowText(m *Model, kind RowKind, file int) string {
 
 // A colleague's remark reaches the TERMINAL, not only the browser. The reader chooses where to
 // read and magus does not care which; read receipts already work both ways, and a review that
-// showed the conversation in one surface and not the other would send half of them to a browser
+// showed the conversation in one client and not the other would send half of them to a browser
 // to find out what was asked.
 func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 	t.Parallel()
@@ -558,7 +558,7 @@ func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 // A pull request covers commits a working diff does not, so a colleague's remark can land on a
 // file this changeset never touches. The console lists those; the viewer used to read m.unplaced
 // only INSIDE its per-file loop, so a thread on a path it was not drawing reached no row at all
-// and was discarded in silence: the one thing a review surface must never do.
+// and was discarded in silence: the one thing a review viewer must never do.
 func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{

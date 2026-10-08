@@ -2,13 +2,13 @@ package tty
 
 import "strings"
 
-// The box every interactive surface draws itself in.
+// The box every interactive view draws itself in.
 //
 // These are free functions rather than region methods because the box is a
 // LOOK, not a place: the run's pinned band draws one at the bottom of the
 // terminal and the picker draws one wherever the cursor happens to be, and the
 // two must be the same box or the terminal reads as two different products.
-// Duplicating the glyphs and the arithmetic in each surface is how they drift.
+// Duplicating the glyphs and the arithmetic in each view is how they drift.
 //
 // Every width here is in COLUMNS, measured with cols, because the glyphs are
 // multi-byte and every budget in this package is column-denominated.
@@ -59,6 +59,6 @@ func boxWrap(content string, inner int, dim func(string) string) string {
 	return dim(boxV) + content + strings.Repeat(" ", pad) + dim(boxV)
 }
 
-// plain is the no-styling dim function, for a surface drawing to something that
+// plain is the no-styling dim function, for a view drawing to something that
 // does not want color.
 func plain(s string) string { return s }

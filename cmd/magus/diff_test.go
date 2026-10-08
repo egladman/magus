@@ -254,7 +254,7 @@ func impactFixture() diffImpact {
 			},
 		},
 		Advisors: []adviceSection{
-			{Name: "public-surface", Title: "A public symbol changed", Body: "types.Diff is exported.\nBump the minor."},
+			{Name: "exported-api", Title: "A public symbol changed", Body: "types.Diff is exported.\nBump the minor."},
 			// A retraction sits in the fixture because every real run has several: it must not
 			// read as a finding, and it must not read as an advisor that failed either.
 			{Name: "retracted", Title: "Nothing to retract"},
@@ -291,7 +291,7 @@ func impactFixture() diffImpact {
 // TestImpactRendersEverySection pins the sections a disposer reads before landing.
 //
 // Asserted line by line rather than by substring: these sentences are the whole product of
-// this surface, and a section that silently stopped rendering its list would still pass a
+// this report, and a section that silently stopped rendering its list would still pass a
 // header-only check.
 func TestImpactRendersEverySection(t *testing.T) {
 	assert.Equal(t, []string{
@@ -453,7 +453,7 @@ func TestImpactListsReportWhatTheyLeftOff(t *testing.T) {
 
 // TestPrintDiffTextWithoutImpactIsUnchanged is the additive guarantee.
 //
-// There is no golden file for this surface, so the whole report is spelled out here: any
+// There is no golden file for this report, so the whole report is spelled out here: any
 // impact line leaking into the default rendering fails this, and so does a stray blank
 // line, which a substring check for the section headers would not catch.
 func TestPrintDiffTextWithoutImpactIsUnchanged(t *testing.T) {
@@ -811,7 +811,7 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 // TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the report.
 //
 // This report is what a reader meets when the viewer stood aside (piped, redirected, in CI,
-// or asked for with --no-tui), and it is the surface with the most readers. It used to name
+// or asked for with --no-tui), and it has the most readers. It used to name
 // the console and nothing else, so every other way of reading a changeset existed only in
 // `-h` prose and the man page: the best teaching in the product sat furthest from the door.
 //
@@ -1887,14 +1887,14 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 		assert.Contains(t, facts, "changed in 1 commit")
 	})
 
-	t.Run("public surface names the exports when it knows them", func(t *testing.T) {
+	t.Run("exported API names the exports when it knows them", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
 			Path:       "a.go",
 			Visibility: types.DiffVisibilityPublic,
 			Symbols:    []types.DiffSymbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
 		})
 		require.NotEmpty(t, facts)
-		assert.Equal(t, "PUBLIC SURFACE: exports Open, Close", facts[0])
+		assert.Equal(t, "EXPORTED API: exports Open, Close", facts[0])
 	})
 
 	t.Run("conformance shows each check's message", func(t *testing.T) {
@@ -1911,7 +1911,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 		}, facts)
 	})
 
-	t.Run("public surface falls back to the consuming projects", func(t *testing.T) {
+	t.Run("exported API falls back to the consuming projects", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
 			Path:       "a.go",
 			Visibility: types.DiffVisibilityPublic,
@@ -1921,13 +1921,13 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 			},
 		})
 		require.NotEmpty(t, facts)
-		assert.Equal(t, "PUBLIC SURFACE: used by web, api", facts[0])
+		assert.Equal(t, "EXPORTED API: used by web, api", facts[0])
 	})
 
-	t.Run("public surface with no evidence still says public", func(t *testing.T) {
+	t.Run("exported API with no evidence still says public", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{Path: "a.go", Visibility: types.DiffVisibilityPublic})
 		require.NotEmpty(t, facts)
-		assert.Equal(t, "PUBLIC SURFACE", facts[0])
+		assert.Equal(t, "EXPORTED API", facts[0])
 	})
 
 	t.Run("a hot rising file says so, and an unranked one keeps its commit count", func(t *testing.T) {
@@ -2113,7 +2113,7 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 
 		assert.Contains(t, out, "2 files to read, 1 generated folded; 1 projects edited, 2 projects rebuild")
 		assert.Contains(t, out, "12 files reference its widest changed symbol")
-		assert.Contains(t, out, "PUBLIC SURFACE: exports Run")
+		assert.Contains(t, out, "EXPORTED API: exports Run")
 		assert.Contains(t, out, "written by claude-code, after reading core/engine.go, core/plan.go")
 		assert.Contains(t, out, "transcript: /tmp/session.jsonl")
 		// A touch with no host still attributes the write rather than printing a blank.
@@ -2194,7 +2194,7 @@ func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
 }
 
 // TestReviewPromptHintIsSilentWhenAlreadyAsked: suggesting a flag the reader just passed is
-// how a surface teaches people to ignore its hints.
+// how a command teaches people to ignore its hints.
 func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
 	var out strings.Builder
 	hintReviewPrompt(&out, diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
@@ -2295,7 +2295,7 @@ func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 // the three silences that keep it from being noise.
 //
 // It drives Diff.Reviewed rather than seeding a receipt store, because that field is the one answer
-// every surface reads: the console gets it over the wire and the terminal gets it here, and a hint
+// every client reads: the console gets it over the wire and the terminal gets it here, and a hint
 // that re-derived it would be the second lookup this join exists to prevent.
 func TestHintSinceLastReview(t *testing.T) {
 	rangeSrc := diffInput{kind: inputRevRange, base: "main", head: "topic", label: "the range main...topic"}

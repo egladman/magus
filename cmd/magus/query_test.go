@@ -677,7 +677,7 @@ func mustOutput(t *testing.T, cmd *exec.Cmd) []byte {
 
 // The CLI half of the path-normalization mirror; the MCP half is
 // TestPathNormalizationIsSharedWithCLI in internal/handler/mcp. `magus query` hands the
-// raw terms to the graph and canonicalises nothing of its own, so the two surfaces
+// raw terms to the graph and canonicalises nothing of its own, so the CLI and MCP
 // cannot resolve one pasted path to different nodes.
 func TestPathNormalizationIsSharedWithMCP(t *testing.T) {
 	root := t.TempDir()

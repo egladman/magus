@@ -57,7 +57,7 @@ const defaultHeight = 24
 // Run draws the changeset and reads keys until the reader quits.
 //
 // It never touches the alternate screen buffer: the transcript above stays where it is and
-// survives the session, which is the rule every interactive surface in magus follows.
+// survives the session, which is the rule every interactive view in magus follows.
 func Run(ctx context.Context, opts Options) error {
 	input, err := tty.OpenInput(opts.In, opts.Out, opts.Probe)
 	if err != nil {
@@ -122,7 +122,7 @@ const wheelRows = 3
 // reader asked to leave.
 func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 	if ev.Kind != tty.EventKey {
-		// The wheel scrolls, which is a DELIBERATE divergence from the picker: that surface leaves
+		// The wheel scrolls, which is a DELIBERATE divergence from the picker: that view leaves
 		// the wheel to the terminal so a reader keeps their own scrollback, and it can afford to
 		// because it is open for seconds. This one holds the terminal (and therefore the
 		// scrollback the wheel would otherwise reach) for as long as it takes to read a

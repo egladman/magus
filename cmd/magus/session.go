@@ -38,7 +38,7 @@ const sessionsDefaultLimit = 20
 // the magusfile to load, and the machine ingest (hook, notify) lives beside the human
 // reads instead of burning top-level names no person types.
 //
-// The listing is NOT the console's Activity surface: Activity reads internal/trail
+// The listing is NOT the console's Activity app: Activity reads internal/trail
 // (actions against the server), this reads internal/sessions (facts a session
 // produced). The stores are meant to converge; until they do, each is named after
 // what it holds.
@@ -1020,7 +1020,7 @@ func counted(tally map[string]int) []countedName {
 }
 
 // showListCap bounds the file and skill lists in the text view. The tail is a
-// session's whole reach, which is a different question with its own surface.
+// session's whole reach, which is a different question with an answer of its own.
 const showListCap = 10
 
 func renderSessionShow(w io.Writer, s sessionShowOutput) {

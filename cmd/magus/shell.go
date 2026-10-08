@@ -38,12 +38,12 @@ import (
 // A person and a host therefore run the SAME command, not two that agree. The only
 // difference is how the input arrives: an operand for someone typing, stdin for a wrapper
 // that already has the command in a variable. Verdict, flags, output formats and exit
-// codes are one implementation, so there is no second surface to keep honest.
+// codes are one implementation, so there is no second code path to keep honest.
 //
 // It is deliberately not a sandbox and not a supervisor. Nothing is executed and nothing
 // is prevented; the exit code is what a host chooses to block on.
 
-// shellUsage describes the guard surface.
+// shellUsage describes the guard's commands.
 func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus shell '<command>' [flags]   # judge one command")
 	fmt.Fprintln(w, "       magus shell [flags]               # the command or path arrives on stdin")

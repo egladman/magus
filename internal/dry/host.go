@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// installHost wires a session for magusfile evaluation, layering host surfaces
+// installHost wires a session for magusfile evaluation, layering host modules
 // from least to most permissive: the Buzz std library (print captured into
 // tr.out), then the pure-compute WASM-compatible host modules (`strings`, `json`,
 // ...), then inert IO modules, then the tracing `magus` and `magus/spell/*` modules
@@ -93,8 +93,8 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 	return vm.DirectValue(name, f)
 }
 
-// buildMagus builds the tracing `magus` module. It MUST cover the same member
-// surface the real bindings register (internal/interp/bindings: MagusModuleKeys);
+// buildMagus builds the tracing `magus` module. It MUST cover the same members
+// the real bindings register (internal/interp/bindings: MagusModuleKeys);
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusAPIMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
@@ -556,7 +556,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 	// Runtime-only members (a debugger, hints, fatal-abort, cache busting) have no
 	// dry-run effect; stub them as no-ops so a reference resolves. They're here to
-	// satisfy the surface parity guard, not because the dry run acts on them.
+	// satisfy the API parity guard, not because the dry run acts on them.
 	for _, name := range []string{"fatal", "pry", "bustCache"} {
 		m.MapSet(name, fn("magus."+name, retNull))
 	}
@@ -1063,7 +1063,7 @@ func normalizeTarget(name string) string {
 // sees. Stubbing a pure function in either would turn a live doc into a decorative
 // one; docs/concepts/targets.md teaches normalization by running it.
 //
-// Everything else on the magus surface depends on a workspace and stays stubbed in
+// Everything else in the magus module depends on a workspace and stays stubbed in
 // the tracer / absent in plain mode, which is why this is a small explicit list
 // rather than a share of the whole module.
 func addPureMagus(m vm.Value) {

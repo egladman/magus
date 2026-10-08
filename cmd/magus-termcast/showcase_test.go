@@ -38,7 +38,7 @@ func TestShowcaseCaptureIsClean(t *testing.T) {
 // TestShowcaseFramesDropTheTeardown pins where a frame ends. The recorder marks
 // each frame as it is taken, so the bytes after the LAST mark are the session
 // exiting, not a frame, and rendering them would end the animation on a shell
-// prompt instead of on the surface the beat was about.
+// prompt instead of on the view the beat was about.
 func TestShowcaseFramesDropTheTeardown(t *testing.T) {
 	frames := showcaseFrames("first" + frameMark + "second" + frameMark + "exit\n")
 	if len(frames) != 2 {

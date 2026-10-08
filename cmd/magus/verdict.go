@@ -26,7 +26,7 @@ import (
 // symbolCoverage reports what a lookup was able to search. input is the query text and
 // seeded reports whether this lookup merged the lazy @symbols shards.
 //
-// It observes; knowledge.Answer judges. That split is what keeps this surface and the MCP
+// It observes; knowledge.Answer judges. That split is what keeps this command and the MCP
 // tools from reaching different verdicts about the same graph.
 //
 // Both probes are skipped entirely when the symbol layer could not have held the answer

@@ -271,7 +271,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	fmt.Fprintln(os.Stderr, "")
 	interactive.Emit(os.Stderr, "stop with:  "+hint.ServerStop.String())
 
-	// Point users at the agent surface. A hint, not a step: connecting a client
+	// Point users at the agent integration. A hint, not a step: connecting a client
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap; init just says where to look.
 	interactive.Emit(os.Stderr, "")

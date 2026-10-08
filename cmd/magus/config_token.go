@@ -1,7 +1,7 @@
 package main
 
 // config_token.go is the OPERATOR token (mgo_): the credential the CLI itself uses, holding
-// every surface on loopback, and the only one that may manage other tokens.
+// every scope on loopback, and the only one that may manage other tokens.
 //
 // It lives at `magus config token`, NOT under `config mcp`, because it is not an MCP
 // credential: it opens the console and token management as much as /mcp. `print`,
@@ -27,11 +27,11 @@ func configToken(args []string) error {
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus config token <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The OPERATOR credential: the server accepts it on every surface - /mcp, the")
+		fmt.Fprintln(os.Stderr, "The OPERATOR credential: the server accepts it for every scope - /mcp, the")
 		fmt.Fprintln(os.Stderr, "console, and token management - and the CLI's own commands use it. Send it as")
 		fmt.Fprintln(os.Stderr, "`Authorization: Bearer <token>`. The server generates one on first start.")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "For a credential scoped to ONE surface, mint a client token instead:")
+		fmt.Fprintln(os.Stderr, "For a credential limited to ONE scope, mint a client token instead:")
 		fmt.Fprintln(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.String()+"     an agent, /mcp only")
 		fmt.Fprintln(os.Stderr, "  "+hint.ConfigConsoleTokenCreate.String()+"     the PWA, console only")
 		fmt.Fprintln(os.Stderr, "")
