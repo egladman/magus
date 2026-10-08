@@ -1385,7 +1385,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	out.SeedProjects = authorEditedProjects(res.SeedProjects, out.Files)
 	out.AffectedProjects = res.AffectedProjects
 
-	// Surface starts UNKNOWN everywhere and is only lowered to internal for a file the symbol
+	// Visibility starts UNKNOWN everywhere and is only lowered to internal for a file the symbol
 	// index actually covered. Defaulting to internal would report every unindexed file as
 	// safe, which is the one wrong answer that costs something.
 	for i := range out.Files {
