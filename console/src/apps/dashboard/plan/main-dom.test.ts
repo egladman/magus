@@ -691,7 +691,7 @@ test("the view says what a job is and links to Runs for target runs", async () =
     assert.equal(link?.dataset.openApp, "runs");
     let opened: unknown;
     window.addEventListener(
-      "console:open-surface",
+      "console:open-app",
       (e) => {
         opened = (e as CustomEvent).detail;
       },

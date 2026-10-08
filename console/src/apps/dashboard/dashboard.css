@@ -60,7 +60,7 @@ body[data-dash-native] { margin: 0; }
   flex-wrap: wrap;
   align-items: center;
   gap: 0.25rem 0.7rem;
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   margin-block: calc(-1 * var(--console-pad)) 0;
   margin-inline: calc(-1 * var(--console-pad));
   padding-block: 0;

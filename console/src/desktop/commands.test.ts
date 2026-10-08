@@ -210,16 +210,16 @@ test("advanceSequence passes an unbound idle chord straight through", () => {
 // none of them: its keys are bare, meaningful only while it has focus, and so belong in no
 // console-wide keymap, and both surfaces render from the keymap.
 test("a command can carry a surface-local key for display", () => {
-  registerCommand({ id: "t.surfacekey", label: "T: local", run: () => {}, key: "v" });
-  const found = listCommands().find((c) => c.id === "t.surfacekey");
+  registerCommand({ id: "t.appkey", label: "T: local", run: () => {}, key: "v" });
+  const found = listCommands().find((c) => c.id === "t.appkey");
   assert.equal(found?.key, "v");
-  unregisterCommand("t.surfacekey");
+  unregisterCommand("t.appkey");
 });
 
 // It is NOT a keymap entry: resolveCommand must not find it, because the surface dispatches
 // these itself and the console must not also fire them from anywhere on the page.
 test("a surface-local key is not dispatched by the console keymap", () => {
-  registerCommand({ id: "t.surfacekey2", label: "T: local", run: () => {}, key: "v" });
+  registerCommand({ id: "t.appkey2", label: "T: local", run: () => {}, key: "v" });
   assert.equal(resolveCommand({} as Keymap, "v"), null);
-  unregisterCommand("t.surfacekey2");
+  unregisterCommand("t.appkey2");
 });

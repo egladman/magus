@@ -24,7 +24,7 @@
   /* The console's one bar height and one surface gutter, so this row measures the same as the log
      viewer's controls row and the Notes filter, and its input starts on the same x as the facet
      chips, the list rows and the detail pane below. A floor, because the row wraps on a narrow pane. */
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);

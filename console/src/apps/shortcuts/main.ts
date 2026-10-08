@@ -68,7 +68,7 @@ export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, nul
     title: "Shortcuts",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
       const root = h("div");
-      root.dataset.surface = "shortcuts";
+      root.dataset.app = "shortcuts";
 
       // The banner replaces the old read-only lede: this surface now runs actions, not just lists
       // them, so it leads with that plus the one place shortcuts are changed.

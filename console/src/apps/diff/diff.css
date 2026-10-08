@@ -16,7 +16,7 @@
 :root {
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
-  --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
+  --console-diff-bg: var(--pf-t--global--background--color--primary--default, #ffffff);
   /* The surface's chrome plane - sidebar, toolbar, peek panel. --console-chrome rather than the raw
      secondary token so this joins the shell's frame instead of sitting a plane below it: in dark the
      raw token is #151515 against a rail and title bar at #242424, which drew a seam exactly where the
@@ -73,7 +73,7 @@
      Independently, the two are sized by unrelated content - a title versus a row of PF chips -
      and drift out of alignment the moment either one's content changes. One number, read by
      both, is what keeps that from happening again. */
-  --console-diff-head-block-size: var(--console-surface-head-h);
+  --console-diff-head-block-size: var(--console-app-head-h);
 }
 
 /* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
@@ -427,7 +427,7 @@
 }
 
 .console-diff-scroll {
-  background: var(--console-diff-surface);
+  background: var(--console-diff-bg);
 }
 
 /* Clusters separate wider than a cluster holds together, the same ratio the key legend below uses
@@ -811,13 +811,13 @@
  * with the spacer. It is also the third channel after color and the glyph. */
 .console-diff-row[data-kind="add"],
 .console-diff-row__side[data-kind="add"] {
-  background: color-mix(in srgb, var(--console-diff-add) 12%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-add) 12%, var(--console-diff-bg));
   box-shadow: inset 2px 0 0 var(--console-diff-add);
 }
 
 .console-diff-row[data-kind="del"],
 .console-diff-row__side[data-kind="del"] {
-  background: color-mix(in srgb, var(--console-diff-del) 12%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-del) 12%, var(--console-diff-bg));
   box-shadow: inset 2px 0 0 var(--console-diff-del);
 }
 
@@ -830,12 +830,12 @@
    to 1.30:1, and the +/- glyph and the 2px inset accent bar are the other two channels. */
 :root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
-  background: color-mix(in srgb, var(--console-diff-add) 14%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-add) 14%, var(--console-diff-bg));
 }
 
 :root.pf-v6-theme-dark .console-diff-row[data-kind="del"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="del"] {
-  background: color-mix(in srgb, var(--console-diff-del) 14%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-del) 14%, var(--console-diff-bg));
 }
 
 /* The header is CHROME, not content, so it holds the pane instead of joining the code's
@@ -1377,7 +1377,7 @@
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
-.console-diff-sidebar__item[data-surface="public"] .console-diff-sidebar__path {
+.console-diff-sidebar__item[data-visibility="public"] .console-diff-sidebar__path {
   text-decoration: underline;
   text-decoration-color: var(--pf-t--global--icon--color--status--warning--default);
   text-underline-offset: 2px;

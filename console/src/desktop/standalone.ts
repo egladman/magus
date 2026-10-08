@@ -82,7 +82,7 @@ interface HostModule {
 // without the fetch-and-lift, since there is no built page - the bundle owns its scaffold.
 export function moduleApp(s: ModuleApp): PageModule<null, null> {
   const url = (p: string): string => new URL("./" + p, import.meta.url).href;
-  const cssId = "surface-css-" + s.id;
+  const cssId = "app-css-" + s.id;
   return {
     id: s.id,
     title: s.title,
@@ -122,7 +122,7 @@ export function standaloneApp(s: StandaloneApp): PageModule<null, null> {
   // artifact at compile time.
   const artUrl = (file: string): string => new URL("./" + file, import.meta.url).href;
   const scaffold = s.bundle.replace(/[^/]*$/, "scaffold.html");
-  const cssId = "surface-css-" + s.id;
+  const cssId = "app-css-" + s.id;
 
   return {
     id: s.id,

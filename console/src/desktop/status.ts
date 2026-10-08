@@ -39,7 +39,7 @@ export function publishStatus(contribution: StatusContribution): void {
   const demoing = wantsDemo(parseHash());
   const conn = document.getElementById("console-conn");
   if (conn && contribution.connection) {
-    conn.dataset.owner = "surface";
+    conn.dataset.owner = "app";
     conn.textContent = demoing ? "demo" : (contribution.label ?? "");
     conn.dataset.state = demoing ? "demo" : contribution.connection;
     if (contribution.health && !demoing) conn.dataset.health = contribution.health;

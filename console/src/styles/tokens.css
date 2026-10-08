@@ -247,10 +247,10 @@
    pointer (see the touch floor above). max() lets the head stay compact on a mouse and still
    contain the button on a touchscreen. */
 :root {
-  --console-surface-bar-h: calc(
+  --console-app-bar-h: calc(
     var(--console-control-block-size) + 2 * var(--pf-t--global--spacer--sm)
   );
-  --console-surface-head-h: max(2.5rem, var(--console-control-block-size));
+  --console-app-head-h: max(2.5rem, var(--console-control-block-size));
 }
 
 /* --- 1c. The uppercase micro-label -------------------------------------------------------
@@ -525,7 +525,7 @@
    are defined. */
 :root {
   --magus-diagram-paper: var(--pf-t--global--background--color--primary--default);
-  --magus-diagram-surface: var(--console-chrome);
+  --magus-diagram-fill: var(--console-chrome);
   --magus-diagram-ink: var(--pf-t--global--text--color--regular);
   --magus-diagram-muted: var(--pf-t--global--text--color--subtle);
   --magus-diagram-soft: var(--pf-t--global--text--color--subtle);

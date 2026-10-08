@@ -86,7 +86,7 @@
      Notes filter row. A floor rather than a fixed size: the row wraps cluster-by-cluster in a
      narrow pane and has to be free to grow. Its own padding-block goes to zero, or the two stack
      and the row comes out taller than every other bar again. */
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-block: 0; align-items: center;
   column-gap: 0.85rem; row-gap: 0.4rem;
 }
@@ -512,7 +512,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-body__head {
   box-sizing: border-box;
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
-  min-block-size: var(--console-surface-head-h);
+  min-block-size: var(--console-app-head-h);
   padding-inline: var(--log-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }

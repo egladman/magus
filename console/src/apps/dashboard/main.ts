@@ -747,7 +747,7 @@ export function activate(): void {
   const intent = takeModeIntent("dashboard");
   setDashboardMode(isDashboardMode(intent) ? intent : "overview");
 
-  document.querySelectorAll<HTMLElement>("#dash-main [data-open-surface]").forEach((button) => {
+  document.querySelectorAll<HTMLElement>("#dash-main [data-open-app]").forEach((button) => {
     button.addEventListener(
       "click",
       () => {

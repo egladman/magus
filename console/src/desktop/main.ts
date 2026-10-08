@@ -759,7 +759,7 @@ function openServerSettings(): void {
 // asynchronously, so poll a few animation frames for the target rather than assume a fixed delay, and
 // give up quietly past the deadline. With a cmdId, scroll to and briefly highlight that command's row
 // and focus its Record button (the row's first button) so a rebind is one click away; without one, just
-// scroll the editor into view. Scoped to [data-surface="settings"] so this never matches the modal
+// scroll the editor into view. Scoped to [data-app="settings"] so this never matches the modal
 // overlay's own [data-kbeditor] copy, which is present in the DOM (just hidden) the whole session.
 function openKeybindings(cmdId?: string): void {
   dispatchCommand("console.open.settings");
@@ -788,7 +788,7 @@ function openKeybindings(cmdId?: string): void {
   const tryFocus = (): void => {
     if (cmdId) {
       const row = document.querySelector<HTMLElement>(
-        '[data-surface="settings"] [data-kbeditor] [data-command="' + cmdId + '"]',
+        '[data-app="settings"] [data-kbeditor] [data-command="' + cmdId + '"]',
       );
       if (row) {
         reveal(row, "center", row);
@@ -796,7 +796,7 @@ function openKeybindings(cmdId?: string): void {
       }
     } else {
       const editor = document.querySelector<HTMLElement>(
-        '[data-surface="settings"] [data-kbeditor]',
+        '[data-app="settings"] [data-kbeditor]',
       );
       if (editor) {
         reveal(editor, "start");

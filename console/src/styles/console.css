@@ -1310,7 +1310,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet-content > div { position: absolute; inset: 0; overflow: auto; }
 #console-outlet-content > div[hidden] { display: none; }
 
-/* Launcher empty state (data-surface=home): the heading + lede layout, and the PatternFly Gallery
+/* Launcher empty state (data-app=home): the heading + lede layout, and the PatternFly Gallery
    of clickable Cards (home.ts) - no custom card/grid CSS. Unlike a surface tab (which paints its own
    panels over the outlet), the launcher is the outlet's empty state and fills it edge to edge, so it
    supplies the page background itself (the PF primary page token, theme-aware light/dark) - otherwise
@@ -1334,7 +1334,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    against each other (the heading and lede take their own narrower measure, the demo pill floats to the
    trailing edge), and those relationships survive a padded content box while a per-child max-width would
    have to restate every one of them. The max() keeps the phone gutter when there is nothing to center. */
-#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding-block: 2rem; padding-inline: max(1.25rem, (100% - var(--console-launcher-w)) / 2); background: var(--pf-t--global--background--color--secondary--default); }
+#console-outlet [data-app="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding-block: 2rem; padding-inline: max(1.25rem, (100% - var(--console-launcher-w)) / 2); background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
@@ -1361,47 +1361,47 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-launcher-demo:hover .console-launcher-demo__label,
 .console-launcher-demo:focus-visible .console-launcher-demo__label { max-width: 9rem; opacity: 1; }
-#console-outlet [data-surface="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
-#console-outlet [data-surface="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
+#console-outlet [data-app="home"] h1 { max-width: 44rem; margin: 0 0 0.2rem; font-size: 1.4rem; }
+#console-outlet [data-app="home"] > p { max-width: 44rem; margin: 0 0 1.5rem; color: var(--pf-t--global--text--color--subtle); }
 /* The gallery owns the gap to the demo pill below it. It has to live HERE, not on the pill's margin-top:
    that margin is `auto` (it floats the pill to the bottom of a short column) and collapses to nothing the
    moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
    card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
-#console-outlet [data-surface="home"] .pf-v6-l-gallery { margin-bottom: 2.5rem; }
+#console-outlet [data-app="home"] .pf-v6-l-gallery { margin-bottom: 2.5rem; }
 
 /* The cache figure: a big-number stat parked in the bottom-right corner. Absolutely positioned so it
    sits in the empty quadrant the reading column leaves rather than pushing the flow down - it is a
    closing remark, not a step. Right-aligned and set in the display face at a size nothing else on
    the screen uses, because it is the one number that answers "was any of this worth it". */
-#console-outlet [data-surface="home"] [data-launcher-saved] {
+#console-outlet [data-app="home"] [data-launcher-saved] {
   position: absolute; right: max(1.25rem, (100% - var(--console-launcher-w)) / 2); bottom: 1.75rem;
   display: grid; justify-items: end; gap: 0; text-align: right;
   pointer-events: none;
 }
 /* Each line holds its own line. A wrapped caption under a big number reads as a disclaimer, and
    the whole point of the figure is that it lands in one look. */
-#console-outlet [data-surface="home"] [data-launcher-saved] > * { white-space: nowrap; }
-#console-outlet [data-surface="home"] [data-launcher-saved][hidden] { display: none; }
+#console-outlet [data-app="home"] [data-launcher-saved] > * { white-space: nowrap; }
+#console-outlet [data-app="home"] [data-launcher-saved][hidden] { display: none; }
 /* Subtle on purpose. At full text color the figure competed with the choices for first look, and
    it is a closing remark, not the thing you came to do - the SIZE carries it, so the color does
    not have to. Subtle at reduced opacity, which keeps it legible on both grounds without a second
    hard-coded grey. */
-#console-outlet [data-surface="home"] [data-launcher-saved-value] {
+#console-outlet [data-app="home"] [data-launcher-saved-value] {
   font-size: clamp(3rem, 9vw, 5.5rem); font-weight: 700; line-height: 0.9;
   letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.38;
 }
-#console-outlet [data-surface="home"] [data-launcher-saved-unit] {
+#console-outlet [data-app="home"] [data-launcher-saved-unit] {
   font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; margin-top: 0.2rem;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.55;
 }
-#console-outlet [data-surface="home"] [data-launcher-saved-note] {
+#console-outlet [data-app="home"] [data-launcher-saved-note] {
   font-size: 0.72rem; margin-top: 0.25rem; color: var(--pf-t--global--text--color--subtle);
   opacity: 0.5;
 }
 /* A phone has no empty quadrant to park it in, so it returns to the flow. */
 @media (max-width: 48rem) {
-  #console-outlet [data-surface="home"] [data-launcher-saved] {
+  #console-outlet [data-app="home"] [data-launcher-saved] {
     position: static; justify-items: start; text-align: left; margin-top: 1.5rem; max-width: none;
   }
 }
@@ -1413,16 +1413,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    is not on screen. Showing both was the same eight glyphs twice over (three times, counting each
    card's watermark), which is what VS Code's activity-bar guidance and NN/G's duplicate-links
    findings both warn against. */
-#console-outlet [data-surface="home"] [data-launcher-ways] { display: none; }
+#console-outlet [data-app="home"] [data-launcher-ways] { display: none; }
 @media (min-width: 48rem) {
-  #console-outlet [data-surface="home"] .pf-v6-l-gallery { display: none; }
+  #console-outlet [data-app="home"] .pf-v6-l-gallery { display: none; }
   /* Safe here and only here: the white cards that needed a grey ground are the ones the line above
      retires. What remains is secondary-filled, so it gains contrast from this rather than losing it. */
-  #console-outlet [data-surface="home"] { background: var(--pf-t--global--background--color--primary--default); }
+  #console-outlet [data-app="home"] { background: var(--pf-t--global--background--color--primary--default); }
   /* The demo pill goes with the grid: the demo is one of the two ways below, and offering it twice on
      one screen is the duplication this whole change is about. */
-  #console-outlet [data-surface="home"] .console-launcher-demo { display: none; }
-  #console-outlet [data-surface="home"] [data-launcher-ways] { display: grid; margin-inline: 0; }
+  #console-outlet [data-app="home"] .console-launcher-demo { display: none; }
+  #console-outlet [data-app="home"] [data-launcher-ways] { display: grid; margin-inline: 0; }
 }
 /* Bigger cards on a desktop window. The PF Gallery sizes its columns from a minimum, so raising the
    minimum is what fills the extra width - the grid keeps choosing the column count itself, and the
@@ -1430,7 +1430,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    full-bleed tile wall it could be: these are eight cards you pick one of and leave, so they should
    read as a considered set, not as a start screen you have to scan. */
 @media (min-width: 62rem) {
-  #console-outlet [data-surface="home"] .pf-v6-l-gallery { --pf-v6-l-gallery--GridTemplateColumns--min: 17rem; }
+  #console-outlet [data-app="home"] .pf-v6-l-gallery { --pf-v6-l-gallery--GridTemplateColumns--min: 17rem; }
 }
 
 /* The workspace scope control in the title bar (ui/scope-picker.ts). Square and normal-case like every
@@ -1803,7 +1803,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Entrance: the cards fade-and-rise once on load, staggered 50ms apart. One-shot (forwards), and fully
    disabled under prefers-reduced-motion (below). Kept subtle - a 0.5rem rise over ~0.45s. Keep the step
    in ms: esbuild --minify rewrites `* 0.05s` to an invalid `/20s` and the whole cascade drops. */
-#console-outlet [data-surface="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; animation-delay: calc((sibling-index() - 1) * 50ms + 20ms); }
+#console-outlet [data-app="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; animation-delay: calc((sibling-index() - 1) * 50ms + 20ms); }
 @keyframes console-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
 
 /* One-shot "living" icon micro-motions on hover - each surface's glyph animates ONCE, in character, and
@@ -1924,7 +1924,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   .console-shell-commandbar__items { transform: none; transition: none; }
   /* The launcher identity motion is decorative: kill the entrance, the hover lift/drift, and the
      one-shot icon micro-motions, leaving the cards fully visible and static. */
-  #console-outlet [data-surface="home"] .console-launcher-card { opacity: 1; animation: none; }
+  #console-outlet [data-app="home"] .console-launcher-card { opacity: 1; animation: none; }
   .console-launcher-card, .console-launcher-card__watermark, .console-launcher-card__icon svg,
   .console-launcher-card [data-motion] { transition: none !important; animation: none !important; transform: none !important; }
   /* The rail still expands and collapses - it just arrives at the new width immediately. */
@@ -2060,8 +2060,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
 /* The reference surface (the drawer's "break out to tab" target): the same dense, legible help styling
    the drawer body uses, in a scrolling, width-capped column so a wide/tiled pane stays readable. */
-#console-outlet [data-surface="reference"] { height: 100%; overflow: auto; padding: 1rem 1.25rem; }
-#console-outlet [data-surface="reference"] .console-shell-refdrawer__body { max-width: 46rem; font-size: 0.85rem; line-height: 1.5; }
+#console-outlet [data-app="reference"] { height: 100%; overflow: auto; padding: 1rem 1.25rem; }
+#console-outlet [data-app="reference"] .console-shell-refdrawer__body { max-width: 46rem; font-size: 0.85rem; line-height: 1.5; }
 
 /* The cloned help + search sit in the panel's scrolling body; keep it dense and legible. */
 #console-refpanel .console-shell-refdrawer__body { font-size: 0.8rem; line-height: 1.5; }
@@ -2161,13 +2161,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   box-shadow: 0 1px 0 var(--pf-t--global--border--color--default);
 }
 
-/* Shortcuts app (apps/shortcuts/main.ts, data-surface="shortcuts"): a first-class tab listing EVERY registered
+/* Shortcuts app (apps/shortcuts/main.ts, data-app="shortcuts"): a first-class tab listing EVERY registered
    command, grouped by area - the token, the prose label, and the chord when one is bound. Reuses the
    keyboard cheat sheet's group/kbd chrome (it is the same row shape, just in a tab instead of a
    modal); only the three-column row grid and the page frame are authored here. Frames the surface as
    a single scrolling column, same idiom as the Settings page: the pane host already supplies height
    and clips (#console-outlet-content > div), so this just owns its own padding and scroll. */
-#console-outlet [data-surface="shortcuts"] {
+#console-outlet [data-app="shortcuts"] {
   height: 100%; overflow-y: auto; display: flex; flex-direction: column;
   gap: 1.25rem; padding-block: 1.5rem 2.5rem; padding-inline: var(--console-pad);
 }

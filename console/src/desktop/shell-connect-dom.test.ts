@@ -104,7 +104,7 @@ describe("the shell connect page", () => {
     assert.equal(page.dataset.connectPage, "runs");
     assert.match(page.textContent ?? "", /No server connected/);
     assert.match(page.textContent ?? "", new RegExp(PURPOSE));
-    assert.equal(pane().querySelector("[data-stub-surface]"), null);
+    assert.equal(pane().querySelector("[data-stub-app]"), null);
   });
 
   test("applying an address opens the pending surface, once", async () => {
@@ -116,7 +116,7 @@ describe("the shell connect page", () => {
     await settle();
     assert.equal(stub.activations, 1);
     assert.equal(pane().querySelector("[data-connect-page]"), null, "the page is gone");
-    assert.ok(pane().querySelector("[data-stub-surface]"));
+    assert.ok(pane().querySelector("[data-stub-app]"));
     assert.equal(stub.visible.at(-1), true, "it inherits the pane's visibility");
     setDefaultHost("127.0.0.1:7392");
     await settle();
@@ -137,7 +137,7 @@ describe("the shell connect page", () => {
     tile.setVisible(true);
     await settle();
     assert.equal(stub.activations, 1);
-    assert.ok(pane().querySelector("[data-stub-surface]"));
+    assert.ok(pane().querySelector("[data-stub-app]"));
   });
 
   test("with an address already applied the surface opens directly", async () => {
@@ -181,7 +181,7 @@ describe("the shell connect page", () => {
     await settle();
     assert.equal(stub.deactivations, 0, "the surface is not torn down");
     assert.equal(pane().querySelector("[data-connect-page]"), null, "no page replaces it");
-    assert.equal(pane().querySelector("[data-stub-surface]")?.textContent, "surface data");
+    assert.equal(pane().querySelector("[data-stub-app]")?.textContent, "surface data");
   });
 
   test("closing the pane before connecting leaves nothing to open later", async () => {

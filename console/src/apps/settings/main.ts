@@ -388,7 +388,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   };
 
   const page = h("div", "console-settings-page");
-  page.dataset.surface = "settings";
+  page.dataset.app = "settings";
   // No page heading: the surface's own tab (the top tab bar) already reads "Settings", so an h1 here
   // just repeats it. The section sub-tabs below carry the naming from here down.
 
@@ -1170,7 +1170,7 @@ function ensureStylesheet(id: string, href: string): void {
 // settingsApp builds the Settings PageModule; the shell registers it and drives it through the
 // single-instance open() path.
 export function settingsApp(deps: SettingsDeps): PageModule<null, null> {
-  const cssId = "surface-css-settings";
+  const cssId = "app-css-settings";
   // A variable (not a string literal) so esbuild leaves it a runtime load: gen/settings/settings.css.
   const cssFile = "settings/settings.css";
   return {

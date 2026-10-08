@@ -670,7 +670,7 @@ export function referenceApp(): PageModule<null, null> {
     title: "Reference",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
       const root = document.createElement("div");
-      root.dataset.surface = "reference";
+      root.dataset.app = "reference";
       const body = document.createElement("div");
       body.className = "console-shell-refdrawer__body";
       const shell = document.getElementById("console-ref-shell");

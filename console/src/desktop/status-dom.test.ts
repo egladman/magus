@@ -27,7 +27,7 @@ describe("the console status bar", () => {
     publishStatus({ connection: "connected", label: "connected" });
     assert.equal(conn().textContent, "connected");
     assert.equal(conn().dataset.state, "connected");
-    assert.equal(conn().dataset.owner, "surface");
+    assert.equal(conn().dataset.owner, "app");
   });
 
   // The whole point of the split: a surface with nothing to say about the server must leave the dot

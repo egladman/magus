@@ -1094,7 +1094,7 @@ export function activate(host: HTMLElement): AppInstance {
     item.append(wrap);
     // Keep the full path in the native tooltip.
     item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-    if (o.annotation?.visibility === "public") item.dataset.surface = "public";
+    if (o.annotation?.visibility === "public") item.dataset.visibility = "public";
     if (o.annotation?.reach) {
       const r = h("span", "console-diff-sidebar__counts");
       r.textContent = String(o.annotation.reach);

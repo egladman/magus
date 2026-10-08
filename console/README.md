@@ -87,8 +87,8 @@ Three tokens decide it now, and a surface sheet reads them rather than picking a
 
 | Token                       | What it sizes                                                     |
 | --------------------------- | ----------------------------------------------------------------- |
-| `--console-surface-bar-h`   | a BAR: the strip carrying a surface's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
-| `--console-surface-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
+| `--console-app-bar-h`   | a BAR: the strip carrying a surface's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
+| `--console-app-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
 | `--console-pad`             | the inline gutter for every surface-level strip AND the content under it, so a header label starts on the same x as what it heads |
 
 Use a bar's height as a FLOOR (`min-block-size`), never a fixed size: these rows wrap in a narrow
@@ -274,10 +274,10 @@ ANSI colors, the badge kinds, the gantt bar kinds).
 the custom CSS CLASSES we author. A JS "hook" that carries no styling should be a `data-*`
 attribute, not a class, wherever practical.
 
-`data-surface` is SPOKEN FOR: it marks a mounted surface ROOT, and `console.css` styles several by
-value (`[data-surface="home"]`, `[data-surface="shortcuts"]`, ...). Chrome that lives inside
+`data-app` is SPOKEN FOR: it marks a mounted surface ROOT, and `console.css` styles several by
+value (`[data-app="home"]`, `[data-app="shortcuts"]`, ...). Chrome that lives inside
 `#console-outlet` but is not a surface must pick its own hook: the navigation rail uses
-`data-rail-surface` for exactly this reason, having first been written with `data-surface` and
+`data-rail-app` for exactly this reason, having first been written with `data-app` and
 silently inherited the Shortcuts surface's layout. Check a new hook against the existing selectors
 before reusing a name that reads as generic.
 

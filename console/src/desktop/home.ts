@@ -160,7 +160,7 @@ export function appIconSvg(glyph: string, size?: number): string {
 }
 
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
-// open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
+// open; `open` asks the console to open one as a tab. The returned element carries data-app="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
 // syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a server
@@ -292,11 +292,11 @@ export function buildLauncher(
   apps: readonly AppManifest[],
   open: (pageId: string) => void,
 ): HTMLElement {
-  // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
+  // data-app tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
   const root = document.createElement("div");
-  root.dataset.surface = "home";
+  root.dataset.app = "home";
 
   // The workspace's SIGIL (sigil.ts): one unique mark per workspace, derived from its root, so this
   // console looks like YOURS and a sibling worktree looks like itself. Fixed - an identifier that

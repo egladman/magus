@@ -17,12 +17,12 @@
 // PatternFly: this is a real PF Nav (pf-v6-c-nav, __list, __item, __link, __link-icon, __link-text,
 // pf-m-current) rather than an invented component - the console consumes PF's vocabulary as-is and
 // tunes it through PF's own per-link custom properties in console.css. Per the naming convention,
-// the two things PF has no word for are app hooks and state: data-rail-surface (which surface a row
+// the two things PF has no word for are app hooks and state: data-rail-app (which surface a row
 // opens) and data-tab-open / data-expanded (state), never a --modifier class.
 //
-// The hook is data-RAIL-surface, not data-surface: the console already uses data-surface to mark a
+// The hook is data-RAIL-surface, not data-app: the console already uses data-app to mark a
 // mounted SURFACE ROOT, and the rail lives inside #console-outlet where those rules apply - a row
-// named data-surface="shortcuts" picks up the Shortcuts surface's own layout and breaks.
+// named data-app="shortcuts" picks up the Shortcuts surface's own layout and breaks.
 
 import { tabHostsApp, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
@@ -102,7 +102,7 @@ export function sidebarItems(
 }
 
 // railAction builds a rail row that RUNS something rather than opening a surface. Same markup as a
-// surface row, so the two read and behave identically; it simply carries no data-rail-surface hook,
+// surface row, so the two read and behave identically; it simply carries no data-rail-app hook,
 // which is what keeps it out of the current/open bookkeeping that only surfaces have.
 function railAction(label: string, iconSvg: string, run: () => void): HTMLLIElement {
   const item = document.createElement("li");
@@ -299,7 +299,7 @@ export function createSidebar(
     const link = document.createElement("button");
     link.type = "button";
     link.className = "pf-v6-c-nav__link";
-    link.dataset.railSurface = s.id;
+    link.dataset.railApp = s.id;
     // The accessible name is on the button and stays there in BOTH states, so collapsing the rail to
     // icons never leaves a row unnamed. The visible text below is therefore decorative.
     link.setAttribute("aria-label", s.label);

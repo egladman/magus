@@ -495,7 +495,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // a run is `magus run` actually executing - a job's check runs as one, but plenty of runs exist
   // for no job at all. See docs/glossary.md's Job and Run entries, which this line is a plain-words
   // echo of. The link is the same cross-surface navigation every other surface uses
-  // (openApp/data-open-surface), not an anchor href - there is nothing to route to.
+  // (openApp/data-open-app), not an anchor href - there is nothing to route to.
   const intro = h("p", "console-plan-intro");
   intro.append(
     document.createTextNode(

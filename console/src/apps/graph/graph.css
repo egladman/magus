@@ -208,7 +208,7 @@
 .console-graph-stage__tools .pf-v6-c-toolbar__content-section {
   /* The bar's height as a FLOOR, the same one the log viewer's controls row takes. It has to be a
      floor: the row below wraps in a narrow pane and must be free to grow. */
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   column-gap: 0.4rem; row-gap: 0.3rem; align-items: center; flex-wrap: wrap; min-width: 0;
 }
 .console-graph-stage__tools .pf-m-toggle-group { flex-wrap: wrap; row-gap: 0.3rem; min-width: 0; }
@@ -911,7 +911,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__box { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .console-graph-qb__head {
   display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  min-block-size: var(--console-surface-head-h);
+  min-block-size: var(--console-app-head-h);
   padding-block: 0; padding-inline: var(--console-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
@@ -1000,7 +1000,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-figures-controls {
   display: flex;
   align-items: center;
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }

@@ -32,7 +32,7 @@ function mount(ws: Workspace, expanded = false, focusedPageId: string | null = n
 }
 
 function link(host: HTMLElement, pageId: string): HTMLButtonElement {
-  const el = host.querySelector<HTMLButtonElement>(`[data-rail-surface="${pageId}"]`);
+  const el = host.querySelector<HTMLButtonElement>(`[data-rail-app="${pageId}"]`);
   assert.ok(el, `no rail row for ${pageId}`);
   return el;
 }
@@ -41,7 +41,7 @@ test("renders one PF nav row per surface", () => {
   const { host } = mount({ tabs: [], activeId: null });
   // Count SURFACE rows, not nav items: the collapse control is a row of the same kind and would
   // otherwise be counted as a surface that does not exist.
-  assert.equal(host.querySelectorAll("[data-rail-surface]").length, 3);
+  assert.equal(host.querySelectorAll("[data-rail-app]").length, 3);
   assert.equal(link(host, "dashboard").querySelector("svg") != null, true);
   assert.equal(
     link(host, "dashboard").querySelector(".pf-v6-c-nav__link-text")?.textContent,
@@ -161,7 +161,7 @@ test("moving focus inside a tiled tab moves the current row", () => {
   assert.equal(link(host, "dashboard").classList.contains("pf-m-current"), false);
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), true);
   assert.equal(
-    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-surface].pf-m-current")
+    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-app].pf-m-current")
       .length,
     1,
     "exactly one row is ever current",
@@ -265,13 +265,13 @@ test("utility apps are pinned in their own group", () => {
   const { host } = mount({ tabs: [], activeId: null });
   const utility = host.querySelector("[data-rail-utility]");
   assert.ok(utility);
-  assert.equal(utility.querySelectorAll("[data-rail-surface]").length, 1);
+  assert.equal(utility.querySelectorAll("[data-rail-app]").length, 1);
   assert.equal(
-    utility.querySelector("[data-rail-surface]")?.getAttribute("data-rail-surface"),
+    utility.querySelector("[data-rail-app]")?.getAttribute("data-rail-app"),
     "settings",
   );
   // ...and the lenses are NOT in it.
-  assert.equal(utility.querySelector('[data-rail-surface="dashboard"]'), null);
+  assert.equal(utility.querySelector('[data-rail-app="dashboard"]'), null);
   // The utility group comes after the main list, so it renders at the foot.
   const lists = [...host.querySelectorAll(".pf-v6-c-nav__list")];
   assert.equal(lists[lists.length - 1], utility);

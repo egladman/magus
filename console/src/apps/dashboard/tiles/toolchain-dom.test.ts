@@ -124,7 +124,7 @@ test("Open Tools asks the shell to open the tools app", () => {
   };
   window.addEventListener(appNavigationEvent, listen);
   try {
-    const open = tile.el.querySelector<HTMLButtonElement>("[data-open-surface]");
+    const open = tile.el.querySelector<HTMLButtonElement>("[data-open-app]");
     assert.equal(open?.dataset.openApp, "tools");
     assert.equal(open?.textContent, "Open Tools");
     open?.click();

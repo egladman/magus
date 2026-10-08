@@ -43,7 +43,7 @@
      paint diagram-design's own paper (#f5f5f5, #2d3142) on purpose, being documents of
      their own. */
   --magus-diagram-paper: var(--pico-background-color);
-  --magus-diagram-surface: var(--pico-code-background-color);
+  --magus-diagram-fill: var(--pico-code-background-color);
   --magus-diagram-ink: var(--pico-color);
   --magus-diagram-muted: var(--pico-muted-color);
   --magus-diagram-soft: var(--pico-muted-color);

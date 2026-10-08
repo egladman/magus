@@ -4,8 +4,8 @@ export type AppNavigation = {
   mode?: string;
 };
 
-const eventName = "console:open-surface";
-const modeEventName = "console:surface-mode";
+const eventName = "console:open-app";
+const modeEventName = "console:app-mode";
 
 type ModeWindow = Window & { __magusConsoleModeIntent?: Record<string, string> };
 
