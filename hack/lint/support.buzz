@@ -46,6 +46,33 @@ export fun named(files: [Path], p: str) > Path? {
     return null;
 }
 
+// attributeGlobs are the patterns .gitattributes marks linguist-generated, as globs
+// rooted at the workspace.
+export fun attributeGlobs(src: str) > [str] {
+    final globs = mut [<str>];
+    foreach (line in src.split("\n")) {
+        final fields = line.trim().split(" ");
+        if (fields.len() < 2 or fields[0].startsWith("#") or fields.indexOf("linguist-generated") == null) {
+            continue;
+        }
+        globs.append(rooted(fields[0]));
+    }
+    return globs;
+}
+
+// rooted turns a gitignore-style pattern into a workspace glob: a leading slash, or a
+// slash inside the pattern, anchors it at the root; otherwise it matches at any depth.
+export fun rooted(p: str) > str {
+    if (p.startsWith("/")) {
+        return p.sub(1);
+    }
+    final inner = if (p.endsWith("/")) p.sub(0, len: p.len() - 1) else p;
+    if (inner.indexOf("/") != null) {
+        return p;
+    }
+    return "**/" + p;
+}
+
 // lineAt returns the 1-based line holding byte offset off of src.
 export fun lineAt(src: str, off: int) > int {
     var line = 1;

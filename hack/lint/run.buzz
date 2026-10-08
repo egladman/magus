@@ -24,6 +24,7 @@ import "path";
 import "std";
 import "magus/lint";
 import "hack/lint/support" as support;
+import "hack/lint/banned-words" as bannedwords;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
 import "hack/lint/code-follows-mined-precedents" as precedents;
@@ -75,6 +76,7 @@ export fun rules() > [Rule] {
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
         Rule{ name = "markdown-prose", reads = markdownprose\reads(), check = markdownprose\check },
+        Rule{ name = "banned-words", reads = bannedwords\reads(), check = bannedwords\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
         Rule{ name = "hack-scripts-parse-argv-with-flags", reads = scriptflags\reads(), check = scriptflags\check },

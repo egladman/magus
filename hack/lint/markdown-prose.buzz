@@ -117,7 +117,7 @@ export fun check(files: [Path]) > [Finding] !> any {
     final generated = mut [<str>];
     final attrs = support\named(files, p: ".gitattributes");
     if (attrs != null) {
-        foreach (g in attributeGlobs(support\read(attrs!))) { generated.append(g); }
+        foreach (g in support\attributeGlobs(support\read(attrs!))) { generated.append(g); }
     }
     final ignore = support\named(files, p: ".markdownlintignore");
     if (ignore != null) {
@@ -206,20 +206,6 @@ export fun judgedFindings(rows: [any], files: {str: str}) > [Finding] {
     return found;
 }
 
-// attributeGlobs are the patterns .gitattributes marks linguist-generated, as globs
-// rooted at the workspace.
-export fun attributeGlobs(src: str) > [str] {
-    final globs = mut [<str>];
-    foreach (line in src.split("\n")) {
-        final fields = line.trim().split(" ");
-        if (fields.len() < 2 or fields[0].startsWith("#") or fields.indexOf("linguist-generated") == null) {
-            continue;
-        }
-        globs.append(rooted(fields[0]));
-    }
-    return globs;
-}
-
 // ignoreGlobs are .markdownlintignore's entries as globs, less HAND_WRITTEN.
 export fun ignoreGlobs(src: str) > [str] {
     final globs = mut [<str>];
@@ -229,25 +215,12 @@ export fun ignoreGlobs(src: str) > [str] {
             continue;
         }
         if (t.endsWith("/")) {
-            globs.append(rooted(t) + "**");
+            globs.append(support\rooted(t) + "**");
         } else {
-            globs.append(rooted(t));
+            globs.append(support\rooted(t));
         }
     }
     return globs;
-}
-
-// rooted turns a gitignore-style pattern into a workspace glob: a leading slash, or a
-// slash inside the pattern, anchors it at the root; otherwise it matches at any depth.
-fun rooted(p: str) > str {
-    if (p.startsWith("/")) {
-        return p.sub(1);
-    }
-    final inner = if (p.endsWith("/")) p.sub(0, len: p.len() - 1) else p;
-    if (inner.indexOf("/") != null) {
-        return p;
-    }
-    return "**/" + p;
 }
 
 fun isGenerated(rel: str, globs: [str]) > bool !> any {
