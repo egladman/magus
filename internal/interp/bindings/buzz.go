@@ -55,7 +55,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// A native module, not a global: `magus` is reached by `import "magus"` like fs,
 	// vcs and every other host module, so its declarations attach the way theirs do
 	// and a file that never imports it fails to resolve the name.
-	sess.SetNativeModule("magus", buildMagus(ctx, sess, obs, parseMode, magusfileSurface))
+	sess.SetNativeModule("magus", buildMagus(ctx, sess, obs, parseMode, magusfileMode))
 
 	// A target declares its dependencies and cache footprint through the magus.Context
 	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
@@ -118,18 +118,18 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	})
 }
 
-// magusSurface names where the magus.* namespace is installed. A magusfile and a
+// magusMode names where the magus.* namespace is installed. A magusfile and a
 // `magus buzz` script share every member; only the withhold block differs. The
-// MCP client is a script surface with the clientWithheld members dropped.
-type magusSurface int
+// MCP client is the script mode with the clientWithheld members dropped.
+type magusMode int
 
 const (
-	// magusfileSurface is a magusfile being loaded or run: every member is live.
-	magusfileSurface magusSurface = iota
-	// scriptSurface is a standalone `magus buzz` script, snippet, test file, or REPL.
+	// magusfileMode is a magusfile being loaded or run: every member is live.
+	magusfileMode magusMode = iota
+	// scriptMode is a standalone `magus buzz` script, snippet, test file, or REPL.
 	// There is no workspace being loaded, so the members that DECLARE into one raise
 	// MGS1022 instead.
-	scriptSurface
+	scriptMode
 )
 
 // RegisterMagusNamespace installs the magus.* namespace into a standalone Buzz
@@ -137,25 +137,25 @@ const (
 // a magusfile and the members that need no magusfile (magus\describe, magus\cmd,
 // magus\run, magus\insight, magus\doctor, the log levels) work there.
 //
-// It is a SEPARATE call from RegisterModuleSurface rather than part of it, because
+// It is a SEPARATE call from RegisterModules rather than part of it, because
 // the magusfile engine installs its own richer namespace (registerAllBuzz) and must
 // not have this one layered over it. The two are built by the same buildMagus, so
 // they cannot drift.
 func RegisterMagusNamespace(ctx context.Context, sess *buzz.Session) {
-	sess.SetNativeModule("magus", buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
+	sess.SetNativeModule("magus", buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptMode))
 }
 
-// buildMagus assembles the magus.* namespace object for one surface. The
-// magusfile engine and `magus buzz` share it so the surfaces stay in lock-step, the
-// same reason RegisterModuleSurface is shared for the host modules. Both carry
+// buildMagus assembles the magus.* namespace object for one mode. The
+// magusfile engine and `magus buzz` share it so the two modes stay in lock-step, the
+// same reason RegisterModules is shared for the host modules. Both carry
 // every member; the MCP client goes through assembleMagus with some withheld.
-func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface) vm.Value {
-	return assembleMagus(ctx, sess, obs, parseMode, surface)
+func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, mode magusMode) vm.Value {
+	return assembleMagus(ctx, sess, obs, parseMode, mode)
 }
 
 // assembleMagus is buildMagus without the withheld top-level members, which are
 // also dropped from what magus\describe.module lists.
-func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface, withheld ...string) vm.Value {
+func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, mode magusMode, withheld ...string) vm.Value {
 	// The host-declarable subset (magus.cmd/run/insight/doctor,
 	// magus.bust_cache) is generated from the std.Magus descriptor like every other
 	// module, so the two can't drift and a declared method can't be silently left
@@ -237,7 +237,7 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// evaluation has. Elsewhere the real member would find no registry and return
 	// null (a silent no-op the caller reads as success), so it is replaced by an
 	// MGS1022 guard that names the constraint.
-	if surface != magusfileSurface {
+	if mode != magusfileMode {
 		magus.MapSet("project", magusfileOnly(obs, `magus\project`))
 		cache.MapSet("remote", magusfileOnly(obs, `magus\cache.remote`))
 		ci.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))

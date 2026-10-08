@@ -2769,7 +2769,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	sess.SetIncludeDirs([]string{dir})
 
 	var out bytes.Buffer
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(&out))
+	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(&out))
 	bindings.RegisterMagusNamespace(ctx, sess)
 	bindings.RegisterSpellSourceModules(sess)
 

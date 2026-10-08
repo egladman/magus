@@ -201,7 +201,7 @@ func InstallClient(ctx context.Context, sess *buzz.Session, out io.Writer) error
 	if err := sess.Provide(env, hostModuleBinds(clientHostModules())...); err != nil {
 		return err
 	}
-	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface, clientWithheld...))
+	sess.SetNativeModule("magus", assembleMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptMode, clientWithheld...))
 	spell.DeclareMagusTypes(sess, func(member string) bool { return !slices.Contains(clientWithheld, member) })
 	return nil
 }
@@ -219,8 +219,8 @@ func mergeModuleMapMissing(dst, src vm.Value) {
 	}
 }
 
-// moduleSurfaceConfig is the resolved options for one RegisterModuleSurface call.
-type moduleSurfaceConfig struct {
+// moduleConfig is the resolved options for one RegisterModules call.
+type moduleConfig struct {
 	modules ffi.Set
 	// scriptOut is where std.print goes. Defaults to STDERR: under `magus run` a
 	// magusfile's print is human output like every other thing magus says, and
@@ -231,31 +231,31 @@ type moduleSurfaceConfig struct {
 	scriptOut io.Writer
 }
 
-// ModuleSurfaceOption configures one registration of the host module surface.
-type ModuleSurfaceOption func(*moduleSurfaceConfig)
+// ModuleOption configures one registration of the host modules.
+type ModuleOption func(*moduleConfig)
 
 // WithModules replaces the default host-module set for one session. It is the
 // test seam for a fake fs/http/vcs module; callers use registry.Modules.With to
 // replace only the capability they need without mutating global state.
-func WithModules(modules ffi.Set) ModuleSurfaceOption {
-	return func(c *moduleSurfaceConfig) { c.modules = modules }
+func WithModules(modules ffi.Set) ModuleOption {
+	return func(c *moduleConfig) { c.modules = modules }
 }
 
 // WithScriptOutput sends std.print to w instead of the default stderr. `magus buzz`
 // passes stdout: it runs a script as a program, so the script's output is the
 // command's output rather than commentary alongside one.
-func WithScriptOutput(w io.Writer) ModuleSurfaceOption {
-	return func(c *moduleSurfaceConfig) { c.scriptOut = w }
+func WithScriptOutput(w io.Writer) ModuleOption {
+	return func(c *moduleConfig) { c.scriptOut = w }
 }
 
-// RegisterModuleSurface installs the shared Buzz module surface: Buzz's own
-// stdlib, the magus testing extensions (assert/suite), and every magus module
-// (hostreg.Modules) layered on top of the same bare names. It is the full surface
-// a standalone script sees, shared by the magusfile engine (which then adds the
-// magus.* namespace and the Target/Charm source types on top) and the `magus buzz`
+// RegisterModules installs the shared Buzz modules: Buzz's own stdlib, the magus
+// testing extensions (assert/suite), and every magus module (hostreg.Modules)
+// layered on top of the same bare names. It is the full module set a standalone
+// script sees, shared by the magusfile engine (which then adds the magus.*
+// namespace and the Target/Charm source types on top) and the `magus buzz`
 // runner, so the two never drift.
-func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...ModuleSurfaceOption) {
-	cfg := moduleSurfaceConfig{modules: bindinggen.Modules, scriptOut: os.Stderr}
+func RegisterModules(ctx context.Context, sess *buzz.Session, opts ...ModuleOption) {
+	cfg := moduleConfig{modules: bindinggen.Modules, scriptOut: os.Stderr}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -286,7 +286,7 @@ func RegisterModuleSurface(ctx context.Context, sess *buzz.Session, opts ...Modu
 // aggregate. Shared by the magusfile binding path (registerAllBuzz) and the spell
 // handler op path (callBuzzSpellFunc), so both surfaces stay in lock-step.
 func registerMagusModules(ctx context.Context, sess *buzz.Session) {
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterSpellSourceModules(sess)
 }
 
@@ -303,7 +303,7 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 //     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
 //     RegisterMagusNamespace); only its types are declared here.
 //
-// It is layered on top of RegisterModuleSurface by the magusfile runtime and,
+// It is layered on top of RegisterModules by the magusfile runtime and,
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
 func RegisterSpellSourceModules(sess *buzz.Session) {

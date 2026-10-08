@@ -533,7 +533,7 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 
 func TestBuzzCmd_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
 	_, trace := buzzTrace(t, []string{"-s", "-e", `import "std"; fun main() > void { std\print("ok"); }`})
-	assert.Contains(t, trace, "buzz.register_surface")
+	assert.Contains(t, trace, "buzz.register_modules")
 	assert.Contains(t, trace, "buzz.register_decls")
 	assert.Contains(t, trace, "buzz.exec")
 	assert.Contains(t, trace, "buzz.main")
@@ -627,7 +627,7 @@ func TestBuzzReachesMagus(t *testing.T) {
 	sess := buzz.NewSession(t.Context())
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetIncludeDirs([]string{dir})
-	bindings.RegisterModuleSurface(t.Context(), sess)
+	bindings.RegisterModules(t.Context(), sess)
 
 	for code, want := range map[string]bool{
 		`import "std"; import "fs";`:                  false,

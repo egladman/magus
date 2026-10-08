@@ -620,8 +620,8 @@ func buzzFindImport(p, dir string, includeDirs []string) string {
 // file's type of the same name still wins and an aliased import sees them. The
 // resolver below covers an import the closure scan could not follow.
 func installBuzzHost(ctx context.Context, sess *buzz.Session, code string, scriptOut io.Writer, tr *startupTracer) {
-	stop := tr.phase("buzz.register_surface")
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(scriptOut))
+	stop := tr.phase("buzz.register_modules")
+	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(scriptOut))
 	stop()
 	stop = tr.phase("buzz.register_decls")
 	bindings.RegisterSpellDecls(sess)

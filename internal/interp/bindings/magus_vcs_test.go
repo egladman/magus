@@ -26,7 +26,7 @@ func execMagusScript(t *testing.T, ws types.WorkspaceRepository, src string) fun
 	ctx := types.WithWorkspace(t.Context(), ws)
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	require.NoError(t, sess.Exec(ctx, src))
 	return func(export string) (vm.Value, error) {

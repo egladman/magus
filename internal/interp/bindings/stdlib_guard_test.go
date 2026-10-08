@@ -34,7 +34,7 @@ func newGuardFixture(t *testing.T, rules ...filesystem.Rule) guardFixture {
 	outside := filesystem.ResolveRulePath(t.TempDir())
 	sess := buzz.NewSession(t.Context(), buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(t.Context(), sess)
+	RegisterModules(t.Context(), sess)
 	base := []filesystem.Rule{{Path: ws, Read: true, Write: true}}
 	// A child the kernel confines needs its ELF interpreter and libc too.
 	for _, dir := range []string{"/lib", "/lib64", "/usr/lib", "/usr/lib64"} {

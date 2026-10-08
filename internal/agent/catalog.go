@@ -560,10 +560,10 @@ func diagnosticCode(code string) (types.DiagnosticCode, error) {
 	return "", fmt.Errorf("no diagnostic %q: a skill may only cite a registered code", code)
 }
 
-// buzzSurfaceName is the identifier a magusfile writes for decl, which is not always
+// buzzMemberName is the identifier a magusfile writes for decl, which is not always
 // its declared Name: a declaration may pin a verbatim spelling, and otherwise the Buzz
-// surface is the camelCase of the snake_case Name.
-func buzzSurfaceName(decl std.Method) string {
+// member is the camelCase of the snake_case Name.
+func buzzMemberName(decl std.Method) string {
 	if decl.BuzzName != "" {
 		return decl.BuzzName
 	}
@@ -632,7 +632,7 @@ var skillFuncs = template.FuncMap{
 			}
 			if !nested {
 				for _, decl := range m.Methods {
-					if buzzSurfaceName(decl) == call {
+					if buzzMemberName(decl) == call {
 						return magusModule + `\` + call, nil
 					}
 				}
@@ -643,7 +643,7 @@ var skillFuncs = template.FuncMap{
 					continue
 				}
 				for _, decl := range ns.Methods {
-					if buzzSurfaceName(decl) == method {
+					if buzzMemberName(decl) == method {
 						return magusModule + `\` + call, nil
 					}
 				}

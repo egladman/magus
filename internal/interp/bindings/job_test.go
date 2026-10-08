@@ -31,7 +31,7 @@ func TestJobExitWithoutResultThroughBuzzScript(t *testing.T) {
 	ctx := types.WithWorkspace(t.Context(), workspace)
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 
 	require.NoError(t, sess.Exec(ctx, `

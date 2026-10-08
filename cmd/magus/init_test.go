@@ -67,7 +67,7 @@ func TestStarterMagusfileChecksClean(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer func() { _ = sess.Close() }()
-	bindings.RegisterModuleSurface(ctx, sess, bindings.WithScriptOutput(io.Discard))
+	bindings.RegisterModules(ctx, sess, bindings.WithScriptOutput(io.Discard))
 	bindings.RegisterMagusNamespace(ctx, sess)
 	bindings.RegisterSpellSourceModules(sess)
 	require.NoError(t, sess.Exec(ctx, starterMagusfileBuzz),

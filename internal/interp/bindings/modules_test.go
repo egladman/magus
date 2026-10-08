@@ -92,7 +92,7 @@ func TestSupersetModules(t *testing.T) {
 	}
 }
 
-func TestRegisterModuleSurfaceWithModules(t *testing.T) {
+func TestRegisterModulesWithModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
@@ -105,7 +105,7 @@ func TestRegisterModuleSurfaceWithModules(t *testing.T) {
 		},
 		Capabilities: ffi.Capabilities(ffi.WASM),
 	})
-	RegisterModuleSurface(ctx, sess, WithModules(modules))
+	RegisterModules(ctx, sess, WithModules(modules))
 
 	json, ok := sess.NativeModule("json")
 	require.True(t, ok)
@@ -122,7 +122,7 @@ func scriptSession(t *testing.T) *buzz.Session {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	return sess
 }

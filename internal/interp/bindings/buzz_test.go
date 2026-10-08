@@ -282,22 +282,22 @@ func TestClientDeniedImportPathsCoverTheWithheldStdlib(t *testing.T) {
 	}
 }
 
-// surfaceLockPath is the committed snapshot of everything a magusfile can call on the
+// apiLockPath is the committed snapshot of everything a magusfile can call on the
 // magus namespace, one dotted member per line, sorted.
-var surfaceLockPath = filepath.Join("testdata", "magus-api.lock")
+var apiLockPath = filepath.Join("testdata", "magus-api.lock")
 
-// magusSurfaceNames flattens the magusfile-surface magus namespace to dotted member
+// magusAPINames flattens the magusfile-mode magus namespace to dotted member
 // names, two levels deep: the top-level members plus the members of each namespace
 // member (project, cache, ci, secret, workspace). Two levels is what the removal
 // history needs (`magus.project.register` and `magus.target.literal` were both
-// nested), and going deeper would snapshot returned data rather than the surface.
-func magusSurfaceNames(t *testing.T) []string {
+// nested), and going deeper would snapshot returned data rather than the API.
+func magusAPINames(t *testing.T) []string {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 
-	magus := buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, magusfileSurface)
+	magus := buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, magusfileMode)
 	require.True(t, magus.IsMap(), "the magus module is a map")
 
 	var out []string
@@ -327,16 +327,16 @@ func magusSurfaceNames(t *testing.T) []string {
 // member and the table that has to describe it; an added one fails too, which is the
 // cheap price of the snapshot and is settled by regenerating.
 func TestMagusSurfaceLocked(t *testing.T) {
-	got := magusSurfaceNames(t)
+	got := magusAPINames(t)
 
 	if os.Getenv("UPDATE_MAGUS_API_LOCK") != "" {
-		require.NoError(t, os.MkdirAll(filepath.Dir(surfaceLockPath), 0o755))
-		require.NoError(t, os.WriteFile(surfaceLockPath, []byte(strings.Join(got, "\n")+"\n"), 0o644))
-		t.Logf("wrote %s (%d members)", surfaceLockPath, len(got))
+		require.NoError(t, os.MkdirAll(filepath.Dir(apiLockPath), 0o755))
+		require.NoError(t, os.WriteFile(apiLockPath, []byte(strings.Join(got, "\n")+"\n"), 0o644))
+		t.Logf("wrote %s (%d members)", apiLockPath, len(got))
 		return
 	}
 
-	data, err := os.ReadFile(surfaceLockPath)
+	data, err := os.ReadFile(apiLockPath)
 	require.NoError(t, err, "the surface lock must be committed; regenerate with UPDATE_MAGUS_API_LOCK=1 go test ./internal/interp/bindings/")
 	want := strings.Fields(strings.TrimSpace(string(data)))
 
@@ -392,7 +392,7 @@ func TestMagusSurfaceIsDeclared(t *testing.T) {
 	}
 	// The magus.Context builder and the target registry are not members of this
 	// namespace; log is assembled here from the descriptor's log namespace.
-	for _, name := range magusSurfaceNames(t) {
+	for _, name := range magusAPINames(t) {
 		assert.Truef(t, declared[name],
 			"magus\\%s is bound at run time but absent from the std.Magus descriptor, "+
 				"so it has no checker declaration, no reference doc page, and nothing "+
@@ -406,7 +406,7 @@ func TestMagusSurfaceIsDeclared(t *testing.T) {
 // something that works.
 func TestRemovedAPIIsActuallyRemoved(t *testing.T) {
 	live := map[string]bool{}
-	for _, n := range magusSurfaceNames(t) {
+	for _, n := range magusAPINames(t) {
 		live[n] = true
 	}
 	for _, name := range interp.RemovedAPINames() {
@@ -467,7 +467,7 @@ func runCollapseBench(b *testing.B, prelude, call string, words int) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	b.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 
 	src := fmt.Sprintf(`
 import "strings";

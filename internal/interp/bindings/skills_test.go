@@ -47,7 +47,7 @@ func skillsSession(t *testing.T, ctx context.Context) *buzz.Session {
 	t.Helper()
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	require.NoError(t, sess.Exec(ctx, skillsScript))
 	return sess

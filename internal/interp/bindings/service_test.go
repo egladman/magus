@@ -42,7 +42,7 @@ func TestServiceLeasesThroughBuzzScript(t *testing.T) {
 	ctx, scope := service.WithScope(types.WithWorkspace(t.Context(), ws))
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	DeclareMagusTypes(sess)
 	RegisterMagusNamespace(ctx, sess)
 	require.NoError(t, sess.Exec(ctx, `
