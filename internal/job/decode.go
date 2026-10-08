@@ -38,7 +38,7 @@ func foldStoredNames(rows []types.Job) error {
 			// remains; magus doctor reports no row carrying completion_gates): a row an older
 			// magus wrote would come back with no goals, and wait would pass it on its check
 			// alone. mirrorLegacyGoals is the write half.
-			Goals []types.CompletionGate `json:"completion_gates"`
+			Goals []types.Goal `json:"completion_gates"`
 		}
 		bag, err := json.Marshal(rows[i].Unknown)
 		if err != nil {

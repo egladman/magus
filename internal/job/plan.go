@@ -82,9 +82,9 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 		if err := RefuseUngraded(merged); err != nil {
 			return "", err
 		}
-		var goals []types.CompletionGate
+		var goals []types.Goal
 		for _, gate := range merged.Goals {
-			if !slices.ContainsFunc(prev.Goals, func(g types.CompletionGate) bool { return g.ID == gate.ID }) {
+			if !slices.ContainsFunc(prev.Goals, func(g types.Goal) bool { return g.ID == gate.ID }) {
 				goals = append(goals, gate)
 			}
 		}
@@ -318,13 +318,13 @@ func RefuseForkLimits(rows []types.Job, id, parent string, limits config.Jobs) e
 // RefuseAmbiguousSymbols refuses a symbol gate whose bare name resolves to more than one
 // definition, naming each. A name the reader cannot answer for is not refused: a cold graph
 // must not block a declaration, and the gate itself still refuses to certify later.
-func RefuseAmbiguousSymbols(ctx context.Context, gates []types.CompletionGate, read SymbolReader) error {
+func RefuseAmbiguousSymbols(ctx context.Context, gates []types.Goal, read SymbolReader) error {
 	if read == nil {
 		return nil
 	}
 	var refused []string
 	for _, gate := range gates {
-		if gate.Resolve().Kind != types.GateKindSymbol {
+		if gate.Resolve().Kind != types.GoalKindSymbol {
 			continue
 		}
 		for _, name := range gate.Symbols {
@@ -378,21 +378,21 @@ func RenderGates(out io.Writer, status types.JobStatus) {
 	}
 }
 
-// inheritGates returns row with its ancestors' symbol gates appended, each renamed
-// `<ancestor>/<gate>` so it cannot collide with the row's own. Only symbol gates travel: a
-// check or a paths gate names work the ancestor does, while a symbol gate names a fact
+// inheritGoals returns row with its ancestors' symbol goals appended, each renamed
+// `<ancestor>/<goal>` so it cannot collide with the row's own. Only symbol goals travel: a
+// check or a paths goal names work the ancestor does, while a symbol goal names a fact
 // about the tree that a child's changes can break.
-func inheritGates(row types.Job, rows []types.Job) types.Job {
-	var inherited []types.CompletionGate
+func inheritGoals(row types.Job, rows []types.Job) types.Job {
+	var inherited []types.Goal
 	for _, ancestor := range types.JobAncestors(rows, row.ID) {
-		for _, gate := range ancestor.Goals {
-			if gate = gate.Resolve(); gate.Kind != types.GateKindSymbol {
+		for _, goal := range ancestor.Goals {
+			if goal = goal.Resolve(); goal.Kind != types.GoalKindSymbol {
 				continue
 			}
-			gate.ID = ancestor.ID + "/" + gate.ID
-			// Its dependencies name gates of the ancestor's this row does not carry.
-			gate.DependsOn = nil
-			inherited = append(inherited, gate)
+			goal.ID = ancestor.ID + "/" + goal.ID
+			// Its dependencies name goals of the ancestor's this row does not carry.
+			goal.DependsOn = nil
+			inherited = append(inherited, goal)
 		}
 	}
 	if len(inherited) == 0 {

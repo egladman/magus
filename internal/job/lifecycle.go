@@ -107,7 +107,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 	// that needed it refuses; nothing here turns a failed look into a satisfied gate.
 	var seen Observed
 	if observe != nil {
-		if seen, err = observe(ctx, inheritGates(jobs[i], jobs)); err != nil {
+		if seen, err = observe(ctx, inheritGoals(jobs[i], jobs)); err != nil {
 			return types.JobStatus{}, err
 		}
 	}
@@ -117,7 +117,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
-		status = VerifyGates(inheritGates(*row, jobs), *result, attempt, gateAttempts, jobs, seen)
+		status = VerifyGates(inheritGoals(*row, jobs), *result, attempt, gateAttempts, jobs, seen)
 		if status.Verified {
 			row.State = types.StatePass
 		}
@@ -243,7 +243,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 	if i < 0 {
 		return types.JobStatus{}, fmt.Errorf("job: there is no job %q", id)
 	}
-	row := inheritGates(jobs[i], jobs)
+	row := inheritGoals(jobs[i], jobs)
 
 	result := types.JobResult{Job: row.ID}
 	attempt, gateAttempts := types.JobAttempt{}, row.GateAttempts

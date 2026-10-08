@@ -233,7 +233,7 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 // a client the MCP descriptor holds to scalars, and validates it through the same typed
 // declaration boundary stdin uses. Authorization then treats the collection as a declared
 // plan field, so a bound holder cannot rewrite it.
-func mergeGoals(params map[string]any, key string) ([]types.CompletionGate, bool, error) {
+func mergeGoals(params map[string]any, key string) ([]types.Goal, bool, error) {
 	v, present := params[key]
 	if !present {
 		return nil, false, nil
@@ -245,7 +245,7 @@ func mergeGoals(params map[string]any, key string) ([]types.CompletionGate, bool
 	if err != nil {
 		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
 	}
-	var gates []types.CompletionGate
+	var gates []types.Goal
 	if err := json.Unmarshal(body, &gates); err != nil {
 		return nil, false, fmt.Errorf("job: %s must be an array of goals: %w", key, err)
 	}

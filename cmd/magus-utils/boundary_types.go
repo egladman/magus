@@ -233,7 +233,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Origin", Type: reflect.TypeFor[types.Origin](), RuntimeObject: true},
 	{Name: "JobEntry", Type: reflect.TypeFor[types.JobEntry](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
-	{Name: "CompletionGate", Type: reflect.TypeFor[types.CompletionGate](), RuntimeObject: true},
+	{Name: "Goal", Type: reflect.TypeFor[types.Goal](), RuntimeObject: true},
 	{Name: "GateEvidence", Type: reflect.TypeFor[types.GateEvidence](), RuntimeObject: true},
 	{Name: "JobResult", Type: reflect.TypeFor[types.JobResult](), RuntimeObject: true},
 	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},

@@ -252,7 +252,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   append(make([]string, 0, 4), "types/"),
 		DenyPaths:    append(make([]string, 0, 4), "gen/"),
 		DependsOn:    append(make([]string, 0, 4), "b"),
-		Goals:        append(make([]CompletionGate, 0, 4), CompletionGate{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
+		Goals:        append(make([]Goal, 0, 4), Goal{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
 		GateAttempts: append(make([]JobGateAttempt, 0, 4), JobGateAttempt{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}),
 		Releases:     append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
 		Unattributed: append(make([]JobUnattributedWrite, 0, 4), JobUnattributedWrite{Path: "types/y.go"}),
@@ -281,7 +281,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/", "first/"},
 		DenyPaths:    []string{"gen/", "first/"},
 		DependsOn:    []string{"b", "first"},
-		Goals:        []CompletionGate{{ID: "unit", Kind: GateKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
+		Goals:        []Goal{{ID: "unit", Kind: GoalKindCheck, Expect: ExpectPassed, Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check", "first"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}},
 		Releases:     []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}},
 		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}},
@@ -294,7 +294,7 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 		WritePaths:   []string{"types/"},
 		DenyPaths:    []string{"gen/"},
 		DependsOn:    []string{"b"},
-		Goals:        []CompletionGate{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
+		Goals:        []Goal{{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}},
 		GateAttempts: []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}},
 		Releases:     []JobRelease{{Path: "types/x.go"}},
 		Unattributed: []JobUnattributedWrite{{Path: "types/y.go"}},
@@ -318,7 +318,7 @@ func TestDeclarationRejectsCyclicGoals(t *testing.T) {
 
 	err := (Declaration{
 		ID: "gated",
-		Goals: []CompletionGate{
+		Goals: []Goal{
 			{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"publish"}},
 			{ID: "publish", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"unit"}},
 		},
@@ -437,7 +437,7 @@ func TestScriptCheckRendersAsARecordedRunAndNamesOneSubject(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 
-	gate := CompletionGate{ID: "probe", Kind: GateKindCheck, Check: LeaseCheck{Script: "probes/key.buzz"}}.Resolve()
+	gate := Goal{ID: "probe", Kind: GoalKindCheck, Check: LeaseCheck{Script: "probes/key.buzz"}}.Resolve()
 	require.NoError(t, gate.Validate())
 
 	both := gate

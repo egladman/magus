@@ -122,15 +122,15 @@ func (f SymbolFact) Defined() bool { return len(f.DefinedIn) > 0 }
 // magus looked. Absence of evidence never satisfies a gate: a guard that cannot ask must
 // stand down, and a gate that cannot verify must refuse, or the cheapest way to pass one
 // is to break the observation.
-func (o Observed) missing(kind types.GateKind, expect types.GateExpect) string {
+func (o Observed) missing(kind types.GoalKind, expect types.GoalExpect) string {
 	switch {
-	case kind == types.GateKindPaths && expect == types.ExpectChanged && !o.ChangedKnown:
+	case kind == types.GoalKindPaths && expect == types.ExpectChanged && !o.ChangedKnown:
 		return "magus could not read what this job changed, so there is no diff to hold the declared paths against"
-	case kind == types.GateKindPaths && expect != types.ExpectChanged && !o.PresentKnown:
+	case kind == types.GoalKindPaths && expect != types.ExpectChanged && !o.PresentKnown:
 		return "magus could not read the tree, so it cannot say whether the declared paths are there"
-	case kind == types.GateKindSymbol && expect == types.ExpectChanged && !o.ChangedKnown:
+	case kind == types.GoalKindSymbol && expect == types.ExpectChanged && !o.ChangedKnown:
 		return "magus could not read what this job changed, so it cannot say whether the declared symbols moved"
-	case kind == types.GateKindSymbol && !o.SymbolsKnown:
+	case kind == types.GoalKindSymbol && !o.SymbolsKnown:
 		return "magus could not read the symbol graph, so it cannot say what the declared symbols are. `" + hint.GraphBuild.String() + "` builds it"
 	}
 	return ""
@@ -140,13 +140,13 @@ func (o Observed) missing(kind types.GateKind, expect types.GateExpect) string {
 // is per subject rather than per gate because a partial result is the common case: the
 // migration lands and the test beside it does not, and a verdict naming only the gate
 // makes the reader re-derive which half is missing.
-func (o Observed) holds(kind types.GateKind, expect types.GateExpect, declared string) (bool, string) {
+func (o Observed) holds(kind types.GoalKind, expect types.GoalExpect, declared string) (bool, string) {
 	from := o.ChangedFrom
 	if from == "" {
 		from = "the job's checkpoint"
 	}
 	switch kind {
-	case types.GateKindPaths:
+	case types.GoalKindPaths:
 		switch expect {
 		case types.ExpectChanged:
 			if o.covering(declared, o.Changed) {
@@ -169,7 +169,7 @@ func (o Observed) holds(kind types.GateKind, expect types.GateExpect, declared s
 	}
 }
 
-func (o Observed) symbolHolds(expect types.GateExpect, declared, from string) (bool, string) {
+func (o Observed) symbolHolds(expect types.GoalExpect, declared, from string) (bool, string) {
 	fact, asked := o.Symbols[declared]
 	if !asked {
 		// A name nobody asked the graph about reads as undefined and unreferenced, which
@@ -287,7 +287,7 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			" `magus buzz --record`, whose printed ref is evidence anyone can reopen", row.ID))
 	}
 
-	declaredGates := make(map[string]types.CompletionGate, len(row.Goals))
+	declaredGates := make(map[string]types.Goal, len(row.Goals))
 	for _, gate := range row.Goals {
 		declaredGates[gate.ID] = gate
 	}
@@ -322,8 +322,8 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	// declaring only `--check` reported no goals at all to anything that read Gates,
 	// which is how `describe job` came to show an empty goal list on a job with a check.
 	gates := row.EffectiveGoals()
-	evidenceByGate[types.PrimaryCompletionGateID] = rep.Validation.OutputRef
-	attemptByGate[types.PrimaryCompletionGateID] = att
+	evidenceByGate[types.PrimaryGoalID] = rep.Validation.OutputRef
+	attemptByGate[types.PrimaryGoalID] = att
 
 	statusByGate := map[string]types.GateStatus{}
 	for _, gate := range gates {
@@ -406,8 +406,8 @@ func prefixedGateViolations(status types.GateStatus) []string {
 	return out
 }
 
-func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {
-	if kind := gate.Kind; kind != types.GateKindCheck {
+func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAttempt, seen Observed) types.GateStatus {
+	if kind := gate.Kind; kind != types.GoalKindCheck {
 		return verifySubjectGate(gate, seen)
 	}
 	status := types.GateStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
@@ -753,7 +753,7 @@ const globMeta = "*?[{"
 // one thing a gate must not read as evidence, and a caller that could not compute the diff
 // says so through ChangedKnown rather than by handing back an empty list that looks like a
 // job which changed nothing.
-func verifySubjectGate(gate types.CompletionGate, seen Observed) types.GateStatus {
+func verifySubjectGate(gate types.Goal, seen Observed) types.GateStatus {
 	status := types.GateStatus{ID: gate.ID}
 	kind, expect := gate.Kind, gate.Expect
 
@@ -807,9 +807,9 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep types.Job
 	if rep.Job != "" && rep.Job != id {
 		return types.JobIntegration{}, fmt.Errorf("job: the evidence is filed under job %q and this one is %q", rep.Job, id)
 	}
-	var checks []types.CompletionGate
+	var checks []types.Goal
 	for _, gate := range row.EffectiveGoals() {
-		if gate.Kind == types.GateKindCheck {
+		if gate.Kind == types.GoalKindCheck {
 			checks = append(checks, gate)
 		}
 	}
@@ -818,10 +818,10 @@ func WaitIntegration(ctx context.Context, store *Store, id string, rep types.Job
 	}
 	refs := map[string]string{}
 	if ref := strings.TrimSpace(rep.Validation.OutputRef); ref != "" {
-		refs[types.PrimaryCompletionGateID] = ref
+		refs[types.PrimaryGoalID] = ref
 	}
 	for _, evidence := range rep.GateEvidence {
-		if !slices.ContainsFunc(checks, func(g types.CompletionGate) bool { return g.ID == evidence.GateID }) {
+		if !slices.ContainsFunc(checks, func(g types.Goal) bool { return g.ID == evidence.GateID }) {
 			return types.JobIntegration{}, fmt.Errorf("job: the evidence names goal %q, and %s holds no check goal by that id", evidence.GateID, id)
 		}
 		refs[evidence.GateID] = strings.TrimSpace(evidence.OutputRef)

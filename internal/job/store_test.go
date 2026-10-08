@@ -695,7 +695,7 @@ func TestStoreReadsGoalsStoredUnderTheirOldName(t *testing.T) {
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
-	assert.Equal(t, []types.CompletionGate{{ID: "gone", Kind: types.GateKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}, rows[0].Goals)
+	assert.Equal(t, []types.Goal{{ID: "gone", Kind: types.GoalKindSymbol, Expect: types.ExpectAbsent, Symbols: []string{"Legacy"}}}, rows[0].Goals)
 
 	_, err = s.Update(t.Context(), "a", func(u *types.Job) { u.Criteria = "rewritten" })
 	require.NoError(t, err)
@@ -711,7 +711,7 @@ func TestStoreReadsGoalsStoredUnderTheirOldName(t *testing.T) {
 		`"goals":[{"id":"y","kind":"paths","expect":"changed","paths":["b"]}]}]}`)
 	rows, err = s.List()
 	require.NoError(t, err)
-	assert.Equal(t, []types.CompletionGate{{ID: "x", Kind: types.GateKindPaths, Expect: types.ExpectChanged, Paths: []string{"a"}}}, rows[0].Goals)
+	assert.Equal(t, []types.Goal{{ID: "x", Kind: types.GoalKindPaths, Expect: types.ExpectChanged, Paths: []string{"a"}}}, rows[0].Goals)
 }
 
 func TestStoreClear(t *testing.T) {
