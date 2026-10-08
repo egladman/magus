@@ -11,17 +11,17 @@ repository root, and it runs hooks as programs with the event on stdin. One
 self-contained script covers every event magus uses, so installing the whole
 integration is a single download.
 
-| what             | where                                                                      |
-| ---------------- | -------------------------------------------------------------------------- |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)                   |
-| guard wiring     | `.cursor/hooks.json`                                                       |
-| shell commands   | deny and advise both reach the model                                       |
-| file writes      | deny and advise both reach the model                                       |
-| MCP calls        | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
-| session start    | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
-| checkpoint       | `sessionEnd`                                                               |
-| lease            | `subagentStart` (unverified live, see below)                               |
-| MCP              | [MCP](../mcp.md)                                                           |
+| what            | where                                                                      |
+| --------------- | -------------------------------------------------------------------------- |
+| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
+| guard wiring    | `.cursor/hooks.json`                                                       |
+| shell commands  | deny and advise both reach the model                                       |
+| file writes     | deny and advise both reach the model                                       |
+| MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
+| session start   | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
+| checkpoint      | `sessionEnd`                                                               |
+| lease           | `subagentStart` (unverified live, see below)                               |
+| MCP             | [MCP](../mcp.md)                                                           |
 
 ## Skills
 

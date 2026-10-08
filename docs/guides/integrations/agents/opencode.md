@@ -12,16 +12,16 @@ a deny reaches the model as the tool error; an advise is appended to the tool's
 own result by `tool.execute.after`, which is the same call and the same context
 window. One file carries all of it.
 
-| what             | where                                                                                         |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| skills           | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
-| guard wiring     | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
-| shell commands   | deny and advise both reach the model                                                          |
-| file writes      | deny and advise both reach the model                                                          |
-| MCP calls        | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
-| checkpoint       | the `session.idle` bus event                                                                  |
-| rehydration      | `experimental.session.compacting`                                                             |
-| MCP              | [MCP](../mcp.md)                                                                              |
+| what           | where                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| skills         | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
+| guard wiring   | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
+| shell commands | deny and advise both reach the model                                                          |
+| file writes    | deny and advise both reach the model                                                          |
+| MCP calls      | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
+| checkpoint     | the `session.idle` bus event                                                                  |
+| rehydration    | `experimental.session.compacting`                                                             |
+| MCP            | [MCP](../mcp.md)                                                                              |
 
 ## Skills
 

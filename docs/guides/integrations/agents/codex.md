@@ -13,18 +13,18 @@ verdict shape. Current Magus binaries therefore receive those events directly;
 the shared templates remain the portable fallback for hosts without that host
 contract.
 
-| what             | where                                                           |
-| ---------------- | --------------------------------------------------------------- |
-| skills           | `.agents/skills/`                                               |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)        |
-| guard wiring     | `.codex/hooks.json`, `PreToolUse`                               |
-| shell commands   | deny and advise both reach the model                            |
-| file writes      | deny and advise both reach the model                            |
-| MCP calls        | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
-| push approval    | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
-| checkpoint       | `Stop`                                                          |
-| rehydration      | `SessionStart` (`compact`)                                      |
-| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
+| what            | where                                                           |
+| --------------- | --------------------------------------------------------------- |
+| skills          | `.agents/skills/`                                               |
+| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)        |
+| guard wiring    | `.codex/hooks.json`, `PreToolUse`                               |
+| shell commands  | deny and advise both reach the model                            |
+| file writes     | deny and advise both reach the model                            |
+| MCP calls       | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
+| push approval   | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
+| checkpoint      | `Stop`                                                          |
+| rehydration     | `SessionStart` (`compact`)                                      |
+| MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
 
 ## Skills
 
