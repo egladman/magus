@@ -12,7 +12,7 @@ import (
 // full copy only, its `{{else}}` arm in the short copy only, and `.Short` and
 // `.Is "name"` branch the same way. The short copy is held to the terse rules
 // as well as the Markdown ones; text only the full copy shows is held to the
-// Markdown rules alone.
+// Markdown rules and [RuleBareRule], which holds for every word of a skill.
 
 // skillForm is one render of a skill body, with the source line each of its
 // lines starts on.
@@ -45,8 +45,15 @@ func judgeSkillSource(text string) []Finding {
 	var found []Finding
 
 	seen := map[Finding]bool{}
+	judged := append(judgeForm(forms[0], SurfaceSkill), judgeForm(forms[1], SurfaceMarkdown)...)
 
-	for _, f := range append(judgeForm(forms[0], SurfaceSkill), judgeForm(forms[1], SurfaceMarkdown)...) {
+	for _, f := range judgeForm(forms[1], SurfaceSkill) {
+		if f.Rule == RuleBareRule {
+			judged = append(judged, f)
+		}
+	}
+
+	for _, f := range judged {
 		if !seen[f] {
 			seen[f] = true
 			found = append(found, f)

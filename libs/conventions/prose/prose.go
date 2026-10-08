@@ -54,6 +54,9 @@ const (
 	RuleTerseParagraph Rule = "terse-paragraph"
 	// RuleWordy reports a phrase with a shorter equivalent in a skill.
 	RuleWordy Rule = "wordy"
+	// RuleBareRule reports "rule" in a skill with no mechanism named: there a
+	// rule is only what magus enforces, and the rest is an instruction.
+	RuleBareRule Rule = "bare-rule"
 	// RuleTemplate reports a skill body that does not render, so neither of
 	// its forms can be judged.
 	RuleTemplate Rule = "template"
@@ -113,6 +116,7 @@ var checks = []struct {
 	{RuleTerseSentence, skill, terseSentence},
 	{RuleTerseParagraph, skill, terseParagraph},
 	{RuleWordy, skill, wordy},
+	{RuleBareRule, skill, bareRule},
 	// A skill body that does not render is reported before any rule runs; the
 	// entry gives the rule its place in [Rules].
 	{RuleTemplate, nil, nil},

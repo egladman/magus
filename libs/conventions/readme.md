@@ -85,7 +85,8 @@ declaration because an index records no position inside a doc. With
 each finding names its file and line. `-surface skill` judges a SKILL.md an
 agent loads as written, and `-surface skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
-the skill rules, and what only its full form shows meets the Markdown ones. It writes the findings as JSON on stdout.
+the skill rules, and what only its full form shows meets the Markdown ones and
+`bare-rule`. It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
@@ -107,6 +108,7 @@ standard library.
 | `terse-sentence`   | skill        | a sentence over 25 words                                       |
 | `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
 | `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
+| `bare-rule`        | skill        | "rule" with no mechanism named, in either form of a skill      |
 | `template`         | skill source | a body that does not render, so neither form can be judged     |
 
 A skill takes every Markdown and pull request rule but `lead-context`.
