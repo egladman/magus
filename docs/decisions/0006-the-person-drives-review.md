@@ -1,7 +1,7 @@
 ---
 title: "ADR 0006: the person drives review"
 order: 6
-description: Draft. We ship faster with agents, and review has become the bottleneck that does not scale. This records what a review of agent-written pull requests found, what magus enforces on its own tree versus what it ships to anyone else, and how a local review that reads as a story should work, with a person driving every step.
+description: Draft. Agents write code faster than we can review it, and review has become the bottleneck that does not scale. This records what a review of agent-written pull requests found, what magus enforces on its own tree versus what it ships to anyone else, and how a local review that reads as a story should work, with a person driving every step.
 tags: [adr, decision, review, agents, guard, diff, conventions, precedents]
 status: proposed (a draft of where the thinking stands)
 date: 2026-10-07
@@ -15,7 +15,7 @@ built_ was weighed and declined.
 
 ## Context
 
-We ship far faster with agents, and we are now the bottleneck. When you write code you
+Agents write code far faster than we can review it, and we are now the bottleneck. When you write code you
 understand it as you go. When an agent writes it, you meet it for the first time as a
 reviewer, a third party to code you did not write, and you start at a disadvantage.
 
@@ -54,15 +54,19 @@ standard from one tree leaked into the product.
    must not touch, and I close it by reading, questioning and cutting what came back. The
    agent does the middle, often the largest share, but never the start or the finish. I
    drive the session the whole way; an agent never decides the work is done.
-2. **Write for people.** The moment we start writing code with the intent of other
+2. **Two people review.** One person and an agent reviewer let things slip through. A
+   change an agent wrote gets two human reviewers, and an agent's review never counts as
+   one. Agents let us move faster, but speed is not the goal: we still ship deliberately,
+   and quality comes first.
+3. **Write for people.** The moment we start writing code with the intent of other
    agents reading that code instead of other humans is the moment we have lost our way
    as software engineers. Code and comments are for a human reader, and text padded for
    an agent's context window is a defect.
-3. **People merge.** An agent never enables auto-merge or queues its own pull request.
+4. **People merge.** An agent never enables auto-merge or queues its own pull request.
    Whether a change met its criteria is my call.
-4. **Review before publication.** The first careful read happens locally, before a push
+5. **Review before publication.** The first careful read happens locally, before a push
    puts the change in front of anyone else.
-5. **Enforce only what we know is right.** magus refuses only what cannot be undone.
+6. **Enforce only what we know is right.** magus refuses only what cannot be undone.
    Anything else it ships advises, and anything mined from or tuned to this repository
    stays this repository's policy.
 
@@ -121,11 +125,12 @@ from. What it established:
 | A reviewer can mark "I am reading this now", so a merge does not land under them; a merge that lands mid-review is reported to the reviewer | proposed       |
 | Measure review time lost to merges that landed during an active review                                                                      | proposed       |
 | A person enables auto-merge; an agent, or tooling acting for one, never does                                                                | done (decided) |
+| A change an agent wrote needs two human approvals; an agent's review is advice and never counts as one                                      | proposed       |
 
 ### 5. Text a stranger can read
 
 Reviewers read our pull requests and design docs as answers to a question nobody showed
-them. The fix is the second principle, enforced.
+them. The fix is the principle to write for people, enforced.
 
 | Item                                                                                                                                                                                                          | State                   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
