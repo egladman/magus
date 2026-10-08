@@ -31,7 +31,7 @@ const (
 )
 
 // The DiffRead constants say whether anybody recorded reading a file AT the content it holds
-// now. Untyped strings, matching the older DiffRole and DiffSurface constants beside them
+// now. Untyped strings, matching the older DiffRole and DiffVisibility constants beside them
 // rather than the newer types.Evidence: DiffFile.ReadState is one more string field on a
 // struct whose peers are all strings, and typing this one alone would make the odd one out.
 //
@@ -57,21 +57,21 @@ const (
 	DiffReadStale = "stale"
 )
 
-// DiffSurface is how far a changed symbol's referents reach, which is half of the question a
-// semver decision turns on. The other half is what the change did to the symbol, which is
+// DiffVisibility is how far a changed symbol's referents reach, which is half of the question
+// a semver decision turns on. The other half is what the change did to the symbol, which is
 // DiffChange, and it needs a base graph to answer.
 const (
-	// DiffSurfaceInternal means every referent lives inside the defining project. A change
+	// DiffVisibilityInternal means every referent lives inside the defining project. A change
 	// here cannot break a consumer that the workspace does not also rebuild.
-	DiffSurfaceInternal = "internal"
-	// DiffSurfacePublic means at least one referent lives in ANOTHER project: the symbol is
-	// API surface across a boundary the workspace itself draws.
-	DiffSurfacePublic = "public"
-	// DiffSurfaceUnknown means no symbol index covered the file, so the question was not
+	DiffVisibilityInternal = "internal"
+	// DiffVisibilityPublic means at least one referent lives in ANOTHER project: the symbol is
+	// exported API across a boundary the workspace itself draws.
+	DiffVisibilityPublic = "public"
+	// DiffVisibilityUnknown means no symbol index covered the file, so the question was not
 	// answered. It must never render as "internal": "we did not look" and "we looked and
 	// found nothing" are different facts, and collapsing them is how a signal earns the right
 	// to be ignored.
-	DiffSurfaceUnknown = "unknown"
+	DiffVisibilityUnknown = "unknown"
 )
 
 // The DiffChange constants say what a change did to one symbol, read by comparing the head
@@ -345,10 +345,10 @@ type DiffFile struct {
 	// CheckAdvice. Only the first changed file of a new directory carries it, so a finding is
 	// reported once per directory.
 	Layout []Check `json:"layout,omitempty" yaml:"layout,omitempty"`
-	// Surface is one of the DiffSurface constants: whether any changed symbol here is
+	// Visibility is one of the DiffVisibility constants: whether any changed symbol here is
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
-	// rather than a verdict; see DiffSurface.
-	Surface string `json:"surface" yaml:"surface"`
+	// rather than a verdict; see DiffVisibility.
+	Visibility string `json:"visibility" yaml:"visibility"`
 	// Touches are the agent sessions that wrote this file and what they had READ first.
 	// Empty when no guard hook is wired, which is the common case and not a fault.
 	Touches []DiffTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
@@ -383,7 +383,7 @@ type DiffFile struct {
 	// Coverage and Churn are: "nothing references this" and "nobody looked" are different
 	// facts. As a plain int an unindexed workspace serves `reach: 0` on every file, a
 	// valid-looking number that a fleet dashboard reads as "no change touches widely used
-	// code". DiffSurfaceUnknown already refuses that collapse; the pointer is the same refusal
+	// code". DiffVisibilityUnknown already refuses that collapse; the pointer is the same refusal
 	// applied to the field the ordering actually turns on.
 	Reach *int `json:"reach" yaml:"reach"`
 }

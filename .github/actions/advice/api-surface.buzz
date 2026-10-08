@@ -145,7 +145,7 @@ fun main() > void !> any {
         // Generated output is skipped even when it looks public. A regenerated binding file
         // can export a great deal, and none of it is a decision anyone made in this pull
         // request - the source change that produced it is the one to talk about.
-        if (f.surface != "public" or f.role == "output") { continue; }
+        if (f.visibility != "public" or f.role == "output") { continue; }
         var exports = mut [];
         var across = mut [];
         var changes = mut [];

@@ -111,7 +111,7 @@ export object FileRow {
     path: str,
     project: str,
     role: str,
-    surface: str,
+    visibility: str,
 }
 
 export object Bundle {
@@ -865,7 +865,7 @@ fun sectionJSON(s: Section) > {str: any} {
 export fun bundleJSON(b: Bundle) > {str: any} {
     final files = mut [<any>];
     foreach (f in b.files) {
-        files.append({"path": f.path, "project": f.project, "role": f.role, "surface": f.surface});
+        files.append({"path": f.path, "project": f.project, "role": f.role, "visibility": f.visibility});
     }
     final cards = mut [<any>];
     foreach (c in b.cards) {
@@ -899,7 +899,7 @@ export fun bundleJSON(b: Bundle) > {str: any} {
 fun fileRows(d: magus\Diff) > [FileRow] {
     final acc = mut [<FileRow>];
     foreach (f in d.files) {
-        acc.append(FileRow{ path = f.path, project = f.project, role = f.role, surface = f.surface });
+        acc.append(FileRow{ path = f.path, project = f.project, role = f.role, visibility = f.visibility });
     }
     return acc;
 }

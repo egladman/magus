@@ -1511,7 +1511,7 @@ func diffAPILines(api *types.DiffAPI) []string {
 // would be invisible until somebody compared two surfaces side by side.
 func diffFileFacts(f types.DiffFile) []string {
 	var facts []string
-	if f.Surface == types.DiffSurfacePublic {
+	if f.Visibility == types.DiffVisibilityPublic {
 		var api []string
 		var across []string
 		seen := map[string]bool{}

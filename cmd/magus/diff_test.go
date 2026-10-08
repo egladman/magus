@@ -175,8 +175,8 @@ func TestWantsTUIFallsBackRatherThanRefusing(t *testing.T) {
 func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 	reach := 12
 	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "core.go", Role: types.DiffRoleSource, Surface: types.DiffSurfaceInternal, Reach: &reach, Project: "root"},
-		{Path: "gen/out.json", Role: types.DiffRoleOutput, Surface: types.DiffSurfaceUnknown},
+		{Path: "core.go", Role: types.DiffRoleSource, Visibility: types.DiffVisibilityInternal, Reach: &reach, Project: "root"},
+		{Path: "gen/out.json", Role: types.DiffRoleOutput, Visibility: types.DiffVisibilityUnknown},
 	}}
 	patch := "diff --git a/gen/out.json b/gen/out.json\n" +
 		"@@ -1 +1 @@\n" +
@@ -1869,7 +1869,7 @@ func diffReach(n int) *int { return &n }
 // is the opposite of "nobody looked".
 func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	t.Run("nothing measured yields no facts", func(t *testing.T) {
-		assert.Empty(t, diffFileFacts(types.DiffFile{Path: "a.go", Surface: types.DiffSurfaceUnknown}))
+		assert.Empty(t, diffFileFacts(types.DiffFile{Path: "a.go", Visibility: types.DiffVisibilityUnknown}))
 	})
 
 	t.Run("zero reach is not a fact", func(t *testing.T) {
@@ -1889,9 +1889,9 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 
 	t.Run("public surface names the exports when it knows them", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
-			Path:    "a.go",
-			Surface: types.DiffSurfacePublic,
-			Symbols: []types.DiffSymbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
+			Path:       "a.go",
+			Visibility: types.DiffVisibilityPublic,
+			Symbols:    []types.DiffSymbol{{Label: "Open", PublicBeyondWorkspace: true}, {Label: "Close", PublicBeyondWorkspace: true}},
 		})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "PUBLIC SURFACE: exports Open, Close", facts[0])
@@ -1913,8 +1913,8 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 
 	t.Run("public surface falls back to the consuming projects", func(t *testing.T) {
 		facts := diffFileFacts(types.DiffFile{
-			Path:    "a.go",
-			Surface: types.DiffSurfacePublic,
+			Path:       "a.go",
+			Visibility: types.DiffVisibilityPublic,
 			Symbols: []types.DiffSymbol{
 				{Label: "Open", PublicTo: []string{"web", "api"}},
 				{Label: "Close", PublicTo: []string{"web"}},
@@ -1925,7 +1925,7 @@ func TestDiffFileFactsSaysWhatWasMeasured(t *testing.T) {
 	})
 
 	t.Run("public surface with no evidence still says public", func(t *testing.T) {
-		facts := diffFileFacts(types.DiffFile{Path: "a.go", Surface: types.DiffSurfacePublic})
+		facts := diffFileFacts(types.DiffFile{Path: "a.go", Visibility: types.DiffVisibilityPublic})
 		require.NotEmpty(t, facts)
 		assert.Equal(t, "PUBLIC SURFACE", facts[0])
 	})
@@ -2086,12 +2086,12 @@ func TestPrintDiffTextOrdersTheEvidence(t *testing.T) {
 		Base: "working",
 		Files: []types.DiffFile{
 			{
-				Path:    "core/engine.go",
-				Project: "core",
-				Role:    types.DiffRoleSource,
-				Surface: types.DiffSurfacePublic,
-				Symbols: []types.DiffSymbol{{Label: "Run", PublicBeyondWorkspace: true, FileCount: 12}},
-				Reach:   diffReach(12),
+				Path:       "core/engine.go",
+				Project:    "core",
+				Role:       types.DiffRoleSource,
+				Visibility: types.DiffVisibilityPublic,
+				Symbols:    []types.DiffSymbol{{Label: "Run", PublicBeyondWorkspace: true, FileCount: 12}},
+				Reach:      diffReach(12),
 				Touches: []types.DiffTouch{{
 					Host:       "claude-code",
 					Read:       []string{"core/engine.go", "core/plan.go"},

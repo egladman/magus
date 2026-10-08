@@ -1389,7 +1389,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	// index actually covered. Defaulting to internal would report every unindexed file as
 	// safe, which is the one wrong answer that costs something.
 	for i := range out.Files {
-		out.Files[i].Surface = types.DiffSurfaceUnknown
+		out.Files[i].Visibility = types.DiffVisibilityUnknown
 	}
 	// Reach gets a measured baseline of zero ONLY when an index was loaded; otherwise it stays
 	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
@@ -1420,8 +1420,8 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 			continue
 		}
 		// The index covered this file whether or not the patch touched a symbol in it.
-		if f.Surface == types.DiffSurfaceUnknown {
-			f.Surface = types.DiffSurfaceInternal
+		if f.Visibility == types.DiffVisibilityUnknown {
+			f.Visibility = types.DiffVisibilityInternal
 		}
 		// A package symbol is defined by every file of its package and referenced by every
 		// importer, so it would set every file's reach and changes nothing a caller sees.
@@ -1451,7 +1451,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		// reviewer needs to know the file contains something a consumer can see, and burying
 		// that because its neighbors are internal is how the signal gets missed.
 		if len(sym.PublicTo) > 0 || sym.PublicBeyondWorkspace {
-			f.Surface = types.DiffSurfacePublic
+			f.Visibility = types.DiffVisibilityPublic
 		}
 	}
 	// scip-go indexes only the files that build for the host's GOOS, GOARCH and default

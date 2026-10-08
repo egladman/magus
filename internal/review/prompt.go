@@ -154,7 +154,7 @@ func promptFiles(files []types.DiffFile) []string {
 		if f.Project != "" {
 			facts = append(facts, "in "+f.Project)
 		}
-		if f.Surface == types.DiffSurfacePublic {
+		if f.Visibility == types.DiffVisibilityPublic {
 			facts = append(facts, "referenced from other projects")
 		}
 		if f.Coverage != nil {

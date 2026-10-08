@@ -574,7 +574,7 @@ fun liveProbe() > Probe !> any {
             final found = mut [<str>];
             var covered = false;
             foreach (f in d.files) {
-                if (f.surface != "unknown") { covered = true; }
+                if (f.visibility != "unknown") { covered = true; }
                 foreach (s in f.symbols) {
                     if (found.indexOf(s.id) == null) { found.append(s.id); }
                 }
@@ -582,7 +582,7 @@ fun liveProbe() > Probe !> any {
             if (!covered) { return null; }
             return found;
         },
-        // One magus\diff over a line in each file: its surface reads unknown exactly where no
+        // One magus\diff over a line in each file: its visibility reads unknown exactly where no
         // symbol index covers the file. magus\explain answers the same per path, but loads
         // the whole symbol graph again on every call.
         indexed = fun (paths: [str]) > {str: bool} !> any {
@@ -590,7 +590,7 @@ fun liveProbe() > Probe !> any {
             foreach (p in paths) { probeLines[p] = [Line{ commit = "", line = 1, text = "" }]; }
             final d = magus\diff({"patch": symbolPatch(probeLines)});
             final covered = mut {<str: bool>};
-            foreach (f in d.files) { covered[f.path] = f.surface != "unknown"; }
+            foreach (f in d.files) { covered[f.path] = f.visibility != "unknown"; }
             return covered;
         },
     };

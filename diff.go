@@ -150,7 +150,7 @@ func attachAPIDelta(out *types.Diff, byPath map[string]*types.DiffFile, head *kn
 		if !public {
 			return
 		}
-		f.Surface = types.DiffSurfacePublic
+		f.Visibility = types.DiffVisibilityPublic
 		switch change {
 		case types.DiffChangeAdded:
 			api.Added++

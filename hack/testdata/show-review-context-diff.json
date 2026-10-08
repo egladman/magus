@@ -63,7 +63,7 @@
           "signature": "func parse_widget_name(s string, strict bool) string"
         }
       ],
-      "surface": "public",
+      "visibility": "public",
       "reach": 5
     },
     {
@@ -80,7 +80,7 @@
           "change": "added"
         }
       ],
-      "surface": "internal",
+      "visibility": "internal",
       "reach": 1
     }
   ],
