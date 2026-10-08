@@ -6,10 +6,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -414,7 +414,9 @@ func TestSnapshotOneRefusesANonRegularFile(t *testing.T) {
 	c := newBareCache(t)
 	root := t.TempDir()
 	abs := filepath.Join(root, "out.txt")
-	require.NoError(t, syscall.Mkfifo(abs, 0o644))
+	// The mkfifo command rather than syscall.Mkfifo, which does not exist to compile on
+	// Windows, where this test skips.
+	require.NoError(t, osexec.Command("mkfifo", abs).Run())
 
 	// No writer is ever opened: reaching an open at all would hang here, so this
 	// also proves the refusal happens before any open.
