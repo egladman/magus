@@ -452,9 +452,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	t.Run("pull-request-text", func(t *testing.T) {
 		// The rule runs the prose judge that `magus run judge-build libs/conventions` links into
 		// the workspace's libs/conventions/gen, so this one holds that module, built output
-		// and all; the root test target needs judge-build. It is not the checkout itself: the
-		// rule would then describe the branch's diff with a nested `magus describe file`, and
-		// inside a test that nested magus is this test binary.
+		// and all; the root test target needs judge-build. It is not the checkout itself, whose
+		// branch diff would add advice about the areas it touches to every verdict.
 		conventions := filepath.Join(root, "libs", "conventions")
 		ws := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))

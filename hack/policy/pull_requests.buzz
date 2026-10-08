@@ -34,6 +34,7 @@ import "magus";
 import "vcs";
 import "proc";
 import "fs";
+import "path";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/commits" as subjects;
@@ -233,26 +234,140 @@ export fun parseNumstat(numstat: str) > Facts {
     return Facts{ known = true, fragments = fragments, shipped = shipped, lines = lines, paths = sources };
 }
 
-// describedAreas asks magus which project owns each path and whether it is generated, and
-// returns the areas touchedAreas finds in the answer. An answer magus could not give is no
-// areas: the areas only ever advise.
-export fun describedAreas(paths: [str]) > [str] {
-    if (paths.len() == 0) {
-        return [<str>];
-    }
-    final described = magus\describe.file(paths, opts: {"quiet": true}) catch null;
-    if (described == null) {
-        return [<str>];
-    }
-    final files: [any] = described!["files"] ?? [<any>];
-    return touchedAreas(files);
+// The section of .gitattributes magus writes from every project's declared outputs, per
+// target ctx.writesFiles included (internal/settle DriverGlobs). An output line sets
+// linguist-generated; a tracked file an output's exclusion carves back out follows as
+// `!linguist-generated`; a vcs.auto_resolve line sets merge=magus alone and is source.
+final attributesFile = ".gitattributes";
+final attributesBegin = "# BEGIN magus-generated";
+final attributesEnd = "# END magus-generated";
+
+// OutputAttributes are the patterns of that section, workspace-relative. managed is false
+// when the file carries no section, and then nothing is known to be generated.
+export object OutputAttributes {
+    managed: bool,
+    outputs: [str],
+    carved: [str],
 }
 
-// touchedAreas names the areas a change touches, from `magus describe file` records: the
-// owning project, or for the root project the top two directories of the path (a
-// top-level package such as `internal/guard`). Generated outputs, files magus maintains,
-// lockfiles and changelog fragments are left out: each follows from another change, so
-// none asks a question of its own.
+// outputAttributes reads the managed section of a .gitattributes file's text.
+export fun outputAttributes(text: str) > OutputAttributes {
+    final outputs = mut [<str>];
+    final carved = mut [<str>];
+    var managed = false;
+    var inside = false;
+    foreach (raw in text.split("\n")) {
+        final row = raw.trim();
+        if (row.startsWith(attributesBegin)) {
+            managed = true;
+            inside = true;
+            continue;
+        }
+        if (row.startsWith(attributesEnd)) {
+            inside = false;
+            continue;
+        }
+        if (!inside or row == "" or row.startsWith("#")) {
+            continue;
+        }
+        final fields = row.split(" ");
+        var pattern = fields[0];
+        // magus anchors a slashless pattern with a leading `/`; a doublestar glob is rooted
+        // already.
+        if (pattern.startsWith("/")) {
+            pattern = pattern.sub(1);
+        }
+        if (fields.indexOf("linguist-generated") != null) {
+            outputs.append(pattern);
+        } else if (fields.indexOf("!linguist-generated") != null) {
+            carved.append(pattern);
+        }
+    }
+    return OutputAttributes{ managed = managed, outputs = outputs, carved = carved };
+}
+
+// The directory names the workspace load never descends, as internal/describe
+// loadSkipDirs lists them: a magusfile under one belongs to another tree.
+final skippedDirs = [".claude", ".git", ".hg", ".jj", ".magus", ".sl", "__pycache__", "dist", "node_modules", "target", "vendor"];
+
+// projectRoot reports whether dir, workspace-relative, is a project's root by the rule
+// internal/describe IsProjectRoot applies: it holds magusfile.buzz, magus.yaml, or a
+// magusfiles/ directory with a .buzz file in it. A project a workspace provider reports
+// has no such file, and its paths fall to the project above it.
+fun projectRoot(workspace: str, dir: str) > bool {
+    foreach (seg in dir.split("/")) {
+        if (skippedDirs.indexOf(seg) != null) {
+            return false;
+        }
+    }
+    final abs = "{workspace}/{dir}";
+    if ((fs\isFile("{abs}/magusfile.buzz") catch false) or (fs\isFile("{abs}/magus.yaml") catch false)) {
+        return true;
+    }
+    if (!(fs\isDir("{abs}/magusfiles") catch false)) {
+        return false;
+    }
+    foreach (name in fs\listDir("{abs}/magusfiles") catch [<str>]) {
+        if (name.endsWith(".buzz")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// classify gives each path the record `magus describe file` would, {path, project, role},
+// read in process: magus\describe.file runs a nested magus, which took 10s over 500 paths
+// against the guard's 3s rule timeout, and a rule out of time fails open whole. role is "output" for a path the managed .gitattributes section marks
+// generated, "maintained" for that .gitattributes itself (types.IsMagusMaintained), and
+// "source" otherwise; project is the nearest project root above the path. Lockfiles are
+// left to touchedAreas, which knows them by name.
+export fun classify(workspace: str, paths: [str]) > [any] {
+    final attrs = outputAttributes(fs\readFile("{workspace}/{attributesFile}") catch "");
+    final roots = mut {<str: bool>};
+    final files = mut [<any>];
+    foreach (p in paths) {
+        var role = "source";
+        if (p == attributesFile and attrs.managed) {
+            role = "maintained";
+        } else if ((path\matchesAny(attrs.outputs, path: p) catch false) and !(path\matchesAny(attrs.carved, path: p) catch false)) {
+            role = "output";
+        }
+        var project = ".";
+        final parts = p.split("/");
+        var depth = parts.len() - 1;
+        while (depth > 0) {
+            final dir = parts.sub(0, len: depth).join("/");
+            if (roots[dir] == null) {
+                roots[dir] = projectRoot(workspace, dir: dir);
+            }
+            if (roots[dir]!) {
+                project = dir;
+                break;
+            }
+            depth = depth - 1;
+        }
+        files.append({"path": p, "project": project, "role": role});
+    }
+    return files;
+}
+
+// areasOf returns the areas touchedAreas finds among paths, changed in the checkout at
+// workspace.
+export fun areasOf(workspace: str, paths: [str]) > [str] {
+    return touchedAreas(classify(workspace, paths: paths));
+}
+
+// describedAreas is areasOf for a caller running at the workspace root, as the
+// pr-description target does.
+export fun describedAreas(paths: [str]) > [str] {
+    return areasOf(".", paths: paths);
+}
+
+// touchedAreas names the areas a change touches, from records shaped as `magus describe
+// file` prints them (see classify): the owning project, or for the root project the top
+// two directories of the path (a top-level package such as `internal/guard`). Generated
+// outputs, files magus maintains, lockfiles and changelog fragments are left out: each
+// follows from another change, so none asks a question of its own.
 export fun touchedAreas(files: [any]) > [str] {
     final areas = mut [<str>];
     foreach (f in files) {
@@ -321,7 +436,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
         }
         final facts = parseNumstat(res!.stdout);
         return Facts{ known = facts.known, fragments = facts.fragments, shipped = facts.shipped,
-            lines = facts.lines, paths = facts.paths, areas = describedAreas(facts.paths) };
+            lines = facts.lines, paths = facts.paths, areas = areasOf(workspace, paths: facts.paths) };
     };
 }
 
@@ -1053,6 +1168,44 @@ test "touchedAreas names projects and top-level packages, generated files and fr
     final got = touchedAreas(files);
     std\assert(got.join(",") == "internal/guard,libs/conventions,magusfile.buzz", message: got.join(","));
     std\assert(unnamedAreas(got, text: "The Guard and the magusfile.").join(",") == "libs/conventions", message: "named by last segment, any case");
+}
+
+test "classify reads outputs from the managed attributes and owners from project roots" {
+    final ws = fs\tempDir("areas") catch "";
+    std\assert(ws != "", message: "a temp dir");
+    fs\mkdirAll("{ws}/libs/lib/gen") catch void;
+    fs\mkdirAll("{ws}/tools/magusfiles") catch void;
+    fs\mkdirAll("{ws}/vendor/dep") catch void;
+    fs\mkdirAll("{ws}/internal/guard") catch void;
+    fs\writeFile("{ws}/libs/lib/magusfile.buzz", content: "") catch void;
+    fs\writeFile("{ws}/tools/magusfiles/a.buzz", content: "") catch void;
+    fs\writeFile("{ws}/vendor/dep/magusfile.buzz", content: "") catch void;
+    fs\writeFile("{ws}/.gitattributes", content: "*.go diff=golang\n"
+        + "{attributesBegin} - do not edit\n"
+        + "*.go diff=golang\n"
+        + "/MAGUS.md merge=magus linguist-generated\n"
+        + "libs/lib/gen/** merge=magus linguist-generated\n"
+        + "libs/lib/gen/keep.go !merge !linguist-generated\n"
+        + "notes/*.md merge=magus\n"
+        + "{attributesEnd}\n"
+        + "docs/*.svg linguist-generated\n") catch void;
+
+    final got = mut [<str>];
+    foreach (f in classify(ws, paths: ["MAGUS.md", "docs/MAGUS.md", "libs/lib/gen/a.go", "libs/lib/gen/keep.go",
+        "libs/lib/x.go", "tools/t.go", "vendor/dep/d.go", "internal/guard/dir.go", ".gitattributes",
+        "notes/n.md", "docs/a.svg"])) {
+        got.append("{f["path"] ?? ""}={f["project"] ?? ""}:{f["role"] ?? ""}");
+    }
+    std\assert(got.join(" ") == "MAGUS.md=.:output docs/MAGUS.md=.:source libs/lib/gen/a.go=libs/lib:output "
+        + "libs/lib/gen/keep.go=libs/lib:source libs/lib/x.go=libs/lib:source tools/t.go=tools:source "
+        + "vendor/dep/d.go=.:source internal/guard/dir.go=.:source .gitattributes=.:maintained "
+        + "notes/n.md=.:source docs/a.svg=.:source", message: got.join(" "));
+    std\assert(areasOf(ws, paths: ["MAGUS.md", "libs/lib/x.go", "internal/guard/dir.go", "libs/lib/gen/a.go"]).join(",")
+        == "libs/lib,internal/guard", message: "outputs ask nothing");
+
+    fs\writeFile("{ws}/.gitattributes", content: "*.go diff=golang\n") catch void;
+    std\assert(classify(ws, paths: [".gitattributes"])[0]["role"] == "source", message: "no managed section, nothing magus maintains");
+    fs\removeAll(ws) catch void;
 }
 
 test "parseNumstat counts fragments, shipped files and lines, generated files aside" {
