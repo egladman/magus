@@ -1104,7 +1104,7 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 		itemsLayout[indexLayout] = ObjectCheck(v.Layout[indexLayout])
 	}
 	out.MapSet("layout", vm.ListValue(itemsLayout))
-	out.MapSet("surface", vm.StrValue(v.Surface))
+	out.MapSet("visibility", vm.StrValue(v.Visibility))
 	itemsTouches := make([]vm.Value, len(v.Touches))
 	for indexTouches := range v.Touches {
 		itemsTouches[indexTouches] = ObjectDiffTouch(v.Touches[indexTouches])
