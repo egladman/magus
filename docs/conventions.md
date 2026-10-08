@@ -418,7 +418,11 @@ and `-surface skill-source` hold what a skill's short form shows to three more r
 sentence over 25 words (`terse-sentence`), no paragraph or list item over 60
 (`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as `in order
 to` for `to`). In a skill body under `internal/agent/skills/`, text inside an `{{if .Full}}`
-arm is in the full form only and meets the rules above alone.
+arm is in the full form only and meets the rules above alone, plus `bare-rule`. In a
+skill a rule is only what magus enforces (a guard, workspace or lint rule, a diagnostic,
+or a rule id) and everything else a skill asks of an agent is an instruction, so
+`bare-rule` refuses `rule` in either form unless a qualifier or a rule id in code names
+the mechanism.
 
 Quoted text and code are mentions, not use, so a page can name the words a rule refuses.
 The guard and the check also ask, as advice that fails nothing, why a pull request touches
