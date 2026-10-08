@@ -3,8 +3,8 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5708
-skill_short_bytes: 4053
+skill_full_bytes: 5758
+skill_short_bytes: 4103
 ---
 
 # magus-context-audit
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6eba6eb4549a` |
+| `skill-content` | `dcaa26dcd989` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -108,25 +108,25 @@ document.
 Report findings in this order.
 
 1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
-   violate a rule or stall.
+   break one instruction or stall.
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied.
 3. Split authority: two surfaces describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
-   A local rule contradicting a shipped skill is always this. Check each
-   local rule's `retire-when` while here; the condition may have arrived.
+   A local instruction contradicting a shipped skill is always this. Check each
+   local instruction's `retire-when` while here; the condition may have arrived.
 4. Orphaned replacement: a denial or deprecation names a tool no instruction
    documents.
-5. Silent duplication: one rule restated in several places.
+5. Silent duplication: one instruction restated in several places.
 
 ## Do not report these
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
-  giving one line are one rule at two lengths. That is the design.
+  giving one line are one instruction at two lengths. That is the design.
 - **A record of history.** "Verified on <date> by doing X" describes what happened,
   not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
-  to grep and is one rule with a carve-out.
+  to grep and is one instruction with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
@@ -143,7 +143,7 @@ magus doctor    # the agent skills check must report a CHANGED digest, or the in
 
 A stale binary re-installs the OLD body and reports success.
 
-Prefer DELETING a contradicting line over reconciling it. When a rule must appear twice, make one the source and have
+Prefer DELETING a contradicting line over reconciling it. When an instruction must appear twice, make one the source and have
 the other name it, not restate it.
 ````
 
@@ -225,18 +225,18 @@ Report findings in this order. Severity here is "how badly does this derail a
 session", not "how wrong is the sentence".
 
 1. Dead end: A forbids X, B requires X, and no third path exists. The agent must
-   violate a rule or stall. Nothing else on this list is worth
+   break one instruction or stall. Nothing else on this list is worth
    reporting before one of these.
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied. It is indistinguishable from a dead end until the agent tries it.
 3. Split authority: two surfaces describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
-   A workspace-local rule contradicting a shipped skill is always this finding:
+   A workspace-local instruction contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are in conflict. Check each
-   local rule's `retire-when` while here; the condition may have arrived.
+   local instruction's `retire-when` while here; the condition may have arrived.
 4. Orphaned replacement: a denial or deprecation names a tool no instruction
    documents.
-5. Silent duplication: one rule restated in several places. It is not yet a
+5. Silent duplication: one instruction restated in several places. It is not yet a
    contradiction; it is where the next one is born, because an edit updates
    some of them.
 
@@ -245,11 +245,11 @@ session", not "how wrong is the sentence".
 A lens that cries wolf gets switched off, taking the real findings with it.
 
 - **Different altitudes.** A skill giving the full ladder and a hook injection
-  giving one line are one rule at two lengths. That is the design.
+  giving one line are one instruction at two lengths. That is the design.
 - **A record of history.** "Verified on <date> by doing X" describes what happened,
   not what to do now. Journal entries are point-in-time by definition.
 - **A stated exception.** "Never pipe output, EXCEPT <case>" looks like a conflict
-  to grep and is one rule with a carve-out.
+  to grep and is one instruction with a carve-out.
 - **A labeled migration note** describing old behavior on purpose.
 
 ## Recommend, then verify the fix landed
@@ -270,7 +270,7 @@ most common way an applied fix silently does not apply.
 
 Prefer DELETING a contradicting line over reconciling it. Two reconciled
 statements are still two statements to keep in sync; one statement cannot
-contradict itself. When a rule must appear twice, make one the source and have
+contradict itself. When an instruction must appear twice, make one the source and have
 the other name it, not restate it.
 ````
 

@@ -20,7 +20,8 @@
 //     error, never a pass.
 //   - A skill is judged on its own surface, since an agent pays for every word on every
 //     load: what its short form shows is held to the terse rules too (a sentence and a
-//     paragraph word cap, and wordy phrases with a shorter equivalent). A skill body
+//     paragraph word cap, and wordy phrases with a shorter equivalent), and "rule"
+//     names only what magus enforces, so a bare one is refused. A skill body
 //     under internal/agent/skills/ renders a short and a full form, so text only the
 //     full form shows is held to the Markdown rules alone.
 //

@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13389
-skill_short_bytes: 8230
+skill_full_bytes: 13409
+skill_short_bytes: 8240
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `f14ca1267ec0` |
+| `skill-content` | `ae8cd9e72172` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -77,7 +77,7 @@ outermost contiguous run of `magusfiles/`, `magusfile.buzz` or `go.mod`.
 Running a binary by absolute path does NOT set its working directory: it
 still walks up from your cwd. Pass `--root` when you mean elsewhere.
 
-## Rules
+## How to run work
 
 1. Prefer the MCP tools.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
@@ -181,8 +181,8 @@ magus affected ci --plan | magus run --stdin      # plan -> run its shards
 A pipe into magus, or `jq` over `-o json`, is composition. A pipe into a text filter
 is a missing `-o`.
 
-A backgrounded run's capture is magus output too, and the same rule applies.
-Grepping the task file your host wrote is denied. Background it as `-o jsonl --tee <file>` to get a
+A backgrounded run's capture is magus output too: grepping the task file your host
+wrote hits the `capture-filter` guard rule. Background it as `-o jsonl --tee <file>` to get a
 contract you can `jq`; otherwise read the file whole.
 
 ## When you need finer granularity
@@ -280,7 +280,7 @@ means a directory holding its own `magus.yaml` inside a larger checkout resolves
 itself, so where a command lands is a question about markers on disk, never about the
 VCS.
 
-## Rules
+## How to run work
 
 1. Prefer the MCP tools; they return structured content with nothing to silence.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
@@ -431,8 +431,8 @@ magus affected ci --plan | magus run --stdin      # plan -> run its shards
 A pipe into magus, or `jq` over `-o json`, is composition. A pipe into a text filter
 is a missing `-o`.
 
-A backgrounded run's capture is magus output too, and the same rule applies.
-Grepping the task file your host wrote is denied; it drops the `output:` and `inspect:` lines
+A backgrounded run's capture is magus output too: grepping the task file your host
+wrote hits the `capture-filter` guard rule, since a grep drops the `output:` and `inspect:` lines
 under the `cause:` you matched. Background it as `-o jsonl --tee <file>` to get a
 contract you can `jq`; otherwise read the file whole.
 

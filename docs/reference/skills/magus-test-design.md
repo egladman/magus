@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `868995bd261c` |
+| `skill-content` | `9141f0079ce1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -393,7 +393,7 @@ cannot produce the failure the contract describes.
 | --- | --- | --- |
 | Mock asserts a call count | proves an interaction chosen by the test, not the result a caller receives | assert the complete result; cover the real interaction at integration scope |
 | Snapshot hides volatile data | can bless a change without saying which values matter | normalize only legitimate volatility and assert the remaining structure |
-| Fake service mirrors production rules | duplicates the system under test and drifts | use the real local component or add a named contract/integration test |
+| Fake service mirrors production logic | duplicates the system under test and drifts | use the real local component or add a named contract/integration test |
 | E2E checks only success | proves the workflow exited, not that it produced the required state | assert the full observable result and durable effects |
 
 ### Fill-in report

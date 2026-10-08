@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 14435
-skill_short_bytes: 10339
+skill_full_bytes: 14447
+skill_short_bytes: 10345
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `3fc860492b57` |
+| `skill-content` | `8ee868c0690a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -234,7 +234,7 @@ Agents before you left a record, where the workspace declares a session adapter:
 
 Read it before a non-trivial edit. A file last committed weeks ago may have been
 rewritten yesterday by a session whose work is not committed. A refused write
-there is a rule you are about to hit too.
+there is a guard rule you are about to hit too.
 
 Never infer from an empty result that nobody worked on a file. It equally means the
 workspace declares no adapter, the common case.
@@ -500,7 +500,7 @@ Read it BEFORE a non-trivial edit, for the reason the git half of the same outpu
 exists. A file last committed three weeks ago looks dormant and may have been
 rewritten twice yesterday by a session whose work is not committed yet. Four
 sessions on one file is a reason to look at what they did before adding a fifth
-opinion, and a refused write is a rule you are about to hit too.
+opinion, and a refused write is a guard rule you are about to hit too.
 
 Never infer from an empty result that nobody worked on a file. It equally means the
 workspace declares no adapter, the common case.
@@ -519,7 +519,7 @@ workspace declares no adapter, the common case.
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
 human an export. `magus graph export -o json` (or `-o graphml`) opens in Gephi, yEd,
-or a browser graph tool. The emit-never-render rule that governs magus
+or a browser graph tool. The emit-never-render convention that governs magus
 governs you too.
 
 ## Fetching current behavior

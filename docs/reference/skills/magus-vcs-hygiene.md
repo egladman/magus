@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9737
-skill_short_bytes: 6171
+skill_full_bytes: 9739
+skill_short_bytes: 6173
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6fa9771b7c62` |
+| `skill-content` | `6ebda74d2371` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -81,10 +81,10 @@ with its owning project and a role:
   cache key, but directory containment still seeds its owning project.
   - Touching it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)).
   - Declaring it in the owning project's `sources` fixes both halves.
-  - Check the VCS ignore rules (`git check-ignore -v <path>`). An unclaimed
+  - Check the VCS ignore patterns (`git check-ignore -v <path>`). An unclaimed
     un-ignored file is at risk of being lost.
 
-## Rules for generated files
+## Handling generated files
 
 - Never hand-edit one. Change the source of truth, then run the producing target
   (usually `magus run generate`).
@@ -226,14 +226,14 @@ with its owning project and a role:
   - Touching it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)).
   - Declaring it in the owning project's `sources` fixes both halves; leaving it undeclared is right when
     nothing reads it.
-  - Check the VCS ignore rules (`git check-ignore -v <path>`); build residue should be
+  - Check the VCS ignore patterns (`git check-ignore -v <path>`); build residue should be
     ignored, and an unclaimed un-ignored file is at risk of being lost.
 
 WRONG: reading a 3000-line diff of `docs/gen/` to understand a change.
 CORRECT: note that `docs/gen/**` is a declared output of
 `docs:generate`, skip the diff, and read the source change that caused it.
 
-## Rules for generated files
+## Handling generated files
 
 - Never hand-edit one. Change the source of truth, then run the producing target
   (usually `magus run generate`).

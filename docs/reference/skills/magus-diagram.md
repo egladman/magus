@@ -3,8 +3,8 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 7985
-skill_short_bytes: 6726
+skill_full_bytes: 7975
+skill_short_bytes: 6716
 ---
 
 # magus-diagram
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `5d4bb6f3ba9c` |
+| `skill-content` | `7fbc5d82c520` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -200,7 +200,7 @@ goes through a declared lens of scope, focus and depth.
 - **Hand-drawn code edges and path strings.** An edge no code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
 
-Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-lang.
+Writing the Buzz itself, the syntax and strict mode: magus-buzz-lang.
 ````
 
 
@@ -378,7 +378,7 @@ goes through a declared lens of scope, focus and depth.
 - **Hand-drawn code edges and path strings.** An edge no code holds asserts
   something nobody checked, and a path string goes stale the day a package moves.
 
-Writing the Buzz itself, the syntax and the strict-mode rules: magus-buzz-lang.
+Writing the Buzz itself, the syntax and strict mode: magus-buzz-lang.
 ````
 
 

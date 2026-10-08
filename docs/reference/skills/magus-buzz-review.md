@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 18953
-skill_short_bytes: 13065
+skill_full_bytes: 18948
+skill_short_bytes: 13060
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `eaeafed87a30` |
+| `skill-content` | `0b15e9d3e330` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -94,13 +94,13 @@ conformance lenses check applies to only one:
 
 So **a magusfile or a spell file is always embedded.** A top-level `if`, a top-level
 `foreach`, an unlabeled second argument: all fine and idiomatic there. Applying
-strict-mode rules to a magusfile is not a strict reading; it is a wrong one.
+strict mode to a magusfile is not a strict reading; it is a wrong one.
 
 Judge a standalone script by how it is invoked:
 
-- Run by a bare `magus buzz <file>` (no `--embedded`): strict rules apply, and a
+- Run by a bare `magus buzz <file>` (no `--embedded`): strict mode applies, and a
   top-level `if` is a genuine defect.
-- Strict rules do not apply when it runs by `magus buzz --embedded <file>`, from
+- Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
   the surface.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
@@ -249,7 +249,7 @@ Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
-script = check how it is invoked) before applying any strict-mode-derived rule.
+script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```
@@ -332,14 +332,14 @@ conformance lenses check applies to only one:
 
 So **a magusfile or a spell file is always embedded.** A top-level `if`, a top-level
 `foreach`, an unlabeled second argument: all fine and idiomatic there. Applying
-strict-mode rules to a magusfile is not a strict reading; it is a wrong one.
+strict mode to a magusfile is not a strict reading; it is a wrong one.
 
 Judge a standalone script by how it is invoked, not by
 guessing from its shape:
 
-- Run by a bare `magus buzz <file>` (no `--embedded`): strict rules apply, and a
+- Run by a bare `magus buzz <file>` (no `--embedded`): strict mode applies, and a
   top-level `if` is a genuine defect.
-- Strict rules do not apply when it runs by `magus buzz --embedded <file>`, from
+- Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
   the surface.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
@@ -565,7 +565,7 @@ Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
-script = check how it is invoked) before applying any strict-mode-derived rule.
+script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
 ```

@@ -3,7 +3,7 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6740
+skill_full_bytes: 6741
 skill_short_bytes: 5258
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `b7a8863c774f` |
+| `skill-content` | `d2382a07e63a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -321,7 +321,7 @@ freely). Ground every claim in a query, as for a layout proposal.
 A mechanism that ACTS (a guard, a refusal, a cancellation, an auto-fix) is judged on
 its wrong firings. Name the two cases its predicate cannot separate and the cost of
 guessing each wrong. When it cannot separate them, do not build it, and say so rather
-than shipping a rule that fires on the wrong one.
+than shipping a check that fires on the wrong one.
 
 Wrong firings are the expensive direction: a gap gets noticed, while a check that
 cries wolf teaches people to route around it, taking the real findings with it.

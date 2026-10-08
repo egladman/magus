@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7173
-skill_short_bytes: 4917
+skill_full_bytes: 7179
+skill_short_bytes: 4923
 ---
 
 # magus-change-summary
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `92e6aac3008d` |
+| `skill-content` | `5c7d1e0a5be5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -117,7 +117,7 @@ experiment a landed feature unless source and graph evidence support it.
 this to the changelog", match the file's shape (Keep a Changelog 1.1.0 with SemVer)
 and append under `## [Unreleased]`. Open with what a user can now do, then why it is the right shape.
 
-Rules for an entry, all checkable:
+Write each entry to this checkable list:
 
 - Name every surface it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target.
@@ -277,7 +277,7 @@ and append under `## [Unreleased]`. For example:
   <default>.
 ```
 
-Rules for an entry, all checkable:
+Write each entry to this checkable list:
 
 - Name every surface it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target. A reader upgrades by searching for those strings.

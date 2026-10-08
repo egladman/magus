@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 12489
-skill_short_bytes: 9550
+skill_full_bytes: 12495
+skill_short_bytes: 9556
 ---
 
 # magus-sdk
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `112` |
+| `agent-skill-version` | `113` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `d656b94acd87` |
+| `skill-content` | `d949893fb732` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -180,7 +180,7 @@ Match the graph to the question's granularity.
   its 10 fields.
 
 **The `Entry`/`Output`/`Report` suffix split needs the ~20-line comment at the top
-of `types/describe.go`.** Most of it is a naming RULE, not vocabulary. Read the comment
+of `types/describe.go`.** Most of it is a naming CONVENTION, not vocabulary. Read the comment
 before you add a type.
 
 - `Entry` is added only when the bare name would collide with an existing type:
@@ -403,7 +403,7 @@ depend on target `build` in project B".
   `types/target.go:95-101`).
 
 **The `Entry`/`Output`/`Report` suffix split needs the ~20-line comment at the top
-of `types/describe.go`.** Most of it is a naming RULE, not vocabulary. Read the comment
+of `types/describe.go`.** Most of it is a naming CONVENTION, not vocabulary. Read the comment
 before you add a type; guess at the pattern instead and you misname it.
 
 - `Entry` is added only when the bare name would collide with an existing type:
