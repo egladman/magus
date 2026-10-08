@@ -211,7 +211,7 @@ var condescending = regexp.MustCompile(`(?i)\b(?:easy|easily|simple|simply|obvio
 	`just|please)\b`)
 
 // condescension reports a word that tells the reader a step is easy. A word
-// filler already reports ("simply", "just" meaning merely, "Please note") is
+// filler already reports (`simply`, `just` meaning merely, `Please note`) is
 // left to it, so one word gives one finding.
 func condescension(in input) []Finding {
 	var out []Finding
