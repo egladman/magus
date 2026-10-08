@@ -609,7 +609,7 @@ fun crosscheckFindings(root: str, docs: str, pages: [str]) > [str] !> any {
         formatFindings(magusLookupFindings(file, md: fs\readFile(page.value)), into: found);
     }
 
-    final verify = docs + "/setup/verify.md";
+    final verify = docs + "/guides/setup/verify.md";
     foreach (f in releaseKeyFindings(fs\readFile(root + "/internal/selfupdate/release-keys.json"),
             guideFile: verify, guide: fs\readFile(root + "/" + verify))) {
         found.append(f);

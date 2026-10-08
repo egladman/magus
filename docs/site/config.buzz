@@ -19,7 +19,7 @@ export fun magusConfig() > Config {
     nav.append(NavLink{ suffix = "documentation/", label = "Documentation", key = "documentation" });
     // Everything for someone who has not run magus yet, in the order they would meet it.
     final start = mut [<NavLink>];
-    start.append(NavLink{ suffix = "setup/", label = "Setup", key = "setup" });
+    start.append(NavLink{ suffix = "guides/setup/", label = "Setup", key = "setup" });
     start.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
     start.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
     nav.append(NavLink{ label = "Get started", key = "start", children = start });
