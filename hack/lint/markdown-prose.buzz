@@ -150,15 +150,15 @@ fun judge(files: {str: str}, module: str, surface: str) > [Finding] !> any {
     if (files.len() == 0) {
         return [<Finding>];
     }
-    final args = mut ["run", "./cmd/judge-docs", "-surface", surface];
+    final args = mut ["-surface", surface];
     foreach (full in support\sorted(files.keys())) {
         args.append(full);
     }
-    final fix = "Run `go run ./cmd/judge-docs -surface {surface} <file>` in libs/conventions and read why it stopped.";
-    final run = proc\exec("go", args: args, dir: module,
+    final fix = "Run `magus run judge-build libs/conventions`, then {module}/gen/judge-docs -surface {surface} <file>, and read why it stopped.";
+    final run = proc\exec(module + "/gen/judge-docs", args: args,
         opts: {"quiet": true, "allow_failure": true}) catch null;
     if (run == null or run!.code != 0) {
-        final why = if (run == null) "go did not start" else "it exited {run!.code}: " + run!.stderr.trim();
+        final why = if (run == null) "the judge binary did not start" else "it exited {run!.code}: " + run!.stderr.trim();
         return [Finding{ path = JUDGE, message = "the prose judge did not run, so no Markdown was judged; " + why, fix = fix }];
     }
     final rows: [any]? = json\parse(run!.stdout) catch null;

@@ -682,7 +682,7 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     }
     final changed = mut [<str>];
     foreach (f in vcs\changedFiles(vcs\base())) { changed.append(f.value); }
-    foreach (question in descriptions\areaQuestions(descriptions\unnamedAreas(descriptions\describedAreas(changed), text: text))) {
+    foreach (question in descriptions\areaQuestions(descriptions\unnamedAreas(descriptions\areasOf(".", paths: changed), text: text))) {
         magus\log.warn("pr-description: {question}");
     }
     if (problems.len() > 0) {

@@ -357,12 +357,6 @@ export fun areasOf(workspace: str, paths: [str]) > [str] {
     return touchedAreas(classify(workspace, paths: paths));
 }
 
-// describedAreas is areasOf for a caller running at the workspace root, as the
-// pr-description target does.
-export fun describedAreas(paths: [str]) > [str] {
-    return areasOf(".", paths: paths);
-}
-
 // touchedAreas names the areas a change touches, from records shaped as `magus describe
 // file` prints them (see classify): the owning project, or for the root project the top
 // two directories of the path (a top-level package such as `internal/guard`). Generated
