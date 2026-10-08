@@ -196,7 +196,7 @@ func splitMember(n ast.Node) (string, []string) {
 
 // hostImport reports whether path is served by a host module or resolver
 // rather than a file, and so cannot register a rule when it loads. A spell
-// loads on the script surface, where a registration raises MGS1022, and a
+// loads in script mode, where a registration raises MGS1022, and a
 // project/ handle reads its targets without running them.
 func hostImport(p string) bool {
 	p = strings.TrimPrefix(p, "buzz:")

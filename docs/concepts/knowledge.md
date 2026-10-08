@@ -755,7 +755,7 @@ knowledge:
     shared: notes        # a directory IN the repo: committed, so git records who wrote each note
 ```
 
-One sentence each, and the whole surface follows from them:
+One sentence each, and the whole model follows from them:
 
 - `notes.shared`: a person stands behind it, the team has it, git says who. Must live
   inside the checkout; outside it there is no commit to attribute a note to and no review to
@@ -939,7 +939,7 @@ the always-on `AGENTS.md` block for you to paste; magus never writes that file.
 Claude Code uses `magus agent install .claude/skills`. The skills teach HOW to use magus (the
 repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.
-They ship with the binary and teach only the tool surface, so they stay current
+They ship with the binary and teach only the magus tools, so they stay current
 with the magus version rather than the workspace. Each installed file carries a
 version footer, and `magus doctor` reports actionable drift after
 an upgrade. See [Agents](../guides/integrations/agents.md) for the full host setup.

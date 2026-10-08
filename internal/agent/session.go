@@ -9,7 +9,7 @@ package agent
 // restated contract is the copy that goes stale.
 //
 // The split from the guard is real rather than cosmetic. A guard verdict travels
-// live and is shaped by what a host's hook surface can CARRY; a session event is
+// live and is shaped by what a host's hook can CARRY; a session event is
 // read afterwards out of a host's own log and is shaped by what that log
 // RECORDS. A host can be fully guarded and observe almost nothing, or the other
 // way round, so the two contracts move independently.

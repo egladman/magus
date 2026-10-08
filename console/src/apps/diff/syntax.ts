@@ -2,7 +2,7 @@
 //
 // WHY HAND-ROLLED. The console is served under a strict CSP with no CDN and no external
 // script origin, so highlighting is a BUNDLED tokenizer or it does not exist. A full grammar
-// engine (Prism, highlight.js, Shiki) is tens to hundreds of kilobytes shipped into a surface
+// engine (Prism, highlight.js, Shiki) is tens to hundreds of kilobytes shipped into an app
 // that already ships a virtualizer, and it buys precision this context cannot use - a diff
 // line is a FRAGMENT, so no tokenizer can be correct about it anyway (see below).
 //

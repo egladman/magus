@@ -37,7 +37,7 @@ import (
 // query/explain/path READ the knowledge graph (daily retrieval verbs); graph
 // owns the graph ITSELF: emit the project dependency DAG (deps), export the
 // merged knowledge graph for external tools (export), and report its shape
-// (stats). One home instead of surfaces scattered across describe and insight.
+// (stats). One home instead of commands scattered across describe and insight.
 
 var graphSubs = []string{"build", "push", "pull", "deps", "export", "stats", "diff"}
 
@@ -1140,7 +1140,7 @@ func liveBridgeReachable(ctx context.Context) bool {
 // loopback origin (http://<host>/console/graph/). Under the server-origin grammar the origin
 // names which server; the page loads both itself and its graph data from that one loopback
 // origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical:
-// the server serves the shell for it and the console's boot router opens the graph surface.
+// the server serves the shell for it and the console's boot router opens the graph app.
 // There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
@@ -1153,7 +1153,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	// The ACTUAL console is probed (not just the proc socket) so we never emit a URL and
 	// token for a transport nothing is listening on. When nothing serves it, the server is
 	// started rather than refused: --follow is a request for the console, and the console
-	// is the server's own surface.
+	// is the server's own front end.
 	//
 	// --print is exempt. It is the scriptable "just give me the URL" form, and a command
 	// that only prints must not leave a background process behind as a side effect.
@@ -1177,7 +1177,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return errSilent{exitCode: 1}
 	}
 
-	linkOpts := console.LinkOpts{Host: hostPort, Surface: "graph", Code: code}
+	linkOpts := console.LinkOpts{Host: hostPort, App: "graph", Code: code}
 	if useTargets {
 		linkOpts.Fragment = append(linkOpts.Fragment, console.FragmentParam{Key: "flavor", Value: "targets"})
 	}

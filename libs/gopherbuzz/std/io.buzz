@@ -2,7 +2,7 @@ namespace io;
 
 /// The `io` module, matching upstream Buzz's src/lib/io.buzz.
 ///
-/// Only the TYPED surface lives here; `iocore` still does the work. A host module
+/// Only the TYPED declarations live here; `iocore` still does the work. A host module
 /// built directly as a Go value carries no signatures, so `File.open(path, mode:
 /// .write)` had no parameter type for the inferred enum case to resolve against.
 /// Declaring FileMode and a typed `open` here gives it one. Everything the opened

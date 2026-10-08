@@ -5,7 +5,7 @@ syntax = "proto3";
 // one on this machine.
 //
 // It is the deliberate opposite of magus.memory.v1alpha1, and the asymmetry is the point. Memory
-// is agent-written, so a human read/edit/delete surface is its safety valve. A note is
+// is agent-written, so a human read/edit/delete view is its safety valve. A note is
 // human-written, and its whole value is that guarantee: a note is the one node class in the
 // knowledge graph that is NOT derived from the workspace, so nothing in the repository
 // corroborates it later and its only provenance is the person who wrote it and signed the
@@ -151,7 +151,7 @@ message Note {
   //
   // A client MUST render a note carrying this differently from one without it. The whole
   // claim a note makes is that somebody stands behind it; a capture's claim is the opposite,
-  // that nobody does and the source can be re-read instead. A surface that presents the two
+  // that nobody does and the source can be re-read instead. A client that presents the two
   // identically tells the reader the one thing this field exists to prevent.
   Source source = 11;
 }

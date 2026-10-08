@@ -97,7 +97,7 @@ const (
 	// Every event under it is a READ, because that service has no write path: a note's whole
 	// value is the guarantee that a person wrote it, so the browser never becomes an author.
 	// Reads are audited for one reason the shared store does not supply on its own: this is
-	// the only surface that can serve the PRIVATE store, which is not in any repository and
+	// the only service that can serve the PRIVATE store, which is not in any repository and
 	// which nothing else attributes.
 	KindNotes Kind = "notes"
 
@@ -381,7 +381,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // subagent type, a task description, the spawning tool's name); Context is the text actually
 // handed over, which is the whole point of the record and the reason it goes to a blob.
 //
-// There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed
+// There is no Decision field, unlike AgentCommand: a spawn is not judged by the guard. The handed
 // context is prose, not a command line, and judging it as one would deny a lease for quoting
 // a denied command in its instructions.
 //
@@ -620,7 +620,7 @@ func Append(ctx context.Context, base string, e Event) {
 // so a concurrent reader never observes a partial blob.
 func WriteBlob(ctx context.Context, base, prefix string, data []byte) (ref string, size int64) {
 	// Redacted BEFORE the ref is computed, so the content address names what is actually
-	// stored. Blobs are the highest-risk surface in this package: an MCP request/response pair
+	// stored. Blobs are the highest-risk data in this package: an MCP request/response pair
 	// is a whole tool payload, persisted verbatim, and nothing else on the path scrubs it.
 	data = secret.Redact(ctx, data)
 	size = int64(len(data))

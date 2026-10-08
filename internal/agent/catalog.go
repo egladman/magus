@@ -1,7 +1,7 @@
-// Package agent owns the two provider-neutral halves of Magus's agent surface.
+// Package agent owns the two provider-neutral halves of Magus's agent integration.
 //
 // The first is the agent-skill artifact (this file): command packages supply embedded
-// source files, and this package renders, installs and verifies the generated surface
+// source files, and this package renders, installs and verifies the generated skills
 // without knowing about a particular CLI host.
 //
 // The second is the guard verdict wire contract (guard.go). It lives here because
@@ -106,7 +106,7 @@ import (
 // (CLI `--amend`) says the entry is meant to exist.
 //
 // 52: that skill is magus-memory again, and the agent-industry name it carried is
-// gone from every surface a reader meets. The word is jargon and this
+// gone from everything a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
 // always been called. Pre-1.0, so the old directory is not carried: install
 // removes it.
@@ -117,7 +117,7 @@ import (
 // stale until it is reinstalled.
 //
 // 54: magus-vcs-hygiene teaches how to get back to a recorded state, which nothing
-// on the agent surface said. A checkpoint holds a revision and a patch DIGEST, so it
+// in the installed skills said. A checkpoint holds a revision and a patch DIGEST, so it
 // can say whether a tree is the same one and can never give uncommitted work back;
 // the skill now says that, says to commit before parking, and gives the inspect-out-
 // of-place and restore-per-file commands instead of the whole-tree ones the guard
@@ -196,7 +196,7 @@ import (
 // not only one bound to the row being graded.
 //
 // 69: magus-multi-agent names a lease's boundary write_paths, read_paths and deny_paths and
-// its model `model`, which is what every magus surface now spells them; the old names are
+// its model `model`, which is how magus now spells them everywhere; the old names are
 // accepted on input for one release and nowhere emitted.
 //
 // 70: magus-workspace-rules makes the recurring guard-feedback loop actionable:
@@ -228,7 +228,7 @@ import (
 // pre-tool-use hook: an operand for the first, stdin for the second, one evaluator
 // behind both. magus-context-audit piped its candidate command into the old path.
 //
-// 83: magus-multi-agent has the root declare a shared surface's names before any job
+// 83: magus-multi-agent has the root declare a shared API's names before any job
 // forks, solo changes included, and grades the declaration with the symbol gates that
 // exist: `present` for new names, `absent` for a predictable second copy, `unreferenced`
 // for a replaced helper. It also drops the fan-out and depth caps: a job tree grows as wide
@@ -338,7 +338,9 @@ import (
 // paragraph; examples and history moved to the full form.
 // 113: a skill says "rule" only for what magus enforces and calls the rest instructions;
 // magus-workspace-rules says guard.builtins grades the compiled guard rules.
-const SkillVersion = 113
+// 114: the skills name what each part of magus is (console apps, guard inputs, host
+// modules, the exported API) instead of one catch-all noun.
+const SkillVersion = 114
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -416,8 +418,8 @@ type Variant int
 
 // The words are SHORT and FULL, one each: the Go constants, the wire strings, the
 // installed stamp value, and the published pages. The shorter end had drifted to three
-// spellings across those surfaces (simple, concise, short), which is one word per
-// surface a reader crosses, and nothing to tell them the three name one thing.
+// spellings across those places (simple, concise, short), which is one word per
+// place a reader looks, and nothing to tell them the three name one thing.
 //
 // Why these two words rather than any other pair: internal/prompt.Variant is the same
 // concept for prose and already says Short, and the full end cannot move at all: `full`
@@ -428,8 +430,8 @@ type Variant int
 // file holds, which is a Variant, not the Form an install was asked for.
 const (
 	// VariantShort sheds ENUMERATION and keeps JUDGMENT, for the most capable readers,
-	// not the least. A capable reader can re-derive the mechanical steps from the tool
-	// surface on its own; what it cannot re-derive is which failures are silent, what is
+	// not the least. A capable reader can re-derive the mechanical steps from the tools
+	// on its own; what it cannot re-derive is which failures are silent, what is
 	// load-bearing, and where a judgment call is being asked of it. So short is a bet ON
 	// the reader, not a lossy compression, which is why the split is a judgment an
 	// author records, and why anything a step cannot survive losing belongs in the
@@ -560,10 +562,10 @@ func diagnosticCode(code string) (types.DiagnosticCode, error) {
 	return "", fmt.Errorf("no diagnostic %q: a skill may only cite a registered code", code)
 }
 
-// buzzSurfaceName is the identifier a magusfile writes for decl, which is not always
+// buzzMemberName is the identifier a magusfile writes for decl, which is not always
 // its declared Name: a declaration may pin a verbatim spelling, and otherwise the Buzz
-// surface is the camelCase of the snake_case Name.
-func buzzSurfaceName(decl std.Method) string {
+// member is the camelCase of the snake_case Name.
+func buzzMemberName(decl std.Method) string {
 	if decl.BuzzName != "" {
 		return decl.BuzzName
 	}
@@ -632,7 +634,7 @@ var skillFuncs = template.FuncMap{
 			}
 			if !nested {
 				for _, decl := range m.Methods {
-					if buzzSurfaceName(decl) == call {
+					if buzzMemberName(decl) == call {
 						return magusModule + `\` + call, nil
 					}
 				}
@@ -643,7 +645,7 @@ var skillFuncs = template.FuncMap{
 					continue
 				}
 				for _, decl := range ns.Methods {
-					if buzzSurfaceName(decl) == method {
+					if buzzMemberName(decl) == method {
 						return magusModule + `\` + call, nil
 					}
 				}
@@ -747,20 +749,20 @@ func MustSkill(name string) SkillRef {
 }
 
 var skillSources = []skillSource{
-	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
+	{name: "magus-workspace-rules", description: "Adapt magus's installed agent integration to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
 	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md"},
 	{name: "magus-test-design", description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior. Use when designing, writing, or reviewing tests that require a real/fake/stub decision, complete observable assertions, or a coverage-gap assessment. Do not use merely to execute or diagnose tests (magus-run), or to choose package seams (magus-architecture-review).", bodyPath: "skills/magus-test-design/SKILL.md"},
 	{name: "magus-buzz-lang", description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts. Use BEFORE writing or editing any .buzz file or a `magus buzz -e` snippet; when a Buzz check or run fails (a BZZ code, `expected '=', got ':'`, `argument 2 must be labeled`, `not allowed at the top level`, `null is not callable`); and for any one-off script in a magus workspace, since Buzz is already installed with the host modules (fs, json, yaml, http, template, vcs). Carries the syntax that differs from TypeScript, Go and Python, every built-in method, a reference script, and the check-fix-run loop. Do NOT use to review existing Buzz (magus-buzz-review).", bodyPath: "skills/magus-buzz-lang/SKILL.md"},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-lang for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
 	{name: "magus-diagram", description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-lang.", bodyPath: "skills/magus-diagram/SKILL.md"},
-	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md"},
+	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus commands (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md"},
 	{name: "magus-commit-composition", description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. Use when a branch has accumulated commits in the order the work occurred, before opening a PR, when asked to reconsolidate/squash/reword/clean up commits, or when a reviewer would meet a rename split across commits and a fix buried in a regeneration. Do NOT use on pushed commits, and do NOT use it to write a single message - that is idiomatic-commit-messages; this decides what goes IN each commit.", bodyPath: "skills/magus-commit-composition/SKILL.md"},
-	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
+	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent integration; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-multi-agent", description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task. Covers forking the job row each worker is bound to (magus job fork with FILE or glob write paths, a check, criteria and a model), the spawn description <parent>/<role> <job>, partitioning by WRITE SET from graph evidence (magus refs --occurrences, explain, affected --plan --stdin), proving the jobs cannot collide, and matching each job's model to its work. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing.", bodyPath: "skills/magus-multi-agent/SKILL.md"},
 	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md"},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
 	{name: "magus-run", description: "Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).", bodyPath: "skills/magus-run/SKILL.md"},
-	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},
+	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK's exported API itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},
 	{name: "magus-vcs-hygiene", description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root). magus drives git, Mercurial, Sapling and Jujutsu. Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, git clean, or the hg/sl/jj equivalents (shelve, revert --all, update --clean, goto --clean, purge), and when reading status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.", bodyPath: "skills/magus-vcs-hygiene/SKILL.md"},
 }
 
@@ -1032,7 +1034,7 @@ func checkDestination(dir, dest string) error {
 // WriteSkillTree renders the standard Agent Skills format into <dir>/<dest>.
 // The destination must be a path relative to <dir>; absolute paths are
 // refused so magus never silently writes outside the working tree. The
-// caller is responsible for that guard at the CLI surface; this method
+// caller is responsible for that guard at the CLI; this method
 // enforces it for safety.
 // changed is the SUBSET of written whose bytes this install actually altered, so a
 // caller can report what a run did rather than how many files it touched. Without it

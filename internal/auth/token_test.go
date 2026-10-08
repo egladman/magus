@@ -125,7 +125,7 @@ func (s *TokenSuite) TestGuardHotReload() {
 	a, _ := GenerateOperator()
 	_, err := SaveNewOperator(a)
 	require.NoError(t, err)
-	need := types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+	need := types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
 	h, err := httpx.BearerGuard(rpcerr.FormatJSON, Verify, need, okHandler)
 	require.NoError(t, err)
 

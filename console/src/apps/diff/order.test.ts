@@ -25,7 +25,7 @@ function file(path: string, additions = 1, deletions = 0): DiffFile {
 }
 
 function ann(path: string, over: Partial<DiffAnnotation> = {}): DiffAnnotation {
-  return { path, role: "source", reach: 0, surface: "unknown", ...over };
+  return { path, role: "source", reach: 0, visibility: "unknown", ...over };
 }
 
 function session(files: DiffAnnotation[]): DiffReview {
@@ -120,12 +120,12 @@ test("stats exclude generated files from the count", () => {
   assert.equal(s.deletions, 2);
 });
 
-test("stats count public surface", () => {
+test("stats count public API files", () => {
   const cs = order(
     [file("a.ts"), file("b.ts")],
-    session([ann("a.ts", { surface: "public" }), ann("b.ts", { surface: "internal" })]),
+    session([ann("a.ts", { visibility: "public" }), ann("b.ts", { visibility: "internal" })]),
   );
-  assert.equal(stats(cs).publicSurface, 1);
+  assert.equal(stats(cs).publicFiles, 1);
 });
 
 // "Nobody measured it" and "it has no tests" are different facts.
@@ -143,7 +143,7 @@ test("untested counts measured zero, never unmeasured", () => {
 test("risk chips state facts and name the API", () => {
   const chips = riskChips(
     ann("x.go", {
-      surface: "public",
+      visibility: "public",
       reach: 43,
       coverage: { ratio: 0.62, covered_stmts: 62, total_stmts: 100 },
       symbols: [
@@ -160,7 +160,7 @@ test("risk chips state facts and name the API", () => {
   );
   assert.deepEqual(
     chips.map((c) => c.text),
-    ["public surface", "43 referents", "62% covered"],
+    ["public API", "43 referents", "62% covered"],
   );
   assert.match(chips[0]?.title ?? "", /Open/);
 });
@@ -180,7 +180,7 @@ test("removed and re-signed public symbols each earn a chip", () => {
   });
   const chips = riskChips(
     ann("api.go", {
-      surface: "public",
+      visibility: "public",
       reach: 0,
       symbols: [
         symbol("Close", { change: "removed" }),
@@ -192,7 +192,7 @@ test("removed and re-signed public symbols each earn a chip", () => {
   );
   assert.deepEqual(
     chips.map((c) => c.text),
-    ["public surface", "1 removed", "1 re-signed"],
+    ["public API", "1 removed", "1 re-signed"],
   );
   assert.equal(chips[1]?.tone, "danger");
   assert.match(chips[1]?.title ?? "", /Close/);
@@ -320,7 +320,7 @@ test("unmeasured coverage renders no coverage chip", () => {
 // Read state is a FINDING, not a progress bar. "stale" is the one nothing else can tell the
 // reader: those files look finished, so they are the ones a scroll will skip.
 test("a file that changed after it was read leads its chips", () => {
-  const chips = riskChips(ann("x.go", { read_state: "stale", surface: "public" }));
+  const chips = riskChips(ann("x.go", { read_state: "stale", visibility: "public" }));
   assert.equal(chips[0]?.text, "changed since read");
   assert.equal(chips[0]?.tone, "danger");
   assert.match(chips[0]?.title ?? "", /not the version you are about to land/);

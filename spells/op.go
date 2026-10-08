@@ -174,7 +174,7 @@ func (c Command) SourcesPlaceholder() []string {
 // Hint is one failure classification: when a command fails and Contains appears in its
 // output, magus prints Advise.
 //
-// The field names are the authoring surface. A spell writes these in Buzz, so they are
+// The field names are the spell API. A spell writes these in Buzz, so they are
 // the same words in Go, in the generated mirror, and in a spell file:
 //
 //	Hint{contains = "authentication required", advise = "run `docker login <registry>`"}
@@ -279,7 +279,7 @@ func (s Service) Validate() error {
 	return nil
 }
 
-// Op is a single dispatchable surface of a spell — one tool-native Operation
+// Op is a single dispatchable unit of a spell — one tool-native Operation
 // (see docs/operations.md). An op is one of two declarative shapes, tagged by Kind:
 // a command op (OpKindCommand, the default) whose embedded [Command] Bin/Args run
 // via PATH with no script VM; or a service op (OpKindService) whose [Service]

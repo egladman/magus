@@ -156,9 +156,9 @@ export fun renderSettingsPanel(showConsole: bool) > str !> any {
     }
     // "Saved locally" rather than "in this browser": these apps install as a PWA, so
     // browser framing reads wrong. Changing a console pref raises a "reload to apply" toast
-    // (console-settings.js), so the note stays short and identical on every surface.
+    // (console-settings.js), so the note stays short and identical on every app.
     final note = "Saved locally.";
-    // Reading preferences, on every surface. Checkboxes rather than the theme's cycle
+    // Reading preferences, on every app. Checkboxes rather than the theme's cycle
     // button: each is a plain two-state opt-out, where a cycle would hide half its states
     // behind a click. theme.js seeds and persists them (and applies both pre-paint).
     //
@@ -420,7 +420,7 @@ export fun renderReferenceDrawer(root: str, canonUrl: str, content: str, site: S
 // License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root,
 // so the site links resolve at any depth.
 export fun renderSiteFooter(root: str, site: Site) > str !> any {
-    // Clusters spread across the footer's width: this site's surfaces, the browser apps, and
+    // Clusters spread across the footer's width: this site's pages, the browser apps, and
     // the project/external links. The app entry is the Console (single entry point, matching
     // the header); dashboard/graph/logs/activity are its tabs. Backtick raw string holds the
     // Mustache verbatim (double-quoted "{{x}}" would collide with Buzz's {expr}).

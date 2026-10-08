@@ -94,7 +94,7 @@ func TestReviewThreadsTreatsNothingAsNoThreads(t *testing.T) {
 }
 
 // A malformed thread does not take the readable ones down with it. Returning only the error
-// would leave the surface saying a colleague said nothing, which is the worst thing it can say.
+// would leave the client saying a colleague said nothing, which is the worst thing it can say.
 func TestReviewThreadsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{

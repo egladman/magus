@@ -1,14 +1,14 @@
 // home.ts - the console's launcher. It is NOT a tab: the console renders it as the outlet's empty
 // state (main.ts) whenever the workspace has zero open tabs (fresh load, or after the last tab is
-// closed). Clicking a card opens that surface as a real tab; with a tab open, the command bar
-// ("Open ...") is how another surface is launched. This module just builds the launcher DOM - a
+// closed). Clicking a card opens that app as a real tab; with a tab open, the command bar
+// ("Open ...") is how another app is launched. This module just builds the launcher DOM - a
 // heading, a lede, and a PatternFly Gallery of clickable Cards - and leaves mounting to the console.
 //
-// A plain click on a card opens that surface as a tab. Each card also carries a top-right kebab menu
-// whose one item, "Open in a new window", spawns a dedicated OS/PWA window for that surface
-// (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
+// A plain click on a card opens that app as a tab. Each card also carries a top-right kebab menu
+// whose one item, "Open in a new window", spawns a dedicated OS/PWA window for that app
+// (openAppWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
 import {
   DEMO_HINT,
@@ -143,11 +143,11 @@ export function launcherTagline(now: Date = new Date(), pick: () => number = Mat
   return eligible[Math.floor(pick() * eligible.length)].text;
 }
 
-// surfaceIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
+// appIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
 // currentColor, round caps. The rail and the launcher both draw through it so the marks match.
 // `size` omitted leaves the svg unsized, which is what the card's corner watermark wants (it is
 // scaled by CSS).
-export function surfaceIconSvg(glyph: string, size?: number): string {
+export function appIconSvg(glyph: string, size?: number): string {
   const dims = size == null ? "" : ' width="' + size + '" height="' + size + '"';
   return (
     '<svg viewBox="0 0 24 24"' +
@@ -159,8 +159,8 @@ export function surfaceIconSvg(glyph: string, size?: number): string {
   );
 }
 
-// buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
-// open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
+// buildLauncher builds the launcher DOM as the outlet's empty state. `apps` is what it offers to
+// open; `open` asks the console to open one as a tab. The returned element carries data-app="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
 // syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a server
@@ -289,14 +289,14 @@ export function syncLauncherChord(root: HTMLElement, chord: string): void {
 }
 
 export function buildLauncher(
-  surfaces: readonly AppManifest[],
+  apps: readonly AppManifest[],
   open: (pageId: string) => void,
 ): HTMLElement {
-  // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
+  // data-app tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
   const root = document.createElement("div");
-  root.dataset.surface = "home";
+  root.dataset.app = "home";
 
   // The workspace's SIGIL (sigil.ts): one unique mark per workspace, derived from its root, so this
   // console looks like YOURS and a sibling worktree looks like itself. Fixed - an identifier that
@@ -318,7 +318,7 @@ export function buildLauncher(
   const closeAllMenus = (except?: () => void): void => {
     for (const c of menuClosers) if (c !== except) c();
   };
-  for (const s of surfaces) {
+  for (const s of apps) {
     const card = document.createElement("div");
     card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
     card.dataset.open = s.id;
@@ -336,7 +336,7 @@ export function buildLauncher(
     const icon = document.createElement("span");
     icon.className = "console-launcher-card__icon";
     if (isWholeMotion(s.motion)) icon.dataset.motion = s.motion;
-    icon.innerHTML = surfaceIconSvg(s.glyph, 24);
+    icon.innerHTML = appIconSvg(s.glyph, 24);
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -354,10 +354,10 @@ export function buildLauncher(
     // icon-scoped so the watermark never animates.
     const mark = document.createElement("span");
     mark.className = "console-launcher-card__watermark";
-    mark.innerHTML = surfaceIconSvg(s.glyph);
+    mark.innerHTML = appIconSvg(s.glyph);
     card.append(mark);
     card.addEventListener("click", () => open(s.id));
-    // Enter/Space open the surface only when the CARD itself is focused - a key press on the kebab or a
+    // Enter/Space open the app only when the CARD itself is focused - a key press on the kebab or a
     // menu item bubbles here too, so guard on the target to avoid a stray open.
     card.addEventListener("keydown", (ev) => {
       if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) {
@@ -417,7 +417,7 @@ export function buildLauncher(
     openWin.addEventListener("click", (ev) => {
       ev.stopPropagation();
       closeMenu();
-      openSurfaceWindow(s.id);
+      openAppWindow(s.id);
     });
     card.append(kebab, menu);
 
@@ -498,7 +498,7 @@ export function buildLauncher(
   pickWay.append(pickLabel, pickHint);
 
   // The demo is reached from the title bar's workspace control now, not from a button here. It used
-  // to have its own primary button on this screen and on each of five surfaces - six places offering
+  // to have its own primary button on this screen and on each of five apps - six places offering
   // one thing, on a screen that already had a rail listing every destination. This POINTS at the one
   // control instead of competing with it.
   const demoWay = document.createElement("div");

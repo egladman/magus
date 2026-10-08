@@ -1,8 +1,8 @@
 package types
 
 // Event is the canonical record something emits when it needs a human's
-// attention. It is shared across magus surfaces (the notify CLI, the activity
-// trail, doctor reports, self-update notices, hints), so every consumer
+// attention. It is shared by the notify CLI, the activity
+// trail, doctor reports, self-update notices and hints, so every consumer
 // reasons over the same shape.
 //
 // The fields are categorical, one piece of information each:

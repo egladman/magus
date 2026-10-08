@@ -1,7 +1,7 @@
 # TRANSPORT: the shipped guard templates, executed against real host events.
 #
 # The sibling gate in internal/agent/guard_test.go checks that every host DECLARES a stance for
-# every decision and surface. A declaration can be sincere and still wrong, because
+# every decision and input. A declaration can be sincere and still wrong, because
 # nothing there runs the file: the OpenCode plugin declared a correct stance for
 # months while invoking a subcommand that no longer existed, so it never received a
 # verdict to have a stance about, and every session it guarded ran unguarded.
@@ -17,7 +17,7 @@
 # name, and the `magus shell` flags an entry declares about itself. Whether to forward
 # the whole event is worked out from the event.
 #
-# Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
+# Every case is labeled `# case: <input>/<decision>`; TestTransportCasesCoverTheContract
 # in internal/agent/guard_test.go fails when the guard contract grows a cell no case covers.
 
 # The glue itself runs anywhere magus does; the fixtures do not. The stale binary below is
@@ -178,7 +178,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # case: mcp/deny
 # A client script calling magus\job.clear() would drop every job, which is the one thing a
 # bound worker may never do, so leaseRebind refuses it and the same hookSpecificOutput reply
-# this file renders for the command surface carries the deny here. The job door is the
+# this file renders for shell commands carries the deny here. The job door is the
 # client tool's script: magus serves no per-verb job tool, so a call naming one is not a
 # call to magus at all.
 stdin $WORK/mcp-call.json
@@ -310,7 +310,7 @@ stdout '"additionalContext":"'
 stdout 'every session'
 
 # case: path/advise
-# The same suppression on the other surface, so a host that needs the flag gets it
+# The same suppression on the other input, so a host that needs the flag gets it
 # on both rather than half-silenced.
 env __MAGUS_NO_ADVISE=1
 stdin advise-path.json
@@ -330,7 +330,7 @@ stdout 'every session'
 
 # case: path/deny
 # An envelope that arrives truncated. Judged as text it matches no rule and passes, which
-# is the one silent failure on this surface: the intact event advises, and a byte short of
+# is the one silent failure for file writes: the intact event advises, and a byte short of
 # it said nothing at all.
 stdin truncated-path.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
@@ -343,7 +343,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
 ! stdout .
 
 # case: path/deny
-# The notes store is the one rule that denies on this surface, and it fires only where a
+# The notes store is the one rule that denies on file writes, and it fires only where a
 # workspace DECLARES one - so this runs in a subdirectory that does, leaving every other
 # case judged against a tree with no notes store at all.
 #
@@ -363,7 +363,7 @@ cd $WORK
 #
 # Cursor splits a verdict across two events: a gating event carries a deny and no
 # message on an allow, so the advisory has to ride the post-tool event. These cases
-# run both halves, because the declaration now claims advise=model on both surfaces
+# run both halves, because the declaration now claims advise=model on both inputs
 # and only the file can show whether the text really arrives.
 # hosts: cursor
 
@@ -498,8 +498,8 @@ stdout '"permission":"allow"'
 # artifact ships: the OpenCode plugin in the header note declared a correct stance
 # and was still broken, because nothing ran it. These cases run it.
 #
-# There is no `# case: <surface>/<decision>` label on purpose. An observation is
-# not a verdict on a surface, and labeling it would make TestTransportCasesCover-
+# There is no `# case: <input>/<decision>` label on purpose. An observation is
+# not a verdict on an input, and labeling it would make TestTransportCasesCover-
 # TheContract count a cell the guard contract does not have.
 
 # It records a read and says NOTHING to the host. A read is not a decision, so any
@@ -536,8 +536,8 @@ stderr 'MGS3024'
 # only shipped glue nothing ever ran. That is precisely the exemption the OpenCode
 # plugin in the header note shipped behind.
 #
-# No `# case: <surface>/<decision>` label, for the reason the observe block carries
-# none: a checkpoint and a brief are not verdicts on a surface.
+# No `# case: <input>/<decision>` label, for the reason the observe block carries
+# none: a checkpoint and a brief are not verdicts on an input.
 #
 # Both write to the user-global state dir, which the archive's read-only HOME is not.
 env HOME=$WORK/home
@@ -608,7 +608,7 @@ stdout '^\{"hookSpecificOutput":'
 stdout 'standing rules: CLAUDE.md; re-read it'
 ! stderr .
 
-# A flag this surface does not declare is reported, and the brief still arrives.
+# A flag this template does not declare is reported, and the brief still arrives.
 stdin $WORK/session-start.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-rehydrate.buzz -- --agent-name testscript
 stderr 'magus-rehydrate.buzz: unsupported argument "--agent-name"'
@@ -649,7 +649,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout 'magus guard is NOT running'
 
 # The path template stays silent by default: for most hosts an empty response means
-# allow. That is the deliberate trade - this surface can now DENY, so failing open here
+# allow. That is the deliberate trade - this template can now DENY, so failing open here
 # means an unavailable guard lets a notes write through, and announcing it on every file
 # edit was judged the worse noise. __MAGUS_FAILED_RESPONSE is the opt-in for a host that
 # would rather hear about it.

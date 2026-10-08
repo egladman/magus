@@ -69,10 +69,10 @@ magus run lint .         # runs your `lint` target, which calls go's golangci-li
 
 ### When to use which
 
-- **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public surface**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
+- **Reach for a target** when you want a _runnable verb_: the thing a teammate or CI types (`magus run test api`). Targets are your **public API**; declare one per lifecycle step you want runnable. Until you export a target for an operation, `magus run <op>` is a graceful no-op.
 - **Reach for a spell** when you want to _package a toolchain's operations_ and _tell the cache which files matter_. Bind a built-in or load a spell file. Call its ops from inside target bodies.
 - **Skip the spell entirely** for a one-off step with arbitrary logic: write the target body directly with the host modules (e.g. `proc\exec(...)`). A spell earns its keep when an operation recurs and has cache inputs worth declaring.
-- **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday surface is your composed targets.
+- **Use the `::` escape hatch** (`magus run go::go-vet api`) only for ad-hoc runs or introspection. The everyday way to run a spell is your composed targets.
 
 magus deliberately does **not** decide what "lint" or "format" means. A spell supplies tool-native operations in the tool's own words; your magusfile decides which op backs each lifecycle target. Toolchain knowledge lives in the spell (reusable, cacheable); policy lives in the magusfile (yours to compose).
 
@@ -317,7 +317,7 @@ the point of this section.
 
 ### What magus does not restrict
 
-A spell has the whole [host module](../reference/buzz/index.md) surface:
+A spell has every [host module](../reference/buzz/index.md):
 `proc\exec`, `http`, `fs`, `crypto`, the lot. It can run any command your shell
 can, reach the network, and read and write files. Nothing here is sandboxed
 per-spell, and importing a spell is trusting it, the same way adding a dependency

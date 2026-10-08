@@ -379,7 +379,7 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 // unreachable path, a proc-dial error that carries the server socket path. A liveness probe
 // only needs UP/DOWN, which the status code already carries (a kubelet reads only the code),
 // so the body is redacted to leak neither. The CLI probe path (runProbes) keeps the rich
-// reason: it is a local terminal, not this networked surface.
+// reason: it is a local terminal, not this networked endpoint.
 func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snapshot, err := status(r.Context())

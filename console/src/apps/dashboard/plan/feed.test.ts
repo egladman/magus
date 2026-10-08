@@ -39,7 +39,7 @@ test("feedRow marks a deny and an ask, and leaves a pass alone", () => {
 
 // The path is attributed to NOBODY, which is the honest answer, and both jobs are still told.
 // Rendering it as an ordinary edit would hide the one fact worth acting on: the plan has two
-// live lanes over one file. Seen for real in this repository between pwa/job-watch and
+// live jobs writing one file. Seen for real in this repository between pwa/job-watch and
 // pwa/turns-capture, both of which declared internal/trail.
 test("feedRow names both claimants of a contested path", () => {
   const row = feedRow(

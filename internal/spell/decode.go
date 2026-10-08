@@ -73,7 +73,7 @@ func decodeScriptRunners(src obj) ([]spells.Command, error) {
 //
 // A record carrying only .value decodes as a manifest with no lock candidates, which
 // is what makes a spell written against the older [Path] contract keep loading. That
-// is the entire compat surface: Path and Manifest agree on .value, and the extra Path
+// is the entire compat promise: Path and Manifest agree on .value, and the extra Path
 // fields (base, isDir) are meaningless for a manifest, so ignoring them loses nothing.
 func decodeManifests(src obj) ([]spells.Manifest, error) {
 	objs := src.Objs("manifests")

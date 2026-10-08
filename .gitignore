@@ -121,7 +121,7 @@ coverage.cmd.out
 *.swp
 *.swo
 
-# Agent surface: GENERATED, not source.
+# Skills, MCP config and hints for agents: GENERATED, not source.
 #
 # `magus agent install` writes these from the binary and stamps each with the schema and
 # content hashes it was built from - so they are a rendering of internal/agent/skills/. Keep

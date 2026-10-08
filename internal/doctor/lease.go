@@ -69,7 +69,7 @@ func (r *runner) checkBoundLease() types.Check {
 // session in the verdict itself (see leases.md#what-the-guard-enforces-under-a-lease).
 //
 // It reads the job store through Root alone, so a diagnostic never adopts a legacy
-// cache-dir store on the way past. The MCP surface is outside what it can see: no leg
+// cache-dir store on the way past. MCP calls are outside what it can see: no leg
 // here says anything about whether a magus tool call is judged.
 //
 // Named for the subject (the bound lease), not "binding": that word rhymes with
@@ -151,7 +151,7 @@ func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string
 			Name:    name,
 			Status:  types.CheckAdvice,
 			Message: fmt.Sprintf("lease %q is bound here, live and registered, but no host hook config in this checkout invokes the guard", id),
-			Details: []string{"the guard-wiring check names what is missing; the MCP surface is not checked here"},
+			Details: []string{"the guard-wiring check names what is missing; MCP calls are not checked here"},
 		}
 	}
 

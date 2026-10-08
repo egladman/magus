@@ -146,7 +146,7 @@ func graphLookup(ctx context.Context, root string, byPath map[string]*types.Proj
 	// Loaded in the BACKGROUND, because loading it takes most of a second and
 	// the picker has to be on screen before then. Blocking the open on a search
 	// index means typing `magus x` and watching nothing happen, which is worse
-	// than searching less, and is the exact input lag this surface exists to
+	// than searching less, and is the exact input lag this command exists to
 	// avoid.
 	//
 	// Until it arrives, the caller's path filter answers. From the first

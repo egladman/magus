@@ -136,7 +136,7 @@ add`, never the live tree.
 
 For a rare VCS fact that needs magus's portable VCS module instead of porcelain,
 use one inline Buzz evaluation{{if .Full}}. It is dense on purpose: an occasional capability
-query, not an everyday CLI surface{{end}}.
+query, not an everyday CLI command{{end}}.
 
 ```sh
 magus buzz -e 'import "std"; import "vcs"; fun main(args: [str]) > void !> any { std\print((vcs\ref() ?? "(no ref)") + " " + vcs\commit().short); }'

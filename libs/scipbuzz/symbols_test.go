@@ -63,8 +63,8 @@ func TestHostSymbolParsesWithAPackage(t *testing.T) {
 	require.Equal(t, "buzz host `magus/spell`/Command#", magusKey(t, typ))
 }
 
-// TestEmittedSymbolsRoundTrip parses and re-formats every global symbol the corpus
-// produces; a symbol that changes is one `scip lint` reports as non-canonical.
+// TestEmittedSymbolsRoundTrip parses and re-formats every global symbol the snapshot
+// inputs produce; a symbol that changes is one `scip lint` reports as non-canonical.
 func TestEmittedSymbolsRoundTrip(t *testing.T) {
 	idx, _, err := indexDir(snapshotInput)
 	require.NoError(t, err)

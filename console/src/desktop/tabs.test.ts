@@ -23,7 +23,7 @@ test("openTab into an empty workspace appends and activates", () => {
   assert.deepEqual(ws, { tabs: [tab("a")], activeId: "a" });
 });
 
-// A first visit opens ONE surface. It used to arrive pre-split beside Activity, which handed everyone
+// A first visit opens ONE app. It used to arrive pre-split beside Activity, which handed everyone
 // a layout they had not asked for and - because the workspace persists - kept it forever.
 test("desktop starter opens the Dashboard alone", () => {
   const ws = desktopStarterWorkspace();
@@ -34,7 +34,7 @@ test("desktop starter opens the Dashboard alone", () => {
   assert.equal(tab?.layout, undefined, "no split: an un-tiled tab carries no layout tree");
 });
 
-test("setLayout makes a collapsed pane its tab's primary surface", () => {
+test("setLayout makes a collapsed pane its tab's primary app", () => {
   const leaf: Pane = { kind: "leaf", id: "activity", pageId: "activity" };
   const ws = setLayout(desktopStarterWorkspace(), "starter", leaf);
   assert.equal(ws.tabs[0]?.pageId, "activity");
@@ -151,7 +151,7 @@ test("renameTab does not mutate its input", () => {
   assert.equal(ws.tabs[0].title, "a");
 });
 
-// The reducer feeds a persisted cell whose subscribers re-render, so a surface re-reporting the
+// The reducer feeds a persisted cell whose subscribers re-render, so an app re-reporting the
 // document it already has open must not wake them: identity, not just deep equality, is the contract.
 test("renameTab returns the same reference for an unknown id or an unchanged title", () => {
   const ws = openTab(emptyWorkspace, tab("a"));

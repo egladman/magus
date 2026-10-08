@@ -27,7 +27,7 @@ question, deterministically, from declared sources, and stops. Output reads at
 a terminal and parses in a pipe (`-o name`, `-o json`, `-o template=`; the
 pipe is for people, and the agent guard routes an agent to `-o` instead,
 because a pipe replaces the exit status and a failing gate then reads as 0). A
-non-zero exit means what it has meant for fifty years. Every surface degrades
+non-zero exit means what it has meant for fifty years. Everything magus draws degrades
 to plain text when there is no terminal to draw on, and the pinned band never
 takes the screen, the alternate buffer, or your scrollback. Composition
 happens where a monorepo needs it (in the graph, through `ctx.needs`), not by
@@ -35,7 +35,7 @@ pretending the binary can be smaller than the problem.
 
 The scope test governs what a verb may be, and the one-vocabulary rule
 (target, spell, charm, op, each named once and reused everywhere) keeps the
-surface predictable. That prevents the failure in both directions: claiming a
+command set predictable. That prevents the failure in both directions: claiming a
 minimalism the tool cannot carry, and the house dialect with no rule you can
 hold in your head, the one that makes users look things up forever and then
 teaches their agents the same confusion.
@@ -126,9 +126,9 @@ agent output than the most-trained languages on earth, with explicitness the
 only variable in sight. Weigh that as experience rather than benchmark; it is
 still the strongest evidence on this page.
 
-The mechanism is an ordering rule with one worked example: no surface is
+The mechanism is an ordering rule with one worked example: nothing is
 designed for an agent first. The `agents` key in `affected ci --plan` is the
-one agent-specific field in an otherwise human-first surface; the
+one agent-specific field in an otherwise human-first plan; the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
 deliberate exception is the job store, an agent-to-agent declaration
@@ -143,8 +143,8 @@ The floor under the ordering rule is an absent seam: magus never calls a
 model ([Scope](scope.md#where-others-drew-it) records the missing adapter as
 deliberate). The closest feature, `magus diff --prompt`, prints the context
 magus holds for you to paste into your own model, and never a drafted
-review. Every capability on this surface is a person's to run with no agent
-anywhere in the loop; the agent surface is additive, never load-bearing.
+review. Every review capability is a person's to run with no agent
+anywhere in the loop; the agent integration is additive, never load-bearing.
 The installed skills are gitignored renderings of the binary, so nothing in
 CI can drift-gate them; `magus doctor`'s agent-skills check is what observes
 staleness, per workspace ([Scope](scope.md#where-the-claim-is-strained)). A
@@ -174,7 +174,7 @@ first.
 Exactly one code path grades a write by who is acting, and naming it is what
 keeps the rule checkable. `gradeLeasedWrite` reads the lease ledger to
 decide whether a worker is editing outside the paths its lease declared.
-That is a concurrency-ownership question on the guard surface (who owns this
+That is a concurrency-ownership question in the guard (who owns this
 file right now) rather than a judgment about the work, and it reaches no cache
 key, no drift comparison, and no diagnostic. Its uncertainties (no ledger, no
 live lease, a file that will not parse) fail open with at most an
@@ -222,7 +222,7 @@ is a toll, and a toll is removed. This principle never slows
 a cache hit stays instant, and the pause belongs to the act that leaves the
 machine.
 
-The mechanisms are the ones named above. The debt is the rest of the surface:
+The mechanisms are the ones named above. The debt is the rest of magus:
 the console and the Go SDK have not been read against this entry, and until
 they are, their smoothness is unexamined rather than chosen.
 
@@ -269,7 +269,7 @@ adopting it:
    One binary, no account, nothing to upsell, no toolchain underneath it to
    break. The honest half: the learning cost is charged up front, and the
    claim is cheaper over a year, not cheaper in week one.
-2. **At least as small in scale.** The surface may not outgrow what one
+2. **At least as small in scale.** The tool may not outgrow what one
    person can hold. Enforced today by judgment alone; the ledger that would
    measure it is a debt, below.
 3. **Clearly and demonstrably better.** A claim of better needs an artifact
@@ -313,8 +313,8 @@ when magus automates a decision and when it hands the decision to you.
 
 ### Agents propose, humans dispose
 
-An agent surface can suggest work; it cannot accept it. magus records
-authorship from the surface that performed the write, so a change carries the
+An agent integration can suggest work; it cannot accept it. magus records
+authorship from the transport that performed the write, so a change carries the
 origin the channel delivered (the OS account, the entry point, the credential
 or host) no matter what the writer reports about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
@@ -371,7 +371,7 @@ like a session with nothing to deny. So a shipped template announces its
 fail-open arms rather than exiting quietly, and
 `TestFailOpenArmsAnnounceThemselves` fails the build when one stops. One
 template is exempt, and the test declares it rather than leaving it to be
-discovered: the path template stays silent. An empty response on that surface
+discovered: the path template stays silent. An empty response from a file-write rule
 already means allow, a notice on every file edit was judged the worse noise,
 and hearing about it there is opt-in. Whoever runs the guard should be
 able to read what it does and repair it without us.
@@ -520,7 +520,7 @@ automated the wrong half. Each row above removes the person at the point
 where the mechanism needs their judgment, so each stays out.
 
 [Sending a review](concepts/review.md) is the newest of them and the one with
-the most surface to give away, so its refusals are worth naming: no review
+the most to give away, so its refusals are worth naming: no review
 command carries a `--publish` flag, a self-review is always a comment rather
 than an approval, and authorship is stamped from the transport a write arrived
 on rather than from what the writer claims. A batch waits for a person because
@@ -578,7 +578,7 @@ This repository is built with agents at scale: 113,430 agent-run shell commands
 in twenty-one days. Our own oversight lapsed too. In 22 of 203 recent sessions
 the guard was not running, and those sessions carried 17% of all commands. The
 only reason that number exists is that we went looking for it.[^agent-commands-2026-09]
-Whether the surface earns its cost is measured the same way rather than
+Whether the agent integration earns its cost is measured the same way rather than
 asserted: [Benchmarks](benchmarks.md) publishes every run beside the
 environment that produced it, controls first.
 
@@ -607,7 +607,7 @@ Four rules on this page live only in prose today, and by this page's own
 standard that makes each a debt. Every one is a read of what magus already
 records, so each passes the scope test; none is built:
 
-- **The surface ledger** (criterion 2): a generated, committed inventory of
+- **The size ledger** (criterion 2): a generated, committed inventory of
   verbs, flags, config keys, and diagnostic codes, regenerated by `generate`
   so the drift gate lands any growth in the diff of the change that caused
   it, where the person who can say no is already looking. Not a cap: a

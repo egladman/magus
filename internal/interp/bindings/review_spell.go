@@ -207,11 +207,11 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 // ReviewThreads reads the comment threads already on the review.
 //
 // Empty on an unreachable host, for the reason FindReview gives about itself: this is the one
-// call that makes a local surface depend on a host being reachable, and the surface has to keep
+// call that makes a local client depend on a host being reachable, and the client has to keep
 // working when it is not. Nil error, empty list; ReviewThreadsReached is for the caller that
 // cannot afford to lose that distinction.
 //
-// A MALFORMED thread is different, and is reported. Dropping one leaves the surface saying a
+// A MALFORMED thread is different, and is reported. Dropping one leaves the client saying a
 // colleague said nothing, which is the single worst thing a review reader can be told, and
 // the threads that did decode still come back, so the caller shows what it has and says what
 // it could not read.
@@ -225,7 +225,7 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 //
 // For the caller that turns the threads into a NUMBER rather than rendering the ones it got. A
 // count taken from an empty list says "nothing was said" about a conversation nobody could read,
-// and those are opposite facts. A surface that RENDERS wants ReviewThreads: staying up against a
+// and those are opposite facts. A client that RENDERS wants ReviewThreads: staying up against a
 // host it cannot reach is the whole point of that contract.
 //
 // reached is false only when the host was asked and did not answer. Nothing to ask (no provider

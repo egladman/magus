@@ -13,16 +13,16 @@ import (
 	"github.com/egladman/magus/internal/journal"
 )
 
-// KnownSurfaces is every clean /console/<surface>/ segment magus may mint a link to or present
+// KnownApps is every clean /console/<app>/ segment magus may mint a link to or present
 // (Link, GraphLink, JobLink, Present). The console's app manifests decide the set: each app's path
 // plus the segments that open one of its modes, and console/src/apps/apps.test.ts fails when this
 // list and theirs differ in either direction. It stays a list because the CLI mints links where no
-// console bundle exists to read; the server's routes come from the bundle it serves (surfaceRoute).
-var KnownSurfaces = []string{"activity", "dashboard", "diagrams", "diff", "graph", "logs", "notes", "plan", "runs", "tools"}
+// console bundle exists to read; the server's routes come from the bundle it serves (appRoute).
+var KnownApps = []string{"activity", "dashboard", "diagrams", "diff", "graph", "logs", "notes", "plan", "runs", "tools"}
 
-// IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path).
-func IsSurfaceRoute(seg string) bool {
-	return slices.Contains(KnownSurfaces, seg)
+// IsAppRoute reports whether seg is exactly one known app segment (no sub-path).
+func IsAppRoute(seg string) bool {
+	return slices.Contains(KnownApps, seg)
 }
 
 // LogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded
@@ -77,14 +77,14 @@ func KeyDigestsParam(digests []KeyClassDigest) string {
 }
 
 // LinkOpts is the input to Link: the single home for the server-origin console URL grammar.
-// Host is the server's loopback host:port (from mcp.address); Surface is a console surface
-// segment (see KnownSurfaces: "dashboard", "graph", ...); Code is an optional one-time exchange
-// code (mgx_) the console trades for its token; Fragment holds any extra content directives
-// that ride the fragment ahead of the code.
+// Host is the server's loopback host:port (from mcp.address); App is a console app segment
+// (see KnownApps: "dashboard", "graph", ...); Code is an optional one-time exchange code
+// (mgx_) the console trades for its token; Fragment holds any extra content directives that
+// ride the fragment ahead of the code.
 type LinkOpts struct {
-	Host    string
-	Surface string
-	Code    string
+	Host string
+	App  string
+	Code string
 	// Fragment is the ordered list of extra content directives (e.g. {"flavor","targets"} or
 	// {"view","blast"}) appended to the fragment BEFORE the code. Order is preserved so callers
 	// get stable, testable output; each value is percent-encoded with the one escaping policy.
@@ -98,12 +98,12 @@ type FragmentParam struct {
 }
 
 // Root is the console's own address, the one a person opens when they want the console
-// rather than a particular surface: http://<host>/console/. Empty when there is no host.
+// rather than a particular app: http://<host>/console/. Empty when there is no host.
 //
 // Beside Link rather than spelled at each caller, for the reason Link's own doc gives: the
-// grammar has one home. Link with an empty surface would render "/console//", which some
+// grammar has one home. Link with an empty app would render "/console//", which some
 // servers redirect and some do not, so the root is its own answer rather than a special
-// case of a surface link.
+// case of an app link.
 func Root(host string) string {
 	if host == "" {
 		return ""
@@ -111,13 +111,13 @@ func Root(host string) string {
 	return "http://" + host + "/console/"
 }
 
-// Link assembles a console surface's server-origin deep link:
-// http://<host>/console/<surface>/#[<directives>&]code=<code>. Under the server-origin grammar
+// Link assembles a console app's server-origin deep link:
+// http://<host>/console/<app>/#[<directives>&]code=<code>. Under the server-origin grammar
 // the ORIGIN names which server: the server serves both the console shell (over its loopback
 // /console/) and the data API, so nothing but content state and the exchange code rides the
-// fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
-// surface URL: the server serves the shell for it (SPA fallback) and the console's boot router
-// opens that surface from the path. The code rides the fragment (never transmitted on the
+// fragment; there is no #live= host directive. The clean /console/<app>/ PATH is the canonical
+// app URL: the server serves the shell for it (SPA fallback) and the console's boot router
+// opens that app from the path. The code rides the fragment (never transmitted on the
 // document GET) and is emitted LAST, after any content directives. It is single use and lives a
 // minute, so a link seen in a process list or a log is spent or dead, never a credential.
 //
@@ -136,10 +136,10 @@ func Link(opts LinkOpts) string {
 	if len(parts) > 0 {
 		frag = "#" + strings.Join(parts, "&")
 	}
-	return "http://" + opts.Host + "/console/" + opts.Surface + "/" + frag
+	return "http://" + opts.Host + "/console/" + opts.App + "/" + frag
 }
 
-// SurfaceLink is Link without an origin: /console/<surface>/#<directives>.
+// AppLink is Link without an origin: /console/<app>/#<directives>.
 //
 // For a response the CONSOLE ITSELF reads. The console is served from the server it is
 // asking, so it already knows the origin; sending an absolute URL would mean the handler
@@ -149,7 +149,7 @@ func Link(opts LinkOpts) string {
 //
 // Here rather than hand-built at the handler for the reason Link's own doc gives: the
 // grammar has one home, so both forms share the one escaping policy.
-func SurfaceLink(surface string, fragment ...FragmentParam) string {
+func AppLink(app string, fragment ...FragmentParam) string {
 	parts := make([]string, 0, len(fragment))
 	for _, p := range fragment {
 		parts = append(parts, p.Key+"="+encodeComponent(p.Value))
@@ -158,7 +158,7 @@ func SurfaceLink(surface string, fragment ...FragmentParam) string {
 	if len(parts) > 0 {
 		frag = "#" + strings.Join(parts, "&")
 	}
-	return "/console/" + surface + "/" + frag
+	return "/console/" + app + "/" + frag
 }
 
 // LinkTokenLifetime is how long the console token a sign-in link stands for lives, whether the
@@ -213,20 +213,20 @@ func encodeComponent(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
-// JobSurface is the console surface a job's row lives on. The plan view holds two tenants,
+// JobApp is the console app a job's row lives on. The plan view holds two tenants,
 // the target plan and the Jobs stage; a job is named by the latter.
-const JobSurface = "plan"
+const JobApp = "plan"
 
 // jobFragment selects one job in the Jobs view. Shared by the two link forms so a path and
 // an absolute URL cannot disagree about which directive names a job.
 func jobFragment(id string) FragmentParam { return FragmentParam{Key: "job", Value: id} }
 
-// JobSurfaceLink is one job's row in the console Jobs view, without an origin: the form a
+// JobAppLink is one job's row in the console Jobs view, without an origin: the form a
 // handler hands back to the console, which is already served from the server it is asking.
-// See [SurfaceLink].
-func JobSurfaceLink(id string) string { return SurfaceLink(JobSurface, jobFragment(id)) }
+// See [AppLink].
+func JobAppLink(id string) string { return AppLink(JobApp, jobFragment(id)) }
 
-// JobLink is [JobSurfaceLink] against the loopback origin of the server serving the
+// JobLink is [JobAppLink] against the loopback origin of the server serving the
 // console: what a CLI hands a PERSON, who is not in the console already and for whom a
 // bare path resolves against nothing.
 //
@@ -238,5 +238,5 @@ func JobLink(host, id string) string {
 	if host == "" || id == "" {
 		return ""
 	}
-	return Link(LinkOpts{Host: host, Surface: JobSurface, Fragment: []FragmentParam{jobFragment(id)}})
+	return Link(LinkOpts{Host: host, App: JobApp, Fragment: []FragmentParam{jobFragment(id)}})
 }

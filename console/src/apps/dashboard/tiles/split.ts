@@ -4,7 +4,7 @@
 // ONE knob, snapped to whole grid columns, and that restraint is the design rather than a shortcut.
 // A freeform drag would let the canvas be dragged into states the layout cannot honor - fractional
 // columns, a panel too narrow to render its content, the bin-packing this mode exists for quietly
-// undone - on a surface that is usually being looked at rather than used. Snapping to a column
+// undone - on an app that is usually being looked at rather than used. Snapping to a column
 // boundary means every reachable state is one the grid already knows how to lay out, so there is no
 // such thing as a broken arrangement to get stuck in.
 //
@@ -51,7 +51,7 @@ import { viewMode } from "./bigPicture";
 // takes; the activity column takes the rest.
 const COLUMNS = 12;
 
-// The cell, its schema and its bounds come from layoutPrefs so the Settings surface can export
+// The cell, its schema and its bounds come from layoutPrefs so the Settings app can export
 // and import this preference without re-declaring the storage key or the fallback beside it.
 // Everything that INTERPRETS the stored value still lives here - readSplit below is the only
 // reader, and it discards anything it does not recognize.

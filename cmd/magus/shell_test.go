@@ -263,10 +263,10 @@ func TestHookCmd(t *testing.T) {
 
 // TestShellJudgesAnOperandTheSameAsStdin is the claim the command is named for: a person
 // typing the command and a host piping it get ONE verdict from one evaluator, not two
-// surfaces that agree today.
+// code paths that agree today.
 //
 // The operand wins over stdin rather than being rejected, which is the reverse of what
-// the hook surface did. Rejecting it was right while stdin was the only contract; once a
+// the hook command did. Rejecting it was right while stdin was the only contract; once a
 // person is the other caller, a terminal's stdin is a keyboard, and reading it would hang
 // on a command that was already supplied.
 func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
@@ -597,12 +597,12 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	assert.Empty(t, events)
 }
 
-// TestHookCmd_RecordsSpawnFromEnvelope covers the spawn surface end to end: a host payload
+// TestHookCmd_RecordsSpawnFromEnvelope covers the spawn hook end to end: a host payload
 // carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
 // blob and the cooperative lease marker stamped onto the event.
 //
 // It also pins two things that must NOT happen. The prompt below quotes `git stash`, which the
-// command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
+// command guard denies. A spawn is not a guard input, so the verdict is a pass and the
 // spawn is recorded rather than blocked for describing a denied command; and that stays true
 // whether or not the caller named a model, which is a claim this guard grades nothing on.
 //
@@ -875,11 +875,11 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	assert.NotContains(t, run("git stash", "session-2"), "denied again", "a fresh session hears the rule in full")
 }
 
-// TestHookCmdRoutesAnAgentSurfaceWrite pins the WIRING, not the rule: a rule that is
+// TestHookCmdRoutesAnAgentSourceWrite pins the WIRING, not the rule: a rule that is
 // correct and never called is the failure mode this repository has shipped before. It also
-// pins the dedupe on the path surface, where a suppressed advisory must leave silence
+// pins the dedupe on the path input, where a suppressed advisory must leave silence
 // rather than let the next rung speak into it.
-func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
+func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 	t.Chdir(root)
@@ -901,13 +901,13 @@ func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
 		"the repeat is silence, not the new-directory advisory stepping into the gap this rule left")
 }
 
-// TestHookCmdJudgesTheCacheDirOnBothSurfaces is the hook's decision table for this rule.
+// TestHookCmdJudgesTheCacheDirOnBothInputs is the hook's decision table for this rule.
 // It is here rather than in TestEvaluateBashGuard because the rule is not pure: it reads
 // the resolved cache location, so the table it belongs in is the one that runs hookCmd.
 //
 // The rows run UNBOUND, which is the contract: this is the guard's own evidence rather
 // than a boundary, so an orchestrator and a person in their own checkout are refused too.
-func TestHookCmdJudgesTheCacheDirOnBothSurfaces(t *testing.T) {
+func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 	for name, tc := range map[string]struct {
 		input string
 		path  bool
@@ -1056,9 +1056,9 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	assert.Equal(t, worker.ID, events[0].Lease)
 }
 
-// TestHookCmdJudgesTheMCPLedgerSurface is the decision table for the transport the CLI
+// TestHookCmdJudgesTheMCPLedgerInput is the decision table for the transport the CLI
 // rules would otherwise miss: the same envelope a host forwards for an MCP tool call.
-func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
+func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	wide := narrowLease()
@@ -1188,13 +1188,13 @@ func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	assert.Contains(t, claimed.String(), `"lease_from": "env"`)
 }
 
-// TestHookCmdAdvisesAnInvalidLeaseOnEverySurface: the notice lived inside gradeLeasedWrite,
-// which runs on the path surface only, so a COMMAND under a typo'd id ran fully un-enrolled
+// TestHookCmdAdvisesAnInvalidLeaseOnEveryInput: the notice lived inside gradeLeasedWrite,
+// which runs on the path input only, so a COMMAND under a typo'd id ran fully un-enrolled
 // with nothing said about it.
-func TestHookCmdAdvisesAnInvalidLeaseOnEverySurface(t *testing.T) {
+func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	for name, args := range map[string][]string{
-		"the command surface": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
-		"the path surface":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},
+		"the shell-command input": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
+		"the file-write input":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
@@ -1226,7 +1226,7 @@ func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 }
 
 // TestHookCmdDeniesTheGateThroughTheMCPDoor is the hole the tool-name decode closes: the
-// same work the lease-scoped gate rule refuses on the command surface, asked for through
+// same work the lease-scoped gate rule refuses for shell commands, asked for through
 // the tool that does it. It passed unjudged while the coverage line said deny=model.
 func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 	global = globalFlags{}
@@ -1296,7 +1296,7 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 
 // TestHookCmdDeniesAWiringWriteUnderALease proves the WIRING, the way the gate rule's own
 // test does: a rule nothing calls never fires however well it is tested. It also pins the
-// rank, since the lease ledger speaks first on this surface and a boundary that happens to
+// rank, since the lease ledger speaks first on file writes and a boundary that happens to
 // contain the file must not clear it.
 func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	global = globalFlags{}

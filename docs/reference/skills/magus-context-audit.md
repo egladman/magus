@@ -3,13 +3,13 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5758
-skill_short_bytes: 4103
+skill_full_bytes: 5754
+skill_short_bytes: 4099
 ---
 
 # magus-context-audit
 
-Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.
+Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent integration; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `113` |
+| `agent-skill-version` | `114` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `dcaa26dcd989` |
+| `skill-content` | `cb4c4abc5ca4` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -67,10 +67,10 @@ which file wins. A contradiction makes it pick arbitrarily or stall.
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list. The riskiest surface is usually the one
+You cannot audit what you cannot list. The riskiest source is usually the one
 nobody remembers is loaded.
 
-| surface | why it bites |
+| source | why it bites |
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
@@ -97,7 +97,7 @@ Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
-grep -rn "<the command or rule>" <every surface you enumerated>
+grep -rn "<the command or rule>" <every source you enumerated>
 ```
 
 ## Rank what you find
@@ -111,7 +111,7 @@ Report findings in this order.
    break one instruction or stall.
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied.
-3. Split authority: two surfaces describe one decision differently (one
+3. Split authority: two sources describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
    A local instruction contradicting a shipped skill is always this. Check each
    local instruction's `retire-when` while here; the condition may have arrived.
@@ -173,10 +173,10 @@ across turns, or spends reasoning budget arbitrating instead of working.
 
 ## Enumerate before reading
 
-You cannot audit what you cannot list. The riskiest surface is usually the one
+You cannot audit what you cannot list. The riskiest source is usually the one
 nobody remembers is loaded.
 
-| surface | why it bites |
+| source | why it bites |
 | --- | --- |
 | the repo's agent instruction file (`CLAUDE.md`, `AGENTS.md`, ...) | always loaded, whole file, never scoped |
 | installed skills | whole directory; a stale one looks identical to a current one |
@@ -211,7 +211,7 @@ Work outward from what CHANGED (a diff, a changelog, a recent decision), not by
 reading everything. Contradictions cluster around recent edits.
 
 ```sh
-grep -rn "<the command or rule>" <every surface you enumerated>
+grep -rn "<the command or rule>" <every source you enumerated>
 ```
 
 ## Rank what you find
@@ -229,7 +229,7 @@ session", not "how wrong is the sentence".
    reporting before one of these.
 2. Stale instruction: it names a command that no longer exists, no longer works,
    or is now denied. It is indistinguishable from a dead end until the agent tries it.
-3. Split authority: two surfaces describe one decision differently (one
+3. Split authority: two sources describe one decision differently (one
    "advised", the other "denied"), and the agent cannot tell which is current.
    A workspace-local instruction contradicting a shipped skill is always this finding:
    local text overrides nothing, so the two are in conflict. Check each

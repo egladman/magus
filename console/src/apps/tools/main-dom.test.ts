@@ -1,4 +1,4 @@
-// main-dom.test.ts - the Tools surface's mount. document/window come from test-setup.mjs (node
+// main-dom.test.ts - the Tools app's mount. document/window come from test-setup.mjs (node
 // --import). The rows are served through the real ListTools transport so the wire mapping is under
 // test too: a fixture written as the server serializes it (protobuf JSON, enums by name) cannot
 // pass while the real feed would not parse.
@@ -11,12 +11,12 @@ import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { setDefaultHost } from "../../lib/settings";
 import { activate } from "./main";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 const HOST = "127.0.0.1:7391";
 const realFetch = globalThis.fetch;
 
-let mounted: SurfaceInstance | null = null;
+let mounted: AppInstance | null = null;
 let host: HTMLElement;
 
 beforeEach(() => {

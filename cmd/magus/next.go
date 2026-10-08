@@ -38,7 +38,7 @@ type explainWithNext struct {
 	// same fact the text view prints. Absent when nothing touched it, or when the node is
 	// not about a file.
 	//
-	// Here as well as in the text renderer because the machine-readable surface is the one
+	// Here as well as in the text renderer because the machine-readable output is the one
 	// an agent reads, and the argument for printing contact at all is that omitting it
 	// makes a reader conclude a file is quiet. That argument does not weaken when the
 	// reader is a program.
@@ -90,7 +90,7 @@ func actingRole(cacheDir, root string) (hint.Role, []string) {
 
 // served filters next for the acting role and records what survived to the journal.
 //
-// Every surface that carries breadcrumbs calls it, structured output included: the
+// Every output that carries breadcrumbs calls it, structured output included: the
 // journal's readers ask what a reader was given, and an entry that reached a harness
 // as a field was given over exactly as one printed on a terminal was.
 func (n nextGate) served(next []hint.Next) []hint.Next {

@@ -1,6 +1,6 @@
 package main
 
-// subcommand is one entry in magus's top-level surface.
+// subcommand is one entry in magus's top-level subcommands.
 type subcommand struct {
 	Name  string
 	Short string // the one-line description shown by `magus help`
@@ -18,7 +18,7 @@ const (
 	groupSetup     = "Setup and maintenance"
 )
 
-// subcommands is the SINGLE source of truth for magus's top-level surface, in the
+// subcommands is the SINGLE source of truth for magus's top-level subcommands, in the
 // order `magus help` lists them.
 //
 // Three copies of this list used to exist and all three had drifted: usage() had the
@@ -31,7 +31,7 @@ const (
 // subcommand added here shows up in help, in did-you-mean, and in every shell without
 // anyone remembering to update five files.
 //
-//go:generate go run ../magus-utils completions -surface surface.go -out completions
+//go:generate go run ../magus-utils completions -subcommands subcommands.go -out completions
 var subcommands = []subcommand{
 	{Group: groupWork, Name: "ls", Short: "list all discovered projects"},
 	{Group: groupWork, Name: "describe", Short: "define a magus concept and list all entities (spell|charm|target|graph|project|workspace|module|mcp-tool|file|tool)"},

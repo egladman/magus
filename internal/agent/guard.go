@@ -25,13 +25,13 @@ const GuardSchemaVersion = 1
 // deny, never as an allow.
 var guardDecisions = []string{"pass", "advise", "deny", "ask"}
 
-// guardSurfaces is every input the guard judges: a shell command, a file path
+// guardInputs is every input the guard judges: a shell command, a file path
 // an edit is about to write (`magus shell --path`), or an MCP tool call
 // (a tool name plus a params object, forwarded whole rather than reduced to a
-// single string). A host wires each surface to a different one of its events,
+// single string). A host wires each input to a different one of its events,
 // and a host that cannot wire one covers less, which is a coverage difference
 // to record, not to hide.
-var guardSurfaces = []string{"command", "path", "mcp"}
+var guardInputs = []string{"command", "path", "mcp"}
 
 // GuardTemplateVersion is the revision of the hook templates a reader installs
 // into their agent host.
@@ -72,7 +72,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // version 2 added drops attribution and keeps the verdict), so an unbumped
 // copy loses the activity trail's host label, not its guard.
 //
-// 4: two changes, neither released before this. The path surface learned to render a
+// 4: two changes, neither released before this. The path template learned to render a
 // deny arm: it handled only advise, so a deny rendered EMPTY while magus exited 2, and
 // both scripts read empty-output-plus-nonzero as a broken guard and exit 0, which every
 // host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
@@ -124,9 +124,9 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // session is handed back renders as a JSON envelope on request, for a host that parses a
 // session-start hook's stdout as a reply rather than reading it as context.
 //
-// 13: the contract grew a third surface, MCP tool calls, and magus-command.sh grew
+// 13: the contract grew a third input, MCP tool calls, and magus-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
-// HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
+// HOST_EVENT_PATH, only a tool name and a params object, so a host wiring MCP calls
 // forwards the whole event instead of reducing it to one jq extraction. A copy that
 // predates this has no HOST_EVENT_RAW arm at all, so a host that tries to wire an
 // mcp__magus__* matcher through it ships the literal string "null" as the command to
@@ -149,12 +149,12 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // environment. A hook command is an argv the host splits itself, so a `VAR=value` prefix
 // only works where something re-joins and re-parses it. The ports now decide from the
 // event whether to forward the whole envelope (the field HOST_EVENT_PATH names is absent
-// on exactly the surfaces whose payload is not one string). They read their `magus shell`
+// on exactly the inputs whose payload is not one string). They read their `magus shell`
 // flags from the argv `magus buzz` forwards after `--`. The sh copies are unchanged and
 // keep their variables, because sh is what runs them. This bumps because the CONFIG and
 // the glue moved together: a config written for this version wires no HOST_EVENT_RAW, and
 // a copy that predates it then selects `null` on every MCP call, spawn and skill load, so
-// those surfaces stop being judged with nothing anywhere saying so.
+// those calls stop being judged with nothing anywhere saying so.
 //
 // 17: the command and path glue forward the host's subagent id (HOST_AGENT_PATH, default
 // agent_id) as `magus shell --agent`. Both select one field out of the envelope, so the id
@@ -190,5 +190,5 @@ const GuardTemplateMarker = "magus-guard-template:"
 // GuardDecisions returns every decision a verdict can carry.
 func GuardDecisions() []string { return append([]string(nil), guardDecisions...) }
 
-// GuardSurfaces returns every input the guard judges.
-func GuardSurfaces() []string { return append([]string(nil), guardSurfaces...) }
+// GuardInputs returns every input the guard judges.
+func GuardInputs() []string { return append([]string(nil), guardInputs...) }

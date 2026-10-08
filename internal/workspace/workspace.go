@@ -10,7 +10,7 @@
 //     calls magus.project(...). Those option types cannot live in package
 //     magus, and not in project either (the watch-ignore constructors need
 //     internal/file/watch, which already imports project).
-//   - Surface: Load and WithLimiter carry internal types (*config.Config,
+//   - Signatures: Load and WithLimiter carry internal types (*config.Config,
 //     *cache.Limiter). Keeping them here lets the server inject a shared limiter
 //     without those internals leaking onto the public magus API.
 package workspace

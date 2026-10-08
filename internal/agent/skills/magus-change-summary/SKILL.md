@@ -96,7 +96,7 @@ and append under `## [Unreleased]`.{{if .Full}} For example:
 
 Write each entry to this checkable list:
 
-- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+- Name everything it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target.{{if .Full}} A reader upgrades by searching for those strings.{{end}}
 - Use Keep a Changelog's section headings: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Never invent one.
@@ -109,7 +109,7 @@ Write each entry to this checkable list:
 
 ## Answer a granular diff question
 
-For "what exactly changed in X", stay on magus surfaces{{if .Full}}: they
+For "what exactly changed in X", stay on magus's own commands{{if .Full}}: they
 classify and relate, where a raw diff only shows text{{end}}.
 
 | question | command |
@@ -141,7 +141,7 @@ pieces:
    which dirty tree was reviewed, since the revision alone reads the same
    for every dirty tree built on it){{end}}.
 2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
-   changed file's reach, public-surface exposure, and referents{{if .Full}},
+   changed file's reach, public API exposure, and referents{{if .Full}},
    the surrounding code worth a second look, not just the literal
    hunks{{end}}. `magus diff` refuses a positional git ref on
    purpose{{if .Full}}; a swallowed ref once printed the reader's own edits

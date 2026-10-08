@@ -15,8 +15,8 @@
 //	magus x [filter...]                 interactive shorthand: pick project + target
 //	magus doctor                        validate the workspace
 //
-// magus help prints the full top-level surface, in the order and with the
-// descriptions subcommands in surface.go declares as the single source of
+// magus help prints the full list of top-level subcommands, in the order and with the
+// descriptions subcommands in subcommands.go declares as the single source of
 // truth, kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
@@ -714,7 +714,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
-	// Without a second pass the whole MAGUS_* surface goes unchecked while the
+	// Without a second pass the whole set of MAGUS_* variables goes unchecked while the
 	// equivalent yaml is rejected. Printed and exiting 1 like the load failure
 	// above, for the same reason: it is the same multi-line validator text.
 	//
@@ -1328,7 +1328,7 @@ func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) 
 
 // isDeclaredRun is the second, deliberately narrow admission path into dispatchJob: a plain
 // `run <target> <project>` whose target the workspace's own magusfile declares for that project.
-// The review surface submits these so a reader can run a project's tests against the code they
+// The review app submits these so a reader can run a project's tests against the code they
 // are looking at.
 //
 // It admits strictly less than a terminal's `magus run`: exactly three tokens, no flags, no

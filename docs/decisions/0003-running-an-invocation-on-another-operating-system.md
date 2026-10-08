@@ -75,7 +75,7 @@ require a container runtime. This page amends the last of those, and says how mu
    `safe.directory` over the bind mount, named-volume ownership and cache locking over
    the VM file share are measured on real machines and published as a matrix with dates.
    Until the matrix exists, line one of a relayed run says `experimental`, which is what
-   `docs/concepts/compatibility.md` asks of any surface not yet supported. The indexer
+   `docs/concepts/compatibility.md` asks of any feature not yet supported. The indexer
    benchmark under "The indexers" is part of the same delivery.
 5. **A, B, C and D are rejected; B' is superseded.**
 
@@ -397,7 +397,7 @@ shape: the provider owns the mounts and the environment, so the one property tha
 (the sandbox floor, the read-only checkout, no shared-tier writes) holds only if the spell
 remembers, and the engine must then verify a command it did not write; a per-machine
 runtime becomes a repository fact, which it is not; and every runtime CLI is a second
-surface with its own exit codes and its own idea of a TTY.
+interface with its own exit codes and its own idea of a TTY.
 
 ### E. One engine-API client, one user fact, two callers (decided)
 

@@ -588,7 +588,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, want, test.Dependencies, "identifier exact + glob patterns; comment ignored")
 }
 
-// TestChainIsSourceOrdered pins the fact the whole chain surface exists for: the order
+// TestChainIsSourceOrdered pins the fact the whole chain exists for: the order
 // is the order the body writes, ACROSS ctx.needs calls, and a glob step expands in
 // place. Dependencies happens to agree here; Chain is what promises it.
 func TestChainIsSourceOrdered(t *testing.T) {
@@ -649,8 +649,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 	}, l.Chain)
 }
 
-// TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so the
-// describe surface prints no line rather than an empty one.
+// TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so
+// `magus describe` prints no line rather than an empty one.
 func TestChainEmptyForALeafTarget(t *testing.T) {
 	g := Extract(`import "magus";
 import "project/../lib";
@@ -842,15 +842,15 @@ export fun plain(ctx: magus\Context, args: [str]) > void { http\get("https://exa
 	assert.Empty(t, plain.SecretRefs)
 }
 
-// TestReadsSecretsCoversTheWholeSecretSurface pins what MGS1026 can see.
+// TestReadsSecretsCoversEverySecretCall pins what MGS1026 can see.
 //
-// Recognizing only magus\secret.read left the entire injector surface uncovered, so a
+// Recognizing only magus\secret.read left every other secret injector uncovered, so a
 // target that granted a credential and then fetched with it was never flagged as
 // uncacheable. That is a worse hazard than the one the check was built for: with a grant
 // the magusfile never holds the value, so switching the ref from staging to production
 // changes nothing the cache can see and the target replays its old output against a
 // different credential, a wrong build, not a stale login.
-func TestReadsSecretsCoversTheWholeSecretSurface(t *testing.T) {
+func TestReadsSecretsCoversEverySecretCall(t *testing.T) {
 	g := Extract(`import "magus";
 export fun reads(ctx: magus\Context, args: [str]) > void {
     final tok = magus\secret.read("TOKEN");

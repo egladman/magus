@@ -1,5 +1,5 @@
 // watch.ts - the shell-side notification watchers. These are the notifications the console cannot derive
-// from a surface it happens to have open: they must be observed at the SHELL so they fire whether or not
+// from an app it happens to have open: they must be observed at the SHELL so they fire whether or not
 // you are looking (the "unwatched" half of the admission doctrine). Three server-dependent watchers poll
 // on a slow ticker over the console's existing authenticated transport - no new backend push:
 //   - share-connect: a device first exercising the share token records a TOKEN_LIFECYCLE "share.open"
@@ -15,7 +15,7 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { CredentialClass, TokenService } from "@wire/token/v1alpha1/token_pb";
-import { createServerTransport, getLiveToken, resolveServerHost, surfaceLink } from "./server";
+import { createServerTransport, getLiveToken, resolveServerHost, appLink } from "./server";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";
 import {
@@ -135,7 +135,7 @@ async function pollServerStorage(host: string, store: NotificationStore): Promis
     // the dashboard tile that only watches the figure: a reader already inside the console should
     // not need a terminal to carry out what this notice has decided. `magus server job clear-cache`
     // is the same submission from the other door.
-    link: { label: "Open the jobs", href: surfaceLink("dashboard", host) },
+    link: { label: "Open the jobs", href: appLink("dashboard", host) },
   });
 }
 
@@ -177,7 +177,7 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
         important: true,
         key: "review.said:" + ids,
         message,
-        link: { label: "Open the review", href: surfaceLink("diff", host) },
+        link: { label: "Open the review", href: appLink("diff", host) },
       });
       continue;
     }
@@ -196,7 +196,7 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
       message,
       // The capture itself is a CLI act by construction (see review-notice.ts), so the link goes to the
       // conversation the reader has to read before deciding it is worth keeping.
-      link: { label: "Open the review", href: surfaceLink("diff", host) },
+      link: { label: "Open the review", href: appLink("diff", host) },
     });
   }
 }

@@ -70,7 +70,7 @@ func TestMethodName(t *testing.T) {
 // binary must classify to a KNOWN verb. A new RPC whose leading word is in neither the mutating nor the
 // read set fails here, forcing the author to add it to one bucket in interceptor.go, which is the moment
 // they decide whether it needs auditing. This is what keeps the audit boundary from silently drifting as
-// the service surface grows.
+// the service grows.
 func TestKnownVerbs(t *testing.T) {
 	var unknown []string
 	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {

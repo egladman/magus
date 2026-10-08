@@ -4,7 +4,7 @@
 // orchestrator hands out are the same shape - a job with a HOLDER - so they are ONE list here
 // (JobService.ListJobs returns both), told apart by the holder on the row rather than by living on
 // two different screens. A catalog job carries a description and the size of what it maintains and
-// can be RUN from its row; a session job carries its criteria, the lanes and the check it was given.
+// can be RUN from its row; a session job carries its criteria, the write paths and the check it was given.
 // Neither is a different view.
 //
 // KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (server or session), the criteria, and the
@@ -31,7 +31,7 @@
 //     said so; one that never returned said nothing, and is the only state here that no one else
 //     will report. It is never drawn, counted, or worded as a failure - and the target plan never
 //     invents one, because an engine that resolved a DAG knows what happened to every node in it.
-//  2. THE PICTURE IS NOT THE ACCESSIBLE SURFACE. The SVG stage is aria-hidden and the node list
+//  2. THE PICTURE IS NOT WHAT ASSISTIVE TECHNOLOGY READS. The SVG stage is aria-hidden and the node list
 //     beside it is the accessible twin - the same split the graph explorer makes between its canvas
 //     and its node cloud, for the same reason: a laid-out drawing has no reading order.
 //  3. IT POLLS ONLY WHILE IT IS ON SCREEN, and it refreshes the instant it comes back, so a pane
@@ -59,7 +59,7 @@ import { JobFeed } from "./feed";
 import { persisted } from "../../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../../../desktop/zoomControl";
 import { registerCommand, unregisterCommand } from "../../../desktop/commands";
-import { openSurface } from "../../../desktop/surface-navigation";
+import { openApp } from "../../../desktop/app-navigation";
 import { h } from "../../../desktop/view";
 import {
   renderConnectPrompt,
@@ -494,8 +494,8 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // job is work someone OWNS (an orchestrator's declaration, or the server's own maintenance), and
   // a run is `magus run` actually executing - a job's check runs as one, but plenty of runs exist
   // for no job at all. See docs/glossary.md's Job and Run entries, which this line is a plain-words
-  // echo of. The link is the same cross-surface navigation every other surface uses
-  // (openSurface/data-open-surface), not an anchor href - there is nothing to route to.
+  // echo of. The link is the same cross-app navigation every other app uses
+  // (openApp/data-open-app), not an anchor href - there is nothing to route to.
   const intro = h("p", "console-plan-intro");
   intro.append(
     document.createTextNode(
@@ -507,9 +507,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     "console-plan-intro__link pf-v6-c-button pf-m-link pf-m-inline",
   ) as HTMLButtonElement;
   runsLink.type = "button";
-  runsLink.dataset.openSurface = "runs";
+  runsLink.dataset.openApp = "runs";
   runsLink.append(h("span", "pf-v6-c-button__text", "Runs"));
-  runsLink.addEventListener("click", () => openSurface({ pageId: "runs" }));
+  runsLink.addEventListener("click", () => openApp({ pageId: "runs" }));
   intro.append(runsLink, document.createTextNode("."));
 
   const toolbar = h("div", "console-plan-toolbar");
@@ -518,7 +518,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   toolbar.dataset.controlSize = "compact";
 
   // The source switch, a PF ToggleGroup - the console's segmented-control idiom (the settings
-  // surface's Pretty|Raw switch, the log viewer's Log|Timeline). First in the toolbar because it
+  // app's Pretty|Raw switch, the log viewer's Log|Timeline). First in the toolbar because it
   // decides what every other control in it is talking about.
   const sourceGroup = h("div", "pf-v6-c-toggle-group console-plan-source");
   sourceGroup.setAttribute("role", "group");
@@ -768,7 +768,7 @@ export interface JobsInstance {
 export function activate(host: HTMLElement): JobsInstance {
   // Per-bundle, not per-page: lib/server's origin-adoption flag is module state, so the shell having
   // adopted this origin does not make it adopted in here. Without it the view works only after some
-  // other surface has persisted a host, which is the shape of bug that looks fine on the developer's
+  // other app has persisted a host, which is the shape of bug that looks fine on the developer's
   // machine. Called ONCE per mount, per its own contract - it consumes the token out of the hash, so
   // a call per refresh would be asking a question that has already been answered.
   adoptServerOrigin();
@@ -1557,7 +1557,7 @@ export function activate(host: HTMLElement): JobsInstance {
         "Jobs are not served here",
         "This server declined the job service (" +
           read.detail +
-          "). That is the service saying no, not a server that is missing: every other console surface still reads this one.",
+          "). That is the service saying no, not a server that is missing: every other console app still reads this one.",
       );
       setSummary("Jobs are not served here.");
       return;
@@ -1931,11 +1931,11 @@ export function activate(host: HTMLElement): JobsInstance {
     zoomBy: (factor) => setZoom(zoom * factor),
     zoomReset: () => setZoom(1),
   };
-  // Commands, so every action appears in the command bar and the Actions surface and can be
+  // Commands, so every action appears in the command bar and the Actions app and can be
   // rebound - a private keydown table would give none of that. The single-letter keys are bound on
-  // THIS view's root rather than as global chords (the diff surface's refinement of the graph
+  // THIS view's root rather than as global chords (the diff app's refinement of the graph
   // explorer's global GRAPH_KEYMAP): a bare "j" must not step through a list while someone is
-  // typing in another surface. The keydown goes to the mount it happened IN, not to the focused
+  // typing in another app. The keydown goes to the mount it happened IN, not to the focused
   // one - a keystroke belongs to the pane it was typed into.
   const detachCommands = attachCommands(commands);
   const byKey = new Map<string, () => void>();

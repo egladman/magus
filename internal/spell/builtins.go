@@ -85,7 +85,7 @@ var BuiltinsHash = sync.OnceValue(func() string {
 })
 
 // BuiltinOps returns each built-in spell's op names keyed by runtime spell name. It is
-// the surface the dry-run tracer needs to build spell stubs without depending on the
+// all the dry-run tracer needs to build spell stubs without depending on the
 // full spells.Descriptor; derived from Builtins() so it cannot drift from the registry.
 func BuiltinOps() map[string][]string {
 	b := Builtins()
@@ -110,7 +110,7 @@ var shipped = sync.OnceValue(loadShipped)
 // A built-in is a spell whose source compiles against the spell type modules alone. One
 // that imports a host module (endoflife-date imports http) fails in that session with
 // BZZ2001 and ships as source only: `magus spell pull` copies it into a workspace, which
-// loads it with the host surface. Nothing lists which spell is which.
+// loads it with the host modules. Nothing lists which spell is which.
 //
 // Only a top-level directory is a candidate. A top-level directory with no spell.buzz
 // holds nested spells (harness/cursor), which are providers a workspace wires by import

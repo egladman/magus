@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Both insight surfaces (the magus\ Buzz module and the client MCP tool)
+// Both the magus\ Buzz module and the client MCP tool
 // reach these lenses through a runtime type assertion on types.InsightAnalyzer. This
 // makes dropping or renaming one a COMPILE error here rather than a "workspace does
 // not support insight analysis" at the call site, which reads as a workspace problem.

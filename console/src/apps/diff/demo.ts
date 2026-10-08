@@ -1,9 +1,9 @@
-// demo.ts - the Diff surface's server-free showcase (the shared #demo fragment).
+// demo.ts - the Diff app's server-free showcase (the shared #demo fragment).
 //
 // It supplies the two things the server would have supplied - a parsed changeset and an
 // annotated session - and nothing else changes: order(), buildRows(), the ranking, the
 // generated fold, the rail and the comment stream are all the production paths. So what a
-// reader meets at /console/diff/#demo is the real surface with fabricated input, not a
+// reader meets at /console/diff/#demo is the real app with fabricated input, not a
 // screenshot of one.
 //
 // The changeset is the SAME story every other showcase tells (demo-scenario.ts): the
@@ -12,9 +12,9 @@
 // web client with it. The trail's reindex-after-checkout beat, the failing
 // services/identity:test run, and the apps/dashboard typecheck diagnostics at
 // src/api/session.ts:42 are all THIS diff, seen from the other side - so a reader who opens
-// two surfaces finds the same names, files and reasons in both. The churn and reach numbers
+// two apps finds the same names, files and reasons in both. The churn and reach numbers
 // below are the same figures scenarioInsight reports for those paths, and demo.test.ts asserts
-// that rather than trusting this sentence - a reader who compares the Insight surface with this
+// that rather than trusting this sentence - a reader who compares the Insight app with this
 // one and finds different numbers has caught the showcase lying.
 //
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
@@ -46,7 +46,7 @@ const AGENT = {
 
 // demoSession returns the annotated changeset and the paired-review state.
 //
-// Files are listed in READING ORDER, which is what the surface honors: the shared library's
+// Files are listed in READING ORDER, which is what the app honors: the shared library's
 // contract change first because it is what everything else here is a consequence of, then the
 // two consumers it broke, then the new and deleted files, then the test and the doc. The
 // generated three sort out of the reading order entirely by role.
@@ -82,7 +82,7 @@ export function demoSession(): DiffReview {
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "public",
+          visibility: "public",
           reach: 38,
           symbols: [
             {
@@ -123,7 +123,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 22,
           symbols: [
             {
@@ -142,7 +142,7 @@ export function demoSession(): DiffReview {
           project: "apps/dashboard",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 14,
           symbols: [
             {
@@ -154,7 +154,7 @@ export function demoSession(): DiffReview {
             },
           ],
           // Measured zero, not unmeasured: the typecheck target runs here, the test target does
-          // not, so this is the one file in the changeset the surface can honestly call untested.
+          // not, so this is the one file in the changeset the app can honestly call untested.
           coverage: { ratio: 0, covered_stmts: 0, total_stmts: 96 },
           churn: { commits: 19, authors: 2, score: 7638, rank: 2, project_trend: -5 },
           touches: [
@@ -170,7 +170,7 @@ export function demoSession(): DiffReview {
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
         },
         {
@@ -182,7 +182,7 @@ export function demoSession(): DiffReview {
           project: "services/gateway",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 9,
           churn: { commits: 12, authors: 3, score: 1284 },
           touches: [{ host: AGENT.host, session: AGENT.session }],
@@ -192,30 +192,30 @@ export function demoSession(): DiffReview {
           project: "services/gateway",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
         },
         {
-          // A BINARY file: no hunks, and the surface has to say so rather than render an empty
+          // A BINARY file: no hunks, and the app has to say so rather than render an empty
           // diff, which reads as "nothing changed". A golden fixture regenerated because the
           // type it captures moved is the most ordinary way one appears in a review.
           path: "libs/authkit/testdata/claims.golden",
           project: "libs/authkit",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 4, authors: 2, score: 96 },
         },
         {
           // A MODE change and nothing else: no hunks either, for a different reason. A script
           // becoming executable is a real reviewable event that renders as an empty entry
-          // unless the surface reads the mode.
+          // unless the app reads the mode.
           path: "tools/migrate/backfill.sh",
           project: "tools/migrate",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 2, authors: 1, score: 18 },
         },
@@ -224,7 +224,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 0,
           churn: { commits: 7, authors: 2, score: 210 },
         },
@@ -233,7 +233,7 @@ export function demoSession(): DiffReview {
           project: "services/identity",
           role: "source",
           hint: HINT_SOURCE,
-          surface: "internal",
+          visibility: "internal",
           reach: 3,
           churn: { commits: 24, authors: 2, score: 2304, rank: 4 },
           // No reads recorded, so the story row stops at the author rather than inventing a
@@ -245,7 +245,7 @@ export function demoSession(): DiffReview {
           project: "docs",
           role: "unclaimed",
           hint: HINT_UNCLAIMED,
-          surface: "unknown",
+          visibility: "unknown",
           // Prose defines no indexed symbol, so reach is unmeasured rather than zero.
           reach: null,
           churn: { commits: 3, authors: 1, score: 96 },
@@ -255,7 +255,7 @@ export function demoSession(): DiffReview {
           project: "libs/protocol",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
         {
@@ -263,7 +263,7 @@ export function demoSession(): DiffReview {
           project: "apps/dashboard",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
         {
@@ -271,7 +271,7 @@ export function demoSession(): DiffReview {
           project: "docs",
           role: "output",
           hint: HINT_OUTPUT,
-          surface: "unknown",
+          visibility: "unknown",
           reach: 0,
         },
       ],
@@ -306,7 +306,7 @@ export function demoSession(): DiffReview {
         body: "canReach was the only reader of scope, so this is the whole web-side change.",
         resolved: true,
         // Already sent, so the showcase has both states side by side: what the reader still
-        // holds and what the world has seen. A surface where those look the same is one where
+        // holds and what the world has seen. An app where those look the same is one where
         // pressing send is a guess.
         published: true,
       },
@@ -344,7 +344,7 @@ export function demoSession(): DiffReview {
 // hunks, because the code moved after the remark was written. One is on a file this changeset
 // does not touch at all, because a review covers commits a working diff does not.
 //
-// The last two are why placement is not just a lookup: a surface that dropped them would be
+// The last two are why placement is not just a lookup: an app that dropped them would be
 // telling the reader a colleague said nothing, which is the worst thing a review can say.
 export function demoReview(): ReviewInfo {
   return {
@@ -390,7 +390,7 @@ export function demoReview(): ReviewInfo {
         path: "services/gateway/internal/proxy/auth.go",
         line: 88,
         // On a file this changeset does not touch at all, so there is nothing to place it
-        // against and the surface lists it instead.
+        // against and the app lists it instead.
         hunk: -1,
         author: "priya",
         body: "Gateway mints scope-only tokens on the health path. It will start failing Valid the moment this lands.",
@@ -417,7 +417,7 @@ export function applyDemoPublish(session: DiffReview): DiffReview {
 //
 // Appended directly after the thread rather than at the end, because that is where a reply
 // belongs in a conversation, and a showcase that piled every answer at the bottom would teach
-// the reader a shape the real surface does not have.
+// the reader a shape the real app does not have.
 export function applyDemoReply(
   review: ReviewInfo | null,
   thread: string,
@@ -462,7 +462,7 @@ export const DEMO_RUN_MS = 900;
 // applyDemoOp is the showcase's stand-in for the server's session store: the reader's writes
 // land in memory instead of over HTTP.
 //
-// It exists so the showcase is the surface rather than a picture of it - marking a hunk read,
+// It exists so the showcase is the app rather than a picture of it - marking a hunk read,
 // posting a comment, resolving one and skipping a suggestion all have to WORK, or the reader
 // meets a rail whose buttons do nothing and concludes the feature is broken. Pure, so
 // demo.test.ts can pin each op without a DOM.

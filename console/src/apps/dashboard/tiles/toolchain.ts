@@ -7,7 +7,7 @@
 // for a reason that is not good news.
 
 import type { DashboardState } from "../state";
-import { openSurface } from "../../../desktop/surface-navigation";
+import { openApp } from "../../../desktop/app-navigation";
 import { lifecycleNote, toolCounts } from "../../tools/model";
 import { StatStrip } from "./widgets";
 import { Card, h, type Tile } from "./card";
@@ -32,9 +32,9 @@ export function toolchainTile(): Tile {
   const open = document.createElement("button");
   open.type = "button";
   open.className = "pf-v6-c-button pf-m-link pf-m-inline";
-  open.dataset.openSurface = "tools";
+  open.dataset.openApp = "tools";
   open.append(h("span", "pf-v6-c-button__text", "Open Tools"));
-  open.addEventListener("click", () => openSurface({ pageId: "tools" }));
+  open.addEventListener("click", () => openApp({ pageId: "tools" }));
   card.body.append(counts.el, empty, open);
 
   return {

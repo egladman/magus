@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	read   = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
-	write  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
-	tokens = types.Need{Surface: types.SurfaceTokens, Level: types.LevelWrite}
+	read   = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+	write  = types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
+	tokens = types.Need{Scope: types.ScopeTokens, Level: types.LevelWrite}
 )
 
 // pinnedNeeds is every guarded path of a server, each Connect procedure and each /api route,
@@ -45,7 +45,7 @@ var (
 // that changes tier, or a new one, changes this table in the same diff, and a path the table
 // does not name fails the matrix.
 var pinnedNeeds = map[string]types.Need{
-	"/mcp": {Surface: types.SurfaceMCP, Level: types.LevelWrite},
+	"/mcp": {Scope: types.ScopeMCP, Level: types.LevelWrite},
 
 	"/api/":                 read, // the not-found fallback
 	"/api/v1/events":        read,

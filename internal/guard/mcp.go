@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 )
 
-// The MCP surface: how a call to one of magus's own tools becomes a line the command
+// MCP calls: how a call to one of magus's own tools becomes a line the command
 // rules read, and how those rules read it back. Writer and reader in one file, because a
 // rendering and a parse that disagree is a rule judging something nobody sent.
 

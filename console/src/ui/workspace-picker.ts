@@ -1,5 +1,5 @@
 // workspace-picker.ts - the title bar's control for which workspace THIS BROWSER TAB is looking at.
-// Picking here changes what every surface in the tab reports on.
+// Picking here changes what every app in the tab reports on.
 //
 // Named for the workspace rather than for the scope so it does not collide with view.ts's `Scope`,
 // which is a component's disposer bag and has nothing to do with any of this. The CSS hooks are still
@@ -9,7 +9,7 @@
 // It is the console's account switcher. Two browser tabs can sit in two workspaces at once and stay
 // there; the scope rides sessionStorage (lib/scope.ts), so it belongs to the tab and not to the
 // browser. That is what makes "which workspace am I in" a question with one answer per window
-// instead of a per-surface setting people have to keep in step by hand.
+// instead of a per-app setting people have to keep in step by hand.
 //
 // HIDDEN until a server serves more than one workspace. With one loaded, scoped and unscoped show
 // the same thing and the control is a decision nobody has to make - the same rule the dashboard's
@@ -24,7 +24,7 @@ import {
 } from "../lib/scope";
 
 export interface WorkspacePickerOptions {
-  // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-surface
+  // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-app
   // "See the demo" buttons are gone - so an unwired picker leaves the demo reachable only by typing
   // #demo into the address bar.
   onDemo(enter: boolean): void;

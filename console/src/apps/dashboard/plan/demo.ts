@@ -11,7 +11,7 @@
 //
 // It is the SAME story every other showcase tells (demo-scenario.ts), seen from the work side: the
 // acme monorepo's shared token library grew an audience on its claims type, and the blast radius
-// took out a Go verifier and a TypeScript web client. The diff surface shows the resulting patch;
+// took out a Go verifier and a TypeScript web client. The diff app shows the resulting patch;
 // the activity trail shows the failing services/identity:test run at 92m and the apps/dashboard
 // typecheck diagnostics; THIS shows the work an agent cut to do it, with the same jobs owning the
 // same paths that appear as changed files over there.

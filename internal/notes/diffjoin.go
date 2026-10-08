@@ -12,7 +12,7 @@ import (
 // reader for different things: a note on the exact symbol you changed is almost certainly
 // about your edit, while a note on some other symbol in the same file may have nothing to do
 // with it. Rendering both as "this note applies" lends the weak case the strong one's
-// authority, and a surface that overstates its relevance is one readers learn to skip.
+// authority, and a view that overstates its relevance is one readers learn to skip.
 type MatchStrength string
 
 // Each value names WHAT matched and nothing more: the subject is the only axis they differ on.

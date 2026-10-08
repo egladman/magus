@@ -19,7 +19,7 @@ import (
 //
 // These export the SAME drivers the `resume` and `resolve` keywords already bind to
 // and add no behavior. Buzz semantics are untouched and no Buzz program can observe
-// that they exist, so upstream parity is unaffected: this is embedding-API surface,
+// that they exist, so upstream parity is unaffected: this is embedding API,
 // the axis on which a Go implementation is expected to differ from a Zig one with a
 // C API.
 

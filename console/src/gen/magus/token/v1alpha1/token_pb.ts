@@ -3,7 +3,7 @@
 /* eslint-disable */
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the server's stored tokens and its live share link. It is a second door onto
+// API over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //
@@ -32,7 +32,7 @@ export const file_magus_token_v1alpha1_token: GenFile = /*@__PURE__*/
   fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEijAEKBUdyYW50EisKBnRva2VucxgBIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEigKA21jcBgCIAEoDjIbLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxldmVsEiwKB2NvbnNvbGUYAyABKA4yGy5tYWd1cy50b2tlbi52MWFscGhhMS5MZXZlbCL3AQoJVG9rZW5JbmZvEgwKBG5hbWUYASABKAkSCgoCaWQYCCABKAkSNAoFY2xhc3MYCSABKA4yJS5tYWd1cy50b2tlbi52MWFscGhhMS5DcmVkZW50aWFsQ2xhc3MSKgoFZ3JhbnQYByABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudBIvCgtleHBpcmVfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBKBAgCEANKBAgDEARKBAgEEAVKBAgGEAdSCmlkZW50aWZpZXJSBXNjb3BlUgdjcmVhdGVkUglsYXN0X3VzZWQiEwoRTGlzdFRva2Vuc1JlcXVlc3QiRQoSTGlzdFRva2Vuc1Jlc3BvbnNlEi8KBnRva2VucxgBIAMoCzIfLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbyKhAQoSQ3JlYXRlVG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQESKgoFZ3JhbnQYBCABKAsyGy5tYWd1cy50b2tlbi52MWFscGhhMS5HcmFudEIOCgxfZXhwaXJlX3RpbWVKBAgCEANSBXNjb3BlIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKj8KBUxldmVsEhUKEUxFVkVMX1VOU1BFQ0lGSUVEEAASDgoKTEVWRUxfUkVBRBABEg8KC0xFVkVMX1dSSVRFEAIqqgEKD0NyZWRlbnRpYWxDbGFzcxIgChxDUkVERU5USUFMX0NMQVNTX1VOU1BFQ0lGSUVEEAASHQoZQ1JFREVOVElBTF9DTEFTU19PUEVSQVRPUhABEhsKF0NSRURFTlRJQUxfQ0xBU1NfU1RPUkVEEAISGgoWQ1JFREVOVElBTF9DTEFTU19TSEFSRRADEh0KGUNSRURFTlRJQUxfQ0xBU1NfRVhDSEFOR0UQBDKtAgoMVG9rZW5TZXJ2aWNlEl8KCkxpc3RUb2tlbnMSJy5tYWd1cy50b2tlbi52MWFscGhhMS5MaXN0VG9rZW5zUmVxdWVzdBooLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXNwb25zZRJYCgtSZXZva2VUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLlJldm9rZVRva2VuUmVxdWVzdBofLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbxJiCgtDcmVhdGVUb2tlbhIoLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVxdWVzdBopLm1hZ3VzLnRva2VuLnYxYWxwaGExLkNyZWF0ZVRva2VuUmVzcG9uc2VC4wEKGGNvbS5tYWd1cy50b2tlbi52MWFscGhhMUIKVG9rZW5Qcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy90b2tlbi92MWFscGhhMTt0b2tlbnYxYWxwaGExogIDTVRYqgIUTWFndXMuVG9rZW4uVjFhbHBoYTHKAhRNYWd1c1xUb2tlblxWMWFscGhhMeICIE1hZ3VzXFRva2VuXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OlRva2VuOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_buf_validate_validate]);
 
 /**
- * Grant is what a token may do: one level per surface, as the server enforces it.
+ * Grant is what a token may do: one level per scope, as the server enforces it.
  *
  * @generated from message magus.token.v1alpha1.Grant
  */
@@ -63,8 +63,8 @@ export const GrantSchema: GenMessage<Grant> = /*@__PURE__*/
 /**
  * TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
  * revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
- * hash), the class, the grant, the expiry, and the name. A list is still an intelligence
- * surface, so it omits the full hash, any filesystem path, and the creation time.
+ * hash), the class, the grant, the expiry, and the name. A list is still a source of intelligence
+ * for an attacker, so it omits the full hash, any filesystem path, and the creation time.
  *
  * @generated from message magus.token.v1alpha1.TokenInfo
  */
@@ -218,7 +218,7 @@ export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PUR
   messageDesc(file_magus_token_v1alpha1_token, 6);
 
 /**
- * Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+ * Level is how much of one scope a grant reaches. Levels are ordered: a higher level includes
  * every lower one. The zero value is none.
  *
  * @generated from enum magus.token.v1alpha1.Level

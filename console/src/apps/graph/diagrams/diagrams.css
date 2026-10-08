@@ -1,5 +1,5 @@
 /* diagrams.css - the Graph's Figures mode: a bar (figure and lens) over the figure's own control row,
-   then the figure beside its node list. A CHROME surface: the bars run full bleed and the figure
+   then the figure beside its node list. A CHROME app: the bars run full bleed and the figure
    meets the pane edge. The figure's colours are the --magus-diagram-* tokens in tokens.css. */
 
 .console-diagrams {
@@ -16,7 +16,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 1rem;
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);

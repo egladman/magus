@@ -80,7 +80,7 @@ func TestPromptCacheWindowDescribe(t *testing.T) {
 }
 
 // The vocabulary rule, pinned rather than trusted to review: magus sees a clock and
-// never the provider's cache, so no surface it feeds may call a window expired.
+// never the provider's cache, so no output it feeds may call a window expired.
 func TestPromptCacheDescriptionsNeverSayExpired(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	for _, gap := range []time.Duration{0, time.Minute, 7 * time.Minute, 2 * time.Hour, 48 * time.Hour} {

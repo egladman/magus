@@ -475,7 +475,7 @@ func (f fakeReviewPatch) WorkingDiff(context.Context, []string) (string, error) 
 	return f.patch, nil
 }
 
-// place resolves a thread onto the hunk holding its line, so both surfaces read one answer.
+// place resolves a thread onto the hunk holding its line, so the terminal viewer and the console read one answer.
 // Exercised here because the route is where the patch and the threads meet; internal/diff
 // tests the arithmetic, and this tests that the route feeds it the right patch.
 func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
@@ -678,7 +678,7 @@ func TestRemoteHostNamesTheDestination(t *testing.T) {
 		{"https://github.com/acme/acme.git", "github.com"},
 		{"ssh://git@github.acme.com/team/svc.git", "github.acme.com"},
 		{"https://github.acme.com:8443/team/svc", "github.acme.com"},
-		// Not a URL this understands: the surface names the repo alone rather than inventing
+		// Not a URL this understands: the client names the repo alone rather than inventing
 		// a host the reader would then trust.
 		{"/srv/git/bare.git", ""},
 		{"", ""},
@@ -759,7 +759,7 @@ func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 // Serving the conversation is not the same as the reader seeing it. The lookup marks threads new
 // by READING the watermark and must never advance it: an aborted fetch, a refresh mid-flight or a
 // second tab would otherwise consume the marks, and the notification with them, since the job
-// that raises it compares against the same watermark. The surface says when it has drawn them,
+// that raises it compares against the same watermark. The client says when it has drawn them,
 // through the session's `seen` op.
 func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 	withReviewProvider(t, []any{

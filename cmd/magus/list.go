@@ -47,7 +47,7 @@ var lsNouns = []string{"target", "targets", "job", "jobs"}
 // ls enumerates what exists, optionally narrowed by a noun. It is the counterpart
 // to describe, not a duplicate of it: describe leads with a definition and teaches
 // a concept, ls answers "what is actually here". Keeping enumeration on one verb is
-// also what stops the surface growing a `magus targets`, then a `magus spells`, then
+// also what stops the CLI growing a `magus targets`, then a `magus spells`, then
 // a `magus charms`: one rule to learn, and a new noun costs no new subcommand.
 //
 // The noun is optional and defaults to projects, so the long-standing bare

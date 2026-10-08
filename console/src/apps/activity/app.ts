@@ -2,7 +2,7 @@ import type { AppManifest } from "../manifest";
 
 export const activity: AppManifest = {
   id: "activity",
-  // The bare noun, never "Trail": "audit trail" frames the surface as governance, which it is not.
+  // The bare noun, never "Trail": "audit trail" frames the app as governance, which it is not.
   // It also matches the service behind it (magus.activity.v1alpha1).
   label: "Activity",
   hint: "Everything that happened here, and what led to it",

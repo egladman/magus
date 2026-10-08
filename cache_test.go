@@ -240,7 +240,7 @@ func TestSecretProviderNamesTheSpellOnly(t *testing.T) {
 }
 
 // TestNewOutputDescriptorCarriesEveryField is the projection that keeps an
-// internal/ type out of the public surface. A field dropped here would silently
+// internal/ type out of the public API. A field dropped here would silently
 // vanish from `magus query output <ref> -o json`, which is why every one is set.
 func TestNewOutputDescriptorCarriesEveryField(t *testing.T) {
 	got := newOutputDescriptor(cache.OutputDescriptor{

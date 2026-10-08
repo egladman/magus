@@ -1,9 +1,9 @@
 /* The line-level renderer styles (.console-render-badge / .console-render-line /
-   .console-render-ansi*), shared with every surface that paints captured output through
+   .console-render-ansi*), shared with every app that paints captured output through
    render/sections.ts. Bundled at build time, so this is an inline, not a runtime request. */
 @import "../../render/render.css";
 
-/* logs.css - page-scoped styles for the console Log Viewer surface.
+/* logs.css - page-scoped styles for the console Log Viewer app.
  *
  * PatternFly (W3): the CHROME migrated to PatternFly - the file/query bar is a PF Toolbar
  * (scaffold.html), the filter field + time-range are PF FormControls, the action buttons are PF
@@ -17,7 +17,7 @@
  * tokens (--console-* / --console-ansi-* / --pf-t--* directly, theme-aware in light and dark) rather
  * than the old Pico-era palette. Per the console-<area> naming convention, the shared render model
  * the log viewer + activity trail both build (foldable sections, status badges, ANSI spans, lines,
- * the surface frame) is the console-render-* area (.console-render-section, .console-render-line,
+ * the app frame) is the console-render-* area (.console-render-section, .console-render-line,
  * .console-render-ansi__fg--*, .console-render-badge, ...). The view switches are PF ToggleGroups and
  * the filter chips are PF Labels; only the genuinely component-less log chrome (the trace waterfall,
  * the zoom control, the filter row + "AND" connective, the ref-identity pills) is the console-log-*
@@ -31,7 +31,7 @@
  * .console-render-ansi*); its own chrome is a PF Toolbar. The old Pico .file-bar / .log-actions /
  * .btn-group frame is gone. */
 
-/* The surface gutter, and it is the SHELL's rather than one of this sheet's own: a reader
+/* The app gutter, and it is the SHELL's rather than one of this sheet's own: a reader
    switching from Runs to the log viewer should not see the content step in or out by 1.6px.
    Kept as a local name because it is also the re-scaling seam - the dashboard's activity tile
    and Big Picture both narrow it for a preview that is not a whole page (dashboard.css). */
@@ -64,7 +64,7 @@
   flex: 0 0 auto;
   /* --console-chrome: this toolbar frames the content the same way the shell's bars do, and the raw
      secondary token puts it a plane below them in dark (#151515 against #242424). One token for
-     everything that is chrome is what keeps the surface from showing seams where it joins the shell. */
+     everything that is chrome is what keeps the app from showing seams where it joins the shell. */
   background: var(--console-chrome);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.8rem;
@@ -86,7 +86,7 @@
      Notes filter row. A floor rather than a fixed size: the row wraps cluster-by-cluster in a
      narrow pane and has to be free to grow. Its own padding-block goes to zero, or the two stack
      and the row comes out taller than every other bar again. */
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-block: 0; align-items: center;
   column-gap: 0.85rem; row-gap: 0.4rem;
 }
@@ -130,7 +130,7 @@
    (text) are the render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query
    drops. No font-size here on purpose: forcing one (0.72rem) is what puts these buttons on a
    different scale from the toggle groups and the filter field sharing their row. */
-/* Shared with Activity (.console-render-panel is the common frame both surfaces build); Activity's
+/* Shared with Activity (.console-render-panel is the common frame both apps build); Activity's
    Refresh button has no sizing rule of its own otherwise, so its icon renders at 0x0. */
 .console-render-panel .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 #log-bar-controls .pf-v6-c-button,
@@ -157,7 +157,7 @@
 /* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
    scales the viewer body. Real <button>s (keyboard + focus for free), reset to plain status-bar
    chrome rather than PF button styling since they are a bespoke shell affordance. */
-/* The zoom stepper moved to console.css as .console-zoom - it is shared with the Plan surface
+/* The zoom stepper moved to console.css as .console-zoom - it is shared with the Plan app
    now, and only this sheet is log-viewer-scoped. See console/zoomControl.ts. */
 
 
@@ -374,7 +374,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 /* Keep the floating-dropdown chrome up to the SAME breakpoint the controls collapse at. PF reverts the
    expandable panel to a static, chrome-less inline block at lg (62rem) - its default collapse stop - but
    this toolbar collapses at 2xl instead (the dense set needs ~1350px for one inline row). Without this,
-   between 62rem and 2xl the kebab opens an unstyled inline stack with no surface under it. Restore PF's
+   between 62rem and 2xl the kebab opens an unstyled inline stack with no background under it. Restore PF's
    own panel tokens across that window so the dropdown keeps its background, padding, and shadow. */
 @media screen and (min-width: 62rem) and (max-width: 90.624rem) {
   #log-bar-controls .pf-v6-c-toolbar__expandable-content {
@@ -397,8 +397,8 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 }
 
 
-/* Activity surface (loads this shared render sheet - console/main.ts registers it via
-   moduleSurface({ css: "logs/logs.css" })). The trail header is a PF Toolbar: just the
+/* Activity app (loads this shared render sheet - console/main.ts registers it via
+   moduleApp({ css: "logs/logs.css" })). The trail header is a PF Toolbar: just the
    connection note + Refresh, aligned end on ONE dense row (no in-app title - the tab already
    names the app). This class only subdues the note; everything else is PF + shared
    console-render-*. */
@@ -482,7 +482,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    auto, which floors it at its MIN-CONTENT width, and a long leaf label then overrides the
    clamp entirely - the activity index's long call leaves pushed this aside
    to 580px inside a 1395px split. The run browser's leaves are short enough to stay under
-   the cap, so the same rule looked correct in one surface while it was broken in the
+   the cap, so the same rule looked correct in one app while it was broken in the
    other. The tree scrolls, so the floor buys nothing. */
 /* The cap moved from 15rem when the run browser's rows became COMMAND LINES: "magus affected ci
    --no-default-charms" needs width in a way "build" never did, and at 15rem nearly every row
@@ -495,7 +495,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   min-height: 0; min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
   /* Chrome, so the chrome token - it sits directly against the navigation rail, and the two reading
-     as different planes was the seam most visible on this surface. Below 48rem it also floats OVER
+     as different planes was the seam most visible on this app. Below 48rem it also floats OVER
      the content as an overlay, where the raw secondary token had it darker than what it covered. */
   background: var(--console-chrome);
 }
@@ -512,7 +512,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-body__head {
   box-sizing: border-box;
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
-  min-block-size: var(--console-surface-head-h);
+  min-block-size: var(--console-app-head-h);
   padding-inline: var(--log-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }

@@ -18,7 +18,7 @@ import (
 // A bare workspace-relative path is the only spelling magus teaches;
 // internal/file.ResolveProject warns on the scheme when it parses one, and
 // nothing in magus renders it any more. Display (the bare path) is what every
-// surface emits; WorkspaceURI and WorkspaceRef exist for external callers not
+// command prints; WorkspaceURI and WorkspaceRef exist for external callers not
 // yet migrated. Do not reach for them for new output.
 const workspaceScheme = "workspace://"
 

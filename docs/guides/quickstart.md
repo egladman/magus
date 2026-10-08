@@ -145,7 +145,7 @@ body per skill instead.
 
 The primary entry is the SHORT form: the enumeration dropped, the judgment kept,
 for the most capable readers, the ones that can re-derive the steps from the
-tool surface but not which failures are silent. It is the one always loaded, so
+magus tools but not which failures are silent. It is the one always loaded, so
 it is the one whose size every session pays for.
 
 Beside it goes an always-full `<skill>-full` twin, loaded only when asked for by

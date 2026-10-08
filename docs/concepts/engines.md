@@ -109,7 +109,7 @@ A few entries are _not_ treated as duplicates because the magus behavior the
 stdlib can't reproduce: magus's `os\exit` raises a lifecycle error (Buzz's
 hard-exits the process), magus's `os\sleep` is cancellable (Buzz's blocks), and
 magus's `crypto.*_file` hashes a file (Buzz's `hash` only takes a string). These
-stay on the magus surface.
+stay in the `magus` namespace.
 
 A workspace spell lives at `spells/<name>/spell.buzz` (or flat
 `spells/<name>.buzz`).
@@ -136,7 +136,7 @@ above the interface. This is the current state, not the end state:
    the `magusfile.<ext>` lists.
 3. Branch the runtime where it special-cases an engine by name
    (`src.Engine == "buzz"` in `internal/interp/runtime.go`).
-4. Provide the per-engine host bindings (the `magus.*` surface), as
+4. Provide the per-engine host bindings (the `magus.*` namespace), as
    `internal/interp/bindings/buzz.go` does today.
 
 **Future direction: registry-driven discovery.** The intent is to derive

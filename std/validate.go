@@ -41,7 +41,7 @@ func validateModule(m Module) error {
 	return validateMCPTools(m)
 }
 
-// validateMCPTools checks the module's agent surface: unique tool names, unique
+// validateMCPTools checks the module's MCP tools: unique tool names, unique
 // parameter names within a tool, and a schema-representable type on every parameter.
 func validateMCPTools(m Module) error {
 	seen := map[string]bool{}

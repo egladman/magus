@@ -255,7 +255,7 @@ This page zooms in on the two transports; the HTTP server also carries the agent
 [MCP tools](mcp.md), the read-only [console routes](../../reference/console.md) the browser apps use
 (all reading the same warm [knowledge graph](../../concepts/knowledge.md)), and one bearer-gated
 [job-control service](../../reference/console.md#job-control) for maintenance jobs, the server's only
-mutating HTTP surface. The full-system view (clients,
+mutating HTTP service. The full-system view (clients,
 guards, shared state, and the progressive web app) is the architecture diagram in the
 [README](https://github.com/egladman/magus#architecture).
 
@@ -275,7 +275,7 @@ How it works, and where the guards sit:
   open a share. A network client cannot reach it.
 - **Ephemeral, time-boxed LAN listener.** On success the server picks the machine's
   private LAN IPv4, binds a NEW listener on an ephemeral port, and serves ONLY the read
-  surface there: the console static assets, the read JSON routes
+  routes there: the console static assets, the read JSON routes
   (`status`, `events`, `insight`, `outputs`, `output`), and the read-only Connect
   services (activity, metrics). It does NOT serve `/mcp`, the share endpoint, or any
   mutating route. The listener closes when the share expires (15 minutes by default,
@@ -302,7 +302,7 @@ listener is gone and the token validates nowhere.
 
 ## Health: what `magus status` reports
 
-`magus status` is the health surface. It prints one row per fact, record type first and
+`magus status` is the health command. It prints one row per fact, record type first and
 pid second, so `awk` and `xargs` work on it without a parser:
 
 ```text

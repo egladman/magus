@@ -13,9 +13,9 @@ import (
 
 var (
 	needMCP          = mcp.ToolNeed
-	needTokens       = types.Need{Surface: types.SurfaceTokens, Level: types.LevelWrite}
-	needConsoleRead  = types.Need{Surface: types.SurfaceConsole, Level: types.LevelRead}
-	needConsoleWrite = types.Need{Surface: types.SurfaceConsole, Level: types.LevelWrite}
+	needTokens       = types.Need{Scope: types.ScopeTokens, Level: types.LevelWrite}
+	needConsoleRead  = types.Need{Scope: types.ScopeConsole, Level: types.LevelRead}
+	needConsoleWrite = types.Need{Scope: types.ScopeConsole, Level: types.LevelWrite}
 )
 
 // procedureNeeds is the Need of every Connect procedure the server serves, keyed by service

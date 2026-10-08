@@ -9,10 +9,10 @@ import { logs } from "../apps/logs/app";
 import { graph } from "../apps/graph/app";
 import type { Workspace } from "./tabs";
 
-const SURFACES = [dashboard, logs, graph];
+const APPS = [dashboard, logs, graph];
 
-test("every surface gets a row, in the surface list's order", () => {
-  const items = sidebarItems({ tabs: [], activeId: null }, SURFACES, null);
+test("every app gets a row, in the app list's order", () => {
+  const items = sidebarItems({ tabs: [], activeId: null }, APPS, null);
   assert.deepEqual(
     items.map((i) => i.pageId),
     ["dashboard", "logs", "graph"],
@@ -23,7 +23,7 @@ test("every surface gets a row, in the surface list's order", () => {
   );
 });
 
-test("a tab marks its surface open, and the focused surface current", () => {
+test("a tab marks its app open, and the focused app current", () => {
   const ws: Workspace = {
     tabs: [
       { id: "a", pageId: "logs", title: "Log Viewer" },
@@ -31,7 +31,7 @@ test("a tab marks its surface open, and the focused surface current", () => {
     ],
     activeId: "b",
   };
-  const by = new Map(sidebarItems(ws, SURFACES, "graph").map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, APPS, "graph").map((i) => [i.pageId, i]));
   assert.deepEqual(
     { open: by.get("logs")?.open, current: by.get("logs")?.current },
     { open: true, current: false },
@@ -46,10 +46,10 @@ test("a tab marks its surface open, and the focused surface current", () => {
   );
 });
 
-// A tiled tab hosts several surfaces at once, and every one of them is genuinely open - the rail has
-// to read the layout tree, not just the tab's primary pageId, or a split tab reports one open surface
+// A tiled tab hosts several apps at once, and every one of them is genuinely open - the rail has
+// to read the layout tree, not just the tab's primary pageId, or a split tab reports one open app
 // and the console refuses to open the others (they are single-instance).
-test("a tiled tab marks every surface in its layout", () => {
+test("a tiled tab marks every app in its layout", () => {
   const ws: Workspace = {
     tabs: [
       {
@@ -68,9 +68,9 @@ test("a tiled tab marks every surface in its layout", () => {
     ],
     activeId: "a",
   };
-  // A tiled tab holds BOTH surfaces, so both are open - but only the focused one is current. Marking
-  // every surface in the tab lit two rows at once with nothing saying where input would land.
-  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
+  // A tiled tab holds BOTH apps, so both are open - but only the focused one is current. Marking
+  // every app in the tab lit two rows at once with nothing saying where input would land.
+  const by = new Map(sidebarItems(ws, APPS, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("logs")?.open, true);
   assert.equal(by.get("logs")?.current, true);
   assert.equal(by.get("dashboard")?.open, true, "the tab's other pane is open");
@@ -78,7 +78,7 @@ test("a tiled tab marks every surface in its layout", () => {
   assert.equal(by.get("graph")?.open, false);
 });
 
-// A background tab's surface is open without being what you are looking at. The rail draws the two
+// A background tab's app is open without being what you are looking at. The rail draws the two
 // states differently, so collapsing them would make the marker meaningless.
 test("a background tab is open but not current", () => {
   const ws: Workspace = {
@@ -88,19 +88,19 @@ test("a background tab is open but not current", () => {
     ],
     activeId: "a",
   };
-  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, APPS, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("graph")?.open, true);
   assert.equal(by.get("graph")?.current, false);
 });
 
 // activeId can name a tab that is no longer in the list (a close that raced a restore). Nothing may
 // be current then, and the rail must still render every row rather than throwing.
-test("no focused surface leaves nothing current", () => {
+test("no focused app leaves nothing current", () => {
   const ws: Workspace = {
     tabs: [{ id: "a", pageId: "logs", title: "Log Viewer" }],
     activeId: "gone",
   };
-  const items = sidebarItems(ws, SURFACES, null);
+  const items = sidebarItems(ws, APPS, null);
   assert.equal(
     items.some((i) => i.current),
     false,

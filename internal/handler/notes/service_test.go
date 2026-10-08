@@ -91,7 +91,7 @@ func TestASharedNotePathIsTheFileNotTheId(t *testing.T) {
 	assert.Equal(t, "notes/Some Note.md", n.GetPath(), "and the path is still the file")
 }
 
-// TestAColdGraphNeverReportsAnAnchorAsResolving is the safety property this surface turns on.
+// TestAColdGraphNeverReportsAnAnchorAsResolving is the safety property this service turns on.
 // When nothing could be checked, saying so is the honest report; rendering it as RESOLVES
 // would tell a reader their notes were verified when no verification ran at all.
 func TestAColdGraphNeverReportsAnAnchorAsResolving(t *testing.T) {

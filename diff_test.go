@@ -148,7 +148,7 @@ func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {
 		"Close": types.DiffChangeRemoved,
 		"Fresh": types.DiffChangeAdded,
 	}, changes, "Steady is untouched in a changed file; hidden changed but no consumer can see it")
-	assert.Equal(t, types.DiffSurfacePublic, out.Files[0].Surface)
+	assert.Equal(t, types.DiffVisibilityPublic, out.Files[0].Visibility)
 }
 
 // TestAttachAPIDeltaLikelyOnlyFromSignatures pins the split between what magus proves and

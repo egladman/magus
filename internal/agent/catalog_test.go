@@ -1029,7 +1029,7 @@ func TestOfferedLocalSkillsSkipStampedLitterAndRequireADescription(t *testing.T)
 // guardAdviceSkillCoverage maps each advisory the guard can emit to a token that
 // must appear in some installed skill.
 //
-// The token is a magus surface name, not a phrase: the skill teaches the same
+// The token is a magus command or target name, not a phrase: the skill teaches the same
 // thing in its own words and rewording it should not fail a gate, but dropping
 // the CAPABILITY should.
 var guardAdviceSkillCoverage = map[string]string{
@@ -1043,7 +1043,7 @@ var guardAdviceSkillCoverage = map[string]string{
 // host, not just the one that can inject them.
 //
 // An advise reaches the MODEL on Claude Code alone. Codex rejects the
-// additionalContext key outright, Cursor's command surface has no channel for a
+// additionalContext key outright, Cursor's command hook has no channel for a
 // non-denial, and OpenCode can only log one for the person. That is those hosts'
 // contract and magus cannot widen it, so the guard advisory is a timelier
 // delivery of guidance, never its only copy.
@@ -1110,9 +1110,9 @@ func TestTargetIsTheTaughtNoun(t *testing.T) {
 		"the magus-run skill opening must not teach task as the unit of work (task orchestrator excepted)")
 }
 
-// vcsDriverSpellings maps each driver's Name() to how a human-facing surface may spell
+// vcsDriverSpellings maps each driver's Name() to how human-facing text may spell
 // it. Unmapped names FAIL rather than pass, so adding a fifth backend forces a decision
-// here instead of shipping a surface that silently covers four of five.
+// here instead of shipping text that silently covers four of five.
 var vcsDriverSpellings = map[string][]string{
 	"git": {"git"},
 	"hg":  {"Mercurial", "hg"},
@@ -1120,18 +1120,18 @@ var vcsDriverSpellings = map[string][]string{
 	"jj":  {"Jujutsu", "jj"},
 }
 
-// TestAgentSurfaceNamesEveryVCSDriver keeps the agent surface at parity with the drivers.
+// TestAgentSkillsNameEveryVCSDriver keeps the agent skills at parity with the drivers.
 //
 // vcs/parity_test.go already pins parity for nineteen DRIVER METHODS across all four
 // backends, so the repo has decided this matters. That enforcement stopped at the driver
-// and never reached the surfaces a reader meets, and the gap was not theoretical: the
+// and never reached the text a reader meets, and the gap was not theoretical: the
 // magus-vcs-hygiene DESCRIPTION named git and only git, and a description is what a host
 // matches on to decide whether to load a skill at all. An agent in a Mercurial repo about
 // to run `hg purge` would never have loaded the skill that exists to stop it.
 //
 // The driver list is READ FROM THE SOURCE rather than restated, so this cannot drift from
 // what magus actually drives.
-func TestAgentSurfaceNamesEveryVCSDriver(t *testing.T) {
+func TestAgentSkillsNameEveryVCSDriver(t *testing.T) {
 	names := vcsDriverNames(t)
 	require.NotEmpty(t, names, "found no VCS drivers; the Name() scan below stopped matching")
 
@@ -1141,7 +1141,7 @@ func TestAgentSurfaceNamesEveryVCSDriver(t *testing.T) {
 
 	for _, name := range names {
 		spellings, ok := vcsDriverSpellings[name]
-		require.Truef(t, ok, "vcs driver %q has no entry in vcsDriverSpellings; decide how the agent surface should spell it", name)
+		require.Truef(t, ok, "vcs driver %q has no entry in vcsDriverSpellings; decide how the agent skills should spell it", name)
 		assert.Truef(t, containsAny(desc, spellings),
 			"the magus-vcs-hygiene description never names the %q backend (any of %v), so a host will not load it for that repository", name, spellings)
 	}

@@ -755,13 +755,13 @@ export fun bindings_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./std/..."]);
 }
 
-// Regenerates the magusfile API lock through TestMagusSurfaceLocked.
+// Regenerates the magusfile API lock through TestMagusAPILocked.
 // -count=1 is load-bearing: a cached pass writes no file.
 export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(bindings_generate);
     ctx.writesFiles("internal/interp/bindings/testdata/magus-api.lock");
     go["go-test"](ctx.withEnv({"UPDATE_MAGUS_API_LOCK": "1", "GOEXPERIMENT": "jsonv2"}),
-        {"args": ["-count=1", "-run", "TestMagusSurfaceLocked",
+        {"args": ["-count=1", "-run", "TestMagusAPILocked",
             "./internal/interp/bindings/"]});
 }
 
@@ -2206,7 +2206,20 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/**/*.go", "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go",
                    "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
                    "console/**/*.ts", "docs/**/*.ts",
-                   "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts");
+                   "docs/guides/integrations/agents/**/*.ts", "libs/textsearch/**/*.ts",
+                   "**/*.buzz", "console/**/*.buzz", "docs/**/*.buzz",
+                   "docs/guides/integrations/agents/**/*.buzz", "libs/conventions/**/*.buzz",
+                   "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
+                   "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
+                   "proto/**/*.buzz",
+                   "**/*.css", "console/**/*.css", "docs/**/*.css",
+                   "**/*.html", "console/**/*.html", "docs/**/*.html",
+                   "**/*.mjs", "console/**/*.mjs",
+                   "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",
+                   "docs/guides/integrations/agents/**/*.yaml", "libs/textsearch/**/*.yaml",
+                   "proto/**/*.yaml",
+                   "**/*.yml", "libs/testlayout/**/*.yml",
+                   "proto/**/*.proto", "**/*.txtar");
     // code-follows-mined-precedents and symbol-docs-follow-prose-rules fail on a stale symbol
     // index. magus\precedents freshens every index here, under this run's lock, so the rules
     // run below find them current; read from that child process instead, a rebuild would be

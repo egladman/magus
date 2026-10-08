@@ -1,5 +1,5 @@
 // Package changeset holds a change under review: the patch parsed into files, hunks and rows,
-// and the shared session every surface reads while somebody works through it.
+// and the shared session every client reads while somebody works through it.
 //
 // Named for the whole rather than either half. It was `diff`, which described the parsing and
 // not the session, collided with the handler package serving /api/v1/diff and the terminal
@@ -211,7 +211,7 @@ func (s *Store) relocate(root string) {
 	}
 	for i, c := range sess.Comments {
 		// A published remark is not moved. It exists somewhere a colleague may already have
-		// replied to, and re-placing our copy would make the two surfaces disagree about what
+		// replied to, and re-placing our copy would make the two clients disagree about what
 		// was said where: the same reason a published remark is no longer editable.
 		if c.Published {
 			continue
@@ -238,7 +238,7 @@ func (s *Store) Anchor(root, path string, line int) types.CommentAnchor {
 // the file was not tracked or could not be read. A caller mints a receipt from THIS rather
 // than from the file's current bytes, so the receipt attests to what the reader saw.
 //
-// The advertised scenario for this surface is a paired review where an agent edits while the
+// The advertised scenario for the review session is a paired review where an agent edits while the
 // human reads, so a file moving mid-session is the expected case rather than a corner.
 func (s *Store) ContentAt(root, path string) string {
 	s.mu.Lock()
@@ -271,7 +271,7 @@ func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffReview {
 //
 // Additive and idempotent: a thread never becomes unseen, so re-rendering the same conversation
 // costs nothing and cannot resurrect a remark as new. Ids the session already holds are skipped
-// rather than appended twice, because this runs on every render of the surface.
+// rather than appended twice, because this runs on every render of the review.
 func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffReview {
 	if len(ids) == 0 {
 		return s.Get(root)

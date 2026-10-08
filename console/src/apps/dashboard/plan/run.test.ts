@@ -143,7 +143,7 @@ test("no_return is not a state this plan has - it reads as idle like any other u
   assert.equal(normalizeRunState("fail"), "fail");
 });
 
-// The wire carries exactly four states. "queued" is the one a reader of the pool surfaces would
+// The wire carries exactly four states. "queued" is the one a reader of the pool apps would
 // most plausibly expect to find here and the one an implementation would most plausibly add: the
 // engine resolves running over a stale pass server-side, so waiting-to-start arrives as idle.
 test("there is no queued on the wire - it reads as idle", () => {

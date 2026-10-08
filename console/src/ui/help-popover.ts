@@ -1,4 +1,4 @@
-// help-popover.ts - the shared "?" help affordance. Every console surface that carries a query/filter
+// help-popover.ts - the shared "?" help affordance. Every console app that carries a query/filter
 // prompt (the log viewer, the graph explorer) had its OWN bare "?" button whose entire explanation lived
 // in a native title= tooltip. Hover tooltips never appear on touch and the buttons had no click handler,
 // so on mobile tapping "?" did nothing. This upgrades any such trigger into a real click-to-toggle

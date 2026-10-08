@@ -12,8 +12,8 @@ import (
 // fresh module, or merging onto one an earlier Module provided under the same name.
 //
 // It is the single shape gopherbuzz's stdlib and a host embedder (e.g. magus's
-// os/vcs/http surface) both use to describe a module, so a session's whole import
-// surface is one ordered, labeled list: Session.Provide applies it, and a caller
+// os/vcs/http modules) both use to describe a module, so a session's whole set of
+// imports is one ordered, labeled list: Session.Provide applies it, and a caller
 // filters by label to derive a subset (the WASM playground, a strict-conformance
 // run, a docs index).
 //

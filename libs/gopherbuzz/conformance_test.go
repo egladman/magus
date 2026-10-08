@@ -42,7 +42,7 @@ func TestUpstreamCommitReadsThePin(t *testing.T) {
 
 // TestUpstreamConformance runs every upstream tests/behavior/*.buzz file
 // in-process through gopherbuzz (Session + the bundled std modules, the same
-// surface `magus buzz -t` installs) and checks the result against the checked-in
+// module set `magus buzz -t` installs) and checks the result against the checked-in
 // allowlist in both directions.
 func TestUpstreamConformance(t *testing.T) {
 	dir, ok := buzz.UpstreamCheckout()

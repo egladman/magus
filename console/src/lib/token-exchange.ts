@@ -9,7 +9,7 @@
 //
 // WHY IT IS A SEPARATE MODULE from lib/server. server.ts documents that a page importing
 // only its primitives is tree-shaken clear of the ConnectRPC transport code; importing
-// TokenService there would put the token client in every surface bundle. Only the shell,
+// TokenService there would put the token client in every app bundle. Only the shell,
 // which does the trading for every tab, pays for this one.
 //
 // A token's class is its prefix (mgo_ operator, mgs_ stored, mgl_ share link), and the prefix
@@ -58,7 +58,7 @@ export const CONSOLE_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
 // exchangeOperatorToken wires ensureConsoleToken to the real server. The minted token carries no
 // name (the server derives a unique one). When it expires the server answers 401, which signs the
-// console out with a notice (lib/server signalAuthLost) rather than failing surface by surface.
+// console out with a notice (lib/server signalAuthLost) rather than failing app by app.
 export async function exchangeOperatorToken(host: string, now = Date.now()): Promise<Outcome> {
   const client = createClient(TokenService, createServerTransport(host, getLiveToken()));
   return ensureConsoleToken(async () => {

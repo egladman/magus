@@ -30,7 +30,7 @@ final reading = [
     Advisor{input = "skip-cache", script = "skip-cache.buzz"},
     Advisor{input = "conformance", script = "conformance.buzz"},
     Advisor{input = "missing-target", script = "missing-target.buzz"},
-    Advisor{input = "api-surface", script = "api-surface.buzz"},
+    Advisor{input = "exported-api", script = "exported-api.buzz"},
     Advisor{input = "first-contribution", script = "first-contribution.buzz"},
     Advisor{input = "merge-queue", script = "merge-queue.buzz"},
 ];
@@ -105,12 +105,12 @@ fun main() > void !> any {
 test "enabled keeps the switched-on advisors, in comment order" {
     final inputs = mut {<str: str>};
     foreach (a in reading) { inputs[a.input] = "false"; }
-    inputs["api-surface"] = "true";
+    inputs["exported-api"] = "true";
     inputs["doctor"] = "true";
     final on = enabled(inputs);
     assert\equal(on.len(), want: 2, message: "only the two switched on");
     assert\equal(on[0].script, want: "doctor.buzz", message: "doctor first");
-    assert\equal(on[1].script, want: "api-surface.buzz", message: "api-surface after it");
+    assert\equal(on[1].script, want: "exported-api.buzz", message: "exported-api after it");
 }
 
 test "enabled refuses a switch it cannot read" {

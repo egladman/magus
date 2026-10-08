@@ -188,7 +188,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
               fs\join("..", "docs", "gen", "playground", "wasm_exec.js")],
              dir: fs\join("gen", "wasm"));
 
-    proc\exec("node", ["scripts/surface-stubs.mjs"], ".", {});
+    proc\exec("node", ["scripts/app-stubs.mjs"], ".", {});
     // Last: it hashes every file above into sw.js's precache stamp.
     proc\exec("node", ["scripts/stamp-build.mjs"], ".", {});
 }

@@ -125,7 +125,7 @@ func consoleJobLine(id string) string {
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
-		link = console.Link(console.LinkOpts{Host: host, Surface: console.JobSurface})
+		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
 	}
 	line := "console: " + link + "\n  " + authHint(link)
 	if skew := consoleSkew(serverVersion, version); skew != "" {
@@ -146,7 +146,7 @@ func consoleSkew(serverVersion, cliVersion string) string {
 }
 
 // printConsoleJobLine writes that line, and nothing at all when the console is off: a
-// suppressed surface has no address, and a bare "console:" is worse than silence.
+// suppressed console has no address, and a bare "console:" is worse than silence.
 func printConsoleJobLine(out io.Writer, id string) {
 	if line := consoleJobLine(id); line != "" {
 		fmt.Fprintln(out, line)
@@ -1546,7 +1546,7 @@ func recentTrail(cacheDir string) []trail.Event {
 const jobWatchWindow = 2000
 
 // printFeedLine writes one event as one line. Fixed columns rather than prose, because the
-// value of this surface is skimming a column: a person watching four workers is looking for
+// value of this feed is skimming a column: a person watching four workers is looking for
 // the word "deny" going past, not reading sentences.
 func printFeedLine(out io.Writer, e job.FeedEvent) {
 	stamp := time.UnixMilli(e.Ts).Format("15:04:05")
@@ -2094,7 +2094,7 @@ func gradesSymbols(rows []types.Job, id string) bool {
 // jobDelete is `magus job rm <job>`: take one row out of the plan.
 //
 // Named rm rather than delete because that is the verb a person types for this everywhere
-// else, and the surface it sits beside (fork, exec, exit, wait) is the shell's own
+// else, and the commands it sits beside (fork, exec, exit, wait) are the shell's own
 // vocabulary.
 //
 // It is NOT how a job ends. `job exit` records what happened and leaves the row as the

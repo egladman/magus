@@ -66,8 +66,8 @@ type Row struct {
 // Hunk is one @@ section: the header line, its body, and the content digest the viewed set
 // is keyed by.
 type Hunk struct {
-	// Index is the 0-based position within the file, which is the coordinate the MCP surface
-	// takes on a comment. It is carried explicitly rather than left implicit in the slice
+	// Index is the 0-based position within the file, which is the coordinate the MCP tools
+	// take on a comment. It is carried explicitly rather than left implicit in the slice
 	// position so a caller that filters hunks cannot silently renumber them.
 	Index  int    `json:"index"`
 	Header string `json:"header"`
@@ -75,7 +75,7 @@ type Hunk struct {
 	// @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {". Empty where git
 	// named none: the top of a file, or a language it has no funcname pattern for.
 	//
-	// Parsed HERE rather than by each surface, for the reason the digest and the intra-line
+	// Parsed HERE rather than by each client, for the reason the digest and the intra-line
 	// emphasis are: two readers of one header is two chances to disagree about what a hunk is
 	// called, and nothing would ever report the disagreement.
 	Declaration string `json:"declaration,omitempty"`
@@ -83,7 +83,7 @@ type Hunk struct {
 	// NIL when no line carried one, which is every ordinary hunk, so this costs nothing to ship
 	// and nothing to hold.
 	//
-	// Computed here so the two surfaces cannot disagree about it. A sanitizer in the terminal and
+	// Computed here so the two clients cannot disagree about it. A sanitizer in the terminal and
 	// not the browser would leave one of them rendering the deception, and the reader has no way
 	// to tell which they are looking at.
 	Display []string `json:"display,omitempty"`
@@ -113,7 +113,7 @@ type File struct {
 	Additions int    `json:"additions"`
 	Deletions int    `json:"deletions"`
 	// Binary files carry no hunks. Rendering one as an empty diff reads as "nothing changed",
-	// which is false, so the flag is explicit and the surface says so.
+	// which is false, so the flag is explicit and the client says so.
 	Binary  bool   `json:"binary"`
 	OldMode string `json:"old_mode,omitempty"`
 	NewMode string `json:"new_mode,omitempty"`
@@ -321,7 +321,7 @@ func (p *parser) closeHunk() {
 	p.hunk, p.raw = nil, nil
 }
 
-// markEmphasis fills in each changed row's intra-line span, once, for every surface to read.
+// markEmphasis fills in each changed row's intra-line span, once, for every client to read.
 //
 // The pairing is a run of removed lines against the run of added lines that follows, matched
 // positionally and only when the two runs are the same length. An unequal run means lines were
@@ -359,7 +359,7 @@ func markEmphasis(rows []Row) {
 //
 // Two conversions, and each is a coordinate the other consumer does not want. Rows carry
 // UTF-16 offsets because the wire's reader is a browser, and they measure Text, which has no
-// marker on it. Both happen here so neither surface has to hold an opinion about how a span
+// marker on it. Both happen here so neither client has to hold an opinion about how a span
 // travelled to it.
 func RawLineEmphasis(h Hunk) []Span {
 	if len(h.Rows) == 0 {
@@ -476,7 +476,7 @@ type FileHunks struct {
 }
 
 // sanitizeRows escapes the deceptive characters in each row's text, which is what the browser
-// draws; Lines is what the terminal draws, and both have to be covered or one surface renders a
+// draws; Lines is what the terminal draws, and both have to be covered or one client renders a
 // deception the other caught.
 //
 // AFTER markEmphasis, and the row's emphasis is DROPPED where the text changed. Emph is an offset
@@ -513,7 +513,7 @@ func displayLines(lines []string) []string {
 }
 
 // ParseHunks is the identity view of a patch: paths and hunk digests, without the rendering
-// detail. It is what the session store and the MCP surface consume.
+// detail. It is what the session store and the MCP tools consume.
 //
 // A projection of Parse, never its own pass. This is what decides which files a changeset
 // contains, so a reader of its own here would be the one place a dialect gap turns into an
@@ -555,7 +555,7 @@ func PatchDigest(patch string) string {
 //
 // The arithmetic lives HERE, once, for the reason the parser and the emphasis do: a thread is
 // anchored to a line of the REVIEW, and the review is not the changeset in front of the reader.
-// Two surfaces working that out independently is the same remark landing against different code
+// Two clients working that out independently is the same remark landing against different code
 // depending on where you opened it.
 //
 // The NEW side, always. A host anchors an inline comment to the line as it stands after the

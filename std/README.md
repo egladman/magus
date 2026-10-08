@@ -4,7 +4,7 @@ This package is magus's **host API**: the modules a `magusfile.buzz` (or a spell
 calls into to touch the outside world (run processes, read files, query the VCS,
 make HTTP requests, hash, (de)serialize, build charm patches). It is layered on
 top of [`gopherbuzz/std`](../gopherbuzz/std/README.md) (the Buzz language stdlib)
-to form one **superset** surface.
+to form one **superset** module API.
 
 ## How it relates to `gopherbuzz/std`
 

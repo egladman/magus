@@ -1,7 +1,7 @@
-// connectPrompt.ts - the one prompt a surface shows while it has no server to read. Every
-// server-backed surface renders it through renderConnectPrompt, so the words, the actions and the
-// docs link cannot drift between surfaces. What a surface shows once it IS connected (nothing kept
-// yet, a clean tree) stays the surface's own and goes through renderEmptyMessage: those are facts
+// connectPrompt.ts - the one prompt an app shows while it has no server to read. Every
+// server-backed app renders it through renderConnectPrompt, so the words, the actions and the
+// docs link cannot drift between apps. What an app shows once it IS connected (nothing kept
+// yet, a clean tree) stays the app's own and goes through renderEmptyMessage: those are facts
 // about its data, not the connection.
 //
 // Nothing here connects or retries on its own. Every way forward is a control the reader presses.
@@ -22,18 +22,18 @@ import { h } from "./view";
 
 export const SERVER_GUIDE_URL = "https://eli.gladman.cc/magus/guides/integrations/server/";
 
-// Surfaces are separate bundles with separate command registries, so a surface cannot reach the
+// Apps are separate bundles with separate command registries, so an app cannot reach the
 // shell through dispatchCommand. The shell listens for this on document and opens the address field.
 export const REQUEST_SERVER_SETTINGS_EVENT = "magus:request-server-settings";
 
 // The prompt's states are the status bar's own ConnectionState values, narrowed to the three a
-// surface can be stuck in, so the console keeps one vocabulary for a connection.
+// app can be stuck in, so the console keeps one vocabulary for a connection.
 export type ConnectPromptState =
   | { connection: Extract<ConnectionState, "none"> }
   | { connection: Extract<ConnectionState, "connecting">; host: string }
   | { connection: Extract<ConnectionState, "disconnected">; host: string; reason?: string };
 
-// The elements of a surface's empty state. actions is the [data-empty-ways] row.
+// The elements of an app's empty state. actions is the [data-empty-ways] row.
 export interface EmptyStateSlots {
   title: HTMLElement;
   message: HTMLElement;
@@ -41,7 +41,7 @@ export interface EmptyStateSlots {
 }
 
 export interface ConnectPromptOptions {
-  // What the surface shows once connected, in one sentence. Shown only in the "none" state.
+  // What the app shows once connected, in one sentence. Shown only in the "none" state.
   purpose?: string;
   // Backs the Retry button in the "disconnected" state. Without it there is no Retry.
   onRetry?: () => void;
@@ -157,22 +157,22 @@ function wayButton(modifier: string, label: string, onClick: () => void): HTMLBu
   return control;
 }
 
-// ServerNeed is a surface registry entry's declaration that the surface has nothing to show without
+// ServerNeed is an app registry entry's declaration that the app has nothing to show without
 // a server. purpose is the sentence the connect page shows in its place.
 export interface ServerNeed {
   purpose: string;
 }
 
 // requireServer wraps module so that activating it with no server address and no demo shows the
-// shell's connect page instead, and the module is not activated. The surface opens once an address
-// is applied (Settings, or another tab) and its pane is not hidden, so a surface that measures its
+// shell's connect page instead, and the module is not activated. The app opens once an address
+// is applied (Settings, or another tab) and its pane is not hidden, so an app that measures its
 // DOM at init sees real dimensions. Nothing polls: an applied address is the only trigger. Once
-// open, the surface stays open whatever the connection does, and its own inline prompt answers a
+// open, the app stays open whatever the connection does, and its own inline prompt answers a
 // drop. With need undefined, module is returned unchanged.
 //
 // With an address but NO TOKEN it shows the sign-in page instead: every server route needs a bearer
-// token, so an unauthenticated surface could only render empty. A server that refuses the token
-// later (AUTH_LOST_EVENT, raised by lib/server on a 401) tears the surface down and returns here.
+// token, so an unauthenticated app could only render empty. A server that refuses the token
+// later (AUTH_LOST_EVENT, raised by lib/server on a 401) tears the app down and returns here.
 export function requireServer<S, Q>(
   module: PageModule<S, Q>,
   need: ServerNeed | undefined,
@@ -185,8 +185,8 @@ export function requireServer<S, Q>(
   };
 }
 
-// The order the surfaces resolve their own source in, so the page never stands in front of a
-// surface that would have found a server.
+// The order the apps resolve their own source in, so the page never stands in front of a
+// app that would have found a server.
 function serverAvailable(): boolean {
   return wantsDemo(parseHash()) || resolveServerHostOrRemembered() !== null;
 }
@@ -205,14 +205,14 @@ function ready(): boolean {
   return serverAvailable() && !signInRequired();
 }
 
-// surfaceURL is the clean /console/<surface>/ address of this surface on the page's own origin,
+// appURL is the clean /console/<app>/ address of this app on the page's own origin,
 // keeping a #port= attach so the signed-in link reaches the same server.
-export function surfaceURL(surface: string): string {
+export function appURL(app: string): string {
   const path = location.pathname;
   const at = path.indexOf("/console/");
   const base = at >= 0 ? path.slice(0, at + "/console/".length) : "/console/";
   const port = parseHash().port;
-  return location.origin + base + surface + "/" + (port ? "#port=" + port : "");
+  return location.origin + base + app + "/" + (port ? "#port=" + port : "");
 }
 
 function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
@@ -234,9 +234,9 @@ function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
   return { page, slots };
 }
 
-// renderSignIn writes the sign-in state: why the surface cannot show anything, and the one command
+// renderSignIn writes the sign-in state: why the app cannot show anything, and the one command
 // that fixes it. notice says why a signed-in page came back here (a refused token).
-export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: string): void {
+export function renderSignIn(slots: EmptyStateSlots, app: string, notice?: string): void {
   delete slots.actions.dataset.connectPrompt;
   slots.title.textContent = "Sign in to this server";
   slots.message.textContent =
@@ -246,7 +246,7 @@ export function renderSignIn(slots: EmptyStateSlots, surface: string, notice?: s
   way.dataset.emptyWay = "";
   const label = h("span", undefined, "Open it signed in");
   label.dataset.emptyWayLabel = "";
-  const cmd = signInCommand(surfaceURL(surface));
+  const cmd = signInCommand(appURL(app));
   const command = h("pre");
   command.dataset.emptyCmd = "";
   command.dataset.signInCommand = "";
@@ -291,7 +291,7 @@ function gatedPage<S, Q>(
     host.replaceChildren(page);
   };
 
-  // force skips the hidden-pane check: the tile activates a surface only once its pane is shown.
+  // force skips the hidden-pane check: the tile activates an app only once its pane is shown.
   const open = (force = false): void => {
     if (closed || inner || opening || !ready() || (!force && host.closest("[hidden]"))) return;
     opening = true;
@@ -330,8 +330,8 @@ function gatedPage<S, Q>(
   if (openNow) open(true);
   else showGate();
 
-  // The tile reads docTitle once, before the surface exists, so it gets a stable source that
-  // forwards the surface's once it opens.
+  // The tile reads docTitle once, before the app exists, so it gets a stable source that
+  // forwards the app's once it opens.
   const docTitle: TitleSource = {
     get: () => inner?.docTitle?.get() ?? null,
     subscribe(fn) {
@@ -351,7 +351,7 @@ function gatedPage<S, Q>(
     setVisible(next) {
       visible = next;
       if (inner) inner.setVisible(next);
-      // An address applied while this pane was hidden opens the surface when it is revealed.
+      // An address applied while this pane was hidden opens the app when it is revealed.
       else open();
     },
     deactivate() {

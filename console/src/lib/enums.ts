@@ -1,4 +1,4 @@
-// enums.ts - the word for a protobuf enum value, derived from the value's name so no surface keeps
+// enums.ts - the word for a protobuf enum value, derived from the value's name so no app keeps
 // its own verdict/support/state table. The server owns the vocabulary; a value added there reads
 // correctly here without an edit.
 

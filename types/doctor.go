@@ -8,7 +8,7 @@ package types
 // directly; there is no second spelling of them anywhere.
 
 // CheckStatus is one check's outcome. Advice is deliberately not a failure:
-// it is worth knowing and never a gate, which is the distinction the CI surface and
+// it is worth knowing and never a gate, which is the distinction the CI report and
 // the tool share one word for.
 type CheckStatus string
 
@@ -31,7 +31,7 @@ type CheckStatus string
 // check had two options: fail (and dictate) or not exist. What actually happened
 // is that each one grew its own private escape hatch (no_language for language
 // coverage, and briefly allow_bespoke_name for target naming), so the config
-// surface grew one key per opinion, and taking magus's advice became mandatory
+// grew one key per opinion, and taking magus's advice became mandatory
 // unless you wrote a paragraph explaining yourself. Advice that exits zero needs
 // no escape hatch at all.
 //

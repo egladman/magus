@@ -1,4 +1,4 @@
-/* tools.css - the Tools surface: a bar of filters over one full-width table.
+/* tools.css - the Tools app: a bar of filters over one full-width table.
    Its own sheet rather than the Dashboard's: dashboard.css loads only with the Dashboard, and the
    table here is a page, not a tile. Shares the console's semantic tokens, the layer meant to be
    shared. */
@@ -12,14 +12,14 @@
 }
 
 /* --- Bar ------------------------------------------------------------------------
-   The console's one bar height and one surface gutter, as a floor: the row wraps on a narrow pane. */
+   The console's one bar height and one app gutter, as a floor: the row wraps on a narrow pane. */
 .console-tools__bar {
   flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  min-block-size: var(--console-surface-bar-h);
+  min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
@@ -34,7 +34,7 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-tools__filters { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-/* A pressed filter takes the surface accent, so the ones narrowing the table are readable at a
+/* A pressed filter takes the app accent, so the ones narrowing the table are readable at a
    glance without reading their counts. */
 .console-tools__filter[aria-pressed="true"] {
   background: var(--console-accent);

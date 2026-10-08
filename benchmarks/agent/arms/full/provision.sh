@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Provision ARM-1 "full": the installed agent surface - skills, guard hooks,
+# Provision ARM-1 "full": the installed agent integration - skills, guard hooks,
 # the MAGUS.md routing index, the CLAUDE.md magus block, and hints. MCP is NOT
 # switched on; see ../README.md for that decision and the switch table.
 set -eu

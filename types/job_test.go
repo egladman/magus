@@ -182,7 +182,7 @@ func TestPathsIntersectReadsTheClaimGrammar(t *testing.T) {
 
 // A finished lease is not competing for anything. The skill has a worker RELEASE its
 // paths when it stops editing, so reporting a pass, a fail, or a no-return as a
-// collision would make the surface loudest exactly as the plan winds down.
+// collision would make the report loudest exactly as the plan winds down.
 func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	t.Parallel()
 

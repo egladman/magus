@@ -1,7 +1,7 @@
-// demo-dom.test.ts - the Diff surface's server-free showcase, mounted. document/window come
+// demo-dom.test.ts - the Diff app's server-free showcase, mounted. document/window come
 // from test-setup.mjs (node --import), the same as the other *-dom tests.
 //
-// What is pinned here is the promise the #demo fragment makes: the surface renders FULLY with
+// What is pinned here is the promise the #demo fragment makes: the app renders FULLY with
 // no server, no workspace and no network. So fetch is replaced with one that fails the test if
 // it is called at all - a showcase that quietly falls back to a server works on the machine
 // that has one running and shows an empty state to everybody else, which is the failure this
@@ -71,13 +71,13 @@ test("#demo lists the primary files in the sidebar and folds the generated group
     (el) => el.textContent,
   );
   // The showcase must never pass itself off as the reader's own tree - but it says so through
-  // the shell's connection pill, the one place every surface says it. A second badge here made
-  // the diff the only surface announcing demo twice, in a style nothing else uses.
+  // the shell's connection pill, the one place every app says it. A second badge here made
+  // the diff the only app announcing demo twice, in a style nothing else uses.
   assert.ok(!chips.includes("demo data"), "demo state belongs to the connection pill, not a chip");
   assert.ok(chips.includes("11 files"));
-  assert.ok(chips.includes("1 public surface"));
+  assert.ok(chips.includes("1 public API"));
   assert.ok(chips.includes("1 untested"));
-  // The ranking key is present in the fixture, so the surface must NOT be wearing the
+  // The ranking key is present in the fixture, so the app must NOT be wearing the
   // "unranked" caveat while claiming a reading order.
   assert.ok(!chips.includes("unranked"));
 
@@ -127,11 +127,11 @@ test("#demo answers the peek command instead of doing nothing", async () => {
   dispose.deactivate();
 });
 
-// The surface used to carry its own "See the demo" button. It does not any more - one entry point for
+// The app used to carry its own "See the demo" button. It does not any more - one entry point for
 // the whole console, the title bar's Workspace menu - so what it owes someone with no server is a
-// SENTENCE naming where a populated version lives, not a dead end. Every /console/<surface>/ path is
-// the shell with a <base> injected (scripts/surface-stubs.mjs), so that menu is always on screen.
-test("without #demo and without a server the surface says where a populated one lives", async () => {
+// SENTENCE naming where a populated version lives, not a dead end. Every /console/<app>/ path is
+// the shell with a <base> injected (scripts/app-stubs.mjs), so that menu is always on screen.
+test("without #demo and without a server the app says where a populated one lives", async () => {
   const dispose = activate(document.body);
   await settle();
 
@@ -140,10 +140,10 @@ test("without #demo and without a server the surface says where a populated one 
   assert.equal(
     document.querySelectorAll(".pf-v6-c-empty-state__footer button").length,
     0,
-    "the per-surface demo button is gone",
+    "the per-app demo button is gone",
   );
   const body = document.querySelector<HTMLElement>(".pf-v6-c-empty-state__body")?.textContent ?? "";
-  assert.match(body, /Workspace menu/, "an empty surface has to name where a populated one lives");
+  assert.match(body, /Workspace menu/, "an empty app has to name where a populated one lives");
 
   dispose.deactivate();
 });
@@ -162,8 +162,8 @@ test("#demo still loads the fabricated changeset", async () => {
   dispose.deactivate();
 });
 
-// The pane-width defaults. These key off the surface's OWN box, not the viewport, because the
-// surface tiles: two panes on a wide desktop give it far less room than the window suggests, and a
+// The pane-width defaults. These key off the app's OWN box, not the viewport, because the
+// app tiles: two panes on a wide desktop give it far less room than the window suggests, and a
 // viewport query reads "wide" for both. happy-dom does no layout, so the ResizeObserver is stubbed
 // and driven by hand - which is also the only way to exercise a retile without a real browser.
 //
@@ -190,8 +190,8 @@ test("the diff sizes itself from its own pane, not the window", async () => {
     await settle();
 
     const root = document.querySelector<HTMLElement>(".console-diff-layout");
-    assert.ok(paneCb, "the surface must observe its own root");
-    // happy-dom reports innerWidth 1024, so the surface mounts in its wide defaults.
+    assert.ok(paneCb, "the app must observe its own root");
+    // happy-dom reports innerWidth 1024, so the app mounts in its wide defaults.
     assert.equal(root?.dataset.sidebar, "open");
 
     const resizeTo = async (width: number): Promise<void> => {
@@ -210,7 +210,7 @@ test("the diff sizes itself from its own pane, not the window", async () => {
     await resizeTo(1200);
     assert.equal(root?.dataset.sidebar, "open", "a wide pane restores the index");
 
-    // A zero box is a detached or hidden surface, not a measurement, and must not collapse it.
+    // A zero box is a detached or hidden app, not a measurement, and must not collapse it.
     await resizeTo(0);
     assert.equal(root?.dataset.sidebar, "open", "an unlaid-out box is not a narrow one");
 
@@ -239,7 +239,7 @@ test("#demo places the review's threads beside the code they are about", async (
   // to send rather than everything the reader has written.
   assert.ok(chips.includes("1 draft"), `want one draft, got ${chips.join(", ")}`);
   // A thread on a file this changeset does not touch has nowhere in the stream to sit. It is
-  // counted rather than dropped: "your colleague said nothing" is the one thing this surface
+  // counted rather than dropped: "your colleague said nothing" is the one thing this app
   // must never say by accident.
   assert.ok(chips.includes("1 elsewhere"));
 
@@ -257,7 +257,7 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   // The whole address, not just the review: repo and number, so "send" never means somewhere
   // the reader would have to guess.
   assert.match(box?.textContent ?? "", /Send 1 remark to acme\/acme #482/);
-  // And the network, said out loud. Everything else on this surface is local; the one act that
+  // And the network, said out loud. Everything else on this app is local; the one act that
   // leaves the machine names the host it leaves for, before it leaves.
   assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
   assert.match(box?.textContent ?? "", /Nothing has left this machine yet/);
@@ -285,7 +285,7 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   dispose.deactivate();
 });
 
-// setFocusMode puts the surface in a known mode instead of assuming one.
+// setFocusMode puts the app in a known mode instead of assuming one.
 //
 // The preference is a module-scope persisted cell, and its in-memory value is the source of
 // truth - localStorage.clear() in beforeEach does not touch it. These tests share one process
@@ -504,7 +504,7 @@ test("#demo names the network destination before a reply is sent", async () => {
 
 // The run control is the one review capability a forge structurally cannot offer: it asks the
 // machine the code is on. It is in the showcase for the reason every other control is - the
-// showcase IS the surface, so a button that does nothing here reads as a broken feature - and
+// showcase IS the app, so a button that does nothing here reads as a broken feature - and
 // these pin the two claims it makes that are easy to get wrong and invisible when wrong.
 
 test("#demo offers to run the project in view", async () => {
@@ -602,7 +602,7 @@ test("#demo gives no reason when nothing narrowed the verdicts", async () => {
 // jsdom computes no layout, so the sibling relationship is what a test can hold; it is also the
 // thing that was actually wrong.
 //
-// It also pins the two ZONES apart. The head carries the surface's identity and its actions, the
+// It also pins the two ZONES apart. The head carries the app's identity and its actions, the
 // readout carries the counts and the key legend; putting an action back among the chips is the
 // regression this row was restructured to undo.
 test("the toolbar's controls sit in a row, actions apart from the readout", async () => {
@@ -664,10 +664,10 @@ test("focus mode hides the readout row and takes the key legend with it", async 
   dispose.deactivate();
 });
 
-// The head is the only place the surface says what it is and what it is comparing. Both were
-// missing outright: the diff was the one surface opening with an unheaded row of numbers, and
+// The head is the only place the app says what it is and what it is comparing. Both were
+// missing outright: the diff was the one app opening with an unheaded row of numbers, and
 // nothing on it named the two sides of the diff being read.
-test("the head names the surface and the two sides being compared", async () => {
+test("the head names the app and the two sides being compared", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();

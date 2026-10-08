@@ -530,7 +530,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 }
 
 // vcsExe returns the absolute path of the active VCS executable, or "" when
-// unresolved or not on PATH. Internal: the Buzz surface exposes vcs.cmd, which runs the
+// unresolved or not on PATH. Internal: Buzz exposes vcs.cmd, which runs the
 // binary, rather than a path for the caller to hand to proc.exec themselves.
 func vcsExe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)

@@ -1,4 +1,4 @@
-// main.ts - the console's Activity surface: the server's audit trail (magus.activity.v1alpha1) painted with
+// main.ts - the console's Activity app: the server's audit trail (magus.activity.v1alpha1) painted with
 // the SAME foldable, status-accented sections as the log viewer (buildSection over the shared render
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
@@ -52,7 +52,7 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 import { demoEvents } from "./demo";
 
 const PAGE_SIZE = 100;
@@ -65,8 +65,8 @@ interface Refs {
   emptySlots: EmptyStateSlots;
 }
 
-// buildScaffold assembles the surface DOM on PatternFly - the shared render frame plus a PF EmptyState
-// for the cold state - matching the log viewer's migrated surface, so a run's output and the trail read
+// buildScaffold assembles the app DOM on PatternFly - the shared render frame plus a PF EmptyState
+// for the cold state - matching the log viewer's migrated app, so a run's output and the trail read
 // as one design. The trail entries reuse the shared buildSection render model into .console-render-body.
 // There is deliberately NO toolbar: the reload control and the event count live in the collapsible
 // event-index panel (mounted in activate), so a second floating bar of chrome is not needed.
@@ -110,7 +110,7 @@ function buildScaffold(host: HTMLElement): Refs {
 // the build may be wrong as a result. Called ONLY from the live load path, so the demo (which never
 // calls it) cannot light the bell. Deduped per event (kind + time + action) so re-loading the trail does
 // not re-fire; there is no in-app URL that addresses a single trail entry, so it carries no deep link -
-// the activity surface the reader is already on IS the destination.
+// the activity app the reader is already on IS the destination.
 function notifyDenials(events: ActivityEvent[]): void {
   for (const ev of events) {
     if (ev.kind !== Kind.SANDBOX_DENIAL) continue;
@@ -232,7 +232,7 @@ function indexLeaf(
   // between the mark and everything it refers to.
   const title = h("span", "pf-v6-c-tree-view__node-text");
   // EVERY row carries the dot, not just the failures. It is the run browser's outcome dot
-  // (logs.css, which this surface loads), and there it marks every row - so marking only
+  // (logs.css, which this app loads), and there it marks every row - so marking only
   // errors here taught two rules for one symbol: "outcome" one tab over, "this one broke"
   // in this list. A reader cannot tell a passing event from an unmarked one.
   const dot = h("span", "console-log-runs__dot");
@@ -427,13 +427,13 @@ interface PayloadControl {
   ref: PayloadRef;
 }
 
-// activate builds the surface into host, loads once, and returns a teardown. Every async load checks
+// activate builds the app into host, loads once, and returns a teardown. Every async load checks
 // `stale` before touching the DOM, so a load that resolves after the tab closed is dropped.
-// Returns the console's surface shape (page.ts): a teardown plus setVisible, so the shell can tell
-// this pane when it stops being the visible one. Every surface hands back this shape rather than a
-// bare teardown - a surface with nowhere to put the hook is how the log viewer came to write a
+// Returns the console's app shape (page.ts): a teardown plus setVisible, so the shell can tell
+// this pane when it stops being the visible one. Every app hands back this shape rather than a
+// bare teardown - an app with nowhere to put the hook is how the log viewer came to write a
 // backgrounded tab's status bar.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   const refs = buildScaffold(host);
   let stale = false;
   let loadedEvents: ActivityEvent[] = [];
@@ -461,7 +461,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // screen in that state, so the count rides there too instead of vanishing with the tree.
   const countBadge = h("span", "console-log-runs__reopen-badge");
   // What the index is currently listing, held apart from the trail itself: switching the grouping
-  // repaints the tree alone, and re-rendering the whole surface for it would rebuild every section
+  // repaints the tree alone, and re-rendering the whole app for it would rebuild every section
   // and throw away the reader's scroll position and any payload they had expanded.
   let indexEvents: ActivityEvent[] = [];
   let indexSelect: (index: number) => void = () => {};
@@ -619,7 +619,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // keepIndex holds the event index open even though there is nothing to list. The refresh control
   // lives in that panel's header, and applyDefault(false) with hideWhenEmpty hides the panel AND its
   // reopen rail - so on a failure the one affordance that could retry goes away with the data, and
-  // this surface has no toolbar to fall back on. A cold or genuinely empty trail still collapses it.
+  // this app has no toolbar to fall back on. A cold or genuinely empty trail still collapses it.
   function showEmptyTrail(connText: string, keepIndex: boolean): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
@@ -721,10 +721,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    // adoptServerOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // adoptServerOrigin, not just consumeLiveToken. Each app is its own esbuild bundle, so
     // lib/server's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
     // does not make it true in here, and serverAttach then returns null on a console served by
-    // that very server. Without this the surface works only after the dashboard has persisted a
+    // that very server. Without this the app works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptServerOrigin();
     if (wantsDemo(params)) {

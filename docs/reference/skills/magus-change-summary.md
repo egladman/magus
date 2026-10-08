@@ -3,13 +3,13 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7179
-skill_short_bytes: 4923
+skill_full_bytes: 7178
+skill_short_bytes: 4922
 ---
 
 # magus-change-summary
 
-Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for "what's been merged lately?", "catch me up since last week", "add this to the CHANGELOG", and "what exactly did this branch change?" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.
+Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for "what's been merged lately?", "catch me up since last week", "add this to the CHANGELOG", and "what exactly did this branch change?" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus commands (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `113` |
+| `agent-skill-version` | `114` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `5c7d1e0a5be5` |
+| `skill-content` | `2ca18daf7755` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -119,7 +119,7 @@ and append under `## [Unreleased]`. Open with what a user can now do, then why i
 
 Write each entry to this checkable list:
 
-- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+- Name everything it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target.
 - Use Keep a Changelog's section headings: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Never invent one.
@@ -129,7 +129,7 @@ Write each entry to this checkable list:
 
 ## Answer a granular diff question
 
-For "what exactly changed in X", stay on magus surfaces.
+For "what exactly changed in X", stay on magus's own commands.
 
 | question | command |
 | --- | --- |
@@ -154,7 +154,7 @@ pieces:
 1. At review time: `magus vcs checkpoint -o name` prints the revision, or
    `<revision>+<digest>` when the tree was dirty.
 2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
-   changed file's reach, public-surface exposure, and referents. `magus diff` refuses a positional git ref on
+   changed file's reach, public API exposure, and referents. `magus diff` refuses a positional git ref on
    purpose; the pipe form is the sanctioned spelling.
 3. In a diff session, per-hunk viewed marks key off content digest, not position:
    unchanged stays marked, changed resurfaces.
@@ -279,7 +279,7 @@ and append under `## [Unreleased]`. For example:
 
 Write each entry to this checkable list:
 
-- Name every surface it adds: the config key WITH its env var, the CLI flag, the
+- Name everything it adds: the config key WITH its env var, the CLI flag, the
   diagnostic code, the target. A reader upgrades by searching for those strings.
 - Use Keep a Changelog's section headings: `Added`, `Changed`, `Deprecated`,
   `Removed`, `Fixed`, `Security`. Never invent one.
@@ -292,7 +292,7 @@ Write each entry to this checkable list:
 
 ## Answer a granular diff question
 
-For "what exactly changed in X", stay on magus surfaces: they
+For "what exactly changed in X", stay on magus's own commands: they
 classify and relate, where a raw diff only shows text.
 
 | question | command |
@@ -324,7 +324,7 @@ pieces:
    which dirty tree was reviewed, since the revision alone reads the same
    for every dirty tree built on it).
 2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
-   changed file's reach, public-surface exposure, and referents,
+   changed file's reach, public API exposure, and referents,
    the surrounding code worth a second look, not just the literal
    hunks. `magus diff` refuses a positional git ref on
    purpose; a swallowed ref once printed the reader's own edits

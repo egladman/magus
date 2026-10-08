@@ -3,8 +3,8 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10239
-skill_short_bytes: 6237
+skill_full_bytes: 10232
+skill_short_bytes: 6230
 ---
 
 # magus-test-design
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `113` |
+| `agent-skill-version` | `114` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `9141f0079ce1` |
+| `skill-content` | `6e01e650d37a` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -76,7 +76,7 @@ commit, or in CI.
 
 1. State the behavior as an observable contract: triggering input or event,
    expected result or state, and visible side effects.
-2. Discover the workspace's test surface before naming a target:
+2. Discover the workspace's tests before naming a target:
 
    ```sh
    magus describe targets -o name
@@ -224,7 +224,7 @@ commit, or in CI.
 
 1. State the behavior as an observable contract: triggering input or event,
    expected result or state, and visible side effects.
-2. Discover the workspace's test surface before naming a target:
+2. Discover the workspace's tests before naming a target:
 
    ```sh
    magus describe targets -o name

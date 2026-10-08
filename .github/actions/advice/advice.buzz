@@ -196,7 +196,7 @@ export fun diffRange(base: str, head: str) > str !> any {
 //
 // ON THE FORGE the checkout is CLEAN: a pull request's changes are commits, so the
 // working-tree default is empty and an advisor reading it reported nothing at all, on every
-// pull request, for as long as api-surface had existed. The range is what it has to read.
+// pull request, for as long as exported-api had existed. The range is what it has to read.
 //
 // LOCALLY the working tree is right and the range would be wrong: `magus diff --impact` is
 // run before committing, and the uncommitted edit IS the change its reader is weighing.

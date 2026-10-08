@@ -100,7 +100,7 @@ func TestDiffRunSubmitsADeclaredTarget(t *testing.T) {
 	assert.True(t, out.Started)
 }
 
-// TestDiffRunReportsAlreadyRunning covers the concurrency the surface has to be honest about:
+// TestDiffRunReportsAlreadyRunning covers the concurrency the client has to be honest about:
 // the reader may already be running this target in their own terminal. Starting a second one is
 // wrong, and so is a reply that looks like this request started it.
 func TestDiffRunReportsAlreadyRunning(t *testing.T) {
@@ -166,7 +166,7 @@ func TestDiffRunReportsNoVerdictAsUnknown(t *testing.T) {
 }
 
 // TestDiffRunSurfacesASubmitFailure: a server that cannot accept the work must say so, not
-// leave the surface polling a run that was never started.
+// leave the client polling a run that was never started.
 func TestDiffRunSurfacesASubmitFailure(t *testing.T) {
 	var submitted [][]string
 	h := newTestRunHandler(t, t.TempDir(), &submitted)

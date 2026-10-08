@@ -160,7 +160,7 @@ var affectedOnlyFlags = map[string]string{
 	// reader meets it. They were absent from this map while the comparison read
 	// run.go and affected.go as SOURCE: the scan looked only inside the affected
 	// function, so everything bound by affectedPlan, affectedImpact and bisect was
-	// invisible to it. Comparing the documented surfaces instead makes them visible,
+	// invisible to it. Comparing the documented flags instead makes them visible,
 	// which is the point: they are exceptions, not omissions.
 	"explain":             "mode selector: reports why a project is in the set instead of running",
 	"plan":                "mode selector: emits a CI shard plan for the affected set",

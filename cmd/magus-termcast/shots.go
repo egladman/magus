@@ -15,13 +15,13 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 )
 
-// The shots: magus's interactive terminal surfaces, rendered as stills for the
+// The shots: magus's interactive terminal views, rendered as stills for the
 // documentation.
 //
 // They are the deterministic sibling of the recorded session in main.go. Both
 // are right, for different subjects. The core loop is a sequence of commands
 // anyone can type, so recording it for real is the truthful thing to do. The
-// surfaces here are conditions (a run stalled on another process's lock, a
+// views here are conditions (a run stalled on another process's lock, a
 // target that failed, a prompt waiting on a choice), and staging those in a
 // real shell reliably enough to record is painful.
 //

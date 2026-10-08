@@ -2,7 +2,7 @@
 // test-setup.mjs (node --import), which is what the -dom suffix selects.
 //
 // Every bug this control can have is SILENT: a second stepper appears beside the first, or a
-// torn-down surface removes the live one. Nothing throws, so only a test catches it.
+// torn-down app removes the live one. Nothing throws, so only a test catches it.
 
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
@@ -42,11 +42,11 @@ test("mounting twice leaves ONE stepper, not a stack", () => {
   assert.equal(steppers(), 1);
 });
 
-test("a preempted surface cannot remove its successor\'s stepper", () => {
+test("a preempted app cannot remove its successor\'s stepper", () => {
   const first = mountZoomControl(opts());
   const second = mountZoomControl(opts());
   assert.equal(steppers(), 1, "the second mount preempted the first");
-  // The first surface tears down LATER, the way a backgrounded pane does.
+  // The first app tears down LATER, the way a backgrounded pane does.
   first?.remove();
   assert.equal(steppers(), 1, "the live stepper survives a late teardown from the old holder");
   second?.remove();
@@ -72,17 +72,13 @@ test("with no status bar there is nothing to dock into, and that is not a crash"
   assert.equal(mountZoomControl(opts()), null);
 });
 
-test("the readout reports the surface\'s own factor, and reset returns it to 100%", () => {
+test("the readout reports the app\'s own factor, and reset returns it to 100%", () => {
   const o = opts();
   const ctl = mountZoomControl(o);
   const readout = document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]');
   assert.equal(readout?.textContent, "100%");
   document.querySelector<HTMLElement>('.console-zoom [data-zoom="in"]')?.click();
-  assert.equal(
-    readout?.textContent,
-    "200%",
-    "the click drove the surface AND repainted the readout",
-  );
+  assert.equal(readout?.textContent, "200%", "the click drove the app AND repainted the readout");
   document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]')?.click();
   assert.equal(readout?.textContent, "100%");
   // A change made by any other route - a command, ctrl+wheel - is reflected through sync().

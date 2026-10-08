@@ -1,6 +1,6 @@
 ---
 title: Jobs and leases
-description: The surface magus gives an agent that fans work out (the working-state checkpoint, the declared job store, the lease a holder takes on a job, the console Jobs view, the recorded spawn, and verifying a result against the diff since the checkpoint).
+description: What magus gives an agent that fans work out (the working-state checkpoint, the declared job store, the lease a holder takes on a job, the console Jobs view, the recorded spawn, and verifying a result against the diff since the checkpoint).
 tags:
   [
     agents,
@@ -21,7 +21,7 @@ aliases: [guides/integrations/agents/delegation]
 One agent hands work to several. magus neither runs that fan-out nor polices
 it. It answers what the working state is, records what the orchestrating agent
 says it intends, and shows a person the result: the same rule the rest of the
-[agent surface](../agents.md) obeys, where answering is the tool's job and
+[agent integration](../agents.md) obeys, where answering is the tool's job and
 deciding is the model's.
 
 Two nouns, and the difference decides how everything below reads. A **job** is
@@ -33,10 +33,10 @@ took it. A job is the thing; a lease is permission over it.
 How to split the work is not on this page. That is the
 [`magus-multi-agent` skill](../../../reference/skills/magus-multi-agent.md):
 partition by write set rather than by affected project, prove the jobs cannot
-collide, narrow the scope at every level, match a model to each job. This page is the surface
+collide, narrow the scope at every level, match a model to each job. This page covers what
 that skill writes to and reads from.
 
-| step                      | surface                                                   |
+| step                      | what you run                                              |
 | ------------------------- | --------------------------------------------------------- |
 | Record the working state  | `magus vcs checkpoint`, `client` (`magus\vcs.checkpoint`) |
 | Declare the work          | `magus job fork`, `client` (`magus\job.put`)              |
@@ -764,7 +764,7 @@ person, which is why a row that has merely gone quiet is a job YOU decide is
 possibly dead.
 
 The service behind it is `magus.job.v1alpha1.JobService`, the server's one
-mutating console surface, mounted behind the same loopback bind and bearer token
+mutating console service, mounted behind the same loopback bind and bearer token
 as everything else. Start it with `magus server start`; see
 [the server](../server.md). `magus server status` prints the mcp and console
 URLs, and says so explicitly when the server predates the tree, because every
@@ -809,7 +809,7 @@ into something you can check.
 1. Diff the actual tree against the job's checkpoint, and compare THAT against
    the row's write and deny paths. `magus graph diff --rev <revision>` gives the
    domain-level answer; `git diff <revision> | magus diff -` annotates each
-   changed file with its reach, public-surface exposure, and referents. See
+   changed file with its reach, public-API visibility, and referents. See
    [`magus diff`](../../../reference/manpage/magus-diff.md): it refuses a git ref
    given positionally, so the pipe is the sanctioned spelling.
 2. Check the dirty half of the token. A checkpoint whose digest differs from the
@@ -844,6 +844,6 @@ review back up read the same identity.
   agent or the person that put it there.
 - Judge a delegation prompt, or let one change a guard verdict.
 - Mint anything for a checkpoint: no tag, no stash, no ref, no file.
-- Inject any of this into an agent's context. Every surface here is pull-based,
+- Inject any of this into an agent's context. Everything here is pull-based,
   and the [knowledge graph](../../../concepts/knowledge.md) the partition is
   argued from is read the same way.

@@ -4,9 +4,9 @@
 // Chromium fires `beforeinstallprompt` ONCE, early in the page's life, and only if the page is not
 // already installed and meets the install criteria. Nothing may prompt from that handler - the whole
 // point of preventDefault()ing it is to defer the offer to a moment the operator chose. So the event has
-// to be caught at SHELL BOOT and stashed; a listener added later (when the Settings surface mounts, long
+// to be caught at SHELL BOOT and stashed; a listener added later (when the Settings app mounts, long
 // after load) is registered for an event that has already been and gone. The shell therefore creates this
-// store at boot and hands it to the Settings surface as a dep.
+// store at boot and hands it to the Settings app as a dep.
 //
 // The captured event is SINGLE-USE. prompt() may be called on it exactly once; a second call throws, so a
 // dismissed offer cannot be re-raised from the page. The browser re-fires the event on a later navigation
@@ -15,7 +15,7 @@
 //
 // Firefox and Safari implement no part of this. They are not failures to report - Safari has a real
 // manual route (Share > Add to Home Screen on iOS, File > Add to Dock on macOS) - so the store reports
-// "manual" and the surface prints the route instead of a dead button.
+// "manual" and the app prints the route instead of a dead button.
 
 // The Chromium-only event. Not in lib.dom, so it is declared here rather than cast at each use.
 export interface BeforeInstallPromptEvent extends Event {
@@ -33,7 +33,7 @@ export type InstallState = "installed" | "ready" | "dismissed" | "manual" | "pen
 
 export type PromptOutcome = "accepted" | "dismissed" | "unavailable";
 
-// The browser surface the store depends on, injected so the store is exercised without a DOM.
+// The browser API the store depends on, injected so the store is exercised without a DOM.
 export interface InstallHost {
   on(type: string, fn: (ev: Event) => void): void;
   // Already running as an installed app: a standalone-family display mode, or iOS's own flag.

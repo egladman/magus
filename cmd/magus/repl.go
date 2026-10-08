@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/langservice"
 )
 
-// buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile surface
+// buzzRepl opens the REPL behind a bare `magus buzz`: the full magusfile API
 // (host modules, the magus.* namespace, spell and project imports), with the
 // magusfile at cwd executed on start so its targets and locals are there to poke
 // at. There is no second, magusfile-less REPL and no flag to ask for this one:

@@ -26,15 +26,15 @@ not cover, and the mechanisms that make it checkable rather than aspirational.
 
 ## The three contracts
 
-"Compatibility" is not one promise, because magus has three surfaces with three
-different consumers and three different ways to break. Keeping them separate is
-what makes each one answerable.
+"Compatibility" is not one promise, because magus has three compatibility gates
+with three different consumers and three different ways to break. Keeping them
+separate is what makes each one answerable.
 
-| Contract                   | The consumer                            | How it breaks                             | The mechanism                                          |
-| -------------------------- | --------------------------------------- | ----------------------------------------- | ------------------------------------------------------ |
-| magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts | additive-only keys, plus a declared version floor      |
-| the CLI surface            | your shell scripts and CI configuration | a removed flag, a changed output format   | a drift-gated `api.lock` snapshot of the whole surface |
-| the server wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint`   |
+| Contract                   | The consumer                            | How it breaks                             | The mechanism                                        |
+| -------------------------- | --------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts | additive-only keys, plus a declared version floor    |
+| the CLI                    | your shell scripts and CI configuration | a removed flag, a changed output format   | a drift-gated `api.lock` snapshot of the whole CLI   |
+| the server wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint` |
 
 The promise is the same for all three. The mechanisms differ because the ways
 they break differ.
@@ -73,8 +73,8 @@ carries a `go` directive. magus does the same thing with a
 **Behavior a bug produced.** If magus computed a cache key wrongly, the fix
 changes the key. Depending on a defect is not depending on a contract.
 
-**Anything explicitly marked experimental.** A surface documented as experimental
-may change or disappear. It has to say so where you meet it, not only in release
+**Anything explicitly marked experimental.** A command, key or API documented as
+experimental may change or disappear. It has to say so where you meet it, not only in release
 notes.
 
 ## Before 1.0
@@ -88,7 +88,7 @@ may be renamed, a flag may be dropped, a message may be restructured, and the
 changelog says so under **Breaking**.
 
 Practically, that means the run-up to 1.0 includes a deliberate pass over the
-whole surface (every `magus\project` key, every CLI flag, every config field),
+public names (every `magus\project` key, every CLI flag, every config field),
 asking whether each name is one worth keeping forever. Any rename that pass wants
 has to happen before 1.0 or never.
 
@@ -149,10 +149,10 @@ Anything older is asked to upgrade rather than accommodated.
 Nothing is removed within a major version, so deprecation means "there is a better
 way now", never "this stops working soon".
 
-A deprecated surface keeps working, says what replaced it at the point of use
+A deprecated name keeps working, says what replaced it at the point of use
 rather than only in a document, and is listed in the changelog under
 **Deprecated**. Removal waits for a major version, and since there is no plan for
-a 2.0, the honest reading is that a deprecated surface stays until there is a
+a 2.0, the honest reading is that a deprecated name stays until there is a
 reason strong enough to justify the first one.
 
 ## Why no 2.0
@@ -164,7 +164,7 @@ version since 2012 and treats a 2.0 as effectively out of the question; the
 constraint is what produced the stability, not a consequence of it.
 
 The cost is real and worth naming: every addition is permanent, so the bar for
-adding surface is high, and some things stay slightly wrong forever because
+adding to the public API is high, and some things stay slightly wrong forever because
 fixing them would cost more than living with them. That trade is made on purpose.
 An occasional awkward name is cheaper than a migration every user has to perform.
 

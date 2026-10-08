@@ -17,7 +17,7 @@ import (
 // later, docs and buzz source nodes). Every node and edge is EXTRACTED or
 // rubric-INFERRED from parseable workspace sources; nothing here is LLM-authored
 // or otherwise unverifiable. These are pure domain types (stdlib-only leaf); the
-// builder lives in internal/graph/knowledge and the CLI surface in cmd/magus.
+// builder lives in internal/graph/knowledge and the CLI in cmd/magus.
 
 // KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.
 // External consumers (agent skills, MCP tools, other tools reading the node-link
@@ -91,7 +91,7 @@ const (
 	// bound to a host module, a function is authored in Buzz, a symbol comes from SCIP.
 	// They never overlap (SCIP does not index .buzz), so a definition lands in exactly one.
 
-	KindMethod     = "method" // a callable bound to a host module (fs.stat): magus's built-in API surface
+	KindMethod     = "method" // a callable bound to a host module (fs.stat): magus's built-in API
 	KindDiagnostic = "diagnostic"
 	KindDoc        = "doc"        // markdown doc page (phase 4)
 	KindDocSection = "docsection" // a heading within a doc page; the graph's retrieval unit for prose

@@ -284,7 +284,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// its map so buildStep can fold them straight into the key. An odd
 							// literal count means a key whose value the static read could not
 							// pair (an observation in the source that contributes nothing to
-							// the key, which is the under-declaration this whole surface exists
+							// the key, which is the under-declaration this whole check exists
 							// to reject), so trip the same guard a computed argument trips, and
 							// record NOTHING: pairing what is left over invents observations
 							// from a list magus has just said it cannot read.
@@ -576,7 +576,7 @@ type spellHit struct {
 }
 
 // ctxCall reports whether e is a ctx.<name>(...) call, a target declaring through the
-// magus.Context it received (ctx.needs, ctx.glob). The declaration surface lives only on
+// magus.Context it received (ctx.needs, ctx.glob). The declaration API lives only on
 // the context, read here statically off the source text so the graph never runs a body.
 func ctxCall(e *ast.CallExpr, name string) bool {
 	me, ok := e.Callee.(*ast.MemberExpr)
@@ -587,7 +587,7 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 	return ok && id.Name == "ctx"
 }
 
-// ctxDeclNames is the ctx declaration surface in one place: the static reader, the
+// ctxDeclNames is the ctx declaration members in one place: the static reader, the
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
@@ -612,7 +612,7 @@ func CtxDeclNames() []string {
 var ctxExecNames = map[string]bool{"withEnv": true, "withCwd": true}
 
 // flagDynamic records that a declaration named `kind` carried something the static read
-// could not attribute, split by which half of the surface it belongs to. The two halves
+// could not attribute, split by which half of the ctx members it belongs to. The two halves
 // earn different treatment, and no condition over runtime policy can tell them apart:
 // policy is only loaded on the CLI path, so scoping on it made a bare library caller's
 // magus.Open reject a magusfile the CLI accepts.

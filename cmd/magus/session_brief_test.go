@@ -119,7 +119,7 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 }
 
 // The gather, against a checkout on disk. Every section it fills here is read out of
-// a file this test wrote, which is the property the whole surface rests on: a brief
+// a file this test wrote, which is the property the whole command rests on: a brief
 // that could be produced without the checkout would be a summary again.
 func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	testkit.Isolate(t)

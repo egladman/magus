@@ -450,7 +450,7 @@ func ruleLocations(ctx context.Context, root string, wired ...string) []string {
 }
 
 // relativeTo renders absolute paths inside root as workspace-relative ones, which is
-// the spelling every other magus surface prints and takes back.
+// the spelling every other magus command prints and takes back.
 func relativeTo(root string, paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {

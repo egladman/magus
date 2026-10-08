@@ -1,4 +1,4 @@
-// main.ts - the console's Notes surface: the workspace's human-authored notes, both the
+// main.ts - the console's Notes app: the workspace's human-authored notes, both the
 // shared store in the checkout and the private one on this machine, separated by scope so a
 // reader never has to guess who else can see a note.
 //
@@ -7,9 +7,9 @@
 // corroborates it later, so its only provenance is the person who wrote it. A browser edit
 // would put an unattributable author on that store, so the way in stays `magus notes edit` -
 // an editor, and a commit under the author's name. NotesService has no Update and no Delete to
-// call even if this surface wanted one.
+// call even if this app wanted one.
 //
-// Read-only makes the surface's whole job TRIAGE: which note do I need, is it still true, and
+// Read-only makes the app's whole job TRIAGE: which note do I need, is it still true, and
 // what do I type when I am back at a keyboard. That is why it is a filtered list against a
 // reading pane rather than a gallery of cards - a card that shows a note's path, its anchors
 // and its edit command spends more room on the metadata than on the title, and the prose the
@@ -53,7 +53,7 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 import { demoNotes } from "./demo";
 import { parseTranscript, type Transcript } from "./transcript";
 import { renderMarkdown } from "./markdown";
@@ -121,7 +121,7 @@ interface Refs {
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or null when absent. A note
 // whose store could not stat it has no modify time, and inventing one would put a freshness
-// claim on the surface that nothing measured.
+// claim on the app that nothing measured.
 function tsMillis(t: Timestamp | undefined): number | null {
   if (!t) return null;
   return Number(t.seconds) * 1000 + Math.floor(t.nanos / 1e6);
@@ -231,9 +231,9 @@ function copyRow(value: string, what: string): HTMLElement {
   return row;
 }
 
-// buildScaffold assembles the surface: a filtered list beside a reading pane, over a PF
+// buildScaffold assembles the app: a filtered list beside a reading pane, over a PF
 // EmptyState for the cold case. The panel root keeps its own class rather than the log viewer's
-// `.console-render-panel`, and console.css's fill chain names it alongside the other surface
+// `.console-render-panel`, and console.css's fill chain names it alongside the other app
 // roots.
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-notes-app");
@@ -245,12 +245,12 @@ function buildScaffold(host: HTMLElement): Refs {
   bar.dataset.controlSize = "default";
   // PF FormControl is a WRAPPER plus an input, and `__text` alone styles nothing: the field
   // was rendering as a bare native input, which is why it had square corners and a 2px inset
-  // border while every other control on the surface was rounded.
+  // border while every other control on the app was rounded.
   const searchWrap = h("span", "pf-v6-c-form-control console-notes-app__search");
   const search = h("input", "pf-v6-c-form-control__text") as HTMLInputElement;
   search.type = "search";
   // Says what the field does AND teaches the non-obvious half: you can find a note by the code
-  // it annotates, not only by its own words. "anchor" is the surface's word for that and it is
+  // it annotates, not only by its own words. "anchor" is the app's word for that and it is
   // opaque on first contact, so the placeholder spends its characters on the capability and
   // leaves the vocabulary to the detail pane, which has room to label it.
   //
@@ -259,7 +259,7 @@ function buildScaffold(host: HTMLElement): Refs {
   // reader has not opened.
   search.placeholder = "Filter notes, or the code they are about";
   search.setAttribute("aria-label", "Filter notes by title, tag or anchor");
-  // ONE bar across the whole surface rather than one per pane. The filter sits at the left and
+  // ONE bar across the whole app rather than one per pane. The filter sits at the left and
   // the open note's scope badge at the right, and because it spans both columns there is no
   // second header to keep level with it - two of them drifted 29px apart, which is the kind of
   // alignment that is easier to delete than to maintain.
@@ -314,15 +314,15 @@ function buildScaffold(host: HTMLElement): Refs {
   };
 }
 
-// activate builds the surface into host, loads once, and returns a teardown. Every async load
+// activate builds the app into host, loads once, and returns a teardown. Every async load
 // checks `stale` before touching the DOM, so a load that resolves after the tab closed is
 // dropped.
 //
-// Returns the console's surface shape (page.ts): a teardown plus setVisible, so the shell can tell
-// this pane when it stops being the visible one. Every surface hands back this shape rather than a
-// bare teardown - a surface with nowhere to put the hook is how the log viewer came to write a
+// Returns the console's app shape (page.ts): a teardown plus setVisible, so the shell can tell
+// this pane when it stops being the visible one. Every app hands back this shape rather than a
+// bare teardown - an app with nowhere to put the hook is how the log viewer came to write a
 // backgrounded tab's status bar.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   const refs = buildScaffold(host);
   let stale = false;
 
@@ -605,7 +605,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     target.append(document.createTextNode((ANCHOR_KIND_NAME[a.kind] ?? "anchor") + " " + a.target));
     if (a.detail) target.append(h("small", "console-notes-app__anchor-detail", a.detail));
     // The node id is the handle a reader carries to the Graph Explorer by hand. It is text and
-    // not a link because cross-surface navigation carries a pageId and nothing else today, so a
+    // not a link because cross-app navigation carries a pageId and nothing else today, so a
     // link would have to invent a contract this change has no business inventing.
     if (a.nodeId) target.append(h("small", "console-notes-app__anchor-detail", a.nodeId));
     row.append(target);
@@ -734,7 +734,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // loadDemo renders invented notes. The disclosure that they ARE invented is not optional -
   // authorship is the entire claim a note makes, and sample prose passing as something a colleague
-  // wrote is the one lie this store cannot survive - but this surface no longer carries it. Demo
+  // wrote is the one lie this store cannot survive - but this app no longer carries it. Demo
   // mode is entered through the Workspace menu, which sets #demo, and the shell's connection dot
   // reads "demo" off that fragment for as long as it is set, on this tab and every other.
   function loadDemo(): void {
@@ -747,10 +747,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
-    // adoptServerOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // adoptServerOrigin, not just consumeLiveToken. Each app is its own esbuild bundle, so
     // lib/server's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
     // does not make it true in here, and serverAttach then returns null on a console served by
-    // that very server. Without this the surface works only after the dashboard has persisted a
+    // that very server. Without this the app works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptServerOrigin();
     if (wantsDemo(params)) {

@@ -3,7 +3,7 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 14447
+skill_full_bytes: 14466
 skill_short_bytes: 10345
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `113` |
+| `agent-skill-version` | `114` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `8ee868c0690a` |
+| `skill-content` | `d091c8f52025` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -276,7 +276,7 @@ magus keeps a deterministic, cache-backed graph of its own domain. Query it to f
 and relate entities instead of grepping source. This skill teaches HOW to use
 the tools; the verbs below say WHAT is in this specific workspace. The division is
 strict, so this skill never goes stale when a workspace changes, only when the
-tool surface does.
+tool set does.
 
 FAST PATH: in a magus workspace (a magusfile.buzz at the root), ask the graph FIRST.
 That covers "what exists", "what depends on X", "where is Y used", and "how do A and
@@ -487,8 +487,8 @@ declared CODEOWNERS ownership appears; it is not blame-inferred.
 ## What other sessions already did here
 
 Agents before you left a record. Where a workspace declares a session adapter,
-`magus graph build` folds each host's transcripts into a local store, and two
-surfaces read it back:
+`magus graph build` folds each host's transcripts into a local store, and
+`magus explain` and `magus session` read it back:
 
 - `magus explain <node>` ends with an `agent sessions:` line when any loaded session
   touched that file: reads, writes, distinct sessions, how long ago, and any write

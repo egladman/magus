@@ -7,7 +7,7 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
-import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, surfaceLink } from "../../lib/server";
+import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, appLink } from "../../lib/server";
 import { notify, matchAuthorMarker, undeclaredSeedNotice } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
@@ -16,13 +16,13 @@ import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
 import { buildModelMulti } from "./model";
 import { graphAvailable } from "./share";
 import { render, updateTimelineControl } from "./render";
-import { FrameScheduler } from "../../desktop/surface-runtime";
+import { FrameScheduler } from "../../desktop/app-runtime";
 import { publishStatus } from "../../desktop/status";
 
 // How many live events the tail keeps. The buffer was unbounded, and scheduleLiveRender
 // rebuilds the whole model from every event held and re-appends every node on each animation
 // frame - O(n) per frame over a growing n, so O(n^2) across a stream. A chatty run reached a
-// few thousand lines and the tab stopped responding, which is precisely the surface's job.
+// few thousand lines and the tab stopped responding, which is precisely the app's job.
 // Capping the retained tail bounds the per-frame cost instead of letting it climb with the run.
 //
 // Dropping the head is the right trade for a TAIL: what is on screen and what is arriving stay
@@ -88,7 +88,7 @@ function onLiveEvent(type: string, data: string): void {
   if (ev.kind === Kind.STARTED && ev.command) state.liveInvocation = { command: ev.command };
   // A target that FAILED in the live stream is a bell-tier event: keyed on its output ref and shared
   // with the dashboard's failure detection (both use "fail:<ref>"), so a failure observed by either
-  // surface records exactly ONE notification. This path is live-only (the #demo reveal does not run
+  // app records exactly ONE notification. This path is live-only (the #demo reveal does not run
   // onLiveEvent), so the demo never lights the bell. The failing output is right here in the stream, so
   // it deep-links back to that ref for when the reader had this tab backgrounded.
   if (ev.kind === Kind.RESULT && ev.status === Status.FAIL && ev.ref) {
@@ -106,13 +106,13 @@ function onLiveEvent(type: string, data: string): void {
   }
   // The run's scope frame carries the projects it selected on files nothing declares (MGS1028). It rides
   // the same stream as the FAIL above rather than a channel of its own, and the tier is decided by
-  // undeclaredSeedNotice off the split magus already made, so this surface holds no opinion about which
+  // undeclaredSeedNotice off the split magus already made, so this app holds no opinion about which
   // undeclared file is a build input. The deep-link is the diff filtered to unclaimed files, which is
   // where those files can be looked at and declared.
   if (ev.kind === Kind.SCOPE && ev.undeclared.length > 0) {
     const input = undeclaredSeedNotice(
       ev.undeclared,
-      surfaceLink("diff", liveNotifyHost, { role: "unclaimed" }),
+      appLink("diff", liveNotifyHost, { role: "unclaimed" }),
     );
     if (input) notify(input);
   }
@@ -161,16 +161,16 @@ export function scheduleLiveRender(): void {
 
 // The console detaches a backgrounded tab's status bar, so these getElementById lookups resolve to
 // the ACTIVE tab's bar - a log viewer streaming in the background would write its "connected / N
-// events" into whatever surface the reader is actually looking at. page.ts states the rule; the
-// dashboard already follows it, and this is the other surface that writes the shared bar.
+// events" into whatever app the reader is actually looking at. page.ts states the rule; the
+// dashboard already follows it, and this is the other app that writes the shared bar.
 //
 // lastLinkState replays on return, so the bar catches up rather than showing whatever it held when
 // the tab went away.
-let surfaceHidden = false;
+let appHidden = false;
 let lastLinkState: string | null = null;
 
 export function setLiveVisible(visible: boolean): void {
-  surfaceHidden = !visible;
+  appHidden = !visible;
   liveFrame.setVisible(visible);
   if (visible && lastLinkState) setLiveStatus(lastLinkState);
 }
@@ -181,7 +181,7 @@ export function cancelLiveRender(): void {
 
 export function setLiveStatus(linkState: string): void {
   lastLinkState = linkState;
-  if (surfaceHidden) return;
+  if (appHidden) return;
   // Drive the shared console status bar's connection dot (the same element the dashboard uses), so
   // the log viewer reads the same as its sibling apps. A live stream is "connected" (green) with the
   // event count; a finished stream is "done" (still green - it completed cleanly); connecting/

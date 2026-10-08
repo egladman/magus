@@ -1,4 +1,4 @@
-// attention-dom.test.ts - the attention hero's failure surface: which targets are failing, what you
+// attention-dom.test.ts - the attention hero's failure readout: which targets are failing, what you
 // can do about each one, and the commands offered for doing it.
 //
 // These are pinned by test rather than by looking at the board because a failure is INTERMITTENT in

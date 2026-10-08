@@ -19,7 +19,7 @@ import (
 // stream and the base64-SSE stream reflect pool changes at the same granularity.
 const defaultStreamInterval = 2 * time.Second
 
-// ConnectService is the typed Connect surface over the SAME live status report the base64-SSE status
+// ConnectService is the typed Connect service over the SAME live status report the base64-SSE status
 // frame serves. It is the full replacement for the removed hand-shaped JSON /api/v1/status route:
 // the dashboard reads a single typed message (magus.status.v1alpha1.Status, plus observing_since and config on
 // the GetStatus envelope) instead of parsing JSON. Read-only: it only reports, never mutates.

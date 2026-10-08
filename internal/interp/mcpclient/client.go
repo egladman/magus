@@ -23,7 +23,7 @@ import (
 
 const (
 	// WorkerEnv selects this worker before CLI startup. Setting it can only
-	// narrow the process to the client surface.
+	// narrow the process to client mode.
 	WorkerEnv = "MAGUS_MCP_CLIENT"
 	// LeaseEnv carries the MCP caller's job lease into the forked worker. An
 	// empty value is a stamped absence: the worker must not inherit the server

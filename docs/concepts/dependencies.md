@@ -294,7 +294,7 @@ call of nothing but negations is an error.
 
 ### Globs, not regexes
 
-The pattern surface is glob. Every pattern is `QuoteMeta`'d before `*` is
+The pattern syntax is glob. Every pattern is `QuoteMeta`'d before `*` is
 translated, so an authored regex is matched as literal text: `"^(?!site-).*-generate$"`
 matches a target with that exact name, which is to say nothing. Two reasons it
 stays that way. A pattern that is sometimes glob and sometimes regex has no safe

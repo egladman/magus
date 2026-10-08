@@ -105,7 +105,7 @@ run `magus buzz lsp`, stdio transport, `buzz` documents.
 
 The server is scoped to the three edit-time features above. It does not publish
 diagnostics, format on save, or resolve cross-file go-to-definition. For those,
-reach for the run-time surfaces: `magus doctor` for workspace health, `magus
+reach for the run-time commands: `magus doctor` for workspace health, `magus
 describe` to preview a resolved target or command, and `magus buzz -t` to run a
 spell's test blocks (see [spells.md](../../concepts/spells.md)).
 

@@ -26,17 +26,17 @@ import (
 // every line it had.
 const pickerRules = 2
 
-// SelectMark is the glyph every interactive surface uses to show which row a
+// SelectMark is the glyph every interactive view uses to show which row a
 // keypress or a click will act on.
 //
-// One constant rather than one per surface: the picker and the run's failure
+// One constant rather than one per view: the picker and the run's failure
 // band are two lists a reader learns to drive the same way, and they were
 // marking the current row with different characters, so the same gesture
 // looked like a different affordance depending on which one was open. A ">" is
 // a keyboard character standing in for a pointer; a triangle IS one, and it
 // belongs to the same geometric family as the pool gauge's squares.
 //
-// The glyph only. Each surface pads it to whatever its own row shape needs.
+// The glyph only. Each view pads it to whatever its own row shape needs.
 const SelectMark = "\u25b8"
 
 // pickerHint is the way out, drawn on the prompt line. Short enough to sit
@@ -83,7 +83,7 @@ type PickOptions struct {
 //
 // Takes its descriptors and probe like every other entry point in this package
 // rather than reaching for os.Stdin and os.Stderr itself. It was the one
-// interactive surface a test could not redirect, which is exactly backwards for
+// interactive view a test could not redirect, which is exactly backwards for
 // the one that reads keys.
 func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []string, opts PickOptions) (int, error) {
 	if len(items) == 0 && opts.Query == nil {
@@ -151,7 +151,7 @@ func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []stri
 			}
 			// Left button only, which also means the WHEEL is left alone. The
 			// wheel is how a reader scrolls their own transcript, and magus
-			// does not take it on any surface: a picker that swallowed it
+			// does not take it in any view: a picker that swallowed it
 			// would break scrollback for the seconds it is open, which is the
 			// behavior that makes other tools unusable inside tmux.
 			if !ev.Press || ev.Button != MouseLeft {
@@ -213,7 +213,7 @@ func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []stri
 // RenderPick returns the block a picker WOULD draw for the given state, without
 // opening a terminal or running an input loop.
 //
-// For the documentation renderer, which publishes pictures of this surface: a
+// For the documentation renderer, which publishes pictures of this picker: a
 // hand-written imitation drifts from the real thing silently, and the drift
 // gate cannot see it because it compares the renderer against itself. Driving
 // the real composition means a change to the picker's frame shows up in the
@@ -354,7 +354,7 @@ func (s *session) frame() string {
 	// The SAME box the run's pinned band draws, from the same functions.
 	//
 	// The picker used to be a bare list with its hint jammed onto the prompt
-	// row, which made two surfaces a reader drives identically look like two
+	// row, which made two views a reader drives identically look like two
 	// different products. Position still differs on purpose (this is drawn
 	// where the cursor is, because `magus x` is a command you type and its list
 	// belongs where you typed it), but the LOOK does not.

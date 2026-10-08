@@ -53,7 +53,7 @@ export function initAppMenu(items: readonly AppMenuItem[]): void {
     else if (restoreFocus) btn.focus();
   };
 
-  // The row itself opens the surface as a tab. dispatchCommand (not a threaded-in callback) because
+  // The row itself opens the app as a tab. dispatchCommand (not a threaded-in callback) because
   // main.ts's open() is a closure inside startConsole; console.open.* is its registered seam, and it is
   // single-instance, so picking an already-open app focuses its tab instead of duplicating it.
   for (const item of panel.querySelectorAll<HTMLElement>("[data-app-open]")) {

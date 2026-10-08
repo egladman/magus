@@ -71,7 +71,7 @@ export interface ActivityRow {
 
 // RunDescriptor mirrors one row of the server's GET /api/v1/outputs JSON. It is the same wire DTO
 // the log viewer's run browser reads (logs/runtree.ts's RunSummary), redeclared rather than imported:
-// each console surface is its own bundle, and reaching across for an eight-field interface would pull
+// each console app is its own bundle, and reaching across for an eight-field interface would pull
 // the run browser's module into the shell to get it. timestamp_ms is when the run FINISHED (the cache
 // stamps the descriptor as it records the output), so its age reads as "how long ago this ran".
 export interface RunDescriptor {
@@ -95,7 +95,7 @@ function finite(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-// wireDescriptors maps the ViewerService feed onto the rows this panel and the plan surface both
+// wireDescriptors maps the ViewerService feed onto the rows this panel and the plan app both
 // render. Both work in unix millis, which is the unit the store itself records.
 export function wireDescriptors(outputs: readonly Output[]): RunDescriptor[] {
   return outputs.map((o) => ({
@@ -208,7 +208,7 @@ export interface ActivityDrawer {
 }
 
 // mountActivityDrawer builds the singleton drawer (hidden) once and returns its controller. The shell
-// wires the status-bar activity button (rebuilt per surface) to toggle() through one delegated click,
+// wires the status-bar activity button (rebuilt per app) to toggle() through one delegated click,
 // exactly as it does for the share panel.
 export function mountActivityDrawer(): ActivityDrawer {
   const panel = document.createElement("section");

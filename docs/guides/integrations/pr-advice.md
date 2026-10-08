@@ -132,7 +132,7 @@ files.
 | `trusted-script-moved` | the change renames or removes a script a job runs from a default-branch checkout, which breaks that job on the pull request or after the merge           |
 | `conformance`          | a new target, or a symbol the change adds, renames or re-signs, departs from what the rest of the workspace does with the same work or declaration       |
 | `missing-target`       | the change adds a project, or drops a target, leaving it short of one its kind overwhelmingly has                                                        |
-| `api-surface`          | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
+| `exported-api`         | the change touches symbols reachable outside the project that defines them, and with a `baseline`, what it did to each and the smallest bump that proves |
 | `first-contribution`   | the author has no merged pull request here yet                                                                                                           |
 | `merge-queue`          | off by default; the pull request is approved and could join `magus queue` but has not, naming the label and the methods the provider allows              |
 
@@ -213,7 +213,7 @@ says so and fails its step. It never reads as a change with nothing to report. T
 the advisors therefore needs cache writes on (`MAGUS_CACHE_WRITE_ENABLED: 'true'`); without a
 signing key that still publishes nothing to a shared cache.
 
-A `baseline` sharpens this half as it sharpens `api-surface`. With one, what the change
+A `baseline` sharpens this half as it sharpens `exported-api`. With one, what the change
 adds, renames and re-signs is read from the two indexes. Without one it is read from the
 change's own patch: a symbol is new when its definition line is an added line that no
 removed line in the patch names, and a re-signed symbol is not compared at all. When the
@@ -222,7 +222,7 @@ reporting less.
 
 ## The bump is a floor
 
-`api-surface` takes a `baseline`: a `magus graph export --symbols -o json` of the revision
+`exported-api` takes a `baseline`: a `magus graph export --symbols -o json` of the revision
 the pull request started from. With one, it compares every changed symbol against its base
 and reports what the change did to it (added, removed, re-signed, or changed in the body)
 and the semver bump that evidence proves.

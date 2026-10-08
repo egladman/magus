@@ -308,7 +308,7 @@ function parse(toks: Token[]): QueryNode | null {
 // The raw token stream for a query. Exported so a consumer can render a chip preview (the
 // fields, phrases, brackets, and connectives the user typed) without re-implementing the lexer.
 // The parsed AST stays module-internal - no consumer reads it - so it never leaks the private
-// QueryNode type through the public surface.
+// QueryNode type through the public API.
 export function buildQuery(raw: string): Token[] {
   return tokenize(raw);
 }

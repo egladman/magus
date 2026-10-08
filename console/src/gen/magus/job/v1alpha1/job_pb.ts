@@ -2,7 +2,7 @@
 // @generated from file magus/job/v1alpha1/job.proto (package magus.job.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL surface: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL service: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
@@ -47,7 +47,7 @@ export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   invocationId: string;
 
   /**
-   * Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+   * Where to watch this job: the console's runs app scoped to invocation_id. A PATH,
    * not an absolute URL, because the reader is the console itself and resolves it against
    * its own origin. Empty only when the server coalesced a submit it could not name, since
    * a run with no invocation has nothing to link to.
@@ -645,8 +645,8 @@ export const JobHolderSchema: GenEnum<JobHolder> = /*@__PURE__*/
   enumDesc(file_magus_job_v1alpha1_job, 1);
 
 /**
- * JobService is the server's control surface for background maintenance jobs. Trigger RPCs
- * submit a job and return immediately; ListJobs reports every job's state. Read surfaces stay on
+ * JobService is the server's control service for background maintenance jobs. Trigger RPCs
+ * submit a job and return immediately; ListJobs reports every job's state. Reads stay on
  * the per-domain services - this one only mutates.
  *
  * @generated from service magus.job.v1alpha1.JobService

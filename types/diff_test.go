@@ -191,7 +191,7 @@ func TestPermittedVerdictTreatsUnknownAuthorshipAsUnsafe(t *testing.T) {
 }
 
 // TestPermittedVerdictLeavesARemarkAlone: asking for the thing you got is not a
-// downgrade, and reporting one would make the surface announce a refusal that never happened.
+// downgrade, and reporting one would make the client announce a refusal that never happened.
 func TestPermittedVerdictLeavesARemarkAlone(t *testing.T) {
 	// An unrecognized word lands here too, which is what makes the handler's unchecked
 	// conversion from client input safe: only the two asserting words can ever assert.

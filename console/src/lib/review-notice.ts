@@ -1,7 +1,7 @@
 // review-notice.ts - one sentence, offered when a review has landed with a conversation on it.
 //
-// It lives in lib/ rather than beside the diff surface because TWO things ask the question and they
-// are in different bundles: the Diff surface when you open it on a merged review, and the shell's
+// It lives in lib/ rather than beside the diff app because TWO things ask the question and they
+// are in different bundles: the Diff app when you open it on a merged review, and the shell's
 // watcher when a review you took part in lands while you are elsewhere. The rule that decides
 // whether to say anything is the design, not an implementation detail of either one, and two copies
 // of it would drift the moment somebody tuned the wording.
@@ -23,7 +23,7 @@ export function saidNotice(repo: string, count: number): string {
     : `${count} new remarks${where} are waiting for you.`;
 }
 
-// MergedReview is the little of a review this needs. Structural, so the Diff surface's fuller
+// MergedReview is the little of a review this needs. Structural, so the Diff app's fuller
 // ReviewInfo satisfies it without lib/ having to know that type exists.
 export interface MergedReview {
   readonly repo?: string;

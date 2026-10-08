@@ -32,7 +32,7 @@ import (
 )
 
 // Modules is the single source of truth for the modules gopherbuzz bundles: the
-// upstream-faithful stdlib (buzz.LabelUpstream) plus gopherbuzz's own test surface
+// upstream-faithful stdlib (buzz.LabelUpstream) plus gopherbuzz's own test modules
 // (buzz.LabelGopherbuzz). Register provides every entry; a caller filters by label
 // for a subset. Edit this table to add a module. The registration shape is
 // buzz.Module (see gopherbuzz/module.go), shared with host embedders.

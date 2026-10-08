@@ -2,7 +2,7 @@ import { errMessage, errName } from "./guards";
 import { reportFailure, type NotifyLink } from "./notifications";
 // server.ts - the ONE audited module for addressing and talking to a magus server.
 //
-// Every surface (dashboard, graph explorer, log viewer, activity, the shell) imports
+// Every app (dashboard, graph explorer, log viewer, activity, the shell) imports
 // these security-critical helpers, which used to be copy-pasted between them. They
 // live here, imported once, so host resolution, the loopback lock, and the shared
 // token keys have a single home.
@@ -12,7 +12,7 @@ import { reportFailure, type NotifyLink } from "./notifications";
 //     server origin do I talk to". It considers, in order, an explicit #port= attach,
 //     own-origin adoption (a LAN-share viewer / the operator's server-origin console),
 //     and the operator's configured default. serverAttach() is the explicit-only
-//     subset (no configured fallback) surfaces use to decide whether to enter live
+//     subset (no configured fallback) apps use to decide whether to enter live
 //     mode at all.
 //   - the LOOPBACK LOCK: validateLoopbackHost()/normalizeServerHost() - the pure host
 //     checks that make the "your data never leaves your machine" claim verifiable. A
@@ -79,7 +79,7 @@ export type HashParams = Record<string, string>;
 export function parseHash(): HashParams {
   // A malformed percent-escape (e.g. a truncated shared link) makes
   // decodeURIComponent throw; keep the raw text rather than aborting boot, since
-  // parseHash runs before any surface mounts.
+  // parseHash runs before any app mounts.
   const decode = (s: string): string => {
     try {
       return decodeURIComponent(s);
@@ -111,7 +111,7 @@ export function wantsDemo(params: HashParams): boolean {
   return params.demo !== undefined;
 }
 
-// mayLoadBundledDemo reports whether a surface may fetch demo data bundled next to the app
+// mayLoadBundledDemo reports whether an app may fetch demo data bundled next to the app
 // (the graph explorer's knowledge-graph.json). Never under a server attach: that file is this
 // repo's own graph, notes included, and falling back to it after a failed or tokenless attach
 // shows workspace data nobody authenticated for. Synthetic in-source demos are not covered.
@@ -197,16 +197,16 @@ function loopbackPort(host: string): string | null {
 // so only the content params (e.g. { ref } or { inv }) ride the fragment. Pass the resolved
 // server host (or null) plus the extra content params.
 export function logsLink(host: string | null, extra: Record<string, string>): string {
-  return surfaceLink("logs", host, extra);
+  return appLink("logs", host, extra);
 }
 
-// surfaceLink builds a deep-link to any console surface by its canonical
-// /console/<surface>/ clean path, the form the shell's boot router opens. The re-attach
+// appLink builds a deep-link to any console app by its canonical
+// /console/<app>/ clean path, the form the shell's boot router opens. The re-attach
 // param is the same one logsLink needs and for the same reason: a console attached by
-// #port= has no stored host, so a link that drops it lands the reader on a surface that
+// #port= has no stored host, so a link that drops it lands the reader on an app that
 // cannot find the server. Content params ride the fragment beside it.
-export function surfaceLink(
-  surface: string,
+export function appLink(
+  app: string,
   host: string | null,
   extra: Record<string, string> = {},
 ): string {
@@ -214,7 +214,7 @@ export function surfaceLink(
   const port = host ? loopbackPort(host) : null;
   if (port) parts.push("port=" + port);
   for (const [k, v] of Object.entries(extra)) if (v) parts.push(k + "=" + encodeURIComponent(v));
-  return "../" + surface + "/" + (parts.length ? "#" + parts.join("&") : "");
+  return "../" + app + "/" + (parts.length ? "#" + parts.join("&") : "");
 }
 
 // ---- host resolution + read-only LAN share ---------------------------------
@@ -276,7 +276,7 @@ export function adoptServerOrigin(): boolean {
 
 // serverAttach resolves the server host for an EXPLICIT attach only, or null. This is the
 // faithful replacement for the old `params.live ? validateLiveHost(params.live) : null`:
-// surfaces that go live only on an explicit directive (the graph explorer, the log viewer)
+// apps that go live only on an explicit directive (the graph explorer, the log viewer)
 // use it, so a mere configured default never forces them into live mode.
 //   1. #port=<port>  -> 127.0.0.1:<port> (loopback-implied; wins over origin adoption, since
 //      a hosted page carrying #port is deliberately reaching a local server).
@@ -291,9 +291,9 @@ export function serverAttach(params: HashParams = parseHash()): string | null {
 
 // resolveServerHost is the single source of truth for "which server do I talk to": an
 // explicit attach (serverAttach) if there is one, else the operator's configured default
-// (Settings, a loopback host). Surfaces that auto-connect to a configured server (readiness
+// (Settings, a loopback host). Apps that auto-connect to a configured server (readiness
 // polling, the dashboard, activity, the version chip, sharing) use this; explicit-only
-// surfaces use serverAttach. Returns the server "host:port" or null when nothing resolves.
+// apps use serverAttach. Returns the server "host:port" or null when nothing resolves.
 export function resolveServerHost(params: HashParams = parseHash()): string | null {
   const attach = serverAttach(params);
   if (attach) return attach;
@@ -304,7 +304,7 @@ export function resolveServerHost(params: HashParams = parseHash()): string | nu
 }
 
 // resolveServerHostOrRemembered is resolveServerHost, then the last server the dashboard reached
-// (loopback only). Surfaces that read a server on mount use it, so a reader who has connected once
+// (loopback only). Apps that read a server on mount use it, so a reader who has connected once
 // is not asked again after a reload with no link in the URL.
 export function resolveServerHostOrRemembered(params: HashParams = parseHash()): string | null {
   const resolved = resolveServerHost(params);
@@ -438,7 +438,7 @@ export function consumeLinkCode(params: HashParams = parseHash()): string | null
 }
 
 // stripFragmentKey rewrites the fragment without key, keeping every other key (#port= and the
-// surface's own directives) so a reload stays where it was.
+// app's own directives) so a reload stays where it was.
 function stripFragmentKey(params: HashParams, key: string): void {
   const kept: string[] = [];
   for (const k of Object.keys(params)) {
@@ -833,11 +833,11 @@ export function createServerTransport(
 // ---- sign-in ---------------------------------------------------------------
 
 // AUTH_LOST_EVENT fires on document when the server refuses the stored token. Every bundle shares
-// document, so the shell's sign-in gate hears a 401 raised inside any surface.
+// document, so the shell's sign-in gate hears a 401 raised inside any app.
 export const AUTH_LOST_EVENT = "magus:auth-lost";
 
 // signalAuthLost forgets a token the server refused (expired or revoked) and says so. Keeping it
-// would sign every later request with a credential that can only fail, and each surface would read
+// would sign every later request with a credential that can only fail, and each app would read
 // that as an empty page.
 export function signalAuthLost(host: string): void {
   clearLiveToken();

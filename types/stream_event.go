@@ -39,7 +39,7 @@ import (
 //
 // Flat rather than nested under a "data" key because that is the shape
 // internal/report already ships on `magus run -o jsonl`, and an integrator
-// reading both surfaces should not meet two conventions. It also keeps a jq
+// reading both streams should not meet two conventions. It also keeps a jq
 // filter or an Emacs alist lookup one level deep.
 type StreamEvent struct {
 	// Ts is the event time in unix milliseconds, matching journal.Event.Ts so a

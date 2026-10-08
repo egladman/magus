@@ -23,7 +23,7 @@ different thing in Buzz depending on the authority behind it{{if .Full}}, and a 
 Label every finding from the correctness and conformance lenses. Never invent a
 fourth category, and never leave one unlabeled because the answer felt obvious.
 
-## Establish the surface before applying anything
+## Establish the mode before applying anything
 
 {{if .Full}}This is the single most important step in the whole skill: getting it wrong
 produces confident, fluent false positives, because the "violation" did
@@ -52,7 +52,7 @@ guessing from its shape{{end}}:
   top-level `if` is a genuine defect.
 - Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
-  the surface.
+  the mode.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
   strict-mode violation{{if .Full}}. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid
@@ -251,7 +251,7 @@ were the language.{{end}}
   suite. Authority: UPSTREAM. Contrast `test` staying bindable as a name (the idiom
   lens), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream counterpart.**
-  Authority: PORTABILITY. They are gopherbuzz's own test surface, not a
+  Authority: PORTABILITY. They are gopherbuzz's own test modules, not a
   reimplementation of an upstream module{{if .Full}}. Code leaning on their exact API has no
   upstream equivalent, by design{{end}}.
 {{if .Full}}
@@ -281,7 +281,7 @@ Prompt template per subagent:
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed {{skill "buzz-review"}} skill (.claude/skills/{{skill "buzz-review"}}/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
-Establish the surface first (magusfile/spell = always embedded; a standalone
+Establish the mode first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.

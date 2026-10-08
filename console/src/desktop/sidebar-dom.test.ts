@@ -13,7 +13,7 @@ import type { Workspace } from "./tabs";
 import type { PulseView } from "./pulse";
 import type { Badge } from "./badges";
 import { signal } from "./view";
-const SURFACES = [dashboard, logs, settings];
+const APPS = [dashboard, logs, settings];
 
 function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
   const host = document.createElement("nav");
@@ -25,23 +25,23 @@ function mount(ws: Workspace, expanded = false, focusedPageId: string | null = n
   const opened: string[] = [];
   const bar = createSidebar(
     host,
-    { ws: wsCell, expanded: expCell, pulse, focused, badges, surfaces: SURFACES },
+    { ws: wsCell, expanded: expCell, pulse, focused, badges, apps: APPS },
     { onOpen: (id: string) => opened.push(id) },
   );
   return { host, wsCell, expCell, pulse, focused, badges, opened, bar };
 }
 
 function link(host: HTMLElement, pageId: string): HTMLButtonElement {
-  const el = host.querySelector<HTMLButtonElement>(`[data-rail-surface="${pageId}"]`);
+  const el = host.querySelector<HTMLButtonElement>(`[data-rail-app="${pageId}"]`);
   assert.ok(el, `no rail row for ${pageId}`);
   return el;
 }
 
-test("renders one PF nav row per surface", () => {
+test("renders one PF nav row per app", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  // Count SURFACE rows, not nav items: the collapse control is a row of the same kind and would
-  // otherwise be counted as a surface that does not exist.
-  assert.equal(host.querySelectorAll("[data-rail-surface]").length, 3);
+  // Count APP rows, not nav items: the collapse control is a row of the same kind and would
+  // otherwise be counted as an app that does not exist.
+  assert.equal(host.querySelectorAll("[data-rail-app]").length, 3);
   assert.equal(link(host, "dashboard").querySelector("svg") != null, true);
   assert.equal(
     link(host, "dashboard").querySelector(".pf-v6-c-nav__link-text")?.textContent,
@@ -61,14 +61,14 @@ test("each row is named independently of its visible label", () => {
   assert.equal(link(host, "logs").title, "Log Viewer - Read a run's captured output");
 });
 
-// The whole reason surfaceIconSvg was pulled out of the launcher: the rail and the launcher card
+// The whole reason appIconSvg was pulled out of the launcher: the rail and the launcher card
 // mark the same app, and two hand-kept copies of eight glyphs drift the first time one is redrawn.
-// Both sides are built through their REAL entry points - comparing either against surfaceIconSvg
+// Both sides are built through their REAL entry points - comparing either against appIconSvg
 // would only prove that function equals itself. Compared by geometry, since the two draw at
 // different sizes.
 test("a rail row draws the same glyph as that app's launcher card", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  const launcher = buildLauncher(SURFACES, () => {});
+  const launcher = buildLauncher(APPS, () => {});
   const geometry = (el: Element | null | undefined): string[] =>
     el
       ? [...el.querySelectorAll("path, circle, rect, polyline, line")].map(
@@ -76,7 +76,7 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
         )
       : [];
 
-  for (const s of SURFACES) {
+  for (const s of APPS) {
     const rail = geometry(link(host, s.id).querySelector("svg"));
     const card = geometry(
       launcher.querySelector(`[data-open="${s.id}"] .console-launcher-card__icon svg`),
@@ -86,13 +86,13 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
   }
 });
 
-test("clicking a row asks the console to open that surface", () => {
+test("clicking a row asks the console to open that app", () => {
   const { host, opened } = mount({ tabs: [], activeId: null });
   link(host, "logs").click();
   assert.deepEqual(opened, ["logs"]);
 });
 
-test("the focused surface is current, an open one is only marked open", () => {
+test("the focused app is current, an open one is only marked open", () => {
   const { host } = mount(
     {
       tabs: [
@@ -161,8 +161,7 @@ test("moving focus inside a tiled tab moves the current row", () => {
   assert.equal(link(host, "dashboard").classList.contains("pf-m-current"), false);
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), true);
   assert.equal(
-    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-surface].pf-m-current")
-      .length,
+    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-app].pf-m-current").length,
     1,
     "exactly one row is ever current",
   );
@@ -258,20 +257,17 @@ test("the reading follows the pool and the rail's own width", () => {
   assert.equal(el.dataset.state, "queued");
 });
 
-// A meta surface belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
-// and macOS sidebars both use. The flag lives on the surface list so the rail is not a second place
+// A meta app belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
+// and macOS sidebars both use. The flag lives on the app list so the rail is not a second place
 // deciding what counts as utility.
-test("utility surfaces are pinned in their own group", () => {
+test("utility apps are pinned in their own group", () => {
   const { host } = mount({ tabs: [], activeId: null });
   const utility = host.querySelector("[data-rail-utility]");
   assert.ok(utility);
-  assert.equal(utility.querySelectorAll("[data-rail-surface]").length, 1);
-  assert.equal(
-    utility.querySelector("[data-rail-surface]")?.getAttribute("data-rail-surface"),
-    "settings",
-  );
+  assert.equal(utility.querySelectorAll("[data-rail-app]").length, 1);
+  assert.equal(utility.querySelector("[data-rail-app]")?.getAttribute("data-rail-app"), "settings");
   // ...and the lenses are NOT in it.
-  assert.equal(utility.querySelector('[data-rail-surface="dashboard"]'), null);
+  assert.equal(utility.querySelector('[data-rail-app="dashboard"]'), null);
   // The utility group comes after the main list, so it renders at the foot.
   const lists = [...host.querySelectorAll(".pf-v6-c-nav__list")];
   assert.equal(lists[lists.length - 1], utility);

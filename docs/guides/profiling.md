@@ -101,7 +101,7 @@ heap: 30660 objects live, 30660 peak this run
 ```
 
 `.heap` sits alongside `.where`, `.locals` and `.globals`; see
-[Debugging](debugging.md) for the rest of the pry surface. It answers the one
+[Debugging](debugging.md) for the rest of the pry commands. It answers the one
 question a paused stack cannot: where you _are_ says nothing about what filled
 memory getting there.
 

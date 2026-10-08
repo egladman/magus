@@ -1,4 +1,4 @@
-// Package json is magus's single JSON surface, over encoding/json/v2.
+// Package json is magus's single JSON entry point, over encoding/json/v2.
 //
 // A magus build REQUIRES GOEXPERIMENT=jsonv2; requires_jsonv2.go is what a build missing
 // it hits. There is deliberately no v1 fallback: v1 escapes <, > and & to their \u00XX

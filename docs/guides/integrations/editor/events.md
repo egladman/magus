@@ -8,7 +8,7 @@ aliases: [guides/events]
 # The event stream
 
 `magus events` emits one JSON object per line describing what is happening in a
-workspace. It is the surface an integration builds against: an editor plugin, a
+workspace. It is what an integration builds against: an editor plugin, a
 status bar, a notifier, a dashboard.
 
 ```sh
@@ -209,12 +209,12 @@ independent: the language server is edit time, this stream is run time.
   server, and what building the first clients changed about it).
 - [editor.md](../editor.md): the language server for `*.buzz` files.
 - [server.md](../server.md): the server, and why this stream does not need one.
-- [console.md](../../../reference/console.md): the browser surface reading the
+- [console.md](../../../reference/console.md): the browser console reading the
   same underlying state. Note it documents a route called `/api/v1/events`, which
   is NOT this stream and shares nothing with it: that one is the console's own
   server-sent-events feed, bearer-gated, carrying base64 protobuf status and
   metrics frames for the dashboard. It is server-internal. This page is the
-  integration surface; do not build against the route because the names match.
+  integration contract; do not build against the route because the names match.
 
 ## Stopping a follower
 

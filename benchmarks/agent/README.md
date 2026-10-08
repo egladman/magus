@@ -3,21 +3,21 @@
 Same model, same tasks, two provisioning recipes. The question is not "is magus
 good" but two falsifiable claims:
 
-1. The agent with the magus surface spends fewer tokens and dollars to reach the
+1. The agent with the magus integration spends fewer tokens and dollars to reach the
    same outcome (context economy).
 2. The same agent succeeds more often and violates fewer repo invariants
    (outcome quality).
 
-If the numbers say the surface costs more for the same outcomes, that is a
+If the numbers say the integration costs more for the same outcomes, that is a
 finding. Design and citations: `plans/harness-effectiveness-benchmark-2026-09-02.md`
 in the memory store.
 
 ## Arms
 
-| Arm       | What the worktree gets                                                                                |
-| --------- | ----------------------------------------------------------------------------------------------------- |
-| `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md |
-| `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                   |
+| Arm       | What the worktree gets                                                                                    |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| `rampant` | magus binary and a magusfile, no agent integration: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md |
+| `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                       |
 
 The arms differ only in provisioning. Model, effort, prompt, permission mode,
 budget caps, worktree layout and fixture SHA are identical. Neither arm

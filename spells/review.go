@@ -29,7 +29,7 @@ package spells
 // ReviewThreadsContract exists so a reader never leaves for the browser to find out what a colleague
 // said. It is the one contract function that makes magus depend on a host being reachable, so
 // it is deliberately its own name: a workspace with no credential, or no pull request open,
-// still publishes nothing and reads nothing, and every other surface works exactly as before.
+// still publishes nothing and reads nothing, and every other op works exactly as before.
 //
 // A spell may implement a SUBSET. Each op is looked up by name at the moment it is called, so a
 // missing one is a capability that provider lacks rather than a broken spell, with nothing to

@@ -354,7 +354,7 @@ export fun test(ctx: magus\Context, args: [str]) > void { go["go-test"](); }
 	assert.Equal(t, "go-test", r.Trace[1].Name)
 }
 
-// TestEval_withCatalog proves the SpellCatalog seam: the built-in surface the tracer
+// TestEval_withCatalog proves the SpellCatalog seam: the built-in ops the tracer
 // stubs comes from the injected catalog, not a hard-coded manifest. A mock catalog with
 // one fake built-in makes that spell's op trace like a real built-in's. This is the
 // mock-driven replacement for the old hand-written manifest + drift-gate test.

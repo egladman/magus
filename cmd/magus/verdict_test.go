@@ -148,7 +148,7 @@ func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
 	assert.NotContains(t, got, "absent (magus searched everything")
 }
 
-// The CLI and the MCP tools must reach the same verdict about one graph. Both surfaces
+// The CLI and the MCP tools must reach the same verdict about one graph. Both
 // build a knowledge.Coverage of what they observed and hand it to knowledge.Answer; neither
 // derives a reason. The mirror of this assertion lives in internal/handler/mcp.
 func TestVerdictDerivationIsSharedWithMCP(t *testing.T) {

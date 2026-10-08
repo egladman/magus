@@ -110,7 +110,7 @@ func declaredParams(d ToolDescriptor, fn handlerFn) handlerFn {
 // ToolNeed is what every MCP tool requires of the caller's credential, over either transport.
 // The server holds its /mcp route to the same Need, so a credential the route admits is never
 // refused by a tool behind it.
-var ToolNeed = types.Need{Surface: types.SurfaceMCP, Level: types.LevelWrite}
+var ToolNeed = types.Need{Scope: types.ScopeMCP, Level: types.LevelWrite}
 
 // authorize refuses a call whose credential falls short of ToolNeed, as an MGS9015 tool error.
 // The credential is the one on ctx: the server's bearer guard stamps the bearer it verified,

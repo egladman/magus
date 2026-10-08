@@ -303,7 +303,7 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 // colocated repository resolves to this backend: a git-only range diff would report the capability
 // missing to exactly the users who have both.
 //
-// --git for the reason DirtyDiff passes it: the review surface parses a unified body, and jj's
+// --git for the reason DirtyDiff passes it: the review parses a unified body, and jj's
 // native format is not one. From the workspace root for the reason ChangedFiles and DirtyDiff are,
 // which is that the a/ and b/ headers otherwise name paths relative to a subdirectory nobody is
 // standing in.

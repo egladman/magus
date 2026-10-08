@@ -221,7 +221,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 			if t.Probe.Bin == "" {
 				// Nothing to ask, including a tool keyed by a declared constant: that
 				// token was typed by an author, not read off anything installed.
-				// `magus describe tools` skips it too, so the surfaces agree.
+				// `magus describe tools` skips it too, so the two agree.
 				continue
 			}
 			projBounds := p.ToolBounds[bin]

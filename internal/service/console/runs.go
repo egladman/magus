@@ -25,7 +25,7 @@ const maxRunAge = 5 * time.Minute
 // RunRegistry is the server's live-run tap: a slog.Handler folded into every adopted run's
 // capture logger. It decodes the journal events a run emits (started/scope/exec/result/
 // finished) and maintains, per invocation, the per-target execution state a dashboard
-// renders, so the SAME status surface that reports the pool also reports what each run's
+// renders, so the SAME status service that reports the pool also reports what each run's
 // targets are doing. Finished runs are pruned after a short retention window.
 //
 // It is server-held (one per server process, attached to each adopted dispatch), so it must

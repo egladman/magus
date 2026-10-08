@@ -547,7 +547,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 }
 
 // TestProjectImportHandleNeedsAndDirectCall exercises the new cross-project
-// dependency surface end to end: `import "project/<path>" as b` binds each of the
+// dependency import end to end: `import "project/<path>" as b` binds each of the
 // sibling's exported targets as a callable handle, so ctx.needs(b.build) declares
 // the dependency (recognized by value identity through the session's handle registry)
 // and b.build() dispatches it directly. Under interp.RunDir there is no CrossDispatch

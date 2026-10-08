@@ -530,7 +530,7 @@ func TestJSONShapeMirrorsTheWireNames(t *testing.T) {
 	m, ok := shaped.(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "web", m["path"])
-	// Dir is json:"-": the template surface must not expose a host-absolute path.
+	// Dir is json:"-": the template fields must not expose a host-absolute path.
 	assert.NotContains(t, m, "dir")
 
 	_, err = jsonShape(make(chan int))

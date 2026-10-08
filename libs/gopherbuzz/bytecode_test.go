@@ -1697,7 +1697,7 @@ func TestPromoteKeepsCapturedInEnv(t *testing.T) {
 }
 
 // TestPromoteKeepsExportedInEnv verifies exported top-level vars stay Env bindings
-// (the cross-chunk/cross-module surface) even when promotion is on, and remain
+// (what other chunks and modules import) even when promotion is on, and remain
 // recorded in chunk.Exports.
 func TestPromoteKeepsExportedInEnv(t *testing.T) {
 	src := `export var version = 3; var scratch = 0; foreach (k in 0..3) { scratch = scratch + k; } return version + scratch;`

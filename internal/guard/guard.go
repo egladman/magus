@@ -1,7 +1,7 @@
 // Package guard holds the agent guard: the rules that judge one shell command, or one
 // file path an edit is about to write, and answer with a deny, an advisory, or a pass.
 //
-// It lives outside cmd/magus so the rules are reachable from the surfaces that have to
+// It lives outside cmd/magus so the rules are reachable from the callers that have to
 // agree with them (the CLI hook, the MCP door, the dogfood tests), rather than restated
 // in each. Everything host-specific stays in the caller: this package never reads a flag,
 // a host's tool vocabulary, or the display options a verdict is rendered with.
@@ -831,7 +831,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseAgentSurfaceWrite(input); text != "" {
+			if text := adviseAgentSourceWrite(input); text != "" {
 				advice, adviceKind, spoken = deps.heldBy(markers, string(advisorySkillSource)).Once(advisorySkillSource, text), advisorySkillSource, true
 			}
 		}
@@ -917,7 +917,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		denyUndeclared(input)
-		// The job store's half of the command surface, ranked BELOW the rules above
+		// The job store's half of the shell-command rules, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
@@ -1554,7 +1554,7 @@ var callerKeyEscaper = strings.NewReplacer("%", "%25", "/", "%2F")
 
 // factsKey keys FACTS about a caller, what a rule reads as "did this happen": a skill
 // load, the projects written. `<host>/<caller>`, each part escaped, because two hosts may
-// present the same id. The hook form is left out so a session wiring some surfaces as sh
+// present the same id. The hook form is left out so a session wiring some hooks as sh
 // and others as Buzz sees one set of facts. A caller with no session is keyed on its
 // terminal window; with neither it is empty, so hint.Gate falls back to its anonymous
 // window rather than keying every unattributed caller together.

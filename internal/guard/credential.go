@@ -149,7 +149,7 @@ func namesTokenState(location location, candidate string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// tokenStateDenial is the one text both surfaces refuse with.
+// tokenStateDenial is the one text a file write and a shell line both refuse with.
 func tokenStateDenial(what string) string {
 	return "magus guard denied access to " + what + ", which holds magus's token secrets: the operator token or the token store.\n\n" +
 		"Those files are the credentials the server checks, so a session that reads one holds a grant nobody handed it, and one that writes one mints itself a token. " +
@@ -157,7 +157,7 @@ func tokenStateDenial(what string) string {
 		hint.ConfigMCPConnectorLs.String() + "` lists what exists without a secret."
 }
 
-// denyTokenStatePath is the path surface: the reason a file write aimed at the token state is
+// denyTokenStatePath is the file-write rule: the reason a file write aimed at the token state is
 // refused, or "".
 func denyTokenStatePath(location location, filePath string) string {
 	if !namesTokenState(location, filePath) {
@@ -166,7 +166,7 @@ func denyTokenStatePath(location location, filePath string) string {
 	return tokenStateDenial(strings.TrimSpace(filePath))
 }
 
-// denyTokenStateCommand is the command surface: the reason a shell line names the token
+// denyTokenStateCommand is the shell-command rule: the reason a shell line names the token
 // state, or "". An unparsable line is matched as text.
 //
 // Every word counts: each command's arguments, each redirect's target, heredoc bodies, and

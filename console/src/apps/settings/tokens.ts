@@ -37,18 +37,18 @@ function classLabel(c: CredentialClass): string {
 }
 
 // grantLabel renders a grant the way the CLI does ("mcp=write,console=read"), naming only the
-// surfaces it reaches.
+// scopes it reaches.
 function grantLabel(g: Grant | undefined): string {
   if (!g) return "nothing";
   const level = (l: Level): string =>
     l === Level.WRITE ? "write" : l === Level.READ ? "read" : "";
   const parts: string[] = [];
-  for (const [surface, l] of [
+  for (const [scope, l] of [
     ["tokens", g.tokens],
     ["mcp", g.mcp],
     ["console", g.console],
   ] as const) {
-    if (level(l)) parts.push(surface + "=" + level(l));
+    if (level(l)) parts.push(scope + "=" + level(l));
   }
   return parts.join(",") || "nothing";
 }
@@ -64,7 +64,7 @@ function expiryLabel(t: TokenInfo): string {
 
 // buildTokensSection builds the section body and drives it live against the server at host.
 // A null host (no server resolved) short-circuits to a clear "connect first" empty state.
-// Returns the body element and a destroy() the surface calls on teardown so a late RPC never
+// Returns the body element and a destroy() the app calls on teardown so a late RPC never
 // renders into a detached node. opts.onDenied fires when the server declines the token service to
 // this client (a phone-share session): the caller hides the whole section, so the SERVER, not a
 // client-side mode guess, decides whether token management is offered.

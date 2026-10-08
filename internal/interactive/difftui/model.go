@@ -1,5 +1,5 @@
 // Package difftui is the terminal client of the shared diff session: the same changeset
-// the console's Diff surface renders and an agent joins over MCP, read with a keyboard.
+// the console's Diff app renders and an agent joins over MCP, read with a keyboard.
 //
 // The CLI already shared the review COMPUTATION; what it did not share was the
 // COORDINATION: where the human is looking, which hunks they have read, what an agent
@@ -43,7 +43,7 @@ type Hunk struct {
 	// and means no emphasis, which is what a caller that does not compute it gets.
 	//
 	// Passed in rather than derived here, like Digest above and for the same reason: the
-	// parser works it out once and both surfaces read the one answer.
+	// parser works it out once and both clients read the one answer.
 	Emph []changeset.Span
 }
 
@@ -389,7 +389,7 @@ func (m *Model) takeShownThreads() []string {
 // and learn that re-reviewing is not worth doing carefully.
 //
 // Folded by DEFAULT, and the count is always stated, because a hidden file nobody was told about
-// is the one failure this surface cannot have.
+// is the one failure this viewer cannot have.
 func (m *Model) toggleSettled() {
 	m.unsettled = !m.unsettled
 	if len(m.files) > 0 && !m.expanded(m.file) {
@@ -578,7 +578,7 @@ func (m *Model) rebuild() {
 // contain, or on one folded away.
 //
 // Listed rather than dropped, which is the whole rule the placement follows: "your colleague
-// said nothing" is the one thing a review surface must never say by accident. A pull request
+// said nothing" is the one thing a review viewer must never say by accident. A pull request
 // covers commits a working diff does not, so a thread landing outside it is ordinary rather than
 // exceptional, and until this existed the terminal viewer discarded every one of them in silence
 // while the console listed them.
@@ -624,7 +624,7 @@ func (m *Model) elsewhereRows(shown map[string]bool) []Row {
 // talkRows are the comments and pending suggestions anchored to one hunk.
 //
 // Two coordinates, and they are not the same one: talk is addressed by the hunk's position in
-// the PATCH (h.Index, which is what the MCP surface validates a comment against), while a row
+// the PATCH (h.Index, which is what the MCP tools validate a comment against), while a row
 // is addressed by where the hunk sits in this file's list, because that is what the cursor
 // walks. They coincide while the viewer is handed every hunk of every file.
 func (m *Model) talkRows(file, row int, h *Hunk) []Row {

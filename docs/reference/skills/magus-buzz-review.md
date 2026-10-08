@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 18948
-skill_short_bytes: 13060
+skill_full_bytes: 18939
+skill_short_bytes: 13051
 ---
 
 # magus-buzz-review
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `113` |
+| `agent-skill-version` | `114` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `0b15e9d3e330` |
+| `skill-content` | `35611a0c408b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -77,7 +77,7 @@ different thing in Buzz depending on the authority behind it.
 Label every finding from the correctness and conformance lenses. Never invent a
 fourth category, and never leave one unlabeled because the answer felt obvious.
 
-## Establish the surface before applying anything
+## Establish the mode before applying anything
 
 Getting this wrong produces confident false positives. Buzz parses in one of two modes, and most of what the correctness and
 conformance lenses check applies to only one:
@@ -102,7 +102,7 @@ Judge a standalone script by how it is invoked:
   top-level `if` is a genuine defect.
 - Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
-  the surface.
+  the mode.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
   strict-mode violation. Its contents alone never prove the mode.
 
@@ -233,7 +233,7 @@ fixture doing its job, not a defect.
   suite. Authority: UPSTREAM. Contrast `test` staying bindable as a name (the idiom
   lens), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream counterpart.**
-  Authority: PORTABILITY. They are gopherbuzz's own test surface, not a
+  Authority: PORTABILITY. They are gopherbuzz's own test modules, not a
   reimplementation of an upstream module.
 
 ## Running the three lenses
@@ -248,7 +248,7 @@ Prompt template per subagent:
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
-Establish the surface first (magusfile/spell = always embedded; a standalone
+Establish the mode first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.
@@ -312,7 +312,7 @@ different thing in Buzz depending on the authority behind it, and a reader canno
 Label every finding from the correctness and conformance lenses. Never invent a
 fourth category, and never leave one unlabeled because the answer felt obvious.
 
-## Establish the surface before applying anything
+## Establish the mode before applying anything
 
 This is the single most important step in the whole skill: getting it wrong
 produces confident, fluent false positives, because the "violation" did
@@ -341,7 +341,7 @@ guessing from its shape:
   top-level `if` is a genuine defect.
 - Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
-  the surface.
+  the mode.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
   strict-mode violation. A script that happens to have no
   top-level control flow and no unlabeled second argument is ALSO valid
@@ -536,7 +536,7 @@ were the language.
   suite. Authority: UPSTREAM. Contrast `test` staying bindable as a name (the idiom
   lens), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream counterpart.**
-  Authority: PORTABILITY. They are gopherbuzz's own test surface, not a
+  Authority: PORTABILITY. They are gopherbuzz's own test modules, not a
   reimplementation of an upstream module. Code leaning on their exact API has no
   upstream equivalent, by design.
 
@@ -564,7 +564,7 @@ Prompt template per subagent:
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
 section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
-Establish the surface first (magusfile/spell = always embedded; a standalone
+Establish the mode first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode restriction.
 Return findings only: file:line, the authority label, what's wrong, severity.
 No code. Do not re-explore beyond <target>.

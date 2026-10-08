@@ -17,7 +17,7 @@
 //
 // Only the rows the provenance table marks `published` can be refreshed. A `derived` or
 // `derived-from-binary` row is ours, transcribed by hand from a host that publishes no
-// schema for that surface, and its URL serves prose or a shipped artifact rather than
+// schema for that file, and its URL serves prose or a shipped artifact rather than
 // bytes to diff, so this names it and moves on rather than pretending to have checked it.
 //
 // Run from the workspace root: every path here is relative to it, the way `magus buzz`

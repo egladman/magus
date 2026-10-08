@@ -21,15 +21,15 @@ import (
 //
 // Folded into describe rather than given to `magus shell --rules`, because describe is
 // already the verb for "define a concept and list every entity of that kind" over eleven
-// nouns. A second catalog surface on the command whose job is judging one line is exactly
-// the surface growth this workspace's fold rule exists to prevent.
+// nouns. A second catalog on the command whose job is judging one line is exactly
+// the growth this workspace's fold rule exists to prevent.
 
 // describeRules lists the catalog, or details one rule when named.
 //
 // Parsed through cmdParse like every other describe noun, so `-o json` and the rest of
 // the display set work after the noun exactly as they do on `describe targets`. A
 // hand-rolled loop here accepted the flags nowhere and made this the one noun that lied
-// about the surface.
+// about its flags.
 func describeRules(args []string) error {
 	names, err := cmdParse("describe rules", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {

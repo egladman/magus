@@ -12,7 +12,7 @@ import (
 // a [Zone].
 //
 // A toast has to VANISH with nothing to replace it, which an append-only
-// surface cannot express: a line written into one stays until something newer
+// view cannot express: a line written into one stays until something newer
 // displaces it, and that is right for a failure and wrong here. So the whole
 // band is re-composited on every change, and expiry produces a shorter
 // frame.
@@ -579,7 +579,7 @@ func (n *Notifier) paint() error {
 	// Content FIRST, then the grow. Growing first repaints the band at its new
 	// height while it still holds the OLD rows, so a toast that was just
 	// dropped is drawn once more before being overwritten: a flash of stale
-	// content on a surface whose whole promise is that it holds still. Setting
+	// content on a view whose whole promise is that it holds still. Setting
 	// first means the worst case is a row briefly absent rather than a row
 	// briefly wrong.
 	if _, err := n.lease.Set(rows); err != nil {

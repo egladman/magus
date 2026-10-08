@@ -2605,7 +2605,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		} else if rt.IsRegression(p.Path, volatileTarget) {
 			status = "suspected_regression"
 		}
-		// Said out loud on every host, because the two surfaces below reach almost
+		// Said out loud on every host, because the two outputs below reach almost
 		// nobody: the annotation needs a live CI annotator (Nop everywhere else) and
 		// the report record needs --report. Without this a target failed, silently
 		// reran, passed, and the run came back green with the first attempt's output

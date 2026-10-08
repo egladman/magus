@@ -1,6 +1,6 @@
 // Package render contains graph presentation helpers: ASCII tree and DOT
 // formatters. These were moved out of the public magus package so the
-// public surface stays free of formatting details.
+// public API stays free of formatting details.
 package render
 
 import (

@@ -89,7 +89,7 @@ func (l *LazyWorkspace) usePublishedShards(r knowledge.RemoteShards) {
 	}
 }
 
-// The types.Inspector surface, each call opening the workspace on first use. A failed open
+// The types.Inspector methods, each call opening the workspace on first use. A failed open
 // is every call's error.
 
 func (l *LazyWorkspace) ListCharms(ctx context.Context) ([]types.CharmEntry, error) {

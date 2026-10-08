@@ -171,7 +171,7 @@ func TestCLICommandQueryOutputForm(t *testing.T) {
 
 // TestManpageCoversEverySubcommand guards the drift that shipped `magus man` with pages for
 // 21 of 30 subcommands, vcs among them. internal/cli/registry.go is a hand-maintained
-// mirror of surface.go, and api_test.go cannot catch divergence: it locks api.lock against
+// mirror of subcommands.go, and api_test.go cannot catch divergence: it locks api.lock against
 // API(), which is generated from the same registry.
 func TestManpageCoversEverySubcommand(t *testing.T) {
 	// `magus help` prints what `magus` prints; man(1) has no page for it.
@@ -212,7 +212,7 @@ var helpAliases = []string{"-h", "--help", "help"}
 // top-level switch statement, in source order, with helpAliases removed.
 //
 // This is TestDispatchSubCoversKnownSubcommands's technique (main.go's
-// dispatchSub vs surface.go's knownSubcommands) applied one level down: a
+// dispatchSub vs subcommands.go's knownSubcommands) applied one level down: a
 // per-command dispatcher that routes a child with no matching entry in that
 // command's registry.Children is invisible to man pages, completions, and
 // --help, which is exactly the class of gap item 1 of the 2026-08 doctrine
@@ -394,7 +394,7 @@ func TestSelfManagesOnlyTheBinary(t *testing.T) {
 // serverCmd's switch compares against hint.ServerStart.Leaf() and friends
 // rather than string literals (see server.go), so dispatcherCases's literal
 // extraction finds nothing there. hint.AllCommands already carries the same four
-// leaves for the hint-drift test in surface_test.go; this asserts they also
+// leaves for the hint-drift test in subcommands_test.go; this asserts they also
 // match the registry's declared server Children, which is the check that
 // would have caught server missing reload and job (item 1 of the 2026-08
 // doctrine audit).

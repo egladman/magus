@@ -550,7 +550,7 @@ func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
 //
 // gopherbuzz deliberately leaves a plain error as a string, because upstream Buzz does and
 // its conformance fixtures pin that; enriching is the embedder's opt-in. This is magus
-// taking it. Without it magus would have a two-shape error surface (coded diagnostics
+// taking it. Without it magus would have two error shapes (coded diagnostics
 // arriving as maps, everything else as text), and an author would have to know which calls
 // raise which before knowing whether e["code"] is safe to read. That is the kind of thing
 // you memorise instead of learn.

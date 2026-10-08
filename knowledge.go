@@ -135,7 +135,7 @@ func cacheImmutable(cfg config.Config) bool {
 }
 
 // CatalogFingerprint identifies the compiled-in catalogs a binary contributes to
-// generated output: diagnostic codes, built-in spells, module surface. Stamped into the
+// generated output: diagnostic codes, built-in spells, host module API. Stamped into the
 // exported graph so drift can be attributed to the build that produced it (MGS4005).
 //
 // Hashes the catalogs, not the version: `git describe` moves every commit and would churn

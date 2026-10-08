@@ -15,8 +15,8 @@ func TestConsoleTool(t *testing.T) {
 
 	tool := &consoleTool{host: "127.0.0.1:7391"}
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-		"surface": "activity",
-		"reason":  "show the completed run",
+		"app":    "activity",
+		"reason": "show the completed run",
 	}})
 	require.NoError(t, err)
 	got, ok := resp.Data.(console.Presentation)
@@ -24,7 +24,7 @@ func TestConsoleTool(t *testing.T) {
 	// The open command is built from the signed-in link, which this test does not pin.
 	assert.Equal(t, console.Presentation{
 		URL:         "http://127.0.0.1:7391/console/activity/",
-		Surface:     "activity",
+		App:         "activity",
 		Reason:      "show the completed run",
 		OpenCommand: got.OpenCommand,
 	}, got)

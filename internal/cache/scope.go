@@ -11,7 +11,7 @@ import (
 // whether it may write to them.
 //
 // It names the backend rather than probing it. Active() is a spell op on the real
-// implementation (arbitrary Buzz, with the whole host surface), and calling it here put
+// implementation (arbitrary Buzz, with every host module), and calling it here put
 // that on the path before the first line of output, where a slow probe stalls the run
 // with nothing on screen to explain the pause. Presence and name are known without
 // asking; whether the backend engages is the run's business, not the header's. A wired

@@ -62,7 +62,7 @@ func TestMagusRecordsAreConstructible(t *testing.T) {
 	ctx := t.Context()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	DeclareMagusTypes(sess)
 	require.NoError(t, sess.Exec(ctx, `
@@ -88,7 +88,7 @@ func TestMagusRecordsYieldToAProgramsOwnType(t *testing.T) {
 	ctx := t.Context()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	DeclareMagusTypes(sess)
 	require.NoError(t, sess.Exec(ctx, `

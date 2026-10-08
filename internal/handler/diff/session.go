@@ -48,7 +48,7 @@ type diffSource interface {
 // workspace knows: role (generated or not), owning project, changed-symbol reach, observed
 // coverage, in the order magus recommends reading them.
 //
-// It is the differentiated half of the review surface and a SECOND round trip on purpose.
+// It is the differentiated half of the Diff app and a SECOND round trip on purpose.
 // /api/v1/diff/patch returns the patch in milliseconds; this one loads the symbol shards and walks
 // a reverse closure. Folding them together would hold the whole diff behind the slowest
 // overlay for no reading benefit.
@@ -119,7 +119,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
-// patch, for the console's review surface.
+// patch, for the console's Diff app.
 //
 // The changeset ships PARSED, and the raw patch travels beside it for a caller that wants the
 // interchange format itself. Parsing here rather than in the browser is what keeps one reader
@@ -327,7 +327,7 @@ func scopePaths(r *http.Request) []string {
 //
 // Every write here is stamped DiffAuthorUnattributed with the request's origin: the OS
 // account and the credential the bearer guard verified. The agent's half lives on the MCP
-// surface and is stamped DiffAuthorAgent there. The stamp is decided by WHICH ROUTE the
+// tools and is stamped DiffAuthorAgent there. The stamp is decided by WHICH ROUTE the
 // write arrived on and never by the payload, but the route does not prove a person: any
 // process of the account can mint a console token, so the origin records which
 // credential wrote the remark rather than claiming who held it.
@@ -398,7 +398,7 @@ type reviewSessionRequest struct {
 	// "request_changes". It is a REQUEST, not a decision: the server resolves it against who
 	// opened the review, and a self-review is always a comment however this is set.
 	Verdict string `json:"verdict,omitempty"`
-	// seen: the review threads the surface has just put in front of the reader.
+	// seen: the review threads the client has just put in front of the reader.
 	//
 	// The CLIENT says this, rather than the review lookup assuming it. Serving a response is not
 	// the same as rendering one: an aborted fetch, a refresh mid-flight or a second tab would
@@ -548,11 +548,11 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		var finished string
 		sess, finished = h.Sessions.MarkViewed(h.Root, req.Digest, req.On)
 		// Finishing a file in the console earns a read receipt, exactly as stepping its last
-		// hunk in the terminal viewer does. One rule, two surfaces: the reader chooses where
+		// hunk in the terminal viewer does. One rule, two clients: the reader chooses where
 		// to read and magus does not care which they picked.
 		//
 		// Only a mark arriving HERE mints one. This route is the review route, and the MCP
-		// surface has no way to write it; see Store.MarkViewed for why a restored session
+		// tools have no way to write it; see Store.MarkViewed for why a restored session
 		// must not mint on its own.
 		h.mintReceipt(r.Context(), finished)
 	case "comment":
@@ -657,7 +657,7 @@ func (h *ReviewHandler) mintReceipt(ctx context.Context, path string) {
 //
 // It never fails. No provider wired, no pull request, an unreachable host: all of them are a
 // closed target with a reason, because the reader's options are identical in every case and a
-// surface that rendered them as errors would be accusing them of something they did not do.
+// client that rendered them as errors would be accusing them of something they did not do.
 type ReviewLookupHandler struct {
 	handler.Base
 	workspace reviewSource
@@ -677,7 +677,7 @@ func NewReviewLookupHandler(workspace reviewSource, log *slog.Logger) *ReviewLoo
 	return h
 }
 
-// place resolves each thread onto the hunk holding its line, so both surfaces read one answer
+// place resolves each thread onto the hunk holding its line, so the terminal viewer and the console read one answer
 // instead of computing it twice. An unreadable patch leaves them at -1, which renders against
 // the file rather than against the wrong hunk.
 func (h *ReviewLookupHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
@@ -699,7 +699,7 @@ func (h *ReviewLookupHandler) place(ctx context.Context, threads []types.ReviewT
 type diffReviewResponse struct {
 	ID   string `json:"id"`
 	Repo string `json:"repo,omitempty"`
-	// Host is where publishing would send to, named so a surface can say it out loud before
+	// Host is where publishing would send to, named so a client can say it out loud before
 	// anything leaves. An Enterprise appliance and github.com are the same feature and very
 	// different destinations, and the reader is the only one who can tell whether the one on
 	// screen is the one they meant.
@@ -711,7 +711,7 @@ type diffReviewResponse struct {
 	// Verdicts are the verdicts this reviewer may publish, and VerdictLimit says why when the
 	// set is only remarks.
 	//
-	// The server sends the ANSWER rather than the author and viewer names, so a surface renders
+	// The server sends the ANSWER rather than the author and viewer names, so a client renders
 	// the choices magus allows and has no rule of its own to get wrong. Always populated, so an
 	// absent field is a magus too old to have an opinion rather than a review nobody may remark
 	// on.
@@ -721,7 +721,7 @@ type diffReviewResponse struct {
 }
 
 // remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
-// not a URL this understands; a surface then names the repo alone rather than guessing.
+// not a URL this understands; a client then names the repo alone rather than guessing.
 func remoteHost(remote string) string {
 	s := remote
 	for _, prefix := range []string{"https://", "http://", "ssh://"} {
@@ -776,7 +776,7 @@ func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 //
 // Serving a response is not rendering one. Advancing here meant an aborted fetch, a refresh
 // mid-flight, or a second tab silently consumed the marks, and the notification with them, since
-// the job that raises it compares against this same watermark. The surface says when it has shown
+// the job that raises it compares against this same watermark. The client says when it has shown
 // them, through the session's `seen` op; until it does, the same threads keep arriving marked.
 func (h *ReviewLookupHandler) markNew(threads []types.ReviewThread) {
 	if h.Sessions == nil || len(threads) == 0 {
@@ -823,7 +823,7 @@ type branchSource interface {
 // to hold it up. This ARRIVES, like the conversation does.
 //
 // It reads what has already been fetched and never fetches. The answer is therefore as fresh as
-// the reader's last fetch and no fresher, which the surface says out loud rather than implying
+// the reader's last fetch and no fresher, which the client says out loud rather than implying
 // it is live.
 type BranchesHandler struct {
 	handler.Base
@@ -832,7 +832,7 @@ type BranchesHandler struct {
 
 // branchLimit caps how many branches are examined, and so how many forks one request costs.
 // Production `magus affected ci` spends about 31 forks in total, so a bound here is not
-// decoration: an unbounded version would make a diff surface the most expensive thing in the
+// decoration: an unbounded version would make a diff route the most expensive thing in the
 // server on a repository with a hundred stale branches.
 const branchLimit = 20
 

@@ -1,4 +1,4 @@
-// main.ts - the console's Tools surface: every binary this workspace's spells drive, the version
+// main.ts - the console's Tools app: every binary this workspace's spells drive, the version
 // each reported, the window it is held to and where it stands in its release line.
 //
 // It is the table the Dashboard's Toolchain tile used to be, given room: the tile keeps the counts
@@ -24,7 +24,7 @@ import {
 } from "../../desktop/connectPrompt";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { h } from "../../desktop/view";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 import type { ToolsView } from "../dashboard/state";
 import { SortableTable } from "../../ui/table";
 import { demoToolsView } from "./demo";
@@ -43,9 +43,9 @@ const NO_TOOLS =
   "No project declares a probed tool. A spell declares what its ops need with supported; a project declares its own policy with the tools key.";
 const NO_MATCH = "No tool matches every active filter.";
 
-// activate builds the surface into host and returns the console's teardown handle. Everything below
+// activate builds the app into host and returns the console's teardown handle. Everything below
 // is per-activation, so reopening the tab is a clean slate.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   adoptServerOrigin();
   const demo = wantsDemo(parseHash());
   let server = resolveServerHost(parseHash()) ?? "";

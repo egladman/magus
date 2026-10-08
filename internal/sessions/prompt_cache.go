@@ -139,7 +139,7 @@ func (w PromptCacheWindow) statusAt(last, now time.Time) PromptCacheWindowStatus
 	}
 }
 
-// Describe says where now stands against this window, for a text surface.
+// Describe says where now stands against this window, for text output.
 //
 // The tense is the whole point: a window that has passed CLOSED, one still ahead
 // CLOSES. "Expired" is never the word, here or in a caller, because magus can see a

@@ -69,7 +69,7 @@ import (
 // connectReadMax bounds every Connect request body the server accepts. connect-go
 // otherwise reads an unbounded message into memory, so a connector-token MCP client or
 // a LAN share viewer could POST a multi-gigabyte body and OOM the server. It shares
-// handler.MaxWireBodyBytes with the raw-JSON routes so both wire surfaces cap alike.
+// handler.MaxWireBodyBytes with the raw-JSON routes so both kinds of route cap alike.
 var connectReadMax = connect.WithReadMaxBytes(handler.MaxWireBodyBytes)
 
 // Server assembles and runs the server's HTTP listener from a set of MCP server
@@ -79,7 +79,7 @@ type Server struct {
 	runs       func() []types.StatusRun
 	broker     func() *types.StatusBroker
 	workspaces func() []activityhandler.Workspace
-	// unloaded is set by NewUnloaded: the workspace failed, so only the surfaces that
+	// unloaded is set by NewUnloaded: the workspace failed, so only the routes that
 	// need none are served.
 	unloaded *Unloaded
 	// socket is the server's unix socket, which /mcp and the Connect services are also
@@ -98,7 +98,7 @@ type Option func(*Server)
 
 // WithRuns supplies the server's live-run source (the run registry's Snapshot). When
 // set, the StatusService (GetStatus/StreamStatus) and the status SSE frame carry the per-target
-// execution state of every adopted run alongside the pool: the same status surface, more live state.
+// execution state of every adopted run alongside the pool: the same status routes, more live state.
 func WithRuns(fn func() []types.StatusRun) Option {
 	return func(d *Server) { d.runs = fn }
 }
@@ -295,7 +295,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// Read handlers are built ONCE and reused for two audiences: the loopback
 			// bridge mux below (behind rebind + the console bearer guard), and the on-demand
 			// LAN "share to phone" listener (behind a per-session read-only share token,
-			// see shareGuarded). Building them once keeps the two surfaces serving the
+			// see shareGuarded). Building them once keeps the two listeners serving the
 			// identical read logic.
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
@@ -365,9 +365,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.api("/api/v1/attention", attentionH)
 			f.api("/api/", http.NotFoundHandler())
 
-			// shareGuarded is the exact read surface the LAN share listener exposes, each entry
+			// shareGuarded is the exact set of read routes the LAN share listener exposes, each entry
 			// guarded per link by the share token and held to the same Needs as here. It is a
-			// subset of the loopback surface: NO /api/v1/graph, NO /mcp, NO JobService.
+			// subset of the loopback routes: NO /api/v1/graph, NO /mcp, NO JobService.
 			shareGuarded := map[string]share.Route{
 				"/api/v1/events":  {Handler: eventsH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/events")},
 				"/api/v1/insight": {Handler: insightH, Format: rpcerr.FormatJSON, Needs: requireAPINeeds("/api/v1/insight")},
@@ -390,7 +390,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				// preflight is answered here rather than 401'd by the bearer check; the actual
 				// POST still carries and is verified against the bearer token.
 				f.service(mPath, mHandler)
-				// MetricsService is a read-only stream, so it joins the share read surface.
+				// MetricsService is a read-only stream, so it joins the share read routes.
 				shareGuarded[mPath] = serviceRoute(mPath, mHandler)
 				log.InfoContext(ctx, "[BRIDGE] metrics service mounted", slog.String("path", mPath))
 			} else {
@@ -419,7 +419,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			}
 			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activitySvc, connectReadMax)
 			f.service(activityPath, activityHandler)
-			// ActivityService is read-only, so it joins the share read surface.
+			// ActivityService is read-only, so it joins the share read routes.
 			shareGuarded[activityPath] = serviceRoute(activityPath, activityHandler)
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
 
@@ -427,7 +427,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// onto the wire contract (magus.status.v1alpha1.Status). GetStatus is the one-shot the
 			// dashboard reads; StreamStatus is the typed twin of the base64-SSE status frame.
 			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
-			// browser client) and read-only, so it joins the share read surface too.
+			// browser client) and read-only, so it joins the share read routes too.
 			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log), connectReadMax)
 			f.service(statusPath, statusConnectHandler)
 			shareGuarded[statusPath] = serviceRoute(statusPath, statusConnectHandler)
@@ -437,7 +437,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// spells drive, what each reported, and the window it is held to).
 			//
 			// Deliberately NOT in shareGuarded, unlike every other read service here.
-			// Read-only is not the bar for that surface: every other entry answers from
+			// Read-only is not the bar for this service: every other entry answers from
 			// memory or disk, and this one EXECS argv the spells declare. A share is a
 			// token handed to a phone on the LAN, not a remote handle for spawning
 			// processes on the operator's machine. The console reaches it over the
@@ -450,7 +450,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// the SAME cached scan through the same console service. The console dashboard reads
 			// it here; the JSON route stays mounted above for its documented non-console callers.
 			// Same cross-origin guards as the other read services, and read-only, so it joins the
-			// share read surface too: the LAN "share to phone" dashboard renders insight, and it
+			// share read routes too: the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
 			f.service(insightPath, insightConnectHandler)
@@ -461,7 +461,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// replaced (/api/v1/outputs, /output, /runs, /run; retired in 7ce1896d4, see
 			// docs/concepts/compatibility.md), reading the SAME two stores.
 			//
-			// Read-only, so it takes the read bearer and joins the share surface the way its
+			// Read-only, so it takes the read bearer and joins the share routes the way its
 			// retired JSON twins did: a shared phone renders the run browser, and it must keep
 			// reaching the same runs whichever route the page settles on.
 			var viewerOpts []viewer.Option
@@ -473,7 +473,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			shareGuarded[viewerPath] = serviceRoute(viewerPath, viewerConnectHandler)
 			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
 
-			// Job control service: the server's one MUTATING console surface (submit graph sync,
+			// Job control service: the server's one MUTATING console service (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
 			// cross-origin allowance as the read services (never unauthenticated), so a browser
 			// client can trigger maintenance without the server exposing an open action endpoint.
@@ -482,7 +482,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
-			// listener serving shareGuarded (the read surface) under a fresh read-only
+			// listener serving shareGuarded (the read routes) under a fresh read-only
 			// token. The trigger is loopback-only (RequireLoopbackPeer, atop the
 			// loopback-bound listener) and needs console=write: only the local,
 			// already-authenticated console can open a share. CORS wraps
@@ -512,16 +512,16 @@ func (s *Server) Serve(ctx context.Context) error {
 
 			// Static console on loopback: serve the built PWA at /console/ from the SAME
 			// resolved dir the LAN share listener uses (consoleDir), so a minted server-origin
-			// link (http://127.0.0.1:<port>/console/<surface>/) loads the app straight off this
+			// link (http://127.0.0.1:<port>/console/<app>/) loads the app straight off this
 			// server. console.StaticHandler is the ONE implementation both listeners share: it
-			// adds the SPA fallback so the clean /console/<surface>/ surface paths resolve to the
+			// adds the SPA fallback so the clean /console/<app>/ paths resolve to the
 			// shell, and a strict CSP on the HTML. Static serving stays unauthenticated by design
 			// - the app shell is not a secret; it reads the bearer token from the URL fragment and
 			// replays it on the guarded /api and Connect routes above. The shell is ALL it
 			// serves: StaticHandler refuses any file outside its shell allowlist, because the
 			// build also writes the hosted demo's graph JSON (this repo's knowledge graph, notes
 			// included) into the same dir. It is wrapped in the same GuardRebind the rest of the
-			// loopback surface uses, so a forged cross-origin Host cannot reach it. Mounted only
+			// loopback routes use, so a forged cross-origin Host cannot reach it. Mounted only
 			// when a build was found; otherwise the server still runs (MCP + data routes) and
 			// /console/ just 404s until a console is built.
 			if ok {
@@ -550,7 +550,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(tokenPath, tokenHandler)
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
-			// Notes service: the typed surface the console's Notes view uses to READ the
+			// Notes service: the typed API the console's Notes view uses to READ the
 			// workspace's human-authored notes. Read-only by construction (the contract has no
 			// write RPC), because a note's value is the guarantee that a person wrote it, and a
 			// browser write would put an unattributable author on the one node class nothing in
@@ -568,7 +568,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(notesPath, notesHandler)
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
-			// Graph service: the typed surface for the knowledge graph's own verbs (query,
+			// Graph service: the typed API for the knowledge graph's own verbs (query,
 			// resolve, explain, path, stats). It exists so the browser stops reimplementing them;
 			// the Graph Explorer's filter was a second, divergent copy of the query grammar,
 			// scoring by raw degree over a payload /api/v1/graph had already sent whole. That
@@ -751,7 +751,7 @@ func serviceRoute(path string, h http.Handler) share.Route {
 	return share.Route{Handler: h, Format: rpcerr.FormatConnect, Needs: needs}
 }
 
-// mount binds the listener and mounts /mcp and the health routes, the surface every
+// mount binds the listener and mounts /mcp and the health routes, the routes every
 // server serves whether or not its workspace loaded.
 func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, error) {
 	// Serve the MCP Streamable-HTTP handler and any health routes from one
@@ -778,7 +778,7 @@ func (s *Server) mount(addr netip.AddrPort, mcpHandler http.Handler) (*frame, er
 	f.server = httpServer
 	// Cap the MCP body too: the connector-token client reaches /mcp, not the Connect
 	// services, and mark3labs' streamable handler reads the body with an uncapped
-	// io.ReadAll, so the connectReadMax above does not cover this surface.
+	// io.ReadAll, so the connectReadMax above does not cover this route.
 	cappedMCP := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)

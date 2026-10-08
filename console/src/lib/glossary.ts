@@ -2,7 +2,7 @@
 //
 // The dashboard shows a lot of magus vocabulary (pool, slot, latency, remote
 // cache, buzz, sandbox, ...). Each such term links to its definition so an operator
-// can learn the model without leaving the surface. The link is SAME-ORIGIN and
+// can learn the model without leaving the app. The link is SAME-ORIGIN and
 // relative (../glossary/#<slug>, from a depth-1 console app).
 //
 // It NAVIGATES. Nothing intercepts it: this file, card.ts and dashboard.css each used to

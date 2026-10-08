@@ -35,15 +35,15 @@ import (
 const consoleCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 
 // StaticHandler serves the built console at /console/ for a consoleDir, with an SPA fallback for
-// the clean surface paths and a strict CSP on every HTML document. It is the ONE implementation
+// the clean app paths and a strict CSP on every HTML document. It is the ONE implementation
 // shared by the server's loopback mount and the LAN share listener, so a phone reload of
-// /console/<surface>/ gets the same shell fallback the desktop does (rather than a 404) and both
+// /console/<app>/ gets the same shell fallback the desktop does (rather than a 404) and both
 // origins carry the same CSP.
 //
-// The decoupled console is a single shell page that reads its surface from the URL PATH, so a
-// bare /console/<surface>/ request (see surfaceRoute) must return the shell (not the static
+// The decoupled console is a single shell page that reads its app from the URL PATH, so a
+// bare /console/<app>/ request (see appRoute) must return the shell (not the static
 // directory listing that physically lives there), so the console's boot router can open that
-// surface. A real file serves through the FileServer only when it is part of the app shell
+// app. A real file serves through the FileServer only when it is part of the app shell
 // (see shellExtensions); anything else in consoleDir, and any directory listing, is a 404.
 func StaticHandler(consoleDir string) http.Handler {
 	root := shellDir{http.Dir(consoleDir)}
@@ -51,27 +51,27 @@ func StaticHandler(consoleDir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// cspHTMLWriter stamps the CSP onto HTML responses only, leaving asset (js/css/image)
 		// responses untouched; routing both the shell fallback and the FileServer through it means
-		// the root index.html and any surface stub get the header without a per-branch set.
+		// the root index.html and any app stub get the header without a per-branch set.
 		cw := &cspHTMLWriter{ResponseWriter: w}
 		// seg is the single path element under /console/ ("graph"), or "" for the root, or a
-		// multi-element sub-path ("graph/explorer.js"); only a bare known surface is a route.
+		// multi-element sub-path ("graph/explorer.js"); only a bare known app is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
-		if target, ok := surfaceRoute(consoleDir, seg); ok {
+		if target, ok := appRoute(consoleDir, seg); ok {
 			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
 			// served with <base href="../"> and that only lands on /console/ when the URL
 			// already ends in a slash. Without the redirect, /console/diff resolves every asset
 			// one level too high: console.css, theme.js, patternfly.css all 404 at the site
-			// root, and the surface renders unstyled and never boots. The trim above hides the
-			// difference from the surface lookup, so the check has to happen on the raw path.
+			// root, and the app renders unstyled and never boots. The trim above hides the
+			// difference from the app lookup, so the check has to happen on the raw path.
 			//
-			// The canonical grammar is /console/<surface>/ and Link mints it that way, so this
+			// The canonical grammar is /console/<app>/ and Link mints it that way, so this
 			// only affects a URL a person typed, which is exactly the case worth being kind
 			// about. Redirecting rather than making the base absolute keeps the shell servable
 			// from a prefix it does not know, which is what the relative base is for.
 			// StatusFound, matching share.go's redirect to /console/.
 			if !strings.HasSuffix(r.URL.Path, "/") {
 				// The destination is the console directory's own entry, not the request; see
-				// surfaceRoute. It also normalizes an odd but legal /console//diff.
+				// appRoute. It also normalizes an odd but legal /console//diff.
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
@@ -79,7 +79,7 @@ func StaticHandler(consoleDir string) http.Handler {
 				// so there is nothing to preserve here; the browser reattaches it itself.
 				//
 				//nolint:gosec // G710: the destination is a directory entry name, returned by
-				// surfaceRoute, so it cannot be influenced by the request; only the
+				// appRoute, so it cannot be influenced by the request; only the
 				// optional query rides along. gosec's taint analysis cannot see through the
 				// directory lookup and flags any redirect downstream of a request path.
 				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
@@ -134,15 +134,15 @@ var shellExtensions = map[string]bool{
 	".wasm": true,
 }
 
-// surfaceRoute returns the canonical /console/<seg>/ path when the console in consoleDir has a
-// surface there: a top-level directory holding an index.html stub. The console build writes one
-// stub per app path and mode (console/scripts/surface-stubs.mjs), so the served routes are the
-// bundle's own and a surface the console adds needs no change here.
+// appRoute returns the canonical /console/<seg>/ path when the console in consoleDir has an
+// app there: a top-level directory holding an index.html stub. The console build writes one
+// stub per app path and mode (console/scripts/app-stubs.mjs), so the served routes are the
+// bundle's own and an app the console adds needs no change here.
 //
 // The path is built from the directory entry read off disk, never from seg. A redirect assembled
 // from a request path is one the requester influenced (gosec G710); this one can only name a
 // directory the build wrote.
-func surfaceRoute(consoleDir, seg string) (string, bool) {
+func appRoute(consoleDir, seg string) (string, bool) {
 	if seg == "" || strings.HasPrefix(seg, ".") || strings.ContainsAny(seg, `/\`) {
 		return "", false
 	}
@@ -183,14 +183,14 @@ func isShellFile(consoleDir, urlPath string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// serveConsoleShell writes the console shell (index.html) for a clean /console/<surface>/ route,
+// serveConsoleShell writes the console shell (index.html) for a clean /console/<app>/ route,
 // with a <base href="../"> injected as the first <head> child. The injection is REQUIRED: the
 // shell loads its assets by RELATIVE path (./console.js, ./patternfly.css) so a single built
 // index.html works at both the hosted origin and this server; served one level deep at
-// /console/<surface>/, those refs must resolve against the parent /console/, which the base
+// /console/<app>/, those refs must resolve against the parent /console/, which the base
 // makes so. (The shell's own lazy imports resolve against import.meta.url, i.e. console.js's
 // URL, so they are unaffected.) The hosted static host (which has no such fallback) gets the
-// same effect from the per-surface index.html stubs the console build emits into gen/<surface>/.
+// same effect from the per-app index.html stubs the console build emits into gen/<app>/.
 func serveConsoleShell(w http.ResponseWriter, r *http.Request, consoleDir string) {
 	raw, err := os.ReadFile(filepath.Join(consoleDir, "index.html"))
 	if err != nil {

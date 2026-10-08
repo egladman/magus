@@ -49,11 +49,11 @@ type SourceModule struct {
 }
 
 // sourceModules is the registry of Buzz-implemented modules, kept beside the Go
-// one so All() can report both as a single surface.
+// one so All() can report both as a single list.
 var sourceModules = map[string]SourceModule{}
 
 // sourceMethods holds each source module's methods as parsed at registration.
-// The source never changes after init, and every describe surface (the
+// The source never changes after init, and every describe caller (the
 // knowledge graph asks once per module) would otherwise parse it all again.
 var sourceMethods = map[string][]Method{}
 

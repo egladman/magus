@@ -94,9 +94,9 @@ Two things that follow, and neither is guessable:
 
 **A file under `spells/` is loaded twice.** Once as a discovered spell (a spell session, no
 workspace) and once if a magusfile imports it by path (the magusfile session, workspace
-present). A helper called FROM a magusfile therefore runs on the magusfile surface, where
+present). A helper called FROM a magusfile therefore runs in the magusfile session, where
 the in-process members do work; the same call inside a handler op does not. If you are
-writing a helper for a magusfile to call, you have the full surface; if you are writing an
+writing a helper for a magusfile to call, you have every host module member; if you are writing an
 op body, assume you do not.
 
 **A spell cannot import another spell.** `import "magus/spell/<name>"` does not resolve in

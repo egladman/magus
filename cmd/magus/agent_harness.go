@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// agentHarnessCmd is the generic, descriptor-driven harness surface. It does
+// agentHarnessCmd is the generic, descriptor-driven harness command. It does
 // not know a provider name, host config path, matcher, or response format.
 func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) error {
 	if len(args) == 0 {

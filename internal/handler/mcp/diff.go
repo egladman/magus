@@ -64,7 +64,7 @@ type workspaceSource interface {
 // diffState is what op=state returns: the session, plus the change it describes.
 //
 // The session is EMBEDDED, so every field it carries sits at the top level of the response.
-// The fields beside it are what make the rest of the surface usable: comment and suggest ask
+// The fields beside it are what make the rest of the tool usable: comment and suggest ask
 // an agent for a 0-based hunk index, so a response that showed none would leave the coordinate
 // to be guessed with nothing checking the guess. Hunks also make Viewed joinable, which is
 // what its own description promises ("it tells you what they have already seen, so you can
@@ -84,7 +84,7 @@ type diffState struct {
 	// something the review has moved past.
 	//
 	// READ-ONLY here, deliberately: an agent may draft a comment into the session, which a
-	// person then sends, and nothing on this surface can put words on a review under the
+	// person then sends, and nothing in this tool can put words on a review under the
 	// person's name.
 	Threads []types.ReviewThread `json:"threads,omitempty"`
 }
@@ -123,7 +123,7 @@ type diffConversation struct {
 	Comments    []types.DiffComment    `json:"comments,omitempty"`
 	Suggestions []types.DiffSuggestion `json:"suggestions,omitempty"`
 	// The conversation is not only the local half. A projection called "conversation" that
-	// omitted what a reviewer said would be the surface's worst possible lie.
+	// omitted what a reviewer said would be the tool's worst possible lie.
 	Threads []types.ReviewThread `json:"threads,omitempty"`
 }
 
@@ -214,7 +214,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	sess := t.sessions.Get(t.root)
 	if sess == nil {
 		return spells.InvokeResponse{}, errors.New(
-			"mcp: no diff session is open. A session attaches when the console's Diff surface " +
+			"mcp: no diff session is open. A session attaches when the console's Diff app " +
 				"is opened (GET /api/v1/diff); plain `magus diff` does not attach one. This tool " +
 				"joins the session the console started")
 	}
@@ -359,7 +359,7 @@ func (t *diffTool) reviewThreads(ctx context.Context, hunks []changeset.FileHunk
 
 // validateAnchor refuses a coordinate the changeset does not contain.
 //
-// Without it the surface enforces only the argument it can check locally (a suggestion's
+// Without it the tool enforces only the argument it can check locally (a suggestion's
 // reason) and silently accepts the one that needs the changeset, so comments land at
 // plausible-looking indices nothing verified, on files that are sometimes not in the change at
 // all. A refusal an agent can read and correct is worth more than a stored guess.

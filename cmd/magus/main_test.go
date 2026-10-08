@@ -395,7 +395,7 @@ func TestWantsUsage(t *testing.T) {
 // usage printer in its own file, and what these tests check is the property they share. Pairing
 // it with any one of them would name a single command for a sweep over all of them.
 
-// TestUsagePrintersNameTheirSurface pins what a reader who typed `-h` is actually
+// TestUsagePrintersNameTheirCommands pins what a reader who typed `-h` is actually
 // left with. The assertion is deliberately not byte equality: prose is meant to be
 // rewritten, but a usage block that stops naming a subcommand or a flag has stopped
 // being usage, and that is the regression worth catching.
@@ -454,7 +454,7 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 }
 
 // help is not the command's output, so it must not land in a pipe that expects data.
-func TestUsagePrintersNameTheirSurface(t *testing.T) {
+func TestUsagePrintersNameTheirCommands(t *testing.T) {
 	tests := []struct {
 		name  string
 		print func()
@@ -581,7 +581,7 @@ func TestUsagePrintersThatReturnAnExitPath(t *testing.T) {
 }
 
 // assertPlainASCII enforces the workspace rule that user-facing message strings carry
-// no em-dashes, curly quotes, or other non-ASCII. Help text is the surface most likely
+// no em-dashes, curly quotes, or other non-ASCII. Help text is the place most likely
 // to acquire them, and a terminal that cannot render one prints a replacement glyph.
 func assertPlainASCII(t *testing.T, s string) {
 	t.Helper()
@@ -1256,11 +1256,11 @@ func TestIsDeclaredRunRejectsEverythingButThreeBareTokens(t *testing.T) {
 }
 
 // TestDispatchSubCoversKnownSubcommands guards the drift that shipped `mcp` as a case
-// dispatchSub routed with no matching entry in surface.go's subcommands: `magus mcp`
+// dispatchSub routed with no matching entry in subcommands.go's subcommands: `magus mcp`
 // worked when typed, but help, did-you-mean, the man pages, and every completion
 // script (all derived from subcommands / knownSubcommands) never mentioned it.
 // dispatchSub's switch and knownSubcommands are two separate declarations that can
-// drift exactly the way the three copies surface.go's own doc comment already
+// drift exactly the way the three copies subcommands.go's own doc comment already
 // describes; this closes that gap mechanically instead of relying on someone
 // remembering to update both.
 //
@@ -1336,7 +1336,7 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from surface.go) = %v\n"+
-			"a case dispatchSub routes must have an entry in surface.go's subcommands, and vice versa", got, want)
+		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
+			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
 	}
 }

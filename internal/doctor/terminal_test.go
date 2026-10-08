@@ -53,7 +53,7 @@ func TestCheckTerminalReportsNoColorWithoutBlaming(t *testing.T) {
 
 // TestCheckTerminalReportsTheLogFormatFirst pins the ordering that matters.
 //
-// The format decides whether there is an interactive surface at all: json and
+// The format decides whether there is an interactive view at all: json and
 // text install a structured handler, so a perfectly capable terminal shows no
 // band. "Why is there no status line" is answered by the format more often than
 // by anything about the terminal, so the check says so and stops rather than
@@ -64,7 +64,7 @@ func TestCheckTerminalReportsTheLogFormatFirst(t *testing.T) {
 		c := r.checkTerminal()
 		assert.Equal(t, types.CheckOK, c.Status, "a structured format is a choice, not a fault")
 		assert.Contains(t, c.Message, format)
-		assert.Contains(t, c.Message, "draws no interactive surface")
+		assert.Contains(t, c.Message, "draws no interactive view")
 		require.NotEmpty(t, c.Details)
 		assert.Contains(t, c.Details[len(c.Details)-1], "set log.format to pretty",
 			"and names the remedy")
@@ -84,7 +84,7 @@ func TestCheckTerminalNamesWhereTheFormatCameFrom(t *testing.T) {
 
 func TestCheckTerminalDefaultsToPretty(t *testing.T) {
 	// An unset format is pretty, so an empty config must not read as "no
-	// interactive surface".
+	// interactive view".
 	r := &runner{opts: options{cfg: config.Config{}}}
-	assert.NotContains(t, r.checkTerminal().Message, "draws no interactive surface")
+	assert.NotContains(t, r.checkTerminal().Message, "draws no interactive view")
 }

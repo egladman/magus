@@ -65,7 +65,7 @@ type SGR string
 
 // SGR parameter codes. These name the color, not the meaning: a caller
 // decides that "a cache hit is dim green", because what reads as low
-// signal differs per surface. Shared so the codes themselves are written
+// signal differs per view. Shared so the codes themselves are written
 // once.
 const (
 	SGRBold    SGR = "1"

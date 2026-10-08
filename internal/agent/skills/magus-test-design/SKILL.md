@@ -20,7 +20,7 @@ commit, or in CI.
 
 1. State the behavior as an observable contract: triggering input or event,
    expected result or state, and visible side effects.
-2. Discover the workspace's test surface before naming a target:
+2. Discover the workspace's tests before naming a target:
 
    ```sh
    magus describe targets -o name

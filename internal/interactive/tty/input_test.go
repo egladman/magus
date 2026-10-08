@@ -372,7 +372,7 @@ func TestCursorPositionRefusesWhenItCannotBoundTheWait(t *testing.T) {
 // that cannot be checked by feeding bytes to a string reader, and it is also
 // the highest-consequence one: a terminal that does not implement the query
 // says NOTHING, and a blocking read on it never returns. If the deadline does
-// not work, an interactive surface that asks freezes with no output and no way
+// not work, an interactive view that asks freezes with no output and no way
 // out.
 //
 // A pipe stands in for the terminal because the property under test is whether

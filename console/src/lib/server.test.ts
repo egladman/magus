@@ -74,7 +74,7 @@ test("serverAttach expands #port to the literal loopback IP, rejecting a bad por
   assert.equal(serverAttach({}), null); // no attach directive, no origin adoption
 });
 
-// The bundled demo graph is this repo's real graph, notes included: an attached surface whose
+// The bundled demo graph is this repo's real graph, notes included: an attached app whose
 // live connection failed must not fall back to it.
 test("mayLoadBundledDemo is refused under a server attach", () => {
   assert.equal(mayLoadBundledDemo({ demo: "" }), true);
@@ -83,7 +83,7 @@ test("mayLoadBundledDemo is refused under a server attach", () => {
   assert.equal(mayLoadBundledDemo({ port: "7391", q: "notes" }), false);
 });
 
-// withBrowserGlobals stubs the minimal DOM surface adoptServerOrigin/consumeLiveToken touch
+// withBrowserGlobals stubs the minimal DOM API adoptServerOrigin/consumeLiveToken touch
 // (storage + history), plus the fuller location they read, for the duration of fn.
 function withBrowserGlobals(loc: Record<string, string>, fn: () => void): void {
   const g = globalThis as unknown as Record<string, unknown>;

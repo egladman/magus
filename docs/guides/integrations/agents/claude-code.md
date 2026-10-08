@@ -7,21 +7,21 @@ tags: [agents, claude, claude code, skills, guard, hooks, notifications]
 # Claude Code
 
 Claude Code reads Agent Skills from `.claude/skills/` and runs a `PreToolUse`
-hook before every tool call. That covers both guard surfaces, and both verdicts
+hook before every tool call. That covers the shell-command and file-write rules, and both verdicts
 reach the model, so nothing in the contract is lost here. It is also the setup
 this repository dogfoods and the only one executed end to end against a real
 event.
 
-<!--diagram:agent-surface-->
+<!--diagram:agent-integration-->
 
 | what             | where                                                         |
 | ---------------- | ------------------------------------------------------------- |
 | skills           | `.claude/skills/`                                             |
 | guard wiring     | `.claude/settings.json`, `PreToolUse`                         |
-| command surface  | deny and advise both reach the model                          |
-| file surface     | deny and advise both reach the model                          |
-| MCP call surface | deny and advise both reach the model                          |
-| read surface     | `PreToolUse` on the read tool: recorded, and judged as `cat`  |
+| shell commands   | deny and advise both reach the model                          |
+| file writes      | deny and advise both reach the model                          |
+| MCP calls        | deny and advise both reach the model                          |
+| file reads       | `PreToolUse` on the read tool: recorded, and judged as `cat`  |
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
@@ -37,8 +37,8 @@ magus agent install .claude/skills
 
 Commit what it writes so every teammate's agent gets the same instructions.
 Claude Code discovers skills when a session starts, so restart the session
-before it can invoke anything new. [Skills](skills.md) covers the install
-surface, the two forms, and the drift check.
+before it can invoke anything new. [Skills](skills.md) covers the install,
+the two forms, and the drift check.
 
 ## MCP
 
@@ -197,8 +197,8 @@ harness` prints and run `magus agent harness verify`. See
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
 `mcp__<server>__<tool>`. The shipped spell includes a Magus-MCP matcher,
-so `magus describe harness claude-code` prints this entry alongside the command
-and file surfaces:
+so `magus describe harness claude-code` prints this entry alongside the shell-command
+and file-write entries:
 
 ```json
 {
@@ -223,7 +223,7 @@ already say. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than
 denying or advising on one, which is the honest state to ship rather than
-silence. The next rule this surface grows reaches the model the moment it
+silence. The next rule the guard grows reaches the model the moment it
 ships, with no new host wiring, because the transport is already here.
 
 ## Recording and judging what was read
@@ -280,7 +280,7 @@ that call fires `PreToolUse` like any other, carrying the whole prompt the
 orchestrator is handing over in `tool_input.prompt`, the callee's declared
 `subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
 descriptor includes a matcher for it, so `magus describe harness claude-code`
-prints this entry alongside the surfaces above:
+prints this entry alongside the entries above:
 
 ```json
 {
@@ -331,7 +331,7 @@ cache-write tokens as the agent's context size, which a later `SendMessage` to i
 hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
 `target.contextTokens`.
 
-Same script as the MCP surface and for the same reason: a spawn's payload is a
+Same script as the MCP-call entry and for the same reason: a spawn's payload is a
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
 `tool_input.command` to select and the event goes whole. The one thing written on
 this entry is the flag after `--`, which `magus buzz` forwards to the script as its
@@ -471,10 +471,10 @@ is handed.
 
 ## Coverage and limits
 
-No transport gap in the guard contract: all three surfaces are wired, `deny`
+No transport gap in the guard contract: all three kinds of input are wired, `deny`
 arrives as a `permissionDecision`, and `advise` arrives as `additionalContext`,
 which puts the explanation in front of the model rather than the person. The
-MCP surface is transport-complete but rule-empty today: the wiring passes
+MCP-call wiring is transport-complete but rule-empty today: the wiring passes
 every call because nothing yet judges an MCP tool name, not because the
 channel cannot carry a verdict.
 

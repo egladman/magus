@@ -6,7 +6,7 @@ package types
 //
 // Field names and values track magus.tool.v1alpha1 (proto/magus/tool/v1alpha1/tool.proto),
 // which serves the same view to the console. One concept gets one vocabulary, or a script
-// author has to learn which surface they are reading before they can read it.
+// author has to learn which client they are reading before they can read it.
 type ToolReport struct {
 	Definition string `json:"definition" yaml:"definition" buzz:"-"`
 	Workspace  string `json:"workspace" yaml:"workspace"`

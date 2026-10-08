@@ -45,7 +45,7 @@ function statusText(state: InstallState, hint: string): string {
 }
 
 // buildInstallSection builds the section body and keeps it in step with the store. Returns the body and
-// a destroy() the surface calls on teardown, so a store that outlives the surface (it is created once at
+// a destroy() the app calls on teardown, so a store that outlives the app (it is created once at
 // boot and lives for the tab's lifetime) never repaints a detached node.
 export function buildInstallSection(store: InstallStore): { el: HTMLElement; destroy(): void } {
   const body = h("div", "console-settings-install");

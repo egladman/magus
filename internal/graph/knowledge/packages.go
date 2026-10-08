@@ -37,7 +37,7 @@ const (
 // packageID keys a package node by MANAGER and name, never name alone: the npm package
 // `foo` and the Go module `foo` are different things that would otherwise share a node.
 // internal/symbols/scip.go's parseMoniker folds the manager into its key for the same
-// reason, so the two surfaces agree on what counts as one dependency.
+// reason, so the two agree on what counts as one dependency.
 //
 // The VERSION is deliberately excluded, which is the same call parseMoniker makes. A
 // node is the dependency, not one release of it, so a bump edits an attr instead of

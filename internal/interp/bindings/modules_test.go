@@ -92,7 +92,7 @@ func TestSupersetModules(t *testing.T) {
 	}
 }
 
-func TestRegisterModuleSurfaceWithModules(t *testing.T) {
+func TestRegisterModulesWithModules(t *testing.T) {
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
@@ -105,7 +105,7 @@ func TestRegisterModuleSurfaceWithModules(t *testing.T) {
 		},
 		Capabilities: ffi.Capabilities(ffi.WASM),
 	})
-	RegisterModuleSurface(ctx, sess, WithModules(modules))
+	RegisterModules(ctx, sess, WithModules(modules))
 
 	json, ok := sess.NativeModule("json")
 	require.True(t, ok)
@@ -115,14 +115,14 @@ func TestRegisterModuleSurfaceWithModules(t *testing.T) {
 }
 
 // scriptSession builds the session a `magus buzz` script runs in: the shared host
-// module surface plus the magus.* namespace, parsed upstream-strict like the real
+// modules plus the magus.* namespace, parsed upstream-strict like the real
 // runner, so a test snippet exercises the same rules a script does.
 func scriptSession(t *testing.T) *buzz.Session {
 	t.Helper()
 	ctx := context.Background()
 	sess := buzz.NewSession(ctx)
 	t.Cleanup(func() { _ = sess.Close() })
-	RegisterModuleSurface(ctx, sess)
+	RegisterModules(ctx, sess)
 	RegisterMagusNamespace(ctx, sess)
 	return sess
 }
@@ -186,11 +186,11 @@ main();
 	assert.ErrorIs(t, err, types.MagusfileOnlyMember)
 }
 
-// TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
-// surfaces buildMagus serves. They must carry the SAME member names (a script
-// that cannot see a member has no way to learn it exists), so the surfaces differ
+// TestMagusModesExposeSameMembers is the lock-step guard between the two
+// modes buildMagus serves. They must carry the SAME member names (a script
+// that cannot see a member has no way to learn it exists), so the modes differ
 // only in what a member does when called, which is what MGS1022 reports.
-func TestMagusSurfacesExposeSameMembers(t *testing.T) {
+func TestMagusModesExposeSameMembers(t *testing.T) {
 	sess := scriptSession(t)
 	script, ok := sess.NativeModule("magus")
 	require.True(t, ok && script.IsMap(), "magus namespace is not installed for a script")
@@ -269,7 +269,7 @@ func TestEveryHostModuleIsWired(t *testing.T) {
 // methods: magus\describe.module() (host) and `magus describe module` (CLI) are two thin
 // adapters over the one typed core, host.ModulesOutput. This asserts the objects
 // the host method marshals are exactly that core (same names, docs, per-method Buzz
-// signatures) so the two surfaces can't drift.
+// signatures) so the two can't drift.
 func TestMagusModulesSharesDescribeCore(t *testing.T) {
 	core := hostmodules.Describe("") // what `magus describe modules` formats
 	require.NotEmpty(t, core)
@@ -524,7 +524,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	assert.Equal(t, "calc-ok", string(got))
 }
 
-// TestRunBuzzStdModule exercises the std host surface from a magusfile.buzz
+// TestRunBuzzStdModule exercises the std host modules from a magusfile.buzz
 // end-to-end: the magus-utils generated trampolines must decode a variadic
 // call (fs.join), a slice-in/map-out call (charm.append), and a void call
 // (fs.writeFile). Modules are reached under bare module imports (fs.join,
@@ -1872,9 +1872,9 @@ func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
 
 // TestSourceModuleIsIndistinguishable is the whole point of the Buzz-source
 // module kind: which language implements a stdlib module must be an
-// implementation detail, invisible from every surface a user or a tool reads.
+// implementation detail, invisible from everything a user or a tool reads.
 //
-// It walks the surfaces that matter rather than asserting registration, because
+// It walks the places that matter rather than asserting registration, because
 // registration was never the hard part: being SEEN was.
 func TestSourceModuleIsIndistinguishable(t *testing.T) {
 	// It imports and RUNS like any other module.

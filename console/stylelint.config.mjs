@@ -35,7 +35,7 @@ export default {
     "magus/control-size-token": true,
     // The console has ONE uppercase label and ONE uppercase chip. Written out by hand it came to 35
     // near-misses across seven sheets - six font sizes, six tracking values, three weights - which is
-    // the drift a reader sees as "every surface looks slightly different".
+    // the drift a reader sees as "every app looks slightly different".
     "magus/label-token": true,
   },
 };

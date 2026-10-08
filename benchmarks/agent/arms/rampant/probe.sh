@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-# Prove a worktree is in ARM-0 "rampant". Every surface item the full arm
-# installs must be absent, and the run environment must still resolve magus.
+# Prove a worktree is in ARM-0 "rampant". Every piece of agent integration the
+# full arm installs must be absent, and the run environment must still resolve magus.
 set -eu
 
 # shellcheck disable=SC2034  # read by lib.sh, which shellcheck does not follow without -x
@@ -33,4 +33,4 @@ fi
 
 arm_check_no_mcp "$WT"
 
-printf 'arm rampant: %s carries no agent surface\n' "$WT"
+printf 'arm rampant: %s carries no agent integration\n' "$WT"

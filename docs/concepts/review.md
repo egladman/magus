@@ -34,11 +34,11 @@ reaches, which hunks you have read. Tell it one more thing, where the change is
   written about, in the console and in `magus diff`'s viewer.
 - **Your own remarks stay drafts until you send them.** You write them as you read, then send
   the set once.
-- **You answer a thread from the same surface.**
+- **You answer a thread from the same page.**
 - **`magus notes capture`** keeps both halves of the conversation as a note in your knowledge
   graph.
 
-Wire no provider and the diff surface behaves exactly as it did before. Most branches have no
+Wire no provider and the Diff page behaves exactly as it did before. Most branches have no
 pull request open, and that costs you nothing here.
 
 ## Wiring a provider
@@ -89,7 +89,7 @@ you want both.
 
 ## Reading
 
-In the console's Diff surface:
+On the console's Diff page:
 
 | Key   | Does                                        |
 | ----- | ------------------------------------------- |
@@ -110,7 +110,7 @@ What replaces them is a line saying where you are: a bar, the position, how many
 read, and how many remarks the pass has produced so far. That last number is the one worth
 having. It is the evidence that reading is turning into something.
 
-![The Diff surface in focus mode: the head still names the review and carries Test and Leave focus, and under it one line (a progress bar, "hunk 1 of 14, 0 read, 1 drafted" beside the file name claims.go, and the key legend at the far end) over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
+![The Diff page in focus mode: the head still names the review and carries Test and Leave focus, and under it one line (a progress bar, "hunk 1 of 14, 0 read, 1 drafted" beside the file name claims.go, and the key legend at the far end) over a single hunk with its agent remarks](../../assets/screenshots/console-diff-focus.png)
 
 The toolbar collapses with the rest of it: the counts row goes entirely rather than emptying, and
 the key legend moves onto the progress line, which is the one row a mode about less chrome can
@@ -147,7 +147,7 @@ remark is a request your browser would make to a host you did not choose.
 mind about the first remark by the time you write the fifth, which is why they wait. The
 summary is optional; the list of what is about to go is not.
 
-![The Diff surface with the send box open: a heading reading "Send 1 remark to acme/acme #482", a line saying the post goes over the network to github.com and that nothing has left this machine yet, the one draft listed with its file, line and text beside a discard link, a row of verdict choices reading "Remarks only", "Approve" and "Request changes" with the first selected, and a summary field with Write and Preview tabs above it and a send button beside it](../../assets/screenshots/console-diff-send.png)
+![The Diff page with the send box open: a heading reading "Send 1 remark to acme/acme #482", a line saying the post goes over the network to github.com and that nothing has left this machine yet, the one draft listed with its file, line and text beside a discard link, a row of verdict choices reading "Remarks only", "Approve" and "Request changes" with the first selected, and a summary field with Write and Preview tabs above it and a send button beside it](../../assets/screenshots/console-diff-send.png)
 
 The box names the repository, the review and the host before you commit to any of them, and
 says plainly that nothing has gone yet. A remark you have changed your mind about is discarded
@@ -173,16 +173,16 @@ diff does not. So each thread lands in one of three places, and the console drop
 - listed as **elsewhere** (press `Esc` for the overview), when the file is not on screen at
   all: either outside this changeset, or folded away, as a generated file is by default.
 
-The third bucket is keyed on what the surface is showing rather than on what the changeset
+The third bucket is keyed on what the page is showing rather than on what the changeset
 holds, because a thread rendered nowhere and a thread on a folded file look identical to the
 reader: absent. `magus diff`'s viewer lists the same third bucket at the end of the changeset,
-so neither surface drops one.
+so neither the viewer nor the console drops one.
 
-![The changeset overview: counts for what is to read, folded away, public surface and untested, a reading order, and a section headed "Said on the review, elsewhere" carrying one colleague's remark in full](../../assets/screenshots/console-diff-overview.png)
+![The changeset overview: counts for what is to read, folded away, public API and untested, a reading order, and a section headed "Said on the review, elsewhere" carrying one colleague's remark in full](../../assets/screenshots/console-diff-overview.png)
 
 The overview reads those remarks out rather than counting them. A chip saying "1 elsewhere"
 tells you something was said and withholds what, which leaves you to open a browser to find
-out, the one errand this whole surface exists to save you.
+out, the one errand this whole page exists to save you.
 
 ## When somebody says something
 
@@ -358,7 +358,7 @@ from the installed one and spends your context on text your tools already loaded
   of a review dies, and this is the one place magus spends a refusal to prevent it.
 - **A review never approves a change its own credential opened.** Reviewing a colleague's
   branch, you may approve or request changes; on your own, the verdict is silently downgraded
-  to remarks and the surface says so. The API would happily let your change approve itself,
+  to remarks and the page says so. The API would happily let your change approve itself,
   which is why the rule lives in magus rather than in a spell you could edit, and why
   "magus could not tell who opened this" resolves the same way as "you did". Not knowing is
   not permission.

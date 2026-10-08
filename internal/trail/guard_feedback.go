@@ -15,7 +15,7 @@ import (
 // the same host session.
 type GuardFeedback struct {
 	Rule             string    `json:"rule"`
-	Surface          string    `json:"surface"`
+	Tool             string    `json:"tool"`
 	Denied           int       `json:"denied"`
 	Sessions         int       `json:"sessions"`
 	FollowedSessions int       `json:"followed_sessions"`
@@ -95,7 +95,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		fingerprint := response.Rule + "\x00" + request.Tool
 		c := candidates[fingerprint]
 		if c == nil {
-			c = &candidate{GuardFeedback: GuardFeedback{Rule: response.Rule, Surface: request.Tool}, perSession: map[sessionKey]int{}, followed: map[sessionKey]bool{}}
+			c = &candidate{GuardFeedback: GuardFeedback{Rule: response.Rule, Tool: request.Tool}, perSession: map[sessionKey]int{}, followed: map[sessionKey]bool{}}
 			candidates[fingerprint] = c
 		}
 		c.Denied++
@@ -124,7 +124,7 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		if c := cmp.Compare(b.Denied, a.Denied); c != 0 {
 			return c
 		}
-		return cmp.Compare(a.Rule+"\x00"+a.Surface, b.Rule+"\x00"+b.Surface)
+		return cmp.Compare(a.Rule+"\x00"+a.Tool, b.Rule+"\x00"+b.Tool)
 	})
 	return out, nil
 }

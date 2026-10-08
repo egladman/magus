@@ -428,7 +428,7 @@ func (m *Magus) OutputDescriptorByRef(ref string) (OutputDescriptor, error) {
 
 // OutputKeyInputs returns the pre-hash key inputs stored behind ref: the deterministic
 // label:value lines hashStep consumed to mint the step's cache key, secret-redacted at
-// write. They are the explanation surface for `magus query output <ref> --meta`
+// write. They feed `magus query output <ref> --meta`
 // (component-class digests) and `describe target --cache --against <ref>` (the exact
 // disagreeing line). Returns fs.ErrNotExist when the ref resolves but the run predates
 // key-input persistence.

@@ -35,7 +35,7 @@ The standard library would fail this on about half its test files (660 of 1348 i
 Go 1.26, excluding `src/cmd`): a suite named after a concern, such as
 `concurrency_test.go`, is ordinary Go. This rule is a house rule. A suite with no
 single source file to cover gets one: the code it owns (its harness, its fixture
-types, the corpus it walks) moves into a same-stem production file, and the suite
+types, the cases it walks) moves into a same-stem production file, and the suite
 tests that file.
 
 When some prefix of the stem names a source file, the message names the file the

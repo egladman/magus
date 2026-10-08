@@ -4,7 +4,7 @@
 //
 // The log viewer keeps its own scanning loop (render.ts) - it interleaves the #q= filter,
 // global line numbering, and the timeline/raw modes - but builds each line and header line
-// through the leaf helpers here (renderContent / fillAnsi / renderLine), so both surfaces
+// through the leaf helpers here (renderContent / fillAnsi / renderLine), so both apps
 // share the exact ANSI-color, status-badge, and line markup. The activity view, which needs
 // none of that machinery, assembles whole sections through buildSection.
 

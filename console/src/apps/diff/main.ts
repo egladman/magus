@@ -1,8 +1,8 @@
-// main.ts - the console's Diff surface.
+// main.ts - the console's Diff app.
 //
 // A magus review is not a text diff. The server already knows which changed files are
 // generated, how widely each changed symbol is referenced, whether any of it is public API,
-// and what coverage was observed - so this surface spends the reader's attention in
+// and what coverage was observed - so this app spends the reader's attention in
 // CONSEQUENCE order rather than alphabetical order, and folds away the files a target
 // rewrote. On magus's own tree that routinely halves the number of files anyone has to read.
 //
@@ -19,9 +19,9 @@
 //     navigates.
 //
 // KEYBOARD FIRST, MOUSE COMPLETE. Every action is a registered command (so it appears in the
-// command bar and the Actions surface, and can be rebound) AND has a click target. The
+// command bar and the Actions app, and can be rebound) AND has a click target. The
 // single-letter keys are handled on the scroll container rather than as global chords on
-// purpose: a bare "v" must not fire while someone is typing in another surface.
+// purpose: a bare "v" must not fire while someone is typing in another app.
 
 import {
   fromWire,
@@ -120,8 +120,8 @@ import {
 } from "../../desktop/connectPrompt";
 import { svgGlyph } from "../../ui/glyph";
 
-// Marks for this surface's two toolbar controls. Kept here rather than in ui/glyph.ts, which holds
-// only the ones a second surface also draws.
+// Marks for this app's two toolbar controls. Kept here rather than in ui/glyph.ts, which holds
+// only the ones a second app also draws.
 //
 // PLAY is the run control's: the conventional right-pointing triangle for "start this".
 const PLAY: readonly string[] = ["M8 5l11 7-11 7z"];
@@ -148,7 +148,7 @@ const CROSSHAIR: readonly string[] = [
   "M2 12h3",
   "M19 12h3",
 ];
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 // The roles a #role= deep-link may name, checked rather than cast: the fragment is whatever the
 // address bar holds, and a value outside the vocabulary must leave the index unfiltered rather than
@@ -248,13 +248,13 @@ interface State {
   //
   // The digest is the honest half. magus keys its cache on a target's sources, so a verdict -
   // replayed or freshly run - is a true statement about the tree it was computed from, and the
-  // only way it becomes a lie is the tree moving afterwards. Holding the digest lets the surface
+  // only way it becomes a lie is the tree moving afterwards. Holding the digest lets the app
   // say "passed, for code you have since edited" instead of a green tick over changed code, which
   // is a wrong answer delivered confidently.
   verdicts: Map<string, Verdict>;
 }
 
-// Verdict is one project's last run of its test target, as the surface knows it.
+// Verdict is one project's last run of its test target, as the app knows it.
 interface Verdict {
   readonly state: "running" | "passed" | "failed" | "unknown";
   readonly error?: string;
@@ -394,31 +394,31 @@ function gutter(n: number | null): HTMLElement {
   return h("span", "console-diff-row__gutter", n === null ? " " : String(n));
 }
 
-// The console's surface contract (page.ts): a teardown plus setVisible, so the shell can tell this
-// pane when it stops being the visible one. Every surface hands back this shape - a bare teardown
-// function is still accepted by the normalizer, but it leaves a surface with nowhere to put the
+// The console's app contract (page.ts): a teardown plus setVisible, so the shell can tell this
+// pane when it stops being the visible one. Every app hands back this shape - a bare teardown
+// function is still accepted by the normalizer, but it leaves an app with nowhere to put the
 // hook, which is how the log viewer ended up writing a backgrounded tab's status bar.
-export function activate(host: HTMLElement): SurfaceInstance {
+export function activate(host: HTMLElement): AppInstance {
   const controller = new AbortController();
   let disposed = false;
-  // Dismissing the merged notice holds for this session only. It is not persisted: the surface
+  // Dismissing the merged notice holds for this session only. It is not persisted: the app
   // is reopened per branch, and a preference remembered across them would silence the offer on a
   // review the reader has not seen yet.
   let mergedSeen = false;
 
-  // The server-free showcase, on the fragment every other surface reads. Derived ONCE, here,
+  // The server-free showcase, on the fragment every other app reads. Derived ONCE, here,
   // rather than per fetch: a console served BY a server would otherwise answer host_() with a
   // real origin and the showcase would start writing a stranger's review session.
   const demo = wantsDemo(parseHash());
 
-  // Both width-dependent defaults on this surface key off this: the file index, and the view mode.
+  // Both width-dependent defaults on this app key off this: the file index, and the view mode.
   //
-  // The measurement is the PANE, not the window. This surface tiles, so two panes on a 1440px
+  // The measurement is the PANE, not the window. This app tiles, so two panes on a 1440px
   // desktop give it ~700px each while a viewport query still reads "wide" - and it would then open
   // a 180px index floor and a two-column split inside a pane with no room for either, which is the
   // exact geometry the defaults exist to avoid. The window is only the bootstrap guess, used for
   // the state literal below because no DOM exists yet to measure; the observer at the foot of
-  // activate() corrects it as soon as the surface has a box, and on every retile after that.
+  // activate() corrects it as soon as the app has a box, and on every retile after that.
   const NARROW_PX = 768; // the shell's 48rem inversion, in px
   let paneNarrow = window.innerWidth < NARROW_PX;
 
@@ -435,7 +435,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // narrow pane into two columns that each spend ~7ch on gutters and markers before any code.
     // The preference is NOT overwritten, so the next load on a wide viewport is split again -
     // this is read ONCE at mount and nothing listens for a resize, so widening the CURRENT window
-    // does not bring split back until the surface is remounted.
+    // does not bring split back until the app is remounted.
     mode: paneNarrow ? "unified" : modeCell.get(),
     cursor: -1,
     session: null,
@@ -546,7 +546,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const main = h("div", "console-diff-main");
   const toolbar = h("div", "console-diff-toolbar");
-  // TWO strips, not one crowded one. The head names the surface and what it is comparing and
+  // TWO strips, not one crowded one. The head names the app and what it is comparing and
   // carries the actions; the readout below carries the counts. They were one row of eleven chips
   // over a row of hints and buttons, and nothing said which of the three kinds of thing a reader
   // was looking at.
@@ -574,12 +574,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // a viewer nobody drives with anything but the arrow keys.
   //
   // The console's hold-"?" cheat sheet cannot carry these: it renders only commands that
-  // resolve to a chord in the console-wide keymap, and these are surface-local single keys
+  // resolve to a chord in the console-wide keymap, and these are app-local single keys
   // that never enter it. Until then the only summary lived inside the Esc overview - behind
   // the one key a first-time reader is least likely to try.
   // Each key is its own element rather than a run of text. Written as a sentence, the pair that
   // steps by file reads as `}/{` beside `]/[`, and a reader who has met a template engine sees
-  // mustache syntax and a rendering bug - the author of this surface did, off a screenshot.
+  // mustache syntax and a rendering bug - the author of this app did, off a screenshot.
   // Punctuation is only legible AS a key when it is drawn as one.
   const keysEl = h("div", "console-diff-toolbar__keys");
   for (const [keys, what] of [
@@ -635,7 +635,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // ONE run control, for the project of the file in view - not one per file heading. The question
   // a reader asks is "does the thing I am looking at still pass", and they ask it about one place
   // at a time; a button on every heading would answer the same question n times in a column and
-  // turn the surface into a control panel.
+  // turn the app into a control panel.
   const verdictButton = h(
     "button",
     "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__verdict",
@@ -695,7 +695,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const scroll = h("div", "console-diff-scroll");
   scroll.tabIndex = 0;
-  // A grid rather than a list: rows have cells (gutters, marker, text) and the surface is
+  // A grid rather than a list: rows have cells (gutters, marker, text) and the app is
   // two-dimensionally navigable. aria-rowcount is set on every paint from the true row total.
   scroll.setAttribute("role", "grid");
   scroll.setAttribute("aria-label", "Changed lines");
@@ -787,7 +787,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (file.binary) el.append(label("binary", "pf-m-grey", "No text diff to show"));
     // A mode change produces no hunks either, and without this the row is a filename and a
     // churn count with nothing to say why it is in the changeset - the reader is left to
-    // assume the surface dropped something. A script gaining +x is a real reviewable event.
+    // assume the app dropped something. A script gaining +x is a real reviewable event.
     const mode = modeChange(file);
     if (mode !== null) {
       el.append(
@@ -835,8 +835,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // Wrapped, and display: contents so the chips still lay out as row children: the wrapper
     // exists only to give the stylesheet a positional handle, so a narrow pane can drop the
     // trailing chips whole rather than slicing one down the middle. riskChips emits them
-    // most-important first (public surface, then reach, then churn), so shedding from the END
-    // gives up the least, and "public surface" is the last thing to go.
+    // most-important first (public API, then reach, then churn), so shedding from the END
+    // gives up the least, and "public API" is the last thing to go.
     const risks = h("span", "console-diff-row__risks");
     for (const c of riskChips(findAnnotation(file.path))) {
       risks.append(label(c.text, TONE_CLASS[c.tone], c.title));
@@ -851,7 +851,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const el = h("div", "console-diff-row console-diff-row--hunk");
       const digest = state.digestByRow.get(index);
       if (digest && state.viewed.has(digest)) el.dataset.viewed = "";
-      // The @@ coordinates are wire syntax, and this surface already prints line numbers in its
+      // The @@ coordinates are wire syntax, and this app already prints line numbers in its
       // gutters, so what the heading says is what a reader wanted from it: the declaration they
       // are inside of. A hunk git could name none for keeps its position alone.
       el.append(
@@ -1094,7 +1094,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     item.append(wrap);
     // Keep the full path in the native tooltip.
     item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-    if (o.annotation?.surface === "public") item.dataset.surface = "public";
+    if (o.annotation?.visibility === "public") item.dataset.visibility = "public";
     if (o.annotation?.reach) {
       const r = h("span", "console-diff-sidebar__counts");
       r.textContent = String(o.annotation.reach);
@@ -1231,9 +1231,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // host_ resolves which server to read.
   //
   // adoptServerOrigin() is called HERE, not left to the shell, and the reason is easy to miss:
-  // each surface is its own bundle, so lib/server's module-level "did we adopt this origin"
+  // each app is its own bundle, so lib/server's module-level "did we adopt this origin"
   // flag is per-bundle state. The shell adopting it does not make it true in here. Without
-  // this call the surface falls back to whatever host the dashboard happened to persist, so
+  // this call the app falls back to whatever host the dashboard happened to persist, so
   // Review would report "no server connected" on a console served BY that very server until
   // the reader had visited the dashboard first.
   const host_ = (): string | null => {
@@ -1407,7 +1407,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   // Keep the patch stable while polling the coordination session.
-  let surfaceVisible = true;
+  let appVisible = true;
   let pollTimer: number | null = null;
   let polling = false;
   const stopPolling = (): void => {
@@ -1416,12 +1416,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
   const schedulePoll = (): void => {
     stopPolling();
-    if (demo || disposed || !surfaceVisible || !state.session || state.collaboration === "stale")
+    if (demo || disposed || !appVisible || !state.session || state.collaboration === "stale")
       return;
     pollTimer = window.setTimeout(() => void pollSession(), 4_000);
   };
   const pollSession = async (): Promise<void> => {
-    if (polling || demo || disposed || !surfaceVisible || !state.session) return;
+    if (polling || demo || disposed || !appVisible || !state.session) return;
     const hp = host_();
     if (!hp) {
       setCollaboration("unavailable");
@@ -1572,7 +1572,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // --- chrome ---------------------------------------------------------------
 
   // ranked reports whether the server had a ranking key at all. False means every file's reach
-  // is unmeasured, so the order is path order wearing a ranking's clothes - and this surface
+  // is unmeasured, so the order is path order wearing a ranking's clothes - and this app
   // says "Read these first", which is a claim it cannot keep in that state. Mirrors
   // types.Diff.Ranked; the server's order is still authoritative, this only labels it.
   const ranked = (): boolean =>
@@ -1622,7 +1622,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       chips.push(label("partly read", "pf-m-red", info.reason));
     }
     // Threads on files this changeset does not touch have nowhere in the stream to sit. Counted
-    // rather than dropped: "your colleague said nothing" is the one thing a review surface must
+    // rather than dropped: "your colleague said nothing" is the one thing a review app must
     // never say by accident.
     const elsewhere = state.threads?.elsewhere.length ?? 0;
     if (elsewhere > 0) {
@@ -1668,13 +1668,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
           "The shared review now describes a different patch. Refresh the diff before collaborating.",
       },
     }[state.collaboration];
-    // Demo state is NOT chipped here. Every other surface says it in one place - the shell's
-    // connection pill - and a second badge in this toolbar made the diff the one surface that
+    // Demo state is NOT chipped here. Every other app says it in one place - the shell's
+    // connection pill - and a second badge in this toolbar made the diff the one app that
     // announced it twice, in a style nothing else uses.
     //
     // The tileable case (toolbar on screen, status bar hidden, numbers reading as your own
     // tree) is real and is the reason this existed. It is answered by the pill rather than by
-    // a per-surface badge: fixing it here only would leave every other tileable surface with
+    // a per-app badge: fixing it here only would leave every other tileable app with
     // the same gap and a different answer.
     size.push(
       label(
@@ -1698,7 +1698,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       );
     }
     // Said out loud for the reason the generated count is: a folded file the reader was never
-    // told about is the one failure this surface cannot have. It is the second pass's whole
+    // told about is the one failure this app cannot have. It is the second pass's whole
     // value, so it reads as progress rather than as a warning.
     if (s.settled > 0) {
       pass.push(
@@ -1712,10 +1712,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (!ranked()) {
       attention.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
     }
-    if (s.publicSurface > 0) {
+    if (s.publicFiles > 0) {
       attention.push(
         label(
-          `${s.publicSurface} public surface`,
+          `${s.publicFiles} public API`,
           "pf-m-orange",
           "Files whose changed symbols are reachable outside their project or module",
         ),
@@ -1799,7 +1799,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // The target an inline run asks for. Hard-coded to the canonical test target rather than
   // offered as a picker: the reader is asking one question - does this still pass - and a menu of
   // every declared target turns that into a decision they did not want to make. A project that
-  // declares no `test` comes back undeclared, and the surface says so.
+  // declares no `test` comes back undeclared, and the app says so.
   const RUN_TARGET = "test";
 
   // currentProject is the project of the file the reader is on, which is what the one run control
@@ -1822,7 +1822,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   //
   // A verdict computed against a different changeset digest is shown as STALE rather than hidden
   // or silently reused. Hiding it loses the reader's own work; reusing it is the confident wrong
-  // answer this surface exists not to give.
+  // answer this app exists not to give.
   const renderVerdict = (): void => {
     const project = currentProject();
     if (!project) {
@@ -1870,7 +1870,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   //
   // The server coalesces, so pressing this while the reader's own terminal is already running the
   // same target joins that run rather than starting a second - and the reply says which happened,
-  // which is why the surface can show "Testing..." without ever having to claim it started it.
+  // which is why the app can show "Testing..." without ever having to claim it started it.
   const startRun = async (): Promise<void> => {
     const project = currentProject();
     if (!project) return;
@@ -1899,7 +1899,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   // pollRun watches one run to completion. Polling rather than streaming: the verdict is a single
-  // bit arriving once, and a socket per surface to deliver it would cost more than it saves.
+  // bit arriving once, and a socket per app to deliver it would cost more than it saves.
   const pollRun = async (project: string, asOf: string): Promise<void> => {
     // Bounded so a run that never reports back leaves the control usable rather than stuck on
     // "Testing..." forever. At 1.5s that is ten minutes, past any test run worth watching inline.
@@ -2010,8 +2010,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
       // Its own twist caret rather than the log viewer's console-render-section one: that class is
-      // styled only in logs.css, which this surface never loads (verified cold - the button rendered
-      // display:inline-block with a 0x0 caret when Diff was the first surface opened in a session,
+      // styled only in logs.css, which this app never loads (verified cold - the button rendered
+      // display:inline-block with a 0x0 caret when Diff was the first app opened in a session,
       // and only looked right because an earlier visit to Logs/Activity/Notes had pulled the sheet
       // in already). The rotation is also driven off this button's OWN aria-expanded rather than a
       // [data-collapsed] ancestor, because this button has no such ancestor - logs.css's selector
@@ -2055,7 +2055,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const go = h("button", "console-diff-rail__go");
       go.type = "button";
       // The key rides as its own <kbd>, the same chip the Shortcuts overlay and the Actions
-      // surface use for a physical key - not "[g]" folded into the label, which reads as part
+      // app use for a physical key - not "[g]" folded into the label, which reads as part
       // of the word rather than a key you can press.
       go.append("go ", h("kbd", "console-cheatsheet-kbd", "g"));
       go.disabled = !canCollaborate();
@@ -2089,11 +2089,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     box.append(line("to read", `${s.files} files, +${s.additions} -${s.deletions}`));
     if (s.generated > 0)
       box.append(line("folded away", `${s.generated} generated`, "Declared target outputs"));
-    if (s.publicSurface > 0)
+    if (s.publicFiles > 0)
       box.append(
         line(
-          "public surface",
-          `${s.publicSurface} files`,
+          "public API",
+          `${s.publicFiles} files`,
           "Changed symbols reachable outside their project or module",
         ),
       );
@@ -2330,7 +2330,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   // toggleViewed marks the hunk the cursor is in. It is the READER's claim, which is why no
-  // agent surface can make it.
+  // agent tool can make it.
   const toggleViewed = async (): Promise<void> => {
     const i = currentHunkRow();
     if (i === null) return;
@@ -2409,7 +2409,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // one is worse than none: it teaches a chord that does nothing.
     commit.title = `${navigator.userAgent.includes("Mac") ? "Cmd" : "Ctrl"}+Enter`;
     field.addEventListener("keydown", (e) => {
-      // Stopped here so the surface's own single-letter keys do not fire while typing - a bare
+      // Stopped here so the app's own single-letter keys do not fire while typing - a bare
       // "v" in a remark must be the letter v.
       e.stopPropagation();
       if (e.key === "Escape") {
@@ -2493,7 +2493,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // stream so the threads take their places in it.
   //
   // Never throws and never degrades the session: a forge that cannot be reached is a diff with
-  // no review attached, which is what this surface was before any of this existed.
+  // no review attached, which is what this app was before any of this existed.
   const loadReview = async (): Promise<void> => {
     if (disposed) return;
     if (demo) {
@@ -2525,7 +2525,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (!hp) return;
     const { branches, unsupported } = await fetchBranches(hp, controller.signal);
     if (disposed) return;
-    // Recorded even when there is nothing to report, so the surface can tell "nobody else is
+    // Recorded even when there is nothing to report, so the app can tell "nobody else is
     // touching this" from "this backend has not implemented the lookup". Only the first is
     // reassurance, and only one of them is true.
     state.branchesUnsupported = unsupported;
@@ -2550,7 +2550,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // composePublish shows the batch that is about to leave and asks for the line that heads it.
   //
   // The listing is the point, and it is why this is not a one-key send. Publishing is the one
-  // act on this surface a colleague can see, so the reader gets to read what they wrote as a
+  // act on this app a colleague can see, so the reader gets to read what they wrote as a
   // SET before it goes - which is the whole argument for drafting in the first place: the
   // fifth remark often changes your mind about the first.
   const composePublish = (): void => {
@@ -2574,7 +2574,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const box = h("div", "console-diff-composer console-diff-composer--batch");
     const where = h("span", "console-diff-composer__where");
     where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to ${destination(state.review)}`;
-    // The network, said out loud. Everything else on this surface is local, so the one act that
+    // The network, said out loud. Everything else on this app is local, so the one act that
     // leaves the machine must not look like the others - and it names the HOST, because an
     // appliance and github.com are the same feature and different destinations.
     const warn = h(
@@ -2701,7 +2701,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (disposed) return "";
       applySession(next);
       // Re-read the review, so what just left comes back as a thread beside the code it is
-      // about. Without it the remarks would vanish from the surface at the moment they became
+      // about. Without it the remarks would vanish from the app at the moment they became
       // the only permanent thing on it.
       await loadReview();
       return "";
@@ -2738,7 +2738,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const box = h("div", "console-diff-composer console-diff-composer--batch");
     const where = h("span", "console-diff-composer__where");
     // Who is being answered, and where it lands. A reply goes to a PERSON, but it is also the
-    // second act on this surface that leaves the machine, so it names the destination for the
+    // second act on this app that leaves the machine, so it names the destination for the
     // same reason the send box does.
     where.textContent = state.review
       ? `Reply to ${thread.author} on ${destination(state.review)}`
@@ -3081,7 +3081,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     renderEmptyMessage(emptySlots, title, message);
   };
 
-  // `promptState`, not `state`: this closure already reads the surface's own `state`.
+  // `promptState`, not `state`: this closure already reads the app's own `state`.
   const showConnectPrompt = (promptState: ConnectPromptState): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
@@ -3101,7 +3101,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     stopPolling();
     // The showcase joins the same pipeline one step in, with the patch and the session the
     // server would have returned. Everything below order() is the production path, so what it
-    // shows off is the surface itself rather than a rendering of it. No fetch is issued at all,
+    // shows off is the app itself rather than a rendering of it. No fetch is issued at all,
     // which is what makes /console/diff/#demo work with no server, no workspace and offline.
     if (demo) {
       state.collaboration = "live";
@@ -3205,7 +3205,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // The pane-width defaults. Installed here, at the foot of activate(), because it drives setMode
   // and so must be declared after it. ResizeObserver fires once on observe with the current box, so
-  // the bootstrap guess taken from the window above is corrected as soon as the surface is laid
+  // the bootstrap guess taken from the window above is corrected as soon as the app is laid
   // out, and again on every retile - which is the case a viewport query cannot see at all.
   //
   // Applied only on a CHANGE of state, never per resize tick: setMode rebuilds the row model, and
@@ -3236,7 +3236,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   return {
     setVisible(visible: boolean): void {
-      surfaceVisible = visible;
+      appVisible = visible;
       if (visible) startPolling();
       else stopPolling();
     },

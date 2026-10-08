@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These tests exercise the portable FFI surface — the C-decl parser and the
+// These tests exercise the portable FFI API — the C-decl parser and the
 // FFIProvider boundary — without depending on the purego backend, so they run on
 // every platform (including those where zdef() has no default provider).
 

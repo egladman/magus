@@ -13,18 +13,18 @@ verdict shape. Current Magus binaries therefore receive those events directly;
 the shared templates remain the portable fallback for hosts without that host
 contract.
 
-| what             | where                                                           |
-| ---------------- | --------------------------------------------------------------- |
-| skills           | `.agents/skills/`                                               |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)        |
-| guard wiring     | `.codex/hooks.json`, `PreToolUse`                               |
-| command surface  | deny and advise both reach the model                            |
-| file surface     | deny and advise both reach the model                            |
-| MCP call surface | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
-| push approval    | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
-| checkpoint       | `Stop`                                                          |
-| rehydration      | `SessionStart` (`compact`)                                      |
-| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
+| what            | where                                                           |
+| --------------- | --------------------------------------------------------------- |
+| skills          | `.agents/skills/`                                               |
+| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)        |
+| guard wiring    | `.codex/hooks.json`, `PreToolUse`                               |
+| shell commands  | deny and advise both reach the model                            |
+| file writes     | deny and advise both reach the model                            |
+| MCP calls       | `PreToolUse` (`mcp__.*`), deny and advise both reach the model  |
+| push approval   | `.codex/rules/magus.rules` prompts, `PermissionRequest` answers |
+| checkpoint      | `Stop`                                                          |
+| rehydration     | `SessionStart` (`compact`)                                      |
+| MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
 
 ## Skills
 
@@ -301,12 +301,12 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
 
 ## Coverage and limits
 
-- **The MCP call surface is wired.** The descriptor's third matcher receives
+- **The MCP-call rules are wired.** The descriptor's third matcher receives
   the complete `tool_input` object and sends the raw event to the same host
-  adapter as the command and file surfaces. It is transport-complete, but no
+  adapter as the shell-command and file-write rules. It is transport-complete, but no
   shipped rule currently judges arbitrary MCP tool names or parameters.
 - Hooks are not available on Windows, and `[features] hooks = false` turns the
-  whole surface off. A repo-local `.codex/hooks.json` is also inert until you
+  every hook off. A repo-local `.codex/hooks.json` is also inert until you
   trust the project layer, and every non-managed hook wants a per-hash review
   through `/hooks`, so a config committed to a repository guards nobody who has
   not accepted it. That is the one way this host differs from the others in kind
@@ -321,7 +321,7 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   `apply_patch` carries a patch in `tool_input.command`, rather than a file path,
   so the declared-output guard intentionally matches `Edit|Write`.
 - The command rules are exercised by this repository's harness. The file and
-  MCP surfaces are wired to the documented events but still need a live Codex
+  MCP rules are wired to the documented events but still need a live Codex
   event in this workspace to make the observation empirical; the `SessionStart`
   envelope is likewise rendered from the documented JSON contract.
 - **Lease capture has an event but no context.** `SubagentStart` exists and

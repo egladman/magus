@@ -1,4 +1,4 @@
-// main-dom.test.ts - the Activity surface's payload expansion. document/window are registered
+// main-dom.test.ts - the Activity app's payload expansion. document/window are registered
 // globally by test-setup.mjs (node --import), so this runs under node:test like the other *-dom
 // tests. The event -> section mapping itself is covered in adapter.test.ts.
 //
@@ -6,24 +6,24 @@
 // carries a content ref, a size, and at most the first 240 characters of the response, and
 // ActivityService.GetPayload is the documented way to resolve the rest - which no console code
 // called, so a reader who wanted the payload the trail was pointing at had nowhere to go. These
-// tests fetch through the same stubbed transport the surface really uses, so a control that is
+// tests fetch through the same stubbed transport the app really uses, so a control that is
 // drawn but never wired fails them.
 
 import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
 import { activate } from "./main";
-import type { SurfaceInstance } from "../../desktop/standalone";
+import type { AppInstance } from "../../desktop/standalone";
 
 const realFetch = globalThis.fetch;
-let mounted: SurfaceInstance | null = null;
+let mounted: AppInstance | null = null;
 let hostEl: HTMLElement | null = null;
-// The refs GetPayload was asked for, in order: the surface must resolve the ref the reader clicked
+// The refs GetPayload was asked for, in order: the app must resolve the ref the reader clicked
 // on, not whichever one it happened to build the control from last.
 let asked: string[] = [];
 
 // There is no beforeEach on purpose. The DOM suite runs with --experimental-test-isolation=none, so
 // a hook declared at file scope fires for every *-dom test in the process, siblings included - and
-// the setup these tests need is a #port attach, which would put a sibling's surface into live mode
+// the setup these tests need is a #port attach, which would put a sibling's app into live mode
 // against a server that is not there. mount() does it per test instead. The teardown below is only
 // the undo (a null check away from a no-op elsewhere), which is what the sibling files do too.
 afterEach(() => {
@@ -136,7 +136,7 @@ function serve(
   }) as typeof fetch;
 }
 
-// mount attaches the surface to a fresh host. The hash is the surface's source selector: "#port="
+// mount attaches the app to a fresh host. The hash is the app's source selector: "#port="
 // is what puts it in live mode against a loopback server (the stub), "#demo" the synthesized trail.
 async function mount(hash = "#port=7391"): Promise<HTMLElement> {
   location.hash = hash;

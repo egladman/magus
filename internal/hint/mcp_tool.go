@@ -19,7 +19,7 @@ type ToolName string
 // to concatenate a tool name into prose so the reference tracks a rename.
 func (t ToolName) String() string { return string(t) }
 
-// The full MCP tool surface. std/magus.go names every tool through one of these, and
+// The full set of MCP tools. std/magus.go names every tool through one of these, and
 // the generated catalog (internal/handler/mcp/gen) carries the rendered string, so
 // this block is the one place a tool name is spelled by hand.
 const (
@@ -42,7 +42,7 @@ var AllToolNames = []ToolName{
 // LookupTool resolves a declared tool name, reporting false for one nobody declares.
 //
 // The counterpart of Lookup in cli_command.go, and there for the same reason: a
-// GENERATED surface that names a tool in prose has no compiler to catch a rename,
+// GENERATED output that names a tool in prose has no compiler to catch a rename,
 // so it resolves the name instead of retyping it.
 func LookupTool(name string) (ToolName, bool) {
 	for _, t := range AllToolNames {

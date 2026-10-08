@@ -1,6 +1,6 @@
 ---
 title: Terminal
-description: How magus draws in your terminal (a band of pinned rows that ordinary output scrolls past, notifications for conditions you have to act on, and interactive surfaces you can click) and how every one of them degrades to plain text when there is no terminal to draw on.
+description: How magus draws in your terminal (a band of pinned rows that ordinary output scrolls past, notifications for conditions you have to act on, and interactive views you can click) and how every one of them degrades to plain text when there is no terminal to draw on.
 tags: [terminal, tui, interactive, notifications, mouse, picker, tty]
 aliases: [tui, interactive-terminal]
 ---
@@ -18,7 +18,7 @@ one case clears the visible screen and reprints. Scrollback still survives:
 clearing is not the alternate screen buffer, so what scrolled past before is
 still there when you scroll up.
 
-Every surface on this page degrades to plain output when there is no terminal to
+Everything on this page degrades to plain output when there is no terminal to
 draw on: a pipe, a CI log, a `magus` inside another tool, or a real terminal
 whose `TERM` declares it understands no escape sequence (`TERM=dumb`, which
 Emacs shell-mode sets), so all of those behave the way they always did.
@@ -34,8 +34,8 @@ not move with it.
 
 A dim box encloses the band, so it is obvious at a glance which lines
 scroll away and which are being repainted in place. It is drawn with
-box-drawing runes, and the same box is drawn by every interactive surface
-(the band, the failure list, the `magus x` picker), because two surfaces that
+box-drawing runes, and the same box is drawn by every interactive view
+(the band, the failure list, the `magus x` picker), because two views that
 frame themselves differently read as two different products.
 
 Those runes are multi-byte, so a terminal whose locale is not UTF-8 renders
@@ -159,4 +159,4 @@ not shown when there is nowhere to repaint it.
 
 The log format is reported first because it decides the question before your
 terminal gets a say: `text` and `json` emit structured records and draw no
-interactive surface at all, however capable the terminal is.
+interactive view at all, however capable the terminal is.

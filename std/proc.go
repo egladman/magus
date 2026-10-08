@@ -10,7 +10,7 @@ func init() { Register(Proc) }
 // reason that is structural rather than cosmetic.
 //
 // magus layers its host methods onto Buzz's stdlib, so one `import "os"` carries both
-// surfaces. Buzz owns os.execute, which returns an exit code the caller must remember to
+// APIs. Buzz owns os.execute, which returns an exit code the caller must remember to
 // check; magus's verb raises, captures, streams and enforces the sandbox. Two verbs that
 // are synonyms in English, in one namespace, differing on whether a failure is SILENT, is
 // a trap.

@@ -11,17 +11,17 @@ repository root, and it runs hooks as programs with the event on stdin. One
 self-contained script covers every event magus uses, so installing the whole
 integration is a single download.
 
-| what             | where                                                                      |
-| ---------------- | -------------------------------------------------------------------------- |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)                   |
-| guard wiring     | `.cursor/hooks.json`                                                       |
-| command surface  | deny and advise both reach the model                                       |
-| file surface     | deny and advise both reach the model                                       |
-| MCP call surface | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
-| session start    | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
-| checkpoint       | `sessionEnd`                                                               |
-| lease            | `subagentStart` (unverified live, see below)                               |
-| MCP              | [MCP](../mcp.md)                                                           |
+| what            | where                                                                      |
+| --------------- | -------------------------------------------------------------------------- |
+| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
+| guard wiring    | `.cursor/hooks.json`                                                       |
+| shell commands  | deny and advise both reach the model                                       |
+| file writes     | deny and advise both reach the model                                       |
+| MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
+| session start   | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
+| checkpoint      | `sessionEnd`                                                               |
+| lease           | `subagentStart` (unverified live, see below)                               |
+| MCP             | [MCP](../mcp.md)                                                           |
 
 ## Skills
 
@@ -30,7 +30,7 @@ it prints the managed magus block when your `AGENTS.md` is missing it or
 carrying a stale one, and you paste it in. [Skills](skills.md) covers the block,
 its stamp, and the drift check that grades it.
 
-Because Cursor has no Agent Skills surface, it cannot enforce a short-versus-full
+Because Cursor has no Agent Skills support, it cannot enforce a short-versus-full
 skill-form choice. Keep that repository guidance explicit and user-owned in
 `AGENTS.md`; do not claim a model or provider setting selects it automatically.
 
@@ -194,9 +194,9 @@ script also accepts `file_path`.
 // Compaction still has no model-facing rehydrate event.
 //
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=cursor surface=mcp deny=model advise=none pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
 
 import "std";
 import "flags";
@@ -674,7 +674,7 @@ fun main(args: [str]) > void {
 
 ## Notifications
 
-Cursor can run a command on its agent hook surface. Shape the event into the
+Cursor can run a command from its agent hooks. Shape the event into the
 canonical envelope and pipe it to `magus session notify`; see [Attention hooks](notifications.md).
 
 ## Recording where the work stands
@@ -715,14 +715,14 @@ never fires costs nothing and a missing one cannot be found; check
 
 ## Coverage and limits
 
-**The MCP call surface is gated on `beforeMCPExecution`.** Cursor publishes
+**MCP calls are gated on `beforeMCPExecution`.** Cursor publishes
 `tool_name`, `tool_input`, and `mcp_server_name` on that event; the script
 rewrites them to `mcp__<server>__<tool>` before `magus shell` grades the call.
 `failClosed` is set so a hook crash blocks the tool. Advise stays unwired:
 `afterMCPExecution` is observation-only, and `postToolUse` still carries no
 server identity, so this host cannot form the graded name after the call.
 
-**Both surfaces now reach the model on both decisions.** That is new, and it cost
+**Shell commands and file writes now reach the model on both decisions.** That is new, and it cost
 two events per judged call: the write gate moved from `afterFileEdit`, which
 fires once the write has landed, to `preToolUse`, which blocks it; and the
 advisory moved from stderr prose to `postToolUse.additional_context`. Reporting a

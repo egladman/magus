@@ -68,7 +68,7 @@ type Stepper interface {
 
 // ReplDriver is an optional interface sessions expose to allow the shared
 // REPL to evaluate snippets, detect partial-input continuation, and filter
-// host-injected globals — without knowing the engine's surface language.
+// host-injected globals — without knowing the engine's source language.
 //
 // Each engine exposes one driver per language it speaks; the REPL switches
 // between drivers by language.

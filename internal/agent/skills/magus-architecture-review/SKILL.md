@@ -37,10 +37,10 @@ Ask it explicitly; nothing prompts it.
 {{if .Full}}A boundary is not free. In Go every package boundary FORCES an export:
 a helper that would be lowercase inside one package must be capitalized to cross
 into another. So splitting files into packages to "organize" them WIDENS the
-public surface you were trying to keep small, and each new export is a name you
+public API you were trying to keep small, and each new export is a name you
 must justify, document, and keep stable. The cost is paid per boundary, and no
 churn or coupling metric records it.{{else}}A boundary is not free: in
-Go, splitting a package forces exports, widening the surface you meant to shrink.
+Go, splitting a package forces exports, widening the public API you meant to shrink.
 No churn or coupling metric records that cost.{{end}}
 
 The shapes worth flagging, most clearly wrong first:

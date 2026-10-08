@@ -5,7 +5,7 @@
 // source: magus/token/v1alpha1/token.proto
 
 // Package magus.token.v1alpha1 is the console-facing TokenService: the typed management
-// surface over the server's stored tokens and its live share link. It is a second door onto
+// API over the server's stored tokens and its live share link. It is a second door onto
 // the same token store the CLI writes (tokens.d) and the same share manager the share
 // endpoint drives, never a second store.
 //
@@ -39,7 +39,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes
+// Level is how much of one scope a grant reaches. Levels are ordered: a higher level includes
 // every lower one. The zero value is none.
 type Level int32
 
@@ -146,7 +146,7 @@ func (CredentialClass) EnumDescriptor() ([]byte, []int) {
 	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{1}
 }
 
-// Grant is what a token may do: one level per surface, as the server enforces it.
+// Grant is what a token may do: one level per scope, as the server enforces it.
 type Grant struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        Level                  `protobuf:"varint,1,opt,name=tokens,proto3,enum=magus.token.v1alpha1.Level" json:"tokens,omitempty"`
@@ -209,8 +209,8 @@ func (x *Grant) GetConsole() Level {
 
 // TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and
 // revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full
-// hash), the class, the grant, the expiry, and the name. A list is still an intelligence
-// surface, so it omits the full hash, any filesystem path, and the creation time.
+// hash), the class, the grant, the expiry, and the name. A list is still a source of intelligence
+// for an attacker, so it omits the full hash, any filesystem path, and the creation time.
 type TokenInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // the token's name, or a label for the share link

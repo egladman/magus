@@ -13,7 +13,7 @@ export fun serverHttpFigure() > figure\Figure !> any {
     final console = figure\external("Console PWA", sub: "dashboard, review", tag: "client", look: figure\Look.plain);
     final probe = figure\external("kubelet", sub: "scripts, probes", tag: "client");
     return figure\of("server-http",
-            title: "The HTTP surface, and the one route without a guard",
+            title: "The HTTP routes, and the one route without a guard",
             eyebrow: "magus server",
             desc: "Agents and the console reach /mcp, the /api/v1 read views, the review and "
                 + "plan routes and the typed Connect services through the DNS-rebind, "

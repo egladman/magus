@@ -14,7 +14,7 @@
 // command, magus\modules()/module(), the knowledge graph, the docs and
 // bindings codegen, the manpage/manifest generators) reads through here
 // rather than std.All()/std.Get() directly, so std.All() staying scoped to
-// std's own 24 does not silently narrow what any of those surfaces reports.
+// std's own 24 does not silently narrow what any of those callers reports.
 package hostmodules
 
 import (

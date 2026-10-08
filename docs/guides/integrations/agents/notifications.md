@@ -27,7 +27,7 @@ printf '%s\n' "finished" | magus session notify --outcome Stop -o json
 
 An MCP server only ever observes tool calls. A blocked agent makes no call at
 all: the blockage IS the silence, and silence is precisely what MCP has no way
-to report. The host's own hook system is the only surface that fires on it. So
+to report. The host's own hook system is the only hook that fires on it. So
 this is a hook sink rather than a tool, and it stays one whether or not the
 server is up.
 
@@ -56,8 +56,8 @@ current documentation, because these move; the magus side never changes.
 | ----------------------------- | ---------------------------------------- |
 | [Claude Code](claude-code.md) | `Notification`, `Stop`, `SubagentStop`   |
 | [Codex](codex.md)             | its hook or notify program setting       |
-| [OpenCode](opencode.md)       | its plugin surface                       |
-| [Cursor](cursor.md)           | its agent hook surface                   |
+| [OpenCode](opencode.md)       | its plugin hooks                         |
+| [Cursor](cursor.md)           | its agent hooks                          |
 | [any other host](any-host.md) | any event that means "a human is needed" |
 
 Claude Code's `Notification` fires both on a permission prompt and on idle

@@ -1,9 +1,9 @@
 <main class="console-graph-main">
 
-    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Views, Search
+    <!-- The blocks below marked [data-ref-section] are this app's reference copy (Views, Search
          syntax, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
-         again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
+         again on a tab change while docked - cloning, not moving, so the app can unmount and remount
          freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
          only the clones are shown. -->
     <details class="console-graph-help" data-ref-section>
@@ -62,7 +62,7 @@
         <div class="console-graph-sidebar__search">
           <!-- The help glyph belongs to the SECTION LABEL, like Arrangement's, Color's and Graph's.
                It used to be a pf-m-control button welded to the input, which made the one help
-               affordance on the surface that is not a circle - console.css's own note says the
+               affordance on the app that is not a circle - console.css's own note says the
                shared glyph exists so that "every console app's help affordance is an identical
                circle (the graph query prompt, the log filter)", and this was the query prompt. -->
           <div class="console-graph-display__sublabelrow">
@@ -274,7 +274,7 @@
                   <pre data-empty-cmd><code>magus graph open</code></pre>
                   <span data-empty-hint>Renders your repo's graph here.</span>
                 </div>
-                <!-- No button, matching every other surface: the Workspace menu is the one way in. -->
+                <!-- No button, matching every other app: the Workspace menu is the one way in. -->
                 <div data-empty-way>
                   <span data-empty-way-label>Try the demo</span>
                   <span data-empty-hint>Pick acme from the Workspace menu. Loads the magus project's committed graph export.</span>
@@ -298,7 +298,7 @@
           <!-- Term-prompt view command bar (same idiom as playground.html), populated by
                renderViewCommand(). Hidden when the active view has no exact CLI equivalent. -->
           <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view"></div>
-          <!-- The surface's live region, as the console's inline notice. The icon slot is not
+          <!-- The app's live region, as the console's inline notice. The icon slot is not
                decoration: PF lays the component out as a grid around it, and an alert without one
                reads as body text. role=status because the layout toggle shows which mode is active
                but announces nothing when one changes on its own (switchLayout's scale guard). -->

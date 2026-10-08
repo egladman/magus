@@ -304,7 +304,7 @@ var Magus = Module{
 		},
 		{
 			Name: "diff",
-			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. opts.rev reviews a committed range written base...head instead of the working tree, which is what a caller running where the tree is clean (a CI checkout) has to pass to see anything at all. opts.patch reviews a unified diff given as text instead, the way `magus diff --patch -` reads one: a pull request's patch, for files that may not match the tree. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Each symbol the change adds, renames or re-signs carries `checks`: what the conformance checks found against how the rest of the workspace declares the same kind of thing, with opts.minCohort and opts.minShare as their silence gates (default 5 and 0.8). opts.from reads a review an earlier `magus diff -o json` saved instead of computing it again, so several readers of one change pay for one diff. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether another project can see them (`visibility`), observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `visibility` rather than grepping text. opts.rev reviews a committed range written base...head instead of the working tree, which is what a caller running where the tree is clean (a CI checkout) has to pass to see anything at all. opts.patch reviews a unified diff given as text instead, the way `magus diff --patch -` reads one: a pull request's patch, for files that may not match the tree. opts.baseline is a `magus graph export --symbols -o json` of the base: with it every changed symbol carries what the change did to it (`change` is added, removed, signature, or body) and `api` carries the semver bump that proves, a floor and never a ceiling. Each symbol the change adds, renames or re-signs carries `checks`: what the conformance checks found against how the rest of the workspace declares the same kind of thing, with opts.minCohort and opts.minShare as their silence gates (default 5 and 0.8). opts.from reads a review an earlier `magus diff -o json` saved instead of computing it again, so several readers of one change pay for one diff. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
@@ -389,7 +389,7 @@ var Magus = Module{
 			// project(path, config), which one Buzz signature cannot express, and the
 			// config map's keys are validated by the loader rather than the checker.
 			Args: []Arg{{Name: "config", Type: TypeAny}, {Name: "opts", Type: TypeAny, Optional: true}},
-			// NOT Raises, though the script-surface binding does fail: a magusfile calls
+			// NOT Raises, though the script-mode binding does fail: a magusfile calls
 			// this at TOP LEVEL, where there is no enclosing function to declare !> and
 			// nothing to catch with. Declaring it raising makes the one mandatory call in
 			// every magusfile unwritable.
@@ -451,7 +451,7 @@ var Magus = Module{
 	Namespaces: []Namespace{
 		{
 			Name: "log",
-			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this surface hard to read.",
+			Doc:  "Emitting a message without changing control flow: the four levels, plus hint. magus\\fatal and magus\\raise are deliberately NOT here - they END the run rather than report on it, and grouping them by how they look rather than what they do is what made this module hard to read.",
 			Methods: []Method{
 				{
 					Name:   "debug",
@@ -473,7 +473,7 @@ var Magus = Module{
 				},
 				{
 					Name:   "info",
-					Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module on this surface.",
+					Doc:    "Log at info level. The only way to log from a magusfile; there is no separate log module.",
 					Args:   []Arg{{Name: "msg", Type: TypeString, Optional: true}, {Name: "fields", Type: TypeStringMap, Optional: true}},
 					Extern: true,
 				},
@@ -1068,13 +1068,13 @@ var Magus = Module{
 	MCPTools: magusMCPTools,
 }
 
-// magusMCPTools is the magus module's agent surface, the source the generated MCP
+// magusMCPTools is the magus module's MCP tool list, the source the generated MCP
 // registry (internal/handler/mcp/gen) is emitted from. Kept beside the Magus
 // literal rather than inside it because the descriptions are agent-facing prose and
 // dwarf the declarations they sit next to.
 //
-// client is the magus\ surface: a Buzz program calls the typed members and
-// returns a value. magus\cmd is not on this surface. The tools beside client
+// client exposes the magus\ API: a Buzz program calls the typed members and
+// returns a value. magus\cmd is not part of it. The tools beside client
 // are the operations no member covers.
 var magusMCPTools = []MCPTool{
 	{
@@ -1101,7 +1101,7 @@ var magusMCPTools = []MCPTool{
 		Doc: "Transform a supplied JSON object with Buzz. Define `transform(input: any, args: [str])` and return a JSON-encodable value; the result is returned under `json`, and std\\print text under `stdout`. " +
 			"Only std, math, crypto, serialize and buffer are importable. File imports, native FFI and workspace-changing host modules are unavailable. " +
 			"For workspace queries or actions, use the client tool. `import \"magus\"` returns a diagnostic explaining this boundary. " +
-			"Use the regular `magus buzz` CLI when a script needs the full host surface. Each call runs in a separate process, bounded by the workspace's target_timeout (30 seconds when unset).",
+			"Use the regular `magus buzz` CLI when a script needs the full set of host modules. Each call runs in a separate process, bounded by the workspace's target_timeout (30 seconds when unset).",
 		Params: []MCPParam{
 			{Name: "script", Type: TypeString, Doc: "Inline Buzz source. Exactly one of script or path."},
 			{Name: "path", Type: TypeString, Doc: "A .buzz file inside the workspace, relative to its root. Exactly one of script or path."},
@@ -1115,9 +1115,9 @@ var magusMCPTools = []MCPTool{
 	},
 	{
 		Name: hint.ToolConsole.String(),
-		Doc:  "Return a tokenless link to a local magus console surface, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
+		Doc:  "Return a tokenless link to a local magus console app, plus `open`: a shell command that opens it signed in by minting the token in the person's own shell. Hand the person `open` to run rather than the bare link, which opens an unauthenticated page. Use this only when a person asked to see the dashboard or related status; this tool never opens a browser or changes console state.",
 		Params: []MCPParam{
-			{Name: "surface", Type: TypeString, Doc: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
+			{Name: "app", Type: TypeString, Doc: "Console app to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
 			{Name: "reason", Type: TypeString, Doc: "Optional brief text a compatible MCP client may show with the link."},
 		},
 	},
@@ -1131,7 +1131,7 @@ var magusMCPTools = []MCPTool{
 		Name: hint.ToolDiff.String(),
 		Doc: "Join the review session a person already has open and pair with them on it. " +
 			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
-			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
+			"how widely its changed symbols are referenced, whether it is part of the public API, observed coverage, " +
 			"plus where the person is looking and what they have already read. " +
 			"op=state also returns `patch` (the unified diff) and `hunks` (per file, each hunk's 0-based index and its content digest), " +
 			"which are the coordinates comment and suggest take - so read state first and cite an index from it rather than guessing one. " +
@@ -1529,7 +1529,7 @@ func MagusRun(ctx context.Context, args []string, opts map[string]any) (types.Ex
 }
 
 // MagusAttention lists the open attention requests through a nested magus. Listing only:
-// disposal is deliberately absent from this surface, because a script that closes
+// disposal is deliberately absent from this API, because a script that closes
 // requests is the auto-disposition the doctrine's Manual-on-purpose table rules out.
 func MagusAttention(ctx context.Context, args []string, opts map[string]any) (map[string]any, error) {
 	return runMagusJSON[map[string]any](ctx, "session", append([]string{"attention"}, args...), opts)
@@ -1766,7 +1766,7 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 
 // MagusPutJob backs magus\job.put. The field merge is decoded by
 // internal/job.ParseMerge, the same decoder `magus job fork` calls, so
-// a client typing either surface accepts the same fields and rejects the same mistakes.
+// a caller of either accepts the same fields and rejects the same mistakes.
 func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
 	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
@@ -1920,7 +1920,7 @@ func MagusDescribeSpell(ctx context.Context, name string, opts map[string]any) (
 //
 // It shells out to `magus diff` rather than reimplementing the join, which is the whole
 // point of exposing it here: a Buzz advisor writing a pull-request comment and the console
-// surface then rank files by the SAME definition (types.Diff.SortForReading), and a change to
+// then rank files by the SAME definition (types.Diff.SortForReading), and a change to
 // that order reaches both without either being edited.
 //
 // --generated is passed so the caller receives every file and decides what to fold. A CI

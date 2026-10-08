@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { surfaceSegments } from "../../scripts/surface-stubs.mjs";
+import { appSegments } from "../../scripts/app-stubs.mjs";
 import { APPS } from "./index";
 import { isWholeMotion } from "./manifest";
 
@@ -68,15 +68,15 @@ test("the build bundles exactly the apps the shell loads lazily", () => {
 });
 
 test("the hosted stubs name exactly the manifests' segments", async () => {
-  assert.deepEqual(await surfaceSegments(APPS_DIR), segments);
+  assert.deepEqual(await appSegments(APPS_DIR), segments);
 });
 
 test("the server's link vocabulary names exactly the manifests' segments", () => {
   // Parsed as text: Go is not something this test can load. One line, one literal.
   const line = readFileSync("../internal/service/console/url.go", "utf8")
     .split("\n")
-    .find((l) => l.startsWith("var KnownSurfaces = "));
-  assert.ok(line, "no single-line KnownSurfaces in url.go");
+    .find((l) => l.startsWith("var KnownApps = "));
+  assert.ok(line, "no single-line KnownApps in url.go");
   const known = [...line.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(sorted(known), segments);
 });

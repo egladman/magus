@@ -112,7 +112,7 @@ operations. magus never names anything just `op` in the spell API, for exactly t
 
 - `types.Target`: the addressable **work-unit** `Path + Name`, plus charms
   and changed files. This is _the_ Target ([targets.md](targets.md)).
-- `spell.Op` (formerly `spell.Target`): "a single dispatchable surface of a
+- `spell.Op` (formerly `spell.Target`): "a single dispatchable entry point of a
   spell," i.e. an **Operation**. It was named `Target`, colliding with the
   work-unit above; renamed to `Op` to formalize this vocabulary.
 

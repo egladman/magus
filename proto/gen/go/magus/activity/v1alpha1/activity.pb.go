@@ -65,7 +65,7 @@ const (
 	// An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
 	// that was handed over - the lease's whole point, and routinely kilobytes, so only its
 	// ref rides the event. There is no response blob and no guard decision: a spawn is an
-	// observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
+	// observation, not a judged call. OUTCOME_OK means the handoff was observed, NOT that the
 	// sub-agent later succeeded.
 	Kind_KIND_AGENT_SPAWN Kind = 9
 	// The console NotesService door onto the workspace's human-authored notes. The service has no

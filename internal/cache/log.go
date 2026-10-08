@@ -1247,7 +1247,7 @@ func (h *PrettyHandler) printRef(ref string) {
 //
 // Without it a reader who has not met output refs has fourteen characters and no
 // verb: often an AGENT in a fresh worktree with no magus skills installed, for
-// which the transcript is the only surface guaranteed to reach it.
+// which the transcript is the only output guaranteed to reach it.
 //
 // One line per run, and only when a ref was minted, so it never explains a
 // notation nothing on screen used. Deliberately vendor-neutral.
@@ -1437,7 +1437,7 @@ func (h *PrettyHandler) ToggleFocus() PaneFocus {
 // SetPreview gives the band a right-hand column: the captured output of
 // whatever is selected. Nil or empty returns it to a single column.
 //
-// This is the "two views, one run" surface. It is deliberately not two PANES:
+// This is the "two views, one run" layout. It is deliberately not two PANES:
 // nothing here manages a terminal, and a caller cannot put arbitrary content in
 // it. Both columns are things this handler already owns, which is the line
 // between showing a reader their run and becoming a multiplexer.
@@ -1739,7 +1739,7 @@ func (h *PrettyHandler) resetRun() {
 	h.blocked = nil
 	// The preview belongs to a failure from the run that just ended. Left set,
 	// a rerun drew rows of the PREVIOUS run's log beside an empty tree: stale
-	// content pinned on a surface whose whole promise is that it holds still.
+	// content pinned in a band whose whole promise is that it holds still.
 	h.preview = nil
 	h.rowFailure = h.rowFailure[:0]
 }

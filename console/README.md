@@ -25,9 +25,9 @@ Where a new piece goes:
   `/console/plan/` and `/console/diagrams/` still open them.
 
 The directory is the list. The build bundles every `apps/*/main.ts` except a shell-loaded app's
-into `gen/<id>/<id>.js`, `scripts/surface-stubs.mjs` writes a stub for each manifest's segments,
+into `gen/<id>/<id>.js`, `scripts/app-stubs.mjs` writes a stub for each manifest's segments,
 the server serves exactly those stubs, and the router reads the manifests. The one list outside
-the tree is the server's link vocabulary, `KnownSurfaces` in `internal/service/console/url.go`,
+the tree is the server's link vocabulary, `KnownApps` in `internal/service/console/url.go`,
 because the CLI mints links with no console built. `src/apps/apps.test.ts` fails when any of them
 disagrees with the directories, in either direction.
 
@@ -44,19 +44,19 @@ PatternFly is the console's ONLY design system. The stylesheet stack, in load or
 3. `console.css`: the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
    launcher, layout).
 4. `overrides.css`: the small ID/class-scoped escape hatch for PF-less shell chrome.
-5. Per surface, lazily: `logs/logs.css`, `graph/graph.css`, `dashboard/dashboard.css`.
+5. Per app, lazily: `logs/logs.css`, `graph/graph.css`, `dashboard/dashboard.css`.
 
 ### How it is bundled
 
 - `src/styles/patternfly.css` @imports the PF **base** plus only the **per-component** sheets
   we render (Button, Tabs, Card, Gallery). esbuild `--bundle --minify` inlines them into
-  `gen/patternfly.css`. Add a component's sheet here when a surface starts using it; that is
-  the whole opt-in surface. Do NOT import the 1.8MB monolith `patternfly.min.css`.
+  `gen/patternfly.css`. Add a component's sheet here when an app starts using it; that is
+  the whole opt-in. Do NOT import the 1.8MB monolith `patternfly.min.css`.
 - Font/image `url()` assets are marked `--external` in the build script so esbuild leaves the
   urls instead of inlining PF's ~10MB `assets/`. All such urls live in `patternfly-base.css`
   and are **token default values**, not referenced by the markup we emit; `tokens.css`
   overrides the RedHat body/heading/mono font tokens to a system stack, so those `@font-face`
-  rules are never referenced and never fetched. If a later surface renders pficon glyphs or a
+  rules are never referenced and never fetched. If a later app renders pficon glyphs or a
   masthead background, it must ship a trimmed `assets/` subset or override those tokens too.
 - `gen/patternfly.css` (~683KB minified) is the dominant CSS cost: the full `--pf-t-*` palette
   for both themes plus the imported component sheets. It is a fixed base cost independent of
@@ -79,17 +79,17 @@ These PF status tokens are **theme-aware**: they resolve to the right value in l
 dark, so charts that read `--console-status-*` at runtime via `getComputedStyle` color
 correctly in both themes with no per-theme code.
 
-### Surface chrome (one bar, one head, one gutter)
+### App chrome (one bar, one head, one gutter)
 
-Every surface opens with a strip, and each one used to size its own: measured across the nine
-surfaces they came out 38, 40, 46, 52, 54, 57 and 68px tall, over five different inline gutters.
-Three tokens decide it now, and a surface sheet reads them rather than picking a number.
+Every app opens with a strip, and each one used to size its own: measured across the nine
+apps they came out 38, 40, 46, 52, 54, 57 and 68px tall, over five different inline gutters.
+Three tokens decide it now, and an app sheet reads them rather than picking a number.
 
 | Token                       | What it sizes                                                     |
 | --------------------------- | ----------------------------------------------------------------- |
-| `--console-surface-bar-h`   | a BAR: the strip carrying a surface's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
-| `--console-surface-head-h`  | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
-| `--console-pad`             | the inline gutter for every surface-level strip AND the content under it, so a header label starts on the same x as what it heads |
+| `--console-app-bar-h`       | a BAR: the strip carrying an app's controls (Runs filter, log viewer toolbar, Notes filter, graph stage header, plan toolbar). Derived from `--console-control-block-size`, so it is exactly a default control plus a symmetric spacer pair |
+| `--console-app-head-h`      | a HEAD: the strip carrying a label over a column (Activity's Events/Details, the diff's file index and its REVIEW head, the log viewer's Recent runs/Output) |
+| `--console-pad`             | the inline gutter for every app-level strip AND the content under it, so a header label starts on the same x as what it heads |
 
 Use a bar's height as a FLOOR (`min-block-size`), never a fixed size: these rows wrap in a narrow
 pane and have to be free to grow. Zero the strip's own `padding-block` when you do, or the two stack
@@ -102,22 +102,22 @@ tile and Big Picture narrow `--log-pad` for a preview that is not a whole page.
 A strip's hairline must reach both edges of the region it heads. That means the CHILD spends the
 gutter, not the container; a container's inline padding holds the child's `border-block-end` short
 at each end, which is how the diff's head hairline came to stop 8px before the rail and 8px before
-the sidebar/stream seam while its comment claimed a straight line across the surface.
+the sidebar/stream seam while its comment claimed a straight line across the app.
 
-Two families, and the difference is deliberate. A CHROME surface (runs, logs, graph, diff, notes,
-activity, plan) paints a full-bleed bar and lets its content meet the pane edge. A DOCUMENT surface
+Two families, and the difference is deliberate. A CHROME app (runs, logs, graph, diff, notes,
+activity, plan) paints a full-bleed bar and lets its content meet the pane edge. A DOCUMENT app
 (dashboard, settings, shortcuts) is a padded scrolling page whose content is inset. Both take their
 inset from `--console-pad`, so content starts on the same x either way.
 
 ### Control size and type (`data-control-size`)
 
-Two tiers, and which one a control takes is decided by WHERE it sits, not by the surface it belongs
+Two tiers, and which one a control takes is decided by WHERE it sits, not by the app it belongs
 to. A container declares its tier once with `data-control-size`; `tokens.css` then sizes every
 `pf-v6-c-button`, toggle-group button, tabs link and form control inside it.
 
 | Tier      | Height | Type | Where                                                                 |
 | --------- | ------ | ---- | --------------------------------------------------------------------- |
-| `default` | 37px   | 14px | a surface BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff's remark composer, the dashboard's own control row |
+| `default` | 37px   | 14px | an app BAR: the Runs filter row, the log viewer toolbar, the graph stage header, the Notes filter, the diff's remark composer, the dashboard's own control row |
 | `compact` | 29px   | 12px | an in-panel RAIL, HEAD or card: the graph sidebar, the log viewer's run index, the diff file index and the diff head's own actions, a dashboard card's own controls, the title bar's tray |
 
 Neither number is picked; both restate PatternFly's own button formula (one line box plus its
@@ -129,11 +129,11 @@ filter row ran a 37px input beside 29px buttons, one row's controls disagreeing 
 Text inputs are in the set for that reason; a `textarea` is excluded (its height is its rows), and
 so is `pf-m-inline`, which is a link inside a sentence rather than a control on a row.
 
-Before this, four surfaces carried eight control heights (21, 22, 24, 25, 26, 28, 29, 37) and five
+Before this, four apps carried eight control heights (21, 22, 24, 25, 26, 28, 29, 37) and five
 control font sizes (14, 12.48, 12, 11.52, 10.88px). `magus/control-size-token` pins both halves.
 
 Its reach is PARTIAL and worth knowing: stylelint has no DOM, so the rule only fires on a rule whose
-SELECTOR mentions `[data-control-size]`. A per-surface override written against a `console-*` class
+SELECTOR mentions `[data-control-size]`. A per-app override written against a `console-*` class
 still lands on a tiered control without being caught. The tiers are the fix; the rule is a backstop.
 
 ### The uppercase label (`--console-label-*` / `--console-chip-*`)
@@ -141,7 +141,7 @@ still lands on a tiered control without being caught. The tiers are the fix; the
 The console has exactly two uppercase voices, and `magus/label-token` (stylelint, tested in
 `scripts/stylelint-label-token.test.mjs`) fails the build on a third. Written out by hand this ran
 to 35 near-misses across seven sheets: six font sizes between 0.62 and 0.72rem, six tracking values
-between 0.04 and 0.09em, three weights, with adjacent labels on one surface disagreeing.
+between 0.04 and 0.09em, three weights, with adjacent labels on one app disagreeing.
 
 - `--console-label-size`, `-weight` and `-tracking`: a section, column, facet, stat or panel
   label. Case and colour are all that separate it from the content around it.
@@ -164,7 +164,7 @@ survives version bumps.
 ### Diagram figures (`--magus-diagram-*`)
 
 magus/figure paints an inlined figure with `var(--magus-diagram-<role>, <light hex>)`. The block at
-the end of `tokens.css` maps all nine roles (paper, surface, ink, muted, soft, rule, accent,
+the end of `tokens.css` maps all nine roles (paper, fill, ink, muted, soft, rule, accent,
 accent-tint, link) onto theme-aware slots, so a figure follows the console's light and dark themes
 with no per-theme copy. `apps/graph/diagrams/view-dom.test.ts` fails if a role goes missing.
 
@@ -216,7 +216,7 @@ PatternFly owns the `pf-v6-*` vocabulary; we consume it as-is and invent NOTHING
 it. But some bits have no PF component (the status bar, the ANSI log body, the graph stage, the
 gantt, the keybinding table, ...) and we must author classes for them. Every such class MUST
 follow the formula below, as disciplined, prefixed, and greppable as PatternFly's own names,
-so the custom surface stays tiny, self-documenting, collision-proof, and mechanically
+so the custom set stays tiny, self-documenting, collision-proof, and mechanically
 maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors PF's
 `pf-v6-c-<block>__<element>` + `pf-m-<modifier>` BEM structure.
 
@@ -229,24 +229,24 @@ console-<area>-<block>[__<element>][--<modifier>]
 - `console-`: the app namespace (parallel to `pf-v6-`). EVERY custom class starts with it.
   A bare class like `.badge` or `.qchip` is forbidden; `grep -r "class=" | grep -v "pf-v6-\|console-"`
   must eventually return nothing but real HTML attributes.
-- `<area>`: the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
+- `<area>`: the region/app that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
   The allowed areas are a CLOSED set: pick exactly one:
   - `console-shell-*` the app frame: title bar, tab strip, left navigation rail, status bar,
     floating gear + settings popover, command palette, keybindings overlay, tiling.
-  - `console-dashboard-*` the dashboard surface (hero, tiles, gantt, pool, stat strips, tables).
-  - `console-log-*` the log viewer surface (filter chips, toolbar bits, zoom control).
-  - `console-graph-*` the graph explorer surface (stage, sidebar, node cloud, legend, explain card).
-  - `console-activity-*` the activity surface (only what is not already shared render).
-  - `console-diff-*` the review surface (the virtualized hunk stream, its gutters and split
+  - `console-dashboard-*` the dashboard app (hero, tiles, gantt, pool, stat strips, tables).
+  - `console-log-*` the log viewer app (filter chips, toolbar bits, zoom control).
+  - `console-graph-*` the graph explorer app (stage, sidebar, node cloud, legend, explain card).
+  - `console-activity-*` the activity app (only what is not already shared render).
+  - `console-diff-*` the review app (the virtualized hunk stream, its gutters and split
     columns, the file sidebar). Authored rather than PF because PF has no diff component, and
     because the row geometry is load-bearing: the stream is virtualized against a fixed row
     height, so these rules are part of the scroll math rather than decoration.
-  - `console-plan-*` the lease-plan surface (the lease-tree stage and its edges, the lease
+  - `console-plan-*` the lease-plan app (the lease-tree stage and its edges, the lease
     list that is the stage's accessible twin, the detail sheet). Authored for the same reason as
     the graph stage: PF has no component for a laid-out node/edge drawing, and the node geometry
     is shared with the layout that places it.
   - `console-render-*` the SHARED render model reused by log + activity (foldable sections,
-    status badges, ANSI spans); one home so both surfaces stay in lockstep.
+    status badges, ANSI spans); one home so both apps stay in lockstep.
 - `<block>`: the component/thing, kebab-case, verbose and explicit. Prefer a full word to an
   abbreviation: `console-log-filter`, `console-shell-statusbar`, `console-dashboard-gantt`,
   `console-graph-nodelist`, `console-render-badge`, `console-render-ansi`.
@@ -274,11 +274,11 @@ ANSI colors, the badge kinds, the gantt bar kinds).
 the custom CSS CLASSES we author. A JS "hook" that carries no styling should be a `data-*`
 attribute, not a class, wherever practical.
 
-`data-surface` is SPOKEN FOR: it marks a mounted surface ROOT, and `console.css` styles several by
-value (`[data-surface="home"]`, `[data-surface="shortcuts"]`, ...). Chrome that lives inside
-`#console-outlet` but is not a surface must pick its own hook: the navigation rail uses
-`data-rail-surface` for exactly this reason, having first been written with `data-surface` and
-silently inherited the Shortcuts surface's layout. Check a new hook against the existing selectors
+`data-app` is SPOKEN FOR: it marks a mounted app ROOT, and `console.css` styles several by
+value (`[data-app="home"]`, `[data-app="shortcuts"]`, ...). Chrome that lives inside
+`#console-outlet` but is not an app must pick its own hook: the navigation rail uses
+`data-rail-app` for exactly this reason, having first been written with `data-app` and
+silently inherited the Shortcuts app's layout. Check a new hook against the existing selectors
 before reusing a name that reads as generic.
 
 ### Examples (ad-hoc -> the convention)

@@ -53,7 +53,7 @@ final FIELDS = "number,title,state,author,headRefName,baseRefName,headRefOid,isD
     + "mergeable,mergeStateStatus,autoMergeRequest,reviewDecision,labels,files,statusCheckRollup,comments";
 final LIMIT = 100;
 
-// The queue's own surface: a stack's top carries QUEUE_LABEL plus a method, a kick-back
+// The queue's own labels and markers: a stack's top carries QUEUE_LABEL plus a method, a kick-back
 // sets KICKED or, for KICK_REGENERATION, NEEDS_REGENERATION, and ends its comment with
 // KICK_MARKER, and QUEUE_STATUS is its status. Only a method after QUEUE_LABEL is intent.
 final QUEUE_LABEL = "merge-queue: ";

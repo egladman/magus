@@ -639,7 +639,7 @@ type Agent struct {
 //
 // A shell command's own text is NEVER stored, whatever the loader was handed.
 // The trail settled that rule (internal/trail's Ran field, and the bearer token
-// an `op=state` response carried), and a load is the surface where breaking it
+// an `op=state` response carried), and a load is where breaking it
 // costs most: it ingests a whole session's history at once, unattended. Program,
 // Verdict, Rule and Digest are what survives, and Ref plus Transcript are how a
 // reader opens the original where the host already put it.

@@ -96,8 +96,8 @@ Three decisions are yours to make:
   visibly rather than exiting quietly, because an unguarded session you know
   about beats one you do not.
 
-If you contribute the result back, add a `magus-guard-coverage:` line declaring
-what your glue carries per surface and decision. A parity gate reads those lines
+If you contribute the result back, add a `magus-guard-coverage: schema=2` line
+declaring what your glue carries per `input=` and decision. A parity gate reads those lines
 and fails the build when a host was never asked about a decision the contract
 grew.
 
@@ -213,7 +213,7 @@ yourself: it is the same answer either way.
 
 ## Coverage and limits
 
-Whatever your host's hook surface can carry. One binary produces the rules, so
+Whatever your host's hooks can carry. One binary produces the rules, so
 they are identical everywhere, and what differs is only how much of a verdict
 survives the trip to the model. [Parity across hosts](../agents.md#parity-across-hosts)
 records that for the documented four.

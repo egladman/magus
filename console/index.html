@@ -33,27 +33,26 @@
 <!-- The console is a self-contained app, not a page in a site: NO site nav, NO brand mark. The title
      bar (#console-titlebar) is a masthead-style row: the tab strip fills it (console.js fills
      #console-tabs) and a right-aligned control group (#console-actions) holds the settings gear -
-     the masthead/toolbar idiom, not a floating corner button. console.js mounts a surface per tab/pane
+     the masthead/toolbar idiom, not a floating corner button. console.js mounts an app per tab/pane
      into #console-outlet and swaps the active tab's status bar into the empty #console-statusbar footer.
      Do NOT put the status-bar ids (#console-conn etc.) in the footer statically - console.js creates
      them per tab. The title bar is a Window-Controls-Overlay drag region (-webkit-app-region, console.css);
      every interactive child opts back out to no-drag so tabs/gear stay clickable in the installed PWA. -->
 <body data-console-app data-console-fill>
-  <!-- The left navigation rail: every surface the console can open, always on screen, with the one the
+  <!-- The left navigation rail: every app the console can open, always on screen, with the one the
        active tab is showing marked (pf-m-current) and the ones that merely have a tab open flagged
-       (data-tab-open). console.js's createSidebar() fills this host - the surface list is the same
+       (data-tab-open). console.js's createSidebar() fills this host - the app list is the same
        registry the launcher and the Applications menu read, so the three can never disagree.
        Collapsed to icons by default (data-expanded absent) because the Graph Explorer and the Diff
-       surface carry their OWN left sidebars inside the pane; the width lives in console.css.
-       Named "Applications" to a screen reader, not "Surfaces": surface is the code's word for these
-       (pageId, PageModule, SURFACES) and appears in no other user-facing string - the window calls
-       them apps, in the Applications menu that lists this same set.
+       app carry their OWN left sidebars inside the pane; the width lives in console.css.
+       Named "Applications" to a screen reader, the word the window uses for these in the
+       Applications menu that lists this same set.
        A direct child of <body>, BEFORE the title bar, because it spans the window's full height: the
        shell is a grid and the rail occupies the leading column across every row, so the title bar and
        the content both begin to its right. That is the macOS rule - one leading sidebar may span the
        full height and take the space from the titlebar - and it is why this is not inside <main>. -->
   <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
-  <!-- The content FRAME: the tab strip and the panes below it are one surface, so they are one
+  <!-- The content FRAME: the tab strip and the panes below it are one plane, so they are one
        element. This exists for a reason a wrapper usually does not - a shadow. The frame casts left
        onto the rail and down onto the status bar, and that cast has to be unbroken down the whole
        edge. Split across the header and the main it cannot be: PatternFly's directional elevation
@@ -61,13 +60,13 @@
        stacked boxes pull their casts away from the seam they share and leave an eight-pixel gap in
        the line exactly where the tabs meet the content. One box, one cast. The frame also owns the
        rail-facing border and the rounded bottom-left corner, for the same reason: they describe the
-       edge of the content surface, and the content surface is this. -->
+       edge of the content area, and the content area is this. -->
   <div id="console-frame">
   <header id="console-titlebar">
     <div id="console-tabs"></div>
     <!-- Title-bar-right control group: PatternFly plain (borderless) icon Buttons sitting ON the tab row
          (command bar, applications, reference, settings). The settings gear opens the Settings
-         surface as a tab; console.js's startConsole() wires it. -->
+         app as a tab; console.js's startConsole() wires it. -->
     <div id="console-actions">
     <!-- Command bar trigger: opens the dmenu-style runner (also mod+k). A plain icon button, so the
          command bar is discoverable without knowing the chord. The prompt is drawn INSIDE a terminal
@@ -83,8 +82,8 @@
     </button>
     <!-- MOBILE ONLY as of the navigation rail: console.css hides this button (and its popover) above
          48rem, which is exactly the width where the rail appears. The two are complements on one edge -
-         the rail lists the same surfaces from the same registry, so both showing would be two doors onto
-         the same rows. Below 48rem the rail is hidden and this is the only way to reach a surface.
+         the rail lists the same apps from the same registry, so both showing would be two doors onto
+         the same rows. Below 48rem the rail is hidden and this is the only way to reach an app.
          The Documentation link below is mirrored on the navigation rail's foot (sidebar.ts), which is
          what replaces this menu above 48rem - change one and you must change the other.
          Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
@@ -112,19 +111,19 @@
     <button id="console-refbtn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-refdrawer" aria-expanded="false" aria-label="Reference" title="Reference">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5z"/><path d="M4 19.5V4.5"/></svg></span>
     </button>
-    <!-- The settings gear opens the Settings surface as a tab (single-instance: console.js focuses it
+    <!-- The settings gear opens the Settings app as a tab (single-instance: console.js focuses it
          if already open). It is a plain trigger, not a popover anchor - the old #settings-panel dropdown
          (refresh rate / server host / theme cycle) was retired when those controls moved onto the
-         Settings surface. console.js's startConsole() wires the click to open("settings"). -->
+         Settings app. console.js's startConsole() wires the click to open("settings"). -->
     <button id="settings-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-label="Settings" title="Settings">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
     </button>
     </div>
   </header>
-  <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right): the tab surfaces mount into the
+  <!-- The tab outlet is a PatternFly Drawer (pf-m-panel-right): the tab apps mount into the
        __content, and the Reference panel is the __panel. Opening toggles pf-m-expanded. PINNING
        toggles pf-m-inline (initRefDrawer): pinned = docked inline, which INSETS the content (the
-       panel snaps the layout to fit and the surfaces reflow narrower); unpinned = an overlay that
+       panel snaps the layout to fit and the apps reflow narrower); unpinned = an overlay that
        floats over the full-width content and dismisses on Escape / outside-click. console.js appends
        one pane per tab into #console-outlet-content; initRefDrawer() drives the panel. The title-bar
        Reference button (#console-refbtn) toggles it; pinned it stays open across tab switches
@@ -184,16 +183,16 @@
   <footer id="console-statusbar"></footer>
 
   <!-- Console-wide reference. ref-drawer.ts clones these into the Reference panel AFTER whatever the
-       active surface contributes: chords and tiling are true of every surface, so they belong to the
+       active app contributes: chords and tiling are true of every app, so they belong to the
        shell rather than to any one of them - and they are the whole of what the launcher shows, which
-       has no surface and so used to read "No reference for this view". Hidden in place like every other
+       has no app and so used to read "No reference for this view". Hidden in place like every other
        [data-ref-section] source; only the panel's clones are shown, and the panel's own CSS
        (.console-shell-refdrawer__body, console.css) styles the details/summary/dl. -->
   <div id="console-ref-shell" hidden>
     <details data-ref-section>
       <summary>Keyboard and chords</summary>
       <p>A <b>chord</b> is a key combination bound to a command, written <code>mod+k</code>. <code>mod</code> is Cmd on macOS and Ctrl elsewhere, so one binding fits both.</p>
-      <p>Nothing here is chord-only: the <b>Command Palette</b> runs any command by name, the <b>Shortcuts</b> surface lists every command with its chord and lets you rebind it, and the title-bar and status-bar controls dispatch those same commands.</p>
+      <p>Nothing here is chord-only: the <b>Command Palette</b> runs any command by name, the <b>Shortcuts</b> app lists every command with its chord and lets you rebind it, and the title-bar and status-bar controls dispatch those same commands.</p>
       <dl>
         <dt><code>mod+k</code></dt><dd>Command Palette - run any command.</dd>
         <dt><code>mod+b</code></dt><dd>Show or hide the navigation rail's labels.</dd>
@@ -214,7 +213,7 @@
     </details>
     <details data-ref-section>
       <summary>Tabs and panes</summary>
-      <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every surface is single-instance.</p>
+      <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every app is single-instance.</p>
       <p>The <b>rail</b> down the left edge lists every app, whether or not it is open. The one you are looking at is highlighted, and an app with a tab open somewhere else is marked. Click a row to go there. It collapses to icons and back with the chevron at its foot, or <code>mod+b</code>.</p>
       <p>A tab splits into <b>panes</b>. A split divides the focused pane in the persisted default direction (side by side, or stacked); the direction can be toggled or picked explicitly. Tap or click a pane to focus it; drag the divider to re-weight the split. A pane can also be moved into a neighboring slot without losing its place.</p>
       <p>The <b>Panes</b> button in the status bar drives all of it without a keyboard.</p>

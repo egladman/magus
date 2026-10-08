@@ -1,6 +1,6 @@
 // jobs.ts - the job model: the read, the tree a job list makes, and the placement that tree is
 // drawn at. Everything but the two service calls is pure and DOM-free, so what a reader ends up
-// seeing is decided by code a test can run without a browser (jobs.test.ts). The surface file next
+// seeing is decided by code a test can run without a browser (jobs.test.ts). The app file next
 // door owns the SVG, the poll, and the keyboard.
 //
 // ONE KIND OF THING. A job is work with a HOLDER: the server holds its own maintenance jobs, and a
@@ -56,7 +56,7 @@ export const STATE_LABEL: Record<JobState, string> = {
 };
 
 // STATE_MARK is the NON-COLOR channel on a node. Color alone fails WCAG 1.4.1, and this is a
-// surface whose entire content is five states told apart - the diff surface made the same call for
+// app whose entire content is five states told apart - the diff app made the same call for
 // its add/delete markers. Short enough to sit inside a 152-unit-wide node beside the id.
 export const STATE_MARK: Record<JobState, string> = {
   declared: "D",
@@ -158,7 +158,7 @@ export function lastRunLine(job: Job, nowMs: number): string {
 }
 
 // gateSubject is what a goal examines, rendered for the detail sheet - the TS mirror
-// of CompletionGate.Subject() in types/job.go, so the two surfaces name a gate's subject the same
+// of CompletionGate.Subject() in types/job.go, so the two apps name a gate's subject the same
 // way. check is already rendered as the command that runs it (the server does that, the same way
 // it renders the primary Check field), so this never re-renders it.
 export function gateSubject(gate: CompletionGate): string {
@@ -514,7 +514,7 @@ export function layoutNodes(model: Placeable): NodeLayout {
 // ---- the service -----------------------------------------------------------
 
 // JobClient is the one connection a mount opens, built once and reused by every read and every
-// submit it makes - the same shape the other Connect surfaces use (activity, status, viewer), with
+// submit it makes - the same shape the other Connect apps use (activity, status, viewer), with
 // the bearer token and the server origin already wired by lib/server.
 export type JobClient = Client<typeof JobService>;
 

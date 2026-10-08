@@ -1199,7 +1199,7 @@ while (i < haystack.len()) {
 	}
 }
 
-// The benchmarks below cover the language surface gopherbuzz gained after the set
+// The benchmarks below cover the language features gopherbuzz gained after the set
 // above was written (fibers, match, closures over cells, optionals, mut
 // collections, higher-order collection methods, static dispatch and tuples), so the
 // benchmark set tracks what conformance now tests rather than lagging it.

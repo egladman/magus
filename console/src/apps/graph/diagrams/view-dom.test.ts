@@ -254,7 +254,7 @@ describe("a prepared figure", () => {
     const css = readFileSync("src/styles/tokens.css", "utf8");
     for (const role of [
       "paper",
-      "surface",
+      "fill",
       "ink",
       "muted",
       "soft",

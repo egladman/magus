@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# Prove a worktree is in ARM-1 "full". The surface must not merely be present
-# but CURRENT for the binary this arm was handed, which is what doctor grades:
+# Prove a worktree is in ARM-1 "full". The agent integration must not merely be
+# present but CURRENT for the binary this arm was handed, which is what doctor grades:
 # a stale skill set or a stale guard template measures a dangling-reference
-# surface rather than the shipped one.
+# integration rather than the shipped one.
 set -eu
 
 # shellcheck disable=SC2034  # read by lib.sh, which shellcheck does not follow without -x
@@ -58,4 +58,4 @@ esac
 # an assertion here too and not only in the rampant probe.
 arm_check_no_mcp "$WT"
 
-printf 'arm full: %s carries the current agent surface\n' "$WT"
+printf 'arm full: %s carries the current agent integration\n' "$WT"

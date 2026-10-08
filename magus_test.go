@@ -639,7 +639,7 @@ func TestTargetString(t *testing.T) {
 // TestMagus_proxies asserts that the methods *Magus exposes
 // (Root, All, Get, Where, Affected, AffectedFromPaths, Graph,
 // VCSOptions) return consistent values. The intent is to lock the
-// public surface so internal refactors do not silently change behaviour.
+// public API so internal refactors do not silently change behaviour.
 func TestMagus_proxies(t *testing.T) {
 	t.Parallel()
 	ws := newWorkspace(t)

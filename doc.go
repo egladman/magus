@@ -7,7 +7,7 @@
 // values passed to [Open]/[Inspect] (e.g. [WithLimiter]). [Limiter] caps
 // concurrent spell executions and can be shared across server workspaces.
 //
-// Boundary: the library links the engine-agnostic interp surface and the Buzz VM,
+// Boundary: the library links the engine-agnostic interp package and the Buzz VM,
 // but deliberately not the host bindings (interp/bindings) or the Buzz engine
 // backend — cmd/magus blank-imports those. So a script-driven backend (e.g. the
 // spell-backed remote backend) reaches the library only through registered

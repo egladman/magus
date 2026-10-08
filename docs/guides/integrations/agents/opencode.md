@@ -1,6 +1,6 @@
 ---
 title: OpenCode
-description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries both guard surfaces, the post-compaction brief, and the idle checkpoint).
+description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries the shell-command and file-write rules, the post-compaction brief, and the idle checkpoint).
 tags: [agents, opencode, skills, guard, plugin]
 ---
 
@@ -12,16 +12,16 @@ a deny reaches the model as the tool error; an advise is appended to the tool's
 own result by `tool.execute.after`, which is the same call and the same context
 window. One file carries all of it.
 
-| what             | where                                                                                         |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| skills           | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
-| guard wiring     | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
-| command surface  | deny and advise both reach the model                                                          |
-| file surface     | deny and advise both reach the model                                                          |
-| MCP call surface | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
-| checkpoint       | the `session.idle` bus event                                                                  |
-| rehydration      | `experimental.session.compacting`                                                             |
-| MCP              | [MCP](../mcp.md)                                                                              |
+| what           | where                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| skills         | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
+| guard wiring   | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
+| shell commands | deny and advise both reach the model                                                          |
+| file writes    | deny and advise both reach the model                                                          |
+| MCP calls      | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
+| checkpoint     | the `session.idle` bus event                                                                  |
+| rehydration    | `experimental.session.compacting`                                                             |
+| MCP            | [MCP](../mcp.md)                                                                              |
 
 ## Skills
 
@@ -55,7 +55,7 @@ shell-command hook config, so the descriptor it resolves to is skills-only too.
 
 If you already installed into `.claude/skills` for Claude Code, OpenCode reads
 those too and this step is optional. [Skills](skills.md) covers the rest of the
-install surface.
+install.
 
 ## MCP
 
@@ -90,7 +90,7 @@ other templates.
 // step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
 //
-// Covers BOTH guard surfaces, so OpenCode gets the same rules Claude Code does:
+// Covers shell commands AND file writes, so OpenCode gets the same rules Claude Code does:
 //   bash          the command rules
 //   edit | write  the declared-output rule
 //
@@ -117,9 +117,9 @@ other templates.
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
 // magus-guard-template: 20
-// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none ask=model
-// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none ask=none
+// magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
+// magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
+// magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
 // NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
 // intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
 // edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode
@@ -132,7 +132,7 @@ other templates.
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
 // brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
-// deliberately avoids the MAGUS_* space, which is magus's own config surface.
+// deliberately avoids the MAGUS_* space, which is magus's own settings.
 
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -494,7 +494,7 @@ export const MagusGuard: Plugin = async () => {
     // The cost is real and is accepted: OpenCode has no post-compaction hook (its Plugin
     // type carries only the two pre-compaction ones), so a compacted OpenCode session gets
     // no brief. It can still ask, and `magus session --brief` prints the same state on
-    // demand, which is the surface every host shares.
+    // demand, which is the command every host shares.
 
     event: async ({ event }) => {
       // OpenCode has no session-end event; session.idle is the proxy. The checkpoint
@@ -556,7 +556,7 @@ host of four is a difference nobody can reason about, and deciding what a model
 remembers is not magus's call to make.
 
 Run `magus session --brief` yourself after a compaction: it prints the same state
-on demand, which is the surface every host shares.
+on demand, which every host shares.
 
 ## Recording where the work stands
 
@@ -589,7 +589,7 @@ If you would rather not have the plugin do it, running
   `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
   string was NOT among them (OpenCode has no hook config schema to check it
   against either, per `testdata/hosts/SOURCES.md`), so the MCP call
-  surface is feasible (`tool.execute.before`/`.after` already see every call,
+  wiring is feasible (`tool.execute.before`/`.after` already see every call,
   MCP included) but not wired: a branch keyed on a guessed name risks judging
   an unrelated tool rather than magus's own calls. Confirm the string against a
   live session, then add a third `if (input.tool === ...)` branch beside `bash`

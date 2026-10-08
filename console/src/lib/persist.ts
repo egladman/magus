@@ -28,7 +28,7 @@ export interface Persisted<T> {
   update(fn: (prev: T) => T): void;
   // Durably write `value` WITHOUT updating the in-memory `current` or notifying subscribers, so the
   // running session keeps its live value and the write only surfaces on the next load. Backs the
-  // Settings surface's "Save" (commit without hot-reload). Cross-tab caveat: another tab's storage-event
+  // Settings app's "Save" (commit without hot-reload). Cross-tab caveat: another tab's storage-event
   // listener will still pick this write up and go live there - acceptable, it matches localStorage semantics.
   persistOnly(value: T): void;
   subscribe(fn: (value: T) => void): () => void; // returns an unsubscribe fn

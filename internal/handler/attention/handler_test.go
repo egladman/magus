@@ -115,7 +115,7 @@ func TestAttentionHandler_EmptyQueueServesEmptyList(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200 for a repository nobody has raised a block in, got %d", w.Code)
 	}
-	// [] not null. An empty queue is the GOOD state, and the surface renders a list either
+	// [] not null. An empty queue is the GOOD state, and the console renders a list either
 	// way; null would make "nothing is waiting" indistinguishable from a broken read.
 	if got := w.Body.String(); !strings.HasPrefix(got, `{"requests":[]`) {
 		t.Errorf(`want "requests":[], got %s`, got)
@@ -160,9 +160,9 @@ func TestAttentionHandler_DisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 
 // The disposing identity is stamped from the ROUTE, never from the payload: an agent reaches
 // magus through MCP and cannot arrive here, so a write that landed here came from the console.
-// Without this the store cannot say which surface closed a request, and "who answered this"
+// Without this the store cannot say which client closed a request, and "who answered this"
 // becomes an inference from an empty field.
-func TestAttentionHandler_DisposeStampsTheConsoleAsTheSurface(t *testing.T) {
+func TestAttentionHandler_DisposeStampsTheConsoleAsTheDisposer(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
 	h := NewHandler(root, "v0.0.0-test", nil, nil)

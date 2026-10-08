@@ -90,7 +90,7 @@ func TestCacheSavedCollects(t *testing.T) {
 	assert.Equal(t, 0, attrs[0].Len(), "magus.cache.saved.duration must carry no attributes")
 }
 
-// TestAgentFamiliesCollect records one observation on each agent-surface instrument and reads
+// TestAgentFamiliesCollect records one observation on each lease, attention and review instrument and reads
 // back both the value and the attribute set, since a stray unbounded attribute is the failure
 // mode these families are most exposed to.
 func TestAgentFamiliesCollect(t *testing.T) {

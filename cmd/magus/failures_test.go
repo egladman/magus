@@ -173,7 +173,7 @@ func motion(row int) tty.Event {
 }
 
 // TestFailurePromptHoverMovesTheHighlight is the affordance that makes a
-// clickable row look clickable. Without it a mouse-driven surface is a guessing
+// clickable row look clickable. Without it a mouse-driven view is a guessing
 // game, which defeats the point of having one.
 func TestFailurePromptHoverMovesTheHighlight(t *testing.T) {
 	b := newFakeBand()
@@ -185,7 +185,7 @@ func TestFailurePromptHoverMovesTheHighlight(t *testing.T) {
 }
 
 func TestFailurePromptHoverNeverActsOnItsOwn(t *testing.T) {
-	// Moving the pointer must not run anything. A surface where passing over a
+	// Moving the pointer must not run anything. A view where passing over a
 	// row triggers it is unusable.
 	b := newFakeBand()
 	sel := 0

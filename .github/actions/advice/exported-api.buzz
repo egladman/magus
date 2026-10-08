@@ -1,4 +1,4 @@
-// Comment when a pull request changes API surface: symbols reachable from outside the
+// Comment when a pull request changes exported API: symbols reachable from outside the
 // project that defines them, or exported from the module entirely.
 //
 // This is the version-bump conversation, and it is the one a reviewer most often has too
@@ -14,7 +14,7 @@
 // parameter type - and a breaking-change warning nobody trusts is worse than none at all. So
 // this reports who can SEE the thing you changed and lets the author decide the bump.
 //
-// It shares the ranking with the console's Diff surface and `magus diff` by construction:
+// It shares the ranking with the console's Diff app and `magus diff` by construction:
 // all three read magus\diff, so nobody maintains a second opinion about which files matter.
 //
 // Reads the `baseline` input.
@@ -22,7 +22,7 @@ import "advice";
 import "magus";
 import "std";
 
-final section = "api-surface";
+final section = "exported-api";
 
 // dedupe preserves first-seen order. A project named by several changed symbols is one
 // consumer, not three.
@@ -99,7 +99,7 @@ fun bump(api: obj) > str {
 fun body(count: int, lines: [str], api: obj) > str {
     var noun = " changed files touch";
     if (count == 1) { noun = " changed file touches"; }
-    final parts = mut [bump(api), "**" + "{count}" + noun + " API surface.**\n\n"];
+    final parts = mut [bump(api), "**" + "{count}" + noun + " exported API.**\n\n"];
     foreach (l in lines) { parts.append(l); }
     return parts.join("")
         + "\nThese symbols are reachable from outside the project that defines them, or "
@@ -115,17 +115,17 @@ fun main() > void !> any {
     final base = pull.base;
     final head = pull.headSha;
     if (pr == "" and base == "" and head == "") {
-        std\print("api-surface: no PR context; nothing to advise");
+        std\print("exported-api: no PR context; nothing to advise");
         return;
     }
     if (pr == "" or base == "" or head == "") {
-        throw "api-surface: the pull request's number, base and head sha must be set together";
+        throw "exported-api: the pull request's number, base and head sha must be set together";
     }
 
     if (advice\silenced(repo, pr: pr, name: section)) {
         // Retract rather than leave the last finding frozen on the page.
         advice\publish(repo, pr: pr, name: section, title: "", body: "");
-        std\print("api-surface: silenced by label");
+        std\print("exported-api: silenced by label");
         return;
     }
 
@@ -135,17 +135,17 @@ fun main() > void !> any {
     // What it actually read, before what it concluded. "nothing to say" and "nothing to read"
     // are different failures, and this advisor spent two pull requests looking like the first
     // while being the second: the changeset came back empty and the line below said only that
-    // no public surface changed.
-    std\print("api-surface: read " + review.base + ": " + "{review.files.len()}" + " file(s), "
+    // no public API changed.
+    std\print("exported-api: read " + review.base + ": " + "{review.files.len()}" + " file(s), "
         + "{review.notes.len()}" + " note(s)");
-    foreach (n in review.notes) { std\print("api-surface: note: " + n); }
+    foreach (n in review.notes) { std\print("exported-api: note: " + n); }
     var lines = mut [];
     var files = 0;
     foreach (f in review.files) {
         // Generated output is skipped even when it looks public. A regenerated binding file
         // can export a great deal, and none of it is a decision anyone made in this pull
         // request - the source change that produced it is the one to talk about.
-        if (f.surface != "public" or f.role == "output") { continue; }
+        if (f.visibility != "public" or f.role == "output") { continue; }
         var exports = mut [];
         var across = mut [];
         var changes = mut [];
@@ -165,14 +165,14 @@ fun main() > void !> any {
     if (files == 0) {
         // Publish an EMPTY body rather than skipping: a section that simply stops appearing
         // leaves the previous push's finding frozen on the page, which reads as still true.
-        advice\publish(repo, pr: pr, name: section, title: "API surface", body: "");
-        std\print("api-surface: no public surface changed");
+        advice\publish(repo, pr: pr, name: section, title: "Exported API", body: "");
+        std\print("exported-api: no exported API changed");
         return;
     }
 
     advice\publish(repo, pr: pr, name: section,
-        title: "API surface ({files})", body: body(files, lines: lines, api: review.api));
-    std\print("api-surface: advised on " + "{files}" + " files");
+        title: "Exported API ({files})", body: body(files, lines: lines, api: review.api));
+    std\print("exported-api: advised on " + "{files}" + " files");
 }
 
 
@@ -203,10 +203,10 @@ test "dedupe keeps first-seen order and drops empties" {
     std\assert(kept[0] == "web", message: "first seen stays first");
 }
 
-test "body without a baseline states the surface and claims no bump" {
+test "body without a baseline states the exported API and claims no bump" {
     final text = body(1, lines: [line("x.go", exports: ["A"], across: [], reach: 1)], api: null);
     std\assert(text.indexOf("bump.**") == null, message: "no baseline, no bump");
-    std\assert(text.indexOf("API surface") != null, message: "still names the surface");
+    std\assert(text.indexOf("exported API") != null, message: "still names the exported API");
 }
 
 test "body counts one file in the singular" {

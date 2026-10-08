@@ -1,0 +1,10 @@
+{
+  "claims": {
+    "calls": 0,
+    "flow": 4,
+    "imports": 3
+  },
+  "figure": "agent-integration",
+  "findings": [],
+  "stamp": "sha256:431535cd5b6f3cfc92159d277bd49ac73acba72979a3b73981b106f43c57eb05"
+}

@@ -1,12 +1,12 @@
 import { must } from "../lib/guards";
-// demo-scenario.ts - the ONE fabricated workspace every console surface's demo derives from.
+// demo-scenario.ts - the ONE fabricated workspace every console app's demo derives from.
 //
 // The console's server-free showcases (logs waterfall, recent-runs tree, activity trail, dashboard,
 // diff, notes) each used to invent their own disjoint fixture. A reader who opened two of them side
 // by side saw contradictions - a Linux-kernel build in the log viewer, unrelated runs in the tree, a
 // third cast of MCP calls in the activity trail, and notes about magus's own cache in a workspace
-// called acme. This module is the single source of truth those surfaces now share: one plausible product monorepo ("acme") and one scripted three-hour
-// timeline of runs, MCP calls, a background job, a sandbox denial, and VCS insight, so the surfaces
+// called acme. This module is the single source of truth those apps now share: one plausible product monorepo ("acme") and one scripted three-hour
+// timeline of runs, MCP calls, a background job, a sandbox denial, and VCS insight, so the apps
 // corroborate each other the way a real workspace would.
 //
 // This fixture does the product's FIRST-IMPRESSION work: #demo and the empty state's "See the demo"
@@ -14,7 +14,7 @@ import { must } from "../lib/guards";
 // closely. The workspace is not a four-project placeholder: it is a twelve-project service monorepo,
 // its captured output is what the real tools actually print (go test package lines, tsc diagnostics
 // with file:line:col, a vite summary replayed out of the cache), and its story holds together when a
-// reader opens two surfaces and compares them line by line.
+// reader opens two apps and compares them line by line.
 //
 // THE STORY, in the order it happened - one shared-library contract change and its blast radius:
 //   1. ~3h ago   `magus affected ci` sweeps green on main, mostly out of cache. The baseline: this
@@ -36,15 +36,15 @@ import { must } from "../lib/guards";
 //   9. ~3m       services/identity:build, fresh and green.
 //
 // Everything is a pure function of an injected `now` (epoch ms) with FIXED offsets and NO
-// Math.random - determinism is the point: the same output refs must line up across surfaces, and
+// Math.random - determinism is the point: the same output refs must line up across apps, and
 // the module is directly unit-testable (demo-scenario.test.ts asserts the cross-references hold).
-// It carries NO protobuf or view-model imports: each surface's demo.ts maps this plain data into
+// It carries NO protobuf or view-model imports: each app's demo.ts maps this plain data into
 // its own wire/view type, which keeps the story here and the transport concerns there.
 
 const MIN = 60_000;
 
 // The fictional monorepo the whole showcase inhabits. Projects and targets are IDENTICAL across
-// every surface; a reader who learns "services/identity:test" in the tree meets the same name in
+// every app; a reader who learns "services/identity:test" in the tree meets the same name in
 // the trail, the waterfall, and the dashboard.
 //
 // The tree is the conventional four-bucket monorepo layout, so its shape is recognizable before any
@@ -60,7 +60,7 @@ export const WORKSPACE_ROOT = "~/Repos/acme";
 
 // Every workspace the demo publishes, in menu order. Two, not one: with a single entry the scope
 // control is a question with one answer, and nothing about scoping is demonstrable without a server.
-// The second is magus's own repo because the Graph surface's demo is a committed export of it - the
+// The second is magus's own repo because the Graph app's demo is a committed export of it - the
 // one demo path whose data is real rather than fabricated, so a workspace list omitting it would
 // leave that graph belonging to nothing on screen.
 export const WORKSPACE_ROOTS: string[] = [WORKSPACE_ROOT, "~/Repos/magus"];
@@ -69,9 +69,9 @@ export const WORKSPACE_ROOTS: string[] = [WORKSPACE_ROOT, "~/Repos/magus"];
 // they do in a real repo (the grafana/grafana shape: one module, many nested packages).
 const GOMOD = "github.com/acme/acme";
 
-// The files the story turns on, named once so every surface spells them the same way.
+// The files the story turns on, named once so every app spells them the same way.
 //
-// They were retyped as string literals in each fixture before this, and the Notes surface shows why
+// They were retyped as string literals in each fixture before this, and the Notes app shows why
 // that does not hold: its notes were about magus's own cache and lockfile, in a workspace called
 // acme, because nothing connected the two. A reader who clicked from Diff to Notes met a different
 // fictional company one tab over.
@@ -130,7 +130,7 @@ export const INV_TEST_FIX = "inv80f2";
 export const INV_BUILD_FRESH = "inv5b00";
 
 // scenarioRuns returns the canonical run history, NEWEST FIRST, spanning ~the last three hours.
-// It is the story above as data; the refs here are the join keys every other surface points back
+// It is the story above as data; the refs here are the join keys every other app points back
 // to, so a ref a reader meets in the trail resolves to the same target, timing and outcome in the
 // tree, the waterfall and the dashboard.
 export function scenarioRuns(now: number): ScenarioRun[] {
@@ -774,7 +774,7 @@ export function scenarioInsight(now: number): ScenarioInsight {
 // SCENARIO_CATALOG is the set of project:target pairs the live showcase schedules work from.
 //
 // It is deliberately WIDER than the handful of targets the scripted timeline above names. Those
-// eight carry the story a reader follows across surfaces and must stay exactly as they are - the
+// eight carry the story a reader follows across apps and must stay exactly as they are - the
 // log viewer, the run tree and the trail all cross-reference them. But a workspace that only ever
 // runs eight things does not look like a monorepo, and the dashboard is where that shows: an
 // eight-slot pool with one cube lit, a timeline with one row, and a "2 workspaces" board conveyed a
@@ -798,7 +798,7 @@ export const SCENARIO_CATALOG: {
   durMs: number;
   flaky?: boolean;
 }[] = [
-  // The story targets, unchanged: every other surface's fixture references these by name.
+  // The story targets, unchanged: every other app's fixture references these by name.
   { project: "services/identity", target: "build", durMs: 2100 },
   { project: "services/identity", target: "test", durMs: 3900, flaky: true },
   { project: "services/identity", target: "generate", durMs: 1200 },

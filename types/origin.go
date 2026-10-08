@@ -9,7 +9,7 @@ const (
 	EntryPointCLI EntryPoint = "cli"
 	// EntryPointHook is `magus shell` called by a host's hook wiring.
 	EntryPointHook EntryPoint = "hook"
-	// EntryPointMCP is a tool call on the MCP surface.
+	// EntryPointMCP is a tool call over MCP.
 	EntryPointMCP EntryPoint = "mcp"
 	// EntryPointRPC is an authenticated call on the server's HTTP API.
 	EntryPointRPC EntryPoint = "rpc"

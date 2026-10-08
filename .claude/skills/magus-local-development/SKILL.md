@@ -51,7 +51,7 @@ bug in place.
 
 <!-- rule: buzz-descriptors-are-codegen-inputs; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits eedc47870 and f40fc44a9 (a one-word Name change left four generated files stale and three tests red);
-     retire-when: std method names gain an alias mechanism, or a drift test pins the std surface the way magus-api.lock pins magus.* -->
+     retire-when: std method names gain an alias mechanism, or a drift test pins the std method names the way magus-api.lock pins magus.* -->
 ## A std/ descriptor edit is never local
 
 In `std/`, a method's `Name` and `Doc` are codegen inputs, not documentation.

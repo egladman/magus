@@ -17,7 +17,7 @@ import (
 )
 
 // These guard the hand-maintained Modules registry (modules.go and modules_wasm.go)
-// against drift from the canonical std.Module surface.
+// against drift from the canonical std.Module declarations.
 
 // camelCaseKey mirrors the snake_case->camelCase transform the Buzz emitter applies to
 // method keys (magus-utils bindings). A single-word name is unchanged.
@@ -36,7 +36,7 @@ func camelCaseKey(s string) string {
 }
 
 // TestModulesMatchStd guards the Modules registry against drift from the canonical
-// host module surface: every host module magus declares (hostmodules.All(): std's
+// host modules: every host module magus declares (hostmodules.All(): std's
 // own registry plus std/encoding's), except the magus namespace (not a bare
 // import), must appear in Modules, and Modules must name nothing extra.
 func TestModulesMatchStd(t *testing.T) {
@@ -51,7 +51,7 @@ func TestModulesMatchStd(t *testing.T) {
 	}
 	for name, reg := range Modules {
 		assert.Containsf(t, want, name, "Modules registry has %q but hostmodules.All() does not", name)
-		// The import path has to agree too: a Path here that the host surface does
+		// The import path has to agree too: a Path here that the host modules do
 		// not declare would register the module at an import path nothing else in
 		// magus knows, so `import` would resolve while describe, the docs, and the
 		// knowledge graph all named something else.
@@ -71,7 +71,7 @@ func modKeySet(m map[string]bool) []string {
 }
 
 // TestBuzzBindingsMatchHostModules guards against the generated trampolines
-// drifting from the canonical std.Module surface: every method a module
+// drifting from the canonical std.Module declarations: every method a module
 // declares must be exposed as a key on the generated module map. Buzz camelCases
 // the host's snake_case names, so the lookup key is camelCaseKey(meth.Name).
 func TestBuzzBindingsMatchHostModules(t *testing.T) {
@@ -101,7 +101,7 @@ func TestBuzzBindingsMatchHostModules(t *testing.T) {
 				continue
 			}
 			// extra is self-complete: every declared method must be on the Buzz
-			// surface, even ones Buzz's stdlib also covers (see std.BuzzStdlibEquiv).
+			// module, even ones Buzz's stdlib also covers (see std.BuzzStdlibEquiv).
 			key := camelCaseKey(meth.Name)
 			if meth.BuzzName != "" {
 				key = meth.BuzzName

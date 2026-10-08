@@ -36,7 +36,7 @@
 //
 // NO magus-guard-coverage line, for the same reason magus-observe.buzz has
 // none: a coverage declaration states how much of a VERDICT a host can carry, and
-// this file carries no verdict on no surface. It never denies, never advises, and
+// this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
 // magus-guard-template: 20
@@ -57,7 +57,7 @@ fun warn(message: str) > void {
     io\stderr.write("magus-checkpoint.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this surface takes; see
+// The host this entry is wired into, the one argument this hook takes; see
 // AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
@@ -68,7 +68,7 @@ fun readAgentName(args: [str]) > str {
     final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
     if (parsed == null) { return ""; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this surface declares only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
             + "Fix the hook command in your host config.");
     }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";

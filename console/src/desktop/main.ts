@@ -1,11 +1,11 @@
 // main.ts - the console composition root and SPA-island entry. The page supplies three slots - the
 // tab bar host (#console-tabs), the content outlet (#console-outlet), and the status-bar footer
-// (#console-statusbar) - and this wires them: it mounts one surface per open tab (each kept in the
+// (#console-statusbar) - and this wires them: it mounts one app per open tab (each kept in the
 // DOM and hidden when inactive, so switching is instant and closing tears down), and swaps the active
 // tab's status bar into the footer so the bottom bar is PER-TAB. The active set is the persisted
-// Workspace (tabs.ts), so the console reopens exactly as you left it. Surfaces are PageModules
+// Workspace (tabs.ts), so the console reopens exactly as you left it. Apps are PageModules
 // (page.ts); a heavy one activates lazily (its bundle a dynamic import) so a tab stays cheap until
-// opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
+// opened. The four core lenses are real apps (logs/graph/dashboard/activity). The launcher
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
 import { castWorkspaceSigil } from "./cast";
@@ -22,7 +22,7 @@ import {
   renameTab,
   desktopStarterWorkspace,
   workspaceStore,
-  tabHostsSurface,
+  tabHostsApp,
   type TabState,
 } from "./tabs";
 import { createTabBar, tabViews } from "./tabBar";
@@ -37,7 +37,7 @@ import {
 } from "./home";
 import { APPS } from "../apps/index";
 import { REQUEST_SERVER_SETTINGS_EVENT, requireServer } from "./connectPrompt";
-import { standaloneSurface, moduleSurface } from "./standalone";
+import { standaloneApp, moduleApp } from "./standalone";
 import {
   registerCommand,
   dispatchCommand,
@@ -50,22 +50,22 @@ import {
 } from "./commands";
 import { createCommandBar } from "./commandBar";
 import { createKeybindingsOverlay } from "./keybindings";
-import { settingsSurface } from "../apps/settings/main";
+import { settingsApp } from "../apps/settings/main";
 import { createCheatsheet } from "./cheatsheet";
-import { createShortcutsSurface } from "../apps/shortcuts/main";
+import { createShortcutsApp } from "../apps/shortcuts/main";
 import { createTileView, type TileView } from "./tileView";
 import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
-import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
+import { initRefDrawer, referenceApp } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initWorkspacePicker } from "../ui/workspace-picker";
 import { onWorkspaceScope, onWorkspaces, workspaceScope } from "../lib/scope";
 import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify, reportFailure } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
-import { requestMode, surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
+import { requestMode, appNavigation, appNavigationEvent } from "./app-navigation";
 import { signal } from "./view";
 import {
   parseHash,
@@ -98,7 +98,7 @@ import { showRefreshToast } from "../lib/refresh-toast";
 import type { PageController, PageModule } from "./page";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
-// "keymap" overrides (the same cell the surfaces read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
+// "keymap" overrides (the same cell the apps read). mod = Cmd on macOS, Ctrl elsewhere. Cmd+Opt
 // arrows match a browser/editor's next/prev-tab feel; new/close are the conventional mod+t / mod+w
 // (they land on the console's own tabs when it runs as an installed PWA window).
 const CONSOLE_KEYMAP: Keymap = {
@@ -211,7 +211,7 @@ const splitMode = splitModeCell;
 
 const registry = new Map<string, PageModule<unknown, unknown>>();
 // Every mount resolves through the registry (a launcher pick, a restored layout, a deep link, app
-// mode), so wrapping here is what keeps each of them off a server surface with no server.
+// mode), so wrapping here is what keeps each of them off a server app with no server.
 function register(m: PageModule<unknown, unknown>): void {
   registry.set(m.id, requireServer(m, APPS.find((app) => app.id === m.id)?.server));
 }
@@ -226,11 +226,11 @@ for (const app of APPS) {
   }
 }
 
-// consoleSurfaceFromPath returns what a /console/<segment>/ entry path opens, or null when the page
+// consoleAppFromPath returns what a /console/<segment>/ entry path opens, or null when the page
 // did not boot on such a path (the bare console root, or any other path). It keys on the last path
 // segment being a clean path whose parent segment is "console", so it holds at both the server
 // origin (/console/graph/) and the hosted origin (/magus/console/graph/).
-function consoleSurfaceFromPath(): { pageId: string; mode?: string } | null {
+function consoleAppFromPath(): { pageId: string; mode?: string } | null {
   if (typeof location === "undefined") return null;
   const segs = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   const last = segs[segs.length - 1];
@@ -240,11 +240,11 @@ function consoleSurfaceFromPath(): { pageId: string; mode?: string } | null {
 }
 
 // consoleBasePath is the console root for the current origin: the entry path with its trailing
-// surface segment dropped (/console/graph/ -> /console/, /magus/console/graph/ -> /magus/console/).
-// Used to scrub a consumed entry path back to the base once the surface is open.
+// app segment dropped (/console/graph/ -> /console/, /magus/console/graph/ -> /magus/console/).
+// Used to scrub a consumed entry path back to the base once the app is open.
 function consoleBasePath(): string {
   const segs = location.pathname.replace(/\/+$/, "").split("/");
-  segs.pop(); // drop the <surface> segment
+  segs.pop(); // drop the <app> segment
   return segs.join("/") + "/";
 }
 
@@ -550,16 +550,16 @@ function notConnectedHint(host: string): string {
     : "No server address configured. Click to set the server address.";
 }
 
-// makeStatusBar builds one tab's status bar: the SAME element ids the surfaces write to
+// makeStatusBar builds one tab's status bar: the SAME element ids the apps write to
 // (#console-conn, #console-observing, #console-count) and the .console-shell-statusbar__right slot the
 // log viewer injects its zoom control into. It is a real element (not an innerHTML snapshot) so the
-// surface's live handles + listeners survive tab switches. Only the ACTIVE tab's status bar is attached
-// to the footer, so getElementById resolves to the active surface's status - the bottom bar is per-tab.
+// app's live handles + listeners survive tab switches. Only the ACTIVE tab's status bar is attached
+// to the footer, so getElementById resolves to the active app's status - the bottom bar is per-tab.
 //
 // The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
-// spans the surfaces write via textContent + [data-state], styled ID-scoped in overrides.css.
+// spans the apps write via textContent + [data-state], styled ID-scoped in overrides.css.
 // #console-conn also gets a periodic /readyz enrichment from startConsole's readiness poller below.
-// Ownership split (see enrichConnHealth): a surface with a link of its OWN claims textContent +
+// Ownership split (see enrichConnHealth): an app with a link of its OWN claims textContent +
 // data-state by stamping data-owner through publishStatus; the poller owns title + data-health
 // always, and owns textContent/data-state on any bar nobody claimed. data-health is written only
 // while data-state is already "connected", so health refines the dot but never overrides it.
@@ -576,18 +576,18 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   conn.id = "console-conn";
   conn.setAttribute("aria-live", "polite");
   // The FRAGMENT decides demo, the same authority the readiness pulse and the connect screen already
-  // use. Leaving it to each surface to stamp meant only the Dashboard ever did, so a demo console read
+  // use. Leaving it to each app to stamp meant only the Dashboard ever did, so a demo console read
   // "demo" on one tab and "not connected" on the next - two answers to "what am I looking at", one of
   // them wrong, in the one bar that exists to answer it.
   //
   // Safe to decide at construction now: demo mode is reachable ONLY through the Workspace menu, which
-  // sets #demo and remounts every tab. It was not always - each surface used to carry a "See the demo"
-  // button that entered demo with no fragment, which is why this was deferred to the surfaces at all.
+  // sets #demo and remounts every tab. It was not always - each app used to carry a "See the demo"
+  // button that entered demo with no fragment, which is why this was deferred to the apps at all.
   const demoing = wantsDemo(parseHash());
   conn.textContent = demoing ? "demo" : "not connected";
   // Otherwise start in the honest not-connected state so the liveness dot reads RED until something
-  // proves a link, rather than the muted default color. A surface overwrites data-state the instant it
-  // mounts; the launcher's own bar (no surface behind it) keeps "none" until the readiness poller
+  // proves a link, rather than the muted default color. An app overwrites data-state the instant it
+  // mounts; the launcher's own bar (no app behind it) keeps "none" until the readiness poller
   // resolves a host.
   conn.dataset.state = demoing ? "demo" : "none";
   // Clickable: a disconnected user's fastest fix is the server-address field, so the status pill
@@ -618,10 +618,10 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
-  // No separate "demo data" tag beside this. There was one, revealed per surface, and next to a
+  // No separate "demo data" tag beside this. There was one, revealed per app, and next to a
   // connection dot that now reads "demo" on every tab it was the same sentence twice in one bar.
   // The disclosure a reader needs - that sample prose is asserting things nobody said - is what the
-  // dot says, for as long as demo mode is on, on every surface rather than only the ones that
+  // dot says, for as long as demo mode is on, on every app rather than only the ones that
   // remembered to raise it.
   const right = document.createElement("div");
   right.dataset.cluster = "";
@@ -731,10 +731,10 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   return bar;
 }
 
-// openServerSettings jumps a disconnected user straight to the fix: open the Settings surface (as a
+// openServerSettings jumps a disconnected user straight to the fix: open the Settings app (as a
 // tab, focusing it if already open - open() is single-instance) then focus + scroll the server-address
 // field once it exists. Settings activates asynchronously (its host pane mounts synchronously, but the
-// controller - and the DOM inside it - resolves via mountSurface's awaited activate() a tick or more
+// controller - and the DOM inside it - resolves via mountApp's awaited activate() a tick or more
 // later; see apps/settings/main.ts), so the field is not guaranteed to exist the instant dispatchCommand
 // returns. Poll a few animation frames rather than assume a fixed delay, and give up quietly past the
 // deadline - the tab is open either way, so a user who does not get auto-focus can still find the field.
@@ -753,20 +753,20 @@ function openServerSettings(): void {
   requestAnimationFrame(tryFocus);
 }
 
-// openKeybindings jumps to the Keybindings editor embedded in the Settings surface (not the modal
-// overlay - a deep link lands on the surface's own persistent copy, which is what a return visit or
+// openKeybindings jumps to the Keybindings editor embedded in the Settings app (not the modal
+// overlay - a deep link lands on the app's own persistent copy, which is what a return visit or
 // bookmark would find again). Same async-mount pattern as openServerSettings above: Settings activates
 // asynchronously, so poll a few animation frames for the target rather than assume a fixed delay, and
 // give up quietly past the deadline. With a cmdId, scroll to and briefly highlight that command's row
 // and focus its Record button (the row's first button) so a rebind is one click away; without one, just
-// scroll the editor into view. Scoped to [data-surface="settings"] so this never matches the modal
+// scroll the editor into view. Scoped to [data-app="settings"] so this never matches the modal
 // overlay's own [data-kbeditor] copy, which is present in the DOM (just hidden) the whole session.
 function openKeybindings(cmdId?: string): void {
   dispatchCommand("console.open.settings");
   // Settings activates asynchronously, and a COLD deep-link also pays for the settings bundle's lazy
   // import, which can take well past the old 800ms budget - so the poll would give up before the row
   // ever mounted, and the scroll silently no-op. Poll a generous window instead, and once the node
-  // exists defer the scroll/highlight ONE frame so it lands after the surface's mount/enter layout has
+  // exists defer the scroll/highlight ONE frame so it lands after the app's mount/enter layout has
   // settled (scrolling mid-mount left the row off-center or clipped). Give up quietly past the deadline.
   const deadline = Date.now() + 4000;
   const reveal = (
@@ -788,16 +788,14 @@ function openKeybindings(cmdId?: string): void {
   const tryFocus = (): void => {
     if (cmdId) {
       const row = document.querySelector<HTMLElement>(
-        '[data-surface="settings"] [data-kbeditor] [data-command="' + cmdId + '"]',
+        '[data-app="settings"] [data-kbeditor] [data-command="' + cmdId + '"]',
       );
       if (row) {
         reveal(row, "center", row);
         return;
       }
     } else {
-      const editor = document.querySelector<HTMLElement>(
-        '[data-surface="settings"] [data-kbeditor]',
-      );
+      const editor = document.querySelector<HTMLElement>('[data-app="settings"] [data-kbeditor]');
       if (editor) {
         reveal(editor, "start");
         return;
@@ -810,7 +808,7 @@ function openKeybindings(cmdId?: string): void {
 
 // ---- server readiness enrichment for #console-conn -------------------------
 //
-// Beyond the SSE-derived connected/disconnected signal each surface already owns, a periodic GET
+// Beyond the SSE-derived connected/disconnected signal each app already owns, a periodic GET
 // /readyz (server.fetchReadiness) gives a component-level health breakdown (workspaces, symbol index,
 // services, knowledge graph). This is purely an ENRICHMENT layer: the title (hover detail) and the
 // data-health dot color, applied to whichever status bar is currently docked. An old server that
@@ -862,7 +860,7 @@ function formatReadinessTitle(
 
 // The PWA install offer, captured at MODULE SCOPE rather than inside startConsole: Chromium fires
 // `beforeinstallprompt` once, early, and a listener attached later misses it outright. Bundle evaluation
-// is the earliest point the shell has. The store is handed to the Settings surface below, which is where
+// is the earliest point the shell has. The store is handed to the Settings app below, which is where
 // the operator asks for the install it defers.
 const installStore = createInstallStore(browserInstallHost());
 
@@ -872,9 +870,9 @@ export function startConsole(
   statusHost: HTMLElement,
 ): void {
   // The console's own service worker, registered by the SHELL so every session has one - it precaches
-  // this shell and its surface bundles, and Chromium's install-prompt algorithm still requires a fetch
-  // handler. Registering it from one surface instead would leave a console that never opened that
-  // surface with neither an offline shell nor an install offer.
+  // this shell and its app bundles, and Chromium's install-prompt algorithm still requires a fetch
+  // handler. Registering it from one app instead would leave a console that never opened that
+  // app with neither an offline shell nor an install offer.
   void registerServiceWorker(new URL("./sw.js", import.meta.url));
   watchServedBuild(new URL("./sw.js", import.meta.url), (running, served) =>
     showRefreshToast(
@@ -891,7 +889,7 @@ export function startConsole(
   const bootParams = parseHash();
   // Adopt the server origin BEFORE anything reads the fragment: on any device that opened a
   // LAN share link (a phone, a TV, a laptop) this records own-origin adoption and stashes the
-  // token, so resolveServerHost returns the page's own origin and every surface connects
+  // token, so resolveServerHost returns the page's own origin and every app connects
   // read-only over same-origin fetches to the exact LAN host it loaded from.
   adoptServerOrigin();
   const readOnly = isReadOnly();
@@ -902,7 +900,7 @@ export function startConsole(
   // surfaced, a refusal included, because each leaves the operator credential in the browser;
   // the next load retries. Skipped for a read-only share session, which holds a share token.
   //
-  // Here in the SHELL rather than in a surface because each surface is its own bundle: one
+  // Here in the SHELL rather than in an app because each app is its own bundle: one
   // exchange in the composition root covers every tab, and the storage it writes is what
   // the other bundles read.
   if (!readOnly) {
@@ -929,19 +927,19 @@ export function startConsole(
 
   // The launcher is the outlet's EMPTY STATE, not a tab: one element appended straight into the
   // content outlet as a sibling of the tab panes, shown only when no tab is active (show(null)),
-  // hidden the moment a tab activates. Clicking a card opens that surface as a real tab. It gets its
+  // hidden the moment a tab activates. Clicking a card opens that app as a real tab. It gets its
   // own default status bar (identical to what the old home tab supplied: a "not connected" dot and a
   // hidden Demo chip) so the footer stays populated at zero tabs.
-  // launchDemo opens every surface in the server-free demo: it sets the shared #demo fragment each
-  // surface reads when it activates, then opens them as tabs (Dashboard last so its live-updating demo
+  // launchDemo opens every app in the server-free demo: it sets the shared #demo fragment each
+  // app reads when it activates, then opens them as tabs (Dashboard last so its live-updating demo
   // is the active tab).
   //
-  // A surface derives its demo mode from the fragment (wantsDemo) exactly ONCE, when it activates -
+  // An app derives its demo mode from the fragment (wantsDemo) exactly ONCE, when it activates -
   // there is no in-shell hashchange listener that re-reads it, and open() below is single-instance, so
-  // re-opening a surface that is ALREADY mounted just re-focuses its tab (activateTab) and never
-  // re-activates it. So setting #demo and calling open() cannot flip an already-open surface into demo:
+  // re-opening an app that is ALREADY mounted just re-focuses its tab (activateTab) and never
+  // re-activates it. So setting #demo and calling open() cannot flip an already-open app into demo:
   // it keeps whatever mode it read at mount (its non-demo empty state), the reported bug. Guarantee a
-  // clean slate first - close every open tab - so all four demo surfaces then mount FRESH with #demo in
+  // clean slate first - close every open tab - so all four demo apps then mount FRESH with #demo in
   // the fragment, the one path that reliably enters demo mode. In the normal launcher flow the workspace
   // is already empty (the launcher only shows at zero tabs), so this is a no-op there.
   const launchDemo = (): void => {
@@ -956,10 +954,10 @@ export function startConsole(
   let launcherChordWired = false;
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
-  // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
+  // mountApp is how a tile mounts one app into a pane host: resolve the registered module and
   // activate it, returning its controller (or null if unknown). A tile calls this per leaf, so all
-  // the per-surface lazy-import machinery (standalone/moduleSurface) is reused unchanged.
-  async function mountSurface(
+  // the per-app lazy-import machinery (standalone/moduleApp) is reused unchanged.
+  async function mountApp(
     pageId: string,
     host: HTMLElement,
   ): Promise<PageController<unknown, unknown> | null> {
@@ -970,7 +968,7 @@ export function startConsole(
 
   // mount builds a tab's runtime once: a host pane in the outlet, a per-tab status bar, and a tile
   // that renders the tab's split-pane tree (a single leaf for an un-split tab). It attaches and shows
-  // the tab synchronously BEFORE any surface activates, so a surface that measures its own DOM at init
+  // the tab synchronously BEFORE any app activates, so an app that measures its own DOM at init
   // (the log viewer's segmented switches, charts, canvas) sees the real, visible dimensions - a
   // display:none host reports zero. Inactive tabs are never pre-mounted. A second call for the same
   // tab is a no-op.
@@ -982,19 +980,19 @@ export function startConsole(
     const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
     const tile = createTileView({
       seed,
-      surfaces: APPS,
-      mountSurface,
+      apps: APPS,
+      mountApp,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
       onTitleChange: (title, pageId) => {
         retitleTab(tab.id, title, pageId);
-        // Fires when focus moves to a pane showing a different surface - exactly when the rail's
+        // Fires when focus moves to a pane showing a different app - exactly when the rail's
         // current row changes. Guarded on the tab being active so a background tab cannot claim it.
-        if (ws.get().activeId === tab.id) focusedSurface.set(pageId || null);
+        if (ws.get().activeId === tab.id) focusedApp.set(pageId || null);
       },
     });
     host.append(tile.el);
     mounts.set(tab.id, { host, status: makeStatusBar(), tile });
-    show(tab.id); // visible + status attached before the tile's surfaces finish activating
+    show(tab.id); // visible + status attached before the tile's apps finish activating
   }
 
   // The window title while running as a dedicated app window (index.html?app=<id>), or null in the
@@ -1003,7 +1001,7 @@ export function startConsole(
   let appModeTitle: string | null = null;
 
   // retitleTab names a tab after the document its focused pane has open, falling back to that
-  // surface's own name once there is none - so closing a document, or moving focus to a pane that
+  // app's own name once there is none - so closing a document, or moving focus to a pane that
   // has none, restores "Log Viewer" rather than stranding the last file's name on the tab.
   //
   // Both the bar and the window title are derived from the workspace, so writing it here is the
@@ -1011,10 +1009,10 @@ export function startConsole(
   function retitleTab(id: string, docTitle: string | null, pageId: string): void {
     const next = docTitle ?? registry.get(pageId)?.title ?? "";
     // An empty pane (the in-pane launcher, pageId "") is not a thing to be named after; keeping the
-    // tab's current name is less jarring than blanking it while a surface is being picked.
+    // tab's current name is less jarring than blanking it while an app is being picked.
     if (next === "") return;
-    // App mode mounts its one surface DIRECTLY, bypassing the workspace, so there is no tab to
-    // rename - the window title is the whole naming surface there, and it still follows the
+    // App mode mounts its one app DIRECTLY, bypassing the workspace, so there is no tab to
+    // rename - the window title is all the naming there is, and it still follows the
     // document (a dedicated Log Viewer window naming itself after the run it holds).
     if (appModeTitle !== null) appModeTitle = next;
     else ws.set(renameTab(ws.get(), id, next));
@@ -1036,8 +1034,8 @@ export function startConsole(
   }
 
   // Browser-history integration so the mobile back-gesture (and the back button) moves between the
-  // in-app surfaces you have visited instead of leaving the site. The console keeps its tab/split state
-  // in a persisted workspace, NOT the URL (a tiling workspace has no single "current" surface), so the
+  // apps you have visited instead of leaving the site. The console keeps its tab/split state
+  // in a persisted workspace, NOT the URL (a tiling workspace has no single "current" app), so the
   // history stack carries only the ACTIVE-TAB id per entry: each activation pushes one entry, and a pop
   // re-activates that tab. `historyReady` gates pushing until after boot restore (so the boot's own
   // replaceState scrubbing is not fought); `historyNavInProgress` suppresses the push that the pop-driven
@@ -1058,8 +1056,8 @@ export function startConsole(
       lastHistoryId = target;
       // Re-activate the popped tab when it still exists; otherwise (the launcher baseline, or a
       // since-closed tab) reveal the launcher. Revealing the launcher leaves the workspace intact (the tab
-      // bar still lists open tabs), so a forward or a tab click re-reveals the surface - back just steps
-      // out of the current surface rather than off the site.
+      // bar still lists open tabs), so a forward or a tab click re-reveals the app - back just steps
+      // out of the current app rather than off the site.
       if (target && ws.get().tabs.some((t) => t.id === target)) activateTab(target);
       else show(null);
     } finally {
@@ -1110,9 +1108,9 @@ export function startConsole(
     // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
     // so nothing inside it changed. Read it here instead.
     const shot = active?.tile.snapshot();
-    focusedSurface.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
+    focusedApp.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
     syncWindowTitle();
-    // Let a docked Reference panel re-read the now-active surface's help sections.
+    // Let a docked Reference panel re-read the now-active app's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
     // Record this activation as a history entry so the browser back-gesture returns here (no-op until
     // boot restore has enabled it, and suppressed while a pop is itself driving this activation).
@@ -1167,13 +1165,13 @@ export function startConsole(
     activateTab(cur.tabs[(i + dir + cur.tabs.length) % cur.tabs.length].id);
   }
 
-  // moveSurfaceToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
+  // moveAppToTab is drag-to-adopt's shared orchestration, called from both a tab-on-tab drag
   // (tabBar.ts's onAdoptTab, below) and a Panes-map-cell-on-tab drag (wirePaneCellDrag, further down).
-  // It MOVES one leaf's surface: adopt it into the target tab as a new pane, then remove it from the
-  // source - closing the source tab outright if that was its only pane. The surface RE-MOUNTS fresh in
+  // It MOVES one leaf's app: adopt it into the target tab as a new pane, then remove it from the
+  // source - closing the source tab outright if that was its only pane. The app RE-MOUNTS fresh in
   // the target (tileView never migrates a live DOM node across tiles), which is expected: adopt/closeLeaf
   // are pure tree ops, only the pageId travels.
-  function moveSurfaceToTab(sourceTabId: string, sourceLeafId: string, targetTabId: string): void {
+  function moveAppToTab(sourceTabId: string, sourceLeafId: string, targetTabId: string): void {
     if (sourceTabId === targetTabId) return; // dropping a tab/pane onto itself: intra-tab moves are the map's own swap
     const src = mounts.get(sourceTabId);
     const tgt = mounts.get(targetTabId);
@@ -1183,7 +1181,7 @@ export function startConsole(
     tgt.tile.adopt(pageId);
     const wasLast = src.tile.closeLeaf(sourceLeafId);
     if (wasLast) closeTabById(sourceTabId); // the source tab emptied out - close it like any other empty tab
-    activateTab(targetTabId); // reveal where the surface landed
+    activateTab(targetTabId); // reveal where the app landed
     if (!panesPopup.hidden) renderPanesMap(); // keep an open Panes map in sync with the tree it just changed
   }
 
@@ -1194,46 +1192,46 @@ export function startConsole(
     // menu is per-tab, so a right-click on a background tab splits it in place without switching to it.
     onSplit: (id, dir) => mounts.get(id)?.tile.split(dir),
     // Move a tab out into its own OS window: open the app window, then drop the tab. The window boots
-    // the surface fresh (app mode mounts one surface and skips the workspace), so a tiled tab's other
+    // the app fresh (app mode mounts one app and skips the workspace), so a tiled tab's other
     // panes do not travel with it - the same thing closing the tab would have discarded.
     onMoveToWindow: (id) => {
       const t = ws.get().tabs.find((x) => x.id === id);
       if (!t) return;
-      openSurfaceWindow(t.pageId);
+      openAppWindow(t.pageId);
       closeTabById(id);
     },
-    // Dragging a whole TAB moves its currently-focused pane (a tab has no single "the" surface once
+    // Dragging a whole TAB moves its currently-focused pane (a tab has no single "the" app once
     // tiled, so the focused one is the least surprising pick - the same pane Split/onSplit above would
     // act on if you split it in place instead of dragging it).
     onAdoptTab: (sourceId, targetId) => {
       const focusId = mounts.get(sourceId)?.tile.snapshot().focusId ?? "";
-      moveSurfaceToTab(sourceId, focusId, targetId);
+      moveAppToTab(sourceId, focusId, targetId);
     },
   });
   tabBarHost.append(bar.el);
   wireTabOverflowCue(tabBarHost);
 
-  // Wire the title-bar settings gear to OPEN the Settings surface as a tab (single-instance: open()
+  // Wire the title-bar settings gear to OPEN the Settings app as a tab (single-instance: open()
   // focuses it if it is already open). The old gear popover was retired; its controls live on the
-  // surface now. No-op if the page did not supply the #settings-btn markup.
+  // app now. No-op if the page did not supply the #settings-btn markup.
   const settingsBtn = document.getElementById("settings-btn");
   if (settingsBtn) settingsBtn.addEventListener("click", () => open("settings"));
 
   // The app grid derives from the same registry as the launcher and Open commands. Settings keeps
-  // its dedicated gear, while every user-openable workspace surface remains in the escape hatch.
+  // its dedicated gear, while every user-openable workspace app remains in the escape hatch.
   initAppMenu(APPS.filter((app) => app.id !== "settings"));
 
-  // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
+  // The left navigation rail, over the SAME app list, so the rail, the launcher and the
   // Applications menu can never offer different sets. This runs before the ?app branch below, so an
   // app-mode window builds a rail too and console.css hides it there ([data-appmode]).
   // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
   // source of it; null until the first answer, and back to null whenever the server stops answering.
   const pulse = signal<PulseView | null>(null);
-  // The surface the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
-  // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
+  // The app the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
+  // several at once, so "the active tab's apps" is not an answer to "where am I"; focus is.
   // Null with no tab open (the launcher), so nothing is marked.
-  const focusedSurface = signal<string | null>(null);
-  // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
+  const focusedApp = signal<string | null>(null);
+  // Per-app counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
   // earns a badge and a static one does not.
   const railBadges = signal<Record<string, Badge>>({});
   // The welcome screen reads the SAME pulse the rail does, on the same 15s tick, so a console sitting
@@ -1246,9 +1244,9 @@ export function startConsole(
   // reports more than one workspace, so a single-workspace console never grows a control for a
   // decision with one answer.
   const actionsHost = document.getElementById("console-actions");
-  // Leaving the demo is a RELOAD, not a state flip. Every surface reads #demo once at mount and keeps
+  // Leaving the demo is a RELOAD, not a state flip. Every app reads #demo once at mount and keeps
   // whatever mode it saw - the same reason launchDemo closes every tab before opening them again - so
-  // clearing the fragment without reloading would leave four synthetic surfaces on screen claiming to
+  // clearing the fragment without reloading would leave four synthetic apps on screen claiming to
   // be live.
   const leaveDemo = (): void => {
     history.replaceState(null, "", location.pathname + location.search);
@@ -1276,7 +1274,7 @@ export function startConsole(
     castWorkspaceSigil(seed, roots);
   };
 
-  // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
+  // An app can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no server to poll.
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
   // no server - but a Connect screen there would ask for a credential against a server that does not
@@ -1313,22 +1311,22 @@ export function startConsole(
         ws,
         expanded: sidebarExpandedCell,
         pulse,
-        focused: focusedSurface,
+        focused: focusedApp,
         badges: railBadges,
-        surfaces: APPS,
+        apps: APPS,
       },
       { onOpen: (id) => open(id) },
     );
   }
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
-  // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change). The
+  // markup. It reads the active app's [data-ref-section] help blocks (refreshed on tab change). The
   // panel's "break out to tab" button promotes the console-wide reference into a persistent tab.
   initRefDrawer({ onBreakOut: () => open("reference") });
 
   // The notification center: the title-bar bell + its pop-out history panel. It builds its own bell into
   // #console-actions, installs the one document listener that records notifications raised from any
-  // bundle (surfaces + toasts), and owns the in-memory per-session store. A #demo boot seeds a few
+  // bundle (apps + toasts), and owns the in-memory per-session store. A #demo boot seeds a few
   // history-tier entries so the panel is not empty offline (demo data never lights the bell).
   const notifications = mountNotificationCenter();
   if (wantsDemo(parseHash())) notifications.seedDemo();
@@ -1377,9 +1375,9 @@ export function startConsole(
 
   // Tab keybindings: register the commands and install ONE keydown listener over the merged keymap.
   // The listener skips while typing in a field (see commands.ts), so it never eats filter input.
-  // Opening a surface is a command per surface (group "Open"): the launcher's cards cover the empty
-  // state, and once a tab is open the command bar is how another surface is launched. Each opens
-  // (or focuses, if already open) that single-instance surface as a tab.
+  // Opening an app is a command per app (group "Open"): the launcher's cards cover the empty
+  // state, and once a tab is open the command bar is how another app is launched. Each opens
+  // (or focuses, if already open) that single-instance app as a tab.
   for (const app of APPS) {
     registerCommand({
       id: "console.open." + app.id,
@@ -1414,11 +1412,11 @@ export function startConsole(
     run: () => cycleTab(-1),
   });
   // Tiling: split the focused pane (in the persisted default direction, or a forced axis), move focus
-  // between panes, move a pane's SURFACE into a neighbor's slot, and jump back across the nearest
+  // between panes, move a pane's APP into a neighbor's slot, and jump back across the nearest
   // divider to the pane the current one was split from. Each targets the active tab's tile (tileView.ts
   // owns the tree ops). splitHorizontal/splitVertical double as "set the default": picking one
   // explicitly re-asserts it as splitMode, so the tray icon and the bare mod+\\ chord both follow the
-  // last explicit choice, whichever surface (popup, command bar, tab context menu) made it.
+  // last explicit choice, whichever control (popup, command bar, tab context menu) made it.
   registerCommand({
     id: "console.pane.split",
     label: "Split pane",
@@ -1568,7 +1566,7 @@ export function startConsole(
 
   // Mirror the status-bar Activity button as a palette command, so the drawer is reachable by keyboard
   // like every other action. Unbound by default: the drawer is a glance, not a chord anyone reaches for
-  // mid-edit, and the keymap's free chords are worth more to the surfaces.
+  // mid-edit, and the keymap's free chords are worth more to the apps.
   registerCommand({
     id: "console.activity.toggle",
     label: "Activity",
@@ -1648,9 +1646,9 @@ export function startConsole(
   panesDone.addEventListener("click", () => closePanesPopup(true));
   panesHead.append(panesTitle, panesDone);
 
-  // surfaceLabel is a map cell's caption: the surface's launcher label, or "Empty" for an unfilled
-  // leaf (a fresh split's launcher pane, before the operator picks a surface for it).
-  function surfaceLabel(pageId: string): string {
+  // appLabel is a map cell's caption: the app's launcher label, or "Empty" for an unfilled
+  // leaf (a fresh split's launcher pane, before the operator picks an app for it).
+  function appLabel(pageId: string): string {
     if (pageId === "") return "Empty";
     return APPS.find((app) => app.id === pageId)?.label ?? pageId;
   }
@@ -1697,7 +1695,7 @@ export function startConsole(
       const target = dropTarget;
       clearDrop();
       if (moved) {
-        // A cell dropped onto the tab strip ADOPTS into that tab (moveSurfaceToTab) instead of
+        // A cell dropped onto the tab strip ADOPTS into that tab (moveAppToTab) instead of
         // swapping within the map - the strip sits outside the popup entirely, so this is the one
         // place a map drag reaches past its own tree. Checked before the swap; a drop elsewhere on
         // the same tab (or nowhere) falls through to the ordinary in-map behavior below.
@@ -1706,7 +1704,7 @@ export function startConsole(
           ?.closest<HTMLElement>("[data-tab-id]")?.dataset.tabId;
         const activeTabId = ws.get().activeId;
         if (tabId && activeTabId && tabId !== activeTabId) {
-          moveSurfaceToTab(activeTabId, id, tabId);
+          moveAppToTab(activeTabId, id, tabId);
           return;
         }
         if (target) {
@@ -1760,7 +1758,7 @@ export function startConsole(
     return wrap;
   }
 
-  // buildPaneMapCell renders one leaf as a tappable rectangle: its surface label, an accent ring when
+  // buildPaneMapCell renders one leaf as a tappable rectangle: its app label, an accent ring when
   // it is the focused pane (matching tileView's own data-focus convention), and - only on the focused
   // cell - the split controls (so the first split works even on a single, un-tiled pane).
   function buildPaneMapCell(leaf: Leaf, focusId: string): HTMLElement {
@@ -1769,7 +1767,7 @@ export function startConsole(
     cell.dataset.paneCell = leaf.id;
     cell.setAttribute("role", "button");
     cell.tabIndex = 0;
-    const label = surfaceLabel(leaf.pageId);
+    const label = appLabel(leaf.pageId);
     cell.setAttribute("aria-label", "Focus " + label + " pane");
     if (leaf.id === focusId) cell.dataset.focus = "";
     const text = document.createElement("span");
@@ -1974,7 +1972,7 @@ export function startConsole(
   // edits the console's own commands (those with a CONSOLE_KEYMAP default) against the shared keymap
   // cell. Built here AFTER the command bar command is registered so it appears among the editable rows.
   // The console's own editable commands (those with a CONSOLE_KEYMAP default). Shared by the modal
-  // overlay and the Settings surface's embedded editor - both drive the one shared keymap cell, so
+  // overlay and the Settings app's embedded editor - both drive the one shared keymap cell, so
   // the two never fork. Snapshotted here, after every CONSOLE_KEYMAP command is registered.
   const editableCommands = listCommands().filter((c) =>
     Object.prototype.hasOwnProperty.call(CONSOLE_KEYMAP, c.id),
@@ -2039,12 +2037,12 @@ export function startConsole(
   // there is no console-level teardown to hook into (startConsole runs once for the page's lifetime,
   // like installKeybindings above), so the interval simply runs for as long as the page does.
   const READINESS_POLL_MS = 15000;
-  // enrichConnHealth applies the ONE ownership rule that lets the poller and the surfaces share the dot
-  // without flapping: the active surface owns textContent + data-state (its SSE-derived link signal), the
+  // enrichConnHealth applies the ONE ownership rule that lets the poller and the apps share the dot
+  // without flapping: the active app owns textContent + data-state (its SSE-derived link signal), the
   // poller owns data-health + title. Health only means something once the dot already reads "connected",
   // so the poller writes data-health ONLY while data-state is "connected" (and clears any stale value
   // otherwise). That holds with tabs open too - so an open tab now shows live degraded/down coloring, not
-  // just text - and it can never green-out a surface (graph snapshot, disconnected log view) that has
+  // just text - and it can never green-out an app (graph snapshot, disconnected log view) that has
   // declared itself not-connected, nor fight the dashboard which likewise drops data-health when down.
   function enrichConnHealth(conn: HTMLElement, report: ReadinessReport | null): void {
     if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
@@ -2056,12 +2054,12 @@ export function startConsole(
   let pollGeneration = 0;
   function pollReadiness(): void {
     const current = document.getElementById("console-conn");
-    // The FRAGMENT decides, not the connection dot. The dot is not stamped "demo" until a demo surface
+    // The FRAGMENT decides, not the connection dot. The dot is not stamped "demo" until a demo app
     // mounts and writes it, so keying on it meant a console opened straight at #demo produced no pulse
     // at all until a tab happened to be opened - no rail reading, no workspaces, no sigil. Same
     // ordering mistake as the connect screen's guard, in a branch that predates it.
     if (wantsDemo(parseHash()) || current?.dataset.state === "demo") {
-      // The dot may not exist yet at #demo - it is docked by whichever surface is showing, and on the
+      // The dot may not exist yet at #demo - it is docked by whichever app is showing, and on the
       // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
       if (current) {
         const hint = "Demo data is synthetic. Click to change the server address.";
@@ -2085,8 +2083,8 @@ export function startConsole(
       });
       railBadges.set({});
       // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,
-      // so in the demo the workspace menu stayed empty until that one surface happened to be mounted -
-      // and the scope control is in the title bar, where it is visible long before any surface is.
+      // so in the demo the workspace menu stayed empty until that one app happened to be mounted -
+      // and the scope control is in the title bar, where it is visible long before any app is.
       const demoRoots = DEMO_WORKSPACES;
       workspacePicker?.setWorkspaces(demoRoots);
       castSeen(demoRoots);
@@ -2100,8 +2098,8 @@ export function startConsole(
       pulse.set(null); // a count with no server behind it outlives the thing it described
       railBadges.set({});
       syncLauncherConnectPrompt(launcher, { connection: "none" });
-      // No server address configured at all: nothing to probe. A surface, if one is docked, owns the text;
-      // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
+      // No server address configured at all: nothing to probe. An app, if one is docked, owns the text;
+      // but the launcher's own bar (zero tabs) has no app behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
       if (ws.get().activeId == null) {
         const conn = document.getElementById("console-conn");
@@ -2124,7 +2122,7 @@ export function startConsole(
     // would leave a mobile tab unable to learn it has a workspace to choose.
     const generation = ++pollGeneration;
     void fetchPulse(host).then((p) => {
-      // A slow answer can land after a switch to a demo surface or to no host at all, both of which
+      // A slow answer can land after a switch to a demo app or to no host at all, both of which
       // clear these cells on the way past. Installing it then would paint a live pool reading over
       // synthetic data - the exact thing the branches above clear them to prevent.
       if (generation !== pollGeneration) return;
@@ -2173,10 +2171,10 @@ export function startConsole(
       return;
     }
     const ageSec = Math.max(0, Math.round((Date.now() - at) / 1000));
-    // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
+    // The tooltip is always safe to enrich - no app writes conn.title, so this never contends.
     conn.title = formatReadinessTitle(report, ageSec, host);
-    // The poller owns any bar no surface has claimed: the launcher's zero-tab bar, and every
-    // surface with no server link of its own - which used to sit on "not connected" all session.
+    // The poller owns any bar no app has claimed: the launcher's zero-tab bar, and every
+    // app with no server link of its own - which used to sit on "not connected" all session.
     if (!conn.dataset.owner) {
       conn.textContent = report
         ? report.ready
@@ -2187,7 +2185,7 @@ export function startConsole(
     }
     // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
     // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
-    // state update above, and runs whoever owns the dot so an open-but-disconnected surface still
+    // state update above, and runs whoever owns the dot so an open-but-disconnected app still
     // surfaces the address on the conn item.
     conn.setAttribute(
       "aria-label",
@@ -2195,7 +2193,7 @@ export function startConsole(
         ? "Connected to " + host + ". Click to change the server address."
         : notConnectedHint(host),
     );
-    // Health enrichment runs whoever owns the dot, gated on the (surface- or poller-set) data-state.
+    // Health enrichment runs whoever owns the dot, gated on the (app- or poller-set) data-state.
     enrichConnHealth(conn, report);
   }
   pollReadiness();
@@ -2213,14 +2211,14 @@ export function startConsole(
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
-  // open launches a surface as a tab. Every surface (logs/graph/dashboard/activity) is single-instance
+  // open launches an app as a tab. Every app (logs/graph/dashboard/activity) is single-instance
   // - it keeps module-level state, so a second instance would fight the first; if one is already open
-  // anywhere - a tab's primary surface OR a pane inside a tiled tab - focus that tab instead of opening
+  // anywhere - a tab's primary app OR a pane inside a tiled tab - focus that tab instead of opening
   // a duplicate.
   function open(pageId: string): void {
     const m = registry.get(pageId);
     if (!m) return;
-    const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
+    const hostTab = ws.get().tabs.find((t) => tabHostsApp(t, pageId));
     if (hostTab) {
       activateTab(hostTab.id);
       // ...and land IN it, rather than wherever focus happened to be. leafShowing carries the why.
@@ -2244,10 +2242,10 @@ export function startConsole(
     open(pageId);
   }
 
-  // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
-  // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
-  window.addEventListener(surfaceNavigationEvent, (event) => {
-    const detail = surfaceNavigation(event);
+  // Lazy app bundles do not import the shell. Cross-links therefore ask the sole owner of
+  // tabs, tiling, and focus to reveal an app rather than inventing a second navigation path.
+  window.addEventListener(appNavigationEvent, (event) => {
+    const detail = appNavigation(event);
     if (detail?.mode) openMode(detail.pageId, detail.mode);
     else if (detail?.pageId) open(detail.pageId);
   });
@@ -2260,15 +2258,15 @@ export function startConsole(
     const bundle = app.id + "/" + app.id + ".js";
     register(
       load.kind === "page"
-        ? standaloneSurface({ id: app.id, title: app.label, bundle, css: load.css })
-        : moduleSurface({ id: app.id, title: app.label, bundle, css: load.css }),
+        ? standaloneApp({ id: app.id, title: app.label, bundle, css: load.css })
+        : moduleApp({ id: app.id, title: app.label, bundle, css: load.css }),
     );
   }
-  // Shortcuts is registered from the shell bundle (not a lazy surface bundle) - it is a thin,
+  // Shortcuts is registered from the shell bundle (not a lazy app bundle) - it is a thin,
   // static catalogue over the console's own live command list + keymap, the same deps the keyboard
   // cheat sheet above reads, so a separate bundle would get nothing but import overhead.
   register(
-    createShortcutsSurface({
+    createShortcutsApp({
       commands: listCommands,
       keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
       mac: isMac(),
@@ -2277,51 +2275,51 @@ export function startConsole(
       onEditKeybindings: openKeybindings,
     }),
   );
-  // Settings is registered from the shell bundle (not a lazy surface bundle) so its Keybindings
+  // Settings is registered from the shell bundle (not a lazy app bundle) so its Keybindings
   // editor drives the SAME live keymap cell installKeybindings reads - a separate bundle would get its
   // own non-syncing persisted("keymap"). The shell injects the editable command list, defaults, and cell.
   register(
-    settingsSurface({
+    settingsApp({
       keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell },
       presets: KEYMAP_PRESETS,
       presetList: KEYMAP_PRESET_LIST,
       install: installStore,
     }),
   );
-  // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in APPS:
+  // The Reference app backs the drawer's "break out to tab" button. Registered but NOT in APPS:
   // no launcher card, no app-menu row, no Open command - reachable only via that button, single-instance.
-  register(referenceSurface());
+  register(referenceApp());
 
-  // App mode: a dedicated single-surface window, opened by the app drawer as index.html?app=<id>. It
-  // shows ONE surface with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
-  // PWA popup reads as a native app window. It mounts the surface DIRECTLY, bypassing the persisted
+  // App mode: a dedicated single-app window, opened by the app drawer as index.html?app=<id>. It
+  // shows ONE app with the tab bar hidden (CSS keys on the [data-appmode] root) so an installed
+  // PWA popup reads as a native app window. It mounts the app DIRECTLY, bypassing the persisted
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
   const launchApp = new URLSearchParams(location.search).get("app");
-  const appSurface = launchApp ? APPS.find((app) => app.id === launchApp) : undefined;
-  if (appSurface && registry.has(appSurface.id)) {
-    document.documentElement.dataset.appmode = appSurface.id;
+  const launchedApp = launchApp ? APPS.find((app) => app.id === launchApp) : undefined;
+  if (launchedApp && registry.has(launchedApp.id)) {
+    document.documentElement.dataset.appmode = launchedApp.id;
     // Must be set before mount(): its show() titles the window, and would otherwise read the
-    // workspace, which has no tab for this surface.
-    appModeTitle = appSurface.label;
+    // workspace, which has no tab for this app.
+    appModeTitle = launchedApp.label;
     syncWindowTitle();
-    mount({ id: "app-" + appSurface.id, pageId: appSurface.id, title: appSurface.label });
+    mount({ id: "app-" + launchedApp.id, pageId: launchedApp.id, title: launchedApp.label });
     return;
   }
 
-  // A clean surface path (/console/<surface>/, the canonical minted deep-link) is an ENTRY
-  // INSTRUCTION consumed ONCE: open that surface, then scrub the address back to the console base
+  // A clean app path (/console/<app>/, the canonical minted deep-link) is an ENTRY
+  // INSTRUCTION consumed ONCE: open that app, then scrub the address back to the console base
   // so the URL never has to track later tab/split changes (a tiling workspace has no single
-  // "current" surface; a mirrored path would lie). This mirrors the #token consume-store-scrub the
-  // share flow uses. It COMPOSES with restore below: it opens the surface INTO the restored
+  // "current" app; a mirrored path would lie). This mirrors the #token consume-store-scrub the
+  // share flow uses. It COMPOSES with restore below: it opens the app INTO the restored
   // workspace (open() is single-instance - it activates an already-open tab or adds one), never
   // wiping restored tabs. Refresh, now on the scrubbed base path, restores the workspace as usual.
-  const entrySurface = consoleSurfaceFromPath();
+  const entryApp = consoleAppFromPath();
 
   // Restore the persisted workspace: the tab bar already renders every saved tab (it binds to ws);
-  // mount ONLY the active one so restore is cheap and its surface activates visible. The rest mount
+  // mount ONLY the active one so restore is cheap and its app activates visible. The rest mount
   // lazily on first selection. Show the launcher empty state if the workspace is empty (unless an
-  // entry surface will open below, which fills the empty workspace itself).
+  // entry app will open below, which fills the empty workspace itself).
   const saved = ws.get();
   if (saved.tabs.length > 0) {
     const activeId = saved.activeId ?? saved.tabs[0]?.id ?? null;
@@ -2331,11 +2329,7 @@ export function startConsole(
     // A phone that just scanned the QR lands on something live immediately rather
     // than an empty launcher: open the Dashboard as the read-only view.
     open("dashboard");
-  } else if (
-    !entrySurface &&
-    !hadSavedWorkspace &&
-    window.matchMedia(DESKTOP_START_QUERY).matches
-  ) {
+  } else if (!entryApp && !hadSavedWorkspace && window.matchMedia(DESKTOP_START_QUERY).matches) {
     const starter = desktopStarterWorkspace();
     const [starterTab] = starter.tabs;
     if (starterTab) {
@@ -2344,21 +2338,21 @@ export function startConsole(
     } else {
       show(null);
     }
-  } else if (!entrySurface) {
+  } else if (!entryApp) {
     show(null);
   }
 
-  // Consume the entry path: open its surface into the (possibly restored) workspace, then scrub the
+  // Consume the entry path: open its app into the (possibly restored) workspace, then scrub the
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
-  // only the surface segment is dropped.
-  if (entrySurface) {
-    if (entrySurface.mode) openMode(entrySurface.pageId, entrySurface.mode);
-    else open(entrySurface.pageId);
+  // only the app segment is dropped.
+  if (entryApp) {
+    if (entryApp.mode) openMode(entryApp.pageId, entryApp.mode);
+    else open(entryApp.pageId);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 
-  // Boot restore is done: start history tracking so later surface switches push back-stack entries and
-  // the mobile back-gesture navigates between surfaces instead of leaving the app.
+  // Boot restore is done: start history tracking so later app switches push back-stack entries and
+  // the mobile back-gesture navigates between apps instead of leaving the console.
   enableHistoryNav();
 }
 
@@ -2373,7 +2367,7 @@ const statusHost = document.getElementById("console-statusbar");
 if (tabBarHost && outlet && statusHost) void signInThenStart(tabBarHost, outlet, statusHost);
 
 // signInThenStart trades a CLI link's one-time code for its console token BEFORE anything
-// mounts, so no surface ever makes a request signed with nothing. The code is redeemed at the
+// mounts, so no app ever makes a request signed with nothing. The code is redeemed at the
 // server that served this page, and a code that is used or expired is said so rather than
 // leaving the console to fail call by call.
 async function signInThenStart(

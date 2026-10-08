@@ -68,7 +68,7 @@ Used by: [CreateToken (response)](token.md#createtoken).
 
 ### Grant
 
-Grant is what a token may do: one level per surface, as the server enforces it.
+Grant is what a token may do: one level per scope, as the server enforces it.
 
 Source: [token.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L49).
 
@@ -110,7 +110,7 @@ Used by: [RevokeToken (request)](token.md#revoketoken).
 
 ### TokenInfo
 
-TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full hash), the class, the grant, the expiry, and the name. A list is still an intelligence surface, so it omits the full hash, any filesystem path, and the creation time.
+TokenInfo describes one manageable token WITHOUT its secret, minimized to what a list and revoke UI needs: the revoke handle (id, the 8-hex id, never the token bytes or the full hash), the class, the grant, the expiry, and the name. A list is still a source of intelligence for an attacker, so it omits the full hash, any filesystem path, and the creation time.
 
 Source: [token.proto:68](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L68).
 
@@ -146,7 +146,7 @@ Used by: [CreateToken (response)](token.md#createtoken), [ListTokens (response)]
 
 ### Level
 
-Level is how much of one surface a grant reaches. Levels are ordered: a higher level includes every lower one. The zero value is none.
+Level is how much of one scope a grant reaches. Levels are ordered: a higher level includes every lower one. The zero value is none.
 
 Source: [token.proto:42](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L42).
 

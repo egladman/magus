@@ -33,7 +33,7 @@ const (
 	// nothing wired to invoke magus, so there is no guard to be covered or
 	// uncovered. Reported distinct from HarnessVerified so a skills-only
 	// descriptor can never read as "the guard runs here": the single most
-	// misleading verdict this surface could give.
+	// misleading verdict this status could give.
 	HarnessSkillsOnly HarnessStatus = "skills-only"
 	// HarnessUnprobed means presence matched (the config carries the declared
 	// fragments) but VerifyHarness could not confirm the wired command actually

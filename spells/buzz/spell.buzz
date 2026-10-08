@@ -3,10 +3,10 @@
 // Buzz file IS: which extension carries one, and how to tell code from a comment or
 // a string while scanning it.
 //
-// That identity feeds the surfaces that read source without running it - the
+// That identity feeds the readers of source that do not run it - the
 // comment-aware scanner behind the knowledge graph and the symbol index, and the
 // extension map that binds a file to a project - so removing it does not remove
-// work, it makes those surfaces read Buzz as unstructured text.
+// work, it makes those readers treat Buzz as unstructured text.
 //
 // It declares NO ops of its own on purpose. The three it used to carry (buzz-check,
 // buzz-test, magus-buzz) forked interpreters that know only the Buzz stdlib, so they

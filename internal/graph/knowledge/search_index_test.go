@@ -269,12 +269,12 @@ func requireResolveMatchesReference(t *testing.T, g *Graph, queries []string) in
 	return nonEmpty
 }
 
-// withQueryCorpus adds nodes to g that the synthetic fixture lacks and the filters need:
+// withFilterNodes adds nodes to g that the synthetic fixture lacks and the filters need:
 // language, role, layer and marker-stamp attrs, a doc and a file under a project, mixed-case
 // and non-ASCII text, a node with no source, and a stale doc. It also adds a root "."
 // project and a one-character project, the pair whose relative order the old prefix scan
 // made a quirk (see owningProject).
-func withQueryCorpus(g *Graph) {
+func withFilterNodes(g *Graph) {
 	add := func(n types.KnowledgeNode) { g.AddNode(n) }
 	add(types.KnowledgeNode{ID: "project:.", Kind: types.KindProject, Label: "root"})
 	add(types.KnowledgeNode{ID: "project:a", Kind: types.KindProject, Label: "a"})
@@ -297,7 +297,7 @@ func withQueryCorpus(g *Graph) {
 		Attrs: map[string]string{types.AttrMarkerFamily: "gen", "owner": "bob"}})
 	add(types.KnowledgeNode{ID: "symbol:pkg/p00010 Foo().", Kind: types.KindSymbol, Label: "Foo", Doc: "Foo builds things", Source: "pkg/p00010/inner/x.go:4"})
 	add(types.KnowledgeNode{ID: "symbol:ext Bar().", Kind: types.KindSymbol, Label: "Bar"}) // no source: owned by nothing
-	// A target in the corpus's own project ties a file, a doc and a target to "build".
+	// A target in the large graph's own project ties a file, a doc and a target to "build".
 	add(types.KnowledgeNode{ID: "target:pkg/p00010:build", Kind: types.KindTarget, Label: "build", Doc: "Builds p00010"})
 	g.AddEdge(types.KnowledgeEdge{Source: "doc:docs/guide.md", Target: "doc:README.md", Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted})
 	g.AddEdge(types.KnowledgeEdge{Source: "file:pkg/p00010/y.py", Target: "doc:docs/guide.md", Relation: types.RelationReferences, Confidence: types.ConfidenceExtracted})
@@ -328,9 +328,9 @@ var resolveQueries = []string{
 
 func TestResolveMatchesReferenceOnLargeGraph(t *testing.T) {
 	g := largeGraph(t)
-	withQueryCorpus(g)
+	withFilterNodes(g)
 	nonEmpty := requireResolveMatchesReference(t, g, resolveQueries)
-	// A guard against the corpus drifting into a vacuous pass: most queries must match.
+	// A guard against the cases drifting into a vacuous pass: most queries must match.
 	assert.Greater(t, nonEmpty, len(resolveQueries)*2/3, "too few queries matched anything; the differential would prove little")
 }
 
@@ -338,7 +338,7 @@ func TestResolveMatchesReferenceOnLargeGraph(t *testing.T) {
 // to hit every oddity at once, so a regression names a specific shape rather than a score.
 func TestResolveMatchesReferenceOnQuirkGraph(t *testing.T) {
 	g := NewGraph()
-	withQueryCorpus(g)
+	withFilterNodes(g)
 	g.AddNode(types.KnowledgeNode{ID: "project:web", Kind: types.KindProject, Label: "Web"})
 	g.AddNode(types.KnowledgeNode{ID: "file:web/ui/App.tsx", Kind: types.KindFile, Label: "App.tsx", Source: "web/ui/App.tsx:3"})
 	g.AddNode(types.KnowledgeNode{ID: "file:foo", Kind: types.KindFile, Label: "Bar baz", Doc: "qux"})
@@ -353,7 +353,7 @@ func TestResolveMatchesReferenceOnQuirkGraph(t *testing.T) {
 
 func TestResolveMatchesReferenceOnRandomQueries(t *testing.T) {
 	g := largeGraph(t)
-	withQueryCorpus(g)
+	withFilterNodes(g)
 	rng := rand.New(rand.NewSource(1))
 	pick := func(xs []string) string { return xs[rng.Intn(len(xs))] }
 	kinds := []string{"target", "project", "file", "doc", "spell", "marker", "symbol", "dir", "op", "kind"}
@@ -383,7 +383,7 @@ func TestResolveMatchesReferenceOnRandomQueries(t *testing.T) {
 // its Matches and MatchCount are what MCP and the CLI show.
 func TestQueryPageMatchesReference(t *testing.T) {
 	g := largeGraph(t)
-	withQueryCorpus(g)
+	withFilterNodes(g)
 	ref := newRefResolver(g)
 	for _, in := range []string{"t003", "kind:target t003", "project=pkg/p00010 kind=file", "relation=references"} {
 		want := ref.resolve(in, 0)

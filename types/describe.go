@@ -571,7 +571,7 @@ const ProjectDefinition = "A project is a directory the workspace recognized as 
 
 // ProjectEntry is the structured view of a single project. Its Buzz mirror is
 // generated alongside Projects; DependsOn is tagged because BuzzObject emits the
-// camelCase `dependsOn` the rest of the Buzz surface uses, not the snake_case
+// camelCase `dependsOn` the rest of the magus\ API uses, not the snake_case
 // JSON name.
 type ProjectEntry struct {
 	Path string `json:"path"                yaml:"path"`

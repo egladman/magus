@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus/internal/cli"
 )
 
-// This file teaches the browser terminal the REAL magus CLI surface, read from
+// This file teaches the browser terminal the REAL magus CLI, read from
 // the same command registry the binary, the man pages and the shell completions
 // are generated from.
 //

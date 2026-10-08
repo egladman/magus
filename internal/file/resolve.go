@@ -25,7 +25,7 @@ const workspaceScheme = "workspace://"
 // and a generically-named exported entry point is the one every caller reaches
 // for by default: that is how an import path, which has no workspace-relative
 // mode, silently mis-anchored and broke graph builds. Callers go through the
-// entry point named for the surface their string came from (ResolveDependsOn,
+// entry point named for the source their string came from (ResolveDependsOn,
 // ResolveProject, or ResolveImport), so the mode is chosen by the name, once.
 // Only ResolveProject takes a ctx: it is the one that logs (the deprecation
 // warning above); the siblings gain one when they gain a reason.
@@ -54,7 +54,7 @@ func resolveAmbiguous(input, anchor string) (string, error) {
 // depends_on list. Both spellings are a deliberate affordance for a human author:
 // repo-relative ("libs/foo") and dot-relative ("../foo") both work.
 //
-// This is the one surface that wants that ambiguity. A path produced by magus
+// This is the one input that wants that ambiguity. A path produced by magus
 // itself (a project import, a CLI reference) has exactly one correct reading
 // and uses the entry point named for it.
 func ResolveDependsOn(input, anchor string) (string, error) {
@@ -63,8 +63,8 @@ func ResolveDependsOn(input, anchor string) (string, error) {
 
 // Nit deliberately left: ResolveDependsOn is a one-line pass-through today. It stays
 // a named entry point rather than collapsing into the shared body, because the point
-// of this family is that a caller picks by SURFACE and never sees the ambiguous
-// reading by default. Inlining it would put the only human-authored surface back on
+// of this family is that a caller picks by SOURCE and never sees the ambiguous
+// reading by default. Inlining it would put the only human-authored input back on
 // the generic name.
 
 // ResolveProject canonicalises a project reference to a workspace-relative,
@@ -79,7 +79,7 @@ func ResolveDependsOn(input, anchor string) (string, error) {
 // "workspace://" is still the root alias.
 //
 // This is the one place a CLI-supplied project reference is normalized; add new
-// rules for that surface here rather than in callers. It is not the only entry
+// rules for that input here rather than in callers. It is not the only entry
 // point: an `import "project/<path>"` path anchors unconditionally and goes
 // through [ResolveImport] instead.
 func ResolveProject(ctx context.Context, input, anchor string) (string, error) {

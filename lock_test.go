@@ -588,7 +588,7 @@ func TestLockOwnerRecordsInvocation(t *testing.T) {
 	}
 }
 
-// TestHeldLocksReportsHolders pins the status-surface half: a held lock is normal, so
+// TestHeldLocksReportsHolders pins the status half: a held lock is normal, so
 // this reports it as state, and the value is naming who holds what.
 func TestHeldLocksReportsHolders(t *testing.T) {
 	cache := t.TempDir()

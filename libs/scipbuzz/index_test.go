@@ -137,7 +137,7 @@ func occurrenceName(t *testing.T, symbol string, locals map[string]string) strin
 	return parsed.Descriptors[len(parsed.Descriptors)-1].Name
 }
 
-// TestIndexIsDeterministic indexes the whole corpus twice: the index is published
+// TestIndexIsDeterministic indexes every snapshot input twice: the index is published
 // and cached by content, so equal input must give equal bytes.
 func TestIndexIsDeterministic(t *testing.T) {
 	encode := func() []byte {
@@ -154,7 +154,7 @@ func TestIndexIsDeterministic(t *testing.T) {
 	}
 }
 
-// TestIndexIsLintClean holds the corpus to what `scip lint` reports: every
+// TestIndexIsLintClean holds the snapshot inputs to what `scip lint` reports: every
 // occurrence's symbol has SymbolInformation, in a document or in external_symbols
 // but not both; no occurrence repeats; a forward definition is never also a
 // definition; and every symbol is in canonical form.

@@ -9,7 +9,7 @@ import { Card, h, helpGlyph, type Tile } from "./card";
 // graphLink points a charm pill at the Graph Explorer's own deep-link grammar (kind:/project:/
 // relation:/id:/symbol:, the browser twin of `magus query` - see graph/main.ts's QUERY_FIELDS),
 // scoped to that charm's own node so its "uses" edges are one click from here instead of a
-// hand-typed query in a different surface.
+// hand-typed query in a different app.
 function graphLink(query: string): HTMLAnchorElement {
   const a = document.createElement("a");
   a.href = "../graph/#q=" + encodeURIComponent(query);

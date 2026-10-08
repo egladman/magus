@@ -2,11 +2,11 @@
 // the command companion to the keyboard cheat sheet (desktop/cheatsheet.ts): where that one shows
 // only the commands that HAVE a chord (a keybinding reference, opened by holding "?"), this one is the
 // full command catalogue - each row shows the canonical TOKEN (open.logs) in monospace, the prose
-// label, and the chord when one is bound. Unlike the cheat sheet it is a real surface (page.ts), not a
+// label, and the chord when one is bound. Unlike the cheat sheet it is a real app (page.ts), not a
 // modal overlay: it mounts straight into the pane host like any other tab, so it can be opened, tiled,
 // and moved to its own window the same way. Each row is CLICK-TO-RUN (a discovery aid AND a runner,
 // the tab companion to the Command Palette); a command with a rebindable chord also gets a per-row jump
-// to the keybindings editor, so this surface both explains and edits what the Palette only runs.
+// to the keybindings editor, so this app both explains and edits what the Palette only runs.
 
 import { formatChord, type Command, type Keymap } from "../../desktop/commands";
 import { displayToken } from "../../desktop/commandBar";
@@ -18,7 +18,7 @@ import type { PageController, PageModule, SearchProvider } from "../../desktop/p
 // dispatches a row's command, editableIds gates which rows get a per-row edit-shortcut button (only
 // commands with a CONSOLE_KEYMAP default are rebindable), and onEditKeybindings opens Settings'
 // keybindings editor - with an id, deep-linked and focused on that command's row.
-export interface ShortcutsSurfaceDeps {
+export interface ShortcutsAppDeps {
   commands: () => Command[];
   keymap: () => Keymap;
   mac: boolean;
@@ -27,7 +27,7 @@ export interface ShortcutsSurfaceDeps {
   onEditKeybindings: (id?: string) => void;
 }
 
-// The surface has no search grammar of its own (the list is short and grouped, not filtered) - the
+// The app has no search grammar of its own (the list is short and grouped, not filtered) - the
 // same no-op provider standalone.ts's wrapped apps opt into.
 const noSearch: SearchProvider<null> = {
   placeholder: "",
@@ -57,20 +57,20 @@ function editIcon(): SVGElement {
   return svg;
 }
 
-// createShortcutsSurface builds the PageModule. activate() paints the full command catalogue
+// createShortcutsApp builds the PageModule. activate() paints the full command catalogue
 // into the pane host, grouped by area (first-seen order, so the layout is stable). Each row is a
 // token / label / chord triple, clickable to run the command; a command with no effective chord
 // simply leaves the chord blank, and only a rebindable command grows the trailing edit-shortcut
 // button.
-export function createShortcutsSurface(deps: ShortcutsSurfaceDeps): PageModule<null, null> {
+export function createShortcutsApp(deps: ShortcutsAppDeps): PageModule<null, null> {
   return {
     id: "shortcuts",
     title: "Shortcuts",
     async activate(host: HTMLElement): Promise<PageController<null, null>> {
       const root = h("div");
-      root.dataset.surface = "shortcuts";
+      root.dataset.app = "shortcuts";
 
-      // The banner replaces the old read-only lede: this surface now runs actions, not just lists
+      // The banner replaces the old read-only lede: this app now runs actions, not just lists
       // them, so it leads with that plus the one place shortcuts are changed.
       const banner = h("div", "console-shortcuts__banner");
       banner.append(
@@ -129,8 +129,8 @@ export function createShortcutsSurface(deps: ShortcutsSurfaceDeps): PageModule<n
           row.append(h("code", "console-commands-token", displayToken(cmd.id)));
           row.append(h("span", "console-commands-label", cmd.label));
           const chordCell = h("span", "console-commands-chord");
-          // Surface-local key first, for the reason cheatsheet.ts gives at its own call: the
-          // surface dispatches from its own table, so a keymap entry for one of these would
+          // App-local key first, for the reason cheatsheet.ts gives at its own call: the
+          // app dispatches from its own table, so a keymap entry for one of these would
           // display a chord that does nothing.
           const chord = (cmd.key ?? "") || formatChord(keymap[cmd.id] ?? "", deps.mac);
           if (chord !== "") {
@@ -171,7 +171,7 @@ export function createShortcutsSurface(deps: ShortcutsSurfaceDeps): PageModule<n
       host.append(root);
       return {
         search: noSearch,
-        // Static, but still part of the shell lifecycle: this keeps the surface contract
+        // Static, but still part of the shell lifecycle: this keeps the app contract
         // exhaustive when panes are focused, tiled, or backgrounded.
         setVisible() {},
         deactivate() {

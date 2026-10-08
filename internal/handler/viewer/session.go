@@ -50,7 +50,7 @@ func (s *Service) GetSessionActivity(_ context.Context, req *connect.Request[vie
 }
 
 func (s *Service) loadSessionActivity(peer, session, path string) (*viewerv1.SessionActivity, error) {
-	// The rest of this service rides the share surface. A session's record does not: the diff
+	// The rest of this service rides the share routes. A session's record does not: the diff
 	// routes it annotates are loopback only, and so is this.
 	if !loopbackPeer(peer) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("viewer: session activity is served to local peers only"))

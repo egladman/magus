@@ -103,10 +103,10 @@ func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context
 	return withMagus(t.Context(), m), m, script
 }
 
-// TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` is not a
-// hole in the sandbox. The agent guard allows `magus buzz -` outright and cannot read a
-// script body, so a script that magus never sandboxed was an unrestricted fs/proc/network
-// surface in a workspace that had asked for one. The script runs in this process, which
+// TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox pins the reason `magus buzz` does not
+// escape the sandbox. The agent guard allows `magus buzz -` outright and cannot read a
+// script body, so a script that magus never sandboxed had unrestricted fs, proc and
+// network access in a workspace that had asked for a sandbox. The script runs in this process, which
 // the sandbox never confines, so the binding check is the whole defense here.
 func TestBuzzCmd_ScriptRunsUnderTheWorkspaceSandbox(t *testing.T) {
 	ctx, m, script := buzzSandboxWorkspace(t, types.SandboxModeBestEffort)
@@ -533,7 +533,7 @@ func TestBuzzCmd_TraceRecordsEachCompilePhaseOnce(t *testing.T) {
 
 func TestBuzzCmd_TraceProfilesAClosedScriptWithoutTheNamespace(t *testing.T) {
 	_, trace := buzzTrace(t, []string{"-s", "-e", `import "std"; fun main() > void { std\print("ok"); }`})
-	assert.Contains(t, trace, "buzz.register_surface")
+	assert.Contains(t, trace, "buzz.register_modules")
 	assert.Contains(t, trace, "buzz.register_decls")
 	assert.Contains(t, trace, "buzz.exec")
 	assert.Contains(t, trace, "buzz.main")
@@ -627,7 +627,7 @@ func TestBuzzReachesMagus(t *testing.T) {
 	sess := buzz.NewSession(t.Context())
 	t.Cleanup(func() { _ = sess.Close() })
 	sess.SetIncludeDirs([]string{dir})
-	bindings.RegisterModuleSurface(t.Context(), sess)
+	bindings.RegisterModules(t.Context(), sess)
 
 	for code, want := range map[string]bool{
 		`import "std"; import "fs";`:                  false,

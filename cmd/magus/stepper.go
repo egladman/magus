@@ -33,7 +33,7 @@ func withStepGate(ctx context.Context) context.Context {
 // A fresh session rather than the magusfile's own: the point of stopping here is
 // to look at the WORKSPACE (read the file the command is about to consume,
 // check what a tool reports, try the command's own arguments), and the full
-// host surface (fs, os, vcs, http) is what answers that. The magusfile's locals
+// set of host modules (fs, os, vcs, http) is what answers that. The magusfile's locals
 // are a different question, and `magus buzz` already answers it.
 //
 // Closing the REPL resumes the run, so this is a pause rather than an exit.

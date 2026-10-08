@@ -267,7 +267,7 @@ func TestWorkspacesComponent(t *testing.T) {
 		{"nil-snapshot", nil, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "server unreachable"}},
 		{"no-workspaces", &types.StatusOutput{}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "no workspaces loaded"}},
 		// Two workspaces with recognizable roots: the count is wanted in Detail, but the
-		// roots themselves must NOT leak into it on this unguarded surface.
+		// roots themselves must NOT leak into it on this unguarded endpoint.
 		{"two-workspaces", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a"}, {Root: "/b"}}}, types.ReadinessComponent{Name: "workspaces", Status: "ok", Detail: "2 loaded"}},
 		{"one-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/a", State: types.WorkspaceActive}, {Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "degraded", Detail: "1 loaded, 1 failed to load"}},
 		{"all-failed", &types.StatusOutput{Workspaces: []types.StatusWorkspace{{Root: "/b", State: types.WorkspaceFailed}}}, types.ReadinessComponent{Name: "workspaces", Status: "down", Detail: "1 failed to load"}},

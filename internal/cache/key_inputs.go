@@ -36,7 +36,7 @@ const envValueDigestLen = 12
 // ("env:NAME=abc" -> "env:NAME=sha256:<12hex>"). Env values are the one key-input
 // class that routinely carries material a user would not publish (tokens ride env
 // vars whether or not a secret provider registered them), so the raw value never
-// leaves hashStep. The store persists DIGESTED lines, and every comparison surface
+// leaves hashStep. The store persists DIGESTED lines, and every comparison
 // digests its live lines the same way, which also keeps the two sides byte-comparable
 // (a registry-based redaction would fire on one machine and not the other, turning
 // every secret-bearing env line into a false diff). The digest still changes when
@@ -264,7 +264,7 @@ type KeyInputChange struct {
 // changed target definition explains a moved source hash, never the reverse. Empty exactly
 // when the two sides agree.
 //
-// This is the one pairing rule for both comparison surfaces; [DiffKeyInputs] projects the
+// This is the one pairing rule for both comparisons; [DiffKeyInputs] projects the
 // same result onto whole lines for `--against`.
 //
 // Both sides must already carry digested env values ([DigestEnvValues]); the store persists

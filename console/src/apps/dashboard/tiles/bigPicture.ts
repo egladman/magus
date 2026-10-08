@@ -35,7 +35,7 @@ import type { Tile } from "./card";
 
 export type ViewMode = "board" | "bigPicture";
 
-// viewMode is in-memory because presentation mode ends when the dashboard surface is deactivated.
+// viewMode is in-memory because presentation mode ends when the dashboard app is deactivated.
 export const viewMode = signal<ViewMode>("board");
 
 // "" (not null) so the cell has one plain string type: toggleGroup below binds it directly as a

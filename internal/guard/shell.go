@@ -22,14 +22,14 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// The command surface of `magus shell`: the rules that judge a shell line,
+// The shell-command rules of `magus shell`: the rules that judge a shell line,
 // minus the two large pieces that earned their own files. Tokenizing is in
 // internal/guard/parse.go and the git rules are in internal/guard/vcs.go.
 //
 // Evaluate is a pure function of its inputs (the command line, plus the
 // hint translator the caller built), and is tested as one, so a rule that has to read
 // live workspace state lives beside its own reader instead (internal/guard/lease.go). The
-// path surface is internal/guard/write.go.
+// file-write rules are in internal/guard/write.go.
 //
 // HOW LONG A DENY MAY BE: three lines. The first is the replacement command; the rest
 // are facts the reader cannot discover by trying again. That is the whole budget.
@@ -161,7 +161,7 @@ const (
 	// Upgraded from the push-gate ADVISORY when the run log proves no green gate covers
 	// this commit; see internal/guard/push.go.
 	denyRulePushUngated denyRuleName = "push-ungated"
-	// Both surfaces, like cache-dir-write: a file write and a shell line; see
+	// Both kinds of call, like cache-dir-write: a file write and a shell line; see
 	// internal/guard/credential.go.
 	denyRuleTokenState denyRuleName = "token-state"
 	// The acting lease's boundaries, as the job store declares them; see
@@ -1921,12 +1921,12 @@ var (
 
 	denyBusyWait = "Do not poll for work you started; you are told when it finishes. Start it and do something else.\n" +
 		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
-		"Waiting on something outside this machine is what your host's monitor surface is for."
+		"Waiting on something outside this machine is what your host's monitor is for."
 
 	// Says only what the guard can prove about a probe of someone else's process: nothing
 	// here announces that process's end to the caller, so the other text would be false.
 	denyBusyWaitForeign = "This loop waits on a process you did not start and holds your tool slot for its whole wait; past the tool timeout it is backgrounded rather than killed, and polls on.\n" +
-		"Waiting on another process is what your host's monitor surface is for."
+		"Waiting on another process is what your host's monitor is for."
 
 	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
 		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
@@ -2569,7 +2569,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// The rules that route work through magus judge only the commands that do some.
 	work := slices.DeleteFunc(slices.Clone(cmds), func(c hint.Invocation) bool { return helpRequest(deps, c) })
 	// Authoring a note is refused before anything else, because it is the one rule whose
-	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
+	// whole point is that it holds for EVERY kind of call: the path rule sees file writes, and
 	// these verbs are commands.
 	if notesWriteFires(cmds, parsed, command) {
 		if v, ok := held.ends(deps, ShellVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}); ok {

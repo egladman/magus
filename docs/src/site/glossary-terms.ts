@@ -10,7 +10,7 @@
 //                    panel - since that's the only way to see the definition at all
 //
 // Everything is static. The render pass (lib/glossary.buzz) links each term and bakes its
-// definition into the link (data-def), so both surfaces read the text straight off the DOM
+// definition into the link (data-def), so both views read the text straight off the DOM
 // - no fetch, no JSON. The full "referenced on" backlinks live on the glossary page (the
 // href target), because a term's reference set is a site-wide aggregate. With no JS the
 // term is still a plain link to that glossary entry, so nothing is lost.
@@ -40,7 +40,7 @@ export function initGlossaryTerms(): void {
     return d.innerHTML;
   }
 
-  // Shared inner markup for both surfaces: an optional kind label (code entities), the baked
+  // Shared inner markup for both views: an optional kind label (code entities), the baked
   // definition, then a jump to the reference page - the full glossary entry (with backlinks)
   // for a term, or the code/command/method/config reference otherwise.
   function cardBody(term: HTMLAnchorElement): string {

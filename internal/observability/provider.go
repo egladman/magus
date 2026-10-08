@@ -52,7 +52,7 @@ func ConfigFromTelemetry(t config.Telemetry, version, workspaceRoot string) Conf
 	return cfg
 }
 
-// Provider is the OTel runtime surface. All methods are concurrency-safe; all are no-ops when Enabled=false.
+// Provider is the OTel runtime API. All methods are concurrency-safe; all are no-ops when Enabled=false.
 type Provider interface {
 	Enabled() bool
 	RecordCacheHit(ctx context.Context, attrs ...Attr)
@@ -91,7 +91,7 @@ type Provider interface {
 	RecordBuzzJITRun(ctx context.Context)                                            // magus.buzz.jit.runs
 	RecordBuzzVMFault(ctx context.Context, kind string)                              // magus.buzz.vm.faults
 
-	// Agent-surface families: magus.lease.*, magus.attention.*, magus.review.*. Every
+	// Lease, attention and review families: magus.lease.*, magus.attention.*, magus.review.*. Every
 	// attribute here is a bounded enum the caller has already validated; an id, a path, a
 	// lease label or a remark body must never reach one.
 	RecordLeaseRegistration(ctx context.Context, verdict string)              // magus.lease.registrations

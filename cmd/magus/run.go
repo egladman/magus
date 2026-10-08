@@ -172,7 +172,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
 	// is alive. Say it once, before any potentially long workspace load, and point
-	// at the existing observer rather than inventing another progress surface.
+	// at the existing observer rather than inventing another progress display.
 	// Only when a person is watching. The liveness signal is the whole point, and a
 	// caller reading a captured transcript gets the finished result instead: Emit dedupes
 	// within a process, so one invocation per tool call repeats it forever, and the line

@@ -10,7 +10,7 @@ import (
 
 // FileFacts is the impact overlay for one workspace-relative source file: the symbols
 // it defines (each with how widely it is referenced and its observed coverage) and the
-// file-level coverage. It is the read surface `magus affected --impact` folds onto its
+// file-level coverage. It is the read API `magus affected --impact` folds onto its
 // blast radius: callers (from the SCIP reference edges the @symbols shards carry) and
 // coverage (from the @coverage overlay) for exactly the files a changeset touched. The
 // zero value (no coverage, no symbols) is the honest answer for a file with no ingested
@@ -126,7 +126,7 @@ type SymbolSpan struct {
 //
 // The exported form of a lookup this package had written twice, unexported and single-purpose:
 // once to attribute coverage blocks and once inside the SCIP parser to attribute calls. Both
-// answered the same question, and neither could be asked from outside, so the review surface,
+// answered the same question, and neither could be asked from outside, so the review client,
 // which wants "which function is this hunk in", had no way to find out.
 //
 // Nearest-preceding rather than range-containment BECAUSE the end line is often missing. A

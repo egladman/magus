@@ -155,7 +155,7 @@ func TestFakeProbeSizeErrorPropagates(t *testing.T) {
 //
 // Every type here exists to drive a terminal, and every one of them is supposed
 // to be inert without one. Each has its own gate and its own test; this asserts
-// the property across the whole surface at once, so a new entry point that
+// the property across every type at once, so a new entry point that
 // forgets to check fails HERE rather than in somebody's CI log.
 //
 // A bytes.Buffer has no Fd(), which is the strongest form of "not a terminal",

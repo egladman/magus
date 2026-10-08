@@ -4,7 +4,7 @@
 // is a no-op, so one Refresh button covers overlapping reasons to reload. Styled by .console-shell-toast
 // in overrides.css.
 //
-// Every toast carries a SOURCE (the surface or feature that raised it) - required, not optional, so a new
+// Every toast carries a SOURCE (the app or feature that raised it) - required, not optional, so a new
 // caller cannot forget it. A toast fires globally in the bottom-left corner, so it can appear while a
 // different tab is active; the source chip tells you where it came from in the moment, and it rides into
 // the notification history for the same reason. See lib/notifications.ts.

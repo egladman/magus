@@ -1,8 +1,8 @@
-// sidebar.ts - the shell's left navigation rail: every surface the console can open, always on
+// sidebar.ts - the shell's left navigation rail: every app the console can open, always on
 // screen, with the ones that already have a tab marked. It renders a Workspace (tabs.ts) the way
 // tabBar.ts does and reports intent through a callback; the console still owns opening and focusing.
 //
-// Every other route to a surface is TRANSIENT: the tab strip shows only what is already open, the
+// Every other route to an app is TRANSIENT: the tab strip shows only what is already open, the
 // Applications menu is a popover, the launcher is the empty state and disappears the moment a tab
 // opens, and the Command Palette needs a chord. The rail is the one that stays, so that with a tab
 // open there is still something on screen saying what else the console can show.
@@ -10,32 +10,32 @@
 // LEFT, not right: the right edge is the Reference panel's (a PF Drawer, pf-m-panel-right, which
 // insets the content when pinned). Two panels docking to the same edge would fight over it.
 //
-// NARROW by default: the Graph Explorer and the Diff surface already carry their own left sidebars
+// NARROW by default: the Graph Explorer and the Diff app already carry their own left sidebars
 // INSIDE the pane, so a wide shell panel would put two left columns side by side. Collapsed the rail
 // is an icon strip; expanding it is a deliberate, persisted choice (layoutPrefs.ts).
 //
 // PatternFly: this is a real PF Nav (pf-v6-c-nav, __list, __item, __link, __link-icon, __link-text,
 // pf-m-current) rather than an invented component - the console consumes PF's vocabulary as-is and
 // tunes it through PF's own per-link custom properties in console.css. Per the naming convention,
-// the two things PF has no word for are app hooks and state: data-rail-surface (which surface a row
+// the two things PF has no word for are app hooks and state: data-rail-app (which app a row
 // opens) and data-tab-open / data-expanded (state), never a --modifier class.
 //
-// The hook is data-RAIL-surface, not data-surface: the console already uses data-surface to mark a
-// mounted SURFACE ROOT, and the rail lives inside #console-outlet where those rules apply - a row
-// named data-surface="shortcuts" picks up the Shortcuts surface's own layout and breaks.
+// The hook is data-RAIL-app, not data-app: the console already uses data-app to mark a
+// mounted APP ROOT, and the rail lives inside #console-outlet where those rules apply - a row
+// named data-app="shortcuts" picks up the Shortcuts app's own layout and breaks.
 
-import { tabHostsSurface, type Workspace } from "./tabs";
+import { tabHostsApp, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
-import { surfaceIconSvg } from "./home";
+import { appIconSvg } from "./home";
 import type { AppManifest } from "../apps/manifest";
-import { openSurfaceWindow } from "../lib/appwindow";
+import { openAppWindow } from "../lib/appwindow";
 import { dispatchCommand } from "./commands";
 import type { PulseView } from "./pulse";
 import { badgeLabel, type Badge } from "./badges";
 
-// One row of the rail: the surface it opens, and what the workspace currently makes of it.
-// `open` means some tab hosts that surface; `current` means the ACTIVE tab does. They are separate
-// because a background tab's surface is open without being what you are looking at, and the rail
+// One row of the rail: the app it opens, and what the workspace currently makes of it.
+// `open` means some tab hosts that app; `current` means the ACTIVE tab does. They are separate
+// because a background tab's app is open without being what you are looking at, and the rail
 // distinguishes the two the way a dock does.
 export interface SidebarItem {
   pageId: string;
@@ -76,34 +76,34 @@ export interface Sidebar {
   destroy: () => void;
 }
 
-// sidebarItems maps a Workspace onto the rail's rows. Pure, so the "which surface is open, which is
+// sidebarItems maps a Workspace onto the rail's rows. Pure, so the "which app is open, which is
 // current" rules are unit-tested without a DOM - the same split tabBar.ts uses for its own mapping.
 //
-// The surface list drives the order, NOT the workspace: the rail is the fixed set of places you can
+// The app list drives the order, NOT the workspace: the rail is the fixed set of places you can
 // go, so a row must never move because a tab opened. Only its state changes.
 //
-// EXACTLY ONE row is current, and it is the FOCUSED pane's surface - not every surface the active tab
+// EXACTLY ONE row is current, and it is the FOCUSED pane's app - not every app the active tab
 // holds. A tiled tab shows several at once, and marking them all made a starter workspace open with
 // two rows lit and no way to tell which one input would reach. Focus is the thing that answers "where
 // am I", so focus is what the rail reflects; `focusedPageId` comes from the tile that owns it
 // (tileView's onTitleChange), because the persisted Workspace does not carry runtime focus.
 export function sidebarItems(
   ws: Workspace,
-  surfaces: readonly AppManifest[],
+  apps: readonly AppManifest[],
   focusedPageId: string | null,
 ): SidebarItem[] {
-  return surfaces.map((s) => ({
+  return apps.map((s) => ({
     pageId: s.id,
     label: s.label,
     hint: s.hint,
-    open: ws.tabs.some((t) => tabHostsSurface(t, s.id)),
+    open: ws.tabs.some((t) => tabHostsApp(t, s.id)),
     current: focusedPageId === s.id,
   }));
 }
 
-// railAction builds a rail row that RUNS something rather than opening a surface. Same markup as a
-// surface row, so the two read and behave identically; it simply carries no data-rail-surface hook,
-// which is what keeps it out of the current/open bookkeeping that only surfaces have.
+// railAction builds a rail row that RUNS something rather than opening an app. Same markup as a
+// app row, so the two read and behave identically; it simply carries no data-rail-app hook,
+// which is what keeps it out of the current/open bookkeeping that only apps have.
 function railAction(label: string, iconSvg: string, run: () => void): HTMLLIElement {
   const item = document.createElement("li");
   item.className = "pf-v6-c-nav__item";
@@ -176,7 +176,7 @@ export interface SidebarState {
   pulse: Signal<PulseView | null>;
   focused: Signal<string | null>;
   badges: Signal<Record<string, Badge>>;
-  surfaces: readonly AppManifest[];
+  apps: readonly AppManifest[];
 }
 
 // createSidebar fills `host` (the #console-sidebar element the page supplies) and keeps it in step
@@ -187,14 +187,14 @@ export interface SidebarState {
 // hides it there (:root[data-appmode], console.css) - do not "fix" that by skipping construction
 // without checking that ordering first.
 //
-// The rows are built ONCE and only their state attributes are rewritten on change: the surface list
+// The rows are built ONCE and only their state attributes are rewritten on change: the app list
 // is fixed, so rebuilding the list would throw away focus mid-keyboard-navigation for nothing.
 export function createSidebar(
   host: HTMLElement,
   state: SidebarState,
   cb: SidebarCallbacks,
 ): Sidebar {
-  const { ws, expanded, pulse, focused, badges, surfaces } = state;
+  const { ws, expanded, pulse, focused, badges, apps } = state;
   const sc: Scope = scope();
 
   // One menu, moved to the pointer, living on <body> rather than in the rail - the same arrangement
@@ -244,7 +244,7 @@ export function createSidebar(
     menuInvoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     menuList.replaceChildren(
       menuItem("Open " + label, () => cb.onOpen(pageId)),
-      menuItem("Open in new window", () => openSurfaceWindow(pageId)),
+      menuItem("Open in new window", () => openAppWindow(pageId)),
     );
     menu.hidden = false;
     // Measured after unhiding so the box has a real size, then pulled back inside the viewport - a row
@@ -276,7 +276,7 @@ export function createSidebar(
     menu.remove();
   });
 
-  // Two lists, one vocabulary: the lenses you work in, then the meta surfaces you consult. The split
+  // Two lists, one vocabulary: the lenses you work in, then the meta apps you consult. The split
   // is what keeps Settings out of the path of the six rows above it, and it is the arrangement both
   // VS Code (gear pinned under the view icons) and macOS sidebars use.
   const list = document.createElement("ul");
@@ -290,7 +290,7 @@ export function createSidebar(
   const badgeEls = new Map<string, HTMLElement>();
   const labels = new Map<string, string>();
 
-  for (const s of surfaces) {
+  for (const s of apps) {
     const item = document.createElement("li");
     item.className = "pf-v6-c-nav__item";
 
@@ -299,7 +299,7 @@ export function createSidebar(
     const link = document.createElement("button");
     link.type = "button";
     link.className = "pf-v6-c-nav__link";
-    link.dataset.railSurface = s.id;
+    link.dataset.railApp = s.id;
     // The accessible name is on the button and stays there in BOTH states, so collapsing the rail to
     // icons never leaves a row unnamed. The visible text below is therefore decorative.
     link.setAttribute("aria-label", s.label);
@@ -307,7 +307,7 @@ export function createSidebar(
 
     const icon = document.createElement("span");
     icon.className = "pf-v6-c-nav__link-icon";
-    icon.innerHTML = surfaceIconSvg(s.glyph, 18);
+    icon.innerHTML = appIconSvg(s.glyph, 18);
 
     const text = document.createElement("span");
     text.className = "pf-v6-c-nav__link-text";
@@ -320,7 +320,7 @@ export function createSidebar(
     link.addEventListener("click", () => cb.onOpen(s.id));
     // Right-click for the one thing a row cannot say on its own. The launcher card carried this on a
     // kebab and the tab strip carries it on its own context menu; without it here the rail would be
-    // the only way to reach a surface that could not also send it to its own window.
+    // the only way to reach an app that could not also send it to its own window.
     link.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
       openMenu(s.id, s.label, ev.clientX, ev.clientY);
@@ -359,7 +359,7 @@ export function createSidebar(
   // It LEADS the rail (see toggleList below), and that is a placement decision rather than an
   // arrangement one. The rail spans the full window height, so its first row is the window's own
   // top-left corner - the first thing read in this layout, and a screen corner, which is the easiest
-  // target a pointer has. That slot used to go to whichever surface the registry happened to list
+  // target a pointer has. That slot used to go to whichever app the registry happened to list
   // first, and an accident of ordering read as a judgment about which app matters most. The control
   // that owns the rail is not a member of the list it owns, so it is the one thing there that can
   // hold the corner without claiming rank over its neighbours.
@@ -413,7 +413,7 @@ export function createSidebar(
   host.replaceChildren(toggleList, list, pulseEl, utilityList);
 
   const paintRows = (): void => {
-    for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {
+    for (const item of sidebarItems(ws.get(), apps, focused.get())) {
       const link = links.get(item.pageId);
       if (!link) continue;
       link.classList.toggle("pf-m-current", item.current);
@@ -428,7 +428,7 @@ export function createSidebar(
   sc.add(bind(ws, paintRows));
   sc.add(focused.subscribe(paintRows));
 
-  // A surface with nothing waiting carries NO badge rather than a zero: the badge answers "how much is
+  // An app with nothing waiting carries NO badge rather than a zero: the badge answers "how much is
   // waiting", and nothing waiting is not a quantity worth a mark on the rail. An absent reading (no
   // server, an older one) is indistinguishable from that here on purpose - both mean "say nothing".
   sc.add(

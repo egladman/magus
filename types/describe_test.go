@@ -92,7 +92,7 @@ func TestNewFileReportOverlaps(t *testing.T) {
 	}
 }
 
-// TestLooksLikeBuildInput pins the one classifier two surfaces read MGS1028's
+// TestLooksLikeBuildInput pins the one classifier two callers read MGS1028's
 // severity off: the exact names, the config families that spell themselves several
 // ways, and the deliberate misses. A name it does not know must read as NOT an
 // input, the direction whose cost is a quieter notice rather than an interruption.

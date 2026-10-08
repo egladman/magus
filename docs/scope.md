@@ -214,7 +214,7 @@ over one more setting.
 An option is not additive. Each independent switch doubles the number of states
 the tool can be in, and the states nobody thought about are where the
 bugs live, because no one wrote a test for a combination no one imagined. A
-configuration surface large enough to be flexible is large enough that its author
+configuration large enough to be flexible is large enough that its author
 cannot enumerate what it does. You have met the result: a build that works on one
 machine, a setting three people cargo-culted from a blog post, and a maintainer
 who cannot tell you what turning it off would break.
@@ -230,7 +230,7 @@ tested. `magus.yaml` accepts about a hundred keys, container and leaf together,
 and magus binds 45 of them to command-line flags. Five more globals (`-o`,
 `--tee`, `-v`, `--quiet`, `--silent`) are display switches that answer to no
 config key at all, so 50 flags stand in front of any subcommand's own. That is
-not a small surface, and calling it zero configuration would be a lie.
+not a small set of options, and calling it zero configuration would be a lie.
 
 What the claim rests on is the second number. magus's own `magus.yaml`, for a
 ten-project polyglot repo that publishes containers, signs releases and runs a
@@ -283,7 +283,7 @@ writes agent skills into the directories you name (`.claude/skills/`,
 `.agents/skills/`, `.opencode/skills/`), each stamped with a magus-internal
 version. It does NOT write `AGENTS.md`: that file is yours, so install prints
 the managed block for you to paste. `magus doctor` reports on every one of
-those surfaces, the pasted block included:
+those files, the pasted block included:
 
 ```text
 [pass] agent-skills: 4 install location(s) current with this binary
@@ -311,7 +311,7 @@ once, hand-edited from there, never regenerated and never compared against
 anything, so nothing about a build depends on magus having produced it, which
 is the whole distinction, and it rests on the word generated.
 
-**The server runs long, and two surfaces do not work without it.** It ships
+**The server runs long, and two features do not work without it.** It ships
 inside the binary, so you install nothing extra, and no build needs it. The
 sharpest version of this entry has since been retired: `magus doctor` used to
 probe bridge reachability and FAIL when no server was running, which made doctor
@@ -396,7 +396,7 @@ toolchains it orchestrates.
 
 Nx comes up here because of proximity: it is what this project's author has used
 most and most recently, so its edges are the memorable ones. Its project graph is
-the closest prior art for affected sets. The disagreement is surface area. `nx
+the closest prior art for affected sets. The disagreement is size. `nx
 release` and `nx generate` do read that graph, but each arrives with its own
 model stacked on top (release groups and version plans for one, a virtual
 filesystem and schema-driven generators for the other), and the CLI registers
@@ -418,7 +418,7 @@ had to build, and the test above is how to check any one of them against its dif
 
 The agent-harness world drew the line at the opposite extreme, and the contrast
 is worth stating because magus keeps being read as a member of that category.
-deepseek-harness's published decision notes sharpened the lease surface's
+deepseek-harness's published decision notes sharpened the lease
 checkpoint and release semantics, which is why the architectural disagreement
 deserves stating precisely. It makes every module a plugin (the model adapter,
 the tool registry, the session log, the agent loop itself), so there is no

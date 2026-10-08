@@ -1,6 +1,6 @@
 ---
 title: The guard
-description: "What magus session hook denies, what it advises by default, and why: the five deny grounds, how a workspace sets a built-in rule, the file-path surface, the verdict contract a host wires into, and the observations magus records."
+description: "What magus session hook denies, what it advises by default, and why: the five deny grounds, how a workspace sets a built-in rule, the file-write rules, the verdict contract a host wires into, and the observations magus records."
 tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ---
 
@@ -139,8 +139,8 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   files with no backup at all. So the users with no protection were the ones
   whose backend gave them the least.
 - **Writing into the declared notes store** (`knowledge.notes.shared`), however
-  the write is spelled. A file write into the store is caught on the path
-  surface; `magus notes edit` reading piped prose is a command, so it is caught
+  the write is spelled. A file write into the store is caught by the
+  file-write rules; `magus notes edit` reading piped prose is a command, so it is caught
   here. The reason names the alternative: `magus notes edit`, for a person to
   write the note themselves. The opt-in is the key in the repository's own `magus.yaml`, and
   the rule is armed from that moment, before the store holds a single note,
@@ -179,7 +179,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   which invocations ran the gate and at which commit. A session no lease binds is asked; a leased
   worker is refused, since workers do not publish.
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on
-  either surface and under every role, unbound sessions included. That directory
+  either kind of rule and under every role, unbound sessions included. That directory
   holds the files the guard's own verdicts are computed from: the `lease` marker
   naming which lease this checkout is bound to, the fire-once advisory markers,
   the touched-project set, and the served-next journal whose entries
@@ -189,7 +189,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   what it protects is whether a boundary was checked at all. It ranks above the
   lease rules, so a worker whose `write_paths` happen to cover the directory
   reads what the directory IS rather than a verdict about whose it is. The
-  path surface catches an editor tool's write; the command surface catches a
+  file-write rules catch an editor tool's write; the shell-command rules catch a
   redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
   (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
   names the verbs instead: `magus job exec <id>` to take a lease, `magus clean` for
@@ -214,7 +214,7 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   the row already carries, which is how a holder releases a path, passes
   through. Giving a path back cannot widen a role, and whether a particular
   shrink is legitimate is the store's judgment. Recording the base a lease
-  landed on passes, because it is a procedure the write surface demands.
+  landed on passes, because it is a procedure the write path demands.
   Reading is untouched: `magus\job.list` and `magus ls jobs`.
 
   The guard parses a `client` script and renders each literal `magus\job.put`,
@@ -571,7 +571,7 @@ expire on a two-hour clock instead, so the next session is told again. The state
 is one empty marker file per session and kind under the cache directory, swept
 after a week.
 
-## The file surface
+## File-write rules
 
 `printf '%s' '<file>' | magus session hook --path` judges a file path rather
 than a command. `--path` is a switch and takes no value: the path arrives on
@@ -771,7 +771,7 @@ older than agents. Read it before you run it.
 Every `magus session hook` invocation with a readable command or path appends one
 `agent_command` event to the local Activity Trail. This is product telemetry for
 improving agent support: which host tool an agent selected, whether it reached a
-magus surface or a raw command, and which guidance would move that workflow onto
+magus tool or a raw command, and which guidance would move that workflow onto
 magus. It is not a security feature and never an execution gate; recording is
 best effort, local, and cannot change a verdict.
 
@@ -825,7 +825,7 @@ guessed.
 The trail is evidence, not automatic self-modification. `magus doctor`'s
 recurring-guard-denials check is read-only. It deduplicates repeated stable
 denial rules (three times in one host session, or the same pattern across two
-sessions) and reports the facts: rule, surface, denial count, session count, and
+sessions) and reports the facts: rule, tool, denial count, session count, and
 followed rate. It proposes no destination; a human decides whether to discard
 the pattern, adapt a local skill or host harness, or report an upstream issue.
 

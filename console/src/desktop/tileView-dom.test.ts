@@ -9,21 +9,21 @@ import { createTileView, type TileDeps } from "./tileView";
 import { signal } from "./view";
 import type { PageController } from "./page";
 
-// Mounts are async (the real ones are a lazy import()), so every assertion about a mounted surface
+// Mounts are async (the real ones are a lazy import()), so every assertion about a mounted app
 // has to come after one turn of the event loop.
 const mounted = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-// A stub surface with a document title the test drives. mountSurface resolves on a microtask, like
+// A stub app with a document title the test drives. mountApp resolves on a microtask, like
 // the real lazy import() does - which is the whole point: a pane exists before its controller.
 function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>>>) {
   const seen: [string | null, string][] = [];
   const deps: TileDeps = {
     seed: { kind: "leaf", id: "p1", pageId: "logs" },
-    surfaces: [
+    apps: [
       { id: "logs", label: "Log Viewer", hint: "" },
       { id: "graph", label: "Graph Explorer", hint: "" },
     ],
-    async mountSurface(pageId): Promise<PageController<unknown, unknown>> {
+    async mountApp(pageId): Promise<PageController<unknown, unknown>> {
       return {
         search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
         docTitle: titles[pageId],
@@ -39,11 +39,11 @@ function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>
   return { deps, seen };
 }
 
-// The trap this file exists for: a pane is created BEFORE its surface resolves, so the first
+// The trap this file exists for: a pane is created BEFORE its app resolves, so the first
 // applyTitle runs against a controller-less pane. An "already subscribed" check keyed on the pane
 // id alone makes the later call - the one that finally has a controller - look redundant, and the
-// tile never subscribes at all. The tab then keeps its static name whatever the surface opens.
-test("a surface that resolves after its pane is created still gets subscribed", async () => {
+// tile never subscribes at all. The tab then keeps its static name whatever the app opens.
+test("an app that resolves after its pane is created still gets subscribed", async () => {
   const logs = signal<string | null>(null);
   const { deps, seen } = stubDeps({ logs });
   createTileView(deps);
@@ -63,7 +63,7 @@ test("the tile reports every later document change, not just the first", async (
   assert.deepEqual(seen.at(-1), ["out-two", "logs"]);
 });
 
-test("closing the document reports null, so the console can restore the surface name", async () => {
+test("closing the document reports null, so the console can restore the app name", async () => {
   const logs = signal<string | null>(null);
   const { deps, seen } = stubDeps({ logs });
   createTileView(deps);
@@ -73,7 +73,7 @@ test("closing the document reports null, so the console can restore the surface 
   assert.deepEqual(seen.at(-1), [null, "logs"]);
 });
 
-test("deactivate drops the subscription so a torn-down surface cannot retitle the tab", async () => {
+test("deactivate drops the subscription so a torn-down app cannot retitle the tab", async () => {
   const logs = signal<string | null>(null);
   const { deps, seen } = stubDeps({ logs });
   const tile = createTileView(deps);
@@ -84,9 +84,9 @@ test("deactivate drops the subscription so a torn-down surface cannot retitle th
   assert.equal(seen.length, after);
 });
 
-// A surface with no document concept (the dashboard) omits docTitle entirely; the tile must still
-// report for it, because a null is what tells the console to put the static surface name back.
-test("a surface without a docTitle reports null rather than staying silent", async () => {
+// An app with no document concept (the dashboard) omits docTitle entirely; the tile must still
+// report for it, because a null is what tells the console to put the static app name back.
+test("an app without a docTitle reports null rather than staying silent", async () => {
   const { deps, seen } = stubDeps({});
   createTileView(deps);
   await new Promise((r) => setTimeout(r, 0));
@@ -94,10 +94,10 @@ test("a surface without a docTitle reports null rather than staying silent", asy
 });
 
 // --- a tiled tab: the FOCUSED pane speaks for it -----------------------------------------------
-// A tab can hold a tree of surfaces but the bar has room for one name, so the tab is named after
+// A tab can hold a tree of apps but the bar has room for one name, so the tab is named after
 // whichever pane has focus. These drive the real split/focus/close ops rather than a single pane.
 
-test("adopting a second surface hands the tab's name to the newly focused pane", async () => {
+test("adopting a second app hands the tab's name to the newly focused pane", async () => {
   const logs = signal<string | null>("out-run-1");
   const graph = signal<string | null>("magusfile.buzz");
   const { deps, seen } = stubDeps({ logs, graph });
@@ -145,7 +145,7 @@ test("only the focused pane owns visibility while a tiled tab is shown", async (
   };
   const calls: [string, boolean][] = [];
   const { deps } = stubDeps(titles);
-  deps.mountSurface = async (pageId) => ({
+  deps.mountApp = async (pageId) => ({
     search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
     docTitle: titles[pageId],
     setVisible(visible) {
@@ -183,9 +183,9 @@ test("closing the focused pane names the tab after the survivor", async () => {
   assert.deepEqual(seen.at(-1), ["out-run-1", "logs"]);
 });
 
-// Focus moved off the closed pane, so the surface that went away must also stop being able to
+// Focus moved off the closed pane, so the app that went away must also stop being able to
 // speak - the subscription follows focus, it is not left behind on a torn-down controller.
-test("a closed pane's surface can no longer retitle the tab", async () => {
+test("a closed pane's app can no longer retitle the tab", async () => {
   const logs = signal<string | null>("out-run-1");
   const graph = signal<string | null>("magusfile.buzz");
   const { deps, seen } = stubDeps({ logs, graph });

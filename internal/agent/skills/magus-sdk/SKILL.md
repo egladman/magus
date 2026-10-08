@@ -2,7 +2,7 @@
 
 This skill's reader has never run `magus` and does not know its subcommands. They
 found `github.com/egladman/magus` on pkg.go.dev or in an import line. They want to
-call it from their own Go program. Ground every answer in the actual exported surface,
+call it from their own Go program. Ground every answer in the actual exported API,
 never in what the CLI does, which this reader cannot see:
 
 - `magus.go`, `run.go`, `knowledge.go`, `describe.go`

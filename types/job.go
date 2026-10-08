@@ -711,12 +711,6 @@ type Job struct {
 	// other live jobs bound to the checkout it was declared in. Store-computed and
 	// output-only like Releases: it is a fact about the plan at one instant, and a caller
 	// that could assert it could assert the proof it stands for. See [JobWriteProof].
-	//
-	// Written as `lane_proof` through schema 8. A schema-8 row decodes with this UNSET
-	// rather than through a legacy fold: unlike the Declaration fields, which a person
-	// authors and would lose work by, this one is store-computed, informational, and
-	// already renders as "-" when empty. Carrying a second key for it would add a decode
-	// path with no reader to justify it. JobSchemaVersion is 9 for exactly this.
 	WriteProof JobWriteProof `json:"write_proof,omitempty" yaml:"write_proof,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
@@ -1631,7 +1625,7 @@ func NewJobList(jobs []Job) JobList {
 // Only a [JobState.Editing] job is in a pair. A released, exited or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
-// would make the surface noisiest exactly when the plan is winding down. A job blocked on
+// would make the report noisiest exactly when the plan is winding down. A job blocked on
 // a dependency is not in any pair either: it claims nothing until that dependency passes.
 func jobOverlaps(jobs []Job) []JobOverlap {
 	claims := func(j Job) bool {

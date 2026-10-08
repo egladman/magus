@@ -99,5 +99,5 @@ comments, so every golden stays Buzz.
 
 Beside the goldens, the suite checks that the bytes under every occurrence spell
 the symbol's name (the check magus's rename runs before it edits a file), that the
-corpus is clean under the rules `scip lint` applies, and that indexing twice, or
+inputs are clean under the rules `scip lint` applies, and that indexing twice, or
 from two checkout paths, gives identical bytes.

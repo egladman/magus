@@ -24,7 +24,7 @@ import (
 // and verification all live in internal/agent now; the CLI owns only presentation.
 var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
 
-// agentCmd implements `magus agent <subcommand>`: the agent-integration surface.
+// agentCmd implements `magus agent <subcommand>`: the agent integration commands.
 //
 // Destinations are explicit arguments, never auto-detected, and writing into a
 // repo's agent-config dirs happens only through `install`. AGENTS.md is the one
@@ -345,7 +345,7 @@ func agentStarterCmd(ctx context.Context, rootOverride string) error {
 //
 // BYTES, not tokens: a token count is only true for one tokenizer, and these
 // files are installed for whatever host the reader uses. Printed at all for
-// accountability: a surface that never states its own cost has no pressure on
+// accountability: an install that never states its own cost has no pressure on
 // it to shrink.
 func reportContextCost(dir string, written []string) {
 	// Twins are counted separately, not folded in: only the primary is

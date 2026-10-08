@@ -492,7 +492,7 @@ func TestWithCwdPropagatesToBuzzStdlib(t *testing.T) {
 	require.True(t, ok, "WithCwd must propagate to Buzz's stdlib (bridge dropped?)")
 	assert.Equal(t, dir, buzzCwd, "buzz stdlib cwd")
 
-	// An empty dir is a no-op for both surfaces.
+	// An empty dir is a no-op for both the magus and Buzz cwd.
 	base := context.Background()
 	if _, ok := CwdFromContext(WithCwd(base, "")); ok {
 		t.Fatal(`WithCwd("") set a magus cwd, want none`)

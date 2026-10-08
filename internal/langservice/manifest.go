@@ -1,6 +1,6 @@
 // Package langservice provides editor language features (completion and hover)
-// for Buzz magusfiles, driven by a build-time snapshot of the magus host module
-// surface (see cmd/langservice-manifest and manifest_data.go). It is pure
+// for Buzz magusfiles, driven by a build-time snapshot of the magus host modules
+// (see cmd/langservice-manifest and manifest_data.go). It is pure
 // computation with no host, filesystem, or process access, so it compiles into
 // the browser playground wasm alongside the interpreter.
 //
@@ -17,7 +17,7 @@ package langservice
 //
 //go:generate go run ../../cmd/langservice-manifest -out manifest_data.go
 
-// Method is one callable on a module: its Buzz-surface name, one-line doc, and
+// Method is one callable on a module: its Buzz name, one-line doc, and
 // rendered call signature (e.g. "glob(pattern: str) > [str]").
 type Method struct {
 	Name string
@@ -33,8 +33,8 @@ type Field struct {
 	Doc  string
 }
 
-// Module is one importable magus host module and its surface, as captured by the
-// manifest generator. The manifest is the full authoring surface (every module a
+// Module is one importable magus host module with its fields and methods, as captured by the
+// manifest generator. The manifest lists every module a
 // magusfile may reference), independent of which modules actually execute in the
 // browser. Which ones run there is decided at runtime by ExcludedModules against the
 // interpreter's real registration, not baked in here.

@@ -305,16 +305,16 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     if (srcRel == site.docs + "/guides/setup.md" or srcRel.startsWith(site.docs + "/guides/setup/")) { active = "setup"; }
     // Blog posts and the blog index live under the "Blog" nav item.
     if (srcRel.startsWith(site.blog + "/") or srcRel == site.blog + "/index.md") { active = "blog"; }
-    // /public/ autoindex pages are meta surfaces; no nav item is current.
+    // /public/ autoindex pages are meta pages; no nav item is current.
     if (srcRel.startsWith("public/")) { active = ""; }
-    // The search page is a tool surface with no nav home of its own.
+    // The search page is a tool page with no nav home of its own.
     if (srcRel == "search/index.md") { active = ""; }
     // The install page is reached from the hero's call to action and the footer, not from a
     // top-nav item, so nothing is marked current.
     if (srcRel == DOWNLOAD_SRC) { active = ""; }
     // The tour page is its own top-nav item.
     if (srcRel == "tour/index.md") { active = "tour"; }
-    // /development/ is a contributor surface reached from the footer, not the top nav.
+    // /development/ is a contributor page reached from the footer, not the top nav.
     // README.md renders as that section's landing, so it belongs here too.
     if (srcRel.startsWith("development/") or srcRel == "README.md") { active = "development"; }
     // View-model flags for the head's optional blocks. hasDescription gates the
@@ -447,7 +447,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     // ("website" for home, else "article").
     var ogType = "article";
     if (isHome) { ogType = "website"; }
-    // Body class marks meta surfaces that keep the chrome but drop or widen parts:
+    // Body class marks meta pages that keep the chrome but drop or widen parts:
     // /public/ file-tree pages (.site-public hides the doc-only controls) and the search
     // page (.site-search widens the container). "" for an ordinary page.
     var bodyClass = "";

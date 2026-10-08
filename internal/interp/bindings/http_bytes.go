@@ -29,7 +29,7 @@ const maxChunk = 32 * 1024 * 1024
 // Cache) be written entirely in Buzz with no provider-specific Go code. This is
 // VM glue, hand-written against the gopherbuzz value API and set on the
 // generated `http` module map at bind time (see registerMagusModules); it lives
-// here, not on the VM-agnostic std surface.
+// here, not on the VM-agnostic std module.
 func registerHTTPBytes(m vm.Value) {
 	// byteSize(path) -> int
 	// Byte length of the file at path. The companion to upload_chunked: a script

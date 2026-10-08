@@ -143,7 +143,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"buckets":         true, // map[string]BucketStats — per-workload-tag sub-stores (tag names are top-level subdir names, safe to share)
 		"hit_count":       true, // int — rolling count of cache hits; no source content, no keys, no payloads
 		"miss_count":      true, // int — rolling count of cache misses; same safety profile as hit_count
-		"hit_rate":        true, // float64 — hit_count/(hit_count+miss_count); derived aggregate, no new surface
+		"hit_rate":        true, // float64 — hit_count/(hit_count+miss_count); derived aggregate, nothing new to leak
 		"pass_count":      true, // int — rolling count of passing runs; safe integer counter, no source content
 		"fail_count":      true, // int — rolling count of failing runs; safe integer counter, no source content
 		"volatile_count":  true, // int — rolling count of volatile runs (fail→pass); safe integer counter

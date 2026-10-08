@@ -56,7 +56,7 @@ type commentRef struct {
 type symbolIndex struct {
 	byPkg    map[string]map[string]bool // package name and directory name alike
 	exported map[string]string          // exported symbol -> its one package, "" when several
-	host     map[string]bool            // dotted names the Buzz surface exposes
+	host     map[string]bool            // dotted names the Buzz host modules expose
 	files    map[string]bool            // every base filename in the tree
 }
 
@@ -107,7 +107,7 @@ func (ix symbolIndex) resolves(pkg, sym string) bool {
 // Absence from a known Buzz module is deliberately NOT a rule, though it sounds like the
 // sharpest one available. MEASURED: it fired on yaml.v3 (a Go import path), std.buzz (a
 // filename), vcs.changed_files (an MCP tool name) and magus.inputs (a magusfile key), all
-// sharing one identifier space with the module surface. No surface here is knowably
+// sharing one identifier space with the module names. No name set here is knowably
 // exhaustive, so "the module lacks it" cannot mean what it appears to.
 func (ix symbolIndex) score(pkg, sym string) (int, string) {
 	composed := isMultiwordExported(sym)
@@ -246,7 +246,7 @@ func (ix symbolIndex) add(f *ast.File, dir string) {
 	})
 }
 
-// addBuzzName records the host surface a string literal spells.
+// addBuzzName records the host name a string literal spells.
 //
 // Buzz is the other language a comment in this module cites, and the generated signature
 // table (internal/langservice/manifest_data.go) writes every member of it. Reading those

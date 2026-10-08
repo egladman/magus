@@ -10,11 +10,11 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
-// This file backs the gopherbuzz-original test surface: modules NOT part of
+// This file backs the gopherbuzz-original test modules, which are NOT part of
 // upstream Buzz's standard library. They register through std.Modules tagged
-// buzz.LabelGopherbuzz (so a caller wanting only the upstream-faithful surface can
-// filter them out), and conformance fixtures never import them. The surface
-// exists because Buzz's == is reference identity for maps, lists, and objects
+// buzz.LabelGopherbuzz (so a caller wanting only the upstream-faithful modules can
+// filter them out), and conformance fixtures never import them. They
+// exist because Buzz's == is reference identity for maps, lists, and objects
 // (matching upstream), so `{a: 1} == {a: 1}` is false and test code has no way to
 // assert by value. deepEqual supplies the structural comparison a logic-less
 // script can't express (an `any` is not field-accessible); assert/suite/testing
@@ -38,7 +38,7 @@ var ioSource string
 //go:embed os.buzz
 var osSource string
 
-// The test surface — assertcore, assert, suite, and testing — installs through
+// The test modules — assertcore, assert, suite, and testing — installs through
 // std.Modules (each labeled buzz.LabelGopherbuzz), not a separate RegisterExtensions
 // entry point. assertcore is the native primitive layer; assert/suite/testing are
 // buzz-authored libraries that build on it. assertCoreModule, assertSource,

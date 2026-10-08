@@ -76,7 +76,7 @@ func BinaryName() string {
 	return DefaultBinaryName
 }
 
-// OnPath respells next as the PATH invocation, for a surface whose reader is not this
+// OnPath respells next as the PATH invocation, for output whose reader is not this
 // process.
 //
 // The server resolves its own argv0 once at startup, so a server started as

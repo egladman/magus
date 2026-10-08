@@ -1,12 +1,12 @@
-// sw.ts - registering the console's service worker (../sw.js), shared by the surfaces that need one.
+// sw.ts - registering the console's service worker (../sw.js), shared by the apps that need one.
 //
-// sw.js's PRECACHE is the SHELL's asset list (index.html, console.js, console.css, every surface
-// bundle), so the SHELL is what has to register it. Leave it to one surface and a console whose
-// operator never opens that surface runs with no worker at all - no offline shell, and no install
+// sw.js's PRECACHE is the SHELL's asset list (index.html, console.js, console.css, every app
+// bundle), so the SHELL is what has to register it. Leave it to one app and a console whose
+// operator never opens that app runs with no worker at all - no offline shell, and no install
 // offer either, since Chromium's prompt algorithm still requires a fetch handler even though the
 // browser-menu install no longer does.
 //
-// The script URL is a PARAMETER, not resolved here: each surface is its own esbuild bundle, so
+// The script URL is a PARAMETER, not resolved here: each app is its own esbuild bundle, so
 // import.meta.url differs per output file and only the caller knows where ../sw.js sits relative to it.
 // Every caller resolves the same gen/sw.js, so the registrations coincide and the second is a no-op.
 
@@ -30,9 +30,9 @@ export function registerServiceWorker(
       return null;
     });
 
-  // Waiting on `load` unconditionally never fires when a surface reaches this through a dynamic import:
+  // Waiting on `load` unconditionally never fires when an app reaches this through a dynamic import:
   // by then the page has long finished loading, and the listener is registered for an event that has
-  // already been and gone - so the surface silently gets no service worker at all, while the same
+  // already been and gone - so the app silently gets no service worker at all, while the same
   // code on a standalone page (a deferred module script, which does run before `load`) works.
   if (document.readyState === "complete") return go();
   return new Promise((resolve) => {

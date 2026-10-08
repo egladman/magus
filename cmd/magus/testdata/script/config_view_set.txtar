@@ -4,7 +4,7 @@
 # tag was missing. That silently broke every agent reading the config back:
 # the keys `-o json` prints, the keys `-o name` lists, and the keys `config
 # set key=<key>,...` accepts all have to be the SAME strings, or a round trip
-# through any two of those three surfaces fails.
+# through any two of those three forms fails.
 
 # Plain text: human-readable, defaults annotated inline.
 exec magus config view

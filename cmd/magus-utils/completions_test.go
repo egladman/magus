@@ -80,7 +80,7 @@ func TestRenderersAreDeterministic(t *testing.T) {
 	}
 }
 
-const surfaceFixture = `package main
+const subcommandsFixture = `package main
 
 type subcommand struct {
 	Name  string
@@ -94,21 +94,21 @@ var subcommands = []subcommand{
 }
 `
 
-func writeSurface(t *testing.T, dir, body string) string {
+func writeSubcommands(t *testing.T, dir, body string) string {
 	t.Helper()
-	path := filepath.Join(dir, "surface.go")
+	path := filepath.Join(dir, "subcommands.go")
 	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	return path
 }
 
-func TestReadSurfaceDropsANamelessEntry(t *testing.T) {
-	got, err := readSurface(writeSurface(t, t.TempDir(), surfaceFixture))
+func TestReadSubcommandsDropsANamelessEntry(t *testing.T) {
+	got, err := readSubcommands(writeSubcommands(t, t.TempDir(), subcommandsFixture))
 	require.NoError(t, err)
 	assert.Equal(t, awkwardSubs, got)
 }
 
-func TestReadSurfaceSurfacesAParseFailure(t *testing.T) {
-	_, err := readSurface(writeSurface(t, t.TempDir(), "package main\nvar x = (\n"))
+func TestReadSubcommandsSurfacesAParseFailure(t *testing.T) {
+	_, err := readSubcommands(writeSubcommands(t, t.TempDir(), "package main\nvar x = (\n"))
 	assert.Error(t, err)
 }
 
@@ -130,9 +130,9 @@ func completionsDir(t *testing.T) string {
 func TestRunCompletionsFillsEveryDialect(t *testing.T) {
 	src := t.TempDir()
 	out := completionsDir(t)
-	surface := writeSurface(t, src, surfaceFixture)
+	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-surface", surface, "-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 
 	read := func(name string) string {
 		body, err := os.ReadFile(filepath.Join(out, name))
@@ -161,15 +161,15 @@ func TestRunCompletionsFillsEveryDialect(t *testing.T) {
 func TestRunCompletionsIsIdempotent(t *testing.T) {
 	src := t.TempDir()
 	out := completionsDir(t)
-	surface := writeSurface(t, src, surfaceFixture)
+	table := writeSubcommands(t, src, subcommandsFixture)
 
-	require.NoError(t, runCompletions([]string{"-surface", surface, "-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 	first, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	stat, err := os.Stat(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 
-	require.NoError(t, runCompletions([]string{"-surface", surface, "-out", out}))
+	require.NoError(t, runCompletions([]string{"-subcommands", table, "-out", out}))
 	second, err := os.ReadFile(filepath.Join(out, "magus.bash"))
 	require.NoError(t, err)
 	restat, err := os.Stat(filepath.Join(out, "magus.bash"))
@@ -179,13 +179,13 @@ func TestRunCompletionsIsIdempotent(t *testing.T) {
 	assert.Equal(t, stat.ModTime(), restat.ModTime(), "an unchanged script must not be rewritten")
 }
 
-// TestRunCompletionsRefusesAnEmptySurface: zero subcommands is the parse being wrong,
-// not the surface, and writing an empty list into four scripts would ship it.
-func TestRunCompletionsRefusesAnEmptySurface(t *testing.T) {
+// TestRunCompletionsRefusesAnEmptyTable: zero subcommands is the parse being wrong,
+// not the table, and writing an empty list into four scripts would ship it.
+func TestRunCompletionsRefusesAnEmptyTable(t *testing.T) {
 	src := t.TempDir()
-	surface := writeSurface(t, src, "package main\n\nvar unrelated = 1\n")
+	table := writeSubcommands(t, src, "package main\n\nvar unrelated = 1\n")
 
-	err := runCompletions([]string{"-surface", surface, "-out", completionsDir(t)})
+	err := runCompletions([]string{"-subcommands", table, "-out", completionsDir(t)})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no subcommands found")
 }
@@ -198,7 +198,7 @@ func TestRunCompletionsNamesTheScriptMissingItsMarker(t *testing.T) {
 	out := completionsDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(out, "magus.zsh"), []byte("# no markers here\n"), 0o644))
 
-	err := runCompletions([]string{"-surface", writeSurface(t, src, surfaceFixture), "-out", out})
+	err := runCompletions([]string{"-subcommands", writeSubcommands(t, src, subcommandsFixture), "-out", out})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "magus.zsh")
 	assert.Contains(t, err.Error(), shellMarker.Begin)
@@ -207,7 +207,7 @@ func TestRunCompletionsNamesTheScriptMissingItsMarker(t *testing.T) {
 func TestRunCompletionsSurfacesAMissingScript(t *testing.T) {
 	src := t.TempDir()
 	err := runCompletions([]string{
-		"-surface", writeSurface(t, src, surfaceFixture),
+		"-subcommands", writeSubcommands(t, src, subcommandsFixture),
 		"-out", filepath.Join(t.TempDir(), "absent"),
 	})
 	assert.Error(t, err)

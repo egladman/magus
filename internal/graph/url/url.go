@@ -23,7 +23,7 @@
 //
 // It does NOT hand-build the URL string: it composes internal/service/console.Link,
 // the single home for the server-origin console URL grammar, so the escaping policy
-// (encodeURIComponent-equivalent) and the "/console/<surface>/#...token-last" shape
+// (encodeURIComponent-equivalent) and the "/console/<app>/#...token-last" shape
 // live in one place for every producer.
 package url
 
@@ -72,9 +72,9 @@ type GraphLinkOpts struct {
 // decodeURIComponent-based hash parser reads it back exactly. The code is emitted
 // LAST, after the content directives, matching the server-origin grammar.
 //
-// The clean /console/graph/ PATH is the canonical surface URL: the server serves the
-// console shell for it (SPA fallback) and the console's boot router opens the graph
-// surface from the path. The ORIGIN names the server: it serves both the shell and
+// The clean /console/graph/ PATH is the canonical app URL: the server serves the
+// console shell for it (SPA fallback) and the console's boot router opens the Graph
+// app from the path. The ORIGIN names the server: it serves both the shell and
 // the graph data over its own loopback.
 func GraphLink(opts GraphLinkOpts) (string, error) {
 	if opts.Host == "" {
@@ -99,7 +99,7 @@ func GraphLink(opts GraphLinkOpts) (string, error) {
 	}
 	return console.Link(console.LinkOpts{
 		Host:     opts.Host,
-		Surface:  "graph",
+		App:      "graph",
 		Code:     opts.Code,
 		Fragment: frag,
 	}), nil

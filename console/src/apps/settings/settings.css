@@ -1,5 +1,5 @@
-/* settings.css - the Settings surface's page-scoped stylesheet (loaded lazily when the tab opens,
- * like logs.css / graph.css / dashboard.css). Layout only: the surface is built from PatternFly Form,
+/* settings.css - the Settings app's page-scoped stylesheet (loaded lazily when the tab opens,
+ * like logs.css / graph.css / dashboard.css). Layout only: the app is built from PatternFly Form,
  * Button, and text-input components, so this file just frames the scrollable page and its titled
  * sections. The keybindings editor grid is styled globally in overrides.css ([data-kbeditor]) because
  * the same core also appears in the modal overlay, which exists before this tab is ever opened.
@@ -45,7 +45,7 @@
 /* The default control tier rather than a bare 2.5rem. The 40px it used to carry was the only
    instance of that number anywhere in the console, and it stacked under the shell's own 44px tab
    strip - two tab strips, neither on a declared step. PF's untouched tabs link is 29px, which is too
-   quiet for the surface's primary navigation, so this takes the default tier instead of the compact one. */
+   quiet for the app's primary navigation, so this takes the default tier instead of the compact one. */
 .console-settings-tabs[data-control-size] .pf-v6-c-tabs__link {
   min-block-size: var(--console-control-block-size);
   padding-inline: var(--pf-t--global--spacer--md);
@@ -142,7 +142,7 @@
   color: var(--pf-t--global--text--color--regular);
 }
 /* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading.
-   Same control as the plan surface's source switch, so it takes its height from the same token rather
+   Same control as the plan app's source switch, so it takes its height from the same token rather
    than from a second copy of the same padding guess. */
 .console-settings-diff__view { margin-left: auto; }
 .console-settings-diff__view .pf-v6-c-toggle-group__button {

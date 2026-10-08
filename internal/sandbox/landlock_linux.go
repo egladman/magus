@@ -55,7 +55,7 @@ func accessForPathType(access uint64, isDir bool) uint64 {
 	return access & fsAccessFile
 }
 
-// fsAccessWrite is the full write/create/rename surface. Device ioctls ride with
+// fsAccessWrite is the full set of write/create/rename rights. Device ioctls ride with
 // write: they can change device state, and a read-only grant never allowed that.
 // Bits the running ABI does not handle are masked off before use.
 const fsAccessWrite uint64 = unix.LANDLOCK_ACCESS_FS_WRITE_FILE |

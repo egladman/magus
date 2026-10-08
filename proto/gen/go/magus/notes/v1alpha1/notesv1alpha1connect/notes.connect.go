@@ -7,7 +7,7 @@
 // one on this machine.
 //
 // It is the deliberate opposite of magus.memory.v1alpha1, and the asymmetry is the point. Memory
-// is agent-written, so a human read/edit/delete surface is its safety valve. A note is
+// is agent-written, so a human read/edit/delete view is its safety valve. A note is
 // human-written, and its whole value is that guarantee: a note is the one node class in the
 // knowledge graph that is NOT derived from the workspace, so nothing in the repository
 // corroborates it later and its only provenance is the person who wrote it and signed the

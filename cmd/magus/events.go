@@ -15,10 +15,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// eventsCmd implements `magus events`: the subscribe surface third-party
+// eventsCmd implements `magus events`: the subscribe command third-party
 // integrations build against: an editor plugin, a status bar, a notifier.
 //
-// It is the OUTBOUND half of magus's machine surface and the dual of `magus
+// It is the OUTBOUND half of magus's machine-facing commands and the dual of `magus
 // shell`, which is inbound and returns a verdict. Nothing a subscriber
 // does here can change what magus decides; docs/scope.md seals that seam, and
 // this command has no reply channel by construction.

@@ -438,7 +438,7 @@ func objectName(goType reflect.Type) string {
 }
 
 // buzzObjectName is the public Buzz object name for t, resolved through the boundary
-// registry. A Go type sometimes keeps a descriptive suffix while the Buzz surface exposes
+// registry. A Go type sometimes keeps a descriptive suffix while the Buzz API exposes
 // the concise domain name: ProjectsOutput is Projects, ImpactResult is Impact.
 //
 // This USED to be a hand-written switch listing each rename, which made the registry and

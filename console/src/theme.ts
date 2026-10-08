@@ -2,7 +2,7 @@
 //
 // Pico v2 follows the OS preference when no data-theme attribute is present, so "auto" means: set
 // nothing and let the system decide. A persisted choice (light/dark) overrides it. The early set()
-// call runs from <head> before paint to avoid a flash. On the console, the Settings surface drives
+// call runs from <head> before paint to avoid a flash. On the console, the Settings app drives
 // theme changes over the `magus:theme-set` CustomEvent (see the listener below).
 //
 // This is a classic <script src> in <head> (NOT a module - it must run before paint and set nothing
@@ -70,7 +70,7 @@
   }
 
   // PatternFly v6 dark mode is a class on <html> (pf-v6-theme-dark), NOT Pico's data-theme, so we
-  // toggle it alongside (data-theme is kept for the surfaces still on Pico until the W4 cutover drops
+  // toggle it alongside (data-theme is kept for the apps still on Pico until the W4 cutover drops
   // it). "auto" follows the OS via prefers-color-scheme (see the matchMedia listener below, which
   // re-applies on OS change while in auto); the early set() runs from <head> before paint, so a fresh
   // load in OS-dark applies the class with no flash. Verified light + dark + the auto/light/dark cycle.
@@ -119,7 +119,7 @@
     else if (darkMql.addListener) darkMql.addListener(onOsChange); // older Safari
   }
 
-  // Theme bridge for the Settings surface. That surface cannot import this pre-paint IIFE, so it drives
+  // Theme bridge for the Settings app. That app cannot import this pre-paint IIFE, so it drives
   // the theme over a `magus:theme-set` CustomEvent carrying { theme, persistOnly }. Apply (persistOnly
   // false) runs set(): persist + repaint. Save (persistOnly true) mirrors only set()'s storage side, so
   // the value lands for the next load without repainting the running session.

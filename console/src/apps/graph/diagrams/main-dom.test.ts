@@ -1,4 +1,4 @@
-// main-dom.test.ts - the Diagrams surface mounted against a fake server, and the runtime's
+// main-dom.test.ts - the Diagrams app mounted against a fake server, and the runtime's
 // program. Pinned here:
 //
 //   - THE STATIC RENDER IS THE PAGE. The server's SVG is inline, linked and listed as soon as it
@@ -156,7 +156,7 @@ async function settle(turns = 12): Promise<void> {
 
 // The hooks live in a suite: the dom tests share one process, where a top-level hook would run
 // around every other file's tests too (and theirs around ours, which is why these run after).
-describe("the Diagrams surface", () => {
+describe("the Diagrams app", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -176,7 +176,7 @@ describe("the Diagrams surface", () => {
     delete document.documentElement.dataset.motion;
   });
 
-  function mountSurface() {
+  function mountApp() {
     const host = document.createElement("div");
     document.body.append(host);
     const instance = activate(host);
@@ -197,7 +197,7 @@ describe("the Diagrams surface", () => {
   }
 
   test("the server's figure is inline, linked and listed, with no runtime loaded", async () => {
-    const { host, instance, q } = mountSurface();
+    const { host, instance, q } = mountApp();
     await settle();
     assert.deepEqual(requests, ["/api/v1/diagrams", "/api/v1/diagrams/projects"]);
     const svg = q<SVGSVGElement>(".console-diagrams__frame svg");
@@ -225,7 +225,7 @@ describe("the Diagrams surface", () => {
   });
 
   test("a 422 is the server's finding in an inline notice and no stale figure", async () => {
-    const { q, instance } = mountSurface();
+    const { q, instance } = mountApp();
     await settle();
     const picker = q<HTMLSelectElement>("select");
     picker.value = "big";
@@ -243,14 +243,14 @@ describe("the Diagrams surface", () => {
 
   test("a 409 names the command that builds the index", async () => {
     location.hash = "#diagram=imports";
-    const { q, instance } = mountSurface();
+    const { q, instance } = mountApp();
     await settle();
     assert.match(q(".console-diagrams__notice").textContent ?? "", /run magus graph build/);
     instance.deactivate();
   });
 
   test("the lens form re-requests the figure and the fragment carries the view", async () => {
-    const { q, instance } = mountSurface();
+    const { q, instance } = mountApp();
     await settle();
     q<HTMLInputElement>('input[name="focus"]').value = "app";
     q<HTMLInputElement>('input[name="depth"]').value = "1";
@@ -262,7 +262,7 @@ describe("the Diagrams surface", () => {
   });
 
   test("an incomplete lens is refused in the form, before any request", async () => {
-    const { q, instance } = mountSurface();
+    const { q, instance } = mountApp();
     await settle();
     const before = requests.length;
     q<HTMLInputElement>('input[name="depth"]').value = "2";
@@ -275,7 +275,7 @@ describe("the Diagrams surface", () => {
 
   test("once loaded, the runtime lays a lens out in the page without asking the server", async () => {
     const rt = fakeRuntime(drew(RELAID));
-    const { host, q, instance } = mountSurface();
+    const { host, q, instance } = mountApp();
     await settle();
     const loaded = requests.length;
     loadRuntime(host);
@@ -337,7 +337,7 @@ describe("the Diagrams surface", () => {
     importsIndexed = true;
     location.hash = "#diagram=imports";
     const rt = fakeRuntime(drew(IMPORTS_SVG));
-    const { host, q, instance } = mountSurface();
+    const { host, q, instance } = mountApp();
     await settle();
     loadRuntime(host);
     await settle();
@@ -362,7 +362,7 @@ describe("the Diagrams surface", () => {
 
   test("a runtime refusal is shown like the server's", async () => {
     fakeRuntime({ ok: false, svg: "", findings: "diagram: over budget", diag: null });
-    const { host, q, instance } = mountSurface();
+    const { host, q, instance } = mountApp();
     await settle();
     loadRuntime(host);
     await settle();
@@ -390,7 +390,7 @@ describe("the Diagrams surface", () => {
     test("is drawn from the fragment alone: no request, the runtime's figure, the seed marked", async () => {
       location.hash = linkHash(DEPS);
       const rt = fakeRuntime(drew(RELAID));
-      const { host, q, instance } = mountSurface();
+      const { host, q, instance } = mountApp();
       await settle();
       assert.deepEqual(requests, [], "a link needs no server");
       assert.equal(rt.figures.length, 1);
@@ -425,7 +425,7 @@ describe("the Diagrams surface", () => {
     test("that cannot be read is an inline notice naming the problem", async () => {
       location.hash = linkHash({ ...DEPS, v: 1 });
       const rt = fakeRuntime(drew(RELAID));
-      const { host, q, instance } = mountSurface();
+      const { host, q, instance } = mountApp();
       await settle();
       const note = q(".console-diagrams__notice");
       assert.match(note.textContent ?? "", /could not be read/);
@@ -437,7 +437,7 @@ describe("the Diagrams surface", () => {
 
     test("that is not base64url is an inline notice", async () => {
       location.hash = "#figure=!!not-a-link!!";
-      const { q, instance } = mountSurface();
+      const { q, instance } = mountApp();
       await settle();
       assert.match(q(".console-diagrams__notice").textContent ?? "", /not base64url/);
       instance.deactivate();
@@ -446,7 +446,7 @@ describe("the Diagrams surface", () => {
     test("the runtime declines to draw is an inline notice with its finding", async () => {
       location.hash = linkHash(DEPS);
       fakeRuntime({ ok: false, svg: "", findings: "figure: over budget", diag: null });
-      const { host, q, instance } = mountSurface();
+      const { host, q, instance } = mountApp();
       await settle();
       assert.match(q(".console-diagrams__notice").textContent ?? "", /over budget/);
       assert.equal(host.querySelector(".console-diagrams__frame svg"), null);
@@ -456,7 +456,7 @@ describe("the Diagrams surface", () => {
     test("replaced in the address bar is drawn again", async () => {
       location.hash = linkHash(DEPS);
       const rt = fakeRuntime(drew(RELAID));
-      const { q, instance } = mountSurface();
+      const { q, instance } = mountApp();
       await settle();
       location.hash = linkHash({ ...DEPS, title: "Another" });
       window.dispatchEvent(new HashChangeEvent("hashchange"));

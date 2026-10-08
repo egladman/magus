@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 // A connected dashboard remembers its host in a module cell that localStorage.clear() does not
-// reach, and every server surface in this process falls back to it, so it is reset with the default.
+// reach, and every server app in this process falls back to it, so it is reset with the default.
 afterEach(() => {
   deactivate();
   setDefaultHost("");
@@ -104,7 +104,7 @@ test("an unreachable server is asked once, and again only on Retry", async () =>
 // The console served BY the server carries no #port and, on first use, no Settings address. The
 // shell adopts the page's origin as the server, but that flag is per-bundle, so the dashboard has to
 // adopt it itself; before it did, a signed-in dashboard on http://localhost:7391 sat on "No server
-// connected" while the server streamed status to every other surface.
+// connected" while the server streamed status to every other app.
 test("a signed-in dashboard on the server's own origin connects to that origin", async () => {
   const dom = (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM;
   const before = location.href;

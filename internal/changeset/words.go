@@ -68,7 +68,7 @@ func byteSpan(text string, s Span) Span {
 // completely that emphasizing everything would be noise rather than signal; in each case the
 // row color already says all there is to say.
 //
-// Parse calls this and ships the result, so both surfaces read one answer. Do not add a
+// Parse calls this and ships the result, so both clients read one answer. Do not add a
 // second implementation: nothing checks two against each other, so they diverge in silence and
 // the same changed line reads as two different changes depending on where it was opened.
 //

@@ -6,7 +6,7 @@
 // ToolbarToggleGroup + expandable-content mechanism: the PF React component moves the collapsed
 // children into the expandable panel and toggles pf-m-expanded, and we do exactly that here in the
 // CSS-only console with one small helper - so the behavior is defined ONCE and shared, not duplicated
-// per surface with divergent ad-hoc media queries (that was the whole point of adopting PatternFly).
+// per app with divergent ad-hoc media queries (that was the whole point of adopting PatternFly).
 //
 // Markup contract (per collapsible toolbar - see logs/graph scaffold.html):
 //
@@ -146,7 +146,7 @@ function setupFollower(group: HTMLElement): void {
 }
 
 // wireToolbarOverflow finds every overflow toolbar under `root` and wires its collapse behavior. Safe
-// to call more than once (each group wires itself only once), so a surface can call it from activate().
+// to call more than once (each group wires itself only once), so an app can call it from activate().
 export function wireToolbarOverflow(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>("[data-overflow-group]").forEach(setupOne);
   root.querySelectorAll<HTMLElement>("[data-overflow-follows]").forEach(setupFollower);

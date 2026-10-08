@@ -449,7 +449,7 @@ func TestResolveAnchorsSeesEveryAnchor(t *testing.T) {
 }
 
 // TestResolveAnchorsAgreesWithAnchorIssues is the reason the two APIs share a grader. A
-// surface whose verdict disagreed with `magus notes verify` would be a second opinion rather
+// client whose verdict disagreed with `magus notes verify` would be a second opinion rather
 // than a second view of one answer, and nothing in the types would catch the divergence.
 func TestResolveAnchorsAgreesWithAnchorIssues(t *testing.T) {
 	dir, res := gradedStore(t)

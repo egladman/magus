@@ -121,7 +121,7 @@ func TestParseConfigFlagsSkipsWhatItCannotBind(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, skipped := range []struct{ why, yamlPath string }{
-		{"unexported fields are not part of the config surface", "hidden"},
+		{"unexported fields are not part of the config schema", "hidden"},
 		{"an embedded field has no name to derive a path from", "x"},
 		{`yaml:"-" opts the field out of the file entirely`, "secret"},
 		{`cli:"-" opts the field out of the CLI`, "internal"},

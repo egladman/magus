@@ -101,7 +101,7 @@ func plural(n int, one, many string) string {
 // index would be rebuilt for the current sources.
 //
 // Silent on every uncertainty, which is the same contract every other advisory on this
-// surface keeps. A project with NO index is deliberately not reported here: that is the
+// command keeps. A project with NO index is deliberately not reported here: that is the
 // gap probe's answer, printVerdict already renders it as "outside coverage", and one fact
 // stated twice in two vocabularies teaches a reader to skip both.
 //

@@ -3,7 +3,7 @@
 /* eslint-disable */
 
 // Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the server
-// serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
+// serves to the browser Graph Explorer. Two routes share it: the bulk subgraph document behind
 // GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
 // that type's JSON so a protojson encoding is wire-compatible with what the page already
 // consumes), and GraphService, the ranked-retrieval verbs below. A sibling of

@@ -26,7 +26,7 @@ test("no tab is active when activeId points nowhere", () => {
   ]);
 });
 
-// --- auto-naming: a tab titled after the document its surface has open ------------------------
+// --- auto-naming: a tab titled after the document its app has open ------------------------
 // The console writes a document title into the tab (tabs.ts renameTab); tabViews is what turns a
 // path into the short label a tab can actually show, plus the hint that tells same-named tabs apart.
 

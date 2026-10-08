@@ -19,5 +19,5 @@ func TestFigureRegistersAtItsImportPath(t *testing.T) {
 		names = append(names, m.Name)
 	}
 	assert.Equal(t, []string{"without", "external", "of", "draw"}, names,
-		"only the authoring surface and draw are exported; the layout and renderer stay private")
+		"only the authoring API and draw are exported; the layout and renderer stay private")
 }

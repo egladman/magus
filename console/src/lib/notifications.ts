@@ -2,15 +2,15 @@
 // with a title-bar bell (a red unseen-dot when an IMPORTANT one is waiting) and a pop-out history
 // panel. In-memory ONLY: nothing is persisted, by explicit decision - a notification is a signal about
 // THIS session's server, not a durable record (the activity trail and the dashboard are the durable,
-// pull surfaces).
+// pull views).
 //
 // ADMISSION DOCTRINE (the reason this module is deliberately small). A notification is PUSH - it
 // interrupts. It earns that only when all three hold:
 //   1. it needs a human decision or action,
 //   2. it changes what you can trust about the workspace, and
-//   3. it is not already on the surface you are looking at.
+//   3. it is not already on the app you are looking at.
 // Anything that fails one of those is PULL, and belongs on the dashboard or the activity trail, not
-// here. Do NOT add notifications that merely report progress or restate what a surface already shows.
+// here. Do NOT add notifications that merely report progress or restate what an app already shows.
 //
 // TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the five things that are genuinely
 // "stop and look" (the `important` opt-in below carries the rest: a share connect, a storage threshold,
@@ -18,7 +18,7 @@
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
 //   - server health degraded/down       -> deep-link: the dashboard
-//   - a new remark on your review       -> deep-link: the diff surface
+//   - a new remark on your review       -> deep-link: the diff app
 //   - a rule set or toolchain pin nothing declares (MGS1028) -> deep-link: the diff, unclaimed files
 //
 // That last one earns the bell on the first half of the rule: a linter's rules or a pinned tool version
@@ -45,11 +45,11 @@
 // scrollback of the transient toasts you may have missed. Toasts keep their own auto-dismiss timing;
 // this only remembers them.
 //
-// CROSS-BUNDLE WIRING. Each console surface (logs, dashboard, activity, ...) is built as its OWN esbuild
+// CROSS-BUNDLE WIRING. Each console app (logs, dashboard, activity, ...) is built as its OWN esbuild
 // bundle, dynamically imported by URL, so a module-level singleton here would be a DIFFERENT object in
 // each bundle. The shell therefore owns the one real store; every other bundle raises a notification by
 // dispatching the NOTIFY_EVENT CustomEvent on `document` (see `notify`), which the shell's single
-// listener funnels into that store. This mirrors how the surfaces already talk to the shell through the
+// listener funnels into that store. This mirrors how the apps already talk to the shell through the
 // shared DOM (the #console-conn status dot, dispatchCommand) rather than through shared module state.
 
 import { wireDrawerToggle } from "../ui/ref-drawer";
@@ -70,12 +70,12 @@ export interface NotifyLink {
 }
 
 // The caller-facing shape. `source` is REQUIRED (not optional-with-empty) so a new caller cannot forget
-// to say WHERE a signal came from: it names the surface or feature that raised it ("Settings", "Log
+// to say WHERE a signal came from: it names the app or feature that raised it ("Settings", "Log
 // Viewer", "Dashboard", "Activity", "Share") and is rendered as a quiet chip on both the transient
 // toast and the history entry - a toast fires globally, so its origin matters in the moment too, not just
 // in scrollback. `kind` defaults to "ok" (history tier). `link` may be a bare href string (labeled
 // "Open") or a full {label, href}. `key` is the dedupe key: a notification whose key was already admitted
-// this session is dropped, so a surface that re-detects the same event on every poll or re-render
+// this session is dropped, so an app that re-detects the same event on every poll or re-render
 // notifies only on the transition (see the store's dedupe). `at` is injectable for tests.
 export interface NotifyInput {
   source: string;
@@ -264,7 +264,7 @@ function nameList(names: readonly string[]): string {
 // worth interrupting for, so it records silently in the history tier.
 //
 // Pure, so the tier rule is unit-tested here and the caller owns only where-and-dedupe. `href` is the
-// deep-link the caller builds (the diff surface filtered to unclaimed files); omitted, the entry carries
+// deep-link the caller builds (the diff app filtered to unclaimed files); omitted, the entry carries
 // no action.
 export function undeclaredSeedNotice(
   seeds: readonly UndeclaredSeed[],
@@ -408,7 +408,7 @@ function relTime(at: number, now: number): string {
 export function mountNotificationCenter(): NotificationCenter {
   const store = createNotificationStore();
 
-  // Record every notification raised anywhere (surfaces + toasts) into the one store.
+  // Record every notification raised anywhere (apps + toasts) into the one store.
   document.addEventListener(NOTIFY_EVENT, (e) => {
     const detail = (e as CustomEvent<NotifyInput>).detail;
     if (!detail || typeof detail.message !== "string" || typeof detail.source !== "string") return;
@@ -570,7 +570,7 @@ export function mountNotificationCenter(): NotificationCenter {
 
       const meta = document.createElement("div");
       meta.className = "console-shell-notify__item-meta";
-      // The source chip: a quiet tag naming the surface/feature that raised this, so the entry stands on
+      // The source chip: a quiet tag naming the app/feature that raised this, so the entry stands on
       // its own without the message having to restate where it came from.
       const source = document.createElement("span");
       source.className = "console-shell-notify__item-source";

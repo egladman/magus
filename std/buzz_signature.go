@@ -1,6 +1,6 @@
 // signature.go renders a host method's Buzz call form for docs and
 // `magus describe module`. It is the hand-written companion to the generated
-// trampolines (see the package doc): the Buzz surface a descriptor projects to.
+// trampolines (see the package doc): the Buzz signature a descriptor projects to.
 
 package std
 

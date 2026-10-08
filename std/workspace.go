@@ -6,7 +6,7 @@ package std
 // That was not laziness: root magus imports internal/interp, which imports this package,
 // so std importing root is an import cycle and the API was genuinely out of reach. The
 // fork bought the answer at the cost of a process, a second workspace load, and a
-// serialization round trip, and it made a CLI subcommand load-bearing for a surface that
+// serialization round trip, and it made a CLI subcommand load-bearing for a module that
 // has nothing to do with the CLI.
 //
 // A STRUCTURAL interface sidesteps the cycle. The workspace is ALREADY on the context
@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Analyzer is the workspace's codebase-analytics surface: the VCS-history lenses plus the
+// Analyzer is the workspace's codebase-analytics interface: the VCS-history lenses plus the
 // ones that read the knowledge graph. Deliberately the narrow set the report needs rather
 // than the whole of *Magus: a wide interface here would re-couple std to the shape of the
 // package it cannot import.
@@ -32,7 +32,7 @@ import (
 // until the first caller tried to use it.
 type Analyzer = types.InsightAnalyzer
 
-// AnalyzerFromContext recovers the analytics surface from the workspace on ctx.
+// AnalyzerFromContext recovers the analytics interface from the workspace on ctx.
 //
 // Two distinct absences, and the caller wants to tell them apart: no workspace at all (a
 // `magus buzz` script outside one), or a workspace whose implementation does not analyze

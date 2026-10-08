@@ -1,4 +1,4 @@
-// model.ts - the pure export/import core for the Settings surface (no DOM, no storage). It turns
+// model.ts - the pure export/import core for the Settings app (no DOM, no storage). It turns
 // a snapshot of the browser-side console settings into a versioned envelope (buildSettingsEnvelope) and
 // merges an inbound envelope back onto the current values (importSettings), so both are unit-tested
 // without a browser.
@@ -9,7 +9,7 @@
 // structurally broken envelope (not JSON, or no settings object) is a hard error.
 //
 // Two sections, because the two groups have different lifecycles. `settings` is what the Settings
-// surface EDITS - staged in a draft, diffed, then saved. `layout` is what the console picks up as
+// app EDITS - staged in a draft, diffed, then saved. `layout` is what the console picks up as
 // you use it (a split you dragged, a zoom you set, cards you collapsed); there is no form for it,
 // so it is read live on export and applied straight through on import rather than staged.
 //
@@ -34,7 +34,7 @@ export type ThemePref = "auto" | "light" | "dark";
 // The envelope's schema version. Bump only on a breaking shape change; additive keys do not need one.
 export const SETTINGS_SCHEMA_VERSION = 1;
 
-// One full snapshot of the browser-side console settings the surface can export and import.
+// One full snapshot of the browser-side console settings the app can export and import.
 export interface Settings {
   poll: number; // insight/refresh poll interval, ms (settings.getPollMs)
   host: string; // explicit default server host, "host:port" or "" (settings.getDefaultHost)
@@ -61,7 +61,7 @@ export interface SettingsEnvelope {
   layout: Partial<LayoutSettings>;
 }
 
-// buildSettingsEnvelope wraps a snapshot in the current versioned envelope. Pure - the surface
+// buildSettingsEnvelope wraps a snapshot in the current versioned envelope. Pure - the app
 // passes the live values it read from the cells.
 export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): SettingsEnvelope {
   return {
@@ -86,16 +86,16 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
 }
 
 // The outcome of an import: the merged next snapshot plus which keys the file actually supplied (for the
-// surface's messaging and its reload nudge), or a human error when the envelope is unusable. `unknown`
-// and `skipped` let the surface warn about what it silently dropped: `unknown` = keys present in the
+// app's messaging and its reload nudge), or a human error when the envelope is unusable. `unknown`
+// and `skipped` let the app warn about what it silently dropped: `unknown` = keys present in the
 // settings object that magus does not know, `skipped` = known keys present but rejected by the type check
 // (a wrong-typed value, or a malformed keymap). `newerSchema` carries the file's schemaVersion when it is
-// ahead of this console's, so the surface can say the file came from a newer build.
+// ahead of this console's, so the app can say the file came from a newer build.
 export type ImportResult =
   | {
       ok: true;
       next: Settings;
-      // The merged layout snapshot. Separate from `next` because the surface applies it directly
+      // The merged layout snapshot. Separate from `next` because the app applies it directly
       // rather than staging it: there is no form to stage it against.
       nextLayout: LayoutSettings;
       applied: (keyof Settings)[];
@@ -150,7 +150,7 @@ function isNumberMap(v: Record<string, unknown>): v is Record<string, number> {
 
 // importSettings validates raw envelope text and merges its known, well-typed keys onto `current`.
 // Unknown keys are ignored; missing or wrong-typed keys keep the current value; only invalid JSON or a
-// missing settings object is a hard error. Pure - the surface applies `next` through the real cells.
+// missing settings object is a hard error. Pure - the app applies `next` through the real cells.
 export function importSettings(
   raw: string,
   current: Settings,
@@ -244,7 +244,7 @@ export function importSettings(
     ...Object.keys(settings).filter((k) => !(KNOWN_KEYS as readonly string[]).includes(k)),
     ...Object.keys(layout).filter((k) => !(KNOWN_LAYOUT_KEYS as readonly string[]).includes(k)),
   ];
-  // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the surface
+  // Imports stay permissive on version: a newer schemaVersion never hard-fails, it just tells the app
   // the file came from a newer console so it can explain why some keys may not have applied.
   const version = parsed.schemaVersion;
   const newerSchema =
@@ -253,7 +253,7 @@ export function importSettings(
 }
 
 // --- Pending diff (the transactional model) --------------------------------------------------------
-// The Settings surface stages edits in a DRAFT and shows the diff against the committed baseline before
+// The Settings app stages edits in a DRAFT and shows the diff against the committed baseline before
 // it is saved or applied. One human-readable before -> after entry per changed field.
 export interface PendingChange {
   key: string; // stable id: "poll" | "host" | "theme" | "focusRing" | "keymap:<commandId>"
@@ -263,7 +263,7 @@ export interface PendingChange {
 }
 
 // The display formatters computePendingChanges needs, injected so the function stays pure and browser-free
-// (the surface wires the real formatters; a test passes stubs). effectiveChord resolves a command's
+// (the app wires the real formatters; a test passes stubs). effectiveChord resolves a command's
 // display chord from a user-override keymap (merging defaults); commandIds is the editable command set to
 // scan for keybinding changes.
 export interface DiffContext {
@@ -404,8 +404,8 @@ export function diffLines(before: string, after: string): DiffLine[] {
 // createDraftCell adapts an in-memory value to the Persisted<T> interface so a component built to drive a
 // durable cell (the keybindings editor) can instead stage into the draft: get/set/update mutate the
 // in-memory value and notify local subscribers (so the editor re-renders live), and onChange fires so the
-// surface recomputes the pending diff. It never touches storage - persistOnly is a no-notify in-memory
-// write for interface completeness and is not used by the surface.
+// app recomputes the pending diff. It never touches storage - persistOnly is a no-notify in-memory
+// write for interface completeness and is not used by the app.
 export function createDraftCell<T>(initial: T, onChange: () => void): Persisted<T> {
   let value = initial;
   const listeners = new Set<(v: T) => void>();

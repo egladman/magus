@@ -1,0 +1,321 @@
+// banned-words refuses three words the repository does not use: surface as a noun, lane
+// and corpus. Each names nothing; the fix says what the thing is. The verb "surfaces an
+// error" passes.
+//
+// surface is refused only in frames that make it a noun: a determiner or quantifier
+// directly before it, matched for number so a verb passes (`this surfaces it`, `both
+// surface a gap`); a modifier from a closed list before the singular; a hyphen compound
+// other than `re-`; `surface area`; a file name; and any identifier carrying it, less the
+// verb forms. A noun behind a free modifier (`the health surface`) passes: the frames
+// trade that miss for refusing almost no verb. lane and corpus are refused as any word,
+// in prose or inside an identifier.
+//
+// A word in backticks on its own (`lane`) is a mention, not a use, and passes.
+namespace bannedwords;
+
+import "assert";
+import "path";
+import "std";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+final THIS = "hack/lint/banned-words.buzz";
+
+export fun reads() > [str] {
+    return ["**/*.go", "**/*.buzz", "**/*.md", "**/*.ts", "**/*.css", "**/*.html", "**/*.mjs",
+        "**/*.yaml", "**/*.yml", "**/*.proto", "**/*.txtar", ".gitattributes"];
+}
+
+// SKIPPED are the files whose words are not this repository's to choose now, each with why.
+// Generated output is skipped apart from these: its generator owns the fix.
+final SKIPPED = {
+    "releases/**": "published release notes are history",
+    "blog/**": "a post is one author's dated account",
+    "**/testdata/hosts/**": "third-party host schemas, kept verbatim",
+    "**/pnpm-lock.yaml": "pnpm writes it",
+    "changes/unreleased/surface-names*.md": "the changelog entries name the identifiers they renamed",
+    THIS: "it spells the words it refuses",
+};
+
+// LANES_ARE_ROUTING is where lane stays: the figure router's term for the channel a long or
+// back edge runs in beside the boxes.
+final LANES_ARE_ROUTING = ["libs/figure/figure.buzz"];
+
+// SANCTIONED holds each finding kept on purpose, by "<path>: <matched text>", with why. An
+// entry that no longer has a finding is itself a finding, so the list only shrinks.
+export final SANCTIONED = {<str: str>};
+
+final DETERMINER_ONE = std\pattern(`(?i)\b(?:a|an|this|every|each|one|another|neither|either|per)\s+surface\b`);
+final DETERMINER_MANY = std\pattern(`(?i)\b(?:both|two|three|four|five|these|those|several|all)\s+surfaces\b`);
+final DETERMINER_ANY = std\pattern(`(?i)\b(?:the|its|their|our|other|same|own|whole|full|any|no|some|my|your)\s+surfaces?\b`);
+final MODIFIER_ONE = std\pattern(`(?i)\b(?:agent|mcp|cli|api|command|path|guard|console|diff|review|interactive|public|buzz|http|hook|magusfile|status|file|spawn|config|template|machine|server|client|authoring|loopback|graph|activity|dashboard|plan|share|std|ide|top-level|everyday|plugin|collision|install|management|editor|terminal|catalog|discovery|network|mutating|typed|generated|stepping|comparison|preview|playground|command-line|module|host|magus|script|read|write|tool|test|run)\s+surface\b`);
+final MODIFIER_MANY = std\pattern(`(?i)\b(?:public|interactive|top-level|everyday|mutating|typed|generated|command-line|loopback)\s+surfaces\b`);
+final COMPOUND_BEFORE = std\pattern(`(?i)\b([a-z]+)-surfaces?\b`);
+final COMPOUND_AFTER = std\pattern(`(?i)\bsurfaces?-[a-z]+`);
+final AREA = std\pattern(`(?i)\bsurface\s+area\b`);
+final FILE_NAME = std\pattern(`(?i)\bsurfaces?\.(?:go|buzz|ts|md|css|html|mjs)\b`);
+
+final NOUN_FRAMES = [DETERMINER_ONE, DETERMINER_MANY, DETERMINER_ANY, MODIFIER_ONE, MODIFIER_MANY,
+    COMPOUND_BEFORE, COMPOUND_AFTER, AREA, FILE_NAME];
+
+final TOKEN = std\pattern(`[A-Za-z0-9_]+`);
+final WORD = std\pattern(`[A-Z]*[a-z]+|[A-Z]+|[0-9]+`);
+final VERB_FORM = std\pattern(`^(?:un|re)?surfac(?:e|es|ed|ing)$`);
+final VERB_TEST = std\pattern(`^Test[A-Za-z0-9_]*Surfaces[A-Z]`);
+
+final MENTIONS = ["`surface`", "`surfaces`", "`lane`", "`lanes`", "`corpus`", "`corpora`"];
+
+final SURFACE_FIX = "Say what the thing is: the CLI, the MCP tools, the console page, the API. A verb "
+    + "this refuses reads better reworded (\"appears on\", \"shows\").";
+final IDENTIFIER_FIX = "Rename it for what it is: Console, Tools, API, Page.";
+final LANE_FIX = "Say \"write paths\", or what it means here.";
+final CORPUS_FIX = "Say \"the cases\" or \"the inputs\".";
+
+export fun check(files: [Path]) > [Finding] !> any {
+    return sanction(findings(files), sanctioned: SANCTIONED);
+}
+
+// findings is every banned word in the hand-written files, before SANCTIONED.
+export fun findings(files: [Path]) > [Finding] !> any {
+    final generated = mut ["**/gen/**", "MAGUS.md", "**/MAGUS.md"];
+    final attrs = support\named(files, p: ".gitattributes");
+    if (attrs != null) {
+        foreach (g in support\attributeGlobs(support\read(attrs!))) { generated.append(g); }
+    }
+    final skipped = SKIPPED.keys();
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        if (f.value == ".gitattributes" or path\matchesAny(generated, path: f.value) or path\matchesAny(skipped, path: f.value)) {
+            continue;
+        }
+        final src = support\read(f);
+        if (isGeneratedGo(f.value, src: src)) {
+            continue;
+        }
+        foreach (finding in fileFindings(f.value, src: src)) {
+            found.append(finding);
+        }
+    }
+    return found;
+}
+
+// isGeneratedGo reports a Go file carrying the standard `// Code generated ... DO NOT EDIT.`
+// line, which may sit below a build constraint.
+fun isGeneratedGo(rel: str, src: str) > bool {
+    if (!rel.endsWith(".go")) {
+        return false;
+    }
+    foreach (line in src.split("\n")) {
+        if (line.startsWith("package ")) {
+            return false;
+        }
+        if (line.startsWith("// Code generated ") and line.trim().endsWith("DO NOT EDIT.")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// fileFindings is every banned word in src, the file at rel.
+export fun fileFindings(rel: str, src: str) > [Finding] !> any {
+    final lower = src.lower();
+    if (lower.indexOf("surface") == null and lower.indexOf("lane") == null and lower.indexOf("corp") == null) {
+        return [<Finding>];
+    }
+    final lanesAllowed = path\matchesAny(LANES_ARE_ROUTING, path: rel);
+    final found = mut [<Finding>];
+    var n = 0;
+    foreach (raw in src.split("\n")) {
+        n = n + 1;
+        var line = raw;
+        foreach (m in MENTIONS) {
+            line = line.replace(m, with: " ".repeat(m.len()));
+        }
+        final low = line.lower();
+        if (low.indexOf("surface") != null) {
+            foreach (finding in nounFindings(rel, line: line, n: n)) { found.append(finding); }
+        }
+        if (low.indexOf("surface") != null or low.indexOf("lane") != null or low.indexOf("corp") != null) {
+            foreach (finding in tokenFindings(rel, line: line, n: n, lanesAllowed: lanesAllowed)) { found.append(finding); }
+        }
+    }
+    return found;
+}
+
+// nounFindings reports each noun frame on line once, at the surface word it frames.
+fun nounFindings(rel: str, line: str, n: int) > [Finding] !> any {
+    final low = line.lower();
+    final seen = mut {<int: bool>};
+    final found = mut [<Finding>];
+    foreach (frame in NOUN_FRAMES) {
+        var next = 0;
+        foreach (m in frame.matchAll(line) ?? [<[str]>]) {
+            final at = low.indexOf(m[0].lower(), from: next) ?? 0;
+            next = at + m[0].len();
+            if (frame == COMPOUND_BEFORE and m[1].lower() == "re") {
+                continue;
+            }
+            final word = at + (m[0].lower().indexOf("surface") ?? 0);
+            if (seen[word] != null) {
+                continue;
+            }
+            seen[word] = true;
+            found.append(Finding{ path = rel, line = n, col = at + 1,
+                message = "\"{m[0]}\" uses surface as a noun", fix = SURFACE_FIX });
+        }
+    }
+    return found;
+}
+
+// tokenFindings reports identifiers carrying surface, and lane or corpus as any word.
+fun tokenFindings(rel: str, line: str, n: int, lanesAllowed: bool) > [Finding] !> any {
+    final found = mut [<Finding>];
+    var next = 0;
+    foreach (t in TOKEN.matchAll(line) ?? [<[str]>]) {
+        final token = t[0];
+        final at = line.indexOf(token, from: next) ?? 0;
+        next = at + token.len();
+        final low = token.lower();
+        if (carriesSurface(low) and VERB_FORM.match(low) == null and VERB_TEST.match(token) == null) {
+            found.append(Finding{ path = rel, line = n, col = at + 1,
+                message = "the identifier {token} carries surface as a noun", fix = IDENTIFIER_FIX });
+        }
+        foreach (w in WORD.matchAll(token) ?? [<[str]>]) {
+            final word = w[0].lower();
+            if ((word == "lane" or word == "lanes") and !lanesAllowed) {
+                found.append(Finding{ path = rel, line = n, col = at + 1,
+                    message = "\"{token}\" says lane", fix = LANE_FIX });
+            } else if (word == "corpus" or word == "corpora") {
+                found.append(Finding{ path = rel, line = n, col = at + 1,
+                    message = "\"{token}\" says {word}", fix = CORPUS_FIX });
+            }
+        }
+    }
+    return found;
+}
+
+// carriesSurface reports whether the lower-cased token holds surface other than as resurface.
+fun carriesSurface(low: str) > bool {
+    var at = low.indexOf("surface");
+    while (at != null) {
+        final i = at!;
+        if (i < 2 or low.sub(i - 2, len: 2) != "re") {
+            return true;
+        }
+        at = low.indexOf("surface", from: i + 1);
+    }
+    return false;
+}
+
+// sanction drops each finding sanctioned names and reports each entry that names none.
+export fun sanction(found: [Finding], sanctioned: {str: str}) > [Finding] {
+    final kept = mut [<Finding>];
+    final used = mut {<str: bool>};
+    foreach (f in found) {
+        final key = f.path + ": " + quoted(f.message);
+        if (sanctioned[key] != null) {
+            used[key] = true;
+        } else {
+            kept.append(f);
+        }
+    }
+    foreach (key, reason in sanctioned) {
+        if (used[key] == null) {
+            kept.append(Finding{ path = THIS, message = "sanctions {key}, which no longer has a finding",
+                fix = "Delete the entry: the list only shrinks." });
+        } else if (reason.trim() == "") {
+            kept.append(Finding{ path = THIS, message = "sanctions {key} without a reason",
+                fix = "Say in one line why it stays." });
+        }
+    }
+    return kept;
+}
+
+// quoted is the text a finding's message quotes, or the identifier it names.
+fun quoted(message: str) > str {
+    if (message.startsWith("\"")) {
+        final end = message.indexOf("\"", from: 1) ?? message.len();
+        return message.sub(1, len: end - 1);
+    }
+    return message.split(" ")[2];
+}
+
+fun lines(rel: str, src: str) > [str] !> any {
+    final acc = mut [<str>];
+    foreach (f in fileFindings(rel, src: src)) {
+        acc.append("{f.line}:{f.col} {f.message}");
+    }
+    return acc;
+}
+
+test "a determiner or quantifier before surface refuses the noun, matched for number" {
+    assert\equal(lines("a.md", src: "Each surface is typed.\nThe surfaces differ.\nBoth surfaces load.\n"),
+        want: ["1:1 \"Each surface\" uses surface as a noun", "2:1 \"The surfaces\" uses surface as a noun",
+            "3:1 \"Both surfaces\" uses surface as a noun"], message: "nouns");
+    assert\equal(lines("a.md", src: "This surfaces it.\nBoth surface a gap.\nNeither surfaces.\nA tool surfaces its error.\n"),
+        want: [<str>], message: "verbs pass");
+}
+
+test "a listed modifier refuses the singular only" {
+    assert\equal(lines("a.go", src: "// the public API surface\n// the test surfaces a ward\n// magus surfaces the error\n"),
+        want: ["1:15 \"API surface\" uses surface as a noun"], message: "singular modifier");
+    assert\equal(lines("a.md", src: "two typed surfaces\n"), want: ["1:5 \"typed surfaces\" uses surface as a noun"],
+        message: "an adjective takes the plural too");
+}
+
+test "hyphen compounds, surface area and file names are nouns; re- is a verb" {
+    assert\equal(lines("a.css", src: "--console-surface-bar-h: 1px;\nre-surface it\nsurface area\nsee surface.go\n"),
+        want: ["1:3 \"console-surface\" uses surface as a noun", "3:1 \"surface area\" uses surface as a noun",
+            "4:5 \"surface.go\" uses surface as a noun"], message: "compounds");
+}
+
+test "an identifier carrying surface is refused, its verb forms are not" {
+    assert\equal(lines("a.ts", src: "mountSurface(x); surface_kind = 1;\nresurfaced(); unsurfaced; TestGuardSurfacesWard(t); TestErrorResurfaced\n"),
+        want: ["1:1 the identifier mountSurface carries surface as a noun",
+            "1:18 the identifier surface_kind carries surface as a noun"], message: "identifiers");
+}
+
+test "lane and corpus are refused as any word, in prose or an identifier" {
+    assert\equal(lines("a.go", src: "// a write lane\nvar testCorpus, CORPUS_DIR = 1, 2\n// planes and the planet\n"),
+        want: ["1:12 \"lane\" says lane", "2:5 \"testCorpus\" says corpus", "2:17 \"CORPUS_DIR\" says corpus"],
+        message: "words");
+}
+
+test "the figure router keeps its lanes" {
+    assert\equal(lines("libs/figure/figure.buzz", src: "// a back edge's lane\n// the corpus\n"),
+        want: ["2:8 \"corpus\" says corpus"], message: "lane passes, corpus does not");
+}
+
+test "a word in backticks on its own is a mention" {
+    assert\equal(lines("docs/conventions.md", src: "Never write `lane`, `corpus` or `surface` as a noun.\n"),
+        want: [<str>], message: "mentions pass");
+}
+
+test "generated output and the skipped trees are not read" {
+    final got = findings(support\fixture({
+        ".gitattributes": "docs/reference/rules/*.md merge=magus linguist-generated\n",
+        "docs/reference/rules/x.md": "the lane\n",
+        "gen/x.go": "// the lane\n",
+        "libs/x/MAGUS.md": "the lane\n",
+        "y.go": "//go:build linux\n\n// Code generated by protoc-gen-go. DO NOT EDIT.\n\npackage y\n// the lane\n",
+        "releases/v0.1.0.yaml": "the lane\n",
+        "blog/post.md": "the lane\n",
+        "testdata/hosts/claude/schema.md": "the lane\n",
+        "changes/unreleased/surface-names.md": "the lane\n",
+        "hack/lint/banned-words.buzz": "the lane\n",
+        "docs/page.md": "the lane\n",
+    }));
+    final paths = mut [<str>];
+    foreach (f in got) { paths.append(f.path); }
+    assert\equal(paths, want: ["docs/page.md"], message: "hand-written only");
+}
+
+test "a sanctioned finding passes and a stale or unreasoned entry is reported" {
+    final found = [Finding{ path = "a.md", message = "\"both surface\" uses surface as a noun" },
+        Finding{ path = "b.go", message = "the identifier fooSurface carries surface as a noun" }];
+    assert\equal(sanction(found, sanctioned: {"a.md: both surface": "a verb", "b.go: fooSurface": "a wire name"}).len(),
+        want: 0, message: "both sanctioned");
+    assert\equal(support\messages(sanction(found, sanctioned: {"a.md: both surface": "a verb", "b.go: fooSurface": "",
+        "c.md: gone": "why"})), want: ["sanctions b.go: fooSurface without a reason",
+        "sanctions c.md: gone, which no longer has a finding"], message: "stale and unreasoned");
+}

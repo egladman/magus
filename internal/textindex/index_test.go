@@ -135,7 +135,7 @@ func TestAbsentTrigramEndsTheQuery(t *testing.T) {
 	assert.Equal(t, before, reads, "an absent trigram must answer from the index alone, reading no file")
 }
 
-// TestEmptyPatternIsRefused keeps the surface honest: everything is not an answer.
+// TestEmptyPatternIsRefused keeps the API honest: everything is not an answer.
 func TestEmptyPatternIsRefused(t *testing.T) {
 	ix := buildFrom(t, memTree{"a.txt": []byte("x")})
 	_, err := ix.SearchLiteral("")

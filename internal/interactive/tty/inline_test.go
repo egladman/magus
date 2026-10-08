@@ -218,7 +218,7 @@ func TestInlineViewSurvivesAHeightChangeThenDiffs(t *testing.T) {
 }
 
 // countingTTY records how many bytes reach the terminal. For an interactive
-// surface that is the number that matters: ns/op measures composition, but what
+// view that is the number that matters: ns/op measures composition, but what
 // a reader actually waits on is the terminal parsing and rendering the bytes,
 // and, over ssh, the link carrying them.
 type countingTTY struct{ n int }

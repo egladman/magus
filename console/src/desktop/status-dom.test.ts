@@ -1,4 +1,4 @@
-// status-dom.test.ts - who owns the connection dot. The surface in front and the shell's readiness
+// status-dom.test.ts - who owns the connection dot. The app in front and the shell's readiness
 // poller both write to it, and the rule they share is the invisible data-owner stamp. A regression
 // is silent in the worst way: the dot keeps rendering, it just answers about the wrong thing.
 //
@@ -23,16 +23,16 @@ describe("the console status bar", () => {
       '<span id="console-observing"></span>';
   });
 
-  test("a surface reporting its own link claims the dot", () => {
+  test("an app reporting its own link claims the dot", () => {
     publishStatus({ connection: "connected", label: "connected" });
     assert.equal(conn().textContent, "connected");
     assert.equal(conn().dataset.state, "connected");
-    assert.equal(conn().dataset.owner, "surface");
+    assert.equal(conn().dataset.owner, "app");
   });
 
-  // The whole point of the split: a surface with nothing to say about the server must leave the dot
+  // The whole point of the split: an app with nothing to say about the server must leave the dot
   // alone rather than assert "not connected" about a link it never probed.
-  test("a surface with no link of its own leaves the dot unclaimed", () => {
+  test("an app with no link of its own leaves the dot unclaimed", () => {
     publishStatus({ count: "2373 nodes" });
     assert.equal(conn().dataset.owner, undefined);
     assert.equal(conn().textContent, "");
@@ -40,7 +40,7 @@ describe("the console status bar", () => {
     assert.equal(count().hidden, false);
   });
 
-  // count and observing describe the surface's DATA, so they are written either way - the connection
+  // count and observing describe the app's DATA, so they are written either way - the connection
   // half being absent must not take them down with it.
   test("data slots are written whether or not the dot is claimed", () => {
     publishStatus({ count: "14 events", observing: { text: "run 3", title: "watching run 3" } });
@@ -52,7 +52,7 @@ describe("the console status bar", () => {
     assert.equal(count().hidden, true);
   });
 
-  // Demo is decided by the fragment, not by the surface, and that override predates the ownership
+  // Demo is decided by the fragment, not by the app, and that override predates the ownership
   // stamp. A claimed dot in demo mode still reads "demo".
   test("demo mode overrides a claimed label", () => {
     location.hash = "#demo";

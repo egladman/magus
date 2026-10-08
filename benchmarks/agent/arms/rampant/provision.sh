@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Provision ARM-0 "rampant": the magus binary on PATH and a magusfile in the
-# tree, and no agent surface at all. See ../README.md for the switch table.
+# tree, and no agent integration at all. See ../README.md for the switch table.
 set -eu
 
 # shellcheck disable=SC2034  # read by lib.sh, which shellcheck does not follow without -x

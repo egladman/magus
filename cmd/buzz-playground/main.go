@@ -522,7 +522,7 @@ func exposeDataAPI() {
 		return map[string]any{"ok": g.OK, "targets": targetKeys(g.Targets)}
 	}))
 	// The language-service trio (diagnostics / complete / hover) is the editor's
-	// IDE surface: the CodeMirror adapters call these to draw squiggles, populate
+	// editor API: the CodeMirror adapters call these to draw squiggles, populate
 	// the completion popup, and show hover tooltips. All three are pure functions of
 	// (source, cursor) - no session state - so the page can call them freely on each
 	// keystroke. offset is a UTF-8 byte offset into source (the adapter converts from

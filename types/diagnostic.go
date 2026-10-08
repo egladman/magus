@@ -516,7 +516,7 @@ const (
 	MCPBuzzFailed DiagnosticCode = "MGS3033"
 	// MCPClientFailed is a rejected or failed client tool program. The message
 	// names the import the tool refuses or the script failure. Workspace work
-	// goes through magus\; the CLI remains available for the full host surface.
+	// goes through magus\; the CLI remains available for the full set of host modules.
 	MCPClientFailed DiagnosticCode = "MGS3034"
 	// ToolUnprobeable is a tool that is installed and runs but cannot say which build
 	// it is: its version probe fails. A key on a placeholder would replay a result
@@ -680,7 +680,7 @@ const (
 	//
 	// It heads the CAPABILITY family: a magus feature exists, and the backend or provider wired
 	// here has not implemented the piece it needs. These are not errors in the ordinary sense and
-	// mostly do not fail a command: the reader did nothing wrong, and the surface still works
+	// mostly do not fail a command: the reader did nothing wrong, and the feature still works
 	// without the missing piece. They exist because the alternative is silence, and silence is
 	// indistinguishable from the good news. "No other branch touches these files" and "this
 	// backend cannot tell you about other branches" lead a reader to opposite decisions, and only

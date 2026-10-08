@@ -23,7 +23,7 @@ import (
 const bootstrapExecSentinelVar = "MAGUS_BOOTSTRAP_EXEC_DONE"
 
 // bootstrapExecOptOutVar disables maybeBootstrapExec entirely. Documented in
-// internal/config/config.go's EnvVarDocs alongside the rest of the MAGUS_* surface.
+// internal/config/config.go's EnvVarDocs alongside the rest of the MAGUS_* variables.
 const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
 
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and

@@ -138,7 +138,7 @@ func configMCPConnectorCreate(args []string) error {
 	printMinted("magus config mcp connector create", secret, rec)
 	fmt.Fprintln(os.Stderr, "The token was printed above (stdout). Send it as a header:")
 	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
-	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
+	// The two scopes reach disjoint endpoints, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
 	fmt.Fprintln(os.Stderr, "This token reaches /mcp only. It is REJECTED by the console; mint a console")
 	fmt.Fprintln(os.Stderr, "credential with `"+hint.ConfigConsoleTokenCreate.String()+"`.")

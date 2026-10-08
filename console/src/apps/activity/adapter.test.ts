@@ -73,7 +73,7 @@ test("tsMillis: absent is null, else seconds*1000 + nanos", () => {
 // The dashboard's agent tile links a summary row to "../activity/#at=<atMs>", and the trail
 // resolves it by matching that number against tsMillis(ev.time). The two sides therefore have to
 // agree on the SAME epoch-ms for one event: AgentCallView.atMs is built from the trail event, and
-// tsMillis is what the trail surface reads it back with. If these ever diverge the link silently
+// tsMillis is what the trail app reads it back with. If these ever diverge the link silently
 // reveals nothing, which looks like a missing event rather than a broken link.
 test("tsMillis round-trips the epoch-ms an agent-call deep link carries", () => {
   const ev = { seconds: 1_754_000_000n, nanos: 123_000_000 } as never;

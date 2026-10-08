@@ -4,7 +4,7 @@ description: >
   has something to say, and each is one input you can turn off by name; the read-only
   ones are on by default, so a new advisor arrives without a workflow edit.
 
-  Named for doctor's [advice] level, so the CI surface and the tool share one word for
+  Named for doctor's [advice] level, so the CI comment and the tool share one word for
   "worth knowing, never a gate".
 
   All advisors write into ONE comment, each owning a section it replaces on every run
@@ -126,7 +126,7 @@ inputs:
       raising.
     required: false
     default: '0.8'
-  api-surface:
+  exported-api:
     description: >
       Comment when the pull request changes symbols a consumer can see: reachable from
       outside the project that defines them, or exported from the module. That is the
@@ -166,7 +166,7 @@ inputs:
   baseline:
     description: >
       A `magus graph export --symbols -o json` of the revision this pull request started
-      from, which api-surface reads to say what each changed symbol did to the API and the
+      from, which exported-api reads to say what each changed symbol did to the API and the
       smallest semver bump that proves, and conformance reads to tell a symbol the change
       adds, renames or re-signs from one it only edits.
 
@@ -174,7 +174,7 @@ inputs:
       the same indexers as the head, and ideally in the same checkout: two environments
       render one declaration differently and every difference reads as a changed signature.
 
-      Without it api-surface reports who can see the change and claims no bump, which is
+      Without it exported-api reports who can see the change and claims no bump, which is
       what it did before a baseline was possible, and conformance reads what is new from the
       patch, compares no re-signed symbol, and says so under its findings.
     required: false

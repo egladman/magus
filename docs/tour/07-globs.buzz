@@ -67,7 +67,7 @@ export fun generate_fast(ctx: magus\Context, args: [str]) > void {
 //      rather than "everything else" or nothing: a pattern list whose last
 //      positive entry got deleted is a mistake to report, not a selection.
 //
-// The surface is glob, not regex. Patterns are escaped before "*" is translated,
+// The pattern syntax is glob, not regex. Patterns are escaped before "*" is translated,
 // so a regex like "^(?!x-).*-generate$" matches a target with that literal name,
 // which is to say none. Go's regexp engine has no lookaround anyway, so "every
 // -generate except one" could not be written as a regex even if it accepted them.

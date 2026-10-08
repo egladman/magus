@@ -33,10 +33,10 @@ func (Grant) Generate(r *rand.Rand, _ int) reflect.Value {
 	return reflect.ValueOf(all[r.Intn(len(all))])
 }
 
-// Generate draws any need over the three surfaces and the three levels.
+// Generate draws any need over the three scopes and the three levels.
 func (Need) Generate(r *rand.Rand, _ int) reflect.Value {
-	surfaces := []Surface{SurfaceTokens, SurfaceMCP, SurfaceConsole}
-	return reflect.ValueOf(Need{Surface: surfaces[r.Intn(3)], Level: Level(r.Intn(3))})
+	scopes := []Scope{ScopeTokens, ScopeMCP, ScopeConsole}
+	return reflect.ValueOf(Need{Scope: scopes[r.Intn(3)], Level: Level(r.Intn(3))})
 }
 
 func implies(p, q bool) bool { return !p || q }
@@ -87,7 +87,7 @@ func TestGrantWithinIsPointwiseOnEveryPair(t *testing.T) {
 	}
 }
 
-func TestGrantValidateRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
+func TestGrantValidateRefusesLevelsAScopeHasNoMeaningFor(t *testing.T) {
 	t.Parallel()
 	for _, g := range validGrants() {
 		require.NoError(t, g.Validate(), g.String())
@@ -98,23 +98,23 @@ func TestGrantValidateRefusesLevelsASurfaceHasNoMeaningFor(t *testing.T) {
 }
 
 // A guard built on a zero or invalid need would admit every credential, so Validate refuses
-// each: none is not a need, and a surface or level magus does not know is not one either.
+// each: none is not a need, and a scope or level magus does not know is not one either.
 func TestNeedValidateRefusesZeroAndInvalid(t *testing.T) {
 	t.Parallel()
 	for _, n := range []Need{
-		{Surface: SurfaceTokens, Level: LevelWrite},
-		{Surface: SurfaceMCP, Level: LevelWrite},
-		{Surface: SurfaceConsole, Level: LevelRead},
-		{Surface: SurfaceConsole, Level: LevelWrite},
+		{Scope: ScopeTokens, Level: LevelWrite},
+		{Scope: ScopeMCP, Level: LevelWrite},
+		{Scope: ScopeConsole, Level: LevelRead},
+		{Scope: ScopeConsole, Level: LevelWrite},
 	} {
 		require.NoError(t, n.Validate(), "%+v", n)
 	}
 	for _, n := range []Need{
 		{},
-		{Surface: SurfaceConsole},
-		{Surface: "files", Level: LevelWrite},
-		{Surface: SurfaceMCP, Level: LevelRead},
-		{Surface: SurfaceConsole, Level: 7},
+		{Scope: ScopeConsole},
+		{Scope: "files", Level: LevelWrite},
+		{Scope: ScopeMCP, Level: LevelRead},
+		{Scope: ScopeConsole, Level: 7},
 	} {
 		assert.Error(t, n.Validate(), "%+v", n)
 	}

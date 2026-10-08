@@ -11,7 +11,7 @@ export fun leaseLoopFigure() > figure\Figure !> any {
     final part = figure\external("Partition by write set", sub: "refs, explain, affected", look: figure\Look.plain);
     final work = figure\external("Workers edit", sub: "one write set each");
     final integrate = figure\external("Integrate", sub: "magus affected ci", look: figure\Look.plain);
-    final plan = figure\external("Plan surface", sub: "/console/plan/, overlaps, stale", look: figure\Look.plain);
+    final plan = figure\external("Plan app", sub: "/console/plan/, overlaps, stale", look: figure\Look.plain);
     final human = figure\external("The human", sub: "watches and decides");
     // Not a step: no connector reaches it because it constrains every box.
     final doctrine = figure\external("magus records and answers", sub: "it enforces none of it", look: figure\Look.focal);

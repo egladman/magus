@@ -34,7 +34,7 @@ type runSource interface {
 // the resulting `run <target> <project>` only when the magusfile declares that target for that
 // project, so the console can ask for work the workspace already defines and cannot ask for
 // anything else. That is strictly less than a terminal's `magus run`, which is the bar a browser-
-// reachable surface has to clear.
+// reachable route has to clear.
 type RunHandler struct {
 	handler.Base
 	workspace runSource
@@ -68,7 +68,7 @@ func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logg
 // diffRunRequest names the work: a declared target and the project to run it for.
 //
 // The patch digest the reader is looking at is NOT here. Staleness is a client-side comparison
-// (the surface knows which digest it rendered against when the verdict arrived, and greys the
+// (the client knows which digest it rendered against when the verdict arrived, and greys the
 // verdict out when its own digest moves), so sending it to the server would only give it a second
 // place to be wrong.
 type diffRunRequest struct {
@@ -84,7 +84,7 @@ type diffRunResponse struct {
 	// has finished on this machine yet, distinct from a run that finished and failed.
 	State string `json:"state"`
 	// Started reports that THIS request started the run, as opposed to finding one already in
-	// flight. The surface says "already running" rather than appearing to start a second one.
+	// flight. The client says "already running" rather than appearing to start a second one.
 	Started bool `json:"started,omitempty"`
 	// FinishedMs, DurationMs and Error describe the last completed run, read from the activity
 	// trail. Zero while a run is in flight and no earlier one exists.
@@ -124,7 +124,7 @@ func (h *RunHandler) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // answer reports the state of req's target, submitting it first when start is set. Both verbs
-// share it because a submit's useful reply IS the poll's reply: the surface renders one shape
+// share it because a submit's useful reply IS the poll's reply: the client renders one shape
 // whether it just started the run or is watching one somebody else did.
 func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunRequest, start bool) {
 	ctx := r.Context()

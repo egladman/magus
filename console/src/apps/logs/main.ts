@@ -71,11 +71,11 @@ import { logsZoomCell } from "../../desktop/layoutPrefs";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../../desktop/view";
 
-// Per-activation teardown. The console caches surface modules and re-runs activate() on every
+// Per-activation teardown. The console caches app modules and re-runs activate() on every
 // reopen, so anything init() binds to the DOCUMENT has to be droppable: without these, each
 // open/close cycle leaves another live generation behind. The keybinding matcher owns its own
 // listener (it predates the signal convention) so it needs a separate handle; everything else
-// takes lifecycleAbort's signal. Null while the surface is not active.
+// takes lifecycleAbort's signal. Null while the app is not active.
 let lifecycleAbort: AbortController | null = null;
 let uninstallKeys: (() => void) | null = null;
 
@@ -91,9 +91,9 @@ export const docTitle = signal<string | null>(null);
 // clobbers it back to empty.
 function init(): void {
   // Adopt the serving origin FIRST, because everything below that resolves a server depends on it.
-  // Each surface is its own esbuild bundle, so lib/server's "did we adopt this origin" flag is
+  // Each app is its own esbuild bundle, so lib/server's "did we adopt this origin" flag is
   // PER-BUNDLE state: the shell setting it does not make it true in here, and serverAttach then
-  // returns null on a console served by that very server. The activity surface hit this and fixed
+  // returns null on a console served by that very server. The activity app hit this and fixed
   // it there; the viewer had the same hole, which is why its run browser read "No server connected"
   // on a page the server itself was serving.
   adoptServerOrigin();
@@ -116,7 +116,7 @@ function init(): void {
 let runBrowser: { refresh: () => void; setBodyTitle: (t: string) => void } | null = null;
 let bodyTitleText = "";
 // The run panel's auto-refresh stream, split into "how to start one" and "the running one's stop".
-// Module-level like the rest of this surface's state, because the console re-activates this cached
+// Module-level like the rest of this app's state, because the console re-activates this cached
 // module on every reopen and a stream left behind would outlive the panel it feeds.
 let startBrowserWatch: (() => () => void) | null = null;
 let stopBrowserWatch: (() => void) | null = null;
@@ -149,7 +149,7 @@ function wireRunBrowser(): void {
     },
   });
   runBrowser.setBodyTitle(bodyTitleText);
-  // The panel keeps itself current while this surface is on screen, so a run finished in a terminal
+  // The panel keeps itself current while this app is on screen, so a run finished in a terminal
   // is already in the tree when the reader looks for it. setVisible tears the stream down for a
   // backgrounded tab, and deactivate() catches the close.
   // The stream and the clock are separate concerns: the labels age whether or not anything runs, so
@@ -333,7 +333,7 @@ function setZoom(z: number): void {
 }
 
 function wireZoom(): void {
-  // The shared stepper (console/zoomControl.ts), not a local one: the Plan surface docks the same
+  // The shared stepper (console/zoomControl.ts), not a local one: the Plan app docks the same
   // control in the same place, and two near-identical copies is how they stop being identical.
   zoomCtl = mountZoomControl(zoomOpts());
   registerCommand({
@@ -430,7 +430,7 @@ async function loadFromURL(): Promise<void> {
   // streams in with a live-filling waterfall.
   //
   // Bare is the operative word. `#demo&inv=` names one run of the demo scenario, which is what the
-  // Runs surface mints for "Open the whole run" while the console is in demo mode, so it has to
+  // Runs app mints for "Open the whole run" while the console is in demo mode, so it has to
   // reach the inv branch below rather than being swallowed here. openInvocation has always known how
   // to read a synthetic journal; returning first is what made that path unreachable from a URL.
   const demo = wantsDemo(parseHash());
@@ -492,7 +492,7 @@ async function loadFromURL(): Promise<void> {
   // A #port LINK specifically, not any resolved server: connectLive streams from `/events`, which is
   // the EPHEMERAL per-run server `magus run --open` spins up, and the server does not serve that
   // route at all (its own SSE is /api/v1/events, a graph-change feed). Attaching to a server origin
-  // here therefore 404s and parks the surface on "disconnected" over an empty body - strictly worse
+  // here therefore 404s and parks the app on "disconnected" over an empty body - strictly worse
   // than the empty state, which at least says how to load something.
   const port = parseHash().port;
   const attach = port === undefined ? null : serverAttach(parseHash());
@@ -529,7 +529,7 @@ function finishLoad(ref: string, statusMsg: string): void {
   state.currentRef = looksLikeRef(ref) ? ref : "";
   if (emptyEl) emptyEl.hidden = true;
   setRefIdentity(ref || "log", looksLikeRef(ref));
-  // The loaded run is this surface's open document, so the console names its tab after it (the
+  // The loaded run is this app's open document, so the console names its tab after it (the
   // ref is what a reader would call this log). Empty until something loads, which leaves the tab
   // reading "Log Viewer".
   docTitle.set(ref || null);
@@ -803,8 +803,8 @@ export function activate(): void {
 // document-level listener init() registered against the lifecycle signal - so closing the logs tab
 // or pane leaves no SSE connection open and nothing bound to the document. Static logs (the common
 // case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
-// the standalone page does not (the surface lives as long as the page).
-// setVisible is the console's contract (page.ts): this surface writes the SHARED status bar - the
+// the standalone page does not (the app lives as long as the page).
+// setVisible is the console's contract (page.ts): this app writes the SHARED status bar - the
 // connection pill, the event count and the zoom stepper - so it has to give all three back while its
 // tab is hidden. Without it a background stream writes the active tab's bar.
 export function setVisible(visible: boolean): void {
@@ -837,7 +837,7 @@ export function deactivate(): void {
   uninstallKeys?.();
   uninstallKeys = null;
   // The status bar outlives this module - it is a singleton the console re-activates on reopen - so
-  // a stepper left behind would sit in the bar driving a surface nobody is looking at.
+  // a stepper left behind would sit in the bar driving an app nobody is looking at.
   zoomCtl?.remove();
   zoomCtl = null;
   stopBrowserWatch?.();
