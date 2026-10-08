@@ -449,10 +449,10 @@ export object Judged {
 export fun judgeRunner(workspace: str) > fun (text: str) > [Judged] {
     final dir = workspace + "/libs/conventions";
     return fun (text: str) > [Judged] {
-        final stale = judgeDocs\stale(dir);
-        if (stale != "") {
+        final notRunnable = judgeDocs\whyStale(dir);
+        if (notRunnable != "") {
             return [Judged{ rule = "judge", line = 0,
-                message = "the prose judge cannot run: {stale}; run `{judgeDocs\build}`, then retry" }];
+                message = "the prose judge cannot run: {notRunnable}; run `{judgeDocs\build}`, then retry" }];
         }
         // No dir: proc\exec resolves a relative cmd against dir, which names libs/conventions
         // twice when workspace is relative (the pr-description target passes "."), so the

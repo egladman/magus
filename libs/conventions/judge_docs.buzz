@@ -39,9 +39,9 @@ export fun inputs(dir: str) > str !> any {
     return crypto\sha256Hex(lines.join("\n"));
 }
 
-// stale says why the built judge in dir must not run, or "" when it may: it is missing,
+// whyStale says why the built judge in dir must not run, or "" when it may: it is missing,
 // or the sources it was linked from are not the ones in the tree.
-export fun stale(dir: str) > str {
+export fun whyStale(dir: str) > str {
     if (!(fs\isFile("{dir}/{binary}") catch false)) {
         return "libs/conventions/{binary} is not built";
     }
@@ -70,15 +70,15 @@ test "a judge that is missing or linked from other sources is stale" {
 
     std\assert((sources(dir) catch [<str>]).join(",") == "go.mod,go.sum,prose/prose.go,cmd/judge-docs/main.go",
         message: (sources(dir) catch [<str>]).join(","));
-    std\assert(stale(dir) == "libs/conventions/gen/judge-docs is not built", message: stale(dir));
+    std\assert(whyStale(dir) == "libs/conventions/gen/judge-docs is not built", message: whyStale(dir));
 
     fs\writeFile("{dir}/{binary}", content: "") catch void;
     fs\writeFile("{dir}/{inputsFile}", content: (inputs(dir) catch "") + "\n") catch void;
-    std\assert(stale(dir) == "", message: stale(dir));
+    std\assert(whyStale(dir) == "", message: whyStale(dir));
 
     fs\writeFile("{dir}/prose/prose_test.go", content: "package prose\n\nconst x = 1\n") catch void;
-    std\assert(stale(dir) == "", message: "a test is not linked in");
+    std\assert(whyStale(dir) == "", message: "a test is not linked in");
     fs\writeFile("{dir}/prose/rules.go", content: "package prose\n") catch void;
-    std\assert(stale(dir) == "libs/conventions/gen/judge-docs was linked from other sources than the tree holds", message: stale(dir));
+    std\assert(whyStale(dir) == "libs/conventions/gen/judge-docs was linked from other sources than the tree holds", message: whyStale(dir));
     fs\removeAll(dir) catch void;
 }
