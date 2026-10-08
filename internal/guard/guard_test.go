@@ -450,15 +450,18 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		// The rule runs the prose judge with `go run` in the workspace's libs/conventions, so
-		// this one holds that module. It is not the checkout itself: the rule would then
-		// describe the branch's diff with a nested `magus describe file`, and inside a test
-		// that nested magus is this test binary.
+		// The rule runs the prose judge that `magus run judge-build libs/conventions` links into
+		// the workspace's libs/conventions/gen, so this one holds that module, built output
+		// and all; the root test target needs judge-build. It is not the checkout itself: the
+		// rule would then describe the branch's diff with a nested `magus describe file`, and
+		// inside a test that nested magus is this test binary.
+		conventions := filepath.Join(root, "libs", "conventions")
 		ws := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
-		require.NoError(t, os.Symlink(filepath.Join(root, "libs", "conventions"), filepath.Join(ws, "libs", "conventions")))
+		require.NoError(t, os.Symlink(conventions, filepath.Join(ws, "libs", "conventions")))
 		run := shellIn(t, "trim-key", ws)
-		v := run(`gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`)
+		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
+		v := run(describe)
 		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
@@ -469,6 +472,31 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
 		assert.Equal(t, "pass", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
+
+		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
+		unbuilt := t.TempDir()
+		mod := filepath.Join(unbuilt, "libs", "conventions")
+		require.NoError(t, os.MkdirAll(mod, 0o755))
+		for _, name := range []string{"go.mod", "go.sum", "prose", "cmd"} {
+			require.NoError(t, os.Symlink(filepath.Join(conventions, name), filepath.Join(mod, name)))
+		}
+		v = shellIn(t, "trim-key", unbuilt)(describe)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "libs/conventions/gen/judge-docs is not built; run `magus run judge-build libs/conventions`")
+
+		// The built judge beside a source it was not linked from is as stale as none.
+		require.NoError(t, os.Symlink(filepath.Join(conventions, "gen"), filepath.Join(mod, "gen")))
+		require.NoError(t, os.Remove(filepath.Join(mod, "prose")))
+		require.NoError(t, os.Mkdir(filepath.Join(mod, "prose"), 0o755))
+		sources, err := filepath.Glob(filepath.Join(conventions, "prose", "*.go"))
+		require.NoError(t, err)
+		for _, src := range sources {
+			require.NoError(t, os.Symlink(src, filepath.Join(mod, "prose", filepath.Base(src))))
+		}
+		require.NoError(t, os.WriteFile(filepath.Join(mod, "prose", "zz.go"), []byte("package prose\n"), 0o644))
+		v = shellIn(t, "trim-key", unbuilt)(describe)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run judge-build libs/conventions`")
 	})
 
 	covered["code-comments"] = true
