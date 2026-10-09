@@ -1,10 +1,11 @@
-// The spawn rules the root magusfile registers: spawn-without-job-row and
-// change-role-spawn-not-isolated.
+// The spawn rules the root magusfile registers: spawn-without-job-row,
+// change-role-spawn-not-isolated and brief-builds-magus.
 namespace agentpolicy\spawn;
 
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/builds" as builds;
 
 final isolationDenial = "A worker that changes code gets its own checkout: spawn it with "
     + "`isolation: \"worktree\"`, and have it detach onto its branch (`git switch --detach <branch>`) "
@@ -27,6 +28,8 @@ export object Spawn {
     model: str = "",
     // lease is the job the spawner acts under, "" for the orchestrator or a person.
     lease: str = "",
+    // prompt is the brief handed to the spawned worker.
+    prompt: str = "",
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -47,7 +50,7 @@ fun lineage(title: str) > Lineage? {
 }
 
 // decideSpawn denies a spawn that names no live job row, then a code-changing worker that
-// would share the spawning checkout. rows is null when the store could not be read, which
+// would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
@@ -60,6 +63,10 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
         return magus\guard.deny(isolationDenial);
+    }
+    final building = builds\briefDenial(spawn.prompt);
+    if (building != "") {
+        return magus\guard.deny(building);
     }
     return row;
 }
@@ -251,4 +258,36 @@ test "a thinking role, an isolated worker and a continue pass" {
     std\assert(decideSpawn(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == "allow", message: "a review");
     std\assert(decideSpawn(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == "allow", message: "isolated");
     std\assert(decideSpawn(Spawn{ kind = "continue", title = "", isolated = false }, rows: store, unreadable: "").decision == "allow", message: "a continue");
+}
+
+fun briefed(prompt: str) > Spawn {
+    return Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+}
+
+test "a brief that tells the worker to build magus is denied, naming the script" {
+    foreach (prompt in [
+        "SETUP:\n1. `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`\n2. Work.",
+        "Run `magus run go-build .` first.",
+        "```sh\ngo build -o magus ./cmd/magus\n```",
+    ]) {
+        final v = decideSpawn(briefed(prompt), rows: store, unreadable: "");
+        std\assert(v.decision == "deny", message: prompt);
+        std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
+        std\assert(v.reason.indexOf("one binary per base commit") != null, message: "says the orchestrator places it");
+    }
+    final unreadable = decideSpawn(briefed("Run `magus run go-build .` first."), rows: null, unreadable: "x");
+    std\assert(unreadable.decision == "deny", message: "an unreadable store does not excuse the brief");
+}
+
+test "a brief that forbids the build or builds something else passes" {
+    foreach (prompt in [
+        "Never run `go build ./cmd/magus`; the orchestrator places ./magus.",
+        "Do not build magus:\n\n```sh\nmagus run go-build .\n```\n",
+        "Run `go run ./cmd/magus-utils` and `./magus run buzz-test .`.",
+        "",
+    ]) {
+        std\assert(decideSpawn(briefed(prompt), rows: store, unreadable: "").decision == "allow", message: prompt);
+    }
+    final continued = Spawn{ kind = "continue", title = "", isolated = false, prompt = "Run `magus run go-build .`" };
+    std\assert(decideSpawn(continued, rows: store, unreadable: "").decision == "allow", message: "a continue starts nothing");
 }

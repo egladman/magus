@@ -1,17 +1,21 @@
 // The rules for one checkout's build tools run against another checkout of magus:
-// foreign-binary and go-into-checkout.
+// foreign-binary and go-into-checkout, and for a caller holding a worker lease,
+// worker-builds-magus.
 namespace agentpolicy\binaries;
 
 import "std";
 import "fs";
 import "path";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/builds" as builds;
 
 // Where is where a command runs: the directory the host reported, and the workspace root
-// holding it. Either is "" when unknown.
+// holding it. Either is "" when unknown. lease is the job the caller works under, "" for the
+// orchestrator or a person.
 export object Where {
     dir: str,
     workspace: str,
+    lease: str = "",
 }
 
 // Disk answers the three questions the binary rules ask the filesystem, passed in so the
@@ -49,9 +53,13 @@ export fun onDisk() > Disk {
 // decideBinaries is the denial for a line that runs one checkout's build tools against
 // another checkout of magus, "" when nothing on the line does. Every fact it needs must be
 // known before the line runs: a path held in a variable, or a relative one with no
-// directory to resolve it against, is unknown and passes.
+// directory to resolve it against, is unknown and passes. A leased worker's build of magus is
+// refused first, which includes the bootstrap goIntoCheckout lets the orchestrator and a
+// person run into a checkout with no binary: a worker is placed one, never builds it.
 export fun decideBinaries(programs: [helpers\Program], where: Where, disk: Disk) > str {
     foreach (p in programs) {
+        final building = builds\workerBuildDenial(p, lease: where.lease);
+        if (building != "") { return building; }
         final denial = foreignBinary(p, where: where, disk: disk);
         if (denial != "") { return denial; }
         final goDenial = goIntoCheckout(p, where: where, disk: disk);
@@ -82,7 +90,7 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
         + "of magus. A binary carries the guard rules, host declarations and spell bytecode of the tree "
         + "it was built from, so its verdicts describe {built}, and what it regenerates lands in {target} "
         + "unmarked. Run {target}'s own binary: `{target}/magus --root {target} ...`. "
-        + ownBinaryHint(target, disk: disk)).trim();
+        + ownBinaryHint(target, disk: disk, lease: where.lease)).trim();
 }
 
 // goIntoCheckout: `go -C <dir>` out of this workspace and into a checkout of magus, for a
@@ -110,13 +118,18 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     }
     return ("`go -C {root} {verb}` runs a toolchain command in another checkout of magus, outside its "
         + "cache and its drift tracking. Run the target from that checkout: "
-        + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk)).trim();
+        + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk, lease: where.lease)).trim();
 }
 
-// ownBinaryHint is how to get root a binary of its own, "" when it has one.
-fun ownBinaryHint(root: str, disk: Disk) > str {
+// ownBinaryHint is how to get root a binary of its own, "" when it has one. A leased worker
+// is told to ask for it: it is placed, never built.
+fun ownBinaryHint(root: str, disk: Disk, lease: str) > str {
     final hasBinary = disk.hasBinary;
     if (hasBinary(root)) { return ""; }
+    if (lease != "") {
+        return "It has none yet: ask the orchestrator to place one with hack/dev/bootstrap-worktree.buzz. "
+            + "A worker never builds magus.";
+    }
     return "It has none yet: `{bootstrapIn(root)}` builds one with the real go-build target, "
         + "past a magus cache that cannot key it, while Go's build cache stays on.";
 }
@@ -262,4 +275,26 @@ test "the bootstrap into another checkout passes only while it has no binary" {
         std\assert(denial.indexOf("run <target>") != null, message: "not the bootstrap: " + argv.join(" "));
         std\assert(denial.indexOf("GOEXPERIMENT=jsonv2 go -C /w/a run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "serves the bootstrap");
     }
+}
+
+test "a leased worker is placed a binary and never builds one, bootstrap included" {
+    final fresh = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/b"]);
+    final worker = Where{ dir = "/w/b", workspace = "/w/b", lease = "ui-logs" };
+    foreach (argv in [
+        ["go", "-C", "/w/a", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        ["go", "build", "./cmd/magus"],
+        ["/w/b/magus", "run", "go-build", "."],
+    ]) {
+        final denial = decideBinaries(helpers\request([argv]), where: worker, disk: fresh);
+        std\assert(denial.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: argv.join(" "));
+        std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it: " + argv.join(" "));
+        std\assert(denial.indexOf("Not a bootstrap") == null, message: "not the deadlock advice");
+        std\assert(binaryDenial([argv], where: Where{ dir = "/w/b", workspace = "/w/b" }, disk: fresh).indexOf("one binary per base commit") == null,
+            message: "the orchestrator and a person are not told so: " + argv.join(" "));
+    }
+    final noBinary = decideBinaries(helpers\request([["/w/a/magus", "ls"]]), where: worker, disk: fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a"]));
+    std\assert(noBinary.indexOf("ask the orchestrator to place one") != null, message: "the hint asks for placement");
+    std\assert(noBinary.indexOf("go -C /w/b run") == null, message: "and never serves the bootstrap");
+    std\assert(decideBinaries(helpers\request([["/w/b/magus", "run", "lint", "."]]), where: worker, disk: fresh) == "", message: "other targets pass");
 }

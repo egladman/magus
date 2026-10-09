@@ -27,6 +27,12 @@
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
+//   worker-builds-magus (deny): a caller holding a worker lease compiling magus (`go run`,
+//     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
+//     project), the bootstrap included. The orchestrator builds ./magus once per base commit and
+//     hack/dev/bootstrap-worktree.buzz places it; the orchestrator and a person build freely.
+//   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
+//     line that names the command only to forbid it ("never ...") is not graded.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
 //   stale-write (deny): a magus verb that writes state other checkouts or magus versions
@@ -57,7 +63,9 @@
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
 // six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
 // branch-name), binaries.buzz (foreign-binary and
-// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz,
+// go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
+// magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
+// commits.buzz, pull_requests.buzz,
 // comments.buzz and host.buzz (a run log, and a directory named terminals).
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
@@ -84,7 +92,11 @@ import "./hack/magusfile/commits" as conventional;
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk());
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease }, disk: binaries\onDisk());
     if (denial != "") {
         return magus\guard.deny(denial);
     }
@@ -229,7 +241,7 @@ export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease };
+    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt };
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {

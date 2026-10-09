@@ -15,8 +15,8 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 
 - Use `./magus`, built by `magus run go-build .`. A fresh worktree has none, and
   until it does the hooks run whatever `magus` is on PATH, which may not load this
-  tree; `hack/policy/guard.buzz` does not run at all then. Bootstrap before
-  relying on the guard: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`
+  tree; `hack/policy/guard.buzz` does not run at all then. Bootstrap the root
+  checkout before relying on the guard: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`
   runs the real target (the magus cache cannot key it; Go's cache stays on).
 - Never keep running a renamed `./magus`. The hooks find the binary by that name,
   so a rename hands every session in the checkout to the PATH binary, and the guard

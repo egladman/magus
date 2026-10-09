@@ -135,3 +135,14 @@ carries the advise.
 A side `.cursor/rules` file is the opposite of host-agnostic glue. `harness verify` cannot
 see it, `describe harness` does not print it, and it vanishes the next time someone
 treats `.cursor/` as disposable host state.
+
+<!-- rule: one-magus-binary-per-base; added: 2026-10-09; origin: agent, unreviewed;
+     evidence: job guard-one-binary, hack/policy/builds.buzz tests, six isolated workers each opened with a `go run ./cmd/magus` bootstrap on 2026-10-09;
+     retire-when: a worker checkout can mount the root's built binary without a copy -->
+## Build ./magus once per base; a worker is handed it
+
+Never tell a worker to build magus, and a worker never does. The orchestrator builds
+`./magus` once per base commit, in the root checkout, and
+`hack/dev/bootstrap-worktree.buzz` copies it into each worker checkout while no Go build
+input differs. The guard refuses a brief that says to build it (`brief-builds-magus`) and
+a leased worker that tries (`worker-builds-magus`).

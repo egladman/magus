@@ -1,0 +1,240 @@
+// The one-binary-per-base rules: brief-builds-magus (spawn) and worker-builds-magus
+// (command). The orchestrator builds ./magus once per base commit, in the root checkout, and
+// hack/dev/bootstrap-worktree.buzz copies it into each worker checkout, so neither a brief
+// nor a worker holding a lease may compile it.
+namespace agentpolicy\builds;
+
+import "std";
+import "fs";
+import "path";
+import "./hack/policy/helpers" as helpers;
+
+// The go verbs that compile a package into something runnable.
+final goVerbs = ["run", "build", "install"];
+
+// The targets of the root project that link ./magus.
+final buildTargets = ["go-build", "build"];
+
+// The words that turn a named command into one NOT to run, matched whole.
+final negations = [
+    "never", "not", "avoid", "instead", "rather", "deny", "denies", "denied", "refuse", "refuses",
+    "refused", "forbid", "forbids", "forbidden", "banned", "retired", "removed", "stop", "without",
+];
+
+final separators = ["&&", "||", "|", ";"];
+
+// buildOf is what a program does to compile magus, "" for anything else: `go run`, `go build`
+// or `go install` of the package cmd/magus, or a run of the root project's go-build or build
+// target. An unrelated `go run` and every other magus verb pass.
+export fun buildOf(p: helpers\Program) > str {
+    if (p.name == "go") {
+        final call = helpers\goCall(p.args);
+        if (call.args.len() == 0 or goVerbs.indexOf(call.args[0]) == null) { return ""; }
+        foreach (arg in call.args.sub(1)) {
+            if (isMagusPackage(arg)) {
+                return "go {call.args[0]} {arg}";
+            }
+        }
+        return "";
+    }
+    if (p.name == "magus") {
+        final ops = helpers\magusOperands(p.args);
+        if (ops.len() < 2 or ops[0] != "run") { return ""; }
+        final named = ops[1].split("::");
+        if (buildTargets.indexOf(named[named.len() - 1]) == null) { return ""; }
+        if (ops.len() > 2 and path\clean(ops[2]) != ".") { return ""; }
+        return "magus run {ops[1]} " + (if (ops.len() > 2) ops[2] else ".");
+    }
+    return "";
+}
+
+fun isMagusPackage(arg: str) > bool {
+    if (arg.startsWith("-")) { return false; }
+    final clean = path\clean(arg);
+    return clean == "cmd/magus" or clean.endsWith("/cmd/magus");
+}
+
+// workerBuildDenial is worker-builds-magus: the denial for a program that compiles magus run
+// by a caller holding the worker lease, "" when it does not or the caller holds none. The
+// orchestrator and a person hold no lease and build freely.
+export fun workerBuildDenial(p: helpers\Program, lease: str) > str {
+    if (lease == "") { return ""; }
+    final built = buildOf(p);
+    if (built == "") { return ""; }
+    return "`{built}` compiles magus, and this session holds the worker lease `{lease}`. The orchestrator places "
+        + "one binary per base commit: it builds ./magus once, in the root checkout, and "
+        + "hack/dev/bootstrap-worktree.buzz copies it into a worker checkout whenever no Go build input differs "
+        + "(`./magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease}`). A build per worker is two Go compiles "
+        + "each, and a fan-out runs a dozen at once. Use the ./magus placed in this checkout; if it cannot load this "
+        + "tree, ask the orchestrator to place a newer one.";
+}
+
+// briefDenial is brief-builds-magus: the denial for a spawn brief that tells its worker to
+// compile magus, quoting the line, "" when none does. A line that names the command only to
+// forbid it ("never `go build ./cmd/magus`") is not graded, nor is a fenced block that a
+// negating line introduces.
+export fun briefDenial(brief: str) > str {
+    var introduced = "";
+    var recent = "";
+    var fenced = false;
+    foreach (raw in brief.split("\n")) {
+        final line = raw.trim();
+        if (line.startsWith("```")) {
+            fenced = !fenced;
+            if (fenced) { introduced = recent; }
+            continue;
+        }
+        if (line == "") { continue; }
+        if (!fenced) { recent = line; }
+        if (negates(line) or (fenced and negates(introduced))) { continue; }
+        foreach (p in programsIn(line)) {
+            if (buildOf(p) != "") {
+                return "Fix the brief: it tells the worker to build magus (`{line}`). The orchestrator places one "
+                    + "binary per base commit: it builds ./magus once, in the root checkout, and "
+                    + "hack/dev/bootstrap-worktree.buzz copies it into each worker checkout. A worker that compiles "
+                    + "it adds two Go builds per worker, and a fan-out runs a dozen at once. Drop the step: the "
+                    + "worker uses the ./magus already placed, and asks the orchestrator for a newer one if it cannot "
+                    + "load the tree. A line that names the command to forbid it (\"never ...\") is not graded.";
+            }
+        }
+    }
+    return "";
+}
+
+fun negates(line: str) > bool {
+    final lower = line.lower();
+    if (lower.indexOf("no longer") != null) { return true; }
+    foreach (word in words(lower)) {
+        if (negations.indexOf(word) != null or word.endsWith("n't")) { return true; }
+    }
+    return false;
+}
+
+// words are the line's whitespace-separated words with code-span and quote marks, commas and
+// closing punctuation taken off, so prose and a copied command line split the same way.
+fun words(line: str) > [str] {
+    final spaced = line.replace("`", with: " ").replace("\"", with: " ").replace(",", with: " ")
+        .replace("(", with: " ").replace(")", with: " ");
+    final kept = mut [<str>];
+    foreach (word in spaced.split(" ")) {
+        var w = word;
+        while (w.len() > 1 and (w.endsWith(".") or w.endsWith(":") or w.endsWith(";") or w.endsWith("!") or w.endsWith("?"))) {
+            w = w.sub(0, len: w.len() - 1);
+        }
+        if (w != "") { kept.append(w); }
+    }
+    return kept;
+}
+
+// programsIn are the go and magus commands a line spells, each with the words up to the next
+// shell separator as its arguments.
+fun programsIn(line: str) > [helpers\Program] {
+    final all = words(line);
+    final programs = mut [<helpers\Program>];
+    foreach (i, word in all) {
+        final name = fs\basename(word);
+        if (name != "go" and name != "magus") { continue; }
+        final args = mut [<str>];
+        var open = true;
+        foreach (next in all.sub(i + 1)) {
+            if (separators.indexOf(next) != null) { open = false; }
+            if (open) { args.append(next); }
+        }
+        programs.append(helpers\Program{ name = name, args = args, repeats = false });
+    }
+    return programs;
+}
+
+fun program(argv: [str]) > helpers\Program {
+    return helpers\request([argv])[0];
+}
+
+test "a program that compiles magus is a build, an unrelated go run is not" {
+    foreach (argv in [
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        ["go", "-C", "/w/a", "run", "./cmd/magus", "version"],
+        ["go", "build", "./cmd/magus"],
+        ["go", "build", "-o", "magus", "cmd/magus/"],
+        ["go", "install", "github.com/egladman/magus/cmd/magus"],
+        ["magus", "run", "go-build", "."],
+        ["./magus", "--root", ".", "run", "-j", "2", "go-build", "--no-cache", "."],
+        ["/w/b/magus", "run", "build", "."],
+        ["magus", "run", "go::go-build"],
+    ]) {
+        std\assert(buildOf(program(argv)) != "", message: argv.join(" "));
+    }
+    foreach (argv in [
+        ["go", "run", "./cmd/magus-utils", "x"],
+        ["go", "run", "./hack/gen"],
+        ["go", "test", "./cmd/magus"],
+        ["go", "vet", "./cmd/magus"],
+        ["go", "build", "./internal/guard"],
+        ["go", "version"],
+        ["magus", "run", "go-build", "console"],
+        ["magus", "run", "go-vet", "."],
+        ["magus", "run", "lint", "."],
+        ["magus", "affected", "ci"],
+        ["magus", "describe", "job", "x"],
+        ["git", "build", "./cmd/magus"],
+    ]) {
+        std\assert(buildOf(program(argv)) == "", message: argv.join(" "));
+    }
+}
+
+test "a worker lease denies a build of magus, naming the script and the one binary per base" {
+    foreach (argv in [
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        ["go", "build", "./cmd/magus"],
+        ["magus", "run", "go-build", "."],
+    ]) {
+        final denial = workerBuildDenial(program(argv), lease: "ui-logs");
+        std\assert(denial.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script: " + argv.join(" "));
+        std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it");
+        std\assert(denial.indexOf("`ui-logs`") != null, message: "names the lease");
+    }
+}
+
+test "the orchestrator and a person, holding no lease, build freely" {
+    foreach (argv in [
+        ["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
+        ["magus", "run", "go-build", "."],
+    ]) {
+        std\assert(workerBuildDenial(program(argv), lease: "") == "", message: argv.join(" "));
+    }
+    std\assert(workerBuildDenial(program(["go", "test", "./..."]), lease: "ui-logs") == "", message: "a lease does not deny other go verbs");
+    std\assert(workerBuildDenial(program(["magus", "buzz", "hack/dev/bootstrap-worktree.buzz", "--", "--job", "x"]), lease: "x") == "", message: "the placement script itself");
+}
+
+test "a brief that tells the worker to build magus is denied, quoting the line" {
+    foreach (brief in [
+        "SETUP:\n1. Build first: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`\n2. Then work.",
+        "Your first step is `GOEXPERIMENT=jsonv2 go -C /w/a run -trimpath ./cmd/magus run go-build --no-cache .`.",
+        "Build it with ./magus run go-build . before you start.",
+        "Run `magus run build .` first, then the check.",
+        "Compile it: go build -o magus ./cmd/magus && ./magus version",
+        "Setup:\n\n```sh\ncd /w/a\nGOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .\n```\n",
+    ]) {
+        final denial = briefDenial(brief);
+        std\assert(denial.indexOf("Fix the brief: it tells the worker to build magus") == 0, message: brief);
+        std\assert(denial.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
+        std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it");
+    }
+    std\assert(briefDenial("1. ok\n2. Build: `go build ./cmd/magus`").indexOf("(`2. Build: `go build ./cmd/magus``).") != null, message: "quotes the line");
+}
+
+test "a brief that only names the build to forbid it, or builds something else, passes" {
+    foreach (brief in [
+        "Never run `go run ./cmd/magus run go-build .`; the orchestrator places the binary.",
+        "Do not build magus: `go build ./cmd/magus` is refused for a worker.",
+        "Don't run `magus run go-build .` here.",
+        "Do not run these:\n\n```sh\ngo build ./cmd/magus\nmagus run go-build .\n```\n",
+        "Use ./magus as placed; do not rebuild it with `magus run go-build .`.",
+        "Run `go run ./cmd/magus-utils render` and `go run ./hack/gen`.",
+        "Run `./magus run buzz-test .` and `go test ./cmd/magus`.",
+        "Place the binary with `./magus buzz hack/dev/bootstrap-worktree.buzz -- --job x`.",
+        "Where do I go build things? Ask the orchestrator about magus.",
+        "",
+    ]) {
+        std\assert(briefDenial(brief) == "", message: brief);
+    }
+}
