@@ -26,7 +26,10 @@ import {
   overviewLine,
   sizeLine,
   treeOrder,
+  NODE_H,
+  NODE_W,
   STALE_AFTER_MS,
+  STATE_STATUS,
 } from "./jobs";
 
 function job(id: string, fields: MessageInitShape<typeof JobSchema> = {}): Job {
@@ -319,6 +322,26 @@ test("a child is placed to the right of its parent, and a dependent right of its
   assert.ok(x("root") < x("b1"), "a child cannot start before the parent that handed it out");
   assert.ok(x("b1") < x("b2"), "b2 waits on b1, so it sits downstream of it");
   assert.ok(x("b2") < x("b2a"));
+});
+
+// The drawing is 1:1 with its viewBox, so a node is NODE_W by NODE_H real pixels and the layout has
+// to leave room for it: two nodes that overlap would put one id's 12px text over another's.
+test("no two nodes overlap at the size they are drawn", () => {
+  const at = [...layoutNodes(buildJobTree(TREE)).at.values()];
+  for (let i = 0; i < at.length; i++) {
+    for (let j = i + 1; j < at.length; j++) {
+      const dx = Math.abs(at[i].x - at[j].x);
+      const dy = Math.abs(at[i].y - at[j].y);
+      assert.ok(dx >= NODE_W || dy >= NODE_H, `nodes ${i} and ${j} overlap (${dx}, ${dy})`);
+    }
+  }
+});
+
+test("every state has a shape, and a job that never returned is not drawn as a failure", () => {
+  for (const state of ["declared", "running", "pass", "fail", "no_return"] as const) {
+    assert.ok(STATE_STATUS[state], state + " has an icon");
+  }
+  assert.notEqual(STATE_STATUS.no_return, STATE_STATUS.fail);
 });
 
 test("placement is deterministic - the same listing lays out identically", () => {

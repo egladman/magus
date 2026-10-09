@@ -6,23 +6,27 @@
 // local linear time scale - a timeline is rows x time, not a node graph, so it needs no
 // layout library. A finished bar (passed|failed|cached) with an output reference
 // deep-links to the log viewer for that ref, mirroring the running-targets tile.
+//
+// The drawing is laid out in CSS pixels at the width the card has, never scaled down from a fixed
+// viewBox: a scaled drawing shrinks its text with it (to 3px on a narrow pane), and the type here is
+// the console's 12px floor at every width. Below MIN_W the scroller scrolls sideways instead.
 
 import type { DashboardState, RunView, TargetRunView } from "../state";
-import { Card, h, type Tile } from "./card";
+import { Card, h, scrollRegion, type Tile } from "./card";
 import { logsLink } from "../../../lib/server";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
 const WINDOW_MS = 60_000; // rolling window: last 60s to now
-const VIEW_W = 720; // viewBox width; the SVG scales to the tile via its viewBox
-const LABEL_W = 150; // left gutter for target labels
+const MIN_W = 560; // narrowest drawing, in px; narrower panes scroll
+const LABEL_W = 172; // left gutter for target labels
 const RIGHT_PAD = 12;
-const AXIS_H = 14; // top strip for the time-axis tick labels
-const RUN_H = 16; // a run-group header row
-const ROW_H = 18; // one target row
-const BAR_H = 10;
+const AXIS_H = 22; // top strip for the time-axis tick labels
+const RUN_H = 24; // a run-group header row
+const ROW_H = 24; // one target row
+const BAR_H = 12;
 const MIN_BAR_W = 2; // instant (cached) bars stay visible
-const PLOT_W = VIEW_W - RIGHT_PAD - LABEL_W;
+const LABEL_CHARS = 22; // a 12px mono label that fits the gutter
 const TICK_MS = WINDOW_MS; // full window per axis tick
 
 function svg(tag: string): SVGElement {
@@ -30,7 +34,7 @@ function svg(tag: string): SVGElement {
 }
 
 // truncate keeps a label inside the left gutter (SVG <text> does not clip on its own);
-// the full label rides a <title> tooltip.
+// the full label rides a <title>.
 function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 3) + "..." : s;
 }
@@ -58,6 +62,22 @@ function fmtDurMs(ms: number): string {
   return (ms / 1000).toFixed(ms < 10_000 ? 2 : 1) + " s";
 }
 
+// stateWord is the word a bar's colour has to be backed by. Failed and queued are both drawn from
+// the danger hue (a queue that is full is a saturated pool), and the pale pip beside a solid bar is
+// not a difference to rely on, so the two say what they are in text after the bar.
+function stateWord(state: TargetRunView["state"]): string {
+  if (state === "failed") return "failed";
+  if (state === "queued") return "queued";
+  if (state === "cached") return "cached";
+  return "";
+}
+
+// Geometry for one render: the drawing's width, and the plot it leaves after the gutters.
+interface Geo {
+  w: number;
+  plotW: number;
+}
+
 export function ganttTile(): Tile {
   const card = new Card("gantt", "Live execution", {
     term: "Trace",
@@ -67,13 +87,10 @@ export function ganttTile(): Tile {
       "Where a run's wall clock actually went. The dashed leader is queued time and the solid bar is" +
       " real work. One duration hides that difference, and the two need opposite fixes.",
   });
-  // How to READ the chart, printed on the tile rather than hidden behind the "?".
-  //
-  // The tile encodes four separate things - horizontal position (when), bar length (how long), the
-  // dashed leader (queued rather than working), and the shaded block (which run) - and the legend
-  // decoded only the fifth, color. Someone looking at it cold could name the colors and still not
-  // know which way time ran or what the dashes meant. A popover is the wrong home for this: it is
-  // unreachable on a wall display, which is exactly where an unexplained chart is most expensive.
+  // How to READ the chart, printed on the tile rather than hidden behind the "?": the tile encodes
+  // horizontal position (when), bar length (how long), the dashed leader (queued rather than
+  // working), and the shaded block (which run). A popover is unreachable on a wall display, which
+  // is exactly where an unexplained chart is most expensive.
   const howto = h(
     "p",
     "console-dashboard-gantt__howto",
@@ -81,7 +98,7 @@ export function ganttTile(): Tile {
       " one run, one row per target, and a bar is as long as the target took.",
   );
   const wrap = h("div", "console-dashboard-gantt__scroll");
-  const empty = h("p", "console-dashboard-row__empty", "No active runs.");
+  scrollRegion(wrap, "Execution timeline, scrolls sideways and down");
   const legend = h("div", "console-dashboard-gantt__legend");
   for (const [cls, text] of [
     ["running", "running"],
@@ -95,21 +112,21 @@ export function ganttTile(): Tile {
   ] as const) {
     legend.append(h("span", "console-dashboard-legend console-dashboard-legend--" + cls, text));
   }
-  card.body.append(howto, wrap, empty, legend);
+  card.body.append(howto, wrap, legend);
 
   let runs: RunView[] = [];
   let liveHost: string | null = null;
 
-  function timeX(t: number, t0: number, now: number): number {
+  function timeX(t: number, t0: number, now: number, geo: Geo): number {
     const span = now - t0 || 1;
     const clamped = Math.min(now, Math.max(t0, t));
-    return LABEL_W + ((clamped - t0) / span) * PLOT_W;
+    return LABEL_W + ((clamped - t0) / span) * geo.plotW;
   }
 
-  function drawAxis(root: SVGElement, t0: number, now: number): void {
+  function drawAxis(root: SVGElement, t0: number, now: number, geo: Geo, totalH: number): void {
     const axisLine = svg("line");
     axisLine.setAttribute("x1", String(LABEL_W));
-    axisLine.setAttribute("x2", String(VIEW_W - RIGHT_PAD));
+    axisLine.setAttribute("x2", String(geo.w - RIGHT_PAD));
     axisLine.setAttribute("y1", String(AXIS_H));
     axisLine.setAttribute("y2", String(AXIS_H));
     axisLine.setAttribute("class", "console-dashboard-gantt__axisline");
@@ -121,17 +138,17 @@ export function ganttTile(): Tile {
       [now, "now"],
     ];
     for (const [t, txt] of ticks) {
-      const x = timeX(t, t0, now);
+      const x = timeX(t, t0, now, geo);
       const grid = svg("line");
       grid.setAttribute("x1", String(x));
       grid.setAttribute("x2", String(x));
       grid.setAttribute("y1", String(AXIS_H));
-      grid.setAttribute("y2", "100%");
+      grid.setAttribute("y2", String(totalH));
       grid.setAttribute("class", "console-dashboard-gantt__grid");
       root.appendChild(grid);
       const label = svg("text");
       label.setAttribute("x", String(txt === "now" ? x - 2 : x + 2));
-      label.setAttribute("y", "10");
+      label.setAttribute("y", String(AXIS_H - 6));
       label.setAttribute("class", "console-dashboard-gantt__axislabel");
       if (txt === "now") label.setAttribute("text-anchor", "end");
       label.textContent = txt;
@@ -146,11 +163,12 @@ export function ganttTile(): Tile {
     t0: number,
     now: number,
     runStart: number | null,
+    geo: Geo,
   ): void {
     const span = barSpan(t, now);
     if (!span) return;
-    const x1 = timeX(span.s, t0, now);
-    const x2 = timeX(span.e, t0, now);
+    const x1 = timeX(span.s, t0, now, geo);
+    const x2 = timeX(span.e, t0, now, geo);
     const w = Math.max(MIN_BAR_W, x2 - x1);
 
     // WAIT SEGMENT: the stretch between the run being submitted and this target actually starting.
@@ -158,12 +176,11 @@ export function ganttTile(): Tile {
     // The bar alone conflates two very different facts. A target that took 40s because it ran for
     // 40s and one that took 40s because it sat in the queue for 35s and ran for 5 look identical,
     // and the second is the one worth acting on - it says the pool is the constraint, not the work.
-    // Both times are already in the frame (the run's first start, and this target's), so the
-    // distinction costs a rectangle rather than any new data.
+    // Both times are already in the frame, so the distinction costs a rectangle.
     //
     // Drawn hollow and behind the bar so it reads as elapsed-but-not-working.
     if (runStart != null && t.startMs != null && t.startMs > runStart) {
-      const wx1 = timeX(runStart, t0, now);
+      const wx1 = timeX(runStart, t0, now, geo);
       const ww = x1 - wx1;
       if (ww > 1) {
         const wait = svg("rect");
@@ -172,14 +189,11 @@ export function ganttTile(): Tile {
         wait.setAttribute("width", ww.toFixed(2));
         wait.setAttribute("height", String(BAR_H / 2));
         wait.setAttribute("class", "console-dashboard-gantt__wait");
-        const wt = svg("title");
-        wt.textContent = t.label + " waited " + fmtDurMs(t.startMs - runStart) + " to start";
-        wait.appendChild(wt);
         root.appendChild(wait);
       }
     }
     // A queued pip sits just left of the now-line so it reads as "waiting to start".
-    const x = t.state === "queued" ? Math.max(LABEL_W, timeX(now, t0, now) - MIN_BAR_W) : x1;
+    const x = t.state === "queued" ? Math.max(LABEL_W, timeX(now, t0, now, geo) - MIN_BAR_W) : x1;
     const rect = svg("rect");
     rect.setAttribute("x", x.toFixed(2));
     rect.setAttribute("y", String(rowY + (ROW_H - BAR_H) / 2));
@@ -190,27 +204,28 @@ export function ganttTile(): Tile {
     rect.setAttribute("data-state", t.state);
     const elapsed = t.durationMs > 0 ? t.durationMs : t.startMs != null ? now - t.startMs : 0;
     const dur = fmtDurMs(elapsed);
-    const title = svg("title");
-    title.textContent = t.label + " - " + t.state + (dur ? " (" + dur + ")" : "");
-    rect.appendChild(title);
 
-    // The duration, printed after the bar.
-    //
-    // A bar's LENGTH is a comparison, not a measurement: it says this took longer than that, within
-    // a 60s window, and nothing about how long either actually was. Reading a number off it means
-    // hovering for the tooltip, which on a board that is watched rather than used is no answer at
-    // all. The value is already computed for that tooltip; printing it costs one <text>.
+    // The duration, printed after the bar, with the state word when colour is not enough. A bar's
+    // LENGTH is a comparison, not a measurement: it says this took longer than that, within a 60s
+    // window, and nothing about how long either actually was.
     //
     // Suppressed for a bar that ends flush against the right edge (a still-running target keeps
     // moving) only when there is no room, so the label never overprints the "now" line.
-    if (dur) {
-      const labelX = x + w + 4;
-      if (labelX < VIEW_W - RIGHT_PAD - 26) {
+    const caption = [stateWord(t.state), dur].filter(Boolean).join(" ");
+    if (caption) {
+      // After the bar when there is room; before it, right-aligned, when the bar runs up against the
+      // right edge (most recent bars do). A caption with neither is dropped, never overprinted.
+      const textW = caption.length * 7.5;
+      const after = x + w + 4;
+      const before = x - 4;
+      const fitsAfter = after + textW < geo.w - RIGHT_PAD;
+      if (fitsAfter || before - textW > LABEL_W) {
         const durText = svg("text");
-        durText.setAttribute("x", labelX.toFixed(2));
-        durText.setAttribute("y", String(rowY + ROW_H / 2 + 3));
+        durText.setAttribute("x", (fitsAfter ? after : before).toFixed(2));
+        if (!fitsAfter) durText.setAttribute("text-anchor", "end");
+        durText.setAttribute("y", String(rowY + ROW_H / 2 + 4));
         durText.setAttribute("class", "console-dashboard-gantt__dur");
-        durText.textContent = dur;
+        durText.textContent = caption;
         root.appendChild(durText);
       }
     }
@@ -224,6 +239,7 @@ export function ganttTile(): Tile {
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener");
       a.setAttribute("class", "console-dashboard-gantt__link");
+      a.setAttribute("aria-label", "Open the output of " + t.label);
       a.appendChild(rect);
       root.appendChild(a);
     } else {
@@ -253,26 +269,30 @@ export function ganttTile(): Tile {
       }))
       .filter((r) => r.targets.length > 0);
     const nTargets = visibleRuns.reduce((n, r) => n + r.targets.length, 0);
-    empty.hidden = nTargets > 0;
+    card.setEmpty(nTargets === 0 ? "No runs are active in the last minute." : null);
     if (nTargets === 0) {
       wrap.replaceChildren();
       card.setNote("idle");
       return;
     }
 
+    // One pixel per drawing unit: the width is the scroller's, floored at MIN_W.
+    const w = Math.max(MIN_W, Math.floor(wrap.clientWidth));
+    const geo: Geo = { w, plotW: w - RIGHT_PAD - LABEL_W };
     const totalH =
       AXIS_H + visibleRuns.reduce((n, r) => n + RUN_H + r.targets.length * ROW_H, 0) + 4;
     const root = svg("svg");
-    root.setAttribute("viewBox", "0 0 " + VIEW_W + " " + totalH);
+    root.setAttribute("viewBox", "0 0 " + w + " " + totalH);
+    root.setAttribute("width", String(w));
+    root.setAttribute("height", String(totalH));
     root.setAttribute("class", "console-dashboard-gantt__svg");
-    root.setAttribute("preserveAspectRatio", "xMinYMin meet");
     root.setAttribute("role", "img");
-    root.setAttribute("aria-label", "Live execution timeline");
 
-    drawAxis(root, t0, now);
+    drawAxis(root, t0, now, geo, totalH);
 
     let y = AXIS_H;
     let running = 0;
+    let failed = 0;
     let group = 0;
     for (const run of visibleRuns) {
       // Group banding, drawn first so it sits behind the labels and bars.
@@ -284,7 +304,7 @@ export function ganttTile(): Tile {
       const band = svg("rect");
       band.setAttribute("x", "0");
       band.setAttribute("y", String(y - 2));
-      band.setAttribute("width", String(VIEW_W));
+      band.setAttribute("width", String(w));
       band.setAttribute("height", String(groupH));
       band.setAttribute("class", "console-dashboard-gantt__runband");
       band.setAttribute("data-zebra", group % 2 === 0 ? "even" : "odd");
@@ -293,14 +313,13 @@ export function ganttTile(): Tile {
 
       const head = svg("text");
       // x=8 matches the target labels below, so the header and its rows share one left edge and the
-      // group reads as a block. At x=2 it sat on top of the rule.
+      // group reads as a block.
       head.setAttribute("x", "8");
-      head.setAttribute("y", String(y + 12));
+      head.setAttribute("y", String(y + 16));
       head.setAttribute("class", "console-dashboard-gantt__runlabel");
       // Trigger and invocation id are two different kinds of thing on one line, so they are two
       // tspans rather than one string. The trigger is the word an operator reads; the id is an
-      // opaque handle wanted only when copying it. Weighting the whole line made the id the loudest
-      // text in the tile, and bold on a 12-char hex string is harder to read, not easier.
+      // opaque handle wanted only when copying it.
       const trigger = svg("tspan");
       trigger.setAttribute("class", "console-dashboard-gantt__runtrigger");
       trigger.textContent = run.trigger || "run";
@@ -315,13 +334,10 @@ export function ganttTile(): Tile {
       root.appendChild(head);
 
       // A per-run summary, right-aligned on the header row: how many targets, how much wall clock
-      // the invocation has burned, and how many of its targets are still going.
-      //
-      // This is the line an operator actually reads off a run - "is this sweep nearly done, and is
-      // it slower than usual" - and it was recoverable only by squinting along the rows and adding
-      // up bars. Wall clock is first-start to last-end (or now, while anything is still running),
-      // which is the elapsed time of the INVOCATION rather than the sum of its targets: with work
-      // running concurrently, the sum is always larger than the time anyone waited.
+      // the invocation has burned, and how many of its targets are still going. Wall clock is
+      // first-start to last-end (or now, while anything is still running), which is the elapsed
+      // time of the INVOCATION rather than the sum of its targets: with work running concurrently,
+      // the sum is always larger than the time anyone waited.
       const starts = run.targets.map((t) => t.startMs).filter((v): v is number => v != null);
       const stillRunning = run.targets.filter((t) => t.state === "running").length;
       if (starts.length > 0) {
@@ -336,11 +352,11 @@ export function ganttTile(): Tile {
         ];
         if (stillRunning > 0) bits.push(stillRunning + " running");
         const summary = svg("text");
-        summary.setAttribute("x", String(VIEW_W - RIGHT_PAD));
-        summary.setAttribute("y", String(y + 12));
+        summary.setAttribute("x", String(w - RIGHT_PAD));
+        summary.setAttribute("y", String(y + 16));
         summary.setAttribute("text-anchor", "end");
         summary.setAttribute("class", "console-dashboard-gantt__runsummary");
-        summary.textContent = bits.join(" - ");
+        summary.textContent = bits.join(", ");
         root.appendChild(summary);
       }
       y += RUN_H;
@@ -352,20 +368,33 @@ export function ganttTile(): Tile {
       );
       for (const t of run.targets) {
         if (t.state === "running") running++;
+        if (t.state === "failed") failed++;
         const label = svg("text");
         label.setAttribute("x", "8");
-        label.setAttribute("y", String(y + BAR_H + 2));
+        label.setAttribute("y", String(y + ROW_H / 2 + 4));
         label.setAttribute("class", "console-dashboard-gantt__targetlabel");
-        label.textContent = truncate(t.label || t.target || "-", 22);
+        label.textContent = truncate(t.label || t.target || "-", LABEL_CHARS);
         const lt = svg("title");
         lt.textContent = t.label;
         label.appendChild(lt);
         root.appendChild(label);
-        drawBar(root, t, y, t0, now, runStart);
+        drawBar(root, t, y, t0, now, runStart, geo);
         y += ROW_H;
       }
     }
 
+    root.setAttribute(
+      "aria-label",
+      "Execution timeline: " +
+        visibleRuns.length +
+        (visibleRuns.length === 1 ? " run, " : " runs, ") +
+        nTargets +
+        (nTargets === 1 ? " target, " : " targets, ") +
+        running +
+        " running, " +
+        failed +
+        " failed",
+    );
     wrap.replaceChildren(root);
     card.setNote(
       visibleRuns.length +
@@ -381,6 +410,11 @@ export function ganttTile(): Tile {
   const ticker = window.setInterval(() => {
     if (runs.length) render();
   }, 1000);
+  // The drawing is sized to the scroller, so it is redrawn when the card changes width.
+  const resize = new ResizeObserver(() => {
+    if (runs.length) render();
+  });
+  resize.observe(wrap);
 
   return {
     el: card.el,
@@ -392,6 +426,7 @@ export function ganttTile(): Tile {
     },
     destroy() {
       window.clearInterval(ticker);
+      resize.disconnect();
     },
   };
 }

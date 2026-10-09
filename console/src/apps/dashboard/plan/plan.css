@@ -2,7 +2,7 @@
  * of its two sources (the jobs this server knows about, and the derived target plan).
  *
  * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
- * form control, the empty state, the path chips are PF Labels. What PF has no
+ * form control, the empty state, the buttons, the path chips are PF Labels. What PF has no
  * component for is the STAGE - a laid-out node/edge drawing - and the dense node list and detail
  * sheet beside it, so those are authored here under the console-plan-* area of the naming formula
  * (README.md). Transient state is data-* throughout (data-phase, data-source, data-state,
@@ -11,11 +11,15 @@
  * The states read from the PF-native status tokens, so a theme toggle re-tints the drawing with no
  * per-theme rule here. no_return gets its OWN color (the neutral-but-marked purple family used for
  * spells), deliberately NOT the danger red a failure gets: a job that never returned is not a job
- * that failed, and a reader must be able to tell them apart at a glance and by mark. */
+ * that failed, and a reader must be able to tell them apart at a glance and by mark.
+ *
+ * Type is the console's tokens and nothing is under 12px. The drawing is laid out in CSS pixels, 1:1
+ * (plan/main.ts sizes the SVG from its viewBox), so its text is 12px however the pane is shaped and
+ * the stage scrolls instead of shrinking it. */
 
 .console-plan-layout {
   display: grid;
-  grid-template-columns: 17rem minmax(0, 1fr) 20rem;
+  grid-template-columns: 20rem minmax(0, 1fr) 22rem;
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "intro intro intro"
@@ -50,32 +54,32 @@
 .console-plan-intro {
   grid-area: intro;
   margin: 0;
-  padding-block: 0.35rem;
+  padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
-  font-size: 0.72rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-plan-intro__link { font-size: inherit; }
 
-/* Compact, so it does not tower over the summary line beside it - the same treatment (and the
-   same reason) as the settings sheet's view toggle. PF's default ToggleGroup is 37px against a
-   0.8rem summary, which made the one control on the bar read as the loudest thing on it.
-   The height now comes from the shared token (the toolbar carries data-control-size="compact")
-   rather than a padding guess, so it lands on PF's own compact step and the form control beside it
-   lands on the same one. Only the inline padding and the type ramp stay local. */
+/* Compact, so it does not tower over the summary line beside it - the same treatment (and the same
+   reason) as the settings sheet's view toggle. The height comes from the shared token (the toolbar
+   carries data-control-size="compact") rather than a padding guess, so it lands on PF's own compact
+   step and the form control beside it lands on the same one. Only the inline padding and the type
+   ramp stay local. */
 .console-plan-source .pf-v6-c-toggle-group__button {
   block-size: var(--console-control-block-size);
   padding-block: 0;
-  padding-inline: 0.5rem;
+  padding-inline: var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
 }
 
 .console-plan-toolbar {
   grid-area: toolbar;
   display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
@@ -83,14 +87,14 @@
 }
 .console-plan-summary {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--pf-t--global--font--size--body--default);
   color: var(--pf-t--global--text--color--regular);
 }
 /* The stale-picture note. Loud enough to be read, quiet enough not to look like a failure: what is
    on screen is still the work, it is just older than the work. */
 .console-plan-note {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--console-status-warn-text);
 }
 /* The target override is the only thing after the summary now, so it takes the free space and sits
@@ -98,7 +102,7 @@
 .console-plan-target {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: var(--pf-t--global--spacer--xs);
   margin-inline-start: auto;
 }
 .console-plan-target[hidden] { display: none; }
@@ -110,8 +114,7 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Deliberately narrow: the override is not the entry point. The run plan follows the live run, and
-   this is the small affordance for the exception. The height is the row's, not PF's default - it sat
-   at 37px next to a toggle group the rule above had shrunk, on a shared baseline. */
+   this is the small affordance for the exception. The height is the row's, not PF's default. */
 .console-plan-target .pf-v6-c-form-control {
   width: 9rem;
   block-size: var(--console-control-block-size);
@@ -123,36 +126,45 @@
 .console-plan-tree {
   grid-area: tree;
   min-height: 0;
+  /* Never sideways: the rows wrap and ellipsize inside the column, and min-width: 0 below is what
+     lets them. A row wider than the column is a bug that would otherwise scroll the whole index. */
+  overflow-x: hidden;
   overflow-y: auto;
   border-right: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-plan-list { margin: 0; padding: 0.3rem 0; list-style: none; }
-/* A row is the selecting button plus, on a job the server holds, the control that runs it. The two
-   are siblings rather than nested, because a button inside a button is not markup a browser honors,
-   and the run control keeps its natural width so the id beside it still gets the whole row. */
+.console-plan-list { margin: 0; padding: var(--pf-t--global--spacer--xs) 0; list-style: none; }
+/* A row is the selecting button plus, on a job the server holds, the control that runs it, in ONE
+   row: the button takes the width the Run control leaves, and the id has the first line of it. They
+   are siblings rather than nested, because a button inside a button is not markup a browser honors. */
 .console-plan-list__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.3rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
   margin: 0;
-  padding-inline-end: 0.4rem;
+  padding-inline-end: var(--pf-t--global--spacer--sm);
 }
-.console-plan-list__run { flex: 0 0 auto; }
-/* The GOALS line: criteria and parent, under the mark/id/meta line rather than crowded into it.
-   flex-basis 100% on a wrapping row is what forces it onto its own line regardless of how much
-   room the row above left over - the standard "second line in a flex row" trick, cheaper than a
-   second grid row per item. */
+.console-plan-list__run { grid-column: 2; align-self: center; }
+.console-plan-list__runstate {
+  grid-column: 1 / -1;
+  padding-inline-start: var(--pf-t--global--spacer--md);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  overflow-wrap: anywhere;
+}
+/* The GOALS line: criteria and parent, under the job rather than crowded into it. */
 .console-plan-list__goal {
-  flex: 1 1 100%;
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-inline-start: calc(0.4rem + var(--console-plan-depth, 0) * 0.6rem);
-  padding-inline-end: 0.5rem;
-  padding-block-end: 0.25rem;
-  font-size: 0.68rem;
+  gap: var(--pf-t--global--spacer--sm);
+  min-width: 0;
+  padding-inline-start: calc(var(--pf-t--global--spacer--sm) + var(--console-plan-depth, 0) * var(--pf-t--global--spacer--sm));
+  padding-inline-end: var(--pf-t--global--spacer--sm);
+  padding-block-end: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-list__goal-criteria {
@@ -163,61 +175,68 @@
   white-space: nowrap;
 }
 .console-plan-list__goal-parent {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--pf-t--global--font--family--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.console-plan-list__runstate {
-  flex: 0 0 auto;
-  font-size: 0.66rem;
-  color: var(--pf-t--global--text--color--subtle);
-}
+/* The selecting button, as a grid: state mark, id and age on the first line (the id takes what is
+   left and is never pushed off), then everything else about the job under it. */
 .console-plan-list__item {
-  display: flex;
+  grid-column: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "mark id age"
+    ". meta meta"
+    ". warn warn";
   align-items: baseline;
-  gap: 0.4rem;
+  column-gap: var(--pf-t--global--spacer--sm);
+  min-width: 0;
   width: 100%;
-  padding-block: 0.2rem;
-  padding-inline: calc(0.4rem + var(--console-plan-depth, 0) * 0.6rem) 0.5rem;
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: calc(var(--pf-t--global--spacer--sm) + var(--console-plan-depth, 0) * var(--pf-t--global--spacer--sm)) var(--pf-t--global--spacer--sm);
   border: 0;
+  border-inline-start: 2px solid transparent;
   border-radius: 0;
   background: transparent;
   color: inherit;
-  font-size: 0.76rem;
+  font-size: var(--pf-t--global--font--size--body--default);
   line-height: 1.4;
   text-align: start;
   cursor: pointer;
 }
 .console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
-/* Secondary plus an accent edge, NOT the highlight token. highlight--default is #ffe072, a
-   saturated yellow that keeps its own value in both themes while the row's text does not - so the
-   selected row was the one row on the view you could not read, and it collided with the gold
-   the warnings already own. diff.css rejected the same token for the same reason. */
+/* Secondary plus an accent edge, NOT the highlight token. highlight--default is a saturated yellow
+   that keeps its own value in both themes while the row's text does not - so the selected row was
+   the one row on the view you could not read, and it collided with the gold the warnings own. */
 .console-plan-list__item[aria-current="true"] {
   background: var(--pf-t--global--background--color--secondary--hover);
-  box-shadow: inset 2px 0 0 var(--console-accent);
+  border-inline-start-color: var(--console-accent);
 }
-/* The mark is the non-color channel: the state is readable from the two or four letters alone. */
+/* The mark is the shape half of the state: an icon in the state's colour, with the word in the meta
+   line beside it. */
 .console-plan-list__mark {
-  flex: 0 0 2.1rem;
+  grid-area: mark;
   color: var(--console-plan-state, inherit);
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
 .console-plan-list__id {
-  flex: 1 1 auto;
+  grid-area: id;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--pf-t--global--font--family--mono);
 }
 .console-plan-list__meta {
-  flex: 0 0 auto;
-  display: inline-flex;
-  gap: var(--pf-t--global--spacer--xs);
-  font-size: 0.68rem;
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--pf-t--global--spacer--sm);
+  min-width: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* The two warnings a job can carry: another job claims one of its paths, and nobody has touched it
@@ -230,15 +249,15 @@
   color: var(--console-status-warn-text);
 }
 .console-plan-list__warn {
-  flex: 0 0 auto;
+  grid-area: warn;
   display: inline-flex;
   gap: var(--pf-t--global--spacer--xs);
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
 }
 .console-plan-list__age {
-  flex: 0 0 auto;
-  font-size: 0.66rem;
+  grid-area: age;
+  font-size: var(--pf-t--global--font--size--body--sm);
   font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle);
 }
@@ -264,9 +283,10 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 0.5rem;
+  padding: var(--pf-t--global--spacer--sm);
 }
-.console-plan-stage__svg { width: 100%; height: 100%; min-height: 12rem; }
+/* Sized by plan/main.ts, in pixels, from the viewBox: 1:1 at full size, so 12px type is 12px. */
+.console-plan-stage__svg { display: block; max-width: none; }
 
 .console-plan-edge {
   fill: none;
@@ -306,10 +326,10 @@
 }
 
 .console-plan-node { cursor: pointer; }
-/* FLOATING, not secondary. Secondary is darker than the stage it sits on (#151515 against
-   #292929), so every node read as a hole punched in the view with a colored outline round it -
-   an empty black box, not a card. Floating is the token for a layer lifted ABOVE its ground, in
-   both themes, which is what a node on a canvas is. */
+/* FLOATING, not secondary. Secondary is darker than the stage it sits on, so every node read as a
+   hole punched in the view with a colored outline round it - an empty black box, not a card.
+   Floating is the token for a layer lifted ABOVE its ground, in both themes, which is what a node on
+   a canvas is. */
 .console-plan-node__box {
   fill: var(--pf-t--global--background--color--floating--default);
   stroke: var(--console-plan-state, var(--pf-t--global--border--color--default));
@@ -323,9 +343,7 @@
  *
  * Slow (2.4s) and shallow (down to 0.45), because this runs for as long as the work does - a fast
  * or high-contrast blink beside text somebody is reading is an irritant within a minute. Nothing
- * moves POSITION: the box does not grow, so the pulse cannot be mistaken for the layout shifting
- * under the reader, and the animation is on a property that neither reflows nor repaints its
- * neighbors.
+ * moves POSITION: the box does not grow, so the pulse cannot be mistaken for the layout shifting.
  *
  * The color still says "running" on its own; this only adds emphasis, so a reader who never sees
  * the animation loses nothing. */
@@ -357,35 +375,28 @@
 }
 /* A warned node keeps its state color on the box - the state is still what it is - and turns its
    id gold, so a contested or untouched job is findable in the drawing without reading the list.
-   The words themselves are in the node's title and in the list row beside it; a color on the
-   picture is never the only place a warning is told. */
+   The words themselves are in the list row beside it; a color on the picture is never the only
+   place a warning is told. */
 .console-plan-node[data-warn] .console-plan-node__id,
 .console-plan-node[data-stale] .console-plan-node__id {
   fill: var(--console-status-warn);
 }
+.console-plan-node__mark,
+.console-plan-node__id,
+.console-plan-node__ro,
+.console-plan-node__goal {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+}
 .console-plan-node__mark {
   fill: var(--console-plan-state, var(--pf-t--global--text--color--subtle));
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: 9px;
-  font-weight: 700;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
 }
-.console-plan-node__id {
-  fill: var(--pf-t--global--text--color--regular);
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: 10px;
-}
-.console-plan-node__ro {
-  fill: var(--pf-t--global--text--color--subtle);
-  font-size: 8px;
-}
+.console-plan-node__id { fill: var(--pf-t--global--text--color--regular); }
+.console-plan-node__ro { fill: var(--pf-t--global--text--color--subtle); }
 /* KIND + truncated GOAL, the card's own answer to the same question the list row's meta/goal
-   lines answer. Smaller than the id above it - it is context for the mark and id, not a second
-   headline. */
-.console-plan-node__goal {
-  fill: var(--pf-t--global--text--color--subtle);
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: 8px;
-}
+   lines answer. Quieter than the id above it - it is context for the mark and id. */
+.console-plan-node__goal { fill: var(--pf-t--global--text--color--subtle); }
 
 /* ---- the detail sheet ----------------------------------------------------- */
 
@@ -393,37 +404,39 @@
   grid-area: detail;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.6rem;
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   border-left: 1px solid var(--pf-t--global--border--color--default);
-  font-size: 0.78rem;
+  font-size: var(--pf-t--global--font--size--body--default);
 }
 .console-plan-detail__head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  margin-bottom: var(--pf-t--global--spacer--sm);
 }
 .console-plan-detail__title {
   margin: 0;
   font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.88rem;
+  font-size: var(--pf-t--global--font--size--heading--xs);
   overflow-wrap: anywhere;
 }
 .console-plan-detail__state {
   color: var(--console-plan-state, inherit);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
 }
 .console-plan-detail__ro,
-.console-plan-detail__holder { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
-.console-plan-detail__hint { margin: 0.3rem 0; color: var(--pf-t--global--text--color--subtle); }
-/* The 0.1rem gap is deliberate and applies WITHIN a pair - a label and the value it names should
-   touch. The separation belongs BETWEEN pairs, and it comes from the label's own margin below;
-   with both set to hairlines every field ran into its neighbors and the pane read as one block. */
-.console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
+.console-plan-detail__holder {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-detail__hint { margin: var(--pf-t--global--spacer--xs) 0; color: var(--pf-t--global--text--color--subtle); }
+/* A label and the value it names touch; the separation belongs BETWEEN pairs, and it comes from the
+   label's own margin above. */
+.console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: var(--pf-t--global--spacer--xs); margin: 0; }
 .console-plan-detail__label {
-  margin-top: 0.9rem;
+  margin-top: var(--pf-t--global--spacer--md);
   font-size: var(--console-label-size);
   font-weight: var(--console-label-weight);
   text-transform: uppercase;
@@ -433,7 +446,7 @@
 .console-plan-detail__label:first-child { margin-top: 0; }
 .console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
 .console-plan-detail__runshead {
-  margin: 0.9rem 0 0.2rem;
+  margin: var(--pf-t--global--spacer--md) 0 var(--pf-t--global--spacer--xs);
   font-size: var(--console-label-size);
   font-weight: var(--console-label-weight);
   text-transform: uppercase;
@@ -443,46 +456,46 @@
 /* The released paths: what the lease gave up, and which version of it the next one inherits. Two
    lines per entry so a long path never squeezes the digest it has to be compared against. */
 .console-plan-detail__releases { margin: 0; padding: 0; list-style: none; }
-.console-plan-detail__release { display: flex; flex-direction: column; padding: 0.15rem 0; }
-.console-plan-detail__releasepath { font-size: 0.74rem; overflow-wrap: anywhere; }
+.console-plan-detail__release { display: flex; flex-direction: column; padding: var(--pf-t--global--spacer--xs) 0; }
+.console-plan-detail__releasepath { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
 .console-plan-detail__releasedigest {
   font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.66rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The declared completion gates: an id, the kind+expect pair that says what must be true, and the
-   subject (a check rendered as its command, a path glob, or a symbol) as its own line below - the
-   same two-tier shape the released-paths list uses, for the same reason (a long check command
-   must not squeeze the id it belongs to). */
+/* The declared goals: an id, the kind+expect pair that says what must be true, and the subject (a
+   check rendered as its command, a path glob, or a symbol) as its own line below - the same two-tier
+   shape the released-paths list uses, for the same reason (a long check command must not squeeze the
+   id it belongs to). */
 .console-plan-detail__gates { margin: 0; padding: 0; list-style: none; }
-.console-plan-detail__gate { display: flex; flex-direction: column; padding: 0.2rem 0; }
-.console-plan-detail__gateid { font-size: 0.74rem; overflow-wrap: anywhere; }
-.console-plan-detail__gatecond { font-size: 0.66rem; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__gate { display: flex; flex-direction: column; padding: var(--pf-t--global--spacer--xs) 0; }
+.console-plan-detail__gateid { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
+.console-plan-detail__gatecond { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-plan-detail__gatesubject {
-  margin: 0.1rem 0 0;
+  margin: var(--pf-t--global--spacer--xs) 0 0;
   font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.7rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   overflow-wrap: anywhere;
 }
-/* Unresolved risks are prose a holder wrote, not paths - a plain bulleted list rather than the
-   chip treatment pathField gives something a reader searches or compares. */
-.console-plan-detail__risks { margin: 0; padding-inline-start: 1.1rem; }
-.console-plan-detail__risk { font-size: 0.74rem; overflow-wrap: anywhere; padding: 0.1rem 0; }
+/* Unresolved risks are prose a holder wrote, not paths - a plain bulleted list rather than the chip
+   treatment pathField gives something a reader searches or compares. */
+.console-plan-detail__risks { margin: 0; padding-inline-start: var(--pf-t--global--spacer--lg); }
+.console-plan-detail__risk { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; padding: var(--pf-t--global--spacer--xs) 0; }
 .console-plan-detail__runlist { margin: 0; padding: 0; list-style: none; }
 .console-plan-detail__run {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
-  padding: 0.25rem 0;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: var(--pf-t--global--spacer--xs) 0;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-plan-detail__runtitle { font-size: 0.74rem; overflow-wrap: anywhere; }
-.console-plan-detail__runmeta { font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__runtitle { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
+.console-plan-detail__runmeta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-plan-detail__run[data-outcome="fail"] .console-plan-detail__runtitle {
-  color: var(--console-status-danger);
+  color: var(--console-status-danger-text);
 }
 .console-plan-detail__run[data-outcome="pass"] .console-plan-detail__runtitle {
-  color: var(--console-status-ok);
+  color: var(--console-status-ok-text);
 }
 
 /* The live feed: what the selected job's holder is doing right now, as opposed to everything
@@ -503,10 +516,10 @@
 }
 .console-plan-feed__row {
   display: flex;
-  gap: 0.4rem;
+  gap: var(--pf-t--global--spacer--sm);
   align-items: baseline;
-  padding: 0.12rem 0;
-  font-size: 0.7rem;
+  padding: var(--pf-t--global--spacer--xs) 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
 }
 .console-plan-feed__time {
   color: var(--pf-t--global--text--color--subtle);
@@ -526,11 +539,11 @@
 }
 /* A deny, an ask, a failed run, a contested path. The only rows worth interrupting a worker over
    are the ones this marks, which is the point of marking them. */
-.console-plan-feed__row[data-bad] .console-plan-feed__mark { color: var(--console-status-danger); }
+.console-plan-feed__row[data-bad] .console-plan-feed__mark { color: var(--console-status-danger-text); }
 
-/* One column on a phone: the drawing is the first thing to go, since the list carries the same
-   nodes with the same states in words. */
-@media (max-width: 900px) {
+/* One column in a narrow pane: the drawing is the first thing to go, since the list carries the same
+   nodes with the same states in words. The question is how wide THIS pane is, not the window. */
+@container dashboard (max-width: 56rem) {
   .console-plan-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -547,14 +560,14 @@
 /* Collapsed, the index gives its column back to the stage and leaves only the reopen rail, the
    same affordance the diff's file index and the activity trail's event index use. */
 .console-plan-layout[data-tree="collapsed"] {
-  grid-template-columns: auto minmax(0, 1fr) 20rem;
+  grid-template-columns: auto minmax(0, 1fr) 22rem;
 }
 
 .console-plan-tree__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.35rem;
+  gap: var(--pf-t--global--spacer--xs);
   min-block-size: var(--console-app-head-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
@@ -567,18 +580,7 @@
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-plan-tree__toggle,
-.console-plan-reopen {
-  border: 0;
-  background: none;
-  color: var(--pf-t--global--text--color--subtle);
-  cursor: pointer;
-  font-size: 0.9rem;
-  line-height: 1;
-  padding: 0.2rem 0.3rem;
-}
-.console-plan-tree__toggle:hover,
-.console-plan-reopen:hover { color: var(--pf-t--global--text--color--regular); }
+/* The toggle and the reopen rail are PF plain buttons, so they have PF's hit area and focus ring. */
 .console-plan-reopen {
   grid-area: tree;
   align-self: stretch;
@@ -588,8 +590,6 @@
 .console-plan-reopen[hidden] { display: none; }
 
 /* ---- stage controls -------------------------------------------------------- */
-
-
 
 /* Grab, so the drawing announces that it can be dragged before anybody tries. */
 .console-plan-stage { cursor: grab; }

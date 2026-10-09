@@ -61,6 +61,8 @@ import { mountZoomControl, type ZoomControl } from "../../../desktop/zoomControl
 import { registerCommand, unregisterCommand } from "../../../desktop/commands";
 import { openApp } from "../../../desktop/app-navigation";
 import { h } from "../../../desktop/view";
+import { reportFailure } from "../../../lib/notifications";
+import { statusIcon, type Status as StatusShape } from "../../../ui/status";
 import {
   renderConnectPrompt,
   renderEmptyMessage,
@@ -98,6 +100,7 @@ import {
   NODE_W,
   STATE_LABEL,
   STATE_MARK,
+  STATE_STATUS,
   type JobClient,
   type JobTree,
   type RunJoin,
@@ -109,6 +112,7 @@ import {
   runPlanUrl,
   RUN_STATE_LABEL,
   RUN_STATE_MARK,
+  RUN_STATE_STATUS,
   type RunPlanModel,
 } from "./run";
 
@@ -197,7 +201,7 @@ const COMMANDS: readonly {
   },
   {
     id: "jobs.zoom.reset",
-    label: "Jobs: fit the drawing to the pane",
+    label: "Jobs: draw the graph at full size",
     keys: ["0"],
     run: (c) => c.zoomReset(),
   },
@@ -271,6 +275,8 @@ interface DrawnNode {
   // The data-state value. plan.css maps it to a color; the two sources' vocabularies do not
   // overlap except where they mean the same thing (running, pass, fail).
   readonly state: string;
+  // The shape that stands beside the state's word on a row (ui/status.ts).
+  readonly status: StatusShape;
   readonly mark: string;
   readonly label: string;
   // What is drawn in the box and read in the list row. Usually the id.
@@ -333,6 +339,7 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
     nodes.push({
       id: n.id,
       state: n.state,
+      status: STATE_STATUS[n.state],
       mark: STATE_MARK[n.state],
       label: STATE_LABEL[n.state],
       text: n.id,
@@ -362,6 +369,7 @@ function targetsDrawn(model: RunPlanModel): Drawn {
     nodes: model.nodes.map((n) => ({
       id: n.id,
       state: n.state,
+      status: RUN_STATE_STATUS[n.state],
       mark: RUN_STATE_MARK[n.state],
       label: RUN_STATE_LABEL[n.state],
       text: n.id,
@@ -396,6 +404,19 @@ function targetsDrawn(model: RunPlanModel): Drawn {
 // answers hold the next tick's place forever.
 function deadline(signal: AbortSignal): AbortSignal {
   return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+}
+
+// reportTimeout toasts a read that ran out of time. The transport is silent about an abort, since a
+// superseded read is not a failure, so the deadline's own expiry is told here: the signal says
+// which of its two halves fired.
+function reportTimeout(limit: AbortSignal, what: string): void {
+  if (!limit.aborted || !(limit.reason instanceof DOMException)) return;
+  if (limit.reason.name !== "TimeoutError") return;
+  reportFailure(
+    "Jobs",
+    what + " did not answer within " + FETCH_TIMEOUT_MS / 1000 + "s.",
+    "plan:timeout:" + what,
+  );
 }
 
 // why is what a failed read contributes to the sentence a reader sees. An aborted or timed-out read
@@ -529,10 +550,6 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
     btn.type = "button";
     btn.dataset.source = s;
-    btn.title =
-      s === "jobs"
-        ? "Every job this server knows about, its own and the ones sessions hold"
-        : "The target DAG magus resolves, following the live run";
     btn.append(h("span", "pf-v6-c-toggle-group__text", SOURCE_LABEL[s]));
     item.append(btn);
     sourceGroup.append(item);
@@ -576,17 +593,23 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const tree = h("nav", "console-plan-tree");
   const treeHead = h("div", "console-plan-tree__head");
   const treeTitle = h("span", "console-plan-tree__heading", "Jobs");
-  const treeHide = h("button", "console-plan-tree__toggle") as HTMLButtonElement;
+  // Both are PF plain buttons, so each has PF's hit area; the chevron is the icon and the name says
+  // what pressing it does.
+  const treeHide = h(
+    "button",
+    "pf-v6-c-button pf-m-plain console-plan-tree__toggle",
+  ) as HTMLButtonElement;
   treeHide.type = "button";
-  treeHide.title = "Hide the index";
   treeHide.setAttribute("aria-label", "Hide the index");
-  treeHide.textContent = "‹";
+  treeHide.append(h("span", "pf-v6-c-button__icon", "‹"));
   treeHead.append(treeTitle, treeHide);
-  const treeReopen = h("button", "console-plan-reopen") as HTMLButtonElement;
+  const treeReopen = h(
+    "button",
+    "pf-v6-c-button pf-m-plain console-plan-reopen",
+  ) as HTMLButtonElement;
   treeReopen.type = "button";
-  treeReopen.title = "Show the index";
   treeReopen.setAttribute("aria-label", "Show the index");
-  treeReopen.textContent = "›";
+  treeReopen.append(h("span", "pf-v6-c-button__icon", "›"));
   const list = h("ul", "console-plan-list");
   list.setAttribute("role", "list");
   tree.append(treeHead, list);
@@ -624,7 +647,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 
   const empty = h("div", "pf-v6-c-empty-state console-plan-empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Reading the jobs");
+  const emptyTitle = h("h2", "pf-v6-c-empty-state__title-text", "Reading the jobs");
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
   const emptyMessage = h("p", undefined, "");
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
@@ -1016,6 +1039,11 @@ export function activate(host: HTMLElement): JobsInstance {
       // The button goes back to pressable, because the reader can retry and a dead button says
       // nothing.
       state.textContent = "could not run " + node.id + ": " + outcome.detail;
+      reportFailure(
+        "Jobs",
+        "Could not run " + node.id + ": " + outcome.detail,
+        "job:run:" + node.id,
+      );
       btn.disabled = false;
       return;
     }
@@ -1034,22 +1062,26 @@ export function activate(host: HTMLElement): JobsInstance {
       // from here.
       btn.style.setProperty("--console-plan-depth", String(n.depth));
       if (n.id === selected) btn.setAttribute("aria-current", "true");
-      const mark = h("span", "console-plan-list__mark", n.mark);
+      // The mark is the shape half of the state: an icon the Alert and the status marks share, with
+      // the word beside it in the meta line. It is decoration for a reader that cannot see it, so
+      // it is hidden from them and the word is not said twice.
+      const mark = h("span", "console-plan-list__mark");
       mark.dataset.state = n.state;
+      mark.append(statusIcon(n.status));
       const idEl = h("span", "console-plan-list__id", n.text);
       const metaEl = h("span", "console-plan-list__meta");
       for (const item of n.meta) metaEl.append(h("span", "console-plan-list__meta-item", item));
-      btn.append(mark, idEl, metaEl);
+      // The id has the first line to itself; everything about the job follows it.
+      btn.append(mark, idEl);
+      // Filled by syncAges rather than here: age moves on its own, and rebuilding this list to
+      // advance a clock would take the focus off whatever row a reader is standing on.
+      btn.append(h("span", "console-plan-list__age"), metaEl);
       if (n.warn.length) {
         btn.dataset.warn = "";
         const warning = h("span", "console-plan-list__warn");
         for (const item of n.warn) warning.append(h("span", "console-plan-list__warn-item", item));
         btn.append(warning);
       }
-      // Filled by syncAges rather than here: age moves on its own, and rebuilding this list to
-      // advance a clock would take the focus off whatever row a reader is standing on.
-      btn.append(h("span", "console-plan-list__age"));
-      btn.title = `${n.id}: ${n.label}`;
       li.append(btn);
       // The Run control is a SIBLING of the selecting button, not a child of it: a button inside a
       // button is not markup a browser will honor. Only what the server holds gets one.
@@ -1176,19 +1208,21 @@ export function activate(host: HTMLElement): JobsInstance {
       // the node read as a bare rectangle beside PatternFly's rounded cards and chips, which is
       // the deviation - not a softer corner.
       box.setAttribute("rx", "6");
+      // Text sits on baselines inside the box: 12px type, so the first row is a line above centre
+      // and the second a line below it.
       const mark = svgEl("text", "console-plan-node__mark");
       mark.setAttribute("x", String(-NODE_W / 2 + 8));
-      mark.setAttribute("y", "-3");
+      mark.setAttribute("y", "-4");
       mark.textContent = n.mark;
       const label = svgEl("text", "console-plan-node__id");
-      label.setAttribute("x", String(-NODE_W / 2 + 46));
-      label.setAttribute("y", "-3");
-      label.textContent = trunc(n.text, 17);
+      label.setAttribute("x", String(-NODE_W / 2 + 50));
+      label.setAttribute("y", "-4");
+      label.textContent = trunc(n.text, 15);
       g.append(title, box, mark, label);
       if (n.readOnly) {
         const ro = svgEl("text", "console-plan-node__ro");
-        ro.setAttribute("x", String(NODE_W / 2 - 6));
-        ro.setAttribute("y", "-3");
+        ro.setAttribute("x", String(NODE_W / 2 - 8));
+        ro.setAttribute("y", "-4");
         ro.setAttribute("text-anchor", "end");
         ro.textContent = "ro";
         g.append(ro);
@@ -1202,13 +1236,16 @@ export function activate(host: HTMLElement): JobsInstance {
       if (goalText) {
         const goal = svgEl("text", "console-plan-node__goal");
         goal.setAttribute("x", String(-NODE_W / 2 + 8));
-        goal.setAttribute("y", "13");
-        goal.textContent = trunc(goalText, 28);
+        goal.setAttribute("y", "15");
+        goal.textContent = trunc(goalText, 23);
         g.append(goal);
       }
       return g;
     });
     refs.nodeLayer.replaceChildren(...nodes);
+    // 1:1 with the viewBox, so the type is its stylesheet size however the pane is shaped; zoom
+    // scales from here and the stage scrolls.
+    applyZoom();
   };
 
   const renderJobDetail = (): void => {
@@ -1224,8 +1261,12 @@ export function activate(host: HTMLElement): JobsInstance {
     }
     const head = h("div", "console-plan-detail__head");
     head.append(h("h2", "console-plan-detail__title", n.id));
-    const state = h("span", "console-plan-detail__state", STATE_LABEL[n.state]);
+    const state = h("span", "console-plan-detail__state");
     state.dataset.state = n.state;
+    state.append(
+      statusIcon(STATE_STATUS[n.state]),
+      document.createTextNode(" " + STATE_LABEL[n.state]),
+    );
     head.append(state);
     if (HOLDER_LABEL[n.holder]) {
       head.append(h("span", "console-plan-detail__holder", HOLDER_LABEL[n.holder] + " job"));
@@ -1336,8 +1377,12 @@ export function activate(host: HTMLElement): JobsInstance {
     }
     const head = h("div", "console-plan-detail__head");
     head.append(h("h2", "console-plan-detail__title", n.id));
-    const state = h("span", "console-plan-detail__state", RUN_STATE_LABEL[n.state]);
+    const state = h("span", "console-plan-detail__state");
     state.dataset.state = n.state;
+    state.append(
+      statusIcon(RUN_STATE_STATUS[n.state]),
+      document.createTextNode(" " + RUN_STATE_LABEL[n.state]),
+    );
     head.append(state);
 
     const dl = h("dl", "console-plan-detail__fields");
@@ -1544,11 +1589,13 @@ export function activate(host: HTMLElement): JobsInstance {
 
   const refreshJobs = async (serverHost: string): Promise<void> => {
     const token = beginRead("jobs");
+    const limit = deadline(token.signal);
     const [read, feeds] = await Promise.all([
-      listJobs(ensureClient(serverHost), deadline(token.signal)),
+      listJobs(ensureClient(serverHost), limit),
       activityRows(serverHost, token.signal),
     ]);
     if (!fresh(token)) return;
+    reportTimeout(limit, "The job list");
     feedsUnread = feeds.unread;
     if (read.kind === "denied") {
       if (settleSource(false)) return refreshTargets(serverHost);
@@ -1606,13 +1653,15 @@ export function activate(host: HTMLElement): JobsInstance {
 
   const refreshTargets = async (serverHost: string): Promise<void> => {
     const token = beginRead("targets");
-    const read = await loadRunPlan(serverHost, targetOverride, deadline(token.signal));
+    const limit = deadline(token.signal);
+    const read = await loadRunPlan(serverHost, targetOverride, limit);
     if (!fresh(token)) return;
+    reportTimeout(limit, "The target plan");
     if (read.kind === "absent") {
       blank();
       showEmpty(
         "No target plan endpoint",
-        "No target plan endpoint; this view lights up when the server serves /api/v1/plan.",
+        "This server does not serve a target plan. The view fills in once it serves /api/v1/plan.",
       );
       setSummary("No target plan endpoint.");
       return;
@@ -1636,7 +1685,7 @@ export function activate(host: HTMLElement): JobsInstance {
           runPlanUrl(serverHost, targetOverride) +
           " did not answer (" +
           read.detail +
-          "). If this server predates the target plan the route is not there yet; this view lights up when the server serves /api/v1/plan.",
+          "). If this server predates the target plan, the route is not there yet.",
       );
       setSummary("Could not read the target plan.");
       return;
@@ -1725,16 +1774,8 @@ export function activate(host: HTMLElement): JobsInstance {
     const w = parts[2];
     const h = parts[3];
     if (!w || !h) return;
-    if (zoom === 1) {
-      // Back to fitting the pane: drop the inline sizes and let the stylesheet's 100% govern
-      // again, rather than freezing the drawing at whatever the pane happened to be.
-      refs.stage.style.removeProperty("width");
-      refs.stage.style.removeProperty("height");
-      return;
-    }
-    const box = refs.stageBox.getBoundingClientRect();
-    refs.stage.style.width = `${Math.round(box.width * zoom)}px`;
-    refs.stage.style.height = `${Math.round(box.height * zoom)}px`;
+    refs.stage.style.width = `${Math.round(w * zoom)}px`;
+    refs.stage.style.height = `${Math.round(h * zoom)}px`;
   };
   const setZoom = (next: number): void => {
     const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next * 100) / 100));

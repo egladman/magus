@@ -4,8 +4,8 @@
 
 import type { DashboardState, RemoteView } from "../state";
 import { fmtBytes, fmtCount, fmtDur, fmtPct } from "../state";
-import { StatStrip } from "./widgets";
-import { Card, type Tile } from "./card";
+import { factList, type Fact } from "./widgets";
+import { Card, h, type Tile } from "./card";
 
 export function remoteTile(): Tile {
   const card = new Card("remote", "Remote cache", {
@@ -16,35 +16,37 @@ export function remoteTile(): Tile {
       "Whether the team shares build results or everyone pays for the same work. A low remote hit" +
       " rate means keys are not matching across machines. Errors mean the round trip bought nothing.",
   });
-  const strip = new StatStrip([
-    { key: "hits", label: "Hits", accent: "hit" },
-    { key: "misses", label: "Misses", accent: "miss" },
-    { key: "errors", label: "Errors", accent: "err" },
-    { key: "rate", label: "Hit rate", accent: "rate" },
-    { key: "p50", label: "Transfer p50", accent: "size" },
-    { key: "p95", label: "Transfer p95", accent: "size" },
-    { key: "io", label: "IO ops", accent: "info" },
-    { key: "bytes", label: "Bytes moved", accent: "info" },
-  ]);
-  card.body.append(strip.el);
+  const body = h("div", "console-dashboard-facts");
+  card.body.append(body);
 
+  let painted = "";
   function render(r: RemoteView): void {
-    strip.set("hits", fmtCount(r.hits));
-    strip.set("misses", fmtCount(r.misses));
-    strip.set("errors", fmtCount(r.errors));
-    strip.set("rate", fmtPct(r.hitRate));
-    strip.set("p50", fmtDur(r.durationP50Seconds));
-    strip.set("p95", fmtDur(r.durationP95Seconds));
-    strip.set("io", fmtCount(r.ioCount));
-    strip.set("bytes", fmtBytes(r.bytesTotal));
+    card.setEmpty(null);
+    const rows: Fact[] = [
+      { term: "Hits", value: fmtCount(r.hits) },
+      { term: "Misses", value: fmtCount(r.misses) },
+      { term: "Errors", value: fmtCount(r.errors) },
+      { term: "Hit rate", value: fmtPct(r.hitRate) },
+      { term: "Transfer p50", value: fmtDur(r.durationP50Seconds) },
+      { term: "Transfer p95", value: fmtDur(r.durationP95Seconds) },
+      { term: "IO operations", value: fmtCount(r.ioCount) },
+      { term: "Bytes moved", value: fmtBytes(r.bytesTotal) },
+    ];
+    const signature = JSON.stringify(rows.map((f) => f.value));
+    if (signature === painted) return;
+    painted = signature;
+    body.replaceChildren(factList(rows, 2));
   }
 
   return {
     el: card.el,
     update(s: DashboardState) {
       const r = s.metrics?.remote;
-      card.el.hidden = !r;
       if (r) render(r);
+      else
+        card.setEmpty(
+          "No remote cache traffic has been reported. Configure a remote cache to see it here.",
+        );
     },
     destroy() {},
   };

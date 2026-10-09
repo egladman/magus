@@ -29,7 +29,13 @@
 // may never consider the tab visible, that distinction is the difference between a panel and a
 // blank rectangle.
 
-import { viewMode } from "./bigPicture";
+import { rotationPaused, viewMode } from "./bigPicture";
+
+// hasContent is false for a panel with nothing to show: a tile marks itself [data-empty] when it
+// has no data yet, and a hidden one is out of the board altogether.
+function hasContent(panel: HTMLElement): boolean {
+  return !panel.hidden && !panel.hasAttribute("data-empty");
+}
 
 // How long each panel holds the slot. Long enough to actually read a chart from across a room -
 // anything under about ten seconds reads as a slideshow rather than as a display.
@@ -61,21 +67,19 @@ export function mountRotator(panels: HTMLElement[], opts: RotatorOptions): Rotat
     panels.forEach((p, i) => p.toggleAttribute("data-rotate-active", i === index));
   }
 
-  // A panel that has nothing to show must not take a turn. Several tiles hide THEMSELVES when they
-  // have no data (services, remote and config all set their own .hidden inside update()), and
-  // rotating to one of those would park the slot on an empty rectangle for a full dwell - which
-  // reads as the board being broken rather than as the panel being empty.
+  // A panel that has nothing to show must not take a turn: parking the slot on an empty state for a
+  // full dwell reads as the board being broken rather than as the panel being empty.
   function nextIndex(from: number): number {
     for (let step = 1; step <= panels.length; step++) {
       const candidate = (from + step) % panels.length;
-      if (!panels[candidate].hidden) return candidate;
+      if (hasContent(panels[candidate])) return candidate;
     }
     return from; // every member is empty: hold where we are rather than flicker
   }
 
   function tick(): void {
     if (viewMode.get() !== "bigPicture") return;
-    if (hovering) return;
+    if (hovering || rotationPaused.get()) return;
     if (opts.paused()) return;
     const next = nextIndex(index);
     if (next === index) return;
@@ -105,7 +109,7 @@ export function mountRotator(panels: HTMLElement[], opts: RotatorOptions): Rotat
   // board does not resume mid-cycle on whatever happened to be showing an hour ago.
   const unbind = viewMode.subscribe((mode) => {
     if (mode !== "bigPicture") return;
-    index = panels.findIndex((p) => !p.hidden);
+    index = panels.findIndex(hasContent);
     if (index < 0) index = 0;
     paint();
   });

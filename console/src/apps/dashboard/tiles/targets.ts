@@ -5,7 +5,7 @@
 import type { DashboardState, TargetStatView } from "../state";
 import { fmtCount, fmtDur, fmtPct } from "../state";
 import { SortableTable, type Column } from "../../../ui/table";
-import { Card, type Tile } from "./card";
+import { Card, tableScroller, type Tile } from "./card";
 
 const columns: Column<TargetStatView>[] = [
   {
@@ -76,9 +76,11 @@ export function targetsTile(): Tile {
       " slow target that always hits cache costs nothing, while a fast miss is paid every run.",
   });
   const table = new SortableTable<TargetStatView>(columns, {
+    label: "Per-target run counts, latency and cache hits",
     sortKey: "count",
     emptyText: "No target runs recorded yet.",
   });
+  tableScroller(table.el, "Per-target statistics, scrolls sideways");
   card.body.append(table.el);
 
   return {

@@ -5,7 +5,7 @@
 import type { DashboardState, McpToolView } from "../state";
 import { fmtBytes, fmtCount, fmtDur } from "../state";
 import { SortableTable, type Column } from "../../../ui/table";
-import { Card, type Tile } from "./card";
+import { Card, tableScroller, type Tile } from "./card";
 
 const columns: Column<McpToolView>[] = [
   { key: "tool", label: "Tool", text: (r) => r.tool, sort: (r) => r.tool },
@@ -87,9 +87,11 @@ export function mcpTile(): Tile {
     note: "tool I/O and latency",
   });
   const table = new SortableTable<McpToolView>(columns, {
+    label: "MCP tool calls, payload sizes and latency",
     sortKey: "calls",
     emptyText: "No MCP tool calls recorded yet.",
   });
+  tableScroller(table.el, "MCP tool calls, scrolls sideways");
   card.body.append(table.el);
 
   return {

@@ -101,6 +101,45 @@ test("an unreachable server is asked once, and again only on Retry", async () =>
   assert.equal(title(), "Could not reach the server");
 });
 
+// The page's structure, for a reader that navigates by it: one h1 for the app, no landmark that holds
+// a single button, and the way back from the Jobs view in the app bar beside the other link.
+test("the scaffold has one h1, a bar and no one-button navigation landmarks", () => {
+  document.body.innerHTML = scaffold;
+  assert.equal(document.querySelectorAll("h1").length, 1);
+  assert.equal(document.querySelectorAll("nav").length, 0);
+  const bar = document.querySelector(".console-dashboard-related");
+  assert.ok(bar?.contains(document.getElementById("dash-jobs-back")));
+  assert.equal(document.getElementById("dash-jobs-back")?.hidden, true);
+});
+
+// A bare letter runs a command only while focus is on the page itself. Inside a control it belongs
+// to that control, and a reader has no way to turn it off (WCAG 2.1.4); the palette runs the same
+// commands by name.
+test("p opens the Jobs view from the page but not from inside a control", async () => {
+  location.hash = "#demo";
+  try {
+    mount();
+    await settle();
+    const main = document.getElementById("dash-main") as HTMLElement;
+    const link = document.querySelector<HTMLElement>('[data-open-app="diff"]');
+    assert.ok(link);
+
+    link.dispatchEvent(new KeyboardEvent("keydown", { key: "p", bubbles: true, cancelable: true }));
+    assert.equal(main.dataset.mode, "overview", "a keypress on a button is the button's");
+
+    main.dispatchEvent(new KeyboardEvent("keydown", { key: "p", bubbles: true, cancelable: true }));
+    assert.equal(main.dataset.mode, "jobs");
+    assert.equal(document.getElementById("dash-jobs-back")?.hidden, false);
+
+    document
+      .getElementById("dash-jobs-back")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    assert.equal(main.dataset.mode, "overview");
+  } finally {
+    location.hash = "";
+  }
+});
+
 // The console served BY the server carries no #port and, on first use, no Settings address. The
 // shell adopts the page's origin as the server, but that flag is per-bundle, so the dashboard has to
 // adopt it itself; before it did, a signed-in dashboard on http://localhost:7391 sat on "No server

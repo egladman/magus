@@ -61,17 +61,24 @@ export function latencyTile(): Tile {
     const fig = h("figure", "console-dashboard-chart");
     fig.append(h("figcaption", undefined, LAT_META[k].label));
     const plot = h("div", "console-dashboard-chart__plot");
-    const ro = h("div", "console-dashboard-chart__readout", "no data yet");
+    // The canvas is a picture: it takes a name and the exact values come as the text beside it.
+    plot.setAttribute("role", "img");
+    plot.setAttribute(
+      "aria-label",
+      LAT_META[k].label + " latency over time, p50 p95 and p99. The readout below has the figures.",
+    );
+    const ro = h("p", "console-dashboard-chart__readout", "no data yet");
     fig.append(plot, ro);
     gridEl.append(fig);
     readouts[k] = ro;
     charts[k] = new TimeChart(plot, {
-      // Dash, not just hue, tells the three lines apart in greyscale or for a colorblind reader -
-      // solid/dashed/dotted, matching p50 through p99's rising severity.
+      // PF's chart palette, not the status colours: a percentile is not a severity, and p95 in the
+      // warning gold and p99 in the danger red read as the chart reporting trouble. Dash, not just
+      // hue, still tells the three lines apart in greyscale or for a colourblind reader.
       series: [
-        { label: "p50", colorVar: "--console-status-running" },
-        { label: "p95", colorVar: "--console-status-warn", dash: [6, 3] },
-        { label: "p99", colorVar: "--console-status-danger", dash: [1, 3] },
+        { label: "p50", colorVar: "--pf-t--global--color--nonstatus--blue--300" },
+        { label: "p95", colorVar: "--pf-t--global--color--nonstatus--teal--300", dash: [6, 3] },
+        { label: "p99", colorVar: "--pf-t--global--text--color--regular", dash: [1, 3] },
       ],
       yFormat: (v) => fmtDur(v),
       ySize: 54,
@@ -98,7 +105,7 @@ export function latencyTile(): Tile {
     }
     charts[k].setData(aligned(d));
     readouts[k].textContent =
-      `count ${fmtCount(lat.count)} - p50 ${fmtDur(lat.p50Seconds)} - p95 ${fmtDur(lat.p95Seconds)} - p99 ${fmtDur(lat.p99Seconds)} - max ${fmtDur(lat.maxSeconds)}`;
+      `count ${fmtCount(lat.count)}, p50 ${fmtDur(lat.p50Seconds)}, p95 ${fmtDur(lat.p95Seconds)}, p99 ${fmtDur(lat.p99Seconds)}, max ${fmtDur(lat.maxSeconds)}`;
   }
 
   const onResize = resizeAll;

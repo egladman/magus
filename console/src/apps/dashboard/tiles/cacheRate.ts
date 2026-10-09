@@ -25,9 +25,14 @@ export function cacheRateTile(): Tile {
     },
   });
   const plot = h("div", "console-dashboard-chart__plot");
-  const legend = h("div", "console-dashboard-chart__legend");
-  legend.append(h("span", "console-dashboard-legend console-dashboard-legend--hit", "hit rate"));
-  card.body.append(plot, legend);
+  // The canvas is a picture: it takes a name and the figure comes as the text beside it.
+  plot.setAttribute("role", "img");
+  plot.setAttribute(
+    "aria-label",
+    "Cache hit rate over time. The readout below has the latest figure.",
+  );
+  const readout = h("p", "console-dashboard-chart__readout", "No cache activity yet.");
+  card.body.append(plot, readout);
 
   chart = new TimeChart(plot, {
     series: [
@@ -39,7 +44,7 @@ export function cacheRateTile(): Tile {
       },
     ],
     yFormat: (v) => v + "%",
-    ySize: 44,
+    ySize: 56,
     yRange: [0, 100],
   });
 
@@ -56,7 +61,15 @@ export function cacheRateTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       chart.build(); // idempotent; defers itself until the container is visible
-      chart.setData(derive(s.samples));
+      const data = derive(s.samples);
+      chart.setData(data);
+      const rates = data[1] as (number | null)[];
+      const latest = [...rates].reverse().find((r): r is number => r != null);
+      const text =
+        latest == null
+          ? "No cache activity yet."
+          : "Latest interval: " + latest.toFixed(0) + "% hit rate.";
+      if (readout.textContent !== text) readout.textContent = text;
     },
     destroy() {
       window.removeEventListener("resize", onResize);

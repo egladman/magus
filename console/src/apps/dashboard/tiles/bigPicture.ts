@@ -168,60 +168,60 @@ export function toggleBigPicture(): void {
   else enterBigPicture();
 }
 
-// dashboardHeader is the dashboard's always-visible chrome row - not a Card, sitting above the
-// panels (like the attention hero). It holds the active-workspace picker (left, only past a
-// single workspace) and the Big Picture button (right, always present).
+// rotationPaused is the reader's hold on the rotating slot (tiles/rotator.ts). Panels that change
+// by themselves need a way to stop, and it is shared so the control in the exit strip and the
+// rotator that obeys it cannot disagree. A reader who has asked the OS for reduced motion starts
+// paused.
+export const rotationPaused = signal<boolean>(
+  typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches,
+);
+
+// dashboardHeader is the dashboard's always-visible chrome row - not a Card, sitting at the
+// trailing edge of the app bar. It holds the Big Picture button and, inside the mode, the control
+// that pauses the rotating panel.
+//
+// The Big Picture button is an ordinary secondary button whose name never changes. Inside the mode
+// it is the way out and aria-pressed says it is on, so the label does not also have to flip: a
+// label and a pressed state each saying "on" is two answers to one question.
 export function dashboardHeader(): Tile {
   const root = h("div", "console-dashboard-viewbar");
-  root.setAttribute("aria-label", "Dashboard controls");
+  root.setAttribute("role", "group");
+  root.setAttribute("aria-label", "Dashboard view");
   root.dataset.controlSize = "default";
 
-  const viewWrap = h("div", "console-dashboard-viewbar__view");
-  const viewLabel = h("span", "console-dashboard-viewbar__label", "View");
-  const viewGroup = h("div", "pf-v6-c-toggle-group");
-  viewGroup.setAttribute("role", "group");
-  const viewItem = h("div", "pf-v6-c-toggle-group__item");
-  const bigPictureBtn = document.createElement("button");
+  const bigPictureBtn = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary console-dashboard-viewbar__bigpicture",
+  );
   bigPictureBtn.type = "button";
-  bigPictureBtn.className = "pf-v6-c-toggle-group__button console-dashboard-viewbar__bigpicture";
-  bigPictureBtn.title = "Present this dashboard full-screen, with no console chrome";
   const btnIcon = h("span", "pf-v6-c-button__icon pf-m-start");
   btnIcon.append(bigPictureIcon());
-  // The label is what makes the control self-describing, so it carries the accessible name and the
-  // aria-label is dropped rather than duplicating it (a label plus an aria-label that says the same
-  // thing is just two names for one control, and screen readers announce the override).
-  const btnText = h("span", "pf-v6-c-toggle-group__text", "Big Picture");
-  bigPictureBtn.append(btnIcon, btnText);
+  bigPictureBtn.append(btnIcon, h("span", "pf-v6-c-button__text", "Big Picture"));
   bigPictureBtn.addEventListener("click", () => toggleBigPicture());
-  viewItem.append(bigPictureBtn);
-  viewGroup.append(viewItem);
-  viewWrap.append(viewLabel, viewGroup);
-  root.append(viewWrap);
+
+  const pauseBtn = h("button", "pf-v6-c-button pf-m-secondary console-dashboard-viewbar__rotation");
+  pauseBtn.type = "button";
+  pauseBtn.append(h("span", "pf-v6-c-button__text", "Pause rotation"));
+  pauseBtn.addEventListener("click", () => rotationPaused.set(!rotationPaused.get()));
+  root.append(pauseBtn, bigPictureBtn);
 
   const unbindViewMode = bind(viewMode, (mode) => {
     const active = mode === "bigPicture";
     bigPictureBtn.setAttribute("aria-pressed", String(active));
     bigPictureBtn.toggleAttribute("data-active", active);
-    bigPictureBtn.classList.toggle("pf-m-selected", active);
-    // Inside the mode this is the ONLY way out that does not require guessing, because the button
-    // is all that the hover-reveal exit strip contains and Escape does nothing when the mode was
-    // entered by route rather than by fullscreen. So it says what it will do, not what mode you are
-    // in: a control still reading "Big Picture" while Big Picture is on is a toggle whose label
-    // describes its state, which is exactly the ambiguity someone looking for the exit cannot
-    // afford.
-    btnText.textContent = active ? "Exit Big Picture" : "Big Picture";
-    bigPictureBtn.title = active
-      ? "Leave Big Picture and return to the dashboard"
-      : "Present this dashboard full-screen, with no console chrome";
+    pauseBtn.hidden = !active;
+  });
+  const unbindPause = bind(rotationPaused, (paused) => {
+    pauseBtn.setAttribute("aria-pressed", String(paused));
   });
 
   return {
     el: root,
-    // The header holds no per-frame state. Its one control is the Big Picture button, which follows
-    // viewMode rather than the status stream.
+    // The header holds no per-frame state: both controls follow signals, not the status stream.
     update() {},
     destroy() {
       unbindViewMode();
+      unbindPause();
     },
   };
 }
