@@ -1155,9 +1155,9 @@ func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir 
 	comments, err := bindings.ReviewComments(ctx, at)
 	// The watermark is PERSISTED, so the new-comment mark survives without the server that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	watermark := types.DiffReview{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
+	watermark := types.DiffReview{SeenComments: changeset.NewStore(cacheDir).LoadSeenComments()}
 	fresh := make(map[string]struct{})
-	for _, id := range watermark.UnseenThreads(comments) {
+	for _, id := range watermark.UnseenComments(comments) {
 		fresh[id] = struct{}{}
 	}
 	for i := range comments {

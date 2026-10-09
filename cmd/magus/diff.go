@@ -72,7 +72,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		if rf.Unread {
 			return usagef("magus diff: --print-hook prints the hook that runs --unread, so the two cannot be combined")
 		}
-		_, err := io.WriteString(os.Stdout, review.PrePushHook())
+		_, err := io.WriteString(os.Stdout, review.PrePushHook)
 		return err
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
@@ -1019,7 +1019,7 @@ func (s diffStoreSync) SetViewed(digest string, on bool) {
 // SetThreadsSeen advances the watermark through the same store call the console's session route
 // makes, so a terminal-only reader leaves the same record a browser one does.
 func (s diffStoreSync) SetThreadsSeen(ids []string) {
-	s.store.MarkThreadsSeen(s.root, ids)
+	s.store.MarkCommentsSeen(s.root, ids)
 }
 
 func (diffStoreSync) close() {}

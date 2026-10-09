@@ -21,6 +21,7 @@ export enum<str> DiffWhyRelation {
     implements = "implements",
     implementedBy = "implemented_by",
     continues = "continues",
+    continuedBy = "continued_by",
     sameStep = "same_step",
     tests = "tests",
     generated = "generated",

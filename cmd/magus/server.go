@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service/console"
@@ -1058,7 +1059,8 @@ func serverReload(ctx context.Context, args []string) error {
 //
 // A merge that lands while the reader has marked the review as being read is reported even when
 // nothing was said on it, and is counted with the time the reader had been at it; see
-// [changeset.Reading].
+// [changeset.ReadingMark]. A mark stops counting after [changeset.ReadingTTL] and is cleared when
+// its review closes unmerged, so a forgotten mark does not keep the forge being asked.
 //
 // It records rather than notifies. The event is the durable fact; the console's watcher reads the
 // trail for it, exactly as it already does for a share being opened. Normally reached via
@@ -1082,10 +1084,16 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// in-memory session map is empty by construction: reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
 	store := changeset.NewStore(m.CacheDir())
-	seen := store.LoadSeenThreads()
+	seen := store.LoadSeenComments()
 	drafts := store.LoadDrafts()
-	reading, isReading := store.LoadReading()
-	if len(seen) == 0 && len(drafts) == 0 && !isReading {
+	reading := store.LoadReading()
+	if reading.Expired(time.Now()) {
+		// A forgotten tab is not a reader. Ignored from here on, and cleared so the gate below
+		// stops treating it as the reason to ask the forge.
+		dropReading(ctx, store, reading)
+		reading = changeset.ReadingMark{}
+	}
+	if len(seen) == 0 && len(drafts) == 0 && !reading.Active() {
 		// Nothing persisted means nobody has read or drafted anything in a review here, which is
 		// the opt-in: no forge is asked about a workspace whose reviews were never opened. Saying
 		// "I am reading this now" is opening one.
@@ -1095,6 +1103,11 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil
+	}
+	if at.Closed() && reading.Matches(at) {
+		// Closed without merging: nobody will be hurt by a merge that is not coming.
+		dropReading(ctx, store, reading)
+		reading = changeset.ReadingMark{}
 	}
 	// Reachability is READ here, unlike in the views that render what they could get. An
 	// unreachable forge answers with an EMPTY list, and every number below is derived from that
@@ -1116,8 +1129,8 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(comments); len(unseen) > 0 {
+	// The watermark is the READER's; see DiffReview.SeenComments for why it cannot be the job's.
+	if unseen := (types.DiffReview{SeenComments: seen}).UnseenComments(comments); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
@@ -1138,24 +1151,15 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// A merge under a reader is worth reporting however little was said: the reader was in the
 	// middle of it. The mark must have been set against THIS review; one left over from a branch
 	// that has since moved to another pull request says nothing about this merge.
-	underReader := isReading && reading.Matches(at)
+	underReader := reading.Matches(at)
 	if said == 0 && !underReader {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
 		// would train the reader to ignore the ones that matter. A forge that could not be
 		// reached returned above rather than landing here, so this really is "nothing was said".
 		return nil
 	}
-	if underReader {
-		// Cleared before anything is recorded, so the next tick cannot count this merge twice. A
-		// failure to clear is an error and not a warning: recording anyway would repeat the merge
-		// every fifteen minutes with a duration that grew each time.
-		if err := store.ClearReading(ctx); err != nil {
-			return fmt.Errorf("server %s: clear the reading mark: %w", job.NameCheckReview, err)
-		}
-		if tel := m.Telemetry(); tel != nil {
-			tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
-		}
-	}
+	// Recorded before the mark is cleared: a crash between the two repeats the event on the next
+	// tick, where clearing first would lose it for good.
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
@@ -1165,5 +1169,49 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		Outcome:   trail.OutcomeOK,
 		Preview:   fmt.Sprintf("%s: %d", at.Repo, said),
 	})
+	if !underReader {
+		return nil
+	}
+	// A failure to clear is an error and not a warning: the next tick would count the merge
+	// again with a duration that grew.
+	cleared, err := store.ClearReadingIf(ctx, reading)
+	if err != nil {
+		return fmt.Errorf("server %s: clear the reading mark: %w", job.NameCheckReview, err)
+	}
+	if !cleared {
+		// The mark changed or vanished since it was read, so another tick or the reader has
+		// already dealt with it, and counting it here would count it twice.
+		return nil
+	}
+	if tel := m.Telemetry(); tel != nil {
+		tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
+		shutdownOneShotTelemetry(ctx, tel)
+	}
 	return nil
+}
+
+// dropReading clears a mark the job has decided no longer counts, best-effort: the job already
+// ignores the mark it read, so a failed clear costs one more look on the next tick and nothing else.
+func dropReading(ctx context.Context, store *changeset.Store, mark changeset.ReadingMark) {
+	if _, err := store.ClearReadingIf(ctx, mark); err != nil {
+		slog.WarnContext(ctx, "server: could not clear a stale reading mark", slog.String("err", err.Error()))
+	}
+}
+
+// shutdownOneShotTelemetry flushes the meters of a process that is about to exit. The SDK
+// exports on an interval, so a counter recorded in the last moments of `magus server
+// check-review` run from a shell would otherwise die with the process. A job the server runs for
+// itself arrives with the server's workspace and its shared provider, which outlives the job and
+// must not be shut down here.
+func shutdownOneShotTelemetry(ctx context.Context, tel observability.Provider) {
+	if _, shared := magusFromContext(ctx); shared {
+		return
+	}
+	// Bounded, and detached from ctx so a cancelled job still flushes: an unreachable collector
+	// must not hold the process open.
+	flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := tel.Shutdown(flushCtx); err != nil {
+		slog.WarnContext(ctx, "server: could not flush telemetry before exit", slog.String("err", err.Error()))
+	}
 }

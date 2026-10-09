@@ -266,21 +266,22 @@ type agentInstruments struct {
 	attentionDisposition metric.Float64Histogram
 	reviewRemarks        metric.Int64Counter
 	reviewPublishes      metric.Int64Counter
-	// reviewMergedReading and reviewReadingLost carry no attributes: how long a reader had
-	// been reading is the whole fact, and a review id or repository name is unbounded.
-	reviewMergedReading metric.Int64Counter
-	reviewReadingLost   metric.Float64Histogram
+	// reviewMergedWhileReading and reviewMergedWhileReadingDuration carry no attributes: how long
+	// a reader had been reading is the whole fact, and a review id or repository name is
+	// unbounded.
+	reviewMergedWhileReading         metric.Int64Counter
+	reviewMergedWhileReadingDuration metric.Float64Histogram
 }
 
 func newAgentInstruments(m metric.Meter) (agentInstruments, error) {
 	r := reg{m: m}
 	ai := agentInstruments{
-		leaseRegistrations:   r.i64c("magus.lease.registrations", "Lease base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
-		attentionDisposition: r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
-		reviewRemarks:        r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
-		reviewPublishes:      r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
-		reviewMergedReading:  r.i64c("magus.review.merged_while_reading", "Reviews that merged while the reader had marked them as being read.", "{merge}"),
-		reviewReadingLost:    r.f64h("magus.review.merged_while_reading.duration", "Time from the reader marking a review as being read to it merging, in seconds."),
+		leaseRegistrations:               r.i64c("magus.lease.registrations", "Lease base registrations, by how the base a worker reported compares to the checkpoint it was handed.", "{registration}"),
+		attentionDisposition:             r.f64h("magus.attention.disposition.duration", "Wall-clock time an attention request waited from raised to disposed, in seconds."),
+		reviewRemarks:                    r.i64c("magus.review.remarks", "Review remarks drafted on a change.", "{remark}"),
+		reviewPublishes:                  r.i64c("magus.review.publishes", "Review publishes, by the verdict that landed.", "{publish}"),
+		reviewMergedWhileReading:         r.i64c("magus.review.merged_while_reading", "Reviews that merged while the reader had marked them as being read.", "{merge}"),
+		reviewMergedWhileReadingDuration: r.f64h("magus.review.merged_while_reading.duration", "Time from the reader marking a review as being read to it merging, in seconds."),
 	}
 	return ai, r.err
 }
@@ -308,6 +309,6 @@ func (p *otelProvider) RecordReviewPublish(ctx context.Context, verdict string, 
 }
 
 func (p *otelProvider) RecordReviewMergedWhileReading(ctx context.Context, secs float64) {
-	p.agent.reviewMergedReading.Add(ctx, 1)
-	p.agent.reviewReadingLost.Record(ctx, secs)
+	p.agent.reviewMergedWhileReading.Add(ctx, 1)
+	p.agent.reviewMergedWhileReadingDuration.Record(ctx, secs)
 }

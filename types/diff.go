@@ -810,6 +810,9 @@ func (r ReviewTarget) Open() bool { return r.ID != "" }
 // Merged reports whether the host says this review has landed.
 func (r ReviewTarget) Merged() bool { return r.State == "merged" }
 
+// Closed reports whether the host says this review was closed without landing.
+func (r ReviewTarget) Closed() bool { return r.State == "closed" }
+
 // ReviewComment is one comment already on the review, written by anybody. A thread is a root
 // comment and the replies made to it, named by the root's ID (the "thread id").
 //
@@ -836,7 +839,7 @@ type ReviewComment struct {
 	// empty on a top-level comment, and [DiffOutline].Thread holds the same id.
 	//
 	// The wire stays flat, one record per comment, so each reply keeps its own ID and its own
-	// place in the SeenThreads watermark: a new reply to an old thread is still new. Root counts
+	// place in the SeenComments watermark: a new reply to an old thread is still new. Root counts
 	// only when it names a top-level comment in the same list; changeset.GroupThreads is the one
 	// definition, and treats any other comment as the head of a thread of its own.
 	Root string `json:"root,omitempty" yaml:"root,omitempty"`
@@ -937,7 +940,7 @@ type DiffReview struct {
 	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk:
 	// the failing of every viewed-checkbox that resets on force-push.
 	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
-	// SeenThreads holds the ids of the review's threads the human has actually had on screen.
+	// SeenComments holds the ids of the review's comments the human has actually had on screen.
 	// It is the watermark that decides what counts as NEW, and it belongs to the reader for the
 	// same reason Viewed does: a mark nobody made is a claim nobody can stand behind.
 	//
@@ -945,24 +948,28 @@ type DiffReview struct {
 	// forge record what it has reported) means everything is already marked seen by the time
 	// the reader opens the diff, so the client could never show them what arrived. The job
 	// reads this instead and reports what lies outside it.
-	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
-	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
-	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+	//
+	// compat(until: no installed magus or console build reads "seen_threads"): the wire name
+	// predates the comment/thread vocabulary and stays so a client built before the rename keeps
+	// reading the watermark.
+	SeenComments []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
+	Comments     []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
+	Suggestions  []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
 	// Outlines are the agents' outlines of review threads, at most one per thread.
 	// They are shown to the person and offer no way to be sent; see DiffOutline.
 	Outlines []DiffOutline `json:"outlines,omitempty" yaml:"outlines,omitempty"`
 }
 
-// UnseenThreads returns the ids in comments the reader has not had on screen, in the order given.
+// UnseenComments returns the ids in comments the reader has not had on screen, in the order given.
 //
 // Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
 // and another added nets zero, and the new one is then never reported.
-func (s DiffReview) UnseenThreads(comments []ReviewComment) []string {
+func (s DiffReview) UnseenComments(comments []ReviewComment) []string {
 	if len(comments) == 0 {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(s.SeenThreads))
-	for _, id := range s.SeenThreads {
+	seen := make(map[string]struct{}, len(s.SeenComments))
+	for _, id := range s.SeenComments {
 		seen[id] = struct{}{}
 	}
 	var out []string

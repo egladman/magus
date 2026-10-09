@@ -62,7 +62,7 @@ type Store struct {
 	viewedPath string
 	// draftsPath is where unpublished human comments are persisted, empty to disable.
 	draftsPath string
-	// seenPath is where the seen-thread watermark is persisted, empty to disable.
+	// seenPath is where the seen-comment watermark is persisted, empty to disable.
 	//
 	// It has to outlive the process for the same reason the digest set does: a watermark that
 	// resets on a server restart marks the whole conversation new again the next morning, which
@@ -104,6 +104,9 @@ func NewStore(stateDir string) *Store {
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
 		s.draftsPath = filepath.Join(stateDir, "review", "drafts.json")
+		// compat(until: no installed magus reads seen-threads.json): the file predates the
+		// comment/thread vocabulary and holds comment ids; a rename would hand a released binary
+		// an empty watermark and mark every comment new.
 		s.seenPath = filepath.Join(stateDir, "review", "seen-threads.json")
 	}
 	return s
@@ -145,7 +148,7 @@ func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *t
 			Cursor: types.DiffCursor{Hunk: -1},
 			Viewed: s.loadViewed(),
 			// Restored, or every thread reads as new again after a restart.
-			SeenThreads: s.loadSeen(),
+			SeenComments: s.loadSeen(),
 			// Restored whole, including comments whose anchor is no longer in the changeset:
 			// the draft is the reader's work either way, and the anchor is what LocateAnchor
 			// re-finds it by when the code under it moved.
@@ -272,24 +275,24 @@ func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffReview {
 	})
 }
 
-// MarkThreadsSeen records that the reader has had these threads on screen, which is the
+// MarkCommentsSeen records that the reader has had these comments on screen, which is the
 // watermark deciding what counts as NEW the next time somebody asks.
 //
-// Additive and idempotent: a thread never becomes unseen, so re-rendering the same conversation
+// Additive and idempotent: a comment never becomes unseen, so re-rendering the same conversation
 // costs nothing and cannot resurrect a remark as new. Ids the session already holds are skipped
 // rather than appended twice, because this runs on every render of the review.
-func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffReview {
+func (s *Store) MarkCommentsSeen(root string, ids []string) *types.DiffReview {
 	if len(ids) == 0 {
 		return s.Get(root)
 	}
 	var persist []string
 	sess := s.mutate(root, func(sess *types.DiffReview) {
 		for _, id := range ids {
-			if id != "" && !slices.Contains(sess.SeenThreads, id) {
-				sess.SeenThreads = append(sess.SeenThreads, id)
+			if id != "" && !slices.Contains(sess.SeenComments, id) {
+				sess.SeenComments = append(sess.SeenComments, id)
 			}
 		}
-		persist = slices.Clone(sess.SeenThreads)
+		persist = slices.Clone(sess.SeenComments)
 	})
 	// Persisted like the digest set beside it: a watermark that lived only in memory would reset
 	// on every server restart and mark the whole conversation new again the next morning.
@@ -485,7 +488,7 @@ func (s *Store) mutate(root string, fn func(*types.DiffReview)) *types.DiffRevie
 func clone(s *types.DiffReview) *types.DiffReview {
 	out := *s
 	out.Viewed = slices.Clone(s.Viewed)
-	out.SeenThreads = slices.Clone(s.SeenThreads)
+	out.SeenComments = slices.Clone(s.SeenComments)
 	out.Comments = slices.Clone(s.Comments)
 	out.Suggestions = slices.Clone(s.Suggestions)
 	return &out
@@ -571,7 +574,7 @@ func (s *Store) saveViewed(digests []string) {
 }
 
 // LoadDrafts reads the persisted unsent remarks WITHOUT a session, for the same reason
-// LoadSeenThreads exists: a job in its own process has no session to read.
+// LoadSeenComments exists: a job in its own process has no session to read.
 func (s *Store) LoadDrafts() []types.DiffComment { return s.loadDrafts() }
 
 // LoadViewed reads the persisted read marks WITHOUT a session, and unlike the loader a
@@ -596,12 +599,12 @@ func (s *Store) LoadViewed() ([]string, error) {
 	return out, nil
 }
 
-// LoadSeenThreads reads the persisted seen-thread watermark WITHOUT a session.
+// LoadSeenComments reads the persisted seen-comment watermark WITHOUT a session.
 //
 // Exported because the check-review job runs in its own process: it has no attached session to
 // read, and the watermark is the only thing it needs. Reading it here rather than reconstructing
 // a session is also what keeps the job from looking like a reader who opened a review.
-func (s *Store) LoadSeenThreads() []string { return s.loadSeen() }
+func (s *Store) LoadSeenComments() []string { return s.loadSeen() }
 
 // loadSeen reads the persisted watermark. Every failure yields an empty set, for the reason
 // loadViewed does: a corrupt progress file must not stop a review from opening.
@@ -649,6 +652,6 @@ func (s *Store) saveSeen(ids []string) {
 		return nil
 	})
 	if err != nil {
-		slog.WarnContext(ctx, "magus: could not persist the review's seen threads", slog.String("err", err.Error()))
+		slog.WarnContext(ctx, "magus: could not persist the review's seen comments", slog.String("err", err.Error()))
 	}
 }

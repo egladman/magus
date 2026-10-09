@@ -150,7 +150,7 @@ func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
 	root := filepath.Join(cache, "ws")
 	sessions := changeset.NewStore(cache)
 	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	sessions.MarkThreadsSeen(root, []string{"t1"})
+	sessions.MarkCommentsSeen(root, []string{"t1"})
 
 	threads, _ := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
 	require.Len(t, threads, 1)

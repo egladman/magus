@@ -157,7 +157,8 @@ export function threadIdOf(comment: ReviewComment): string {
 export function groupThreads(comments: readonly ReviewComment[]): ReviewComment[][] {
   const topLevel = new Set<string>();
   for (const c of comments) if (!c.root && c.id) topLevel.add(c.id);
-  const isReply = (c: ReviewComment): boolean => !!c.root && c.root !== c.id && topLevel.has(c.root);
+  const isReply = (c: ReviewComment): boolean =>
+    !!c.root && c.root !== c.id && topLevel.has(c.root);
 
   const byHead = new Map<string, ReviewComment[]>();
   const out: ReviewComment[][] = [];

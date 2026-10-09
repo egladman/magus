@@ -95,7 +95,7 @@ import {
   type DiffAnnotation,
   type DiffTouch,
   type ReviewInfo,
-  type ReviewThread,
+  type ReviewComment,
   type ReviewVerdict,
   type ReviewRole,
   type BranchChange,
@@ -2946,7 +2946,7 @@ export function activate(host: HTMLElement): AppInstance {
 
   // composeReply opens the reply box for the thread `thread` belongs to. The reply goes to the
   // thread id whichever of its comments was clicked.
-  const composeReply = (thread: ReviewThread): void => {
+  const composeReply = (thread: ReviewComment): void => {
     const existing = scroll.querySelector<HTMLTextAreaElement>(
       ".console-diff-composer__input textarea",
     );

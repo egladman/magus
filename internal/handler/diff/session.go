@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -549,85 +548,6 @@ func (h *ReviewHandler) findReview(ctx context.Context) (types.ReviewTarget, err
 	return at, nil
 }
 
-// readingResponse is what the reading op answers.
-type readingResponse struct {
-	// Reading is whether a mark is set after this request.
-	Reading bool `json:"reading"`
-	// Since is when the reading began, in unix milliseconds. Zero when Reading is false.
-	Since int64 `json:"since,omitzero"`
-	// Command is the one line the person may run to tell the forge, or empty when magus does not
-	// know how to say it on this one. magus prints it and never runs it.
-	Command string `json:"command,omitempty"`
-}
-
-// reading marks, or unmarks, the review as being read right now.
-//
-// The mark is local: it makes a merge that lands under the reader reportable (see the
-// check-review job) and measurable. It is never sent to the forge by magus. The command in the
-// response is for the person to run if they want colleagues to see it, so that the one sentence
-// that leaves the machine is typed by a person, like every other.
-//
-// Marking a review that has already merged is refused rather than recorded: the next job tick
-// would report a merge "under" a reader who started after it.
-func (h *ReviewHandler) reading(w http.ResponseWriter, r *http.Request, req reviewSessionRequest) {
-	ctx := r.Context()
-	if !req.On {
-		if err := h.Sessions.ClearReading(ctx); err != nil {
-			h.Log.WarnContext(ctx, "diff session: could not clear the reading mark", slog.String("error", err.Error()))
-			handler.Refuse(w, r, rpcerr.Internal("clearing the reading mark"))
-			return
-		}
-		handler.WriteJSON(w, r, readingResponse{})
-		return
-	}
-	at, err := h.findReview(ctx)
-	if err != nil {
-		handler.Refuse(w, r, rpcerr.ReviewHostFailed("reading: "+err.Error()))
-		return
-	}
-	if at.Merged() {
-		handler.Refuse(w, r, rpcerr.Conflict("review "+at.ID+" has already merged, so there is nothing left to hold"))
-		return
-	}
-	mark, err := h.Sessions.SetReading(ctx, at, time.Now())
-	if err != nil {
-		h.Log.WarnContext(ctx, "diff session: could not record the reading mark", slog.String("error", err.Error()))
-		handler.Refuse(w, r, rpcerr.Internal("recording the reading mark"))
-		return
-	}
-	handler.WriteJSON(w, r, readingResponse{
-		Reading: true,
-		Since:   mark.Since,
-		Command: readingCommand(at, h.Workspace.ReviewOrigin(ctx).Remote),
-	})
-}
-
-var (
-	// A GitHub owner/name, the only repo shape the command below is built for.
-	githubRepo = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
-	// A login, which for the command below must never carry a quote or a space.
-	githubLogin  = regexp.MustCompile(`^[A-Za-z0-9_.-]+(\[bot\])?$`)
-	reviewNumber = regexp.MustCompile(`^[0-9]+$`)
-)
-
-// readingCommand is the gh command that tells a GitHub pull request's participants the reader is
-// on it, or "" for any other forge: only GitHub's shape is known, and a guessed command for a
-// forge magus has not seen would be one the person had to debug before running.
-//
-// Every part is checked against the shape GitHub gives it before it reaches a shell line the
-// person will paste, because the repo and the login arrive from a provider and a remote.
-func readingCommand(at types.ReviewTarget, remote string) string {
-	if remoteHost(remote) != "github.com" ||
-		!reviewNumber.MatchString(at.ID) || !githubRepo.MatchString(at.Repo) {
-		return ""
-	}
-	who := "A reviewer"
-	if githubLogin.MatchString(at.Viewer) {
-		who = at.Viewer
-	}
-	return "gh pr comment " + at.ID + " --repo " + at.Repo + " --body '" + who + " is reading this now'"
-}
-
 func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
@@ -692,7 +612,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		// thing that advances the watermark. It arrives on this route because it is the human's
 		// half of the session: an agent reaching the session over MCP cannot make it, exactly
 		// as it cannot mark a hunk read.
-		sess = h.Sessions.MarkThreadsSeen(h.Root, req.IDs)
+		sess = h.Sessions.MarkCommentsSeen(h.Root, req.IDs)
 	case "publish":
 		// publish and reply fail loudly; every other op is bookkeeping nobody asked about.
 		// These two put sentences in front of colleagues, and a reader told a send succeeded
@@ -905,7 +825,7 @@ func (h *ReviewLookupHandler) markNew(comments []types.ReviewComment) {
 	if sess == nil {
 		return
 	}
-	unseen := sess.UnseenThreads(comments)
+	unseen := sess.UnseenComments(comments)
 	if len(unseen) == 0 {
 		return
 	}

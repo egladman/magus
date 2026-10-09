@@ -1860,7 +1860,7 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
 	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
-	fs.StringVar(&f.Thread, FlagDiffThread, "", "Print the context for one review conversation, by its root comment id, to paste into your own LLM: the conversation, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}")
+	fs.StringVar(&f.Thread, FlagDiffThread, "", "Print the context for one review thread, by its thread id, to paste into your own LLM: the thread, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}")
 	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only")
 	fs.BoolVar(&f.PrintHook, FlagDiffPrintHook, false, "Print a pre-push git hook that runs --unread on the range being pushed, and exit. magus only prints it; save it as .git/hooks/pre-push and make it executable. The hook always exits 0")
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")

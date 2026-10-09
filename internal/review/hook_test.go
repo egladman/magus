@@ -14,7 +14,7 @@ import (
 func TestPrePushHookIsPOSIXShAndAlwaysExitsZero(t *testing.T) {
 	t.Parallel()
 
-	hook := PrePushHook()
+	hook := PrePushHook
 	lines := strings.Split(strings.TrimRight(hook, "\n"), "\n")
 
 	assert.Equal(t, "#!/bin/sh", lines[0])
@@ -32,7 +32,7 @@ func TestPrePushHookRunsUnreadOnTheRangeBeingPushed(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "calls")
 	script := filepath.Join(dir, "pre-push")
-	require.NoError(t, os.WriteFile(script, []byte(PrePushHook()), 0o755))
+	require.NoError(t, os.WriteFile(script, []byte(PrePushHook), 0o755))
 	// A stand-in magus that records its arguments and fails, so the test also proves a
 	// failing report never changes the hook's exit status.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("#!/bin/sh\necho \"$@\" >> "+log+"\nexit 7\n"), 0o755))
@@ -63,7 +63,7 @@ func TestPrePushHookIsSilentWithoutMagus(t *testing.T) {
 
 	dir := t.TempDir()
 	script := filepath.Join(dir, "pre-push")
-	require.NoError(t, os.WriteFile(script, []byte(PrePushHook()), 0o755))
+	require.NoError(t, os.WriteFile(script, []byte(PrePushHook), 0o755))
 
 	cmd := exec.Command("/bin/sh", script)
 	cmd.Env = []string{"PATH=" + dir}

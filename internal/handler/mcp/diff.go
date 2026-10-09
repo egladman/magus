@@ -426,7 +426,7 @@ func (t *diffTool) threadBrief(ctx context.Context, id string) (review.ThreadBri
 			return t.src.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
 		},
 		Anchors: t.anchors,
-		Variant:  prompt.Short,
+		Variant: prompt.Short,
 	})
 	if err != nil {
 		return review.ThreadBriefResult{}, err

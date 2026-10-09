@@ -97,7 +97,7 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 			return ws.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
 		},
 		Anchors: h.opts.Anchors,
-		Variant:  prompt.Short,
+		Variant: prompt.Short,
 	})
 	if err != nil {
 		h.Fail(w, r, "thread", err)

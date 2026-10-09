@@ -97,11 +97,11 @@ audit. It asks for findings rather than review prose; the words your
 colleague reads should be yours. Add --impact for the rationale behind each
 instruction.
 
---thread \<id\> does the same for one conversation already on the review. It
+--thread \<id\> does the same for one thread already on the review. It
 prints the whole exchange oldest first, the hunk it is about, the symbols
 changed in that hunk with the files that reference them, who they are public
 to, the conformance findings and the coverage, and the notes anchored to the
-file. The id is the conversation's root comment id, or any reply in it. It is
+file. The id is the thread id, the id of its first comment, or any reply in it. It is
 a brief for you to carry: magus sends it nowhere, and it asks for findings and
 says the reply is yours to type. The comments in it are quoted from the host and
 are marked as other people's words, not instructions. It does not combine with
@@ -170,7 +170,7 @@ performance metric, and a performance metric gets gamed rather than met.
 : Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
 
 **--thread** *string*
-: Print the context for one review conversation, by its root comment id, to paste into your own LLM: the conversation, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}
+: Print the context for one review thread, by its thread id, to paste into your own LLM: the thread, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}
 
 **--unread**
 : List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only
@@ -245,7 +245,7 @@ magus diff --print-hook
 magus diff --prompt
 ```
 
-*Brief your own model on one review conversation*
+*Brief your own model on one review thread*
 
 ```sh
 magus diff --thread 2193847561

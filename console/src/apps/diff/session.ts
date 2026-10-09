@@ -274,10 +274,10 @@ export interface DiffComment {
   readonly line?: number;
 }
 
-// ReviewThread is one comment already on the host's review, written by anybody. Read-only:
+// ReviewComment is one comment already on the host's review, written by anybody. Read-only:
 // the host holds the record every participant sees, so a reply goes through the provider
 // rather than editing a local copy that would silently diverge.
-export interface ReviewThread {
+export interface ReviewComment {
   readonly id: string;
   readonly path: string;
   readonly line: number;
@@ -330,7 +330,7 @@ export interface ReviewInfo {
   // verdict_limit says WHY the set is only remarks: your own change, or a provider that did not
   // name either party. Different facts, and an app that renders them alike misleads.
   readonly verdict_limit?: string;
-  readonly threads: readonly ReviewThread[];
+  readonly threads: readonly ReviewComment[];
 }
 
 // ReviewVerdict is what a published review says about the change. Mirrors types.ReviewVerdict,
