@@ -11,7 +11,8 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { DiffComment, DiffTouch, ReviewThread } from "./session";
+import type { DiffComment, DiffOutline, DiffTouch, ReviewThread } from "./session";
+import { outlineHeading } from "./outline";
 import type { StepHead, StepPlacement, StepRows } from "./readingorder";
 
 export type ViewMode = "unified" | "split";
@@ -184,6 +185,13 @@ export type Row =
   | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewThread }
   | { readonly kind: "touch"; readonly file: DiffFile; readonly touch: DiffTouch }
   | { readonly kind: "quote"; readonly file: DiffFile; readonly text: string }
+  // An agent's outline for the conversation above it: a heading row, then one row per topic.
+  | {
+      readonly kind: "outline";
+      readonly file: DiffFile;
+      readonly text: string;
+      readonly head: boolean;
+    }
   | { readonly kind: "step"; readonly head: StepHead }
   | {
       readonly kind: "why";
@@ -215,6 +223,28 @@ function pushThread(rows: Row[], file: DiffFile, thread: ReviewThread): void {
   rows.push({ kind: "thread", file, thread });
 }
 
+// pushThreads emits a bucket's comments in order, and an agent's outline after the last comment
+// of each conversation it was left for. The bucket holds a conversation's comments together
+// (placeThreads), so the next comment starting a different root is where one ends.
+function pushThreads(
+  rows: Row[],
+  file: DiffFile,
+  threads: readonly ReviewThread[],
+  outlines?: ReadonlyMap<string, DiffOutline>,
+): void {
+  threads.forEach((thread, i) => {
+    pushThread(rows, file, thread);
+    const next = threads[i + 1];
+    if (next && rootOf(next) === rootOf(thread)) return;
+    const outline = outlines?.get(rootOf(thread));
+    if (!outline) return;
+    rows.push({ kind: "outline", file, text: outlineHeading(outline), head: true });
+    for (const topic of outline.topics) {
+      rows.push({ kind: "outline", file, text: topic, head: false });
+    }
+  });
+}
+
 // buildRows flattens files into the row array for one view mode.
 //
 // Comments are interleaved as rows of their own, directly under the hunk they annotate, rather
@@ -229,6 +259,7 @@ export function buildRows(
   touches?: Map<string, readonly DiffTouch[]>,
   threads?: PlacedThreads,
   step?: StepRows,
+  outlines?: ReadonlyMap<string, DiffOutline>,
 ): Row[] {
   const rows: Row[] = [];
   if (step) rows.push({ kind: "step", head: step.head });
@@ -237,9 +268,7 @@ export function buildRows(
     // A thread whose line this changeset does not contain still belongs to this file, so it
     // sits under the heading rather than being dropped. A colleague said it; the reader hears
     // it, even when the line it was about has since moved.
-    for (const thread of threads?.atFile.get(file.path) ?? []) {
-      pushThread(rows, file, thread);
-    }
+    pushThreads(rows, file, threads?.atFile.get(file.path) ?? [], outlines);
     // The touch sits under the FILE heading rather than under a hunk, because that is the
     // granularity the trail records: an agent wrote the file, and what it had read applies to
     // the edit as a whole. Pinning it to one hunk would claim a precision the data lacks.
@@ -256,9 +285,7 @@ export function buildRows(
       if (place) rows.push({ kind: "why", file, hunk, place });
       // The host's threads first, then this session's own remarks. What a colleague already
       // said is context for what you are about to write, not a footnote to it.
-      for (const thread of threads?.atHunk.get(commentKey(file.path, index)) ?? []) {
-        pushThread(rows, file, thread);
-      }
+      pushThreads(rows, file, threads?.atHunk.get(commentKey(file.path, index)) ?? [], outlines);
       for (const c of comments?.get(commentKey(file.path, index)) ?? []) {
         rows.push({ kind: "comment", file, comment: c });
       }
@@ -511,6 +538,7 @@ export function maxLineChars(rows: readonly Row[]): number {
     else if (row.kind === "comment") bump(row.comment.body);
     else if (row.kind === "touch") bump(touchText(row.touch));
     else if (row.kind === "quote") bump(row.text);
+    else if (row.kind === "outline") bump(row.text);
     else if (row.kind === "why") bump(row.place.why.text);
   }
   return max;

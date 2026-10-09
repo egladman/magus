@@ -56,6 +56,7 @@ Every route under the console's `/api/v1/` prefix, enumerated:
 | `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments, the reading-now mark                                          |
 | `GET /api/v1/diff/review`          | Which review this branch has open on the forge, and what colleagues have already said on it                                        |
 | `GET /api/v1/diff/branches`        | Other branches changing the same files                                                                                             |
+| `GET /api/v1/diff/thread?id=<id>`  | The brief for one review conversation, built from the graph, for the person to paste to their own model                            |
 | `POST /api/v1/diff/run`            | Run a target against the working tree; the one MUTATING route in this table, bounded to what the magusfile declares                |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |

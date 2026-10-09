@@ -102,6 +102,8 @@ import {
   reportSessionFailure,
 } from "./session";
 import { setMarkdown } from "./markdown";
+import { guardOutline, guardReply, outlineKey, outlinesByRoot } from "./outline";
+import { copyThreadBrief } from "./thread-brief";
 import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
 import {
@@ -976,6 +978,17 @@ export function activate(host: HTMLElement): AppInstance {
       el.append(h("span", "console-diff-row__text", row.text || " "));
       return el;
     }
+    if (row.kind === "outline") {
+      // An agent's pointer at what a reply could cover, shown to the person who types it. Marked
+      // as the agent's by the same left border an agent's remark takes, and guarded so there is
+      // nothing to copy: the reply on a review is the person's own words.
+      const el = h("div", "console-diff-row console-diff-row--comment console-diff-row--outline");
+      el.dataset.author = "agent";
+      if (row.head) el.dataset.head = "";
+      el.append(h("span", "console-diff-row__outline", row.text));
+      guardOutline(el);
+      return el;
+    }
     if (row.kind === "touch") {
       const el = h("div", "console-diff-row console-diff-row--touch");
       const who = h("span", "console-diff-row__who");
@@ -1046,6 +1059,17 @@ export function activate(host: HTMLElement): AppInstance {
         composeReply(thread);
       });
       el.append(replyBtn);
+      // Beside Reply: the brief for this conversation, copied when the person clicks. Carrying
+      // it to a model is theirs to do; this only puts the text on their clipboard.
+      const briefBtn = h("button", "console-diff-row__brief", "Copy brief") as HTMLButtonElement;
+      briefBtn.type = "button";
+      briefBtn.dataset.threadId = rootOf(thread);
+      briefBtn.title = "Copy a brief of this conversation, to paste to your own model";
+      briefBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void copyBrief(rootOf(thread), briefBtn);
+      });
+      el.append(briefBtn);
       return el;
     }
     if (row.kind === "comment") {
@@ -1521,11 +1545,14 @@ export function activate(host: HTMLElement): AppInstance {
       return false;
     }
     const before = (state.session?.comments ?? []).length;
+    const outlinesBefore = outlineKey(state.session?.outlines);
     state.session = s;
     state.viewed = new Set(s.viewed ?? []);
     setCollaboration("live");
     renderRail();
-    if (relayout && (s.comments ?? []).length !== before) void rebuild();
+    // An outline is a row of the stream like a comment, so a new one moves the geometry too.
+    const moved = (s.comments ?? []).length !== before || outlineKey(s.outlines) !== outlinesBefore;
+    if (relayout && moved) void rebuild();
     else renderToolbar();
     return true;
   };
@@ -1673,6 +1700,7 @@ export function activate(host: HTMLElement): AppInstance {
       touches,
       state.threads ?? undefined,
       placement ?? undefined,
+      outlinesByRoot(state.session?.outlines),
     );
     state.hunks = hunkRowIndexes(state.rows);
     state.hunkOrdinalByRow = hunkOrdinal(state.rows);
@@ -2554,6 +2582,9 @@ export function activate(host: HTMLElement): AppInstance {
     const control = h("span", "pf-v6-c-form-control");
     const field = h("textarea", "pf-v6-c-form-control__text");
     field.rows = 3;
+    // The words in this box are the person's. An agent's outline is only ever read, so a paste
+    // of one is refused here rather than trusted to be a coincidence.
+    guardReply(field, () => state.session?.outlines ?? []);
     field.placeholder = opts.placeholder;
     // Write and Preview, because the remark is markdown wherever it lands and the reader is
     // typing it blind otherwise: a fence or a list reads as its own syntax here and as rendered
@@ -2974,6 +3005,27 @@ export function activate(host: HTMLElement): AppInstance {
     box.append(where, warn, inputWrap);
     scroll.append(box);
     field.focus();
+  };
+
+  // copyBrief puts the brief for the conversation rooted at `root` on the clipboard. Every way it
+  // can fail is a toast, including the showcase, which has no server to build one.
+  const copyBrief = async (root: string, btn: HTMLButtonElement): Promise<void> => {
+    const hp = demo ? null : host_();
+    if (!hp) {
+      const why = demo
+        ? "The showcase has no server to build a brief from."
+        : "Connect a server to copy a brief.";
+      reportFailure("Review", why, "thread:no-server");
+      return;
+    }
+    btn.disabled = true;
+    const copied = await copyThreadBrief(hp, root, controller.signal);
+    btn.disabled = false;
+    if (disposed || !copied) return;
+    btn.textContent = "Copied";
+    setTimeout(() => {
+      btn.textContent = "Copy brief";
+    }, 1200);
   };
 
   // sendReply posts one reply into the conversation rooted at `root` and returns the failure to

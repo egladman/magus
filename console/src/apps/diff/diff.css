@@ -1402,6 +1402,41 @@
 }
 .console-diff-row__reply:hover { text-decoration: underline; }
 
+/* Copy brief sits after Reply and shares its look; the gap is the only difference. */
+.console-diff-row__brief {
+  flex: 0 0 auto;
+  margin-inline-start: var(--pf-t--global--spacer--md);
+  border: 0;
+  background: transparent;
+  color: var(--console-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--pf-t--global--font--size--xs);
+}
+.console-diff-row__brief:hover { text-decoration: underline; }
+.console-diff-row__brief:disabled { cursor: progress; opacity: 0.55; }
+
+/* An agent's outline for the conversation above it. It carries the agent's border (data-author)
+ * and an italic voice so it never reads as a colleague's remark or the person's own words, and
+ * it cannot be selected or dragged: the reply is typed, not copied from here. */
+.console-diff-row--outline {
+  padding-inline-start: 11ch;
+  color: var(--pf-t--global--text--color--subtle);
+  font-style: italic;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+.console-diff-row--outline[data-head] { font-weight: var(--console-chip-weight); }
+.console-diff-row--outline:not([data-head]) { padding-inline-start: 13ch; }
+.console-diff-row--outline:not([data-head]) .console-diff-row__outline::before { content: "- "; }
+.console-diff-row__outline {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The reading mark, under the toolbar: since when, and the command the person may run. Same
  * strip shape as the progress line, for the same reason - each direct child of the toolbar pays
  * for its own gutter. */

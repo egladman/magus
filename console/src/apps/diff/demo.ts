@@ -533,6 +533,15 @@ export function demoSession(): DiffReview {
         declined: false,
       },
     ],
+    // What an agent suggests priya's conversation could cover. Topics only: the showcase's reader
+    // types the answer, as a reader of a live review does.
+    outlines: [
+      {
+        thread: "th1",
+        agent_name: "claude-code",
+        topics: ["who verifies against two audiences", "what the docstring should promise"],
+      },
+    ],
   };
 }
 

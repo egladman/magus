@@ -326,6 +326,8 @@ func (s *Server) Serve(ctx context.Context) error {
 			diffLookupH.Sessions = diffSessions
 			diffLookupH.Root = opts.Magus.Root()
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
+			diffThreadH := diffhandler.NewThreadHandler(svc, log)
+			diffThreadH.Anchors = opts.NoteAnchors()
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
 			// the same two sources the console already trusts (the service for structure and
@@ -360,6 +362,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.api("/api/v1/diff/session", diffReviewH)
 			f.api("/api/v1/diff/review", diffLookupH)
 			f.api("/api/v1/diff/branches", diffBranchesH)
+			f.api("/api/v1/diff/thread", diffThreadH)
 			f.api("/api/v1/diff/run", diffRunH)
 			f.api("/api/v1/plan", planH)
 			f.api("/api/v1/attention", attentionH)

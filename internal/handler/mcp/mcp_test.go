@@ -351,6 +351,25 @@ func TestUnregisteredDrivers(t *testing.T) {
 	assert.Empty(t, got)
 }
 
+// TestDiffToolIsWiredWithNoteAnchors. A diff tool built by allToolDrivers joins notes against
+// the changeset, so projection=thread briefs name anchors rather than saying none was wired.
+// A workspace declaring no notes store joins nothing, and says so by returning no hits.
+func TestDiffToolIsWiredWithNoteAnchors(t *testing.T) {
+	t.Parallel()
+
+	opts := Options{Magus: fixtureMagus(t)}
+	var tool *diffTool
+	for _, d := range allToolDrivers(opts) {
+		if dt, ok := d.(*diffTool); ok {
+			tool = dt
+		}
+	}
+	require.NotNil(t, tool, "allToolDrivers builds the diff tool")
+	require.NotNil(t, tool.anchors, "the diff tool is wired with the shared anchors closure")
+	assert.Empty(t, tool.anchors(context.Background(), types.Diff{}))
+	assert.Empty(t, opts.NoteAnchors()(context.Background(), types.Diff{}))
+}
+
 func TestBuildMCPTool(t *testing.T) {
 	t.Parallel()
 

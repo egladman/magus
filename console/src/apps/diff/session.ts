@@ -346,6 +346,15 @@ export interface DiffSuggestion {
   readonly declined: boolean;
 }
 
+// DiffOutline is what an agent suggests a conversation should cover, held for the person to read.
+// Mirrors types.DiffOutline. It is a pointer to topics, never a draft: the person types the reply.
+export interface DiffOutline {
+  // thread is the id of the conversation's root comment.
+  readonly thread: string;
+  readonly topics: readonly string[];
+  readonly agent_name?: string;
+}
+
 export interface DiffReview {
   readonly id: string;
   readonly base: string;
@@ -358,6 +367,7 @@ export interface DiffReview {
   readonly viewed?: readonly string[];
   readonly comments?: readonly DiffComment[];
   readonly suggestions?: readonly DiffSuggestion[];
+  readonly outlines?: readonly DiffOutline[];
 }
 
 import type { WireFile } from "./parse";
@@ -570,6 +580,43 @@ export async function reply(
   });
   if (!res.ok) {
     throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
+  }
+}
+
+// fetchThreadBrief reads the brief for one conversation: the text a person pastes to their own
+// model, built by the server from the graph. root is the conversation's first comment (see
+// rootOf in rows.ts).
+//
+// Reading it posts nothing and sends nothing anywhere; carrying it to a model is the person's act.
+// A refusal (no review open, no such conversation) surfaces as a toast carrying the server's own
+// words and resolves to null, so the caller copies nothing.
+export async function fetchThreadBrief(
+  host: string,
+  root: string,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const what = "the conversation brief";
+  try {
+    const q = new URLSearchParams({ id: root });
+    const res = await fetch(`http://${host}/api/v1/diff/thread?${q}`, {
+      headers: authHeaders(),
+      signal,
+    });
+    if (!res.ok) {
+      const refusal = res.status === 401 ? null : await readRefusal(res);
+      if (refusal) reportFailure("Review", refusal.message, `thread:${res.status}`, refusal.help);
+      else reportHttpStatus(host, what, res.status);
+      return null;
+    }
+    const body = (await res.json()) as { brief?: unknown };
+    if (typeof body.brief !== "string" || body.brief === "") {
+      reportFailure("Review", "The server sent no brief for this conversation.", "thread:empty");
+      return null;
+    }
+    return body.brief;
+  } catch (e) {
+    reportFetchFailure(host, what, e);
+    return null;
   }
 }
 
