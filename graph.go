@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
@@ -163,7 +164,9 @@ func ComposeGraph(ws types.WorkspaceRepository, opts ...ComposeOption) types.Gra
 // file watcher invalidates it on source changes; without a watcher (a one-shot
 // CLI) every Get rebuilds cache-first, identical to the old always-rebuild path.
 // Rebuilds are single-flight. Gated on the watcher rather than a TTL so an agent
-// never gets a stale answer and learns to distrust the graph.
+// never gets a stale answer and learns to distrust the graph. While watching, the
+// cache also refills itself in the background after each invalidation, so the
+// query that follows an edit answers from memory instead of paying the rebuild.
 type warmGraph struct {
 	// rebuild builds the graph; its bool is the caller's refresh, which decides whether
 	// the SHARDS are rebuilt or read from the cache. It is threaded rather than bound to
@@ -173,6 +176,9 @@ type warmGraph struct {
 	log     *slog.Logger
 
 	buildMu sync.Mutex // serializes rebuilds so concurrent misses build once
+
+	reload chan struct{} // capacity 1: a pending background rebuild absorbs every request behind it
+	settle time.Duration // quiet time after the last invalidation before the background rebuild
 
 	mu       sync.RWMutex // guards the fields below
 	graph    *knowledge.Graph
@@ -185,8 +191,13 @@ func newWarmGraph(rebuild func(context.Context, bool) (*knowledge.Graph, error),
 	if log == nil {
 		log = slog.Default()
 	}
-	return &warmGraph{rebuild: rebuild, log: log}
+	return &warmGraph{rebuild: rebuild, log: log, reload: make(chan struct{}, 1), settle: warmGraphReloadSettle}
 }
+
+// warmGraphReloadSettle sits on top of the watcher's own debounce: a checkout or a
+// formatter lands as several batches, and rebuilding between them is wasted work. A query
+// inside the window rebuilds inline exactly as it would without the background reload.
+const warmGraphReloadSettle = 500 * time.Millisecond
 
 // Get returns the workspace graph. When a watcher is active and the cache is
 // fresh, it returns the warm graph without touching the filesystem. Otherwise it
@@ -262,8 +273,48 @@ func (w *warmGraph) invalidate() {
 	w.mu.Unlock()
 }
 
+// requestReload asks reloadLoop for a background rebuild without blocking; a request
+// that finds one already pending is absorbed by it.
+func (w *warmGraph) requestReload() {
+	select {
+	case w.reload <- struct{}{}:
+	default:
+	}
+}
+
+// reloadLoop rebuilds the cache once requests have been quiet for w.settle, until ctx
+// ends. It goes through Get, so a query arriving mid-rebuild waits on buildMu and then
+// reads the result, and a change landing mid-rebuild leaves the cache untrusted and
+// requests the next rebuild itself.
+func (w *warmGraph) reloadLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-w.reload:
+		}
+		timer := time.NewTimer(w.settle)
+	settle:
+		for {
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-w.reload:
+				timer.Reset(w.settle)
+			case <-timer.C:
+				break settle
+			}
+		}
+		if _, err := w.Get(ctx, false); err != nil && ctx.Err() == nil {
+			w.log.DebugContext(ctx, "magus: background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
+		}
+	}
+}
+
 // watch starts a file watcher over root that invalidates the cache on any
-// graph-relevant change and marks the cache trustworthy. It returns a stop
+// graph-relevant change and marks the cache trustworthy, then builds the graph in the
+// background and rebuilds it after every invalidation. It returns a stop
 // function. If the watcher cannot start, the cache stays untrusted (every Get
 // rebuilds cache-first) and the error is returned. Call before serving requests
 // so a change between the first build and the watcher's start cannot be missed.
@@ -286,6 +337,9 @@ func (w *warmGraph) watch(ctx context.Context, root string) (func(), error) {
 	w.watching = true
 	w.mu.Unlock()
 
+	go w.reloadLoop(wctx)
+	w.requestReload()
+
 	go func() {
 		defer watcher.Close()
 		for {
@@ -303,6 +357,7 @@ func (w *warmGraph) watch(ctx context.Context, root string) (func(), error) {
 				}
 				if graphRelevant(batch.Paths) {
 					w.invalidate()
+					w.requestReload()
 				}
 			}
 		}

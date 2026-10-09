@@ -200,15 +200,17 @@ func TestWarmGraphInvalidationDuringBuild(t *testing.T) {
 	assert.Equal(t, int64(2), n.Load(), "the next Get must rebuild, not serve the stale graph")
 }
 
-// TestWarmGraphWatchInvalidatesOnChange exercises the real fsnotify watcher: a
-// change to a graph-relevant file under the watched root drops the warm cache.
-func TestWarmGraphWatchInvalidatesOnChange(t *testing.T) {
+// TestWarmGraphWatchRebuildsInTheBackground exercises the real fsnotify watcher: the
+// cache fills when watching starts and refills after a graph-relevant change, both
+// without a Get.
+func TestWarmGraphWatchRebuildsInTheBackground(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping fsnotify integration test under -short")
 	}
 	root := t.TempDir()
 	rebuild, n := countingRebuild()
 	w := newWarmGraph(rebuild, nil)
+	w.settle = 10 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -216,23 +218,83 @@ func TestWarmGraphWatchInvalidatesOnChange(t *testing.T) {
 	require.NoError(t, err)
 	defer stop()
 
-	// Warm the cache; a second Get should be a cache hit.
-	_, err = w.Get(ctx, false)
-	require.NoError(t, err)
-	require.NotNil(t, w.cached())
-	_, err = w.Get(ctx, false)
-	require.NoError(t, err)
+	require.Eventually(t, func() bool { return w.cached() != nil }, 5*time.Second, 10*time.Millisecond,
+		"watching should warm the cache without a query")
 	require.Equal(t, int64(1), n.Load())
 
-	// Touch a graph-relevant file; the watcher (200ms debounce) should invalidate.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// x\n"), 0o644))
 
-	require.Eventually(t, func() bool { return w.cached() == nil }, 5*time.Second, 25*time.Millisecond,
-		"a change to a .buzz file should invalidate the warm cache")
-
+	require.Eventually(t, func() bool { return n.Load() == 2 && w.cached() != nil }, 5*time.Second, 10*time.Millisecond,
+		"a change to a .buzz file should rebuild the warm cache in the background")
 	_, err = w.Get(ctx, false)
 	require.NoError(t, err)
-	assert.Equal(t, int64(2), n.Load(), "Get after invalidation rebuilds")
+	assert.Equal(t, int64(2), n.Load(), "the query after the change answers from memory")
+}
+
+// watchingWarmGraph is a warm graph that trusts its cache as if a watcher ran, with its
+// reload loop running under t's context and a settle short enough for a test.
+func watchingWarmGraph(t *testing.T, rebuild func(context.Context, bool) (*knowledge.Graph, error)) *warmGraph {
+	t.Helper()
+	w := newWarmGraph(rebuild, nil)
+	w.settle = 20 * time.Millisecond
+	w.mu.Lock()
+	w.watching = true
+	w.mu.Unlock()
+	go w.reloadLoop(t.Context())
+	return w
+}
+
+func TestWarmGraphReloadCoalescesABurst(t *testing.T) {
+	rebuild, n := countingRebuild()
+	w := watchingWarmGraph(t, rebuild)
+
+	for range 5 {
+		w.invalidate()
+		w.requestReload()
+	}
+
+	require.Eventually(t, func() bool { return w.cached() != nil }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, int64(1), n.Load(), "a burst inside the settle window rebuilds once")
+}
+
+func TestWarmGraphReloadRebuildsAfterAMidBuildChange(t *testing.T) {
+	var n atomic.Int64
+	started := make(chan struct{})
+	release := make(chan struct{})
+	w := watchingWarmGraph(t, func(context.Context, bool) (*knowledge.Graph, error) {
+		if n.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return knowledge.NewGraph(), nil
+	})
+
+	w.requestReload()
+	<-started
+	w.invalidate()
+	w.requestReload()
+	close(release)
+
+	require.Eventually(t, func() bool { return n.Load() == 2 && w.cached() != nil }, 5*time.Second, 5*time.Millisecond,
+		"the graph that missed the change is replaced, not served")
+}
+
+func TestWarmGraphReloadLoopEndsWithItsContext(t *testing.T) {
+	rebuild, n := countingRebuild()
+	w := newWarmGraph(rebuild, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { defer close(done); w.reloadLoop(ctx) }()
+
+	w.requestReload() // pending inside the settle window when the context ends
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("reloadLoop outlived its context")
+	}
+	assert.Equal(t, int64(0), n.Load(), "a reload pending at shutdown never builds")
 }
 
 func TestGraphRelevant(t *testing.T) {
