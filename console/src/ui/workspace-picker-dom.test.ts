@@ -158,6 +158,24 @@ describe("the workspace scope control", () => {
     assert.equal(document.activeElement, btn);
   });
 
+  test("opens onto the checked workspace and the arrow keys walk the rows", () => {
+    const { host, picker, btn } = mount();
+    picker.setWorkspaces(BOTH);
+    setWorkspaceScope(MAGUS);
+    btn.click();
+    const items = menuItems(host);
+    assert.equal(document.activeElement, items[2], "the current workspace has focus");
+
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true });
+    document.activeElement?.dispatchEvent(down);
+    assert.equal(document.activeElement, items[3]);
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    assert.equal(btn.getAttribute("aria-expanded"), "false");
+    assert.equal(document.activeElement, btn);
+  });
+
   test("destroy removes the control and stops it tracking the scope", () => {
     const { host, picker, btn } = mount();
     picker.setWorkspaces(BOTH);

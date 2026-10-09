@@ -31,6 +31,53 @@ the tree is the server's link vocabulary, `KnownApps` in `internal/service/conso
 because the CLI mints links with no console built. `src/apps/apps.test.ts` fails when any of them
 disagrees with the directories, in either direction.
 
+## Styling standard
+
+Normative. A new sheet, view or component follows it; a reviewer rejects a change that does not. The
+rest of this file says how each rule is built.
+
+- **Type** is the PF tokens and nothing else: `--pf-t--global--font--size--body--sm` (12px),
+  `--body--default` (14px), `--body--lg` (16px), and the `--heading--*` tokens. Nothing is under 12px,
+  and no `rem`, `em` or `px` font size is written by hand. The uppercase label and chip are
+  `--console-label-size` and `--console-chip-size`, both mapped to `--body--sm`.
+- **Spacing** is `--pf-t--global--spacer--*` (xs 4px, sm 8px, md 16px, lg 24px, xl 32px, 2xl 48px) for
+  padding, margin and gap. A value between two steps rounds to one of them; it does not get a new step.
+- **Status is never colour alone.** A state that has a colour also has a shape and a word: put
+  `statusIcon` and `statusText` (or `statusMark`, both in `ui/status.ts`) beside the dot, or use an
+  Alert, which carries an icon and a screen-reader severity prefix. A dot that only changes hue is a bug.
+- **Every failure is a toast and, where the reader is looking, text.** Raise the toast with
+  `reportFailure(source, message, key)` (`lib/notifications.ts`) or `showToast(..., "error")`, and put
+  an inline Alert (`inlineAlert` in `ui/alert.ts`) in the pane that failed to render. A failure only a
+  console log or a blank pane knows about is a bug. The toast is a PF Alert in one toast group; a link or
+  button in it is not announced as interactive, so write the message to say where to go and what to do.
+- **Pane-relative layout uses container queries.** The console tiles panes, so a pane is narrower than
+  the viewport and a viewport `@media (max-width)` answers the wrong question. Declare
+  `container-type: inline-size` on the pane or app root and use `@container`. A viewport media query is
+  right only for the shell itself (title bar, rail) and for `prefers-*` and `hover`/`pointer` features.
+- **Use the PF component when one exists**, and do not re-skin it. Imported now (`patternfly.css`):
+  Alert and Alert group, Backdrop, Badge, Bullseye, Button, Card, Check, ClipboardCopy, DataList,
+  DescriptionList, Divider, Drawer, EmptyState, Form, FormControl, Gallery, HelperText, Icon,
+  InputGroup, Label, Menu, ModalBox, Nav, NotificationDrawer, Popover, Progress, Radio, Skeleton,
+  Spinner, Switch, Table, Tabs, TextInputGroup, ToggleGroup, Toolbar, TreeView. Add the sheet when an
+  app starts using one more (see below). Hand-rolled toasts, alerts, menus, tables and help popovers
+  are what `ui/` and `lib/toast.ts` replace:
+
+  | Need                | Use                                                            |
+  | ------------------- | -------------------------------------------------------------- |
+  | A transient message | `showToast`, `reportFailure`                                   |
+  | An in-place message | `inlineAlert` (`ui/alert.ts`)                                  |
+  | A state mark        | `statusIcon`, `statusText`, `statusMark` (`ui/status.ts`)      |
+  | A menu              | PF Menu markup and `wireMenu` (`ui/menu.ts`)                   |
+  | A "?" explanation   | `createHelpButton`, `attachHelpPopover` (`ui/help-popover.ts`) |
+  | A sortable table    | `SortableTable` (`ui/table.ts`)                                |
+
+- **One focus ring.** The global `:where(button, a, [role="button"], [tabindex]):focus-visible` rule in
+  `console.css` draws PF's focus-ring token at PF's offset. A sheet does not restate the colour or the
+  width. Where an ancestor's `overflow` would clip an outside ring, set only
+  `outline-offset: var(--console-focus-inset)`.
+- **Hit areas** are at least 24px square for anything pressed, and a `title=` is never the only place
+  an explanation lives (touch has no hover).
+
 ## PatternFly
 
 `@patternfly/patternfly@6.5.2` (devDependency, exact pin). PatternFly Core (CSS only, no
@@ -40,7 +87,7 @@ JS runtime), which is the documented path for non-React consumers. Prefix `pf-v6
 PatternFly is the console's ONLY design system. The stylesheet stack, in load order:
 
 1. `patternfly.css`: PF Core base + the per-component sheets we render.
-2. `tokens.css`: the console's PF-native token layer (squares corners, system fonts, `--console-*` slots).
+2. `tokens.css`: the console's PF-native token layer (corner radii, the brand ramp and focus ring, system fonts, `--console-*` slots).
 3. `console.css`: the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
    launcher, layout).
 4. `overrides.css`: the small ID/class-scoped escape hatch for PF-less shell chrome.
@@ -49,7 +96,7 @@ PatternFly is the console's ONLY design system. The stylesheet stack, in load or
 ### How it is bundled
 
 - `src/styles/patternfly.css` @imports the PF **base** plus only the **per-component** sheets
-  we render (Button, Tabs, Card, Gallery). esbuild `--bundle --minify` inlines them into
+  we render (the list is under Styling standard). esbuild `--bundle --minify` inlines them into
   `gen/patternfly.css`. Add a component's sheet here when an app starts using it; that is
   the whole opt-in. Do NOT import the 1.8MB monolith `patternfly.min.css`.
 - Font/image `url()` assets are marked `--external` in the build script so esbuild leaves the
@@ -146,20 +193,27 @@ between 0.04 and 0.09em, three weights, with adjacent labels on one app disagree
 - `--console-label-size`, `-weight` and `-tracking`: a section, column, facet, stat or panel
   label. Case and colour are all that separate it from the content around it.
 - `--console-chip-size`, `-weight` and `-tracking`: the run inside a chip: a status badge on a
-  log line, a scope pill, a run's verdict. Smaller and heavier, because the fill or outline it sits
-  on already does the separating.
+  log line, a scope pill, a run's verdict. Heavier, because the fill or outline it sits on already
+  does the separating. Both sizes are the 12px body token, the floor for any text.
 
 Write `text-transform: uppercase` yourself; it is the label's defining property, and the rule keys
 on it to require the three tokens. Which recipe an element takes is the author's call; what is not
 optional is taking one of them.
 
-### Corner style (squarish, locked house style)
+### Corner style (two tiers, locked house style)
 
 PF builds every radius from global primitives `--pf-t--global--border--radius--{100..500}`
-plus semantic/role aliases. `tokens.css` overrides the primitives AND the aliases (small/
-medium/large/tiny/pill + action/control roles) to **2px**, once, so the whole component set
-(cards, buttons, inputs, tabs, chips) squares up together: no per-component CSS, and it
-survives version bumps.
+plus semantic/role aliases. `tokens.css` overrides the primitives AND the aliases once, so
+the whole component set follows with no per-component CSS, and it survives version bumps.
+There are two tiers, not one radius:
+
+- **Containers and passive chrome** (cards, menus, popovers, tabs, chips, labels): 2-4px
+  (the primitives and the tiny/small/medium/large/pill aliases), so panels stay crisp.
+- **Interactive controls** (buttons, inputs, selects; the `action`, `action--plain` and
+  `control` role aliases): 6px, so they read as pressable against the panel they sit on.
+
+On Apple platforms (`data-platform="apple"` on the root, set by `theme.ts`) the whole scale
+is a step rounder, same tiers.
 
 ### Diagram figures (`--magus-diagram-*`)
 
@@ -294,6 +348,5 @@ before reusing a name that reads as generic.
 .gantt-bar       -> .console-dashboard-gantt__bar   (+ --running/--failed/... variants)
 .node-pill       -> .console-graph-nodelist__pill
 .k-<kind> dot    -> .console-graph-legend__swatch   (+ data-kind="<kind>")
-.sw-toast        -> .console-shell-toast
 .qchip           -> .console-log-filter__chip
 ```

@@ -45,6 +45,11 @@
   --pf-t--global--dark--color--brand--subtle--100: #2b403b;
   --pf-t--global--dark--color--brand--subtle--200: #38524c;
   --pf-t--global--dark--color--brand--subtle--300: #5d897e;
+  /* The focus ring is part of the brand: the global :focus-visible rule in console.css reads PF's
+     focus-ring token, and PF ships it blue, so the ramp's spruce is pointed at its primitives. */
+  --pf-t--global--focus-ring--color--100: var(--pf-t--global--color--brand--200);
+  --pf-t--global--focus-ring--color--200: var(--pf-t--global--color--brand--200);
+  --pf-t--global--dark--focus-ring--color--100: var(--pf-t--global--dark--color--brand--100);
 
   /* --- 1. Two-tier corner radius -------------------------------------------------------
      PatternFly builds every component's radius from a small set of global primitives
@@ -262,9 +267,12 @@
    Tokens rather than one shared class because the label is applied by whichever sheet owns the
    element (see README.md's naming formula); the values are what has to be shared, not the
    selector. A sheet still writes `text-transform: uppercase` itself - it is the label's
-   defining property, and the stylelint rule keys on it to require the three tokens below. */
+   defining property, and the stylelint rule keys on it to require the three tokens below.
+
+   Both sizes are the body--sm token, 12px: the floor for text anywhere in the console. Weight and
+   tracking carry what difference there is between the label and the chip. */
 :root {
-  --console-label-size: 0.68rem;
+  --console-label-size: var(--pf-t--global--font--size--body--sm);
   --console-label-tracking: 0.05em;
   --console-label-weight: 600;
 }
@@ -278,7 +286,7 @@
    Two recipes is the whole vocabulary. Anything uppercase is one or the other, which is what
    makes the stylelint rule that pins them satisfiable without a per-site exception. */
 :root {
-  --console-chip-size: 0.65rem;
+  --console-chip-size: var(--pf-t--global--font--size--body--sm);
   --console-chip-tracking: 0.05em;
   --console-chip-weight: 700;
 }

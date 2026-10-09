@@ -52,7 +52,9 @@
 // listener funnels into that store. This mirrors how the apps already talk to the shell through the
 // shared DOM (the #console-conn status dot, dispatchCommand) rather than through shared module state.
 
+import { wireMenu } from "../ui/menu";
 import { wireDrawerToggle } from "../ui/ref-drawer";
+import { statusMark, type Status } from "../ui/status";
 import { renderTransientToast } from "./toast";
 
 export type NotifyKind = "ok" | "warn" | "error";
@@ -391,6 +393,8 @@ function svgBell(): string {
   );
 }
 
+const KIND_STATUS: Record<NotifyKind, Status> = { ok: "success", warn: "warning", error: "danger" };
+
 function relTime(at: number, now: number): string {
   const secs = Math.max(0, Math.round((now - at) / 1000));
   if (secs < 60) return secs + "s ago";
@@ -466,20 +470,13 @@ export function mountNotificationCenter(): NotificationCenter {
   const olderBtn = document.createElement("button");
   olderBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__older-btn";
   olderBtn.type = "button";
-  olderBtn.setAttribute("aria-haspopup", "menu");
-  olderBtn.setAttribute("aria-expanded", "false");
   olderBtn.textContent = "Dismiss older";
   const olderMenu = document.createElement("div");
   olderMenu.className = "console-shell-notify__older-menu";
   olderMenu.setAttribute("role", "menu");
+  olderMenu.setAttribute("aria-label", "Dismiss older notifications");
   olderMenu.hidden = true;
   const HOUR_MS = 60 * 60 * 1000;
-  let olderOpen = false;
-  const setOlder = (v: boolean): void => {
-    olderOpen = v;
-    olderMenu.hidden = !v;
-    olderBtn.setAttribute("aria-expanded", v ? "true" : "false");
-  };
   for (const [label, hours] of [
     ["Older than 1 hour", 1],
     ["Older than 3 hours", 3],
@@ -490,28 +487,11 @@ export function mountNotificationCenter(): NotificationCenter {
     mi.type = "button";
     mi.setAttribute("role", "menuitem");
     mi.textContent = label;
-    mi.addEventListener("click", () => {
-      store.dismissOlderThan(hours * HOUR_MS);
-      setOlder(false);
-    });
+    mi.addEventListener("click", () => store.dismissOlderThan(hours * HOUR_MS));
     olderMenu.append(mi);
   }
-  olderBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    setOlder(!olderOpen);
-  });
-  olderMenu.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("pointerdown", (e) => {
-    if (olderOpen && e.target instanceof Node && !olderWrap.contains(e.target)) setOlder(false);
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && olderOpen) {
-      e.stopPropagation();
-      setOlder(false);
-      olderBtn.focus();
-    }
-  });
   olderWrap.append(olderBtn, olderMenu);
+  wireMenu(olderMenu, olderBtn);
 
   const clearBtn = document.createElement("button");
   clearBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__clear";
@@ -544,7 +524,8 @@ export function mountNotificationCenter(): NotificationCenter {
       listEl.append(empty);
       clearBtn.hidden = true;
       olderWrap.hidden = true;
-      setOlder(false);
+      olderMenu.hidden = true;
+      olderBtn.setAttribute("aria-expanded", "false");
       return;
     }
     clearBtn.hidden = false;
@@ -557,9 +538,10 @@ export function mountNotificationCenter(): NotificationCenter {
       item.setAttribute("role", "listitem");
       if (n.important && !n.seen) item.dataset.unseen = "";
 
-      const dot = document.createElement("span");
-      dot.className = "console-shell-notify__item-dot";
-      dot.setAttribute("aria-hidden", "true");
+      // The outcome as a shape and a word, not only a tint: the left accent and the icon colour say
+      // nothing to a reader who cannot tell the hues apart.
+      const dot = statusMark(KIND_STATUS[n.kind]);
+      dot.className = "console-shell-notify__item-mark";
 
       const body = document.createElement("div");
       body.className = "console-shell-notify__item-body";
@@ -620,6 +602,8 @@ export function mountNotificationCenter(): NotificationCenter {
       delete bell.dataset.unseen;
       bell.title = "Notifications";
     }
+    // The dot is a colour; the name carries the count for a reader who never sees it.
+    bell.setAttribute("aria-label", bell.title);
   };
 
   store.subscribe(() => {

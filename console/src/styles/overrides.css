@@ -25,7 +25,7 @@
   /* A grid row in the shell (console.css), NOT a fixed overlay: fixed spans the whole window, which
      would cut the navigation rail off above it. In the grid the bar sits in the trailing column and
      the rail runs past it to the window's bottom edge, so the chrome is continuous down the left. */
-  z-index: 20;
+  z-index: var(--pf-t--global--z-index--xs);
   display: flex; align-items: center; gap: 0.9rem;
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
@@ -41,7 +41,7 @@
      border rather than as one edge. The cast is the mark that survives, since it is the one that says
      which side is raised; the bar and the pane above it can share a tone and still separate. */
   background: var(--console-chrome);
-  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
 }
@@ -72,7 +72,7 @@
  * hover to invite the tooltip. */
 #console-statusbar .console-shell-statusbar__version {
   white-space: nowrap; line-height: 1.35; cursor: default;
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
   /* Dead-center in the rail, out of the flex flow, so a long version string can never displace
      the right-side controls (shortcuts, panes) - it truncates against the center instead. */
@@ -165,7 +165,7 @@
  * no accent, so it never reads as a status or an error. */
 #console-statusbar [data-viewonly] {
   margin-left: 0.5rem; padding: 0.05rem 0.35rem;
-  font-size: 0.72rem; line-height: 1.3; white-space: nowrap;
+  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3; white-space: nowrap;
   color: var(--pf-t--global--text--color--subtle);
   background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 8%, transparent);
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -201,8 +201,6 @@
 #console-conn { cursor: pointer; }
 #console-conn:hover { text-decoration: underline; text-decoration-color: var(--console-accent); }
 #console-conn:focus-visible {
-  outline: 2px solid var(--console-accent);
-  outline-offset: 2px;
   border-radius: var(--pf-t--global--border--radius--small);
 }
 
@@ -244,8 +242,8 @@
 #console-notifybtn[data-unseen] .console-shell-notify__dot {
   display: block; position: absolute; top: 0.3rem; right: 0.3rem;
   width: 0.5rem; height: 0.5rem; border-radius: 50%;
-  background: var(--pf-t--global--color--status--danger--default, #c9190b);
-  box-shadow: 0 0 0 2px var(--pf-t--global--background--color--primary--default);
+  background: var(--pf-t--global--color--status--danger--default);
+  box-shadow: 0 0 0 var(--pf-t--global--border--width--regular) var(--pf-t--global--background--color--primary--default);
 }
 /* v2: a full-height right-docked SIDE PANEL (the reference-drawer idiom), not a small dropdown. A popover
    is a usability nightmare under volume - it clips the list and steals focus; a side panel lets you scroll
@@ -289,28 +287,28 @@
   gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-shell-notify__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-shell-notify__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 /* Header actions: the "Dismiss older" menu beside "Clear all". */
 .console-shell-notify__actions { display: flex; align-items: center; gap: 0.5rem; }
 .console-shell-notify__older { position: relative; }
-.console-shell-notify__older-btn { font-size: 0.75rem; --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__older-btn { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
 .console-shell-notify__older-menu {
   position: absolute; top: calc(100% + 0.2rem); right: 0; min-width: 11rem; z-index: 1;
   display: flex; flex-direction: column; padding: 0.2rem;
   background: var(--pf-t--global--background--color--primary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--pf-t--global--box-shadow--lg);
 }
 .console-shell-notify__older-menu[hidden] { display: none; }
 .console-shell-notify__older-item {
-  text-align: left; padding: 0.35rem 0.5rem; font-size: 0.78rem; background: none; border: none; cursor: pointer;
+  text-align: left; padding: 0.35rem 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); background: none; border: none; cursor: pointer;
   color: var(--pf-t--global--text--color--regular); border-radius: var(--pf-t--global--border--radius--small);
 }
 .console-shell-notify__older-item:hover { background: var(--pf-t--global--background--color--secondary--default); }
 .console-shell-notify__list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .console-shell-notify__empty {
-  margin: 0; padding: 1.25rem 0.9rem; font-size: 0.82rem; line-height: 1.4;
+  margin: 0; padding: 1.25rem 0.9rem; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.4;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-notify__item {
@@ -321,26 +319,24 @@
 }
 .console-shell-notify__item:last-child { border-bottom: none; }
 .console-shell-notify__item[data-unseen] { background: var(--pf-t--global--background--color--secondary--default); }
-/* A small round kind dot leading each row, tinted by outcome (ok/warn/error). */
-.console-shell-notify__item-dot { flex: 0 0 auto; margin-top: 0.35rem; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--pf-t--global--text--color--subtle); }
-.console-shell-notify__item[data-kind="ok"] .console-shell-notify__item-dot { background: var(--console-status-ok); }
-.console-shell-notify__item[data-kind="warn"] .console-shell-notify__item-dot { background: var(--console-status-warn); }
-.console-shell-notify__item[data-kind="error"] .console-shell-notify__item-dot { background: var(--pf-t--global--color--status--danger--default, #c9190b); }
-.console-shell-notify__item[data-kind="error"] { border-left-color: var(--pf-t--global--color--status--danger--default, #c9190b); }
+/* The outcome leading each row: a status icon in its colour with the word hidden beside it (ui/status.ts),
+ * so it reads without the hue. The left accent on an error row is a second cue, never the only one. */
+.console-shell-notify__item-mark { flex: 0 0 auto; margin-top: var(--pf-t--global--spacer--xs); }
+.console-shell-notify__item[data-kind="error"] { border-left-color: var(--pf-t--global--color--status--danger--default); }
 .console-shell-notify__item-body { flex: 1 1 auto; min-width: 0; }
-.console-shell-notify__item-msg { margin: 0; font-size: 0.82rem; line-height: 1.35; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
+.console-shell-notify__item-msg { margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.35; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
 .console-shell-notify__item-meta { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.2rem; }
 /* The source chip: a quiet, tag-like label naming the app that raised this (not all-caps). Shared
  * look with the toast's source chip below. */
 .console-shell-notify__item-source {
-  font-size: 0.68rem; padding: 0.05rem 0.4rem;
+  font-size: var(--pf-t--global--font--size--body--sm); padding: 0.05rem 0.4rem;
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
 }
-.console-shell-notify__item-time { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
-.console-shell-notify__item-link { font-size: 0.75rem; --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__item-time { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-shell-notify__item-link { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
 .console-shell-notify__item-dismiss { flex: 0 0 auto; --pf-v6-c-button--PaddingInline: 0.25rem; color: var(--pf-t--global--text--color--subtle); }
 /* On a phone the side panel spans the full width so the rows have room to read. */
 @media (max-width: 30rem) {
@@ -360,14 +356,14 @@
 /* kbd chord chips in the keybindings rows: a compact keycap. Self-contained so the shell does not
  * lean on Pico's kbd styling (dropped at the W4 cutover). */
 [data-kbeditor] kbd {
-  font-size: 0.72rem; padding: 0.05rem 0.4rem; white-space: nowrap;
+  font-size: var(--pf-t--global--font--size--body--sm); padding: 0.05rem 0.4rem; white-space: nowrap;
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--regular);
 }
 [data-kbeditor] [data-kbdesc] {
-  margin: 0 0 0.5rem; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
+  margin: 0 0 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
 }
 [data-kbeditor] h3 {
   margin: 0.9rem 0 0.3rem;
@@ -385,7 +381,7 @@
    content and the ellipsis as a "keep going / pause to save" hint. */
 [data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
 [data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
-[data-kbeditor] [data-conflict] { color: var(--console-status-danger-text); font-size: 0.72rem; white-space: nowrap; }
+[data-kbeditor] [data-conflict] { color: var(--console-status-danger-text); font-size: var(--pf-t--global--font--size--body--sm); white-space: nowrap; }
 [data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
 /* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph
  * lines up with the label instead of hanging off PF's default baseline alignment. */
@@ -413,50 +409,8 @@
  * show. Do not remove: without this the help copy would appear inline in the graph/log apps. */
 [data-ref-section] { display: none; }
 
-/* --- Refresh toast --------------------------------------------------------------------------------
- * A small bottom-left "reload" card raised by the service-worker registration (new bundles are
- * available) and by a console-settings change (refresh-toast.ts / console-settings.ts). It is
- * JS-injected and has no PatternFly component, so its frame lives here (migrated from the removed
- * site.css at the W4 cutover, repointed to PF tokens). The Refresh control is a bare <button> the
- * toast builds directly; with Pico's button base gone it needs its own quiet-chip styling. */
-.console-shell-toast {
-  position: fixed;
-  left: max(1rem, env(safe-area-inset-left));
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
-  max-width: 22rem;
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.6rem 0.9rem; font-size: 0.9rem;
-  background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
-}
-/* The source chip prefixing a toast: names the app that raised it, so a toast that pops while a
- * different tab is active still says where it came from. Quiet, tag-like, not all-caps. */
-.console-shell-toast__source {
-  flex: none; font-size: 0.68rem; padding: 0.05rem 0.4rem;
-  background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
-}
-.console-shell-toast button {
-  flex: none; width: auto; margin: 0;
-  padding: 0.25rem 0.6rem; font-size: 0.85rem;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-  color: var(--pf-t--global--text--color--regular);
-  cursor: pointer;
-}
-/* The transient toast (a settings save/apply, or an error) carries no action button; a tinted left edge
-   carries the outcome, and it fades up on entry before auto-dismissing. */
-.console-shell-toast--transient { border-left: 3px solid var(--console-status-ok); animation: console-toast-in 0.16s ease-out; }
-.console-shell-toast--transient[data-kind="warn"] { border-left-color: var(--console-status-warn); }
-.console-shell-toast--transient[data-kind="error"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
-@keyframes console-toast-in { from { opacity: 0; transform: translateY(0.4rem); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .console-shell-toast--transient { animation: none; } }
+/* Toasts have no rules here: they are PatternFly Alerts in one toast Alert group (lib/toast.ts), and
+ * PF owns their frame, placement, stacking, motion and z-index. */
 
 /* --- Share panel ---------------------------------------------------------------------------------
  * The "Share a read-only view" pop-out (share.ts): a right-docked side panel in the SAME family as
@@ -480,7 +434,7 @@
 .console-shell-share::before,
 .console-shell-activity::before {
   content: ""; position: absolute; top: 0; bottom: 0; left: -18px; width: 18px;
-  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.16));
+  background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
   pointer-events: none;
 }
 .console-shell-share[hidden] { display: none; }
@@ -489,7 +443,7 @@
   gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-shell-share__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-shell-share__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 /* The body scrolls if a short viewport cannot hold the QR + link + actions; its bottom padding clears
    the status-bar fade (::after below) so the last control is never cut. */
 .console-shell-share__body {
@@ -498,7 +452,7 @@
   padding: 1rem 1.1rem 2.75rem;
 }
 .console-shell-share__picklabel {
-  margin: 0; align-self: flex-start; font-size: 0.78rem;
+  margin: 0; align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* The lifetime picker. Five options fit the 24rem panel, but the group WRAPS rather than
@@ -515,12 +469,12 @@
 }
 .console-shell-share__generate { align-self: stretch; }
 .console-shell-share__revoked {
-  margin: 0; align-self: flex-start; font-size: 0.78rem;
+  margin: 0; align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--console-status-warn, var(--pf-t--global--text--color--regular));
 }
 /* Light frame around the QR so quiet-zone contrast holds in dark mode too. */
 .console-shell-share__qr {
-  padding: 0.5rem; background: #ffffff; border-radius: 2px; line-height: 0;
+  padding: 0.5rem; background: var(--pf-t--color--white); border-radius: var(--pf-t--global--border--radius--tiny); line-height: 0;
 }
 .console-shell-share__qr canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
 .console-shell-share__qr--failed { display: none; }
@@ -528,7 +482,7 @@
    is interactive with a plain -> link hover (no all-caps, square). */
 .console-shell-share__url {
   margin: 0; width: 100%; box-sizing: border-box; word-break: break-all; text-align: center;
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle); cursor: pointer;
   padding: 0.35rem 0.4rem;
   border: 1px solid var(--pf-t--global--border--color--default);
@@ -540,11 +494,11 @@
   border-color: var(--pf-t--global--text--color--link--default);
 }
 .console-shell-share__note {
-  margin: 0; text-align: center; font-size: 0.74rem;
+  margin: 0; text-align: center; font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-share__expiry {
-  margin: 0; text-align: center; font-size: 0.7rem; opacity: 0.8;
+  margin: 0; text-align: center; font-size: var(--pf-t--global--font--size--body--sm); opacity: 0.8;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-share__actions {
@@ -575,7 +529,7 @@
   gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-shell-activity__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-shell-activity__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 /* Bottom padding clears the status-bar fade (::after) so the last row is never cut. */
 .console-shell-activity__body {
   flex: 1 1 auto; overflow-y: auto; min-height: 0;
@@ -585,7 +539,7 @@
 /* The aria-live line. Visible as well as announced - the counts are the panel's one-glance answer,
    and a sighted reader wants them for the same reason a screen-reader user is told them. */
 .console-shell-activity__summary {
-  margin: 0; font-size: 0.74rem; color: var(--pf-t--global--text--color--subtle);
+  margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__section { display: flex; flex-direction: column; gap: 0.35rem; }
 .console-shell-activity__sectionhead {
@@ -606,19 +560,19 @@
 .console-shell-activity__row[data-outcome="pass"] { border-left-color: var(--console-status-ok); }
 .console-shell-activity__row[data-outcome="fail"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
 .console-shell-activity__rowtitle {
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.74rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--regular);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.console-shell-activity__rowmeta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-activity__rowmeta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 /* The lease a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
    field's arrival is a data change rather than a styling one. */
 .console-shell-activity__rowunit {
-  align-self: flex-start; font-size: 0.66rem; letter-spacing: 0.03em;
+  align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm); letter-spacing: 0.03em;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty {
-  margin: 0; padding: 0.5rem; font-size: 0.76rem; line-height: 1.4;
+  margin: 0; padding: 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.4;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty[hidden] { display: none; }

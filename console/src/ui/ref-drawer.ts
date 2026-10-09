@@ -72,11 +72,14 @@ export function wireDrawerToggle(opts: {
   const render = (): void => {
     panel.hidden = !open;
     panel.setAttribute("aria-hidden", open ? "false" : "true");
+    panel.inert = !open;
     trigger.setAttribute("aria-expanded", open ? "true" : "false");
   };
 
   const setOpen = (v: boolean): void => {
     if (v === open) return;
+    // Read before render(): hiding the panel moves focus off its contents.
+    const focusInside = panel.contains(document.activeElement);
     open = v;
     render();
     if (v) {
@@ -84,10 +87,9 @@ export function wireDrawerToggle(opts: {
       requestAnimationFrame(() => (opts.focusTarget?.() ?? panel).focus());
     } else {
       opts.onClose?.();
-      // Only pull focus back to the trigger when it currently sits inside the panel, so closing via an
-      // outside click on some other control does not yank focus away from where the user just went.
-      if (document.activeElement instanceof HTMLElement && panel.contains(document.activeElement))
-        trigger.focus();
+      // Only pull focus back to the trigger when it sat inside the panel, so closing via an outside
+      // click on some other control does not yank focus away from where the user just went.
+      if (focusInside) trigger.focus();
     }
   };
 
@@ -147,6 +149,12 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const bodyEl = document.getElementById("console-refdrawer-body");
   const trigger = document.getElementById("console-refbtn");
   if (!drawer || !panel || !bodyEl || !trigger) return;
+
+  // The panel's title is a bare span in the markup, which leaves the region without a heading to
+  // navigate by.
+  const title = panel.querySelector(".console-shell-refdrawer__title");
+  title?.setAttribute("role", "heading");
+  title?.setAttribute("aria-level", "2");
 
   const pinBtn = document.getElementById("console-refpin");
   const closeBtn = document.getElementById("console-refclose");
@@ -519,11 +527,14 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     // panel off the right edge, so the unpinned overlay position is authored in console.css.)
     drawer.classList.toggle("pf-m-inline", pinned && isOpen);
     panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    panel.inert = !isOpen;
     trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
     pinBtn?.setAttribute("aria-pressed", pinned && isOpen ? "true" : "false");
   };
 
   const setOpen = (open: boolean): void => {
+    // Read before render(): hiding the panel moves focus off its contents.
+    const focusInside = panel.contains(document.activeElement);
     isOpen = open;
     if (open) refresh();
     // Closing a pinned panel also unpins it, so it does not spring back on the next open.
@@ -534,11 +545,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     render();
     // Move focus into the panel on open (the close button), back to the trigger on close.
     if (open) requestAnimationFrame(() => closeBtn?.focus());
-    else if (
-      document.activeElement instanceof HTMLElement &&
-      panel.contains(document.activeElement)
-    )
-      trigger.focus();
+    else if (focusInside) trigger.focus();
   };
 
   const togglePin = (): void => {
