@@ -337,8 +337,15 @@ func TestKnowledgeRelationImplements(t *testing.T) {
 		}
 	}
 	require.NotNil(t, def, "implements is declared in the vocabulary")
-	assert.Equal(t, "implements", def.ForwardLabel)
-	assert.Equal(t, "implemented by", def.ReverseLabel)
+	got := *def
+	assert.NotEmpty(t, got.Description)
+	got.Description = ""
+	got.Shapes = nil // the allowed endpoint pairs are pinned through KnowledgeRelationAllows below
+	assert.Equal(t, KnowledgeRelationDefinition{
+		ID:           RelationImplements,
+		ForwardLabel: "implements",
+		ReverseLabel: "implemented by",
+	}, got)
 
 	assert.True(t, KnowledgeRelationAllows(RelationImplements, KindSymbol, KindSymbol))
 	assert.False(t, KnowledgeRelationAllows(RelationImplements, KindFile, KindSymbol))

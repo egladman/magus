@@ -227,7 +227,7 @@ func TestDiffOrderPartialNoteNamesEveryCause(t *testing.T) {
 		partialOrderNote(true, false, []string{"libs/a"}), "a cancelled review is reported as cancelled, not as unreadable indexes")
 }
 
-func TestDiffOrderSymbolsOccurrencesAnswersEachKeyAsTheSingleKeyReadDoes(t *testing.T) {
+func TestDiffOrderSymbolsOccurrencesAnswersEachKeyAsALoneKeyWould(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -241,7 +241,7 @@ func TestDiffOrderSymbolsOccurrencesAnswersEachKeyAsTheSingleKeyReadDoes(t *test
 
 	reads := symbolsOccurrences(t.Context(), in, []string{foo, absent})
 
-	assert.Equal(t, symbolOccurrences(t.Context(), in, foo), reads[foo])
+	assert.Equal(t, symbolsOccurrences(t.Context(), in, []string{foo})[foo], reads[foo], "another key in the batch does not change a key's read")
 	assert.Empty(t, reads[absent].Files, "a key no index names has an entry with no sites")
 	assert.Empty(t, reads[absent].Unreadable)
 	require.Len(t, reads[foo].Files, 1)

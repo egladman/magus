@@ -105,8 +105,14 @@ func TestJoinAnchorsReadsAFileAnchorWithoutAGraph(t *testing.T) {
 
 	hits := joinAnchors(t.Context(), root, stores, nil, []string{"internal/cache/cache.go"}, nil)
 
-	require.Len(t, hits, 1)
-	assert.Equal(t, "cache-pairs", hits[0].Note)
-	assert.Equal(t, "internal/cache/cache.go", hits[0].Matched)
-	assert.Equal(t, string(notes.StatusUngraded), hits[0].Drift)
+	assert.Equal(t, []AnchorHit{{
+		Note:    "cache-pairs",
+		Title:   "Cache pairs",
+		Pos:     0,
+		Kind:    notes.AnchorFile,
+		Target:  "internal/cache/cache.go",
+		Matched: "internal/cache/cache.go",
+		Match:   string(notes.MatchFile),
+		Drift:   string(notes.StatusUngraded),
+	}}, hits)
 }

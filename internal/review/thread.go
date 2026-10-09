@@ -216,8 +216,9 @@ func commentLines(comments []types.ReviewComment) []string {
 		if who == "" {
 			who = "unknown author"
 		}
-		var body []string
-		for _, l := range strings.Split(strings.TrimSpace(printable(t.Body)), "\n") {
+		quoted := strings.Split(strings.TrimSpace(printable(t.Body)), "\n")
+		body := make([]string, 0, len(quoted))
+		for _, l := range quoted {
 			body = append(body, "  > "+l)
 		}
 		out = append(out, fmt.Sprintf("%s:\n%s", printable(who), strings.Join(body, "\n")))

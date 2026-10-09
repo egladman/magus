@@ -1468,15 +1468,9 @@ func SymbolsOccurrences(ctx context.Context, ws types.Inspector, root string, cf
 	}, keys), true
 }
 
-// symbolOccurrences is the testable half of SymbolOccurrences: it takes the same resolved
+// symbolsOccurrences is the testable half of SymbolsOccurrences: it takes the same resolved
 // inputs loadKnowledgeSymbols and symbolGaps do, so none of the three can disagree about
-// which indexes exist.
-func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) SymbolOccurrenceRead {
-	return symbolsOccurrences(ctx, in, []string{key})[key]
-}
-
-// symbolsOccurrences is symbolOccurrences for several keys in one pass: the declarations are
-// resolved once, each index is opened once and decoded at most once, and each source file is
+// which indexes exist. The declarations are resolved once, each index is opened once and decoded at most once, and each source file is
 // read once to verify every key's sites. Every key's read carries the same Unreadable gaps,
 // since a hole in an index is a hole for each symbol.
 func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []string) map[string]SymbolOccurrenceRead {

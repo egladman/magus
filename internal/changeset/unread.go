@@ -105,10 +105,10 @@ func unreadLines(rep UnreadReport, patch, next string) []string {
 
 // NewRange is path:first-last, or path:line (deleted) for a hunk that leaves no line behind.
 func NewRange(path string, start, count int) string {
-	switch {
-	case count == 0:
+	switch count {
+	case 0:
 		return fmt.Sprintf("%s:%d (deleted)", path, start)
-	case count == 1:
+	case 1:
 		return fmt.Sprintf("%s:%d", path, start)
 	}
 	return fmt.Sprintf("%s:%d-%d", path, start, start+count-1)

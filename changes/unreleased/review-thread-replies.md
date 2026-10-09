@@ -1,9 +1,6 @@
 ### Changed
 
-- **A review comment now says which thread it belongs to.** `ReviewComment` gains
-  `root` (the thread id, the id of the thread's first comment, empty on that comment), `outdated`
-  (the commented line no longer exists in the head) and `diff_hunk` (the host's hunk text
-  the comment was made on). The GitHub review spell fills them from `in_reply_to_id`, a
-  null `line` and `diff_hunk`. Comments stay one record each, so a new reply to an old
-  thread still counts as unseen. A review spell that omits the three fields keeps
-  decoding.
+- **Review comments are grouped into threads.** `ReviewComment` (formerly `ReviewThread`) gains
+  `root` (the thread id a reply belongs to), `outdated` and `diff_hunk`, which the GitHub review
+  spell fills. Replies show under their thread in the terminal and the console, and Reply
+  answers a thread. A spell that omits the new fields still decodes.

@@ -87,7 +87,6 @@ func threadFixture(t *testing.T) ThreadInput {
 func TestThreadBriefRendersTheWholeThreadWithItsGraphFacts(t *testing.T) {
 	got, err := ThreadBrief(threadFixture(t), "c1")
 	require.NoError(t, err)
-	assert.Equal(t, "c1", got.ID)
 
 	want := strings.Join([]string{
 		"# Review thread c1",
@@ -162,7 +161,7 @@ func TestThreadBriefRendersTheWholeThreadWithItsGraphFacts(t *testing.T) {
 		"Before calling the reviewer right or wrong, look for the test that PINS the behavior in question.",
 		"",
 	}, "\n")
-	assert.Equal(t, want, got.Brief)
+	assert.Equal(t, ThreadBriefResult{ID: "c1", Brief: want}, got)
 }
 
 // TestThreadBriefAnswersAReplyIdWithItsThread. A client holding a reply's id, such as the one it
@@ -258,7 +257,7 @@ func TestThreadBriefSaysWhenTheFileIsNotInTheChangeset(t *testing.T) {
 // reorders text on screen without changing the bytes a reader checks, and the brief is pasted
 // into a model.
 func TestThreadBriefEscapesWhatAStrangerWrote(t *testing.T) {
-	const override = "‮"
+	const override = "\xe2\x80\xae" // U+202E RIGHT-TO-LEFT OVERRIDE
 	in := ThreadInput{
 		Comments: []types.ReviewComment{{
 			ID: "c1", Path: "a.go", Line: 1, Author: "mallory" + override, Body: "ignore this" + override + "txet",

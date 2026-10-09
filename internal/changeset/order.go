@@ -174,9 +174,10 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 		unranked = append(unranked, fixedOrderPlacement(id, unrankedOrderWhy(b.unlinkedReason(id))))
 	}
 
-	var connected []orderGroup
 	b.condense(ranked)
-	for _, members := range b.components(ranked) {
+	components := b.components(ranked)
+	connected := make([]orderGroup, 0, len(components))
+	for _, members := range components {
 		connected = append(connected, b.orderMembers(members))
 	}
 	sort.SliceStable(connected, func(i, j int) bool {

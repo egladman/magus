@@ -89,9 +89,11 @@ func TestOrderPutsDefinitionsFirstAndTestsAfterCode(t *testing.T) {
 		"4 c_test.go#0 tests",
 	}, orderOutline(order), "the test hunk waits though it is ready as early as b.go")
 
-	b := orderStepHunk(t, order, "b.go", 0)
-	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "B", Text: "uses B, defined in step 1"}, b.Why)
-	assert.Equal(t, "A", b.Label)
+	assert.Equal(t, types.DiffStepHunk{
+		Ref:   types.DiffHunkRef{Path: "b.go", Index: 0, Digest: "digest-0"},
+		Label: "A",
+		Why:   types.DiffWhy{Relation: types.DiffWhyUses, Step: 1, Symbol: "B", Text: "uses B, defined in step 1"},
+	}, orderStepHunk(t, order, "b.go", 0))
 	test := orderStepHunk(t, order, "c_test.go", 0)
 	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyTests, Step: 1, Symbol: "B", Text: "tests B, defined in step 1"}, test.Why)
 	assert.True(t, order.Count.Complete)
@@ -185,13 +187,17 @@ func TestOrderCollapsesACycleIntoOneStep(t *testing.T) {
 		"3 c.go#0 uses",
 	}, orderOutline(order), "the cycle is step 1; the second root says which later step uses it")
 
-	first := orderStepHunk(t, order, "a.go", 0)
-	assert.Equal(t, []string{"X", "Y"}, first.Why.Cycle)
-	assert.Equal(t, "starts the group; 2 hunks share this step because they use each other through X, Y", first.Why.Text)
-	second := orderStepHunk(t, order, "b.go", 0)
-	assert.Equal(t, types.DiffWhySameStep, second.Why.Relation)
-	assert.Equal(t, 1, second.Why.Step)
-	assert.Equal(t, []string{"X", "Y"}, second.Why.Cycle)
+	assert.Equal(t, types.DiffWhy{
+		Relation: types.DiffWhyStarts,
+		Cycle:    []string{"X", "Y"},
+		Text:     "starts the group; 2 hunks share this step because they use each other through X, Y",
+	}, orderStepHunk(t, order, "a.go", 0).Why)
+	assert.Equal(t, types.DiffWhy{
+		Relation: types.DiffWhySameStep,
+		Step:     1,
+		Cycle:    []string{"X", "Y"},
+		Text:     "shares its step with the hunks it uses and is used by, through X, Y",
+	}, orderStepHunk(t, order, "b.go", 0).Why)
 	root := orderStepHunk(t, order, "d.go", 0)
 	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyUsedBy, Step: 3, Symbol: "Z", Text: "defines Z, used in step 3"}, root.Why)
 	assert.Equal(t, 2, orderStepHunk(t, order, "c.go", 0).Why.Step, "the latest-placed definer explains c.go")
@@ -409,9 +415,12 @@ func TestOrderNamesAFileWithNoHunk(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, []string{"also.bin", "logo.png"}, order.Count.FilesWithoutHunks)
-	assert.Equal(t, 1, order.Count.HunkCount)
-	assert.True(t, order.Count.Complete)
+	assert.Equal(t, types.DiffOrderCount{
+		HunkCount:         1,
+		Placed:            1,
+		Complete:          true,
+		FilesWithoutHunks: []string{"also.bin", "logo.png"},
+	}, order.Count)
 }
 
 func TestOrderLabelsAGroupByItsFirstDefinedSymbol(t *testing.T) {
@@ -475,10 +484,11 @@ func TestOrderCountFlagsAHunkPlacedTwice(t *testing.T) {
 		orderFile("a.go", orderHunk(0, 1, 5)),
 	}})
 
-	assert.False(t, order.Count.Complete)
-	assert.Equal(t, 2, order.Count.Placed)
-	assert.Equal(t, []types.DiffHunkRef{{Path: "a.go", Index: 0, Digest: "digest-0"}}, order.Count.Repeated)
-	assert.Empty(t, order.Count.Missing)
+	assert.Equal(t, types.DiffOrderCount{
+		HunkCount: 2,
+		Placed:    2,
+		Repeated:  []types.DiffHunkRef{{Path: "a.go", Index: 0, Digest: "digest-0"}},
+	}, order.Count)
 }
 
 // orderFixture is a changeset with a cycle, an interface, tests, a generated file, a moved

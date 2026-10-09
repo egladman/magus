@@ -108,14 +108,16 @@ func TestUnreadReportListsHunksNoMarkCovers(t *testing.T) {
 
 	rep := BuildUnreadReport("the range a...b", unreadTestPatch, []string{read, "digest-of-a-hunk-elsewhere"}, nil)
 
-	assert.Equal(t, UnreadKnown, rep.State)
-	assert.Equal(t, 4, rep.Hunks)
-	require.Len(t, rep.Unread, 3)
-	var keys []string
-	for _, r := range rep.Unread {
-		keys = append(keys, r.Key())
-	}
-	assert.Equal(t, []string{"core.go#1", "other.go#0", "gen/out.json#0"}, keys)
+	assert.Equal(t, UnreadReport{
+		Source: "the range a...b",
+		State:  UnreadKnown,
+		Hunks:  4,
+		Unread: []types.DiffHunkRef{
+			{Path: "core.go", Index: 1, Digest: parsed[0].Hunks[1].Digest},
+			{Path: "other.go", Index: 0, Digest: parsed[1].Hunks[0].Digest},
+			{Path: "gen/out.json", Index: 0, Digest: parsed[2].Hunks[0].Digest},
+		},
+	}, rep)
 
 	var buf strings.Builder
 	require.NoError(t, WriteUnread(&buf, rep, unreadTestPatch, "magus diff --rev a...b"))
@@ -132,9 +134,13 @@ func TestUnreadReportSaysUnknownWhenTheMarksCannotBeRead(t *testing.T) {
 
 	rep := BuildUnreadReport("the working tree", unreadTestPatch, nil, errors.New("read marks: permission denied"))
 
-	assert.Equal(t, UnreadUnknown, rep.State)
-	assert.Empty(t, rep.Unread, "an unreadable store says nothing about what is unread")
-	assert.Equal(t, 4, rep.Hunks)
+	assert.Equal(t, UnreadReport{
+		Source: "the working tree",
+		State:  UnreadUnknown,
+		Reason: "read marks: permission denied",
+		Hunks:  4,
+		Unread: []types.DiffHunkRef{},
+	}, rep, "an unreadable store says nothing about what is unread")
 	var buf strings.Builder
 	require.NoError(t, WriteUnread(&buf, rep, unreadTestPatch, ""))
 	assert.Equal(t, `read state unknown for the working tree: the read marks could not be read (read marks: permission denied)
