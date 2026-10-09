@@ -340,6 +340,9 @@ type DiffFile struct {
 	// how widely it is referenced. A package or namespace symbol is never one. Empty when no
 	// symbol index covers the file.
 	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// Hunks is every hunk of the file's patch, in patch order, whether or not a symbol sits in
+	// it. Empty for a file the patch gives no hunks: binary, a pure rename or a mode change.
+	Hunks []DiffHunk `json:"hunks,omitempty" yaml:"hunks,omitempty"`
 	// Layout is what the package checks found about the directory this change creates around
 	// this file: its file count, test files and name against the directories beside it, as
 	// CheckAdvice. Only the first changed file of a new directory carries it, so a finding is
@@ -421,6 +424,9 @@ type Diff struct {
 	// API is what the changeset did to the public API, present only when the review was given
 	// a base graph to compare against.
 	API *DiffAPI `json:"api,omitempty" yaml:"api,omitempty"`
+	// Order is the changeset's hunks in the order to read them. Nil when magus could not
+	// compute it, which is distinct from an order with no groups; Notes says why.
+	Order *DiffOrder `json:"order,omitempty" yaml:"order,omitempty"`
 	// Reviewed is the earlier pass this reader already made over these files, when there was one.
 	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
 	// ConformanceError is why the conformance checks could not run, with its MGS code: the

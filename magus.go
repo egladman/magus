@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/volatility"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
@@ -1414,6 +1415,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	case graph != nil:
 		changed = touchedSymbols(graph, patch, byPath)
 	}
+	places := map[string]map[string]hunkPlace{}
 	for _, s := range res.ChangedSymbols {
 		f, ok := byPath[s.File]
 		if !ok {
@@ -1439,6 +1441,12 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		}
 		if listedDiffSymbol(sym, t.kind) {
 			f.Symbols = append(f.Symbols, sym)
+			if len(t.place.hunks) > 0 {
+				if places[f.Path] == nil {
+					places[f.Path] = map[string]hunkPlace{}
+				}
+				places[f.Path][sym.ID] = t.place
+			}
 		}
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
 		// file is as dangerous as its most-depended-on export, and summing would rank a file
@@ -1462,11 +1470,24 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		for _, s := range res.ChangedSymbols {
 			defined[s.File] = true
 		}
-		lines, pf := impact.ChangedLines(patch), readPatchFacts(patch)
+		lines, byHunk, pf := impact.ChangedLines(patch), impact.ChangedLinesByHunk(patch), readPatchFacts(patch)
 		for i := range out.Files {
 			f := &out.Files[i]
-			if !defined[f.Path] && strings.HasSuffix(f.Path, ".go") {
-				f.Symbols = append(f.Symbols, parsedGoSymbols(m.ws.Root, f.Path, lines[f.Path], pf)...)
+			if defined[f.Path] || !strings.HasSuffix(f.Path, ".go") {
+				continue
+			}
+			syms := parsedGoSymbols(m.ws.Root, f.Path, lines[f.Path], pf)
+			f.Symbols = append(f.Symbols, syms...)
+			// Top-level declarations never nest, so no start or extent is needed to order them.
+			for _, hl := range byHunk[f.Path] {
+				for _, s := range parsedGoSymbols(m.ws.Root, f.Path, hl.Lines, pf) {
+					if places[f.Path] == nil {
+						places[f.Path] = map[string]hunkPlace{}
+					}
+					p := places[f.Path][s.ID]
+					p.hunks = append(p.hunks, hl.Index)
+					places[f.Path][s.ID] = p
+				}
 			}
 		}
 	}
@@ -1499,6 +1520,9 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	if indexed {
 		attachPublicThrough(out.Files, newCallGraph(graph, m.projectOwner()))
 	}
+	if patchErr == nil {
+		attachHunks(out.Files, patch, places)
+	}
 
 	out.SortForReading()
 	return out, nil
@@ -1510,6 +1534,50 @@ type touchedSymbol struct {
 	change    string
 	signature string
 	kind      string
+	place     hunkPlace
+}
+
+// hunkPlace is where a touched symbol's changed lines fall within its file's patch.
+type hunkPlace struct {
+	// hunks are the indexes of the hunks that changed a line of the symbol, ascending.
+	hunks []int
+	// start and extent are the first line and the line count of its definition, which order
+	// symbols a hunk shares: the smaller extent is the innermost. Zero where the symbol has
+	// no recorded range.
+	start, extent int
+}
+
+// attachHunks fills each file's Hunks from the patch: every hunk, with its parsed address,
+// and the listed symbols whose changed lines it holds, innermost first. places says which
+// hunks changed each file's symbols; a listed symbol absent from it sits in no hunk.
+func attachHunks(files []types.DiffFile, patch string, places map[string]map[string]hunkPlace) {
+	parsed := map[string][]changeset.Hunk{}
+	for _, pf := range changeset.Parse(patch) {
+		parsed[pf.Path] = pf.Hunks
+	}
+	for i := range files {
+		f := &files[i]
+		for _, h := range parsed[f.Path] {
+			dh := types.DiffHunk{
+				Index: h.Index, Digest: h.Digest,
+				OldStart: h.OldStart, OldCount: h.OldCount, NewStart: h.NewStart, NewCount: h.NewCount,
+				Declaration: h.Declaration,
+			}
+			var ids []string
+			held := map[string]hunkPlace{}
+			for _, s := range f.Symbols {
+				if p := places[f.Path][s.ID]; slices.Contains(p.hunks, h.Index) {
+					ids = append(ids, s.ID)
+					held[s.ID] = p
+				}
+			}
+			slices.SortStableFunc(ids, func(a, b string) int {
+				return cmp.Or(cmp.Compare(held[a].extent, held[b].extent), cmp.Compare(held[b].start, held[a].start))
+			})
+			dh.Symbols = ids
+			f.Hunks = append(f.Hunks, dh)
+		}
+	}
 }
 
 // listedDiffSymbol reports whether a changed file lists sym. touchedKind is the SCIP kind of
@@ -1538,7 +1606,7 @@ var declarationKinds = map[string]bool{
 // what it did to each, from the head graph's definition ranges. Package and namespace symbols
 // are never touched.
 func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*types.DiffFile) map[string]touchedSymbol {
-	lines := impact.ChangedLines(patch)
+	lines := impact.ChangedLinesByHunk(patch)
 	pf := readPatchFacts(patch)
 	defs := definedSymbols(head.Nodes())
 	spans := map[string][]impact.Span{}
@@ -1553,7 +1621,24 @@ func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*type
 	for path, ss := range spans {
 		// File-local, so a short name one other file also removed does not read as re-signed.
 		removed := strings.Join(pf.removed[path], "\n")
-		for id := range impact.Touched(ss, lines[path]) {
+		// Touched judges each line alone, so its answer for the whole file is the union of its
+		// answers per hunk.
+		places := map[string]hunkPlace{}
+		for _, hl := range lines[path] {
+			for id := range impact.Touched(ss, hl.Lines) {
+				p := places[id]
+				p.hunks = append(p.hunks, hl.Index)
+				places[id] = p
+			}
+		}
+		spanOf := map[string]impact.Span{}
+		for _, s := range ss {
+			spanOf[s.ID] = s
+		}
+		for id, place := range places {
+			if s := spanOf[id]; s.End > 0 {
+				place.start, place.extent = s.Start, s.End-s.Start+1
+			}
 			def := defs[id]
 			change := types.DiffChangeBody
 			if _, added := pf.added[path][sourceLine(def.node.Source)]; added {
@@ -1562,7 +1647,7 @@ func touchedSymbols(head *knowledge.Graph, patch string, byPath map[string]*type
 					change = types.DiffChangeSignature
 				}
 			}
-			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature], kind: def.node.Attrs[attrSymbolKind]}
+			out[id] = touchedSymbol{change: change, signature: def.node.Attrs[knowledge.AttrSignature], kind: def.node.Attrs[attrSymbolKind], place: place}
 		}
 	}
 	return out

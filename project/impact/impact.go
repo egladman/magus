@@ -164,25 +164,49 @@ func Enrich(res *types.ImpactResult, store SymbolStore) {
 	}
 }
 
-// ChangedLines maps each file a unified patch touches to the new-side lines it changed. A
-// removed run counts as the new-side line right after it, so a deletion inside a definition
-// lands in that definition.
-func ChangedLines(patch string) map[string][]int {
-	out := map[string][]int{}
+// HunkLines is the new-side lines one hunk of a patch changed. Index is the hunk's position
+// within its file as changeset.Parse numbers it, so a hunk that changed no line leaves a gap
+// rather than renumbering the ones after it.
+type HunkLines struct {
+	Index int
+	Lines []int
+}
+
+// ChangedLinesByHunk maps each file a unified patch touches to the new-side lines each of its
+// hunks changed, in hunk order. A removed run counts as the new-side line right after it, so a
+// deletion inside a definition lands in that definition. A hunk that changed no line is left
+// out.
+func ChangedLinesByHunk(patch string) map[string][]HunkLines {
+	out := map[string][]HunkLines{}
 	for _, f := range changeset.Parse(patch) {
 		for _, h := range f.Hunks {
+			var lines []int
 			next := h.NewStart
 			for _, r := range h.Rows {
 				switch {
 				case r.NewLine != nil:
 					next = *r.NewLine + 1
 					if r.Kind == changeset.KindAdd {
-						out[f.Path] = append(out[f.Path], *r.NewLine)
+						lines = append(lines, *r.NewLine)
 					}
 				case r.Kind == changeset.KindDel:
-					out[f.Path] = append(out[f.Path], next)
+					lines = append(lines, next)
 				}
 			}
+			if len(lines) > 0 {
+				out[f.Path] = append(out[f.Path], HunkLines{Index: h.Index, Lines: lines})
+			}
+		}
+	}
+	return out
+}
+
+// ChangedLines is ChangedLinesByHunk with each file's hunks flattened into one list.
+func ChangedLines(patch string) map[string][]int {
+	out := map[string][]int{}
+	for path, hunks := range ChangedLinesByHunk(patch) {
+		for _, h := range hunks {
+			out[path] = append(out[path], h.Lines...)
 		}
 	}
 	return out
