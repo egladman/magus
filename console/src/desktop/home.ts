@@ -4,11 +4,12 @@
 // ("Open ...") is how another app is launched. This module just builds the launcher DOM - a
 // heading, a lede, and a PatternFly Gallery of clickable Cards - and leaves mounting to the console.
 //
-// A plain click on a card opens that app as a tab. Each card also carries a top-right kebab menu
-// whose one item, "Open in a new window", spawns a dedicated OS/PWA window for that app
-// (openAppWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
-// strand you in a window you did not ask for.
+// A card is a PF clickable card: its title is the button that opens that app as a tab. Each card also
+// carries a kebab in its header actions, a PF Menu whose one item, "Open in a new window", spawns a
+// dedicated OS/PWA window for that app (openAppWindow) - an EXPLICIT opt-in, never the plain-click
+// default, so a card can still never strand you in a window you did not ask for.
 import { openAppWindow } from "../lib/appwindow";
+import { wireMenu } from "../ui/menu";
 import type { PulseView } from "./pulse";
 import {
   DEMO_HINT,
@@ -20,128 +21,11 @@ import { isWholeMotion, type AppManifest } from "../apps/manifest";
 import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
 
-// The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
-// Each entry is dry and tool-flavored (magus is a build tool; the server keeps the graph warm),
-// understated to match the earthy identity.
-//
-// Two independent gates, so a line can be specific without needing its own window:
-//   `at` - an hour window, start inclusive and end exclusive; a wrapped window like night spans
-//          midnight. ANY_HOURS is always eligible.
-//   `on` - days of the week (0 = Sunday), for lines that only make sense on some of them. Omitted
-//          means every day. Kept separate from `at` rather than folded into it because the two
-//          genuinely cross: a Friday evening line is not a Friday line or an evening line.
-//
-// No entry may carry BOTH a narrow window and a narrow day set unless a broader line covers the same
-// slot - see the eligibility test, which walks every hour of every weekday and asserts the pool is
-// never empty. The ANY_HOURS entries are what guarantee that, so keep several of them dayless.
-//
-// The original "See what magus is up to." stays in the pool so nothing is lost. Plain ASCII
-// throughout, and no exclamation marks: the warmth is meant to come from variety, not volume.
-const ANY_HOURS: [number, number] = [0, 24];
-const WEEKEND = [0, 6];
-const MONDAY = [1];
-const FRIDAY = [5];
-interface Tagline {
-  text: string;
-  at: [number, number];
-  on?: number[];
-}
-const TAGLINES: Tagline[] = [
-  { text: "See what magus is up to.", at: ANY_HOURS },
-  { text: "Cache warm, spells ready.", at: ANY_HOURS },
-  { text: "The graph is warm.", at: ANY_HOURS },
-  { text: "Everything is where you left it.", at: ANY_HOURS },
-  { text: "Nothing is on fire.", at: ANY_HOURS },
-  { text: "The workspace is yours.", at: ANY_HOURS },
-  { text: "Ready when you are.", at: ANY_HOURS },
-  { text: "The forge is warming up.", at: [5, 11] },
-  { text: "Fresh build, fresh coffee.", at: [5, 11] },
-  { text: "Morning. What are we building?", at: [5, 11] },
-  { text: "First build of the day.", at: [5, 11] },
-  { text: "The cache slept well.", at: [5, 11] },
-  { text: "Deep in the afternoon build.", at: [11, 17] },
-  { text: "Plenty of daylight left to ship.", at: [11, 17] },
-  { text: "Hitting a good rhythm.", at: [11, 17] },
-  { text: "Halfway through, still warm.", at: [11, 17] },
-  { text: "Evening. One more target?", at: [17, 22] },
-  { text: "Winding down the day's builds.", at: [17, 22] },
-  { text: "Good time to leave it green.", at: [17, 22] },
-  { text: "Last build before you log off?", at: [17, 22] },
-  { text: "Burning the midnight build.", at: [22, 5] },
-  { text: "The server never sleeps.", at: [22, 5] },
-  { text: "Quiet hours. The cache is listening.", at: [22, 5] },
-  { text: "Late one. Keep it cached.", at: [22, 5] },
-
-  // Narrower windows sit inside the broad ones above, so these are extra color at the edges of the
-  // day rather than the only thing eligible there.
-  { text: "Before the first coffee. Respect.", at: [4, 7] },
-  { text: "The tree is quiet at this hour.", at: [4, 7] },
-  { text: "Nobody has pushed yet.", at: [4, 7] },
-  { text: "Lunchtime. The cache will keep.", at: [12, 14] },
-  { text: "Half a day of green behind you.", at: [12, 14] },
-  { text: "Eat something. The build will wait.", at: [12, 14] },
-
-  // Day-gated. Each is deliberately broad on the hour so it reads as a note about the day, not a
-  // note about the minute.
-  { text: "Monday. Clean slate, warm cache.", at: [5, 12], on: MONDAY },
-  { text: "Back at it. The graph kept your place.", at: [5, 12], on: MONDAY },
-  { text: "Friday. Leave it green for Monday.", at: [12, 22], on: FRIDAY },
-  { text: "Last builds of the week.", at: [12, 22], on: FRIDAY },
-  { text: "Weekend build. Nobody is watching.", at: ANY_HOURS, on: WEEKEND },
-  { text: "Saturday hacking. The server kept the lights on.", at: [8, 22], on: WEEKEND },
-  { text: "The weekend tree is a quiet tree.", at: ANY_HOURS, on: WEEKEND },
-
-  // More of the always-eligible pool, so the broad case stays as varied as the narrow ones.
-  { text: "No stale artifacts in sight.", at: ANY_HOURS },
-  { text: "Every target knows what it needs.", at: ANY_HOURS },
-  { text: "The spells are where you left them.", at: ANY_HOURS },
-  { text: "Nothing here runs twice.", at: ANY_HOURS },
-  { text: "Declared, cached, and accounted for.", at: ANY_HOURS },
-  { text: "Ask it what it will do. It will tell you.", at: ANY_HOURS },
-  { text: "One binary, still no second toolchain.", at: ANY_HOURS },
-  { text: "The graph is not guessing.", at: ANY_HOURS },
-];
-
-// The launcher HEADING also rotates, for the same reason the lede does: this is the first thing the
-// console says on every fresh load, and one fixed sentence forever is the difference between a tool
-// that feels alive and one that feels like a form. Kept as plain questions, ASCII, no exclamation
-// marks - the warmth comes from variety, not from enthusiasm.
-const TITLES: string[] = [
-  "What do you want to open?",
-  "Where are we starting?",
-  "What are we looking at?",
-  "Pick a place to begin.",
-  "What needs your attention?",
-  "Where to?",
-  "What are we shipping?",
-  "Where does this one start?",
-  "What is worth a look?",
-  "Open something.",
-  "What is on your mind?",
-];
-
-// launcherTitle picks one of the headings at random. `pick` is injected only so the choice is
-// testable, exactly as in launcherTagline; unlike the taglines these are not time-gated, because a
-// heading that changed character through the day would read as a different app each time.
-export function launcherTitle(pick: () => number = Math.random): string {
-  return TITLES[Math.floor(pick() * TITLES.length)];
-}
-
-// inWindow reports whether `hour` sits in a [start, end) window, handling a window that wraps past
-// midnight (start > end, e.g. 22..5).
-function inWindow(hour: number, [start, end]: [number, number]): boolean {
-  return start <= end ? hour >= start && hour < end : hour >= start || hour < end;
-}
-
-// launcherTagline picks a tagline eligible for the given hour, at random. `pick` is injected only so the
-// choice is testable; it defaults to Math.random. Always non-empty (the ANY_HOURS entries are eligible
-// at every hour), so it never falls back to a placeholder.
-export function launcherTagline(now: Date = new Date(), pick: () => number = Math.random): string {
-  const hour = now.getHours();
-  const day = now.getDay();
-  const eligible = TAGLINES.filter((t) => inWindow(hour, t.at) && (!t.on || t.on.includes(day)));
-  return eligible[Math.floor(pick() * eligible.length)].text;
-}
+// The launcher says the same thing on every load: a screen whose heading changes each visit cannot be
+// found by title, and a screen reader hears a different page each time. The heading and the line
+// under it are fixed; the live reading beside them (syncLauncherPulse) is where the screen moves.
+export const LAUNCHER_TITLE = "Open an app";
+export const LAUNCHER_LEDE = "Each app opens as a tab. One you already have comes forward instead.";
 
 // appIconSvg wraps an app's glyph (its manifest's) in the shared icon idiom: 24x24, stroked
 // currentColor, round caps. The rail and the launcher both draw through it so the marks match.
@@ -280,12 +164,19 @@ export function syncLauncherChord(root: HTMLElement, chord: string): void {
   hint.append(document.createTextNode("Pick one from the rail, or press "));
   const key = document.createElement("button");
   key.type = "button";
-  key.className = "console-cheatsheet-kbd console-home__chord";
+  key.className = "console-shell-keycap";
   key.dataset.openPalette = "";
   key.textContent = chord;
   key.title = "Open the command palette";
   key.setAttribute("aria-label", "Open the command palette (" + chord + ")");
   hint.append(key, document.createTextNode(" for the palette."));
+}
+
+// syncLauncherDemo hides the "Try the demo" way while the console is already in the demo: offering to
+// enter the place you are in is a dead end, and the workspace menu is where the demo is left.
+export function syncLauncherDemo(root: HTMLElement, inDemo: boolean): void {
+  const way = root.querySelector<HTMLElement>("[data-launcher-demo]");
+  if (way) way.hidden = inDemo;
 }
 
 export function buildLauncher(
@@ -306,142 +197,126 @@ export function buildLauncher(
   sigil.hidden = true;
 
   const title = document.createElement("h1");
-  title.textContent = launcherTitle();
+  title.textContent = LAUNCHER_TITLE;
   const sub = document.createElement("p");
-  sub.textContent = launcherTagline();
+  sub.textContent = LAUNCHER_LEDE;
 
-  const gallery = document.createElement("div");
+  const gallery = document.createElement("ul");
   gallery.className = "pf-v6-l-gallery pf-m-gutter";
-  // Every card's kebab menu registers its closer here so an outside click / Escape can shut whichever
-  // one is open, and opening one closes the rest.
-  const menuClosers: (() => void)[] = [];
-  const closeAllMenus = (except?: () => void): void => {
-    for (const c of menuClosers) if (c !== except) c();
-  };
+  // A list with no marker styling loses its list role in Safari; say it.
+  gallery.setAttribute("role", "list");
+  gallery.setAttribute("aria-label", "Apps");
   for (const s of apps) {
+    const li = document.createElement("li");
     const card = document.createElement("div");
-    card.className = "pf-v6-c-card pf-m-clickable console-launcher-card";
+    card.className = "pf-v6-c-card pf-m-clickable console-shell-launcher__card";
     card.dataset.open = s.id;
     // This card's palette hue drives its icon, watermark, and hover border. An app with no accent
     // inherits the shared spruce accent via the --card-accent fallback in console.css.
     if (s.accent) card.style.setProperty("--card-accent", `var(${s.accent})`);
-    // A real clickable button: role=button + tabindex make it keyboard-reachable and announce it
-    // as a button; the Enter/Space handler below completes the contract.
-    card.setAttribute("role", "button");
-    card.setAttribute("tabindex", "0");
-    card.setAttribute("aria-label", "Open " + s.label);
-    // The representative glyph, drawn in the card's hue. Decorative (the accessible name is the card's
-    // aria-label), so aria-hidden. A whole motion rides the icon slot; a part motion is already on
-    // one inner element of the glyph.
+
+    // The header holds the glyph, the card's clickable action and its actions, the PF clickable-card
+    // layout. The action is a real button that stretches over the card; the title names it, so a reader
+    // hears "Dashboard, button" and not "Open Dashboard, button, Open Dashboard".
+    const head = document.createElement("div");
+    head.className = "pf-v6-c-card__header";
+    const headMain = document.createElement("div");
+    headMain.className = "pf-v6-c-card__header-main";
+    // The representative glyph, drawn in the card's hue. Decorative, so aria-hidden. A whole motion
+    // rides the icon slot; a part motion is already on one inner element of the glyph.
     const icon = document.createElement("span");
-    icon.className = "console-launcher-card__icon";
+    icon.className = "console-shell-launcher__icon";
     if (isWholeMotion(s.motion)) icon.dataset.motion = s.motion;
     icon.innerHTML = appIconSvg(s.glyph, 24);
+    headMain.append(icon);
+
+    const titleId = "console-launcher-" + s.id + "-title";
+    const hintId = "console-launcher-" + s.id + "-hint";
+    const selectable = document.createElement("div");
+    selectable.className = "pf-v6-c-card__selectable-actions";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "pf-v6-c-card__clickable-action";
+    action.setAttribute("aria-labelledby", titleId);
+    action.setAttribute("aria-describedby", hintId);
+    action.addEventListener("click", () => open(s.id));
+    selectable.append(action);
+
+    // The kebab sits in the card's actions, above the stretched button, and opens a PF Menu. wireMenu
+    // gives it the arrow keys, Escape and outside-click close; a menu left open on one card closes when
+    // another card's kebab is pressed, because that press is an outside click to the first.
+    const actions = document.createElement("div");
+    actions.className = "pf-v6-c-card__actions";
+    const kebab = document.createElement("button");
+    kebab.type = "button";
+    kebab.className = "pf-v6-c-button pf-m-plain";
+    kebab.dataset.cardKebab = "";
+    kebab.setAttribute("aria-label", "More actions for " + s.label);
+    const kebabIcon = document.createElement("span");
+    kebabIcon.className = "pf-v6-c-button__icon";
+    kebabIcon.innerHTML =
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
+      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
+    kebab.append(kebabIcon);
+    const menu = document.createElement("div");
+    menu.className = "pf-v6-c-menu console-shell-launcher__menu";
+    menu.dataset.cardMenu = "";
+    menu.hidden = true;
+    const menuContent = document.createElement("div");
+    menuContent.className = "pf-v6-c-menu__content";
+    const menuList = document.createElement("ul");
+    menuList.className = "pf-v6-c-menu__list";
+    menuList.setAttribute("role", "menu");
+    menuList.setAttribute("aria-label", "Actions for " + s.label);
+    const menuItem = document.createElement("li");
+    menuItem.className = "pf-v6-c-menu__list-item";
+    menuItem.setAttribute("role", "none");
+    const openWin = document.createElement("button");
+    openWin.type = "button";
+    openWin.className = "pf-v6-c-menu__item";
+    openWin.setAttribute("role", "menuitem");
+    const itemMain = document.createElement("span");
+    itemMain.className = "pf-v6-c-menu__item-main";
+    const itemText = document.createElement("span");
+    itemText.className = "pf-v6-c-menu__item-text";
+    itemText.textContent = "Open in a new window";
+    itemMain.append(itemText);
+    openWin.append(itemMain);
+    openWin.addEventListener("click", () => openAppWindow(s.id));
+    menuItem.append(openWin);
+    menuList.append(menuItem);
+    menuContent.append(menuList);
+    menu.append(menuContent);
+    wireMenu(menu, kebab);
+    actions.append(kebab, menu);
+
+    head.append(headMain, selectable, actions);
+
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
-    const titleText = document.createElement("span");
+    const titleText = document.createElement("h2");
     titleText.className = "pf-v6-c-card__title-text";
+    titleText.id = titleId;
     titleText.textContent = s.label;
     titleEl.append(titleText);
     const body = document.createElement("div");
     body.className = "pf-v6-c-card__body";
+    body.id = hintId;
     body.textContent = s.hint;
 
-    card.append(icon, titleEl, body);
+    card.append(head, titleEl, body);
     // The corner watermark: the SAME glyph as the small icon, blown up and bled off the bottom-right,
     // drawn behind the text (z-index in console.css) in a neutral (colorless) tint that drifts on hover.
     // Decorative, aria-hidden. It reuses the icon markup (motion attrs and all), but the motion CSS is
     // icon-scoped so the watermark never animates.
     const mark = document.createElement("span");
-    mark.className = "console-launcher-card__watermark";
+    mark.className = "console-shell-launcher__watermark";
     mark.innerHTML = appIconSvg(s.glyph);
     card.append(mark);
-    card.addEventListener("click", () => open(s.id));
-    // Enter/Space open the app only when the CARD itself is focused - a key press on the kebab or a
-    // menu item bubbles here too, so guard on the target to avoid a stray open.
-    card.addEventListener("keydown", (ev) => {
-      if (ev.target === card && (ev.key === "Enter" || ev.key === " ")) {
-        ev.preventDefault();
-        open(s.id);
-      }
-    });
 
-    // The kebab: a top-right three-dot button opening a one-item menu ("Open in a new window"). It stops
-    // propagation so its click never reaches the card's own open-as-tab handler, and it is a real button
-    // (aria-label, aria-haspopup, aria-expanded) with Escape-to-close and outside-click dismissal below.
-    const kebab = document.createElement("button");
-    kebab.type = "button";
-    kebab.className = "console-launcher-card__kebab";
-    kebab.dataset.cardKebab = "";
-    kebab.setAttribute("aria-label", "More actions for " + s.label);
-    kebab.setAttribute("aria-haspopup", "menu");
-    kebab.setAttribute("aria-expanded", "false");
-    kebab.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
-      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
-    const menu = document.createElement("div");
-    menu.className = "console-launcher-card__menu";
-    menu.dataset.cardMenu = "";
-    menu.setAttribute("role", "menu");
-    menu.hidden = true;
-    const openWin = document.createElement("button");
-    openWin.type = "button";
-    openWin.className = "console-launcher-card__menuitem";
-    openWin.setAttribute("role", "menuitem");
-    openWin.textContent = "Open in a new window";
-    menu.append(openWin);
-
-    let menuOpen = false;
-    const setMenu = (v: boolean): void => {
-      menuOpen = v;
-      menu.hidden = !v;
-      kebab.setAttribute("aria-expanded", v ? "true" : "false");
-    };
-    const closeMenu = (): void => setMenu(false);
-    menuClosers.push(closeMenu);
-    kebab.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const willOpen = !menuOpen;
-      closeAllMenus();
-      setMenu(willOpen);
-      if (willOpen) openWin.focus();
-    });
-    kebab.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape" && menuOpen) {
-        ev.stopPropagation();
-        closeMenu();
-        kebab.focus();
-      }
-    });
-    menu.addEventListener("click", (ev) => ev.stopPropagation());
-    openWin.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      closeMenu();
-      openAppWindow(s.id);
-    });
-    card.append(kebab, menu);
-
-    gallery.append(card);
+    li.append(card);
+    gallery.append(li);
   }
-
-  // Dismiss any open kebab menu on an outside tap or Escape. pointerdown (not click) so a TAP outside
-  // reliably closes it on touch, where a synthesized click can be dropped when the tapped node changes;
-  // this mirrors the Panes popup / Reference panel outside-dismiss idiom. A pointerdown on a kebab or
-  // inside its menu is left for that element's own handler (the toggle, or an item), so those never
-  // self-close here.
-  document.addEventListener("pointerdown", (ev) => {
-    const el =
-      ev.target instanceof Element
-        ? ev.target
-        : ev.target instanceof Node
-          ? ev.target.parentElement
-          : null;
-    if (el?.closest("[data-card-kebab], [data-card-menu]")) return;
-    closeAllMenus();
-  });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") closeAllMenus();
-  });
 
   // What the zero-tab screen says once there IS a rail: the console's shared cold-state shape (a row
   // of "ways" out of it, [data-empty-way] in console.css) rather than a second copy of the rail's own
@@ -503,6 +378,7 @@ export function buildLauncher(
   // control instead of competing with it.
   const demoWay = document.createElement("div");
   demoWay.setAttribute("data-empty-way", "");
+  demoWay.dataset.launcherDemo = "";
   const demoLabel = document.createElement("span");
   demoLabel.setAttribute("data-empty-way-label", "");
   demoLabel.textContent = "Try the demo";

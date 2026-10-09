@@ -14,6 +14,7 @@ import {
   type Keymap,
 } from "./commands";
 import type { Persisted } from "../lib/persist";
+import { buildModal, keepFocus } from "./modal";
 import { h } from "./view";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -343,37 +344,22 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 // createKeybindingsOverlay wraps the editor core in a modal overlay matching the cheat sheet. Its editor
 // drives the live shared cell, so rebinds here take effect immediately (unlike the staged Settings app).
 export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
-  const overlay = h("div", "pf-v6-c-backdrop");
-  overlay.id = "keybindings-overlay";
-  overlay.hidden = true;
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", "Keybindings");
-
-  const bullseye = h("div", "pf-v6-l-bullseye");
-  const box = h("div", "pf-v6-c-modal-box pf-m-md");
+  const modal = buildModal({
+    id: "keybindings-overlay",
+    title: "Keybindings",
+    onClose: () => close(),
+  });
+  const { overlay, box, body: bodyWrap } = modal;
+  modal.footer.remove(); // this dialog has no footer
   box.dataset.kbBox = "";
-  box.tabIndex = -1; // focusable so the open editor owns keydowns (Esc closes, chords do not leak out)
-  const head = h("div", "pf-v6-c-modal-box__header");
-  head.dataset.kbHead = "";
-  const titleWrap = h("div", "pf-v6-c-modal-box__title");
-  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keybindings"));
-  head.append(titleWrap);
-  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
-  closeBtn.type = "button";
-  closeBtn.dataset.kbClose = "";
-  closeBtn.setAttribute("aria-label", "Close");
-  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
-  closeBtn.addEventListener("click", () => close());
-  const bodyWrap = h("div", "pf-v6-c-modal-box__body");
+  modal.closeBtn.dataset.kbClose = "";
+  const focus = keepFocus(box);
   const editor = createKeybindingsEditor(deps);
   bodyWrap.append(editor.el);
-  box.append(head, closeBtn, bodyWrap);
-  bullseye.append(box);
-  overlay.append(bullseye);
 
   function open(): void {
     if (!overlay.hidden) return;
+    focus.opened();
     overlay.hidden = false;
     box.focus();
   }
@@ -381,6 +367,7 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   function close(): void {
     if (overlay.hidden) return;
     overlay.hidden = true;
+    focus.closed();
     // Hiding the overlay does NOT stop a recording: beginCapture puts a capture-phase
     // keydown listener on `document` that preventDefault()s every key, and it outlives
     // the modal it was started from. Dismissed mid-Record without this, the console eats

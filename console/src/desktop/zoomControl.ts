@@ -45,7 +45,7 @@ export interface ZoomControlOpts {
 //   - an app built while another tab is active resolves to that tab's bar. It takes the slot, and
 //     hands it straight back on setVisible(false) - the holder at rest is always the visible app.
 //
-// A registry rather than a DOM sweep, because "remove any .console-zoom you find" cannot tell a stale
+// A registry rather than a DOM sweep, because "remove any .console-shell-zoom you find" cannot tell a stale
 // node from the live one and would clobber a legitimate holder. release() is idempotent and only ever
 // clears the slot it still owns, so a late remove() from an app that was already preempted cannot
 // take down its successor.
@@ -56,14 +56,14 @@ export function mountZoomControl(opts: ZoomControlOpts): ZoomControl | null {
   if (!right) return null;
   holder?.release();
   const ctl = document.createElement("div");
-  ctl.className = "console-zoom console-shell-statusbar__item";
+  ctl.className = "console-shell-zoom console-shell-statusbar__item";
   ctl.setAttribute("role", "group");
   ctl.setAttribute("aria-label", opts.label ?? "Zoom");
 
   const seg = (key: string, text: string, aria: string): HTMLButtonElement => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = key === "reset" ? "console-zoom__readout" : "console-zoom__btn";
+    b.className = key === "reset" ? "console-shell-zoom__readout" : "console-shell-zoom__button";
     b.dataset.zoom = key;
     b.textContent = text;
     b.setAttribute("aria-label", aria);
@@ -71,7 +71,9 @@ export function mountZoomControl(opts: ZoomControlOpts): ZoomControl | null {
     return b;
   };
 
-  const out = seg("out", "-", "Zoom out");
+  // The minus is U+2212, the sign that is as wide as the plus beside it; a hyphen is shorter and sits
+  // lower, so the pair read as unequal.
+  const out = seg("out", "−", "Zoom out");
   const readout = seg("reset", "100%", "Reset zoom");
   const inn = seg("in", "+", "Zoom in");
   ctl.append(out, readout, inn);

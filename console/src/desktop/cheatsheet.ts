@@ -5,6 +5,7 @@
 // app that rebinds and persists.
 
 import { formatChord, type Command, type Keymap } from "./commands";
+import { buildModal, keepFocus } from "./modal";
 import { h } from "./view";
 
 // The live command list, the effective (merged) keymap, and the platform (for Cmd vs Ctrl labels),
@@ -36,35 +37,26 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const HOLD_MS = 250;
 
   // A dismissible modal: PF backdrop + bullseye + modal-box, matching the keybinding editor.
-  const overlay = h("div", "pf-v6-c-backdrop");
-  overlay.id = "console-cheatsheet";
-  overlay.hidden = true;
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", "Keyboard shortcuts");
-
-  const bullseye = h("div", "pf-v6-l-bullseye");
-  const box = h("div", "pf-v6-c-modal-box pf-m-md console-cheatsheet-box");
-  const head = h("div", "pf-v6-c-modal-box__header");
-  const titleWrap = h("div", "pf-v6-c-modal-box__title");
-  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keyboard shortcuts"));
-  head.append(titleWrap);
-  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
-  closeBtn.type = "button";
-  closeBtn.setAttribute("aria-label", "Close");
-  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
-  closeBtn.addEventListener("click", () => hide());
-  const body = h("div", "pf-v6-c-modal-box__body console-cheatsheet-box__body");
-  const foot = h(
-    "p",
-    "console-cheatsheet-box__hint",
-    // Points at Shortcuts, not the Palette: rebinding is what that app does (each row jumps to the
-    // keybindings editor) and what the Palette, which only runs a command, cannot.
-    "Press Esc or click outside to dismiss. Open Shortcuts to rebind.",
+  const modal = buildModal({
+    id: "console-cheatsheet",
+    title: "Keyboard shortcuts",
+    boxClass: "console-shell-cheatsheet",
+    onClose: () => hide(),
+  });
+  const { overlay, box, body } = modal;
+  body.classList.add("console-shell-cheatsheet__body");
+  const focus = keepFocus(box);
+  // Two ways in, so two ways out, and the sheet says which applies: the hold is a peek that ends with
+  // the key, the button leaves it open. Rebinding is what the Shortcuts app does and this sheet, which
+  // only reads, cannot.
+  modal.footer.append(
+    h(
+      "p",
+      "console-shell-cheatsheet__hint",
+      "Held open with ?, this closes when you let go. Opened from the status bar, it stays until " +
+        "Esc or a click outside. To change a shortcut, open the Shortcuts app.",
+    ),
   );
-  box.append(head, closeBtn, body, foot);
-  bullseye.append(box);
-  overlay.append(bullseye);
   // A click on the backdrop (outside the box) dismisses; a click inside the box does not. This must
   // stay "click", not "pointerdown": while open, the backdrop covers the status-bar toggle button
   // that opened the sheet. A "pointerdown" listener hides the overlay before the browser re-hit-tests
@@ -101,20 +93,20 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
       list.push({ label: cmd.label, chord });
     }
     if (groups.size === 0) {
-      body.append(h("p", "console-cheatsheet-box__empty", "No keyboard shortcuts are bound."));
+      body.append(h("p", "console-shell-cheatsheet__empty", "No keyboard shortcuts are bound."));
       return;
     }
     for (const [group, rows] of groups) {
-      const section = h("section", "console-cheatsheet-group");
-      section.append(h("h3", "console-cheatsheet-group__title", group));
-      const list = h("dl", "console-cheatsheet-group__list");
+      const section = h("section", "console-shell-shortcuts__group");
+      section.append(h("h2", "console-shell-shortcuts__group-title", group));
+      const list = h("dl", "console-shell-cheatsheet__list");
       for (const r of rows) {
-        list.append(h("dt", "console-cheatsheet-group__label", r.label));
-        const dd = h("dd", "console-cheatsheet-group__chord");
+        list.append(h("dt", "console-shell-cheatsheet__label", r.label));
+        const dd = h("dd", "console-shell-cheatsheet__chord");
         // Each chord token as its own <kbd> reads as physical keys (Cmd + Shift + K).
         r.chord.split("+").forEach((tok, i) => {
-          if (i > 0) dd.append(h("span", "console-cheatsheet-group__plus", "+"));
-          dd.append(h("kbd", "console-cheatsheet-kbd", tok));
+          if (i > 0) dd.append(h("span", "console-shell-cheatsheet__plus", "+"));
+          dd.append(h("kbd", "console-shell-keycap", tok));
         });
         list.append(dd);
       }
@@ -127,13 +119,16 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   function show(): void {
     if (open) return;
     render();
+    focus.opened();
     overlay.hidden = false;
+    box.focus();
     open = true;
   }
   function hide(): void {
     if (!open) return;
     overlay.hidden = true;
     open = false;
+    focus.closed();
   }
   function toggle(): void {
     if (open) hide();

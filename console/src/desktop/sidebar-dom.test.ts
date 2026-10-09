@@ -79,7 +79,7 @@ test("a rail row draws the same glyph as that app's launcher card", () => {
   for (const s of APPS) {
     const rail = geometry(link(host, s.id).querySelector("svg"));
     const card = geometry(
-      launcher.querySelector(`[data-open="${s.id}"] .console-launcher-card__icon svg`),
+      launcher.querySelector(`[data-open="${s.id}"] .console-shell-launcher__icon svg`),
     );
     assert.ok(rail.length > 0, `the rail drew no glyph for ${s.label}`);
     assert.deepEqual(rail, card, `the rail and the launcher disagree on the ${s.label} glyph`);
@@ -288,6 +288,30 @@ test("right-clicking a row offers to open it, here or in its own window", () => 
   menu.querySelector<HTMLButtonElement>("button")?.click();
   assert.deepEqual(opened, ["logs"]);
   assert.equal((menu as HTMLElement).hidden, true, "acting on an item closes the menu");
+});
+
+// The rail's one extra action had no keyboard route at all: no key opened the menu, and once open it
+// had no arrows. The ContextMenu key opens it onto the row, and the menu is the keyboard menu.
+test("the ContextMenu key opens the row menu, and the arrows move through it", () => {
+  const { host, bar } = mount({ tabs: [], activeId: null });
+  // On the page, so a row can hold focus.
+  document.body.append(host);
+  const row = link(host, "logs");
+  row.focus();
+  row.dispatchEvent(new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true }));
+  const menus = [...document.querySelectorAll<HTMLElement>(".console-shell-railmenu")];
+  const menu = menus.find((m) => !m.hidden);
+  assert.ok(menu, "one rail menu is open");
+  const items = [...menu.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  // ok(), not equal(): a failing equal() inspects both DOM nodes, which looks like a hang.
+  assert.ok(document.activeElement === items[0], "focus lands on the first item");
+  menu.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  assert.ok(document.activeElement === items[1]);
+  menu.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(menu.hidden, true);
+  assert.ok(document.activeElement === row, "Escape returns focus to the row");
+  bar.destroy();
+  host.remove();
 });
 
 // The menu lives on <body>, so a destroyed rail that left it behind would leak a menu AND the document

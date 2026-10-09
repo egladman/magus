@@ -5,15 +5,16 @@
 // There is no new-tab ("+") affordance: opening an app is the launcher empty state (zero tabs) or
 // the command bar ("Open ...") with a tab already open, so the bar is purely the open tabs.
 //
-// PatternFly (W0 spike): the bar is built from PatternFly's Tabs component classes
-// (.pf-v6-c-tabs pf-m-box, __list, __item, __link, __item-action) rather than hand-styled
-// spans - no custom presentational classes, only pf-v6-* + the app hooks (data-tab-id) and ARIA
-// (role=tab/tablist, aria-selected). The console mounts bar.el into #console-tabs and only uses the
-// callbacks below, so the tiling/reconcile logic is untouched: only the emitted classes changed.
+// The bar is built from PatternFly's Tabs component classes (.pf-v6-c-tabs pf-m-box, __list, __item,
+// __link, __item-action) rather than hand-styled spans. The ARIA follows the WAI-ARIA tabs pattern the
+// PF docs describe: a labelled tablist, tabs that name the panel they control, and the panel (the pane
+// host main.ts mounts) naming the tab that labels it.
 // tabViews stays pure so the Workspace->view mapping is unit-tested; the DOM wiring is a thin layer.
 
 import { type Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
+import { createContextMenu, isKeyboardContext } from "./contextMenu";
+import { SPLIT_WORD, closeGlyph, svgIcon } from "./statusbar";
 import { bind, scope } from "./view";
 
 // A tab as the bar renders it: identity, the label it shows, an optional disambiguating hint
@@ -24,6 +25,10 @@ export interface TabView {
   hint?: string;
   active: boolean;
 }
+
+// The ids that tie a tab to its panel. main.ts stamps the panel's id and role on the pane host.
+export const tabElementId = (id: string): string => "console-tab-" + id;
+export const tabPanelId = (id: string): string => "console-tabpanel-" + id;
 
 // A title split into the part a tab shows and the part available to tell it from a same-named
 // sibling. A path-shaped document title ("src/console/main.ts") yields the basename as the label
@@ -110,23 +115,36 @@ export interface TabBar {
   destroy(): void; // drop the workspace subscription
 }
 
-// closeIcon returns a small X, matching the console's inline-SVG icon convention (avoids a
-// non-ASCII glyph in source and themes with currentColor).
-function closeIcon(): SVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  // Explicit dimensions: PF's close action normally holds a webfont <i> glyph with intrinsic size;
-  // an inline <svg> without width/height collapses to 0x0, so the close X must size itself.
-  svg.setAttribute("width", "12");
-  svg.setAttribute("height", "12");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", "M6 6l12 12M18 6L6 18");
-  path.setAttribute("stroke", "currentColor");
-  path.setAttribute("stroke-width", "2");
-  path.setAttribute("stroke-linecap", "round");
-  svg.append(path);
+// kebabIcon is the vertical three-dot mark the tab-actions button wears.
+function kebabIcon(): SVGElement {
+  const svg = svgIcon(16);
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("stroke", "none");
+  for (const cy of ["5", "12", "19"]) {
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", "12");
+    dot.setAttribute("cy", cy);
+    dot.setAttribute("r", "1.7");
+    svg.append(dot);
+  }
   return svg;
+}
+
+// The part of the bar a control belongs to, so a re-render can put focus back on the same control.
+type Part = "tab" | "close" | "actions";
+
+interface FocusKey {
+  id: string;
+  part: Part;
+}
+
+// The tab menu is opened for one tab from one origin; the origin is where focus returns.
+interface MenuTarget {
+  id: string;
+  title: string;
+  origin: HTMLElement;
+  // Pointer coordinates when a mouse opened it, else null and the menu hangs under the origin.
+  at: { x: number; y: number } | null;
 }
 
 // createTabBar builds the bar bound to the persisted workspace: interactions read-modify-write
@@ -144,100 +162,76 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
   const select = (id: string): void => cb.onSelect(id);
   const close = (id: string): void => cb.onClose(id);
 
-  // Right-click (or long-press on touch) a tab for its actions - the browser-tab idiom. It carries the
-  // things the always-visible close X cannot afford the width for. Built once and moved to the pointer,
-  // rather than one menu per tab, so re-rendering the bar cannot orphan an open menu.
-  const ctx = document.createElement("div");
-  ctx.className = "pf-v6-c-menu console-tabbar__ctx";
-  ctx.hidden = true;
-  const ctxList = document.createElement("ul");
-  ctxList.className = "pf-v6-c-menu__list";
-  ctxList.setAttribute("role", "menu");
-  const ctxContent = document.createElement("div");
-  ctxContent.className = "pf-v6-c-menu__content";
-  ctxContent.append(ctxList);
-  ctx.append(ctxContent);
+  // The tab menu: right-click, the ContextMenu key or Shift+F10 on a tab, or the actions button on the
+  // active tab, which is the route touch has (iOS fires no contextmenu on a long press). It carries the
+  // things the always-visible close X cannot afford the width for. One menu, moved to its origin
+  // (contextMenu.ts), so re-rendering the bar cannot orphan an open menu.
+  const menu = createContextMenu("console-shell-tabs__menu", "Tab actions");
 
-  const closeCtx = (): void => {
-    ctx.hidden = true;
-  };
-  const ctxItem = (label: string, run: () => void): HTMLLIElement => {
-    const li = document.createElement("li");
-    li.className = "pf-v6-c-menu__list-item";
-    li.setAttribute("role", "none");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "pf-v6-c-menu__item";
-    b.setAttribute("role", "menuitem");
-    const main = document.createElement("span");
-    main.className = "pf-v6-c-menu__item-main";
-    const text = document.createElement("span");
-    text.className = "pf-v6-c-menu__item-text";
-    text.textContent = label;
-    main.append(text);
-    b.append(main);
-    b.addEventListener("click", () => {
-      closeCtx();
-      run();
+  const openMenu = (t: MenuTarget): void => {
+    menu.open({
+      origin: t.origin,
+      at: t.at,
+      refind: () => findControl({ id: t.id, part: "tab" }),
+      items: [
+        { label: "Split " + SPLIT_WORD.row.toLowerCase(), run: () => cb.onSplit(t.id, "row") },
+        { label: "Split " + SPLIT_WORD.col.toLowerCase(), run: () => cb.onSplit(t.id, "col") },
+        { label: "Move to new window", run: () => cb.onMoveToWindow(t.id) },
+        { label: "Close " + t.title, run: () => close(t.id) },
+      ],
     });
-    li.append(b);
-    return li;
   };
 
-  const openCtx = (id: string, title: string, x: number, y: number): void => {
-    ctxList.replaceChildren(
-      ctxItem("Split horizontal", () => cb.onSplit(id, "row")),
-      ctxItem("Split vertical", () => cb.onSplit(id, "col")),
-      ctxItem("Move to new window", () => cb.onMoveToWindow(id)),
-      ctxItem("Close " + title, () => close(id)),
-    );
-    ctx.hidden = false;
-    // Place at the pointer, then pull back inside the viewport (a tab near the right edge would
-    // otherwise open its menu off-screen). Measured after unhiding so the box has a real size.
-    const r = ctx.getBoundingClientRect();
-    ctx.style.left = Math.min(x, window.innerWidth - r.width - 4) + "px";
-    ctx.style.top = Math.min(y, window.innerHeight - r.height - 4) + "px";
-    ctx.querySelector<HTMLElement>("button")?.focus();
-  };
+  const list = document.createElement("ul");
+  list.className = "pf-v6-c-tabs__list";
+  list.setAttribute("role", "tablist");
+  list.setAttribute("aria-label", "Open apps");
+  bar.append(list);
 
-  // Lives on <body>, not in the bar: render() replaceChildren()s the bar, which would tear an open menu
-  // out from under the pointer. Its document listeners ride destroy()'s AbortSignal so a rebuilt bar
-  // cannot stack duplicates.
-  document.body.append(ctx);
-  const ac = new AbortController();
-  document.addEventListener(
-    "click",
-    (e) => {
-      if (!ctx.hidden && !ctx.contains(e.target as Node)) closeCtx();
-    },
-    { signal: ac.signal },
-  );
-  document.addEventListener(
-    "keydown",
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeCtx();
-    },
-    { signal: ac.signal },
-  );
+  // findControl returns the control a FocusKey names, if it is still on the bar.
+  function findControl(key: FocusKey): HTMLElement | null {
+    const sel =
+      key.part === "tab"
+        ? "[data-tab-id]"
+        : key.part === "close"
+          ? "[data-tab-close]"
+          : "[data-tab-actions]";
+    const attr = key.part === "tab" ? "tabId" : key.part === "close" ? "tabClose" : "tabActions";
+    for (const el of list.querySelectorAll<HTMLElement>(sel)) {
+      if (el.dataset[attr] === key.id) return el;
+    }
+    return null;
+  }
+
+  // focusedControl names the control that holds focus, so render() can put it back: rebuilding the
+  // list drops focus to <body>, which is what Enter on a tab used to do.
+  function focusedControl(): FocusKey | null {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement) || !list.contains(el)) return null;
+    if (el.dataset.tabId !== undefined) return { id: el.dataset.tabId, part: "tab" };
+    if (el.dataset.tabClose !== undefined) return { id: el.dataset.tabClose, part: "close" };
+    if (el.dataset.tabActions !== undefined) return { id: el.dataset.tabActions, part: "actions" };
+    return null;
+  }
 
   function render(): void {
-    bar.replaceChildren();
-
-    const list = document.createElement("ul");
-    list.className = "pf-v6-c-tabs__list";
-    list.setAttribute("role", "tablist");
+    const keep = focusedControl();
+    list.replaceChildren();
 
     for (const v of tabViews(ws.get())) {
       // pf-m-action marks an item that carries a trailing action button (the close); pf-m-current is
-      // the active tab. data-tab-id is the app hook; role=tab + aria-selected carry the ARIA.
+      // the active tab. The li is presentational: the tab inside it is what carries the role.
       const item = document.createElement("li");
       item.className = "pf-v6-c-tabs__item pf-m-action" + (v.active ? " pf-m-current" : "");
+      item.setAttribute("role", "presentation");
 
       const link = document.createElement("button");
       link.type = "button";
       link.className = "pf-v6-c-tabs__link";
+      link.id = tabElementId(v.id);
       link.dataset.tabId = v.id;
       link.setAttribute("role", "tab");
+      link.setAttribute("aria-controls", tabPanelId(v.id));
       link.setAttribute("tabindex", v.active ? "0" : "-1");
       link.setAttribute("aria-selected", v.active ? "true" : "false");
       const label = document.createElement("span");
@@ -250,7 +244,7 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       // decoration a screen reader would skip.
       if (v.hint) {
         const hint = document.createElement("span");
-        hint.className = "console-tabbar__hint";
+        hint.className = "console-shell-tabs__hint";
         hint.textContent = v.hint;
         link.append(hint);
       }
@@ -259,7 +253,14 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       link.title = v.hint ? v.hint + "/" + v.title : v.title;
       link.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
-        openCtx(v.id, v.title, ev.clientX, ev.clientY);
+        // A keyboard-invoked contextmenu event carries no pointer position.
+        const fromKeyboard = isKeyboardContext(ev);
+        openMenu({
+          id: v.id,
+          title: v.title,
+          origin: link,
+          at: fromKeyboard ? null : { x: ev.clientX, y: ev.clientY },
+        });
       });
 
       // Drag-to-adopt: dropping this tab onto another moves its currently-focused pane into that tab
@@ -307,10 +308,10 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       });
       link.addEventListener("pointerup", (ev) => {
         link.releasePointerCapture(ev.pointerId);
-        const target = dropTarget;
+        const dropped = dropTarget;
         clearTabDrop();
         link.removeAttribute("data-dragging");
-        const targetId = target?.dataset.tabId;
+        const targetId = dropped?.dataset.tabId;
         if (dragMoved && targetId) cb.onAdoptTab(v.id, targetId);
       });
       link.addEventListener("pointercancel", () => {
@@ -332,11 +333,17 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       });
       // Roving keyboard (WAI-ARIA tablist): Enter/Space activate; Left/Right move focus between
       // tabs, Home/End jump to the ends. Focus follows the arrow but activation stays on
-      // Enter/Space/click, so arrowing past tabs does not thrash the outlet.
+      // Enter/Space/click, so arrowing past tabs does not thrash the outlet. The ContextMenu key and
+      // Shift+F10 open the tab menu, the keyboard's right-click.
       link.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") {
           ev.preventDefault();
           select(v.id);
+          return;
+        }
+        if (ev.key === "ContextMenu" || (ev.key === "F10" && ev.shiftKey)) {
+          ev.preventDefault();
+          openMenu({ id: v.id, title: v.title, origin: link, at: null });
           return;
         }
         if (
@@ -355,20 +362,47 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
         else if (ev.key === "ArrowRight") next = (here + 1) % tabs.length;
         else if (ev.key === "Home") next = 0;
         else if (ev.key === "End") next = tabs.length - 1;
+        // Roving tabindex: the tab holding focus is the one Tab returns to.
+        tabs.forEach((t, i) => t.setAttribute("tabindex", i === next ? "0" : "-1"));
         tabs[next]?.focus();
       });
 
-      // The close: PF renders it as a plain button inside __item-action; the icon sits in __item-action-icon.
+      // The actions: PF renders them as plain buttons inside __item-action. The close is on every tab; the
+      // actions button is on the active one only, so a tab does not spend a second hit area on the
+      // phone, where the active tab is the one you are about to act on.
       const action = document.createElement("span");
       action.className = "pf-v6-c-tabs__item-action";
+      if (v.active) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "pf-v6-c-button pf-m-plain";
+        more.dataset.tabActions = v.id;
+        more.setAttribute("aria-label", "Actions for " + v.title);
+        more.setAttribute("aria-haspopup", "menu");
+        more.setAttribute("aria-expanded", "false");
+        more.title = "Actions";
+        const micon = document.createElement("span");
+        micon.className = "pf-v6-c-tabs__item-action-icon";
+        micon.append(kebabIcon());
+        more.append(micon);
+        // Stopped here so the document-level outside-click close in the menu does not see the click
+        // that opens the menu and shut it again at once.
+        more.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (more.getAttribute("aria-expanded") === "true") menu.close();
+          else openMenu({ id: v.id, title: v.title, origin: more, at: null });
+        });
+        action.append(more);
+      }
       const x = document.createElement("button");
       x.type = "button";
       x.className = "pf-v6-c-button pf-m-plain";
+      x.dataset.tabClose = v.id;
       x.setAttribute("aria-label", "Close " + v.title);
       x.title = "Close";
       const xicon = document.createElement("span");
       xicon.className = "pf-v6-c-tabs__item-action-icon";
-      xicon.append(closeIcon());
+      xicon.append(closeGlyph(12));
       x.append(xicon);
       x.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -379,13 +413,8 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       item.append(link, action);
       list.append(item);
     }
-    bar.append(list);
 
-    // DEFERRED: tab overflow scrolling. When the bar is too narrow for every tab (many tabs, a
-    // narrow window, or the reference panel pinned open) the extra tabs are clipped and unreachable.
-    // A first pass added PF scroll-button chevrons over a custom overflow-scroller, but it was reverted
-    // to keep this change focused - revisit as its own task (PF's own pf-m-scrollable list would not
-    // respond to a programmatic scrollBy, so the scroller has to be app-owned; see git history).
+    if (keep) findControl(keep)?.focus({ preventScroll: true });
   }
 
   // bind(ws, render) renders once now AND on every workspace change - the persisted cell already IS
@@ -397,8 +426,7 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
     el: bar,
     destroy: () => {
       sc.dispose();
-      ac.abort();
-      ctx.remove();
+      menu.destroy();
     },
   };
 }

@@ -1,14 +1,14 @@
-/* overrides.css - the ONE small, audited escape hatch for the console shell (W2).
+/* overrides.css - the small, audited escape hatch for the console shell.
  *
- * The class-vs-ID convention (README.md) is: pf-v6-* is the only class vocabulary and app
+ * The class-vs-ID convention (README.md) is: pf-v6-* is the only borrowed class vocabulary and app
  * hooks are IDs + data-*. A few shell bits have no PatternFly component to stand in for them - a
- * bottom STATUS BAR (PF has none), the settings popover POSITION under the gear, the connection LIVENESS DOT,
- * and viewport-capping the two modal overlays. They live here, ID-scoped, instead of scattered
- * back into console.css. Keep this file tiny; growth is a smell (reach for a pf-v6-u-* utility or a
- * real component first).
+ * bottom STATUS BAR (PF has none), the right-docked side panels, the keybinding editor's row grid, and
+ * the Applications popover position. They live here, ID-scoped, instead of scattered through
+ * console.css. Keep this file small; growth is a smell (reach for a pf-v6-u-* utility or a real
+ * component first).
  *
  * Loaded AFTER patternfly.css/tokens.css so these ID rules win. Colors come from the console's
- * PF-native tokens (--console-* in tokens.css, --pf-t-* directly) - never the --pico or --c palettes. */
+ * PF-native tokens (--console-* in tokens.css, --pf-t-* directly). */
 
 /* --- The hidden attribute must actually hide ----------------------------------------------------
  * PF components and our own ID-scoped rules set `display`, which outranks the UA's
@@ -18,261 +18,227 @@
 [hidden] { display: none !important; }
 
 /* --- Status bar ---------------------------------------------------------------------------------
- * A slim fixed bottom rail (IDE-style liveness strip). PF has no status-bar component, so the frame
- * is here. The console swaps ONE tab's status bar into #console-statusbar at a time (main.ts), and
- * that wrapper (a bare <div>) fills the rail. */
+ * A slim bottom rail (IDE-style liveness strip). PF has no status-bar component, so the frame is here.
+ * The console swaps ONE tab's status bar into #console-statusbar at a time (main.ts), and that wrapper
+ * (a bare <div>) fills the rail. */
 #console-statusbar {
   /* A grid row in the shell (console.css), NOT a fixed overlay: fixed spans the whole window, which
-     would cut the navigation rail off above it. In the grid the bar sits in the trailing column and
-     the rail runs past it to the window's bottom edge, so the chrome is continuous down the left. */
+     would cut the navigation rail off above it. In the grid the bar sits in the trailing column and the
+     rail runs past it to the window's bottom edge, so the chrome is continuous down the left. */
   z-index: var(--pf-t--global--z-index--xs);
-  display: flex; align-items: center; gap: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
   min-height: var(--console-statusbar-h);
-  padding: 0.1rem var(--console-pad);
+  padding: 0 var(--console-pad);
   /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
-     chrome wrapping the content, so no seam is drawn BETWEEN them. The border faces the
-     content above, which is where the chrome ends. The CAST that used to face that way is gone: it
-     had the frame lifted over the content it wraps, which is backwards. The outlet casts down onto
-     this bar now (console.css), so the elevation sits on the raised body instead of the ground -
-     except on a phone, where console.css inverts the pair and this bar casts up over the page.
-     NO border either, at any width. One mark per seam: the hairline and the cast were both drawing
-     this same edge, and because the cast is offset a pixel DOWNWARD its strongest lobe landed
-     directly beneath the hairline - a crisp line with a soft one under it, which reads as a doubled
-     border rather than as one edge. The cast is the mark that survives, since it is the one that says
-     which side is raised; the bar and the pane above it can share a tone and still separate. */
+     chrome wrapping the content, so no seam is drawn BETWEEN them. NO border either, at any width: the
+     cast from the outlet is the one mark on this edge (a hairline and a cast on the same seam read as a
+     doubled border). */
   background: var(--console-chrome);
-  font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
-  -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
+  -webkit-user-select: none;
+  user-select: none; /* chrome rail, like a native window edge */
 }
 /* --- Big Picture: suppress the shell's own chrome ------------------------------------------------
- * The dashboard's presentation mode (dashboard.css) stamps [data-bigpicture] on the document
- * element. The canvas it draws is fixed and opaque, so it already COVERS the chrome - but covering
- * is not enough. A shared or cast screen must not be rendering a tab strip and a status bar behind
- * the picture, and the reference drawer stays focusable (and so reachable by keyboard) while merely
- * hidden behind something. Hiding them outright is the only version that is true from the outside.
- *
- * These live here rather than in dashboard.css because the elements are the SHELL's, not the
- * dashboard's, and this file is where shell IDs are already addressed. The attribute-plus-id
- * selector outranks the plain-id rules above without needing !important. */
+ * The dashboard's presentation mode (dashboard.css) stamps [data-bigpicture] on the document element.
+ * The canvas it draws is fixed and opaque, so it already COVERS the chrome - but a shared or cast screen
+ * must not be rendering a tab strip and a status bar behind the picture, and the reference drawer stays
+ * focusable (and so reachable by keyboard) while merely hidden behind something. Hiding them outright is
+ * the only version that is true from the outside. */
 [data-bigpicture] #console-titlebar,
 [data-bigpicture] #console-statusbar,
 [data-bigpicture] #console-refdrawer .pf-v6-c-drawer__panel { display: none; }
 
-#console-statusbar > div { flex: 1 1 auto; display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
-#console-statusbar [data-cluster] { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
-/* .console-shell-statusbar__right: kept as a hook - the log viewer injects its zoom control here via
- * querySelector("#console-statusbar .console-shell-statusbar__right"). */
-#console-statusbar .console-shell-statusbar__right { margin-left: auto; }
-#console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: 1.35; } /* the log viewer's injected zoom control reuses .console-shell-statusbar__item */
-#console-statusbar [data-item] { white-space: nowrap; line-height: 1.35; }
-
-/* Build fingerprint: a quiet monospace chip at the far right (version + commit inline, full detail on
- * hover via title). Muted and dim by default so it never competes with the live status; brightens on
- * hover to invite the tooltip. */
-#console-statusbar .console-shell-statusbar__version {
-  white-space: nowrap; line-height: 1.35; cursor: default;
-  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
-  /* Dead-center in the rail, out of the flex flow, so a long version string can never displace
-     the right-side controls (shortcuts, panes) - it truncates against the center instead. */
-  position: absolute; left: 50%; transform: translateX(-50%); max-width: 34%;
-  overflow: hidden; text-overflow: ellipsis;
+#console-statusbar > div {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  min-width: 0;
 }
-#console-statusbar .console-shell-statusbar__version:hover { opacity: 1; }
-/* Centering it out of the flow assumes the LEFT cluster never reaches the middle of the rail, and
- * anything added there breaks that: on a phone the connection state plus a "view only" tag runs
- * under the version and both become unreadable. Nothing in the flex layout can prevent it, because
- * the chip is not in the flex layout - which is why this is a breakpoint rather than a flex rule.
- *
- * The version is the most disposable thing on the bar - it names a build, it is not live state and
- * nothing acts on it - so it is the one that goes when the rail is too narrow to hold everything.
- * Truncating the left cluster instead would eat what the console is connected to, which is the one
- * item there that must survive a glance. */
+#console-statusbar [data-cluster] {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  min-width: 0;
+}
+/* The two clusters share the bar by priority. The LEFT one (the connection, the read-only tag) gives
+   way: it may shrink to nothing, and the connection label truncates with an ellipsis. The RIGHT one
+   (the tray: activity, panes, share, shortcuts, and whatever an app docks, like the zoom stepper) never
+   shrinks, so the controls stay reachable at any width. It carries .console-shell-statusbar__right,
+   which the log viewer also queries to dock its zoom control. */
+#console-statusbar [data-cluster]:first-child { flex: 1 1 0; overflow: hidden; }
+#console-statusbar .console-shell-statusbar__right { flex: 0 0 auto; margin-left: auto; }
+#console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: 1.35; } /* the zoom stepper docks as one of these */
+#console-statusbar [data-item] { white-space: nowrap; line-height: 1.35; }
+/* Counts are for looking at, and the first thing to go: below 40rem the bar cannot hold them beside the
+   tray (measured 473px of content in a 375px bar, which pushed Share and Activity off the end). */
+@media (max-width: 40rem) {
+  #console-statusbar [data-item] { display: none; }
+}
+
+/* Build fingerprint: a quiet monospace chip (version + commit inline, full detail on hover). The subtle
+   text token at full strength, because faded it measured 3.2:1; it stays quiet by being small and
+   monospace, not by being dim. */
+#console-statusbar .console-shell-statusbar__version {
+  white-space: nowrap;
+  line-height: 1.35;
+  cursor: default;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  /* Dead-center in the rail, out of the flex flow, so a long version string can never displace the
+     right-side controls - it truncates against the center instead. */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#console-statusbar .console-shell-statusbar__version:hover { color: var(--pf-t--global--text--color--regular); }
+/* Centering it out of the flow assumes the LEFT cluster never reaches the middle of the rail. The version
+   is the most disposable thing on the bar - it names a build, it is not live state - so it is the one that
+   goes when the rail is too narrow to hold everything. */
 @media (max-width: 40rem) {
   #console-statusbar .console-shell-statusbar__version { display: none; }
 }
 
-/* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
- * sized down to sit on the slim rail without inflating it. */
+/* The tray buttons: quiet icon buttons that meet the 24px target floor. The glyph is 14px; the region
+   around it is what is hit. The text token is used at full strength, so they clear contrast without a
+   fade. */
 #console-statusbar .console-shell-statusbar__shortcuts,
 #console-statusbar .console-shell-statusbar__activity,
 #console-statusbar .console-shell-statusbar__share {
-  padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
-  color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
+  flex: 0 0 auto;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  line-height: 0;
+  border: 0;
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
 }
 #console-statusbar .console-shell-statusbar__shortcuts:hover,
 #console-statusbar .console-shell-statusbar__activity:hover,
-#console-statusbar .console-shell-statusbar__share:hover { opacity: 1; }
+#console-statusbar .console-shell-statusbar__share:hover { color: var(--pf-t--global--text--color--regular); }
+/* A panel's toggle says so while it is open. */
+#console-statusbar .console-shell-statusbar__activity[aria-expanded="true"],
+#console-statusbar .console-shell-statusbar__share[aria-expanded="true"] { color: var(--console-accent); }
 
-/* Panes tray toggle (main.ts): nearly the quiet weight of the shortcuts button, but its glyph is a
- * live readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a
- * touch brighter than "muted chrome" and gets the accent while its popup is open. Alone among the
- * tray buttons it also carries a word, which is what earns it the fill below. */
+/* Panes tray toggle (main.ts): its glyph is a live readout of the persisted split direction (panesIcon)
+   rather than a static icon, and it gets the accent while its popup is open. Alone among the tray buttons
+   it also carries a word, which is what earns it the fill below. */
 #console-statusbar .console-shell-statusbar__panes {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  padding: 0.1rem 0.4rem; min-height: 0; border: 0;
-  /* The glyph and its word are ONE control, but at the bar's 0.9rem gap a bare label sitting among
-     three bare glyphs read as a fourth, unrelated item. A quiet fill - the view-only chip's wash
-     without its border - closes the pair into a single pill, so the word is obviously the icon's
-     rather than the share button's. */
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: 0 var(--pf-t--global--spacer--sm);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  border: 0;
+  /* The glyph and its word are ONE control, but at the bar's gap a bare label among bare glyphs read as an
+     unrelated item. A quiet fill closes the pair into a single pill. */
   background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 7%, transparent);
   border-radius: var(--pf-t--global--border--radius--small);
-  /* PF's button base sets 14px, which made this the LARGEST text in an 11.5px bar: the label shouted
-     while the control it names is deliberately quiet chrome. Inherit puts it back on the bar's size. */
+  /* PF's button base sets 14px, which made this the LARGEST text in the bar. Inherit puts it back. */
   font-size: inherit;
-  color: var(--pf-t--global--text--color--subtle); opacity: 0.8;
+  color: var(--pf-t--global--text--color--subtle);
 }
 #console-statusbar .console-shell-statusbar__panes:hover {
-  opacity: 1;
+  color: var(--pf-t--global--text--color--regular);
   background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 12%, transparent);
 }
-#console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
-/* The glyph is an inline SVG, so it sat on the baseline of a line box the button's line-height sized -
-   two pixels above the label's optical centre, which is the misalignment you see before you can name
-   it. Its own flex box takes the line box out of the equation and centres the glyph on its metrics. */
+#console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); }
+/* The glyph is an inline SVG, so it sat on the baseline of a line box the button's line-height sized.
+   Its own flex box takes the line box out of the equation and centres the glyph on its metrics. */
 #console-statusbar .console-shell-statusbar__panes .pf-v6-c-button__icon {
-  display: flex; align-items: center; line-height: 0;
+  display: flex;
+  align-items: center;
+  line-height: 0;
 }
-/* Spells out the icon's orientation (main.ts's setPanesIcon keeps it in sync) - tiling is not a
-   metaphor every reader already carries, and the glyph alone assumes it is. Own line-height: the
-   button above still wants its icon at line-height 0, but that would squash this text to nothing. */
+/* Names the icon's orientation (setPanesIcon keeps it in sync) - tiling is not a metaphor every reader
+   already carries, and the glyph alone assumes it is. Own line-height: the button wants its icon at
+   line-height 0, which would squash this text to nothing. */
 #console-statusbar .console-shell-statusbar__panes-label { line-height: 1.35; white-space: nowrap; }
-/* The label is nowrap and overflow-visible, so a squeezed chip does not clip it - it spills. Measured
-   at 360px the chip flexed down to 33px around a 56px word, which then lay across the share button
-   beside it. Refusing to shrink keeps the pair the size of its content. */
-#console-statusbar .console-shell-statusbar__panes { flex: 0 0 auto; }
-/* Below ~26rem there is less bar than content even so, and the word is what goes: the glyph is the
-   live readout, the word only names it. The fill goes with it - it exists to bind the pair into one
-   pill, and there is no pair left - so the chip falls back to the tray's bare-glyph weight instead of
-   sitting there as a lone tinted square. Deliberately narrower than the 40rem stop the version uses:
-   the word earns its place on a normal phone and loses it only on a small one. */
+/* Below ~26rem there is less bar than content even so, and the word is what goes: the glyph is the live
+   readout, the word only names it (the accessible name still carries it). The fill goes with it - it
+   exists to bind the pair into one pill. */
 @media (max-width: 26rem) {
   #console-statusbar .console-shell-statusbar__panes-label { display: none; }
   #console-statusbar .console-shell-statusbar__panes,
   #console-statusbar .console-shell-statusbar__panes:hover { background: none; }
 }
 
-/* Connection liveness item: a leading dot whose color IS the link/health state, read from the
- * console status tokens (theme-aware). Only the DOT carries the status color (via the
- * --console-conn-dot custom property the state rules set); the text stays in the muted default so
- * the status reads as a chip, not an error message. Apps drive [data-state] / [data-health] on
- * #console-conn (their contract). */
-#console-conn { white-space: nowrap; line-height: 1.35; color: var(--pf-t--global--text--color--subtle); }
-
-/* Shared "view only" tag: a quiet, square, lowercase chip beside the connection dot on a phone viewing a
- * LAN share (main.ts adds it only in shared mode). Ambient read-only reminder, not a banner - muted fill,
- * no accent, so it never reads as a status or an error. */
-#console-statusbar [data-viewonly] {
-  margin-left: 0.5rem; padding: 0.05rem 0.35rem;
-  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3; white-space: nowrap;
+/* Connection control: a PF link button (inline), muted to the bar's weight, with the state's icon leading
+   its label. The icon carries the state's shape and colour, the live region beside it carries the word. It
+   jumps to the server-address setting, so it reads as a control on hover. The label truncates; the icon and
+   the 24px target do not. */
+#console-conn {
+  max-width: 100%;
+  min-width: 0;
+  min-block-size: var(--pf-t--global--spacer--lg);
+  font-size: inherit;
+  line-height: 1.35;
   color: var(--pf-t--global--text--color--subtle);
-  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 8%, transparent);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
+  text-decoration: none;
 }
-/* Demo mode has no chip of its own beside this one. It is the CONNECTION DOT's state, set from the
- * #demo fragment in makeStatusBar, so it says the same thing on every tab - a separate tag next to a
- * dot already reading "demo" was the sentence twice in one bar. Its color is the [data-state="demo"]
- * rule below rather than anything here. */
-#console-conn::before {
-  content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
-  border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;
-}
-/* The four connection states cover every status-bar dot. Demo uses indigo so it cannot be mistaken
- * for a live server, while live health remains green, gold, or red. */
-#console-conn[data-state="connected"] { --console-conn-dot: var(--console-status-ok); }
-#console-conn[data-state="demo"] { --console-conn-dot: var(--console-indigo); }
-#console-conn[data-state="connecting"],
-#console-conn[data-state="reconnecting"] { --console-conn-dot: var(--console-status-warn); }
-#console-conn[data-state="disconnected"],
-#console-conn[data-state="none"] { --console-conn-dot: var(--console-status-queued); }
-/* Health REFINES the connected color: the readiness poller (main.ts) only ever writes data-health while
- * the dot's own data-state is already "connected" (a not-connected dot has no health to report and the
- * poller clears any stale value), so a degraded server dims green -> gold and a down component -> red
- * without a separate chip. Gated on [data-state="connected"] so health can never green-out or recolor a
- * dot the active app has declared not-connected. */
-#console-conn[data-state="connected"][data-health="warn"] { --console-conn-dot: var(--console-status-warn); }
-#console-conn[data-state="connected"][data-health="fail"] { --console-conn-dot: var(--console-status-queued); }
-
-/* Clickable: #console-conn is a real (if bare) control now - it jumps to the server-address setting -
- * so it needs to read as one. cursor + a hover shift toward the console accent teaches "click me"; the
- * dot's own state/health color still wins at rest, this only nudges legibility on interaction. */
-#console-conn { cursor: pointer; }
-#console-conn:hover { text-decoration: underline; text-decoration-color: var(--console-accent); }
-#console-conn:focus-visible {
-  border-radius: var(--pf-t--global--border--radius--small);
-}
+#console-conn:hover { color: var(--pf-t--global--text--color--regular); text-decoration: underline; text-decoration-color: var(--console-accent); }
+#console-conn .pf-v6-c-button__icon { flex: 0 0 auto; }
+#console-conn .pf-v6-c-button__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The Applications menu popover (a PF Menu, #console-appmenu) drops from the title-bar control group,
  * right-aligned so it stays inside the viewport. Only the POSITION is here; the menu chrome is
- * PatternFly. (The old settings popover, #settings-panel, was retired when Settings became a real
- * app/tab - the gear now opens that tab. The theme cycle moved into the app too.) */
-/* The tab context menu (right-click / long-press a tab) is positioned at the pointer by tabBar.ts, so it
-   is fixed and body-mounted rather than anchored to a control like the two title-bar popovers. */
-.console-tabbar__ctx {
-  position: fixed; min-width: 12rem; max-width: calc(100vw - 1rem);
-  z-index: var(--pf-t--global--z-index--400); /* over the title bar and the two title-bar popovers (300) */
-}
-/* The disambiguating parent path on a tab whose name is shared with another open tab (tabBar.ts's
-   disambiguate). Smaller and in the subtle text color so the document name still reads as the tab's
-   label and this reads as the footnote that tells two same-named tabs apart - the editor idiom.
-   PatternFly has no Tabs sub-part for it, which is why this is an app class. */
-.console-tabbar__hint {
-  margin-left: 0.4em;
-  font-size: var(--pf-t--global--font--size--xs);
-  color: var(--pf-t--global--text--color--subtle);
-}
+ * PatternFly. */
 #console-appmenu {
-  position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
-  min-width: 15rem; max-width: calc(100vw - 1rem);
+  position: absolute;
+  top: calc(100% + var(--pf-t--global--spacer--xs));
+  right: var(--pf-t--global--spacer--sm);
+  left: auto;
+  min-width: 15rem;
+  max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
 
-/* --- Notification center --------------------------------------------------------------------------
- * The title-bar bell (#console-notifybtn) + its pop-out history panel (#console-notifypanel,
- * notifications.ts). The bell is a PF plain icon Button like its neighbors; only its unseen-dot and the
- * panel chrome (which PatternFly has no component for) live here. State is data-* (data-unseen on the
- * bell and on an unseen item); kind is data-kind (ok/warn/error) driving the left accent. The panel is
- * anchored in #console-actions and drops under the bell, mirroring the Applications menu. */
-#console-notifybtn { position: relative; }
-/* The unseen-dot: a small danger dot in the bell's top-right corner, shown only when an unread
- * error-tier notification waits (the bell carries data-unseen). */
-.console-shell-notify__dot { display: none; }
-#console-notifybtn[data-unseen] .console-shell-notify__dot {
-  display: block; position: absolute; top: 0.3rem; right: 0.3rem;
-  width: 0.5rem; height: 0.5rem; border-radius: 50%;
-  background: var(--pf-t--global--color--status--danger--default);
-  box-shadow: 0 0 0 var(--pf-t--global--border--width--regular) var(--pf-t--global--background--color--primary--default);
-}
-/* v2: a full-height right-docked SIDE PANEL (the reference-drawer idiom), not a small dropdown. A popover
-   is a usability nightmare under volume - it clips the list and steals focus; a side panel lets you scroll
-   a long run of notifications while the app behind stays visible. It docks between the top chrome and
-   the status bar on the right edge, overlaying the content (no inset reflow - it is a peek, dismissed by
-   Escape / outside-click via wireDrawerToggle). */
+/* --- Right-docked side panels ---------------------------------------------------------------------
+ * ONE frame for Share, Activity and the notification center (.console-shell-notify, whose markup
+ * lib/notifications.ts builds): docked between the top chrome and the status bar on the right edge,
+ * overlaying the content with no inset reflow. They were three copy-pasted blocks with diverging
+ * semantics; panel.ts builds the shared markup (an h2 title, an svg close button, a scrolling body).
+ * Appear and disappear via the `hidden` attribute, so there is no transition for a reduced-motion query
+ * to switch off. */
+.console-shell-panel,
 .console-shell-notify {
-  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
-  width: 24rem; max-width: calc(100vw - 1rem);
-  display: flex; flex-direction: column;
+  position: fixed;
+  top: var(--console-topchrome-h);
+  bottom: var(--console-statusbar-h);
+  right: 0;
+  left: auto;
+  width: 24rem;
+  max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
+  display: flex;
+  flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
   border-left: 1px solid var(--pf-t--global--border--color--default);
   z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
 }
-.console-shell-notify[hidden] { display: none; }
-/* Bottom fade: both pop-out panels (notifications + reference) are the PRIMARY (white) background, but the
-   status bar they dock above is the SECONDARY (grey) rail - a hard edge between the two reads as a clash.
-   A short gradient at the panel's bottom eases the panel's own color into the status-bar grey so the two
-   meet seamlessly, and the scrolling content dissolves into it instead of being cut by a line. The overlay
-   is non-interactive and sits above the content; both panels are position:fixed, so bottom:0 is their own
-   lower edge (which already clears the status bar via bottom:var(--console-statusbar-h)). */
+/* Bottom fade: the panels are the PRIMARY (white) background, but the status bar they dock above is the
+   SECONDARY (grey) rail - a hard edge between the two reads as a clash. A short gradient at the panel's
+   bottom eases the panel's own color into the status-bar grey so the two meet seamlessly. The overlay is
+   non-interactive and sits above the content. */
+.console-shell-panel::after,
 .console-shell-notify::after,
-.console-shell-share::after,
-.console-shell-activity::after,
 #console-refpanel::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6rem;
-  /* A tall, eased fade: it stays near-transparent through the first half, then ramps into the
-     status-bar grey, so the panel dissolves into the bar with no visible line. Multi-stop with
-     color-mix approximates an ease-in curve a plain two-stop linear cannot. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6rem;
+  /* A tall, eased fade: near-transparent through the first half, then a ramp into the status-bar grey. */
   background: linear-gradient(
     to bottom,
     transparent 0%,
@@ -280,21 +246,89 @@
     color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 62%, transparent) 74%,
     var(--pf-t--global--background--color--secondary--default) 100%
   );
-  pointer-events: none; z-index: 1;
+  pointer-events: none;
+  z-index: 1;
 }
+/* A left-only drop shadow via a pseudo-strip (not box-shadow): it lifts the panel off the content behind
+   it without a symmetric blur bleeding DOWN onto the status bar, which would fight the bottom fade. */
+.console-shell-panel::before,
+.console-shell-notify::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -18px;
+  width: 18px;
+  background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
+  pointer-events: none;
+}
+.console-shell-panel__head,
 .console-shell-notify__head {
-  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-shell-notify__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+.console-shell-panel__title,
+.console-shell-notify__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+/* The body scrolls if a short viewport cannot hold the content; its bottom padding clears the status-bar
+   fade so the last control is never cut. */
+.console-shell-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xl);
+}
+/* On a phone the side panel spans the full width so the rows have room to read. */
+@media (max-width: 30rem) {
+  .console-shell-panel,
+  .console-shell-notify { left: 0; right: 0; width: auto; max-width: none; }
+}
+
+/* --- Notification center --------------------------------------------------------------------------
+ * The title-bar bell (#console-notifybtn) + its pop-out history panel (#console-notifypanel,
+ * lib/notifications.ts). The bell is a PF plain icon Button like its neighbors; only its unseen-dot and
+ * the panel's rows (which PatternFly has no component for) live here. State is data-* (data-unseen on the
+ * bell and on an unseen item); kind is data-kind (ok/warn/error) driving the left accent. */
+#console-notifybtn { position: relative; }
+/* The unseen-dot: a small danger dot in the bell's top-right corner, shown only when an unread error-tier
+   notification waits (the bell carries data-unseen). */
+.console-shell-notify__dot { display: none; }
+#console-notifybtn[data-unseen] .console-shell-notify__dot {
+  display: block;
+  position: absolute;
+  top: var(--pf-t--global--spacer--xs);
+  right: var(--pf-t--global--spacer--xs);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--pf-t--global--color--status--danger--default);
+  /* A ring in the bar's colour, so the dot reads against the glyph it overlaps. */
+  outline: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--background--color--primary--default);
+}
 /* Header actions: the "Dismiss older" menu beside "Clear all". */
-.console-shell-notify__actions { display: flex; align-items: center; gap: 0.5rem; }
+.console-shell-notify__actions { display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-shell-notify__older { position: relative; }
 .console-shell-notify__older-btn { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
 .console-shell-notify__older-menu {
-  position: absolute; top: calc(100% + 0.2rem); right: 0; min-width: 11rem; z-index: 1;
-  display: flex; flex-direction: column; padding: 0.2rem;
+  position: absolute;
+  top: calc(100% + var(--pf-t--global--spacer--xs));
+  right: 0;
+  min-width: 11rem;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pf-t--global--spacer--xs);
   background: var(--pf-t--global--background--color--primary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
@@ -302,189 +336,193 @@
 }
 .console-shell-notify__older-menu[hidden] { display: none; }
 .console-shell-notify__older-item {
-  text-align: left; padding: 0.35rem 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); background: none; border: none; cursor: pointer;
-  color: var(--pf-t--global--text--color--regular); border-radius: var(--pf-t--global--border--radius--small);
+  text-align: left;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--pf-t--global--text--color--regular);
+  border-radius: var(--pf-t--global--border--radius--small);
 }
 .console-shell-notify__older-item:hover { background: var(--pf-t--global--background--color--secondary--default); }
 .console-shell-notify__list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
 .console-shell-notify__empty {
-  margin: 0; padding: 1.25rem 0.9rem; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.4;
+  margin: 0;
+  padding: var(--pf-t--global--spacer--md);
+  font-size: var(--pf-t--global--font--size--body--default);
+  line-height: 1.4;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-notify__item {
-  display: flex; align-items: flex-start; gap: 0.5rem;
-  padding: 0.55rem 0.4rem 0.55rem 0.7rem;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   border-left: 3px solid transparent;
 }
 .console-shell-notify__item:last-child { border-bottom: none; }
 .console-shell-notify__item[data-unseen] { background: var(--pf-t--global--background--color--secondary--default); }
 /* The outcome leading each row: a status icon in its colour with the word hidden beside it (ui/status.ts),
- * so it reads without the hue. The left accent on an error row is a second cue, never the only one. */
+   so it reads without the hue. The left accent on an error row is a second cue, never the only one. */
 .console-shell-notify__item-mark { flex: 0 0 auto; margin-top: var(--pf-t--global--spacer--xs); }
 .console-shell-notify__item[data-kind="error"] { border-left-color: var(--pf-t--global--color--status--danger--default); }
 .console-shell-notify__item-body { flex: 1 1 auto; min-width: 0; }
-.console-shell-notify__item-msg { margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.35; color: var(--pf-t--global--text--color--regular); overflow-wrap: anywhere; }
-.console-shell-notify__item-meta { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.2rem; }
-/* The source chip: a quiet, tag-like label naming the app that raised this (not all-caps). Shared
- * look with the toast's source chip below. */
+.console-shell-notify__item-msg {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  line-height: 1.35;
+  color: var(--pf-t--global--text--color--regular);
+  overflow-wrap: anywhere;
+}
+.console-shell-notify__item-meta { display: flex; align-items: center; gap: var(--pf-t--global--spacer--md); margin-top: var(--pf-t--global--spacer--xs); }
+/* The source chip: a quiet, tag-like label naming the app that raised this (not all-caps). */
 .console-shell-notify__item-source {
-  font-size: var(--pf-t--global--font--size--body--sm); padding: 0.05rem 0.4rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  padding: 0 var(--pf-t--global--spacer--xs);
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
-  color: var(--pf-t--global--text--color--subtle); white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
 }
 .console-shell-notify__item-time { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-shell-notify__item-link { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
-.console-shell-notify__item-dismiss { flex: 0 0 auto; --pf-v6-c-button--PaddingInline: 0.25rem; color: var(--pf-t--global--text--color--subtle); }
-/* On a phone the side panel spans the full width so the rows have room to read. */
-@media (max-width: 30rem) {
-  .console-shell-notify { left: 0; right: 0; width: auto; max-width: none; }
+.console-shell-notify__item-dismiss {
+  flex: 0 0 auto;
+  --pf-v6-c-button--PaddingInline: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 /* --- Keybindings editor --------------------------------------------------------------------------
  * The editor core ([data-kbeditor], keybindings.ts) is a keybinding-table grid PatternFly has no
  * component for (like the status bar), so it stays data-scoped here. It appears in TWO places - the
- * modal overlay (#keybindings-overlay) and the Settings app's Keybindings section - so its rows
- * are keyed on [data-kbeditor], not the overlay id, and both embeddings get the same styling. Only the
- * modal shell chrome (viewport cap, scroll, focus) is overlay-scoped. */
+ * modal overlay (#keybindings-overlay) and the Settings app's Keybindings section - so its rows are
+ * keyed on [data-kbeditor], not the overlay id, and both embeddings get the same styling. Only the modal
+ * shell chrome (viewport cap, scroll, focus) is overlay-scoped. */
 #keybindings-overlay[hidden] { display: none; }
 #keybindings-overlay .pf-v6-c-modal-box { max-height: 80vh; }
 #keybindings-overlay .pf-v6-c-modal-box__body { overflow: auto; min-height: 0; }
 #keybindings-overlay .pf-v6-c-modal-box:focus { outline: none; } /* the box is focused only to own keydowns */
-/* kbd chord chips in the keybindings rows: a compact keycap. Self-contained so the shell does not
- * lean on Pico's kbd styling (dropped at the W4 cutover). */
+/* kbd keycaps in the keybindings rows: a compact keycap, self-contained so the shell does not lean on a
+   page-level kbd style. */
 [data-kbeditor] kbd {
-  font-size: var(--pf-t--global--font--size--body--sm); padding: 0.05rem 0.4rem; white-space: nowrap;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  padding: 0 var(--pf-t--global--spacer--xs);
+  white-space: nowrap;
   background: var(--pf-t--global--background--color--secondary--default);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--regular);
 }
 [data-kbeditor] [data-kbdesc] {
-  margin: 0 0 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
+  margin: 0 0 var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
 }
 [data-kbeditor] h3 {
-  margin: 0.9rem 0 0.3rem;
-  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
-  text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle);
+  margin: var(--pf-t--global--spacer--md) 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--console-label-tracking);
+  color: var(--pf-t--global--text--color--subtle);
 }
 [data-kbeditor] [data-rows] > h3:first-child { margin-top: 0; }
 [data-kbeditor] [data-krow] {
-  display: flex; align-items: center; gap: 0.75rem;
-  padding: 0.4rem 0.1rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 [data-kbeditor] [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
-[data-kbeditor] [data-chord][data-capturing] { color: var(--console-accent); font-weight: 600; }
+[data-kbeditor] [data-chord][data-capturing] { color: var(--console-accent); font-weight: var(--pf-t--global--font--weight--body--bold); }
 /* The trailing "..." while recording a multi-chord sequence: muted, so the captured chords read as the
    content and the ellipsis as a "keep going / pause to save" hint. */
-[data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
+[data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: var(--pf-t--global--font--weight--body--default); }
 [data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
 [data-kbeditor] [data-conflict] { color: var(--console-status-danger-text); font-size: var(--pf-t--global--font--size--body--sm); white-space: nowrap; }
-[data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
-/* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph
- * lines up with the label instead of hanging off PF's default baseline alignment. */
+[data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: var(--pf-t--global--spacer--xs); flex: 0 0 auto; }
+/* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph lines up
+   with the label instead of hanging off PF's default baseline alignment. */
 [data-kbeditor] [data-kactions] .pf-v6-c-button { align-items: center; }
 [data-kbeditor] [data-kactions] .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 /* The glyph-only reset-to-default control carries a subtle danger tint so it reads as the destructive
- * revert without competing with the app's Reset button; it dims when there is nothing to restore. */
+   revert without competing with the app's Reset button; it dims when there is nothing to restore. */
 [data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"] { color: var(--pf-t--global--text--color--status--danger--default); }
 [data-kbeditor] [data-kactions] .pf-v6-c-button[data-role="reset"]:disabled { color: var(--pf-t--global--text--color--subtle); opacity: 0.5; }
-/* Phone width: the row cannot hold a long label (e.g. "Close pane or tab"), the chord chip, and the
- * controls on one line, so the label's grown-but-min-width:0 box collapsed and the chord kbd rode over
- * the label text. Wrap instead: the label takes the whole first line, and the chord, conflict note, and
- * controls flow onto the next line(s). */
+/* Phone width: the row cannot hold a long label, the chord chip, and the controls on one line, so the
+   label's grown-but-min-width:0 box collapsed and the chord rode over the label text. Wrap instead: the
+   label takes the whole first line, and the chord, conflict note, and controls flow onto the next. */
 @media (max-width: 47.999rem) {
-  [data-kbeditor] [data-krow] { flex-wrap: wrap; column-gap: 0.5rem; row-gap: 0.35rem; }
+  [data-kbeditor] [data-krow] { flex-wrap: wrap; column-gap: var(--pf-t--global--spacer--sm); row-gap: var(--pf-t--global--spacer--xs); }
   [data-kbeditor] [data-krow] > span:first-child { flex: 1 1 100%; }
   [data-kbeditor] [data-kactions] { margin-left: 0; flex-wrap: wrap; }
 }
 
 /* --- Reference-block source hide -----------------------------------------------------------------
- * The graph and log scaffolds carry a few <details data-ref-section> blocks - inline reference/help
- * copy. The Reference panel (ref-drawer.ts, a PatternFly Drawer) CLONES these into the panel on open;
- * the SOURCE blocks stay hidden here (state on data-*, not a class) so the apps render without
- * spilling the disclosure copy into the view - only the cloned copies (which drop data-ref-section)
- * show. Do not remove: without this the help copy would appear inline in the graph/log apps. */
+ * The graph and log scaffolds carry a few <details data-ref-section> blocks - inline reference/help copy.
+ * The Reference panel (ref-drawer.ts, a PatternFly Drawer) CLONES these into the panel on open; the
+ * SOURCE blocks stay hidden here (state on data-*, not a class) so the apps render without spilling the
+ * disclosure copy into the view - only the cloned copies (which drop data-ref-section) show. Do not
+ * remove: without this the help copy would appear inline in the graph/log apps. */
 [data-ref-section] { display: none; }
 
-/* Toasts have no rules here: they are PatternFly Alerts in one toast Alert group (lib/toast.ts), and
- * PF owns their frame, placement, stacking, motion and z-index. */
+/* Toasts have no rules here: they are PatternFly Alerts in one toast Alert group (lib/toast.ts), and PF
+ * owns their frame, placement, stacking, motion and z-index. */
 
 /* --- Share panel ---------------------------------------------------------------------------------
- * The "Share a read-only view" pop-out (share.ts): a right-docked side panel in the SAME family as
- * the notification center and reference drawer, not a centered modal - it has the room to pick a
- * lifetime and then show the QR + link without squishing. Docks between the top chrome and the status
- * bar on the right edge, dismissed by Escape / outside-click. Class names follow the
- * console-<area>-<block>__<element> convention; state is carried by classes, not IDs. The QR frame is
- * pinned light (white ground, dark modules) in BOTH themes so the code scans reliably. */
-.console-shell-share {
-  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
-  width: 24rem; max-width: calc(100vw - 1rem);
-  display: flex; flex-direction: column;
-  background: var(--pf-t--global--background--color--primary--default);
-  border-left: 1px solid var(--pf-t--global--border--color--default);
-  z-index: var(--pf-t--global--z-index--300); /* same tier as the notification panel */
-}
-/* A left-only drop shadow via a pseudo-strip (not box-shadow): it lifts the panel off the content
-   behind it without a symmetric blur bleeding DOWN onto the status bar, which would fight the seamless
-   bottom fade. top/bottom:0 keeps it inside the panel's own height, so nothing spills past the seam. */
-.console-shell-notify::before,
-.console-shell-share::before,
-.console-shell-activity::before {
-  content: ""; position: absolute; top: 0; bottom: 0; left: -18px; width: 18px;
-  background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
-  pointer-events: none;
-}
-.console-shell-share[hidden] { display: none; }
-.console-shell-share__head {
-  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-shell-share__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
-/* The body scrolls if a short viewport cannot hold the QR + link + actions; its bottom padding clears
-   the status-bar fade (::after below) so the last control is never cut. */
-.console-shell-share__body {
-  flex: 1 1 auto; overflow-y: auto; min-height: 0;
-  display: flex; flex-direction: column; gap: 0.7rem; align-items: center;
-  padding: 1rem 1.1rem 2.75rem;
-}
+ * The "Share a read-only view" panel (share.ts): the shared panel frame above, with a centered
+ * single-task column inside it - pick a lifetime, then show the QR + link. The QR frame is pinned light
+ * (white ground, dark modules) in BOTH themes so the code scans reliably. */
+#console-sharepanel .console-shell-panel__body { gap: var(--pf-t--global--spacer--md); align-items: center; }
 .console-shell-share__picklabel {
-  margin: 0; align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm);
+  margin: 0;
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The lifetime picker. Five options fit the 24rem panel, but the group WRAPS rather than
-   overflowing, because a ToggleGroup is a single non-wrapping row by default and an overflowing one
-   silently clips its last chip - here the longest-lived link, the one an ambient display needs. */
-/* flex-wrap on the element ITSELF: pf-v6-c-toggle-group and this class sit on the same node, so a
-   descendant selector here matches nothing. Five options fit the 24rem panel exactly, with no slack
-   at all, and a ToggleGroup is a non-wrapping row by default - so without this the next label that
-   grows by a character silently clips the last chip, which is the longest-lived link and the one an
-   ambient display needs. */
+/* The lifetime picker. A ToggleGroup is a single non-wrapping row by default and an overflowing one
+   silently clips its last chip - here the longest-lived link, the one an ambient display needs - so the
+   group WRAPS. The flex-wrap is on the element ITSELF: pf-v6-c-toggle-group and this class sit on the same
+   node, so a descendant selector would match nothing. */
 .console-shell-share__durations {
   align-self: stretch;
   flex-wrap: wrap;
 }
 .console-shell-share__generate { align-self: stretch; }
 .console-shell-share__revoked {
-  margin: 0; align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--console-status-warn, var(--pf-t--global--text--color--regular));
+  margin: 0;
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--console-status-warn-text);
 }
 /* Light frame around the QR so quiet-zone contrast holds in dark mode too. */
 .console-shell-share__qr {
-  padding: 0.5rem; background: var(--pf-t--color--white); border-radius: var(--pf-t--global--border--radius--tiny); line-height: 0;
+  padding: var(--pf-t--global--spacer--sm);
+  background: var(--pf-t--color--white);
+  border-radius: var(--pf-t--global--border--radius--tiny);
+  line-height: 0;
 }
 .console-shell-share__qr canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
-.console-shell-share__qr--failed { display: none; }
-/* The URL is a click-to-copy button: reset native button chrome to a bordered mono line and signal it
-   is interactive with a plain -> link hover (no all-caps, square). */
+.console-shell-share__qr[data-failed] { display: none; }
+/* The URL is a click-to-copy button: reset native button chrome to a bordered mono line and signal it is
+   interactive with a plain -> link hover. */
 .console-shell-share__url {
-  margin: 0; width: 100%; box-sizing: border-box; word-break: break-all; text-align: center;
-  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--pf-t--global--text--color--subtle); cursor: pointer;
-  padding: 0.35rem 0.4rem;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  word-break: break-all;
+  text-align: center;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  padding: var(--pf-t--global--spacer--xs);
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: transparent;
@@ -494,133 +532,123 @@
   border-color: var(--pf-t--global--text--color--link--default);
 }
 .console-shell-share__note {
-  margin: 0; text-align: center; font-size: var(--pf-t--global--font--size--body--sm);
+  margin: 0;
+  text-align: center;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-share__expiry {
-  margin: 0; text-align: center; font-size: var(--pf-t--global--font--size--body--sm); opacity: 0.8;
+  margin: 0;
+  text-align: center;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-shell-share__actions {
-  display: flex; gap: 0.5rem; margin-top: 0.2rem;
-}
+.console-shell-share__actions { display: flex; gap: var(--pf-t--global--spacer--sm); margin-top: var(--pf-t--global--spacer--xs); }
 
 /* --- Activity drawer -----------------------------------------------------------------------------
- * "What magus is running, and what just ran" (activityDrawer.ts): the share panel's immediate
- * sibling, so it shares that panel's frame rules verbatim (docked between the top chrome and the
- * status bar on the right edge, same width, same tier, same bottom fade and left shadow strip added
- * to the grouped selectors above). Only what differs from the share panel is written here: a dense
- * two-section list rather than a centered single-task form.
- *
- * There is no slide-in transition, matching its sibling: both panels appear and disappear via the
- * `hidden` attribute. Nothing here moves on its own, so there is nothing for a reduced-motion query
- * to switch off. */
-.console-shell-activity {
-  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
-  width: 24rem; max-width: calc(100vw - 1rem);
-  display: flex; flex-direction: column;
-  background: var(--pf-t--global--background--color--primary--default);
-  border-left: 1px solid var(--pf-t--global--border--color--default);
-  z-index: var(--pf-t--global--z-index--300); /* same tier as the share + notification panels */
-}
-.console-shell-activity[hidden] { display: none; }
-.console-shell-activity__head {
-  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-shell-activity__title { font-size: var(--pf-t--global--font--size--body--default); font-weight: 600; color: var(--pf-t--global--text--color--regular); }
-/* Bottom padding clears the status-bar fade (::after) so the last row is never cut. */
-.console-shell-activity__body {
-  flex: 1 1 auto; overflow-y: auto; min-height: 0;
-  display: flex; flex-direction: column; gap: 0.9rem;
-  padding: 0.75rem 0.9rem 2.75rem;
-}
-/* The aria-live line. Visible as well as announced - the counts are the panel's one-glance answer,
-   and a sighted reader wants them for the same reason a screen-reader user is told them. */
+ * "What magus is running, and what just ran" (activityDrawer.ts): the shared panel frame above, with a
+ * dense two-section list inside it rather than a centered single-task form. */
+#console-activitypanel .console-shell-panel__body { gap: var(--pf-t--global--spacer--md); }
+/* The status line. Visible as well as announced - the counts are the panel's one-glance answer, and a
+   sighted reader wants them for the same reason a screen-reader user is told them. */
 .console-shell-activity__summary {
-  margin: 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle);
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
 }
-.console-shell-activity__section { display: flex; flex-direction: column; gap: 0.35rem; }
-.console-shell-activity__sectionhead {
-  margin: 0; display: flex; align-items: center; gap: 0.4rem;
-  font-size: var(--console-label-size); font-weight: var(--console-label-weight);
-  text-transform: uppercase; letter-spacing: var(--console-label-tracking);
+.console-shell-activity__section { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--xs); }
+.console-shell-activity__section-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
-/* Each row is a two-line block: the command, then its meta. The left rule carries the outcome, which
-   is why it is a data attribute and not a color baked into the row class. */
+/* Each row is a two-line block: the command, then its meta. The left rule carries the outcome, which is
+   why it is a data attribute and not a color baked into the row class; the status mark beside the title
+   is the shape and the word, so the rule is never the only cue. */
 .console-shell-activity__row {
-  display: flex; flex-direction: column; gap: 0.1rem;
-  padding: 0.35rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   border-left: 2px solid transparent;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-shell-activity__row[data-outcome="pass"] { border-left-color: var(--console-status-ok); }
 .console-shell-activity__row[data-outcome="fail"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
-.console-shell-activity__rowtitle {
-  font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
+.console-shell-activity__row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--regular);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.console-shell-activity__rowmeta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-/* The lease a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
-   field's arrival is a data change rather than a styling one. */
-.console-shell-activity__rowunit {
-  align-self: flex-start; font-size: var(--pf-t--global--font--size--body--sm); letter-spacing: 0.03em;
+.console-shell-activity__row-title code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
+.console-shell-activity__row-link { min-width: 0; color: inherit; text-decoration: none; }
+.console-shell-activity__row-link:hover { color: var(--pf-t--global--text--color--link--default); text-decoration: underline; }
+.console-shell-activity__row-meta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+/* The job a row belongs to. Nothing sets it yet; the rule exists so the field's arrival is a data change
+   rather than a styling one. */
+.console-shell-activity__row-unit {
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  letter-spacing: 0.03em;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty {
-  margin: 0; padding: 0.5rem; font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.4;
+  margin: 0;
+  padding: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1.4;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty[hidden] { display: none; }
 
-/* Touch targets in the status bar. Apple's HIG asks for a 44x44 pt hit region; these tray icons
-   measure 19x14 because the button carries `padding: 0 2.4px` around a 14px glyph.
-   Only the REGION grows - the glyph stays 14px, so the bar reads the same and stops being a row of
-   targets you have to aim at.
-   PAIRED with the (pointer: coarse) block at the foot of console.css, which grows the bar itself to
-   44px so these fit; without that half this rule would just overflow the bar. Change one, change the other. */
+/* Touch targets in the status bar. Apple's HIG asks for a 44x44 pt hit region; the tray icons are a 14px
+   glyph in a 24px box. Only the REGION grows - the glyph stays 14px, so the bar reads the same and stops
+   being a row of targets you have to aim at. PAIRED with the (pointer: coarse) block at the foot of
+   console.css, which grows the bar itself to 44px so these fit; without that half this rule would just
+   overflow the bar. Change one, change the other. */
 /* Below the shell's inversion AND on a touch pointer, two of the four tray controls are controls for
- * things the device does not have: the cheat sheet lists KEYBOARD shortcuts, and Panes opens the
- * tiling tray, which this width has already folded away in favour of the launcher grid. Dropping
- * them is not dropping function - the function is what is absent - and it is what buys the room for
- * the two that remain to take a full 44x44 target. Four 44px-wide buttons plus the zoom stepper
- * measure 499px of content in a 375px bar that clips, which is how Panes, Share and Keyboard
- * shortcuts went off the end when width was raised without this.
+ * things the device does not have: the cheat sheet lists KEYBOARD shortcuts, and Panes opens the tiling
+ * tray, which this width has already folded away in favour of the launcher grid. Dropping them is not
+ * dropping function - the function is what is absent - and it is what buys the room for the two that
+ * remain to take a full 44x44 target.
  *
- * BOTH conditions, not just the pointer: a touchscreen laptop at 1280px is coarse too, and there
- * tiling works and the rail is present, so hiding its control would remove something real. */
+ * BOTH conditions, not just the pointer: a touchscreen laptop at 1280px is coarse too, and there tiling
+ * works and the rail is present, so hiding its control would remove something real. */
 @media (pointer: coarse) {
   #console-statusbar .pf-v6-c-button.pf-m-plain {
-    /* Height wherever the pointer is coarse; width only below the inversion, in the block after this
-       one. 14px was the dimension that made these hard to hit at all. Above the inversion the bar
-       keeps all four controls at 19x44, which still clears WCAG 2.5.8 through its spacing exception
-       (checked: no two target centres within 24px) - it is Apple's 44x44 that wants the width. */
+    /* Height wherever the pointer is coarse; width only below the inversion, in the block after this one.
+       Above the inversion the bar keeps all four controls narrow, which still clears WCAG 2.5.8 through
+       its spacing exception - it is Apple's 44x44 that wants the width. */
     min-block-size: 44px;
-    /* Centring is not optional here: these buttons carry `line-height: 0` (see the tray rules above),
-       which pins the glyph to the top of whatever box it is in. At the old 19x14 the box WAS the
-       glyph so it never showed; grow the box and the icon hangs at the top of it. */
+    /* Centring is not optional: these buttons carry `line-height: 0`, which pins the glyph to the top of
+       whatever box it is in. Grow the box and the icon hangs at the top of it. */
     display: inline-flex;
     align-items: center;
     justify-content: center;
   }
-  /* Panes drops the fill it carries elsewhere. At 44px the pill is as tall as the bar itself, and a
-     slab that size stops reading as "these two belong together" and starts reading as "this control
-     is active" - which is what the accent on [aria-expanded] already means. The 44px box is grouping
-     enough on its own; the wash was only ever there to fight the 0.9rem gap at chrome scale. */
+  #console-conn { min-block-size: 44px; }
+  /* Panes drops the fill it carries elsewhere. At 44px the pill is as tall as the bar itself, and a slab
+     that size stops reading as "these two belong together" and starts reading as "this control is
+     active" - which is what the accent on [aria-expanded] already means. */
   #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes,
   #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes:hover {
     background: none;
   }
 }
-
 /* AFTER the block above, and not merged into it, because `display: none` here has to beat the
- * `display: inline-flex` there. Both selectors are one id and two classes, so specificity cannot
- * settle it and source order does - written before it, the hide silently lost and the buttons
- * stayed on screen at 44px wide, pushing two of them off the end of the bar. */
+ * `display: inline-flex` there. Both selectors are one id and two classes, so specificity cannot settle
+ * it and source order does. */
 @media (pointer: coarse) and (max-width: 47.999rem) {
   #console-statusbar .pf-v6-c-button.console-shell-statusbar__shortcuts,
   #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes {

@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createTabBar, type TabBarCallbacks } from "./tabBar";
+import { createTabBar, tabElementId, tabPanelId, type TabBarCallbacks } from "./tabBar";
 import type { Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
 
@@ -64,7 +64,7 @@ const labels = (el: HTMLElement) =>
   [...el.querySelectorAll(".pf-v6-c-tabs__item-text")].map((e) => e.textContent);
 const hints = (el: HTMLElement) =>
   [...el.querySelectorAll(".pf-v6-c-tabs__link")].map(
-    (e) => e.querySelector(".console-tabbar__hint")?.textContent ?? null,
+    (e) => e.querySelector(".console-shell-tabs__hint")?.textContent ?? null,
   );
 
 test("a tab renders its document name, not the whole path it was named from", () => {
@@ -124,10 +124,7 @@ test("exactly the active tab carries aria-selected and the roving tabindex", () 
 // its close action too - otherwise "Close Log Viewer" lingers on a tab now showing a file.
 test("the close button is named after the tab's current document", () => {
   withBar({ tabs: [tab("t1", "src/console/main.ts")], activeId: "t1" }, (el) => {
-    assert.equal(
-      el.querySelector(".pf-v6-c-tabs__item-action button")?.getAttribute("aria-label"),
-      "Close main.ts",
-    );
+    assert.equal(el.querySelector("[data-tab-close]")?.getAttribute("aria-label"), "Close main.ts");
   });
 });
 
@@ -142,5 +139,142 @@ test("renaming a tab in the workspace re-renders the bar", () => {
     assert.deepEqual(labels(bar.el), ["out4f2a1c"]);
   } finally {
     bar.destroy();
+  }
+});
+
+// ---- the WAI-ARIA tabs pattern ----------------------------------------------------------------
+
+test("the strip is a labelled tablist whose items are presentational", () => {
+  withBar(sameNamed, (el) => {
+    const list = el.querySelector('[role="tablist"]');
+    assert.equal(list?.getAttribute("aria-label"), "Open apps");
+    for (const li of el.querySelectorAll(".pf-v6-c-tabs__item")) {
+      assert.equal(li.getAttribute("role"), "presentation");
+    }
+  });
+});
+
+test("each tab has an id and names the panel it controls", () => {
+  withBar(sameNamed, (el) => {
+    const links = [...el.querySelectorAll<HTMLElement>('[role="tab"]')];
+    assert.deepEqual(
+      links.map((l) => l.id),
+      [tabElementId("t1"), tabElementId("t2")],
+    );
+    assert.deepEqual(
+      links.map((l) => l.getAttribute("aria-controls")),
+      [tabPanelId("t1"), tabPanelId("t2")],
+    );
+  });
+});
+
+// ---- focus survives the re-render --------------------------------------------------------------
+
+// Enter on a tab selects it, the console writes the workspace, and the bar rebuilds its list. That
+// dropped focus to <body>, so the next arrow key went nowhere.
+test("pressing Enter on a tab leaves focus on that tab", () => {
+  const ws = cell({ tabs: [tab("t1", "a.ts"), tab("t2", "b.ts")], activeId: "t1" });
+  const bar = createTabBar(ws, {
+    ...noop,
+    onSelect: (id) => ws.set({ ...ws.get(), activeId: id }),
+  });
+  document.body.append(bar.el);
+  try {
+    const second = bar.el.querySelector<HTMLElement>('[data-tab-id="t2"]');
+    second?.focus();
+    second?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    const active = document.activeElement as HTMLElement | null;
+    assert.equal(active?.dataset.tabId, "t2", "focus follows the tab through the rebuild");
+    assert.equal(active?.getAttribute("aria-selected"), "true");
+  } finally {
+    bar.destroy();
+    bar.el.remove();
+  }
+});
+
+// ---- the tab menu -------------------------------------------------------------------------------
+
+function menu(): HTMLElement {
+  const m = document.querySelector<HTMLElement>(".console-shell-tabs__menu");
+  assert.ok(m, "the bar mounts one tab menu on <body>");
+  return m;
+}
+
+test("Shift+F10 and the ContextMenu key open the tab menu on a tab, with focus inside it", () => {
+  const bar = createTabBar(cell(sameNamed), noop);
+  document.body.append(bar.el);
+  try {
+    const link = bar.el.querySelector<HTMLElement>('[data-tab-id="t2"]');
+    link?.focus();
+    assert.equal(menu().hidden, true);
+    link?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true }),
+    );
+    assert.equal(menu().hidden, false);
+    const items = [...menu().querySelectorAll('[role="menuitem"]')].map((i) => i.textContent);
+    assert.deepEqual(items, [
+      "Split side by side",
+      "Split stacked",
+      "Move to new window",
+      "Close main.ts",
+    ]);
+    assert.equal(document.activeElement?.getAttribute("role"), "menuitem");
+    menu().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(menu().hidden, true);
+    // ok(), not equal(): a failing equal() inspects both DOM nodes, which looks like a hang.
+    assert.ok(document.activeElement === link, "Escape returns focus to the tab that asked");
+    link?.dispatchEvent(new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true }));
+    assert.equal(menu().hidden, false);
+  } finally {
+    bar.destroy();
+    bar.el.remove();
+  }
+});
+
+test("the menu has arrows: Down moves to the next item and wraps", () => {
+  const bar = createTabBar(cell(sameNamed), noop);
+  document.body.append(bar.el);
+  try {
+    const link = bar.el.querySelector<HTMLElement>('[data-tab-id="t1"]');
+    link?.dispatchEvent(new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true }));
+    const items = [...menu().querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    assert.ok(document.activeElement === items[0]);
+    menu().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    assert.ok(document.activeElement === items[1]);
+    menu().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    menu().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    assert.ok(document.activeElement === items[items.length - 1]);
+  } finally {
+    bar.destroy();
+    bar.el.remove();
+  }
+});
+
+// iOS fires no contextmenu on a long press, so touch needs a visible way in. It sits on the active
+// tab only, where the phone's strip has the room and the reader's attention is.
+test("the active tab carries a visible actions button that opens the same menu", () => {
+  const splits: string[] = [];
+  const bar = createTabBar(cell(sameNamed), {
+    ...noop,
+    onSplit: (id, dir) => splits.push(id + dir),
+  });
+  document.body.append(bar.el);
+  try {
+    const buttons = bar.el.querySelectorAll<HTMLElement>("[data-tab-actions]");
+    assert.equal(buttons.length, 1, "only the active tab");
+    const more = buttons[0];
+    assert.equal(more.dataset.tabActions, "t1");
+    assert.equal(more.getAttribute("aria-label"), "Actions for main.ts");
+    assert.equal(more.getAttribute("aria-haspopup"), "menu");
+    assert.equal(more.getAttribute("aria-expanded"), "false");
+    more.click();
+    assert.equal(menu().hidden, false);
+    assert.equal(more.getAttribute("aria-expanded"), "true");
+    menu().querySelector<HTMLElement>('[role="menuitem"]')?.click();
+    assert.deepEqual(splits, ["t1row"]);
+    assert.equal(menu().hidden, true, "choosing an item closes the menu");
+  } finally {
+    bar.destroy();
+    bar.el.remove();
   }
 });
