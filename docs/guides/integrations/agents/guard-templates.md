@@ -170,8 +170,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //                    subagent's command is graded under the job it was spawned for
 //                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-//   HOST_CWD_PATH    dot-path to the directory the call runs in, whose checkout's own
-//                    ./magus judges it (default cwd)
+//   HOST_CWD_PATH    dot-path to the directory the call runs in. The ./magus beside the
+//                    nearest magus.yaml above it judges the call, so a call from a
+//                    subdirectory with its own magusfile.buzz (console/, docs/) still
+//                    uses the root's build (default cwd)
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
 //   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
@@ -206,7 +208,10 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //
 // On a missing magus this prints a visible notice rather than exiting quietly. A
 // guard that exits silently never runs and nothing says so, and an unguarded
-// session you know about beats one you do not.
+// session you know about beats one you do not. That is the case where no magus exists
+// to ask. A magus that runs but cannot load the tree (older than it, or a checkout with
+// no ./magus) is judged by that magus itself, which denies every write until a
+// binary loads the tree.
 //
 // NOTHING here may raise. Claude Code reads a non-zero hook exit other than 2 as a
 // non-blocking error and runs the call anyway, and exit 2 BLOCKS with stderr as the
@@ -1497,23 +1502,40 @@ import "io";
 import "flags";
 import "fs";
 import "path";
+import "proc";
+import "std";
+import "env";
+import "encoding/json";
+import "lib/hook" as hook;
 
-// magus session hook: puts the workspace's own magus first on PATH for the shell
-// commands a session runs, so a `magus` typed there is the build its hooks run.
+// magus session hook: puts the session checkout's own magus first on PATH for the shell
+// commands a session runs, so a `magus` typed there is the build its hooks run, and says
+// once per session when that magus cannot load the checkout.
 //
 // Wire it to your host's session-start event as `magus buzz -C <root> -s
-// magus-session.buzz -- --env-file <file>`. The directory -C names is the one that goes
-// on PATH, and <file> is the one your host sources before each shell command. It
-// appends `export PATH="<root>:$PATH"` there, keeping what other hooks wrote, and
-// leaves `$PATH` for that shell to expand. An empty or absent --env-file does nothing:
-// a host that sources no such file has no PATH to set. It prints nothing on stdout and
-// exits 0.
+// magus-session.buzz -- --env-file <file>`. <file> is the one your host sources before each
+// shell command. The directory that goes on PATH is the workspace root above the `cwd` the
+// event reports, found the way the guard glue finds it (the nearest magus.yaml), NOT the
+// directory -C names: a host's command line names the main checkout, and a worktree session
+// would otherwise run main's build. An event with no cwd falls back to -C's directory.
+// The hook appends `export PATH="<root>:$PATH"` to <file>, keeping what other hooks wrote,
+// and leaves `$PATH` for that shell to expand. An empty or absent --env-file sets no PATH.
+//
+// It then resolves the binary the guard glue would run for that cwd and loads the
+// workspace with it (`ls`). If that fails, or no binary resolves at all, it answers
+// with additionalContext naming the single fix, once per session. A guard whose binary
+// cannot load the tree judges nothing and denies every write, and a session should hear
+// that when it starts, not at the first refused edit. Otherwise it prints nothing on stdout.
+// It exits 0 either way.
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
 // magus-guard-template: 20
 
 final ENV_FILE_FLAG = "--env-file";
+final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
+final LEASE_KEY = "magus.lease";
+final HOOK_FILE = "magus-session.buzz";
 
 fun warn(message: str) > void {
     io\stderr.write("magus-session.buzz: {message}\n") catch void;
@@ -1532,16 +1554,145 @@ fun envFilePath(args: [str]) > str {
     return parsed!.values[ENV_FILE_FLAG] ?? "";
 }
 
+// leaseFrom is the lease a W3C baggage header names, "" when it names none. The hook runs
+// inside a worker's environment, where BAGGAGE carries `magus.lease=<id>`.
+fun leaseFrom(baggage: str) > str {
+    foreach (member in baggage.split(",")) {
+        final pair = member.trim().split(";")[0];
+        final eq = pair.indexOf("=");
+        if (eq != null and pair.sub(0, len: eq!).trim() == LEASE_KEY) {
+            return pair.sub(eq! + 1, len: pair.len() - eq! - 1).trim();
+        }
+    }
+    return "";
+}
+
+// fixFor is the one command that brings back a binary able to load root. A leased worker
+// never builds: there is one binary per base, and the orchestrator places it.
+fun fixFor(own: bool, hasBinary: bool, lease: str) > str {
+    if (lease != "") {
+        if (own) {
+            return "ask the orchestrator to place this worktree's binary with `magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease}`. A worker never builds one.";
+        }
+        return "ask the orchestrator, or the person who runs this workspace, to install a magus that loads it.";
+    }
+    if (own and hasBinary) {
+        return "rebuild it with `./magus run go-build .`. If that cannot load the tree either, run `mv magus magus.old`, then `{BOOTSTRAP}`.";
+    }
+    if (own) {
+        return "this checkout has no ./magus; bootstrap one with `{BOOTSTRAP}`.";
+    }
+    return "install a magus that loads this workspace with `magus self update`.";
+}
+
+// unloadableNotice states what failed and the fix. why is the error the load printed, or
+// "" when no binary resolved at all.
+fun unloadableNotice(root: str, bin: str, why: str, fix: str) > str {
+    var cause = "no magus binary resolves for {root}";
+    if (bin != "") {
+        cause = "{bin} cannot load {root}";
+        if (why != "") { cause = cause + ": {why}"; }
+    }
+    return "magus guard is NOT judging this session: {cause}, so this workspace's guard policy is not running. A binary older than the tree, or a checkout with no ./magus, "
+        + "has every edit, spawn, push and state-changing command denied until a magus loads the tree; reads, `git status` and the fix still run. Fix: {fix}";
+}
+
+fun contextReply(text: str) > str {
+    final encoded = json\stringify(text) catch `""`;
+    return "\{\"hookSpecificOutput\":\{\"hookEventName\":\"SessionStart\",\"additionalContext\":{encoded}}}";
+}
+
+// readEvent is the host's SessionStart event, null when the hook was run by hand or the
+// payload does not parse. A terminal stdin would block forever, so it is never read.
+fun readEvent() > any? {
+    if (proc\stdinIsTerminal()) { return null; }
+    final raw = io\stdin.readAll() catch null;
+    if (raw == null) { return null; }
+    return json\parse(raw!) catch null;
+}
+
+// firstLine is the first non-empty line of text, which is where a load error says what it is.
+fun firstLine(text: str) > str {
+    foreach (line in text.split("\n")) {
+        if (line.trim() != "") { return line.trim(); }
+    }
+    return "";
+}
+
+// loadFailure loads the workspace with bin, the way any command would, and returns the error
+// it printed. "" means it loaded; a binary that would not even start reports that.
+fun loadFailure(bin: str, root: str) > str {
+    final result = proc\exec(bin, args: ["--root", root, "ls", "-o", "name"], dir: root, opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null) { return "it could not be started"; }
+    if (result!.code == 0) { return ""; }
+    final said = firstLine(result!.stderr);
+    if (said == "") { return "it exited {result!.code} without an error"; }
+    return said;
+}
+
 fun main(args: [str]) > void {
     final envFile = envFilePath(args);
-    if (envFile == "") { return; }
-    final root = path\abs(".") catch "";
+    final event = readEvent();
+    final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
+    var root = "";
+    if (cwd != "") { root = hook\workspaceRootAt(cwd); }
+    if (root == "") { root = path\abs(".") catch ""; }
     if (root == "") { return; }
-    try {
-        fs\appendFile(envFile, content: "export PATH=\"{root}:$PATH\"\n");
-    } catch {
-        warn("could not append to {envFile}; the session's commands find magus on PATH as it was.");
+
+    if (envFile != "") {
+        try {
+            fs\appendFile(envFile, content: "export PATH=\"{root}:$PATH\"\n");
+        } catch {
+            warn("could not append to {envFile}; the session's commands find magus on PATH as it was.");
+        }
     }
+
+    final bin = hook\resolveBin(cwd: cwd);
+    var why = "";
+    if (bin != "") { why = loadFailure(bin, root: root); }
+    if (bin != "" and why == "") { return; }
+
+    final session = hook\field(event, dotPath: hook\envOr("HOST_SESSION_PATH", fallback: "session_id"));
+    if (!hook\noticeOnce(session, family: "session-unloadable", file: HOOK_FILE)) { return; }
+    final own = (fs\isFile("{root}/go.mod") catch false) and (fs\isFile("{root}/cmd/magus/main.go") catch false);
+    final hasBinary = hook\isExecutable("{root}/magus");
+    final fix = fixFor(own, hasBinary: hasBinary, lease: leaseFrom(env\get("BAGGAGE") catch ""));
+    io\stdout.write(contextReply(unloadableNotice(root, bin: bin, why: why, fix: fix))) catch void;
+}
+
+test "a lease is read off the baggage header" {
+    std\assert(leaseFrom("magus.lease=hook-binary") == "hook-binary", message: "alone");
+    std\assert(leaseFrom("a=b, magus.lease=hook-binary;prop=1 ,c=d") == "hook-binary", message: "among others");
+    std\assert(leaseFrom("a=b") == "", message: "absent");
+    std\assert(leaseFrom("") == "", message: "empty");
+}
+
+test "the fix follows who is asking" {
+    std\assert(fixFor(true, hasBinary: true, lease: "").startsWith("rebuild it with `./magus run go-build .`"), message: "orchestrator with a binary");
+    std\assert(fixFor(true, hasBinary: false, lease: "").indexOf(BOOTSTRAP) != null, message: "orchestrator with none");
+    std\assert(fixFor(false, hasBinary: true, lease: "").indexOf("magus self update") != null, message: "another workspace");
+    final worker = fixFor(true, hasBinary: true, lease: "w1");
+    std\assert(worker.indexOf("bootstrap-worktree.buzz -- --job w1") != null, message: "a worker asks for a placed binary");
+    std\assert(worker.indexOf("go-build") == null, message: "and is never told to build");
+}
+
+test "the notice names the cause and the one fix" {
+    final text = unloadableNotice("/w", bin: "/usr/bin/magus", why: "object guard has no field", fix: "rebuild it.");
+    std\assert(text.indexOf("/usr/bin/magus cannot load /w: object guard has no field, so") != null, message: text);
+    std\assert(text.endsWith("Fix: rebuild it."), message: text);
+    std\assert(unloadableNotice("/w", bin: "", why: "", fix: "x").indexOf("no magus binary resolves for /w") != null, message: "nothing resolves");
+}
+
+test "the reply is the SessionStart envelope" {
+    std\assert(contextReply("hi \"there\"") == "\{\"hookSpecificOutput\":\{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"hi \\\"there\\\"\"}}", message: contextReply("hi \"there\""));
+}
+
+test "the first non-empty line is the error" {
+    std\assert(firstLine("\n  \nerror: boom\nmore") == "error: boom", message: "skips blanks");
+    std\assert(firstLine("") == "", message: "empty");
 }
 ```
 

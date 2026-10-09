@@ -333,7 +333,7 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		return leaseProducers(ctx, deps, at.workspace, me.WritePaths)
 	})
 	for _, r := range runs {
-		if r.allowed(checks, at.workspace != "" && ownSourceRoot(at.workspace), produces) {
+		if r.allowed(checks, produces) {
 			continue
 		}
 		lines := make([]string, len(checks))
@@ -415,12 +415,13 @@ func verbFlagTakesValue(verb, name string) bool {
 	return takes
 }
 
-// allowed reports whether a bound worker may make this run: its row's check, a target
-// declaring an output in its write paths, or the rebuild of magus's own binary that every
-// bootstrap verdict in this repository names.
+// allowed reports whether a bound worker may make this run: its row's check, or a target
+// declaring an output in its write paths. A rebuild of magus's own binary is never on the
+// list: there is one binary per base, the orchestrator builds it in the root and places a
+// copy in each worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
-func (r targetRun) allowed(checks []types.LeaseCheck, ownSource bool, produces func() func(target, project string) bool) bool {
+func (r targetRun) allowed(checks []types.LeaseCheck, produces func() func(target, project string) bool) bool {
 	projects := r.projects
 	if len(projects) == 0 {
 		projects = []string{"."}
@@ -432,9 +433,6 @@ func (r targetRun) allowed(checks []types.LeaseCheck, ownSource bool, produces f
 	}
 	if r.verb != "run" {
 		return false
-	}
-	if ownSource && targetName(r.target) == "go-build" && len(projects) == 1 && path.Clean(projects[0]) == "." {
-		return true
 	}
 	writes := produces()
 	return !slices.ContainsFunc(projects, func(p string) bool { return !writes(r.target, p) })

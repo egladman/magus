@@ -350,7 +350,19 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 		VerdictRef:    got.VerdictRef,
 		PolicyDigest:  got.PolicyDigest,
 		DecidedBy:     got.DecidedBy,
+		Binary:        got.Binary,
+		BinaryVersion: got.BinaryVersion,
+		Cwd:           got.Cwd,
 	}
+}
+
+// assertJudgedBy pins the judging magus a hook row records, the running binary and its
+// version, and clears them from got so the rest of the row can be compared whole.
+func assertJudgedBy(t *testing.T, got *trail.Event) {
+	t.Helper()
+	assert.NotEmpty(t, got.Binary, "a hook row names the magus that judged it")
+	assert.Equal(t, version, got.BinaryVersion)
+	got.Binary, got.BinaryVersion = "", ""
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
@@ -437,6 +449,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	requestRef, responseRef := got.RequestRef, got.ResponseRef
 	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
 	got.RequestBytes, got.ResponseBytes = 0, 0
+	assertJudgedBy(t, &got)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
@@ -632,6 +645,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 
 	requestRef := got.RequestRef
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
+	assertJudgedBy(t, &got)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentSpawn,
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
@@ -669,6 +683,8 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	// No marker, so the spawn is uncorrelated: no lease.
+	uncorrelated := events[0]
+	assertJudgedBy(t, &uncorrelated)
 	assert.Equal(t, trail.Event{
 		Ts:           events[0].Ts,
 		Kind:         trail.KindAgentSpawn,
@@ -678,7 +694,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 		Outcome:      trail.OutcomeOK,
 		RequestRef:   events[0].RequestRef,
 		RequestBytes: events[0].RequestBytes,
-	}, events[0])
+	}, uncorrelated)
 
 	body, err := trail.ReadBlob(dir, events[0].RequestRef)
 	require.NoError(t, err)

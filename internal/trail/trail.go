@@ -169,6 +169,14 @@ type Event struct {
 	// with "+" when a workspace rule added its advice to a built-in one. Empty on a pass,
 	// which nothing decided.
 	DecidedBy string `json:"decided_by,omitempty"`
+	// Binary and BinaryVersion name the magus that judged a hook call, and Cwd the
+	// directory the host said the call ran in. Without them a verdict cannot be tied to the
+	// build that reached it, which is the first question when a guard rule that should
+	// have fired did not: the hook may have run a different checkout's binary than the
+	// session's.
+	Binary        string `json:"binary,omitempty"`
+	BinaryVersion string `json:"binary_version,omitempty"`
+	Cwd           string `json:"cwd,omitempty"`
 }
 
 // UnmarshalJSON decodes an event, reading a duration written under either spelling.
@@ -252,6 +260,11 @@ type AgentCommand struct {
 	// RuleFailures are the workspace command rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
+	// Binary, BinaryVersion and Cwd are the judging magus and the host's reported
+	// directory; see Event.
+	Binary        string
+	BinaryVersion string
+	Cwd           string
 }
 
 const agentCommandSchemaVersion = 1
@@ -373,6 +386,9 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Preview:       preview,
 		PolicyDigest:  command.PolicyDigest,
 		DecidedBy:     command.DecidedBy,
+		Binary:        command.Binary,
+		BinaryVersion: command.BinaryVersion,
+		Cwd:           command.Cwd,
 	})
 }
 
@@ -417,6 +433,11 @@ type AgentSpawn struct {
 	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
+	// Binary, BinaryVersion and Cwd are the judging magus and the host's reported
+	// directory; see Event.
+	Binary        string
+	BinaryVersion string
+	Cwd           string
 }
 
 // RuleFailure is one side of a workspace guard rule that judged nothing, and why.
@@ -508,17 +529,20 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		action = ActionAgentSpawn
 	}
 	Append(ctx, base, Event{
-		Ts:           time.Now().UnixMilli(),
-		Kind:         KindAgentSpawn,
-		Origin:       hookOrigin(types.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
-		Workspace:    spawn.Workspace,
-		Action:       action,
-		Lease:        lease,
-		Outcome:      OutcomeOK,
-		RequestRef:   reqRef,
-		RequestBytes: reqBytes,
-		PolicyDigest: spawn.PolicyDigest,
-		DecidedBy:    spawn.DecidedBy,
+		Ts:            time.Now().UnixMilli(),
+		Kind:          KindAgentSpawn,
+		Origin:        hookOrigin(types.Origin{EntryPoint: spawn.EntryPoint, Host: spawn.Host, Session: spawn.Session, Agent: spawn.Agent}),
+		Workspace:     spawn.Workspace,
+		Action:        action,
+		Lease:         lease,
+		Outcome:       OutcomeOK,
+		RequestRef:    reqRef,
+		RequestBytes:  reqBytes,
+		PolicyDigest:  spawn.PolicyDigest,
+		DecidedBy:     spawn.DecidedBy,
+		Binary:        spawn.Binary,
+		BinaryVersion: spawn.BinaryVersion,
+		Cwd:           spawn.Cwd,
 	})
 }
 

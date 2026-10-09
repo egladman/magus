@@ -47,6 +47,47 @@ func TestResolveBootstrapExecTargetFindsWorkspaceBinary(t *testing.T) {
 	assert.Equal(t, want, target)
 }
 
+// A nested project carries its own magusfile.buzz and no binary. The call is made from
+// inside it and still resolves the workspace root's ./magus.
+func TestResolveBootstrapExecTargetFromNestedProjectUsesRootBinary(t *testing.T) {
+	root := t.TempDir()
+	want := writeBootstrapFixtureWorkspace(t, root)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("# fixture\n"), 0o644))
+	nested := filepath.Join(root, "console")
+	require.NoError(t, os.MkdirAll(filepath.Join(nested, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "magusfile.buzz"), []byte("// nested\n"), 0o644))
+
+	for _, start := range []string{nested, filepath.Join(nested, "src")} {
+		target, ok := resolveBootstrapExecTarget(start, "/nonexistent-self")
+		require.True(t, ok, start)
+		assert.Equal(t, want, target, start)
+	}
+}
+
+// A worktree under the main checkout's .claude/worktrees holds its own magus.yaml, so the
+// walk stops there. A worktree with no ./magus gets no substitution; it is never handed
+// the parent checkout's binary.
+func TestResolveBootstrapExecTargetNeverClimbsIntoParentCheckout(t *testing.T) {
+	checkout := t.TempDir()
+	writeBootstrapFixtureWorkspace(t, checkout)
+	require.NoError(t, os.WriteFile(filepath.Join(checkout, "magus.yaml"), []byte("# checkout\n"), 0o644))
+	worktree := filepath.Join(checkout, ".claude", "worktrees", "job")
+	require.NoError(t, os.MkdirAll(filepath.Join(worktree, "console"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magus.yaml"), []byte("# worktree\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magusfile.buzz"), []byte("// worktree\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, "console", "magusfile.buzz"), []byte("// nested\n"), 0o644))
+
+	for _, start := range []string{worktree, filepath.Join(worktree, "console")} {
+		target, ok := resolveBootstrapExecTarget(start, "/nonexistent-self")
+		assert.False(t, ok, "%s resolved %s", start, target)
+	}
+
+	own := writeBootstrapFixtureWorkspace(t, worktree)
+	target, ok := resolveBootstrapExecTarget(filepath.Join(worktree, "console"), "/nonexistent-self")
+	require.True(t, ok)
+	assert.Equal(t, own, target)
+}
+
 // Test 2: the same binary does NOT hand off to itself.
 func TestResolveBootstrapExecTargetSkipsSelf(t *testing.T) {
 	dir := t.TempDir()

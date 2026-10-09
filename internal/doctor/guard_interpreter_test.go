@@ -104,3 +104,104 @@ func onPath(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 	t.Setenv("PATH", dir)
 }
+
+// fakeMagus writes an executable at dir/magus that prints version as `magus version` does.
+func fakeMagus(t *testing.T, dir, version string) string {
+	t.Helper()
+	bin := filepath.Join(dir, "magus")
+	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n"), 0o755))
+	return bin
+}
+
+// A call from console/ or docs/, each with a magusfile.buzz and no binary, runs the root's
+// ./magus: the nearest magus.yaml is the root, not the nearest magusfile.
+func TestHookBinaryFromANestedProjectIsTheRootsBinary(t *testing.T) {
+	root := t.TempDir()
+	bin := fakeMagus(t, root, "v0.5.0")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	nested := filepath.Join(root, "console", "src")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("\n"), 0o644))
+	withoutPathMagus(t)
+
+	assert.Equal(t, bin, hookBinaryFrom(nested))
+	assert.Equal(t, bin, hookBinaryFrom(filepath.Join(root, "console")))
+	assert.Equal(t, bin, hookBinaryFrom(root))
+}
+
+// A worktree nested under another checkout never resolves the parent's binary: its own
+// magus.yaml is the nearest.
+func TestHookBinaryFromAWorktreeNeverClimbsIntoTheParent(t *testing.T) {
+	parent := t.TempDir()
+	fakeMagus(t, parent, "v0.5.0")
+	require.NoError(t, os.WriteFile(filepath.Join(parent, "magus.yaml"), []byte("{}\n"), 0o644))
+	worktree := filepath.Join(parent, ".claude", "worktrees", "job")
+	require.NoError(t, os.MkdirAll(filepath.Join(worktree, "console"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magus.yaml"), []byte("{}\n"), 0o644))
+	withoutPathMagus(t)
+
+	assert.Equal(t, "", hookBinaryFrom(filepath.Join(worktree, "console")))
+
+	pathBin := fakeMagus(t, t.TempDir(), "v0.4.3")
+	t.Setenv("PATH", filepath.Dir(pathBin))
+	assert.Equal(t, pathBin, hookBinaryFrom(filepath.Join(worktree, "console")), "falls to PATH, not to the parent's binary")
+}
+
+// A linked worktree (.git is a file) with no ./magus is an error, whatever PATH holds.
+func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /elsewhere\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
+	pathBin := fakeMagus(t, t.TempDir(), "v0.5.0")
+	t.Setenv("PATH", filepath.Dir(pathBin))
+	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+
+	got := r.checkGuardBinaryEverywhere(nil)
+
+	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Contains(t, got.Message, "this worktree has no ./magus")
+	assert.Contains(t, got.Details, "place it: magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id>")
+
+	require.NoError(t, os.Remove(filepath.Join(root, ".git")))
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))
+	main := r.checkGuardBinaryEverywhere(nil)
+	assert.NotContains(t, main.Message, "this worktree", "a main checkout with no ./magus is the ordinary state")
+}
+
+// The check resolves the hook from every project directory: one whose hook would run a
+// different build than the one that loaded the tree fails it, naming the directory.
+func TestCheckGuardBinaryFailsWhenAProjectResolvesAnotherBuild(t *testing.T) {
+	root := t.TempDir()
+	fakeMagus(t, root, "v0.5.0")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	stray := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(stray, "magus.yaml"), []byte("{}\n"), 0o644))
+	stale := fakeMagus(t, t.TempDir(), "v0.4.3")
+	t.Setenv("PATH", filepath.Dir(stale))
+	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	projects := []*types.Project{{Path: ".", Dir: root}, {Path: "stray", Dir: stray}}
+
+	got := r.checkGuardBinaryEverywhere(projects)
+
+	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Contains(t, got.Message, stale+" (v0.4.3)")
+	assert.Equal(t, "resolved from the project directory "+stray, got.Details[0])
+
+	assert.Equal(t, types.CheckOK, r.checkGuardBinaryEverywhere(projects[:1]).Status, "the root alone passes")
+}
+
+// No magus for a project directory is a failure, not a pass: nothing judges calls there.
+func TestCheckGuardBinaryFailsWhenAProjectResolvesNoBinary(t *testing.T) {
+	root := t.TempDir()
+	fakeMagus(t, root, "v0.5.0")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	stray := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(stray, "magus.yaml"), []byte("{}\n"), 0o644))
+	withoutPathMagus(t)
+	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+
+	got := r.checkGuardBinaryEverywhere([]*types.Project{{Path: "stray", Dir: stray}})
+
+	assert.Equal(t, types.CheckFail, got.Status)
+	assert.Contains(t, got.Message, "no magus resolves for a hook run in "+stray)
+}

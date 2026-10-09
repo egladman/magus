@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/egladman/magus"
 )
 
 // bootstrapExecSentinelVar marks a process that already replaced itself with a
@@ -92,31 +94,24 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 	return resolveBootstrapExecTarget(start, self)
 }
 
-// resolveBootstrapExecTarget walks up from start looking for the nearest ancestor
-// directory that declares magusfile.buzz (exactly what the shell guard template at
-// docs/guides/integrations/agents/guard-templates.md does, matched deliberately
-// rather than reinvented) and stops at the FIRST one found.
+// resolveBootstrapExecTarget finds the workspace root above start with magus.FindRoot,
+// the definition every other entry point uses, and resolves the ./magus beside it.
 //
-// Stopping there, rather than continuing further up, is what keeps this from ever
-// crossing out of the tree start is already inside: a nested worktree (this
-// repository keeps one under .claude/worktrees/) declares its OWN magusfile.buzz at
-// its own root, so the walk halts there and never reaches a parent checkout's copy
-// above it. By construction the only directory this can ever resolve a binary from is
-// the nearest project root above start, never an unrelated tree beside or above it.
+// The marker is magus.yaml, not the nearest magusfile.buzz: console/, docs/, libs/* and
+// the agents guide directory each carry a magusfile.buzz and no binary, so stopping at
+// the first one handed every call made from a subdirectory to whatever magus is on PATH.
+// The nearest magus.yaml still never crosses out of the tree start is inside: a nested
+// worktree (this repository keeps them under .claude/worktrees/) holds its OWN
+// magus.yaml at its root, so the walk halts there and never reaches the parent
+// checkout's copy above it. A tree with no magus.yaml falls back to FindRoot's
+// contiguous project-marker rule.
 //
-// Returns ok=false when no such directory exists, it exists but has no usable
-// ./magus, or that binary resolves to self.
+// Returns ok=false when no root exists, it has no usable ./magus, or that binary
+// resolves to self.
 func resolveBootstrapExecTarget(start, self string) (target string, ok bool) {
-	dir := start
-	for {
-		if info, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err == nil && !info.IsDir() {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", false
-		}
-		dir = parent
+	dir, err := magus.FindRoot(start)
+	if err != nil {
+		return "", false
 	}
 
 	name := "magus"

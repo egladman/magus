@@ -137,20 +137,36 @@ Three things in a session resolve the word `magus`, and each has its own owner:
 | Who runs `magus`                                        | Resolved by                                                               | Owner                                                                                                                                              |
 | ------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Hook commands (the guard's interpreter)                 | PATH, then the `./magus` of the tree `-C` names when that tree builds one | every hook entry, and magus's own re-exec                                                                                                          |
+| The binary that judges a call                           | `./magus` beside the nearest `magus.yaml` above the call's cwd, else PATH | `magus-command.buzz` and the other glue, from the event's `cwd`                                                                                    |
 | The agent's own Bash tool commands                      | PATH, with the session root put first                                     | the `SessionStart` entry (matcher `startup\|resume\|clear`), whose `magus-session.buzz` appends `export PATH="<root>:$PATH"` to `$CLAUDE_ENV_FILE` |
 | Commands magus itself starts (targets, spells, scripts) | PATH, with the running binary's directory put first                       | magus, on every child it spawns                                                                                                                    |
 
 A hook's `magus` is whatever the PATH Claude Code was started with finds. Before it
-does anything else, that magus walks up from the `-C` directory to the nearest
-magusfile and re-execs into the `./magus` there when one exists, so a workspace that
-builds its own binary is judged by it and one that builds none uses the installed
-one. The `SessionStart` entry cannot serve hooks: the hooks reference says
-`CLAUDE_ENV_FILE` persists variables "for subsequent Bash commands", and names no
-other consumer.
+does anything else, that magus walks up from the `-C` directory to the workspace root
+and re-execs into the `./magus` there when one exists, so a workspace that builds its
+own binary is judged by it and one that builds none uses the installed one. The
+`SessionStart` entry cannot serve hooks: the hooks reference says `CLAUDE_ENV_FILE`
+persists variables "for subsequent Bash commands", and names no other consumer.
 
-`magus doctor`'s `guard-binary` check runs the interpreter a hook would run and
-fails when it is a different build from the doctor's own, or cannot print its
-version, naming both binaries.
+The workspace root is the nearest directory holding `magus.yaml`, the file
+`magus.FindRoot` also stops at, and not the nearest `magusfile.buzz`: `console/`,
+`docs/` and each `libs/*` project carry a magusfile and no binary, so a call made from
+one of them would otherwise have fallen to the PATH binary. A worktree under
+`.claude/worktrees/` holds its own `magus.yaml`, so the walk stops there and never
+climbs into the parent checkout. A tree with no `magus.yaml` above falls back to the
+nearest `magusfile.buzz`.
+
+`-C` names the main checkout even for a session in a worktree, so the glue reads the
+directory the call runs in from the event and resolves the binary from there. The
+`SessionStart` entry does the same: it puts the root above the event's `cwd` on PATH,
+not the one `-C` names.
+
+`magus doctor`'s `guard-binary` check runs the interpreter a hook would run, from the
+root and from every project directory, and fails when one is a different build from the
+doctor's own, cannot print its version, or does not exist. It also fails a linked
+worktree that holds no `./magus`, since its hooks then judge with whatever magus is on
+PATH, which may not load the tree. The trail records the judging binary's path and
+version and the event's `cwd` on every hook row.
 
 ### When the hook itself cannot run
 
@@ -172,12 +188,30 @@ so an activated shell finds the checkout's own `./magus` once
 `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .` has
 built it.
 
-A magus that is present but broken (too old, or unable to load the workspace)
-fails open the same way, with its own error as the notice. `magus doctor` and `magus agent
-harness verify --id claude-code` report that before a session starts; verify runs
-each wired command against a synthetic event and checks the verdict comes back. The
-glue never blocks on its own failure either: a verdict it cannot obtain is reported
-and the call proceeds.
+A magus that is present but too old to run `magus shell` at all fails open the same
+way, with its own error as the notice. `magus doctor` and `magus agent harness verify
+--id claude-code` report that before a session starts; verify runs each wired command
+against a synthetic event and checks the verdict comes back. The glue never blocks on a
+failure of its own: a verdict it cannot obtain is reported and the call proceeds.
+
+A magus that runs but cannot load the workspace is different, because the verdict it
+renders comes from the built-in rules alone and the workspace's own rules judged
+nothing. When neither the working tree nor its approved copy loads, and the binary is
+older than the tree (a name the magusfile calls that this build predates, such as
+`magus\guard.builtins`) or the checkout holds no `./magus`, the guard denies every write:
+file edits, spawns, pushes and every shell command that changes state. Reads, `git
+status` and the fix still run, and the denial names the one command to run. The workspace
+needs only to show a guard rule in its magusfile for this, so a fresh worktree is covered
+before any policy has loaded in its cache.
+
+The fix depends on who is asking. The orchestrator or a person rebuilds with `./magus
+run go-build .`, or bootstraps with the command the denial prints where the checkout has
+no binary. A worker holding a lease never builds one: there is one binary per base, the
+orchestrator builds it in the root, and `hack/dev/bootstrap-worktree.buzz` places a copy
+in the worker's checkout, so the denial tells the worker to ask for that. A worktree
+session with no `./magus` is an error, where it used to run open on whatever PATH held;
+`SessionStart` says so once per session, naming the one fix, whenever the binary that
+would judge the session cannot load the tree.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and the command
 template renders it as `permissionDecision: "ask"`: Claude Code shows you the
@@ -392,7 +426,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
 
 It exits 0 and swallows its own output on purpose: a notifier that can fail is a
 hook that can break the session it was meant to watch. It opens with the same
-magusfile walk as the lease hook above, for the same reason.
+workspace-root walk as the lease hook above, for the same reason.
 [Attention hooks](notifications.md) covers the envelope and the outcome vocabulary.
 
 ## Recording where the work stands

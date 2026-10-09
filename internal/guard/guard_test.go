@@ -268,6 +268,8 @@ type policyCase struct {
 	jobs []types.Job
 	// corruptStore replaces the job store with bytes it cannot decode.
 	corruptStore bool
+	// lease is the job the caller acts under, "" for the orchestrator or a person.
+	lease string
 }
 
 func agentSpawn(toolInput map[string]any) map[string]any {
@@ -336,6 +338,17 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "The orchestrator places one binary per base commit"},
+		{rule: "worker-builds-magus", name: "a worker bootstraps the binary", input: bash("GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."),
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "ask the orchestrator to place a newer one"},
+		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: "pass"},
+		{rule: "brief-builds-magus", name: "a brief tells its worker to build", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: "tells the worker to build magus"},
+		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
 		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "A directory named terminals is not a run"},
 	}
@@ -368,7 +381,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			if tc.checkout != nil {
 				deps.CheckoutState = func(context.Context, string) *types.CheckoutState { return tc.checkout }
 			}
-			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input)})
+			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
 			if tc.decision != "pass" {
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")

@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -313,7 +314,10 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		VCS: types.VCSOptions{
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
+		BinaryVersion: version,
 	}
+	// An unresolvable path leaves the trail row without one; the version still records.
+	deps.Binary, _ = runningBinaryPath()
 	if rules != nil {
 		deps.SpawnRule = rules.SpawnRule()
 		deps.ApprovedSpawnRule = rules.ApprovedSpawnRule
@@ -335,7 +339,9 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	}
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
-	deps.LoadFailure = loadErr
+	// Annotated like every other load failure: a binary older than the tree says so, and
+	// the guard reads that off the error to decide what the failure costs the session.
+	deps.LoadFailure = ward.ExplainStaleBinary(loadErr, version, globalCfg.RequiredVersion)
 	setGuardBuiltins(ctx, &deps, nil, root)
 	deps.ApprovedSpawnRule = func(ctx context.Context) (workspace.SpawnRule, error) {
 		return magus.LoadApprovedSpawnRule(ctx, root)

@@ -83,7 +83,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	asked := askWorkspaceRules(ctx, seamCommand, deps.LoadFailure, resolve, bind(deps.CommandRule))
 	// Parsed again only when nothing loaded, so the pass path pays nothing. The unloaded
 	// deny names the failures itself.
-	denied := asked.unloaded && denyUnloaded(&asked, seamCommand, gatedVerb(in.command, in.dialect), at)
+	denied := asked.unloaded && denyUnloaded(&asked, commandCall(in), at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}

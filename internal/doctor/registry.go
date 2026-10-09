@@ -243,7 +243,7 @@ var allChecks = []checkDef{
 		Doc:            "which magus an agent-host guard hook would execute, and whether it predates the tree",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.Check { return r.checkGuardBinary() },
+		run:            func(r *runner, projects []*types.Project) types.Check { return r.checkGuardBinaryEverywhere(projects) },
 	},
 	{
 		Name:           "agent-observer",

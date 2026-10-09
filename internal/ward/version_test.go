@@ -144,6 +144,43 @@ func TestExplainStaleBinary_AnnotatesTheDeadlockShapes(t *testing.T) {
 	}
 }
 
+// A magusfile calling a host member this build predates (`magus\guard.builtins` on a binary
+// built before it) fails with an uncoded "has no field or method", the third shape an
+// out-of-date binary produces. It must read as stale, or the verdict never says so.
+func TestExplainStaleBinary_AnnotatesAMissingObjectMember(t *testing.T) {
+	err := realBuzzErr(t, "object Guard { rules: int }\nfinal g = Guard{ rules = 1 };\ng.builtins(1);")
+	require.ErrorContains(t, err, `has no field or method "builtins"`)
+
+	got := ExplainStaleBinary(err, "v0.3.9", ">= 0.4.0")
+	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, got.Error(), "this magus is out of date")
+	assert.Contains(t, got.Error(), "Fix it:")
+	assert.True(t, IsStaleBinary(err), "the raw load failure is stale-shaped")
+	assert.True(t, IsStaleBinary(got), "and so is the annotated one")
+}
+
+func TestIsStaleBinary(t *testing.T) {
+	missingMember := errors.New(`magusfile: exec magusfile.buzz: object guard has no field or method "builtins"`)
+	for name, tc := range map[string]struct {
+		err  error
+		want bool
+	}{
+		"nil":                          {nil, false},
+		"a plain error":                {errors.New("magusfile: unexpected '}'"), false},
+		"a different buzz code":        {buzzErr("BZZ1006", "call may raise"), false},
+		"an undefined type":            {buzzErr("BZZ1002", `undefined type "Secret"`), true},
+		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
+		"a missing object member":      {missingMember, true},
+		"one stale branch of a join":   {errors.Join(errors.New("other"), missingMember), true},
+		"no stale branch in a join":    {errors.Join(errors.New("a"), errors.New("b")), false},
+		"an already annotated failure": {types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "old"), true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, IsStaleBinary(tc.err))
+		})
+	}
+}
+
 // TestExplainStaleBinary_LeavesEverythingElseAlone is the half that keeps this honest.
 // A hint attached to every load failure would be noise on a plain syntax error, and
 // worse, it would teach people to ignore it.

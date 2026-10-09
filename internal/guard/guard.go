@@ -146,6 +146,10 @@ type Dependencies struct {
 	// workspace declared over builtin.Defaults. Nil means the defaults, with no
 	// parameters set.
 	Builtins map[string]builtin.Setting
+	// Binary and BinaryVersion are the running magus's path and version. The trail records
+	// them on every hook row, so a verdict can be tied to the build that reached it.
+	Binary        string
+	BinaryVersion string
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -156,6 +160,10 @@ type Dependencies struct {
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
+	// lease is the lease the judged call acts under, "" for the orchestrator or a person.
+	// Judge fills it once it has resolved the lease, so the rules that word a remedy can
+	// tell a worker, who never builds the binary, from the one who does.
+	lease string
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -651,6 +659,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	binding := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
+	deps.lease = actingLease
 	// A subagent's first call registers its checkout. A command line runs where the call
 	// does; a host's hook may run from the session's checkout, so an envelope counts only
 	// the call's reported directory, and without one `magus job exec` registers it.
@@ -1121,9 +1130,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
 	if !req.DryRun {
-		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judge(env.Cwd))
 	}
 	return verdict
+}
+
+// judgeSource is the magus that judged a hook call, and the directory the host said the
+// call ran in, as the trail records them.
+type judgeSource struct {
+	binary, version, cwd string
+}
+
+// judge is the judging binary with the host's reported directory.
+func (d Dependencies) judge(cwd string) judgeSource {
+	return judgeSource{binary: d.Binary, version: d.BinaryVersion, cwd: cwd}
 }
 
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
@@ -1799,7 +1819,7 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 //
 // rule is how the workspace command or write rule judged, which alone knows whether its answer came
 // from the approved side or the working tree.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord, by judgeSource) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
@@ -1825,6 +1845,9 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Rule:            verdict.Rule,
 		StdinClosed:     verdict.UpdatedCommand != "",
 		VerdictRef:      verdictRef,
+		Binary:          by.binary,
+		BinaryVersion:   by.version,
+		Cwd:             by.cwd,
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -1872,6 +1895,9 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Child:         req.Child,
 		Context:       req.Value,
 		DeclaredModel: req.DeclaredModel,
+		Binary:        deps.Binary,
+		BinaryVersion: deps.BinaryVersion,
+		Cwd:           req.Cwd,
 	})
 }
 
