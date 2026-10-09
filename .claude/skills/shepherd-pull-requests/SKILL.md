@@ -47,8 +47,10 @@ fix the pure function that produced it and its test, then run it again.
    ./magus buzz hack/ci/pull-requests.buzz -- apply [--pr <n>]... [--author <login>]
    ```
 
-   It queues what is `green` on a current base and reruns a `red` that is not the
-   change's, once per head. It prints each command it ran. It never acts on
+   It queues a `green` stack by the label on its top and reruns a `red` that is not
+   the change's, once per head. It prints each command it ran. It never enables
+   auto-merge: for a `green` pull request in no stack it prints the command under
+   `for_person`, and you tell the person to run it. It never acts on
    `red-inherited`: nothing in the change is broken, and the queue would refuse it
    for main's failures.
 
@@ -63,9 +65,10 @@ fix the pure function that produced it and its test, then run it again.
    regeneration, an import block), each in its own worktree.
 
 4. When an agent reports, check its branch with a narrow test of what it changed.
-   Then you, and only you, push it and queue it again: `gh pr merge <n> --auto
-   --squash`, or for a stack the `merge-queue: <method>` label on its top pull
-   request. A `queue: <state>` label is the queue's answer, never intent.
+   Then you, and only you, push it. Queuing it again is the person's: tell them
+   `gh pr merge <n> --auto --squash`, which you never run, or for a stack the
+   `merge-queue: <method>` label on its top pull request. A `queue: <state>` label
+   is the queue's answer, never intent.
 
 5. Schedule the next pass with the host's wakeup about every 20 minutes (the
    queue's validation time), or with its pull request monitor. Repeat from 1.
@@ -82,6 +85,9 @@ proof; a green check or the queue's comment is not.
 - Never admin-merge (`gh pr merge --admin`) yourself. It skips the queue's
   validation and ordering, so nothing checked the combination that merges. The
   record's `merge` is for the person to run.
+- Never enable auto-merge (`gh pr merge --auto`, or the `enablePullRequestAutoMerge`
+  mutation through `gh api`). A person enables it; the repo's guard denies it. Tell the
+  person the command. `--disable-auto` and reading `autoMergeRequest` are yours.
 - Never force-push a pull request branch. Reviews and the queue's candidates name
   commits, and a rewrite orphans both.
 - Never run two agents on one pull request branch at a time. One branch has one

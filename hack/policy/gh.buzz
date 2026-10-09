@@ -1,4 +1,4 @@
-// The rules for gh calls: ci-watch, ci-batch-poll, queue-poll, admin-merge and pr-watch.
+// The rules for gh calls: ci-watch, ci-batch-poll, queue-poll, admin-merge, pr-watch and auto-merge.
 namespace agentpolicy\gh;
 
 import "std";
@@ -23,10 +23,18 @@ final queuePollAdvice = "You are reading the merge queue's state through GitHub 
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
 
 final adminMergeDenial = "`--admin` merges past the merge queue: nothing validates the pull request "
-    + "on main, and nothing orders it against the others. Queue it instead:\n"
+    + "on main, and nothing orders it against the others. Tell the person to queue it instead:\n"
     + "  gh pr merge <number> --auto --squash\n"
     + "(or --rebase). The queue validates it on main's tip and merges it; `magus queue ls` shows "
-    + "where it stands. Bypassing the queue is the human's call, made from their own terminal.";
+    + "where it stands. Queuing and bypassing the queue are both the person's call, made from "
+    + "their own terminal: you hand over the command and never run it.";
+
+final autoMergeDenial = "A person enables auto-merge, not an agent: it is the decision to merge, made "
+    + "after reading the review (docs/decisions/0006-the-person-drives-review.md). Tell the "
+    + "person the command to run from their own terminal:\n"
+    + "  gh pr merge <number> --auto --squash\n"
+    + "(or --rebase). `gh pr merge <number> --disable-auto` and reading `autoMergeRequest` stay "
+    + "open to you.";
 
 final prWatchDenial = "Watching a pull request's state costs a call per pass and learns nothing the host "
     + "will not tell you. Let the host report it: in Claude Code's desktop app, turn on the pull "
@@ -34,8 +42,9 @@ final prWatchDenial = "Watching a pull request's state costs a call per pass and
     + "queued pull request's place is one `magus queue ls` away, asked once.";
 
 // decideGitHub judges the line's gh calls, with the once-per-session gate passed in so the
-// tests below can count firings without a guard session.
-export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool) > GuardVerdict {
+// tests below can count firings without a guard session. line is the shell line as sent,
+// which names a request body fed through a heredoc that no call's args carry.
+export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool, line: str = "") > GuardVerdict {
     final calls = ghCalls(programs);
     foreach (call in calls) {
         if (blocksOnCI(call)) {
@@ -43,6 +52,9 @@ export fun decideGitHub(programs: [helpers\Program], once: fun (key: str) > bool
         }
         if (runs(call, first: "pr", second: "merge") and helpers\hasFlag(call.args, long: "--admin")) {
             return magus\guard.deny(adminMergeDenial);
+        }
+        if (enablesAutoMerge(call, line: line)) {
+            return magus\guard.deny(autoMergeDenial);
         }
         if (call.repeats and readsPRState(call)) {
             return magus\guard.deny(prWatchDenial);
@@ -161,6 +173,41 @@ fun readsPRState(call: GhCall) > bool {
     }
     return false;
 }
+
+// enablesAutoMerge: `gh pr merge --auto` (or --auto=<value>), or a `gh api` call whose body
+// names the enablePullRequestAutoMerge mutation. Disabling auto-merge and reading it are not.
+fun enablesAutoMerge(call: GhCall, line: str) > bool {
+    if (runs(call, first: "pr", second: "merge")) {
+        return passesAuto(call.args);
+    }
+    final ops = helpers\stripFlags(call.args, valueFlags: ghValueFlags);
+    if (ops.len() == 0 or ops[0] != "api") {
+        return false;
+    }
+    foreach (arg in call.args) {
+        if (arg.indexOf("enablePullRequestAutoMerge") != null) { return true; }
+    }
+    return line.indexOf("enablePullRequestAutoMerge") != null;
+}
+
+// passesAuto reports an --auto or --auto=<value> flag that is not another flag's value, such as
+// a merge body that starts with it.
+fun passesAuto(args: [str]) > bool {
+    var skip = false;
+    foreach (arg in args) {
+        if (skip) {
+            skip = false;
+        } else if (arg == "--auto" or arg.startsWith("--auto=")) {
+            return true;
+        } else if (arg.startsWith("-")) {
+            skip = arg.indexOf("=") == null and (ghValueFlags.indexOf(arg) != null or mergeValueFlags.indexOf(arg) != null);
+        }
+    }
+    return false;
+}
+
+// The `gh pr merge` flags that take a value and are not in ghValueFlags.
+final mergeValueFlags = ["--body", "-F", "--body-file", "--subject", "-A", "--author-email", "--match-head-commit", "--input"];
 
 fun isQueueWorkflow(name: str) > bool {
     return name.startsWith("queue") and (name.endsWith(".yaml") or name.endsWith(".yml"));
@@ -313,12 +360,14 @@ test "an admin merge anywhere on a line is denied" {
     }
 }
 
-test "a queued merge on the same line stays silent" {
+test "a queued merge on the same line is denied, handing the command to the person" {
     foreach (merge in [
         ["gh", "pr", "merge", "topic", "--auto", "--squash"],
         ["gh", "pr", "merge", "417", "--auto", "--rebase"],
     ]) {
-        std\assert(decideGitHub(chain(merge), once: helpers\counter()).decision == "allow", message: merge.join(" "));
+        final v = decideGitHub(chain(merge), once: helpers\counter());
+        std\assert(v.decision == "deny", message: merge.join(" "));
+        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
     }
 }
 
@@ -347,9 +396,64 @@ test "one read of a pull request's state, and a loop over its content, stay sile
     }
 }
 
-test "queuing a pull request and other gh calls stay silent" {
+test "enabling auto-merge through gh pr merge is denied, telling the person's command" {
     foreach (argv in [
         ["gh", "pr", "merge", "12", "--auto", "--squash"],
+        ["gh", "pr", "merge", "--squash", "12", "--auto"],
+        ["gh", "pr", "merge", "--auto", "12"],
+        ["gh", "pr", "merge", "12", "--auto=true", "--rebase"],
+        ["gh", "-R", "egladman/magus", "pr", "merge", "12", "--auto"],
+        ["gh", "pr", "merge", "--repo", "egladman/magus", "--auto", "12"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
+        std\assert(v.reason.indexOf("gh pr merge <number> --auto") != null, message: "names the command to tell the person");
+    }
+}
+
+test "enabling auto-merge through gh api is denied" {
+    final mutation = "mutation \{ enablePullRequestAutoMerge(input: \{pullRequestId: \"PR_x\", mergeMethod: SQUASH}) \{ clientMutationId } }";
+    foreach (argv in [
+        ["gh", "api", "graphql", "-f", "query=" + mutation],
+        ["gh", "api", "graphql", "--raw-field", "query=" + mutation],
+        ["gh", "api", "-X", "POST", "graphql", "-f", "query=" + mutation, "-f", "id=PR_x"],
+    ]) {
+        final v = ask(argv);
+        std\assert(v.decision == "deny", message: argv.join(" "));
+        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
+    }
+    final fed = decideGitHub(helpers\request([["gh", "api", "graphql", "--input", "-"]]), once: helpers\counter(),
+        line: "gh api graphql --input - <<'EOF'\n" + mutation + "\nEOF");
+    std\assert(fed.decision == "deny", message: "a body fed through a heredoc");
+}
+
+test "the admin merge's denial hands the person the queue's command, not an order to run it" {
+    final v = ask(["gh", "pr", "merge", "12", "--admin"]);
+    std\assert(v.reason.indexOf("Tell the person") != null and v.reason.indexOf("never run it") != null, message: v.reason);
+}
+
+test "disabling or reading auto-merge, and other gh calls, stay silent" {
+    foreach (argv in [
+        ["gh", "pr", "merge", "12", "--disable-auto"],
+        ["gh", "pr", "merge", "12", "--squash"],
+        ["gh", "pr", "merge", "12", "--squash", "--body", "--auto"],
+        ["gh", "api", "graphql", "-f", "query=query \{ viewer \{ login } }"],
+        ["git", "log", "--grep", "--auto"],
+        ["echo", "gh", "pr", "merge", "--auto"],
+    ]) {
+        std\assert(ask(argv).decision == "allow", message: argv.join(" "));
+    }
+}
+
+test "auto-merge enabled anywhere on a chained line is denied" {
+    foreach (merge in [["gh", "pr", "merge", "topic", "--squash", "--auto"], ["gh", "pr", "merge", "--auto", "topic"]]) {
+        std\assert(decideGitHub(chain(merge), once: helpers\counter()).decision == "deny", message: merge.join(" "));
+    }
+}
+
+test "unqueuing a pull request and other gh calls stay silent" {
+    foreach (argv in [
         ["gh", "pr", "merge", "12", "--disable-auto"],
         ["gh", "pr", "view", "12", "--json", "autoMergeRequest"],
         ["gh", "api", "repos/egladman/magus/collaborators/egladman/permission", "--jq", ".permission == \"admin\""],
