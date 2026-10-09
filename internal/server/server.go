@@ -606,19 +606,19 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 		unmount, err := s.socket.Mount(f.socketMux)
 		if err != nil {
 			// Not fatal: loopback still serves all of it, to a bearer token.
-			log.WarnContext(ctx, "[AGENT] MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
+			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
 		} else {
 			defer unmount()
 		}
 	}
 	bound := httpServer.Addr()
-	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", bound.String()))
+	log.InfoContext(ctx, "HTTP server starting", slog.String("addr", bound.String()))
 	if !bound.Addr().IsLoopback() {
-		log.WarnContext(ctx, "[AGENT] HTTP server listening beyond loopback over plaintext HTTP (mcp.insecure_bind); a bearer token is the only guard on /mcp",
+		log.WarnContext(ctx, "HTTP server listening beyond loopback over plaintext HTTP (mcp.insecure_bind); a bearer token is the only guard on /mcp",
 			slog.String("addr", bound.String()))
 	}
 	if err := httpServer.Serve(ctx); err != nil {
-		log.WarnContext(ctx, "[AGENT] shutdown error", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "shutdown error", slog.String("error", err.Error()))
 		return err
 	}
 	return nil
