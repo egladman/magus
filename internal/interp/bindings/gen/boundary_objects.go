@@ -1055,6 +1055,23 @@ func ObjectDiffSymbol(v types.DiffSymbol) vm.Value {
 	return out
 }
 
+func ObjectDiffHunk(v types.DiffHunk) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("index", vm.IntValue(int64(v.Index)))
+	out.MapSet("digest", vm.StrValue(v.Digest))
+	out.MapSet("oldStart", vm.IntValue(int64(v.OldStart)))
+	out.MapSet("oldCount", vm.IntValue(int64(v.OldCount)))
+	out.MapSet("newStart", vm.IntValue(int64(v.NewStart)))
+	out.MapSet("newCount", vm.IntValue(int64(v.NewCount)))
+	out.MapSet("declaration", vm.StrValue(v.Declaration))
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = vm.StrValue(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	return out
+}
+
 func ObjectDiffTouch(v types.DiffTouch) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
@@ -1099,6 +1116,11 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 		itemsSymbols[indexSymbols] = ObjectDiffSymbol(v.Symbols[indexSymbols])
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	itemsHunks := make([]vm.Value, len(v.Hunks))
+	for indexHunks := range v.Hunks {
+		itemsHunks[indexHunks] = ObjectDiffHunk(v.Hunks[indexHunks])
+	}
+	out.MapSet("hunks", vm.ListValue(itemsHunks))
 	itemsLayout := make([]vm.Value, len(v.Layout))
 	for indexLayout := range v.Layout {
 		itemsLayout[indexLayout] = ObjectCheck(v.Layout[indexLayout])
@@ -1134,6 +1156,95 @@ func ObjectDiffAPI(v types.DiffAPI) vm.Value {
 	out.MapSet("removed", vm.IntValue(int64(v.Removed)))
 	out.MapSet("signature", vm.IntValue(int64(v.Signature)))
 	out.MapSet("body", vm.IntValue(int64(v.Body)))
+	return out
+}
+
+func ObjectDiffHunkRef(v types.DiffHunkRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("index", vm.IntValue(int64(v.Index)))
+	out.MapSet("digest", vm.StrValue(v.Digest))
+	return out
+}
+
+func ObjectDiffWhy(v types.DiffWhy) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("relation", vm.StrValue(string(v.Relation)))
+	out.MapSet("step", vm.IntValue(int64(v.Step)))
+	out.MapSet("symbol", vm.StrValue(v.Symbol))
+	itemsCycle := make([]vm.Value, len(v.Cycle))
+	for indexCycle := range v.Cycle {
+		itemsCycle[indexCycle] = vm.StrValue(v.Cycle[indexCycle])
+	}
+	out.MapSet("cycle", vm.ListValue(itemsCycle))
+	out.MapSet("text", vm.StrValue(v.Text))
+	return out
+}
+
+func ObjectDiffStepHunk(v types.DiffStepHunk) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("hunk", ObjectDiffHunkRef(v.Hunk))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("why", ObjectDiffWhy(v.Why))
+	return out
+}
+
+func ObjectDiffStep(v types.DiffStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("number", vm.IntValue(int64(v.Number)))
+	itemsHunks := make([]vm.Value, len(v.Hunks))
+	for indexHunks := range v.Hunks {
+		itemsHunks[indexHunks] = ObjectDiffStepHunk(v.Hunks[indexHunks])
+	}
+	out.MapSet("hunks", vm.ListValue(itemsHunks))
+	return out
+}
+
+func ObjectDiffGroup(v types.DiffGroup) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("kind", vm.StrValue(string(v.Kind)))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
+	out.MapSet("reach", vm.IntValue(int64(v.Reach)))
+	itemsSteps := make([]vm.Value, len(v.Steps))
+	for indexSteps := range v.Steps {
+		itemsSteps[indexSteps] = ObjectDiffStep(v.Steps[indexSteps])
+	}
+	out.MapSet("steps", vm.ListValue(itemsSteps))
+	return out
+}
+
+func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
+	out.MapSet("placed", vm.IntValue(int64(v.Placed)))
+	out.MapSet("complete", vm.BoolValue(v.Complete))
+	itemsRepeated := make([]vm.Value, len(v.Repeated))
+	for indexRepeated := range v.Repeated {
+		itemsRepeated[indexRepeated] = ObjectDiffHunkRef(v.Repeated[indexRepeated])
+	}
+	out.MapSet("repeated", vm.ListValue(itemsRepeated))
+	itemsMissing := make([]vm.Value, len(v.Missing))
+	for indexMissing := range v.Missing {
+		itemsMissing[indexMissing] = ObjectDiffHunkRef(v.Missing[indexMissing])
+	}
+	out.MapSet("missing", vm.ListValue(itemsMissing))
+	itemsBare := make([]vm.Value, len(v.Bare))
+	for indexBare := range v.Bare {
+		itemsBare[indexBare] = vm.StrValue(v.Bare[indexBare])
+	}
+	out.MapSet("bare", vm.ListValue(itemsBare))
+	return out
+}
+
+func ObjectDiffOrder(v types.DiffOrder) vm.Value {
+	out := vm.NewMap()
+	itemsGroups := make([]vm.Value, len(v.Groups))
+	for indexGroups := range v.Groups {
+		itemsGroups[indexGroups] = ObjectDiffGroup(v.Groups[indexGroups])
+	}
+	out.MapSet("groups", vm.ListValue(itemsGroups))
+	out.MapSet("count", ObjectDiffOrderCount(v.Count))
 	return out
 }
 
@@ -1199,6 +1310,11 @@ func ObjectDiff(v types.Diff) vm.Value {
 		optAPI = ObjectDiffAPI((*v.API))
 	}
 	out.MapSet("api", optAPI)
+	optOrder := vm.Null
+	if v.Order != nil {
+		optOrder = ObjectDiffOrder((*v.Order))
+	}
+	out.MapSet("order", optOrder)
 	out.MapSet("reviewed", ObjectDiffReviewed(v.Reviewed))
 	optConformanceError := vm.Null
 	if v.ConformanceError != nil {
