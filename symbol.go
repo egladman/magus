@@ -82,9 +82,10 @@ type symbolIndexer struct {
 	minInterval time.Duration
 	now         func() time.Time
 
-	indexesForPath func(absPath string) []indexRef                 // changed file -> the indexes of its owning symbol-capable project
-	runIndex       func(ctx context.Context, index indexRef) error // execute one index's op
-	onChange       func()                                          // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
+	indexesForPath func(absPath string) []indexRef                     // changed file -> the indexes of its owning symbol-capable project
+	runIndex       func(ctx context.Context, index indexRef) error     // execute one index's op
+	status         func(ctx context.Context) []types.SymbolIndexStatus // every index's freshness, probed now
+	onChange       func()                                              // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
 
 	busy  atomic.Bool // an auto-index run is in flight (only one at a time)
 	mu    sync.Mutex
@@ -92,16 +93,17 @@ type symbolIndexer struct {
 }
 
 // loop runs the scheduler: it folds change batches into per-project state and, on each
-// tick, dispatches at most one due project. It returns when
-// ctx is cancelled or the batch channel closes (the watcher stopped).
-func (si *symbolIndexer) loop(ctx context.Context, batches <-chan watch.Batch) {
+// tick, dispatches at most one due project. It returns when ctx is cancelled or the
+// watcher stops, and owns watcher and closes it.
+func (si *symbolIndexer) loop(ctx context.Context, watcher *watch.Watcher) {
+	defer watcher.Close()
 	ticker := time.NewTicker(symbolIndexTick)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case b, ok := <-batches:
+		case b, ok := <-watcher.Events():
 			if !ok {
 				return
 			}
@@ -139,11 +141,12 @@ func (si *symbolIndexer) mark(paths []string) {
 	}
 }
 
-// seed marks refs dirty without opening a quiet window, so each one is due on the first
-// tick that the min interval and backoff allow. State is in memory only, so this is how
-// an index that went stale while no server watched it gets reindexed before its project
-// is next edited.
-func (si *symbolIndexer) seed(refs []indexRef) {
+// seed marks every index si.status finds stale dirty without opening a quiet window, so
+// each one is due on the first tick that the min interval and backoff allow. State is in
+// memory only, so this is how an index that went stale while no server watched it gets
+// reindexed before its project is next edited.
+func (si *symbolIndexer) seed(ctx context.Context) {
+	refs := staleIndexRefs(si.status(ctx))
 	si.mu.Lock()
 	defer si.mu.Unlock()
 	for _, ref := range refs {
@@ -397,6 +400,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			idx := byRef[ref]
 			return symbolRunError(idx.projectRef(), idx.language, err)
 		},
+		status: m.SymbolIndexStatusByStamp,
 		// This watcher is what makes the freshness memo trustworthy: it drops the memo
 		// whenever a capable project's sources change or an index run finishes.
 		onChange: m.symbolStatus.invalidate,
@@ -413,11 +417,8 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 	// The freshness memo is trusted only while this watcher runs (like the warm graph).
 	m.symbolStatus.setWatched(true)
-	go func() {
-		defer watcher.Close()
-		si.loop(wctx, watcher.Events())
-	}()
-	go func() { si.seed(staleIndexRefs(m.SymbolIndexStatusByStamp(wctx))) }()
+	go si.loop(wctx, watcher)
+	go si.seed(wctx)
 	slog.Default().DebugContext(ctx, "magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)

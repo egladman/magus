@@ -134,24 +134,37 @@ func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	assert.Equal(t, goIndexA, ref)
 }
 
+// indexStatuses is a status probe reporting each ref at its freshness.
+func indexStatuses(fresh map[indexRef]types.SymbolIndexFreshness) func(context.Context) []types.SymbolIndexStatus {
+	return func(context.Context) []types.SymbolIndexStatus {
+		var out []types.SymbolIndexStatus
+		for ref, f := range fresh {
+			out = append(out, types.SymbolIndexStatus{Project: types.NewProjectRef(ref.project, "/ws/"+ref.project), Op: ref.op, Freshness: f})
+		}
+		return out
+	}
+}
+
 func TestSymbolIndexerSeedIsDueOnTheFirstTick(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
 	si.state[buzzIndexA] = &indexState{}
+	si.status = indexStatuses(map[indexRef]types.SymbolIndexFreshness{goIndexA: types.SymbolIndexStale, buzzIndexA: types.SymbolIndexFresh})
 
-	si.seed([]indexRef{goIndexA})
+	si.seed(t.Context())
 
 	ref, ok := si.pickDue()
 	require.True(t, ok, "a seeded index opens no quiet window")
 	assert.Equal(t, goIndexA, ref)
-	assert.False(t, si.state[buzzIndexA].dirty, "an index left out of the seed stays clean")
+	assert.False(t, si.state[buzzIndexA].dirty, "a fresh index stays clean")
 }
 
 func TestSymbolIndexerSeedKeepsThrottles(t *testing.T) {
 	si, _, clock := newTestIndexer(t)
 	si.state[goIndexA] = &indexState{lastRun: clock.Add(-time.Minute)}
 	si.state[buzzIndexA] = &indexState{failures: 1, backoffTill: clock.Add(time.Minute)}
+	si.status = indexStatuses(map[indexRef]types.SymbolIndexFreshness{goIndexA: types.SymbolIndexStale, buzzIndexA: types.SymbolIndexStale})
 
-	si.seed([]indexRef{goIndexA, buzzIndexA})
+	si.seed(t.Context())
 
 	_, ok := si.pickDue()
 	assert.False(t, ok, "seeding bypasses neither the min interval nor a backoff")
