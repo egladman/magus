@@ -7,7 +7,9 @@ import {
   commandText,
   matchesFilter,
   parseRunFilter,
+  projectLabel,
   relTime,
+  statusWord,
   toggleFilterTerm,
   type RunLog,
   type RunSummary,
@@ -182,11 +184,38 @@ test("commandText reads as the command that was typed", () => {
   assert.equal(commandText(undefined), "");
 });
 
-test("relTime degrades to a clock time past a day", () => {
+test("relTime is relative for an hour and a dated clock time after", () => {
   assert.equal(relTime(NOW - 5_000, NOW), "5s ago");
   assert.equal(relTime(NOW - 5 * 60_000, NOW), "5m ago");
-  assert.equal(relTime(NOW - 3 * 3_600_000, NOW), "3h ago");
-  assert.match(relTime(NOW - 3 * 86_400_000, NOW), /^\d\d\/\d\d \d\d:\d\d$/);
+  assert.equal(relTime(NOW - 59 * 60_000, NOW), "59m ago");
+  // "3h ago" asks the reader to do arithmetic; a dated time is already the answer.
+  assert.match(relTime(NOW - 3 * 3_600_000, NOW), /^[A-Z][a-z]{2} \d{1,2}, \d\d:\d\d$/);
+  assert.match(relTime(NOW - 3 * 86_400_000, NOW), /^[A-Z][a-z]{2} \d{1,2}, \d\d:\d\d$/);
+});
+
+test("the workspace root is named (root), and an outcome has one name everywhere", () => {
+  assert.equal(projectLabel("."), "(root)");
+  assert.equal(projectLabel("services/identity"), "services/identity");
+  assert.equal(statusWord("pass"), "Passed");
+  assert.equal(statusWord("fail"), "Failed");
+  assert.equal(statusWord("mixed"), "Partly failed");
+
+  const facets = buildFacets(
+    [run({ project: "." }), run({ ref: "out2", inv: "invB", project: "docs", failed: true })],
+    [log(), log({ inv: "invB", status: "fail" })],
+    parseRunFilter(""),
+  );
+  const project = facets.find((f) => f.key === "project");
+  assert.deepEqual(
+    project?.values.map((v) => [v.value, v.label]).sort(),
+    [
+      [".", "(root)"],
+      ["docs", "docs"],
+    ],
+    "the value stays the filter's term; only the label is the reader's word",
+  );
+  const status = facets.find((f) => f.key === "status");
+  assert.deepEqual(status?.values.map((v) => v.label).sort(), ["Failed", "Passed"]);
 });
 
 test("buildRunRows joins outputs onto their invocation, newest first", () => {

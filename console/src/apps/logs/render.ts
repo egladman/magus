@@ -10,18 +10,31 @@ import { state } from "./state";
 import { bodyEl, copyToClipboard, el, setToggleGroup, setToggleGroupDisabled } from "./dom";
 import { stripAnsi } from "../../render/ansi";
 import {
+  countLabel,
+  createSection,
   renderContent,
   renderLine as renderSectionLine,
   sectionAccent,
-  toggleSection,
+  sectionAction,
+  setSectionOpen,
 } from "../../render/sections";
-import { matchAllTexts, matchGroup, sectionMeta } from "./filter";
+import {
+  applyFilterFromInput,
+  clearFilterResults,
+  matchAllTexts,
+  matchGroup,
+  sectionMeta,
+  setFilterResults,
+  syncFilterBox,
+} from "./filter";
 import { renderWaterfall, timelineAvailable, updateFocusUI } from "./waterfall";
 
 export function render(): void {
   bodyEl.textContent = "";
   bodyEl.toggleAttribute("data-raw", !state.pretty && !state.timeline);
   bodyEl.toggleAttribute("data-waterfall", state.timeline);
+  // The views below that filter report their own count; the others show none.
+  clearFilterResults();
   // Timeline view: a trace waterfall built from the events' timing, not the log text.
   if (state.timeline) {
     renderWaterfall();
@@ -79,100 +92,90 @@ export function render(): void {
       showAllBody = titleHit;
     }
 
-    const secEl = document.createElement("div");
-    secEl.className = "console-render-section";
+    // Accent the section by outcome (a coloured left rule) so pass/fail/warn read at a glance, not
+    // just from the text. sectionAccent, not a second copy of the rule: this file had its own
+    // inline version and the two had already drifted apart on what counts as cached.
+    const titleText = sec.title;
+    const status = sectionAccent(titleText);
 
-    // Accent the section by outcome (a colored left rule) so pass/fail/warn read at a
-    // glance, not just from the text. Cached hits are muted (low signal) and fold by default.
-    // sectionAccent, not a second copy of the rule: this file had its own inline version and
-    // the two had already drifted apart on what counts as cached.
-    const status = sectionAccent(sec.title);
-    if (status) secEl.setAttribute("data-status", status);
-
-    const head = document.createElement("button");
-    head.type = "button";
-    head.className = "console-render-section__head";
-
-    // The head IS the header line and doubles as the fold toggle. The line counts as
-    // row `++lineNo` so search and line numbers stay in step; not repeated in the body.
+    // The head IS the header line and doubles as the fold toggle. The line counts as row
+    // `++lineNo` so search and line numbers stay in step; not repeated in the body.
     const headNo = ++lineNo;
-    const ln = document.createElement("span");
-    ln.className = "console-render-line__gutter";
-    ln.textContent = String(headNo);
-    const twist = document.createElement("span");
-    twist.className = "console-render-section__twist"; // caret drawn in CSS; no glyph, so the source stays ASCII
-    twist.setAttribute("aria-hidden", "true");
-    const title = document.createElement("span");
-    title.className = "console-render-section__title console-render-line__content";
-    renderContent(title, sec.title);
+    const gutter = document.createElement("span");
+    gutter.className = "console-render-line__gutter";
+    gutter.textContent = String(headNo);
     const bodyLines = sec.lines.slice(1);
 
-    // A cached target contributed nothing new this run, so fold it away by default -
-    // the fresh work (and any failure) is what a reader came for.
-    if (status === "cached") secEl.setAttribute("data-collapsed", "");
-    head.setAttribute("aria-expanded", status === "cached" ? "false" : "true");
-    const count = document.createElement("span");
-    count.className = "console-render-section__count";
-    count.textContent =
-      bodyLines.length > 0 ? bodyLines.length + (bodyLines.length === 1 ? " line" : " lines") : "";
-
-    const actions = document.createElement("span");
-    actions.className = "console-render-section__actions";
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "console-render-section__action";
-    copy.textContent = "copy";
-    copy.title = "Copy this section's text";
-    copy.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      copyToClipboard(sec.lines.map(stripAnsi).join("\n"), copy);
-    });
-    actions.append(copy);
-    // "cmd": a `magus query` one-liner scoped to this section's line range, so it can
-    // be handed to an agent to fetch exactly these lines. Only when seeded by a ref.
+    const actions: HTMLElement[] = [
+      sectionAction("Copy", "Copy this section's text", (btn) =>
+        copyToClipboard(sec.lines.map(stripAnsi).join("\n"), btn, "this section"),
+      ),
+    ];
+    // A `magus query` one-liner scoped to this section's line range, so the exact lines can be
+    // fetched in a terminal. Only when seeded by a ref.
     if (state.currentRef) {
-      const cmd = document.createElement("button");
-      cmd.type = "button";
-      cmd.className = "console-render-section__action";
-      cmd.textContent = "cmd";
-      cmd.title = "Copy a `magus query` command for these lines";
       const start = headNo;
       const end = headNo + bodyLines.length;
-      cmd.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        const command =
-          bodyLines.length > 0
-            ? "magus query " + state.currentRef + " | sed -n '" + start + "," + end + "p'"
-            : "magus query " + state.currentRef;
-        copyToClipboard(command, cmd);
-      });
-      actions.append(cmd);
+      actions.push(
+        sectionAction(
+          "Copy command",
+          "Copy a `magus query` command that prints these lines",
+          (btn) =>
+            copyToClipboard(
+              bodyLines.length > 0
+                ? "magus query " + state.currentRef + " | sed -n '" + start + "," + end + "p'"
+                : "magus query " + state.currentRef,
+              btn,
+              "the command",
+            ),
+        ),
+      );
     }
 
-    head.append(ln, twist, title, count, actions);
-    head.addEventListener("click", () => toggleSection(secEl, head));
-
-    const linesWrap = document.createElement("div");
-    linesWrap.className = "console-render-section__lines";
+    // A cached target contributed nothing new this run, so it folds away by default - the fresh
+    // work (and any failure) is what a reader came for.
+    const { secEl, lines } = createSection({
+      status,
+      collapsed: status === "cached",
+      gutter,
+      countText: countLabel(bodyLines.length, ["line", "lines"]),
+      fillTitle: (title) => renderContent(title, titleText),
+      actions,
+    });
     for (const raw of bodyLines) {
       const n = ++lineNo;
       if (!filtering || showAllBody || matchAllTexts(q, stripAnsi(raw))) {
-        linesWrap.appendChild(renderSectionLine(raw, n, onLineNumberClick));
+        lines.appendChild(renderSectionLine(raw, n, onLineNumberClick));
         shown++;
       }
     }
 
-    secEl.append(head, linesWrap);
     bodyEl.appendChild(secEl);
     shown++; // the visible head row
   }
-  if (filtering && shown === 0) {
-    const note = document.createElement("p");
-    note.className = "console-log-filter__empty";
-    note.textContent = "No lines match the filter.";
-    bodyEl.appendChild(note);
+  if (filtering) {
+    setFilterResults(shown, lineNo, ["line", "lines"]);
+    if (shown === 0) bodyEl.appendChild(noMatchNote());
   }
   applyLineHighlight();
+}
+
+// noMatchNote is the pretty view's answer to a filter that left nothing, with the way back beside it.
+function noMatchNote(): HTMLElement {
+  const note = document.createElement("div");
+  note.className = "console-log-filter__empty";
+  const text = document.createElement("p");
+  text.textContent = "No lines match the filter.";
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "pf-v6-c-button pf-m-secondary";
+  clear.textContent = "Clear filter";
+  clear.addEventListener("click", () => {
+    syncFilterBox("");
+    applyFilterFromInput("");
+  });
+  note.append(text, clear);
+  return note;
 }
 
 // --- Line-range highlight (#L10-L20, GitHub-style) ----------------------------
@@ -201,15 +204,12 @@ export function applyLineHighlight(): void {
   for (const ln of bodyEl.querySelectorAll(".console-render-line__gutter")) {
     const n = parseInt(must(ln.textContent), 10);
     if (!(n >= range.start && n <= range.end)) continue;
-    const row = ln.parentElement as HTMLElement; // .console-render-line, or the section head button for a head row
+    // A body line, or the section head for a head row (its gutter sits inside the toggle).
+    const row = (ln.closest(".console-render-section__head") ?? ln.parentElement) as HTMLElement;
     row.setAttribute("data-highlight", "");
     // Expand a collapsed section so a highlighted body line is actually visible.
-    const sec = row.closest && row.closest(".console-render-section");
-    if (sec && sec.hasAttribute("data-collapsed")) {
-      sec.removeAttribute("data-collapsed");
-      const head = sec.querySelector(".console-render-section__head");
-      if (head) head.setAttribute("aria-expanded", "true");
-    }
+    const sec = row.closest(".console-render-section");
+    if (sec?.hasAttribute("data-collapsed")) setSectionOpen(sec, true);
     if (first === null) first = row;
   }
   if (first) first.scrollIntoView({ block: "center" });

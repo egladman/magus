@@ -5,6 +5,8 @@
 // same reason: the interesting logic here is which rows survive a query and how they nest,
 // neither of which needs an element to be true.
 
+import { relTime } from "../../render/time";
+
 // RunSummary is one row of the server's /api/v1/outputs feed (a cache.OutputDescriptor projected
 // to the wire): one TARGET's stored output. Times are unix milliseconds. target is the REPRO
 // target (a charm suffix like "build:rw" is preserved); the tree groups by the bare name.
@@ -182,27 +184,20 @@ export function durText(ms: number): string {
   return m + "m" + (s < 10 ? "0" : "") + s + "s";
 }
 
-// relTime renders a unix-ms timestamp as a compact "how long ago", falling back to a clock time for
-// anything older than a day so distant runs stay distinguishable. now is injected so the function
-// is pure and testable.
-export function relTime(ms: number, now: number): string {
-  const sec = Math.max(0, Math.round((now - ms) / 1000));
-  if (sec < 60) return sec + "s ago";
-  const min = Math.round(sec / 60);
-  if (min < 60) return min + "m ago";
-  const hr = Math.round(min / 60);
-  if (hr < 24) return hr + "h ago";
-  const d = new Date(ms);
-  const pad = (n: number): string => (n < 10 ? "0" + n : String(n));
-  return (
-    pad(d.getMonth() + 1) +
-    "/" +
-    pad(d.getDate()) +
-    " " +
-    pad(d.getHours()) +
-    ":" +
-    pad(d.getMinutes())
-  );
+// relTime is the console's one instant formatter (render/time.ts), re-exported because the activity
+// index and the activity drawer reach it from here.
+export { relTime };
+
+// statusWord is the one name for a run's outcome wherever it is written: the tree, the list, the
+// facets and the detail pane each had their own (pass, passed, mixed, partly failed).
+export function statusWord(status: "pass" | "fail" | "mixed"): string {
+  return status === "pass" ? "Passed" : status === "fail" ? "Failed" : "Partly failed";
+}
+
+// projectLabel names a project for a reader: the workspace root is stored as "." and reads as
+// "(root)", the way the graph names it.
+export function projectLabel(project: string): string {
+  return project === "." ? "(root)" : project;
 }
 
 // UNGROUPED is the bucket for outputs whose invocation is not in the runs feed - a run predating
@@ -387,7 +382,7 @@ function projectsTree(kept: RunSummary[], now: number): NodeSpec[] {
     }
     out.push({
       id: "proj:" + proj,
-      label: proj,
+      label: projectLabel(proj),
       count: targetSpecs.length,
       countUnit: "target",
       status: groupStatus(projRuns),
@@ -466,7 +461,12 @@ export function buildFacets(
     // with no way back that does not involve editing the query by hand.
     for (const a of active) if (!counts.has(a)) counts.set(a, 0);
     const values = [...counts.entries()]
-      .map(([value, count]) => ({ value, label: value, count, active: active.has(value) }))
+      .map(([value, count]) => ({
+        value,
+        label: facetLabel(key, value),
+        count,
+        active: active.has(value),
+      }))
       .sort(
         (a, b) =>
           (b.active ? 1 : 0) - (a.active ? 1 : 0) ||
@@ -477,6 +477,13 @@ export function buildFacets(
     if (values.length) out.push({ key, label, values });
   }
   return out;
+}
+
+// facetLabel is the reader's word for a facet value; the value itself is the term the filter takes.
+function facetLabel(key: string, value: string): string {
+  if (key === "project") return projectLabel(value);
+  if (key === "status") return statusWord(value === "fail" ? "fail" : "pass");
+  return value;
 }
 
 // facetValues is the DISTINCT values one run contributes to a facet - distinct, so a run that built

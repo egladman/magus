@@ -1,7 +1,7 @@
-// share.ts - the toolbar "actions" that hand a loaded log off elsewhere: Share re-encodes the
+// share.ts - the toolbar actions that take a loaded log elsewhere: Copy link re-encodes the
 // exact loaded structure into a #data= link (so a run's output travels without re-running
-// magus), and Open in graph jumps to the target's knowledge-graph node. Both are local: Share
-// copies to the clipboard, the graph link rides the graph page's own #node= fragment.
+// magus), and Open graph jumps to the target's knowledge-graph node. Both are local: the link
+// goes to the clipboard, and the graph link rides the graph page's own #node= fragment.
 
 import { create, toBinary } from "@bufbuild/protobuf";
 import { getLiveToken, parseHash, wantsDemo } from "../../lib/server";
@@ -9,14 +9,18 @@ import { EventSchema, JournalSchema, Kind } from "@wire/viewer/v1alpha1/viewer_p
 import { state, waterfallSource } from "./state";
 import { flashBtnLabel } from "./dom";
 import { encodeFragmentBytes } from "./fragment";
+import { copyText } from "../../render/clipboard";
+import { errMessage } from "../../lib/guards";
+import { reportFailure } from "../../lib/notifications";
 
-// --- Share: re-encode the loaded log into a #data= link -----------------------
-// The Share button rebuilds the exact fragment link the viewer decodes and copies it to the
-// clipboard, so a run's output can be handed off without re-running magus. The payload is the
+// --- Copy link: re-encode the loaded log into a #data= link -------------------
+// The button rebuilds the exact fragment link the viewer decodes and copies it to the
+// clipboard, so a run's output can be passed on without re-running magus. The payload is the
 // SAME format loadFromURL reads: toBinary(JournalSchema, ...) of a Journal, gzip+base64url.
 // A structured log ships its real Journal; a heuristic/pasted log is wrapped into a minimal
 // Journal (one KindOutput event per line) so the link still round-trips the structured path.
 export async function shareLink(btn: HTMLElement | null): Promise<void> {
+  let url: string;
   try {
     const bytes = shareBytes();
     const blob = await encodeFragmentBytes(bytes);
@@ -24,16 +28,22 @@ export async function shareLink(btn: HTMLElement | null): Promise<void> {
     // whole link then rides the fragment, which the browser never transmits to a server.
     const base = location.origin + location.pathname;
     const frag = (state.currentRef ? "ref=" + state.currentRef + "&" : "") + "data=" + blob;
-    const url = base + "#" + frag;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(url);
-      flashBtnLabel(btn, "Copied");
-    } else {
-      flashBtnLabel(btn, "Failed");
-    }
-  } catch (_) {
-    flashBtnLabel(btn, "Failed");
+    url = base + "#" + frag;
+  } catch (e) {
+    flashBtnLabel(btn, "Copy failed");
+    reportFailure(
+      "Log Viewer",
+      "Could not build a link to this log: " + errMessage(e),
+      "share:build",
+    );
+    return;
   }
+  await copyText(url, {
+    source: "Log Viewer",
+    what: "the link",
+    button: btn,
+    confirm: "Copied a link to this log. The output rides the link; nothing was uploaded.",
+  });
 }
 
 // shareBytes serializes the loaded log to the Journal wire bytes the viewer decodes: the real

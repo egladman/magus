@@ -11,6 +11,7 @@
 
 import assert from "node:assert/strict";
 import { test, afterEach } from "node:test";
+import { must } from "../../lib/guards";
 import { activate } from "./main";
 import type { AppInstance } from "../../desktop/standalone";
 
@@ -163,7 +164,7 @@ test("an event with a stored body offers to show it, sized", async () => {
 
   const btns = controls(host);
   assert.equal(btns.length, 1, "one control for the one ref the event carries");
-  assert.equal(btns[0].textContent, "show response (2.0 KB)");
+  assert.equal(btns[0].textContent, "Show response (2.0 KB)");
 });
 
 test("clicking it resolves that ref and paints the full body", async () => {
@@ -211,8 +212,8 @@ test("a transient failure keeps the control and names the reason", async () => {
   const btns = controls(host);
   assert.equal(btns.length, 1);
   assert.equal(btns[0].disabled, false, "still pressable");
-  assert.equal(btns[0].textContent, "show response (2.0 KB)", "the label is restored");
-  assert.match(sectionText(host), /could not read the response: .*server went away/);
+  assert.equal(btns[0].textContent, "Show response (2.0 KB)", "the label is restored");
+  assert.match(sectionText(host), /Could not read the response: .*server went away/);
 });
 
 function modeButton(host: HTMLElement, mode: string): HTMLButtonElement {
@@ -225,7 +226,7 @@ function modeButton(host: HTMLElement, mode: string): HTMLButtonElement {
 // branch's OWN content row rather than by class alone.
 function branchText(li: Element): string {
   const text = li.querySelector(
-    ":scope > .pf-v6-c-tree-view__content .pf-v6-c-tree-view__node-text",
+    ":scope > .pf-v6-c-tree-view__content .pf-v6-c-tree-view__node-title",
   );
   return text?.textContent ?? "";
 }
@@ -364,3 +365,141 @@ test("the demo trail offers no expansion", async () => {
   assert.ok(host.querySelector(".console-render-section"), "the demo still paints its sections");
   assert.equal(controls(host).length, 0);
 });
+
+// The demo carries an agent fan-out of its own, because By session has nothing to show without one.
+test("the demo has an agent session to group by", async () => {
+  serve([], { body: "unused" });
+  const host = await mount("#demo");
+  modeButton(host, "session").click();
+
+  const top = roots(host);
+  assert.deepEqual(
+    top.map((el) => el.dataset.session),
+    ["sess-orchestrator"],
+  );
+  assert.ok(top[0].querySelector('[data-session="sess-worker"]'), "the worker nests under it");
+});
+
+// The index is a tree a keyboard can use: it is named, one row is the tab stop, and the arrow keys
+// move between rows. An outcome is a word as well as a mark.
+test("the index tree is named, has one tab stop, and moves with the arrow keys", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+
+  const tree = must(host.querySelector<HTMLElement>('[role="tree"]'));
+  assert.equal(tree.getAttribute("aria-label"), "Events");
+  const nodes = [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")];
+  assert.equal(nodes.filter((n) => n.tabIndex === 0).length, 1, "one Tab stop for the tree");
+
+  const first = must(nodes.find((n) => n.tabIndex === 0));
+  first.focus();
+  first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  assert.notEqual(document.activeElement, first, "ArrowDown moves to the next visible row");
+  assert.equal(nodes.filter((n) => n.tabIndex === 0).length, 1, "and the tab stop follows");
+
+  const leaf = must(tree.querySelector<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node"));
+  assert.match(leaf.textContent ?? "", /OK|Error/, "the outcome is in the row's text");
+  leaf.click();
+  assert.equal(leaf.getAttribute("aria-current"), "true");
+  assert.equal(leaf.closest("li")?.getAttribute("aria-selected"), "true");
+});
+
+// Choosing an event in the index lands on it: the section opens, its head is marked, and focus is on
+// its toggle, so the reader is where they asked to be and can carry on from there.
+test("choosing an event in the index marks and focuses its section", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+  // The grouping is remembered across mounts, and a session grouping lists fewer events.
+  modeButton(host, "kind").click();
+
+  const leaf = must(host.querySelectorAll<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node")[1]);
+  leaf.click();
+  const marked = host.querySelectorAll(".console-render-section__head[data-highlight]");
+  assert.equal(marked.length, 1);
+  const toggle = must(marked[0].querySelector<HTMLElement>(".console-render-section__toggle"));
+  assert.equal(document.activeElement, toggle);
+});
+
+// An event's head is structure: the source and the outcome are labels, the time its own element, and
+// the fold toggle names the lines it controls. A passing event takes no accent rule.
+test("an event head separates source, outcome and time, and a pass has no accent", async () => {
+  serve([mcpEvent()], { body: "unused" });
+  const host = await mount();
+
+  const section = must(host.querySelector<HTMLElement>(".console-render-section"));
+  const head = must(section.querySelector<HTMLElement>(".console-render-section__title"));
+  assert.match(text(head.querySelector(".console-activity-head__kind")), /mcp/);
+  assert.match(text(head.querySelector(".console-activity-head__outcome")), /OK/);
+  assert.ok(head.querySelector("time[datetime]"), "the time is a <time> of its own");
+  const toggle = must(section.querySelector<HTMLElement>(".console-render-section__toggle"));
+  assert.equal(
+    toggle.getAttribute("aria-controls"),
+    section.querySelector(".console-render-section__lines")?.id,
+  );
+  assert.equal(section.hasAttribute("data-status"), false, "a passing event has no rule");
+  assert.match(text(section.querySelector(".console-render-section__count")), /details?$/);
+  assert.equal(
+    text(section.querySelector(".console-render-section__action")),
+    "Copy",
+    "the head offers a copy, in the toolbar's sentence case",
+  );
+});
+
+// A refresh that fails keeps the events already on screen and says so above them.
+test("a failed refresh keeps the page and offers a retry", async () => {
+  serve([mcpEvent()], { body: "unused" });
+  const host = await mount();
+  assert.equal(host.querySelectorAll(".console-render-section").length, 1);
+
+  globalThis.fetch = (() =>
+    Promise.resolve({
+      ok: false,
+      status: 503,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: () => Promise.resolve({ code: "unavailable", message: "server went away" }),
+    } as unknown as Response)) as typeof fetch;
+  must(
+    host.querySelector<HTMLElement>('.console-log-runs__head button[aria-label="Refresh"]'),
+  ).click();
+  await settle();
+
+  assert.equal(host.querySelectorAll(".console-render-section").length, 1, "the events stay");
+  const notice = must(host.querySelector<HTMLElement>(".console-activity-notice"));
+  assert.equal(notice.hidden, false);
+  assert.match(text(notice), /Could not refresh activity/);
+  assert.equal(text(notice.querySelector("button")), "Retry");
+});
+
+// A long index earns a filter box, and a short one does not.
+test("the index filter appears past a handful of events and narrows the tree", async () => {
+  serve([mcpEvent()], { body: "unused" });
+  const short = await mount();
+  assert.equal(
+    short.querySelector<HTMLElement>(".console-log-runs__controls .console-filter")?.hidden,
+    true,
+  );
+
+  mounted?.deactivate();
+  mounted = null;
+  hostEl?.remove();
+  serve(
+    Array.from({ length: 9 }, (_, i) => ({ ...(mcpEvent() as object), action: "call-" + i })),
+    { body: "unused" },
+  );
+  const long = await mount();
+  modeButton(long, "kind").click();
+  const field = must(
+    long.querySelector<HTMLElement>(".console-log-runs__controls .console-filter"),
+  );
+  assert.equal(field.hidden, false);
+  const input = must(field.querySelector<HTMLInputElement>("input"));
+  input.value = "call-3";
+  input.dispatchEvent(new Event("input"));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(long.querySelectorAll("[data-leaf]").length, 1);
+  assert.equal(text(field.querySelector(".console-filter__count")), "1 of 9");
+});
+
+function text(el: Element | null): string {
+  return (el?.textContent ?? "").trim();
+}

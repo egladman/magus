@@ -29,16 +29,18 @@ import {
   initRunBrowser,
   tickRelativeTimes,
   watchRuns,
+  type RunBrowserHandle,
+  type RunBrowserState,
   type Selection,
 } from "./runtree";
 import { cancelLiveRender } from "./live";
 import { decodeFragmentBytes, setFragmentParam, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
+  bindRefSlot,
   bodyEl,
   copyToClipboard,
   el,
-  emptyEl,
   flipToggleGroup,
   panelEl,
   resolveDom,
@@ -47,14 +49,30 @@ import {
   setRefIdentity,
   setStatus,
   setToggleGroup,
+  showLog,
 } from "./dom";
 import { stripAnsi } from "../../render/ansi";
+import { setSectionOpen } from "../../render/sections";
 import { buildModel, buildModelMulti, cmdLabel } from "./model";
 import { render, updateTimelineControl } from "./render";
 import { applyTimeRange, clearFocus } from "./waterfall";
-import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
-import { clearMarks, runSearch, stepActiveMark } from "./search";
+import {
+  focusFilterBox,
+  mountFilterField,
+  renderFilterChips,
+  setFilter,
+  syncFilterBox,
+} from "./filter";
+import { clearMarks } from "./search";
 import { graphAvailable, openInGraph, shareLink } from "./share";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type EmptyStateSlots,
+} from "../../desktop/connectPrompt";
+import { wireMenu } from "../../ui/menu";
+import { reportFailure } from "../../lib/notifications";
+import { errMessage } from "../../lib/guards";
 import { connectLive, setLiveVisible } from "./live";
 import { publishStatus } from "../../desktop/status";
 import { demoJournal, startDemo, stopDemo } from "./demo";
@@ -65,10 +83,9 @@ import {
   type Keymap,
 } from "../../desktop/commands";
 import { mountZoomControl, type ZoomControl } from "../../desktop/zoomControl";
-import { wireToolbarOverflow } from "../../desktop/toolbar";
 import { persisted } from "../../lib/persist";
 import { logsZoomCell } from "../../desktop/layoutPrefs";
-import { attachHelpPopover } from "../../ui/help-popover";
+import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
 import { signal } from "../../desktop/view";
 
 // Per-activation teardown. The console caches app modules and re-runs activate() on every
@@ -101,8 +118,10 @@ function init(): void {
   wireCommands();
   wireZoom();
   wireInput();
-  loadFromURL();
+  // The run browser is mounted before the first load so the load's name and reference id have
+  // somewhere to land, and so the empty state below can read what the browser finds.
   wireRunBrowser();
+  void loadFromURL();
 }
 
 // wireRunBrowser docks the run browser (runtree.ts) to the left of the viewer. It reads the server's
@@ -113,8 +132,11 @@ function init(): void {
 // header from whatever it has loaded and loadFromURL runs BEFORE the panel is mounted - a #inv= link
 // therefore settles its title before there is anything to write it to. bodyTitleText remembers it so
 // the mount can apply it.
-let runBrowser: { refresh: () => void; setBodyTitle: (t: string) => void } | null = null;
+let runBrowser: RunBrowserHandle | null = null;
 let bodyTitleText = "";
+// What the run browser last found, which the cold empty state repeats so the two never disagree.
+let browserState: RunBrowserState | null = null;
+let emptySlots: EmptyStateSlots | null = null;
 // The run panel's auto-refresh stream, split into "how to start one" and "the running one's stop".
 // Module-level like the rest of this app's state, because the console re-activates this cached
 // module on every reopen and a stream left behind would outlive the panel it feeds.
@@ -138,6 +160,9 @@ function wireRunBrowser(): void {
   // exactly the setup it exists for.
   const host = resolveServerHost(parseHash()) ?? "";
   const token = getLiveToken();
+  runBrowser?.dispose();
+  browserState = null;
+  emptySlots = null;
   runBrowser = initRunBrowser({
     scroll,
     host,
@@ -147,8 +172,14 @@ function wireRunBrowser(): void {
     onSelect: (sel) => {
       void openSelection(sel, demo, host, token);
     },
+    onState: (s) => {
+      browserState = s;
+      paintEmpty(host, demo);
+    },
   });
   runBrowser.setBodyTitle(bodyTitleText);
+  bindRefSlot(runBrowser.bodyMeta);
+  paintEmpty(host, demo);
   // The panel keeps itself current while this app is on screen, so a run finished in a terminal
   // is already in the tree when the reader looks for it. setVisible tears the stream down for a
   // backgrounded tab, and deactivate() catches the close.
@@ -164,6 +195,51 @@ function wireRunBrowser(): void {
   };
   stopBrowserWatch?.();
   stopBrowserWatch = startBrowserWatch();
+}
+
+// paintEmpty writes the cold empty state from what the run browser beside it knows. It repeats the
+// connection states the panel reports (through the shared prompt) and otherwise says in one sentence
+// what to do next, so the two halves of the screen never tell different stories about the server.
+function paintEmpty(host: string, demo: boolean): void {
+  if (!emptySlots) {
+    const title = el("log-empty-title");
+    const message = el("log-empty-message");
+    const actions = el("log-empty-actions");
+    if (!title || !message || !actions) return;
+    emptySlots = { title, message, actions };
+  }
+  const slots = emptySlots;
+  if (!host && !demo) {
+    renderConnectPrompt(
+      slots,
+      { connection: "none" },
+      { purpose: "Pick a run to read its output, or open a link from magus query output --open." },
+    );
+    return;
+  }
+  if (!browserState?.loaded) {
+    renderEmptyMessage(slots, "Loading runs", "");
+    return;
+  }
+  if (browserState.unreachable) {
+    renderConnectPrompt(
+      slots,
+      { connection: "disconnected", host },
+      { onRetry: () => runBrowser?.refresh() },
+    );
+    return;
+  }
+  if (browserState.runs === 0) {
+    renderEmptyMessage(slots, "No runs kept yet", "Run a target, then refresh Recent runs.");
+    return;
+  }
+  renderEmptyMessage(slots, "Choose a run", "Pick one from Recent runs to read its output.");
+  const show = document.createElement("button");
+  show.type = "button";
+  show.className = "pf-v6-c-button pf-m-primary";
+  show.textContent = "Show recent runs";
+  show.addEventListener("click", () => runBrowser?.open());
+  slots.actions.append(show);
 }
 
 // openSelection loads a browsed row into the viewer. An invocation opens its whole journal; a
@@ -197,11 +273,11 @@ async function openInvocation(
   token: string | null,
   focus?: string,
 ): Promise<void> {
-  setStatus("loading " + label + "...");
+  setStatus("Loading " + label + "...");
   if (demo) {
     const journal = demoJournal(inv);
     if (!journal) {
-      setStatus("no demo journal for " + label, true);
+      setStatus("The demo has no journal for " + label + ".", true);
       return;
     }
     // Defer one frame so any render the #demo stream already scheduled (scheduleLiveRender, rAF)
@@ -210,16 +286,16 @@ async function openInvocation(
     return;
   }
   if (!host) {
-    setStatus("no server connected; set a server address in Settings", true);
+    setStatus("No server is connected. Set a server address in Settings.", true);
     return;
   }
   const bytes = await fetchRunJournal(host, token, { inv });
   if (!bytes) {
-    setStatus("could not load " + label + " (its journal may have aged out)", true);
+    setStatus("Could not load " + label + ". Its journal may have aged out.", true);
     return;
   }
   if (!renderJournalBytes(bytes, inv, focus)) {
-    setStatus("could not decode " + label, true);
+    setStatus("Could not decode " + label + ".", true);
   }
 }
 
@@ -247,15 +323,16 @@ function showJournal(journal: Journal, ref: string, focus?: string): void {
   loadJournal(journal, ref);
   // The command is taken from the JOURNAL rather than from the row that was clicked, so a run
   // opened from a link is named the same as one opened from the tree.
-  setBodyTitle(cmdLabel(journal.invocation?.command) + (focus ? " - " + focus : ""));
+  const name = cmdLabel(journal.invocation?.command) + (focus ? " - " + focus : "");
+  setBodyTitle(name);
+  docTitle.set(name);
   const isInv = ref.startsWith("inv");
   setFragmentParam(isInv ? "inv" : "ref", ref);
   setFragmentParam(isInv ? "ref" : "inv", "");
   const q = focus ? "target:" + focus : "";
   setFilter(q);
   renderFilterChips();
-  const filterEl = el("log-filter");
-  if (filterEl) (filterEl as HTMLInputElement).value = q;
+  syncFilterBox(q);
   if (focus) render();
 }
 
@@ -275,7 +352,7 @@ async function openRunOutput(
     await openInvocation(inv ?? "", ref, demo, host, token, focus);
     return;
   }
-  setStatus("loading " + ref + "...");
+  setStatus("Loading " + ref + "...");
   if (host) {
     const bytes = await fetchRunJournal(host, token, { ref });
     if (bytes && renderJournalBytes(bytes, ref, focus)) return;
@@ -285,7 +362,7 @@ async function openRunOutput(
   state.timeline = false;
   const text = await fetchRunOutput(host, token, ref);
   if (text == null) {
-    setStatus("could not load " + ref + " (it may have aged out)", true);
+    setStatus("Could not load " + ref + ". It may have aged out.", true);
     return;
   }
   loadText(text, ref);
@@ -320,9 +397,9 @@ function clampZoom(z: number): number {
 
 function applyZoom(): void {
   const z = clampZoom(zoomCell.get());
-  // One knob, two levers (in logs.css): the text view scales font-size; the waterfall zooms its
-  // SVG so it grows past the panel and the scroll box picks it up. A width:100% SVG would just
-  // re-fit under a plain body zoom, so the waterfall needs its own.
+  // One knob, two levers: the text view zooms the body (frame.css); the waterfall zooms its SVG
+  // (logs.css) so it grows past the panel and the scroll box picks it up. A width:100% SVG would
+  // just re-fit under a plain body zoom, so the waterfall needs its own.
   bodyEl.style.setProperty("--log-zoom", String(z));
   zoomCtl?.sync();
 }
@@ -387,10 +464,7 @@ function wireCommands(): void {
     id: "logs.filter",
     label: "Focus filter",
     group: "Log Viewer",
-    run: () => {
-      const f = el("log-filter") || el("log-search");
-      if (f) f.focus();
-    },
+    run: focusFilterBox,
   });
   registerCommand({
     id: "logs.raw",
@@ -423,8 +497,7 @@ async function loadFromURL(): Promise<void> {
   const q = parseHash().q || "";
   setFilter(q);
   renderFilterChips();
-  const filterEl = el("log-filter");
-  if (filterEl) (filterEl as HTMLInputElement).value = q;
+  syncFilterBox(q);
   // The shared BARE `#demo` fragment (wantsDemo, from lib/server - the same trigger the
   // dashboard and graph explorer use) enters the server-free showcase: a synthetic run
   // streams in with a live-filling waterfall.
@@ -439,7 +512,7 @@ async function loadFromURL(): Promise<void> {
     return;
   }
   if (params.data) {
-    setStatus("decoding...");
+    setStatus("Decoding the log...");
     try {
       // #data= now carries a protobuf Journal (from `magus query ref --open`). Decode the
       // bytes and parse; if it is not a valid Journal (a legacy text link), fall back to the
@@ -455,20 +528,24 @@ async function loadFromURL(): Promise<void> {
       if (journal) loadJournal(journal, ref);
       else loadText(new TextDecoder().decode(bytes), ref);
     } catch (e) {
-      setStatus("could not decode the log", true);
+      setStatus("Could not decode the log: " + errMessage(e) + ".", true);
     }
     return;
   }
   if (params.src) {
-    setStatus("fetching...");
+    setStatus("Fetching the log...");
     try {
       const u = new URL(params.src, location.href);
-      if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("bad scheme");
+      if (u.protocol !== "https:" && u.protocol !== "http:") {
+        throw new Error("only http and https addresses are read");
+      }
       const r = await fetch(params.src, { headers: { Accept: "text/plain" } });
-      if (!r.ok) throw new Error("fetch failed");
+      // An arbitrary address, not the magus server, so a 401 here must not sign the console out;
+      // setStatus raises the failure toast itself.
+      if (!r.ok) throw new Error("the address answered HTTP " + r.status);
       loadText(await r.text(), ref);
     } catch (e) {
-      setStatus("could not fetch the log", true);
+      setStatus("Could not fetch the log: " + errMessage(e) + ".", true);
     }
     return;
   }
@@ -522,17 +599,21 @@ function loadJournal(journal: Journal, ref: string): void {
   state.model = { sections: built.sections, titled: built.titled };
   state.rawLines = built.rawLines;
   state.rawText = built.rawLines.join("\n");
-  finishLoad(ref, built.summary);
+  // A run is called by the command that made it; the ref is only the fallback for a journal that
+  // never recorded one.
+  const command = journal.invocation?.command;
+  finishLoad(ref, built.summary, command ? cmdLabel(command) : undefined);
 }
 
-function finishLoad(ref: string, statusMsg: string): void {
+function finishLoad(ref: string, statusMsg: string, name?: string): void {
   state.currentRef = looksLikeRef(ref) ? ref : "";
-  if (emptyEl) emptyEl.hidden = true;
+  showLog();
   setRefIdentity(ref || "log", looksLikeRef(ref));
-  // The loaded run is this app's open document, so the console names its tab after it (the
-  // ref is what a reader would call this log). Empty until something loads, which leaves the tab
-  // reading "Log Viewer".
-  docTitle.set(ref || null);
+  // The loaded run is this app's open document, so the console names its tab after it. A reader
+  // calls a run by its command ("magus affected ci"), not by an opaque id, so that leads; the ref or
+  // file name is the fallback. Empty until something loads, which leaves the tab reading "Log Viewer".
+  docTitle.set(name ?? (ref || null));
+  if (name) setBodyTitle(name);
   // Resolve the Timeline button (and reset the mode if the new log has no timing) before
   // render() so a stale timeline=true from a previous log cannot try to plot a text log.
   updateTimelineControl();
@@ -584,16 +665,54 @@ function rawTextPlain(): string {
 
 // --- Controls -----------------------------------------------------------------
 function wireControls(): void {
+  // The filter box and the two "?" buttons are built from the shared parts. They are mounted
+  // first because a #q= link seeds the box before any log loads.
+  const filterItem = el("log-filter-item");
+  if (filterItem) {
+    const dispose = mountFilterField(filterItem);
+    lifecycleAbort?.signal.addEventListener("abort", dispose);
+  }
+  const rangeHelpSlot = el("time-range-help-slot");
+  if (rangeHelpSlot) {
+    const help = createHelpButton("What Range does");
+    const dispose = attachHelpPopover(help, {
+      text:
+        "Scope the waterfall to a slice of wall-clock time, counted back from the end of the run. " +
+        "Choose Full run or one of the windows. Dragging across the waterfall sets a custom window " +
+        "and shows Reset range beside this.",
+      label: "What Range does",
+    });
+    rangeHelpSlot.replaceChildren(help);
+    lifecycleAbort?.signal.addEventListener("abort", dispose);
+  }
+
+  // The More menu holds the actions used once and then forgotten; Pause and Copy stay on the row.
+  const moreBtn = el("log-more-btn");
+  const moreMenu = el("log-more-menu");
+  if (moreBtn && moreMenu) {
+    const dispose = wireMenu(moreMenu, moreBtn);
+    lifecycleAbort?.signal.addEventListener("abort", dispose);
+  }
+
   const copyBtn = el("copy-all-btn");
   if (copyBtn) {
     (copyBtn as HTMLButtonElement).disabled = true;
     copyBtn.addEventListener("click", () => copyToClipboard(rawTextPlain(), copyBtn));
   }
 
+  // A menu item cannot show its own confirmation, because the menu has closed by the time the copy
+  // lands, so these two confirm in a toast.
   const cmdBtn = el("copy-cmd-btn");
   if (cmdBtn) {
     cmdBtn.addEventListener("click", () => {
-      if (state.currentRef) copyToClipboard("magus query " + state.currentRef, cmdBtn);
+      if (state.currentRef) {
+        copyToClipboard(
+          "magus query " + state.currentRef,
+          cmdBtn,
+          "the command",
+          "Copied a command that prints this output.",
+        );
+      }
     });
   }
 
@@ -612,11 +731,7 @@ function wireControls(): void {
   // reads which option was chosen (data-mode) and flips the corresponding view state. Clearing the
   // active search + re-rendering is shared; the fold button only applies in the pretty log view.
   const clearSearch = (): void => {
-    const searchEl = el("log-search");
-    if (searchEl) (searchEl as HTMLInputElement).value = "";
     clearMarks();
-    const cnt = el("search-count");
-    if (cnt) cnt.textContent = "";
   };
   const syncFold = (): void => {
     const fold = el("fold-all-btn");
@@ -668,52 +783,8 @@ function wireControls(): void {
     foldBtn.addEventListener("click", () => {
       const secs = [...bodyEl.querySelectorAll(".console-render-section")];
       const anyOpen = secs.some((s) => !s.hasAttribute("data-collapsed"));
-      for (const s of secs) {
-        s.toggleAttribute("data-collapsed", anyOpen);
-        const head = s.querySelector(".console-render-section__head");
-        if (head) head.setAttribute("aria-expanded", anyOpen ? "false" : "true");
-      }
+      for (const s of secs) setSectionOpen(s, !anyOpen);
       setBtnLabel(foldBtn, anyOpen ? "Expand sections" : "Collapse sections");
-    });
-  }
-
-  const searchEl = el("log-search");
-  if (searchEl) {
-    let t: ReturnType<typeof setTimeout>;
-    searchEl.addEventListener("input", () => {
-      clearTimeout(t);
-      t = setTimeout(() => runSearch((searchEl as HTMLInputElement).value.trim()), 120);
-    });
-    searchEl.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key === "Enter") {
-        ev.preventDefault();
-        stepActiveMark((ev as KeyboardEvent).shiftKey ? -1 : 1);
-      }
-    });
-  }
-  // Filter syntax help: the "?" trigger's title= is a tooltip only (invisible on touch, no click
-  // handler); attachHelpPopover upgrades it into a tap-to-open popover, reading that same title=
-  // as the body text.
-  const filterHelpBtn = el("log-filter-help");
-  if (filterHelpBtn) attachHelpPopover(filterHelpBtn);
-  const rangeHelpBtn = el("time-range-help");
-  if (rangeHelpBtn) attachHelpPopover(rangeHelpBtn);
-
-  // Filter box: debounced live-filter that narrows both views and syncs the #q= fragment.
-  const filterEl = el("log-filter");
-  if (filterEl) {
-    let ft: ReturnType<typeof setTimeout>;
-    filterEl.addEventListener("input", () => {
-      clearTimeout(ft);
-      ft = setTimeout(() => applyFilterFromInput((filterEl as HTMLInputElement).value), 150);
-    });
-    // Escape clears the filter (and the #q= fragment) for a quick reset.
-    filterEl.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key === "Escape") {
-        ev.preventDefault();
-        (filterEl as HTMLInputElement).value = "";
-        applyFilterFromInput("");
-      }
     });
   }
 
@@ -721,7 +792,7 @@ function wireControls(): void {
   const timeSel = el("time-range");
   if (timeSel)
     timeSel.addEventListener("change", () => applyTimeRange((timeSel as HTMLSelectElement).value));
-  const focusResetBtn = el("console-log-focus__reset");
+  const focusResetBtn = el("log-focus-reset");
   if (focusResetBtn) focusResetBtn.addEventListener("click", clearFocus);
 
   const pauseBtn = el("pause-btn");
@@ -736,10 +807,6 @@ function wireControls(): void {
   }
 
   wireFullscreen();
-
-  // Collapse the secondary controls behind the PF toolbar toggle on narrow viewports (the shared
-  // responsive-toolbar pattern the graph explorer uses too).
-  wireToolbarOverflow();
 }
 
 function wireFullscreen(): void {
@@ -756,9 +823,7 @@ function wireFullscreen(): void {
   document.addEventListener(
     "fullscreenchange",
     () => {
-      const on = document.fullscreenElement === panel;
-      btn.textContent = on ? "Exit fullscreen" : "Fullscreen";
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      setBtnLabel(btn, document.fullscreenElement === panel ? "Exit fullscreen" : "Fullscreen");
     },
     { signal: lifecycleAbort?.signal },
   );
@@ -779,7 +844,12 @@ function wireInput(): void {
       ev.preventDefault();
       panel.removeAttribute("data-drag-over");
       const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
-      if (f) f.text().then((text) => loadText(text, f.name));
+      if (f) {
+        f.text().then(
+          (text) => loadText(text, f.name),
+          (e) => setStatus("Could not read " + f.name + ": " + errMessage(e) + ".", true),
+        );
+      }
     });
   }
 }
@@ -799,11 +869,6 @@ export function activate(): void {
   if (bodyEl && scrollEl) init();
 }
 
-// deactivate aborts a live stream if one is running, drops the keybinding matcher, and cuts every
-// document-level listener init() registered against the lifecycle signal - so closing the logs tab
-// or pane leaves no SSE connection open and nothing bound to the document. Static logs (the common
-// case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
-// the standalone page does not (the app lives as long as the page).
 // setVisible is the console's contract (page.ts): this app writes the SHARED status bar - the
 // connection pill, the event count and the zoom stepper - so it has to give all three back while its
 // tab is hidden. Without it a background stream writes the active tab's bar.
@@ -825,10 +890,19 @@ export function setVisible(visible: boolean): void {
   }
 }
 
+// deactivate aborts a live stream if one is running, drops the keybinding matcher, and cuts every
+// document-level listener init() registered against the lifecycle signal - so closing the logs tab
+// or pane leaves no SSE connection open and nothing bound to the document. Static logs (the common
+// case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
+// the standalone page does not (the app lives as long as the page).
 export function deactivate(): void {
   // Forget the loaded run: this module is a singleton the console re-activates on reopen, so a
   // stale ref left here would name the reopened tab after a log it is no longer showing.
   docTitle.set(null);
+  bindRefSlot(null);
+  browserState = null;
+  emptySlots = null;
+  runBrowser?.dispose();
   if (state.liveAbort) {
     state.liveAbort.abort();
     state.liveAbort = null;

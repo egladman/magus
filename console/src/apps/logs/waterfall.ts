@@ -15,19 +15,30 @@ import type { InvocationView, Source, SpanMulti, SpanTree, Step, TargetSpan } fr
 import { state, waterfallSource } from "./state";
 import { bodyEl, el } from "./dom";
 import { cmdLabel, statusName } from "./model";
-import { matchAllTexts, targetRelevant } from "./filter";
+import { matchAllTexts, setFilterResults, targetRelevant } from "./filter";
 import { render } from "./render";
 import type { Timestamp, Duration } from "@bufbuild/protobuf/wkt";
 
 const WF_NS = "http://www.w3.org/2000/svg";
-const WF_VIEW_W = 900; // viewBox width; the SVG scales to the panel via its viewBox
-const WF_LABEL_W = 210; // left gutter for span labels (indented for steps)
+// The drawing is authored in a 900-unit viewBox and is never drawn narrower than 900px (logs.css), so
+// one unit is at least one pixel and the 12px type below renders at 12px or larger. A narrower pane
+// scrolls across the drawing rather than shrinking its labels to nothing.
+const WF_VIEW_W = 900;
+const WF_LABEL_W = 220; // left gutter for span labels (indented for steps)
 const WF_RIGHT = 64; // right gutter for the per-target duration text
-const WF_AXIS_H = 18; // top strip for the time axis
-const WF_ROW_H = 18; // one span row
-const WF_BAR_H = 10; // a target bar
-const WF_STEP_BAR_H = 6; // a step (child-span) bar
+const WF_AXIS_H = 24; // top strip for the time axis
+const WF_ROW_H = 24; // one span row
+const WF_BAR_H = 14; // a target bar
+const WF_STEP_BAR_H = 8; // a step (child-span) bar
 const WF_PLOT_W = WF_VIEW_W - WF_RIGHT - WF_LABEL_W;
+// Mono type at the 12px body size is about 7.2 units a character; a label that fits its gutter at
+// this width cannot run into the plot.
+const WF_CHAR_W = 7.2;
+// A bar wide enough to hold its own result word; a shorter one names the result beside itself.
+const WF_BAR_LABEL_MIN = 64;
+
+// WF_WORD is the word a result is drawn with; the table twin and the bar both use it.
+const WF_WORD: Record<string, string> = { pass: "Passed", fail: "Failed", cached: "Cached" };
 
 // A domain (visible time window) - the full run span or a focus window.
 interface Domain {
@@ -228,6 +239,7 @@ export function renderWaterfall(): void {
     (filtering ? " - " + nMatch + " matching" : "") +
     (state.focusWin ? " - focused to " + durMsText(dom.t1 - dom.t0) : "");
   bodyEl.appendChild(caption);
+  setFilterResults(nMatch, nt, ["target", "targets"]);
 
   let rows = 0;
   for (const g of multi.groups) {
@@ -236,12 +248,32 @@ export function renderWaterfall(): void {
   }
   const h = WF_AXIS_H + rows * WF_ROW_H + 6;
 
+  // The drawing is for the eye; the table beside it, visually hidden, is the same data for a reader
+  // that cannot see it. The SVG is therefore hidden from the accessibility tree rather than named as
+  // one flat image that says nothing about the targets inside it.
+  bodyEl.appendChild(waterfallTable(multi, dom));
+
   const root = wfSvg("svg") as SVGSVGElement;
   root.setAttribute("viewBox", "0 0 " + WF_VIEW_W + " " + h);
   root.setAttribute("class", "console-log-waterfall__svg");
   root.setAttribute("preserveAspectRatio", "xMinYMin meet");
-  root.setAttribute("role", "img");
-  root.setAttribute("aria-label", "Invocation trace waterfall");
+  root.setAttribute("aria-hidden", "true");
+  const hatch = "console-wf-hatch-" + Math.random().toString(36).slice(2, 8);
+  root.setAttribute("data-hatch", hatch);
+  const defs = wfSvg("defs");
+  const pattern = wfSvg("pattern");
+  pattern.setAttribute("id", hatch);
+  pattern.setAttribute("width", "6");
+  pattern.setAttribute("height", "6");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+  pattern.setAttribute("patternTransform", "rotate(45)");
+  const stripe = wfSvg("rect");
+  stripe.setAttribute("width", "3");
+  stripe.setAttribute("height", "6");
+  stripe.setAttribute("class", "console-log-waterfall__hatch");
+  pattern.appendChild(stripe);
+  defs.appendChild(pattern);
+  root.appendChild(defs);
 
   drawWfAxis(root, dom, h);
 
@@ -283,11 +315,59 @@ export function renderWaterfall(): void {
   updateFocusUI(multi);
 }
 
+// waterfallTable is the drawing as a table, visually hidden: each target and step with its result,
+// when it started (from the start of the run) and how long it took. It is the accessible reading of
+// the SVG, which says all of this in position and colour alone.
+export function waterfallTable(multi: SpanMulti, dom: Domain): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "pf-v6-screen-reader";
+  const table = document.createElement("table");
+  const caption = document.createElement("caption");
+  caption.textContent =
+    "Targets and steps on a time axis, over " + durMsText(dom.t1 - dom.t0) + ".";
+  table.appendChild(caption);
+  const head = table.createTHead().insertRow();
+  for (const name of ["Target or step", "Result", "Starts at", "Duration"]) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = name;
+    head.appendChild(th);
+  }
+  const body = table.createTBody();
+  const row = (label: string, result: string, s: number, e: number): void => {
+    const tr = body.insertRow();
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    tr.appendChild(th);
+    for (const text of [result, "+" + durMsText(Math.max(0, s - multi.t0)), durMsText(e - s)]) {
+      tr.insertCell().textContent = text;
+    }
+  };
+  const showHeaders = multi.groups.length > 1;
+  for (const g of multi.groups) {
+    if (showHeaders) {
+      const tr = body.insertRow();
+      const th = document.createElement("th");
+      th.scope = "colgroup";
+      th.colSpan = 4;
+      th.textContent = g.label || "invocation";
+      tr.appendChild(th);
+    }
+    for (const t of g.targets) {
+      row(t.label, WF_WORD[t.status] ?? "No result yet", t.s, t.e);
+      for (const st of t.steps) row("Step: " + st.label, "", st.s, st.e);
+    }
+  }
+  wrap.appendChild(table);
+  return wrap;
+}
+
 // drawWfGroupHead draws an invocation group header row (the command), spanning the label gutter.
 function drawWfGroupHead(root: SVGSVGElement, label: string, y: number): void {
   const t = wfSvg("text");
   t.setAttribute("x", "4");
-  t.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+  t.setAttribute("y", String(y + WF_ROW_H / 2 + 4));
   t.setAttribute("class", "console-log-waterfall__grouphead");
   t.textContent = wfTrunc(label || "invocation", 48);
   root.appendChild(t);
@@ -366,8 +446,8 @@ function attachWfBrush(root: SVGSVGElement, dom: Domain, h: number): void {
 // picker only in waterfall mode (where a time window is meaningful).
 export function updateFocusUI(spans: SpanMulti | null): void {
   const sel = el("time-range");
-  const win = el("console-log-focus__window");
-  const reset = el("console-log-focus__reset");
+  const win = el("log-focus-window");
+  const reset = el("log-focus-reset");
   const active = state.timeline && !!spans && !!spans.groups && spans.groups.length > 0;
   if (sel) (sel as HTMLSelectElement).disabled = !active;
   if (win) {
@@ -429,7 +509,7 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
     const label = wfSvg("text");
     const atEnd = t === sp.t1;
     label.setAttribute("x", String(atEnd ? x - 2 : x + 2));
-    label.setAttribute("y", "11");
+    label.setAttribute("y", "16");
     label.setAttribute("class", "console-log-waterfall__axislabel");
     if (atEnd) label.setAttribute("text-anchor", "end");
     label.textContent = txt;
@@ -440,16 +520,17 @@ function drawWfAxis(root: SVGSVGElement, sp: Domain, h: number): void {
 function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void {
   const dur = row.e - row.s;
   const dim = row.dim; // dimmed (data-dim) when the filter excludes this span
+  const baseline = y + WF_ROW_H / 2 + 4;
   const label = wfSvg("text");
   label.setAttribute("x", String(row.step ? 20 : 6));
-  label.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+  label.setAttribute("y", String(baseline));
   label.setAttribute(
     "class",
     "console-log-waterfall__label " +
       (row.step ? "console-log-waterfall__label--step" : "console-log-waterfall__label--target"),
   );
   if (dim) label.setAttribute("data-dim", "");
-  label.textContent = wfTrunc(row.label || "-", row.step ? 30 : 26);
+  label.textContent = wfTrunc(row.label || "-", row.step ? 26 : 28);
   const lt = wfSvg("title");
   lt.textContent = row.label + " (" + durMsText(dur) + ")";
   label.appendChild(lt);
@@ -469,20 +550,39 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
     "console-log-waterfall__bar" + (row.step ? " console-log-waterfall__bar--step" : ""),
   );
   if (row.status) rect.setAttribute("data-status", row.status);
+  // A cached run did no work, so its bar is hatched rather than filled: the pattern, like the word
+  // beside it, says so without the reader having to tell two greys apart.
+  if (row.status === "cached") {
+    rect.setAttribute("fill", "url(#" + (root.getAttribute("data-hatch") ?? "") + ")");
+  }
   if (dim) rect.setAttribute("data-dim", "");
   const rt = wfSvg("title");
   rt.textContent = row.label + " - " + durMsText(dur);
   rect.appendChild(rt);
   root.appendChild(rect);
 
-  if (!row.step && row.status && x2 - x1 >= 88) {
+  // The result as a word. Inside the bar when it fits, otherwise beside it, so a short bar never
+  // carries its outcome in colour alone.
+  if (!row.step && row.status) {
+    const word = WF_WORD[row.status] ?? row.status;
+    const width = word.length * WF_CHAR_W;
     const meta = wfSvg("text");
-    meta.setAttribute("x", String(x1 + 5));
-    meta.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
-    meta.setAttribute("class", "console-log-waterfall__barlabel");
+    meta.setAttribute("y", String(baseline));
     meta.setAttribute("data-status", row.status);
     if (dim) meta.setAttribute("data-dim", "");
-    meta.textContent = row.status.toUpperCase();
+    let cls = "console-log-waterfall__barlabel";
+    if (row.status !== "cached" && x2 - x1 >= Math.max(WF_BAR_LABEL_MIN, width + 12)) {
+      meta.setAttribute("x", String(x1 + 6));
+    } else if (x2 + 6 + width <= WF_VIEW_W - WF_RIGHT) {
+      meta.setAttribute("x", String(x2 + 6));
+      cls += " console-log-waterfall__barlabel--outside";
+    } else {
+      meta.setAttribute("x", String(x1 - 6));
+      meta.setAttribute("text-anchor", "end");
+      cls += " console-log-waterfall__barlabel--outside";
+    }
+    meta.setAttribute("class", cls);
+    meta.textContent = word;
     root.appendChild(meta);
   }
 
@@ -490,7 +590,7 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
   if (!row.step) {
     const d = wfSvg("text");
     d.setAttribute("x", String(WF_VIEW_W - 2));
-    d.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+    d.setAttribute("y", String(baseline));
     d.setAttribute("class", "console-log-waterfall__dur");
     if (dim) d.setAttribute("data-dim", "");
     d.setAttribute("text-anchor", "end");

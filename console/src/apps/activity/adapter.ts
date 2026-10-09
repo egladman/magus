@@ -144,7 +144,7 @@ export function payloadRefs(ev: ActivityEvent): PayloadRef[] {
 // payloadLabel is the expand control's text: what would open, and how big it is when the event
 // recorded a size. A "(0 B)" would read as an empty body rather than as an unrecorded one.
 export function payloadLabel(ref: PayloadRef): string {
-  return "show " + ref.label + (ref.bytes > 0 ? " (" + humanBytes(ref.bytes) + ")" : "");
+  return "Show " + ref.label + (ref.bytes > 0 ? " (" + humanBytes(ref.bytes) + ")" : "");
 }
 
 // PAYLOAD_MAX_BYTES bounds what one expanded body paints. A blob is whatever its producer wrote -

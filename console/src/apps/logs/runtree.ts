@@ -27,11 +27,16 @@ import { must } from "../../lib/guards";
 // This file is the DOM half. The grouping, the filter grammar, and the row shapes are in
 // runindex.ts, which has no DOM dependency and carries the unit tests.
 
-import { authHeaders, fetchSSE } from "../../lib/server";
+import { authHeaders, fetchSSE, probeServer } from "../../lib/server";
 import { REFRESH } from "../../ui/glyph";
+import { statusMark, type Status as MarkStatus } from "../../ui/status";
+import { timeEl } from "../../render/time";
+import { createFilterField } from "../../render/filterField";
+import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
 import { persisted } from "../../lib/persist";
 import { scenarioInvocations, scenarioRuns } from "../../desktop/demo-scenario";
 import {
+  buildRunRows,
   buildRunTree,
   parseRunFilter,
   relTime,
@@ -61,6 +66,17 @@ export interface RunBrowserDeps {
   demo: boolean;
   nowMs: () => number;
   onSelect: (sel: Selection) => void;
+  // Called after each load with what the panel now knows, so the viewer's own empty state can say
+  // the same thing about the server and the stored runs that the panel does.
+  onState?: (state: RunBrowserState) => void;
+}
+
+export interface RunBrowserState {
+  loaded: boolean;
+  // Invocations the store holds, ignoring any filter.
+  runs: number;
+  // Both feeds came back empty and nothing answered at the address.
+  unreachable: boolean;
 }
 
 // fetchRuns reads the server's run list. Resolves to [] on any failure (no server, auth, an old
@@ -251,7 +267,7 @@ export function tickRelativeTimes(root: HTMLElement, everyMs = 15_000): () => vo
 
 // demoRuns projects the shared scenario's run history (demo-scenario.ts) into the tree's row shape
 // for the server-free showcase (the shared #demo path), so the browser reads as populated without a
-// server AND tells the SAME story as the activity trail, the waterfall, and the dashboard - the refs
+// server AND shows the SAME runs as the activity trail, the waterfall, and the dashboard - the refs
 // here are the ones a reader meets on those apps. Newest first; timestamps relative to `now`.
 export function demoRuns(now: number): RunSummary[] {
   return scenarioRuns(now).map((r) => ({
@@ -307,11 +323,21 @@ interface TreeState {
   current: string | null;
 }
 
+// STATUS_OF maps a tree node's outcome onto the shared status mark and the one word for it. A branch
+// where only some runs failed reads as a warning, not as either verdict.
+const STATUS_OF: Record<NonNullable<NodeSpec["status"]>, { status: MarkStatus; word: string }> = {
+  pass: { status: "success", word: "Passed" },
+  fail: { status: "danger", word: "Failed" },
+  mixed: { status: "warning", word: "Partly failed" },
+};
+
 function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "pf-v6-c-tree-view__list-item";
   li.setAttribute("role", "treeitem");
   const hasKids = !!spec.children && spec.children.length > 0;
+
+  if (!hasKids) li.dataset.leaf = "";
 
   const content = document.createElement("div");
   content.className = "pf-v6-c-tree-view__content";
@@ -325,6 +351,10 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   node.tabIndex = -1;
   if (spec.title) node.title = spec.title;
 
+  // PF's compact node: a container holding the toggle, a content column (a title over a text line)
+  // and the count. The toggle sits INSIDE the container so the compact background wraps all of it.
+  const container = document.createElement("span");
+  container.className = "pf-v6-c-tree-view__node-container";
   if (hasKids) {
     const toggle = document.createElement("span");
     toggle.className = "pf-v6-c-tree-view__node-toggle";
@@ -332,35 +362,28 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
     ticon.className = "pf-v6-c-tree-view__node-toggle-icon";
     ticon.append(chevron());
     toggle.append(ticon);
-    node.append(toggle);
+    container.append(toggle);
   }
-
-  const container = document.createElement("span");
-  container.className = "pf-v6-c-tree-view__node-container";
   const nodeContent = document.createElement("span");
   nodeContent.className = "pf-v6-c-tree-view__node-content";
-  const text = document.createElement("span");
-  text.className = "pf-v6-c-tree-view__node-text";
-  // The dot goes INSIDE the text node, not beside it. PatternFly's __node-content is
-  // display:flex/column - it stacks a label above a description - so a dot appended as a
-  // sibling of the label lands on its own line above it. Inside the label it rides the
-  // same nowrap line, which is what a status dot is for.
+  const title = document.createElement("span");
+  title.className = "pf-v6-c-tree-view__node-title";
+  // The outcome leads the title as a mark with a shape and a word. It rides INSIDE the title for
+  // the same reason a dot used to: node-content is a column, so a sibling would take a row of its
+  // own above the name it marks.
   if (spec.status) {
-    const dot = document.createElement("span");
-    dot.className = "console-log-runs__dot";
-    dot.dataset.status = spec.status;
-    text.append(dot);
+    const outcome = STATUS_OF[spec.status];
+    title.append(statusMark(outcome.status, outcome.word));
   }
-  // The label goes in its OWN span rather than as a bare text node beside the dot, so the ticker can
-  // rewrite just this (see tickRelativeTimes) without touching the dot or rebuilding the row.
-  const labelEl = document.createElement("span");
+  // The label is its own element so the ticker can rewrite just it (see tickRelativeTimes)
+  // without touching the mark or rebuilding the row. A relative label is a <time>.
+  const labelEl = spec.timeMs ? timeEl(spec.timeMs, Date.now()) : document.createElement("span");
   labelEl.textContent = spec.label;
-  if (spec.timeMs) labelEl.dataset.time = String(spec.timeMs);
-  text.append(labelEl);
-  nodeContent.append(text);
+  title.append(labelEl);
+  nodeContent.append(title);
   if (spec.description) {
     const desc = document.createElement("span");
-    desc.className = "pf-v6-c-tree-view__node-description";
+    desc.className = "pf-v6-c-tree-view__node-text";
     desc.textContent = spec.description;
     nodeContent.append(desc);
   }
@@ -383,6 +406,9 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   content.append(node);
   li.append(content);
 
+  // aria-selected is what a screen reader hears; pf-m-current is the paint. A row with nothing to
+  // open is not selectable and carries neither.
+  if (spec.select) li.setAttribute("aria-selected", String(spec.id === ctx.state.current));
   if (spec.id === ctx.state.current) node.classList.add("pf-m-current");
   // Registered BEFORE the children below, so ctx.order comes out in PAINT order (a row, then its
   // subtree). The arrow keys walk that array as "the next visible row", which a post-order list -
@@ -392,10 +418,12 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   const select = spec.select;
   const markCurrent = (): void => {
     ctx.state.current = spec.id;
-    ctx.root
-      .querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
-      .forEach((n) => n.classList.remove("pf-m-current"));
+    ctx.root.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current").forEach((n) => {
+      n.classList.remove("pf-m-current");
+      n.closest("li")?.setAttribute("aria-selected", "false");
+    });
     node.classList.add("pf-m-current");
+    li.setAttribute("aria-selected", "true");
   };
 
   if (hasKids) {
@@ -513,22 +541,24 @@ export function renderRunTree(
   specs: NodeSpec[],
   state: TreeState,
   onSelect: (sel: Selection) => void,
-  emptyNote?: string,
+  emptyNote?: string | Node,
+  label = "Recent runs",
 ): void {
   container.replaceChildren();
   if (specs.length === 0) {
-    const empty = document.createElement("p");
+    const empty = document.createElement("div");
     empty.className = "console-log-runs__empty";
-    empty.textContent = emptyNote ?? "No stored runs. Run a target, then reopen this panel.";
+    empty.append(emptyNote ?? "No stored runs. Run a target, then reopen this panel.");
     container.append(empty);
     return;
   }
 
   const tree = document.createElement("div");
-  tree.className = "pf-v6-c-tree-view pf-m-guides";
+  tree.className = "pf-v6-c-tree-view pf-m-compact pf-m-no-background pf-m-truncate";
   const list = document.createElement("ul");
   list.className = "pf-v6-c-tree-view__list";
   list.setAttribute("role", "tree");
+  list.setAttribute("aria-label", label);
   const ctx: TreeCtx = { root: tree, state, order: [], onSelect };
   // The first branch opens on load so the newest run's targets are visible without a click. Only
   // on a FIRST paint: once the reader has opened or closed anything, their state is the answer.
@@ -578,8 +608,8 @@ function iconButton(
 
 // A collapsible master panel docked down the left of a render app's scroll box: a titled header
 // (refresh + hide icons) over a caller-filled tree, plus a slim reopen rail. The log viewer's run
-// browser and the activity view's event index are the same frame (both load logs.css, so both reuse
-// the .console-log-runs styles); only what fills treeBox differs.
+// browser and the activity view's event index are the same frame (both sheets import
+// render/frame.css, so both reuse the .console-log-runs styles); only what fills treeBox differs.
 export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
   // The BODY's header, the index header's opposite number across the splitter. It exists so the two
@@ -589,6 +619,9 @@ export interface CollapsiblePanel {
   // the body is currently showing, so the row earns its height instead of being spacing in disguise.
   bodyHead: HTMLElement;
   bodyTitle: HTMLElement;
+  // A slot after the title for what identifies the body's content (the log viewer's reference id).
+  // Hidden until a caller fills it.
+  bodyMeta: HTMLElement;
   treeBox: HTMLElement; // the caller (re)renders its tree into this
   refreshBtn: HTMLButtonElement;
   // The slim reopen rail shown while the panel is auto-collapsed on a phone. head's own chrome
@@ -598,10 +631,18 @@ export interface CollapsiblePanel {
   reopen: HTMLButtonElement;
   // applyDefault sets the open state after a (re)load from whether the panel now has content: an
   // empty panel collapses (to the rail, or fully hidden when hideWhenEmpty), a populated one opens -
-  // except on a phone, where an open aside would crush the content pane, so it starts collapsed to
+  // except in a narrow pane, where an open aside would crush the content, so it starts collapsed to
   // the rail. A reader who opens it from the rail overrides that, and the choice sticks across loads.
   applyDefault: (hasContent: boolean) => void;
+  // open shows the panel as if the reader had pressed the reopen rail.
+  open: () => void;
+  // dispose stops watching the pane's width. Call it when the app deactivates.
+  dispose: () => void;
 }
+
+// NARROW_PX is the pane width below which the open aside floats over the content with a scrim
+// instead of sitting beside it. It is the same 48rem the container query in frame.css uses.
+const NARROW_PX = 768;
 
 // mountCollapsiblePanel reparents `scroll` into a flex split and docks the collapsible aside to its
 // left (so no scaffold markup changes). onRefresh fires on the header refresh click. hideWhenEmpty
@@ -654,49 +695,95 @@ export function mountCollapsiblePanel(opts: {
   const bodyTitle = document.createElement("span");
   bodyTitle.className = "console-log-body__title";
   bodyTitle.textContent = opts.bodyTitle;
-  bodyHead.append(bodyTitle);
+  const bodyMeta = document.createElement("span");
+  bodyMeta.className = "console-log-body__meta";
+  bodyMeta.hidden = true;
+  bodyHead.append(bodyTitle, bodyMeta);
   body.append(bodyHead, opts.scroll);
 
-  split.append(aside, reopen, body);
+  // Behind the aside while it floats over the content: a tap anywhere outside the panel closes it.
+  const scrim = document.createElement("button");
+  scrim.type = "button";
+  scrim.className = "console-log-split__scrim";
+  scrim.tabIndex = -1;
+  scrim.setAttribute("aria-label", "Close " + opts.label.toLowerCase());
+  scrim.hidden = true;
 
-  // The open state is JS-driven (the hidden attribute), so the phone default lives here (matchMedia)
-  // rather than duplicated into logs.css - the same breakpoint the app shell uses (console.css).
-  const narrow = window.matchMedia("(max-width: 47.999rem)");
+  split.append(aside, reopen, scrim, body);
+
+  // The open state is JS-driven (the hidden attribute). Whether the aside is floating is a question
+  // about the PANE, not the window, so it is asked of the split's own width; frame.css asks the same
+  // question of the same element with a container query.
+  let narrow = false;
   // What the reader last decided, which outranks the width default in both directions. Null means
   // they have not touched it and the width still decides.
   let userChoice: "open" | "closed" | null = null;
   let hasContent = false;
-  const apply = (state: "open" | "closed" | "hidden"): void => {
-    aside.hidden = state !== "open";
-    reopen.hidden = state !== "closed";
+  let state: "open" | "closed" | "hidden" = "hidden";
+  const apply = (next: "open" | "closed" | "hidden"): void => {
+    state = next;
+    aside.hidden = next !== "open";
+    reopen.hidden = next !== "closed";
+    scrim.hidden = !(next === "open" && narrow);
   };
   const applyDefault = (): void => {
     if (!hasContent) {
       apply(opts.hideWhenEmpty ? "hidden" : "closed");
       return;
     }
-    apply(userChoice ?? (narrow.matches ? "closed" : "open"));
+    apply(userChoice ?? (narrow ? "closed" : "open"));
   };
-  hideBtn.addEventListener("click", () => {
+  // The floating aside takes focus when the reader opens it and gives it back when it closes, so a
+  // keyboard reader is neither left behind the panel nor stranded on a button that has gone.
+  const close = (restoreFocus: boolean): void => {
     userChoice = "closed";
     apply("closed");
+    if (restoreFocus) reopen.focus();
+  };
+  hideBtn.addEventListener("click", () => close(true));
+  scrim.addEventListener("click", () => close(true));
+  aside.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && narrow && state === "open") {
+      ev.stopPropagation();
+      close(true);
+    }
   });
-  reopen.addEventListener("click", () => {
+  const open = (): void => {
     userChoice = "open";
     apply("open");
-  });
-  // The width default is re-evaluated on a breakpoint FLIP, not sampled once. Sampled once, a
-  // window that happened to be narrow while the app booted left the panel collapsed for the
-  // rest of the session, and a phone rotated to landscape never got it back - both indistinguishable
-  // from the panel simply not existing. An explicit open or close still wins, so this only decides
-  // for a reader who has not.
-  narrow.addEventListener("change", applyDefault);
+    if (narrow) {
+      (
+        aside.querySelector<HTMLElement>('.console-log-runs__tree button[tabindex="0"]') ??
+        aside.querySelector<HTMLElement>("input, button")
+      )?.focus();
+    }
+  };
+  reopen.addEventListener("click", open);
   refreshBtn.addEventListener("click", opts.onRefresh);
+
+  // The width default is re-evaluated whenever the pane's width crosses the line, not sampled once.
+  // Sampled once, a pane that happened to be narrow while the app booted left the panel collapsed
+  // for the rest of the session. An explicit open or close still wins, so this only decides for a
+  // reader who has not.
+  let observer: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    observer = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1]?.contentRect.width ?? 0;
+      // A pane with no width yet (still hidden) says nothing about the layout.
+      if (width === 0) return;
+      const next = width < NARROW_PX;
+      if (next === narrow) return;
+      narrow = next;
+      applyDefault();
+    });
+    observer.observe(split);
+  }
 
   return {
     head,
     bodyHead,
     bodyTitle,
+    bodyMeta,
     treeBox,
     refreshBtn,
     reopen,
@@ -704,6 +791,8 @@ export function mountCollapsiblePanel(opts: {
       hasContent = content;
       applyDefault();
     },
+    open,
+    dispose: (): void => observer?.disconnect(),
   };
 }
 
@@ -713,12 +802,17 @@ const browseModeCell = persisted<BrowseMode>("logs-run-browse-mode", "runs");
 
 // mountBrowserControls adds the two controls the panel needs to be usable without a ref: the
 // ordering toggle and the filter box. They STACK under the header rather than sharing its row -
-// the aside is a rail, and the size-modifier note at the top of logs.css applies here too:
-// controls only mismatch when they sit on one line.
+// the aside is a rail, and PF's control scales only disagree when two controls sit on one line.
 function mountBrowserControls(
   panel: CollapsiblePanel,
   onChange: () => void,
-): { mode: () => BrowseMode; query: () => string } {
+): {
+  mode: () => BrowseMode;
+  query: () => string;
+  clear: () => void;
+  setResults: (visible: string, spoken: string) => void;
+  dispose: () => void;
+} {
   const bar = document.createElement("div");
   bar.className = "console-log-runs__controls";
   // The rail's two controls sit directly above a dense tree, so they take the compact tier of the
@@ -764,53 +858,58 @@ function mountBrowserControls(
     group.append(item);
   }
 
-  // pf-v6-c-form-control is the class for the WRAPPER, not for the input: form-control.css makes it
-  // a display:grid box and styles the field through it. Put on the input itself, PF's own input
-  // reset never applies and the field keeps the UA default `border: 2px inset` bevel.
-  const searchWrap = document.createElement("span");
-  searchWrap.className = "pf-v6-c-form-control console-log-runs__filter";
-  const search = document.createElement("input");
-  search.type = "search";
-  search.className = "pf-v6-c-form-control__text";
-  search.placeholder = "Filter runs";
-  // The keys are the same shape the log filter uses, so a reader learns one grammar for the
-  // app; the placeholder stays short and the syntax lives in the tooltip.
-  search.title =
-    "Filter the tree. Free text matches the project, target, ref, error and command line. " +
-    "Keys: project: target: status:pass|fail trigger: ref: cmd:";
-  search.setAttribute("aria-label", "Filter runs");
-  let debounce: ReturnType<typeof setTimeout>;
-  search.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(onChange, 140);
+  // The keys are the same shape the log filter uses, so a reader learns one grammar for the app; the
+  // placeholder stays short and the syntax lives behind the "?".
+  const field = createFilterField({
+    label: "Filter runs",
+    placeholder: "Filter runs",
+    onChange: () => onChange(),
   });
-  search.addEventListener("keydown", (ev) => {
-    if ((ev as KeyboardEvent).key === "Escape" && search.value) {
-      ev.stopPropagation();
-      search.value = "";
-      onChange();
-    }
+  const help = createHelpButton("Run filter syntax");
+  const disposeHelp = attachHelpPopover(help, {
+    text:
+      "Free text matches the project, target, ref, error and command line. " +
+      "Keys: project: target: status:pass|fail trigger: ref: cmd:",
+    label: "Run filter syntax",
   });
+  const searchRow = document.createElement("div");
+  searchRow.className = "console-log-runs__search";
+  searchRow.append(field.el, help);
 
-  searchWrap.append(search);
-  bar.append(group, searchWrap);
+  bar.append(group, searchRow);
   panel.head.insertAdjacentElement("afterend", bar);
   return {
     mode: () => mode,
-    query: () => search.value,
+    query: () => field.value(),
+    clear: () => {
+      field.setValue("");
+      onChange();
+    },
+    setResults: field.setResults,
+    dispose: () => {
+      field.dispose();
+      disposeHelp();
+    },
   };
 }
 
 // initRunBrowser docks the run browser to the left of the viewer's scroll box and populates it: it
 // fetches both feeds (or, in #demo, the synthetic set), groups them into the chosen ordering, and
-// renders the tree; selecting a row calls deps.onSelect. Demo rows surface ONLY in explicit demo
+// renders the tree; selecting a row calls deps.onSelect. Demo rows appear ONLY in explicit demo
 // mode - with no server and no demo it fetches nothing (a fresh install must not show fabricated
 // runs as if real) and the reopen rail opens to an honest note. Returns a refresh handle the viewer
 // can call (e.g. after a live run finishes), and a setBodyTitle handle for naming what is loaded.
-export function initRunBrowser(deps: RunBrowserDeps): {
+export interface RunBrowserHandle {
   refresh: () => void;
   setBodyTitle: (text: string) => void;
-} {
+  // The slot after the body title, for the loaded output's reference id.
+  bodyMeta: HTMLElement | null;
+  // Shows the panel, for an empty state that points at it.
+  open: () => void;
+  dispose: () => void;
+}
+
+export function initRunBrowser(deps: RunBrowserDeps): RunBrowserHandle {
   const panel = mountCollapsiblePanel({
     scroll: deps.scroll,
     title: "Recent runs",
@@ -821,7 +920,15 @@ export function initRunBrowser(deps: RunBrowserDeps): {
     },
     hideWhenEmpty: false,
   });
-  if (!panel) return { refresh: () => {}, setBodyTitle: () => {} };
+  if (!panel) {
+    return {
+      refresh: () => {},
+      setBodyTitle: () => {},
+      bodyMeta: null,
+      open: () => {},
+      dispose: () => {},
+    };
+  }
   const runsPanel = panel;
   // One state object for the panel's lifetime: which branches are open and which row is current
   // survive a refresh, a filter change and a mode switch.
@@ -829,32 +936,59 @@ export function initRunBrowser(deps: RunBrowserDeps): {
   let runs: RunSummary[] = [];
   let logs: RunLog[] = [];
   let loaded = false;
+  let unreachable = false;
+  let loadGeneration = 0;
 
   const controls = mountBrowserControls(runsPanel, () => paint());
 
   function paint(): void {
     const filter = parseRunFilter(controls.query());
-    const specs = buildRunTree({
+    const now = deps.nowMs();
+    const specs = buildRunTree({ runs, logs, mode: controls.mode(), filter, now });
+    renderRunTree(runsPanel.treeBox, specs, treeState, deps.onSelect, emptyNote(filter.empty));
+    countBadge.textContent = specs.length ? String(specs.length) : "";
+    // The filter says what it left. Top-level rows are compared with the unfiltered tree's, so
+    // "3 of 12" and the badge beside the title agree about what a row is.
+    if (filter.empty || !loaded) {
+      controls.setResults("", "");
+      return;
+    }
+    const total = buildRunTree({
       runs,
       logs,
       mode: controls.mode(),
-      filter,
-      now: deps.nowMs(),
-    });
-    renderRunTree(runsPanel.treeBox, specs, treeState, deps.onSelect, emptyNote(filter.empty));
-    countBadge.textContent = specs.length ? String(specs.length) : "";
+      filter: parseRunFilter(""),
+      now,
+    }).length;
+    controls.setResults(
+      specs.length + " of " + total,
+      specs.length === 0
+        ? "No runs match the filter"
+        : specs.length + " of " + total + " runs match the filter",
+    );
   }
 
-  // The three empty states are three different facts, and only one of them is a problem the
-  // reader can act on. Saying "no stored runs" to someone whose filter simply matched nothing is
-  // the version that reads as data loss.
-  function emptyNote(unfiltered: boolean): string {
-    if (!deps.host && !deps.demo) {
-      return "No server connected. Set a server address in Settings, or pick acme from the Workspace menu for demo data.";
-    }
+  // The empty states are different facts, and only one of them is a problem the reader can act on.
+  // Saying "no stored runs" to someone whose filter simply matched nothing is the version that
+  // reads as data loss. The connection states are short here because the viewer's own empty state
+  // carries the full prompt; the two must never disagree about the server.
+  function emptyNote(unfiltered: boolean): string | Node {
+    if (!deps.host && !deps.demo) return "No server connected.";
     if (!loaded) return "Loading runs...";
-    if (!unfiltered) return "No runs match this filter.";
-    return "No stored runs yet. Run a target, then refresh this panel.";
+    if (unreachable) return "Could not reach the server.";
+    if (!unfiltered) {
+      const note = document.createElement("span");
+      const text = document.createElement("span");
+      text.textContent = "No runs match this filter.";
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "pf-v6-c-button pf-m-link";
+      clear.textContent = "Clear filter";
+      clear.addEventListener("click", controls.clear);
+      note.append(text, clear);
+      return note;
+    }
+    return "No runs kept yet. Run a target, then refresh.";
   }
 
   // How many top-level rows are showing, beside the title - which is also how a filter reports that
@@ -868,27 +1002,47 @@ export function initRunBrowser(deps: RunBrowserDeps): {
   const demoNow = deps.nowMs();
 
   async function load(): Promise<void> {
+    const generation = ++loadGeneration;
+    let nextRuns: RunSummary[] = [];
+    let nextLogs: RunLog[] = [];
+    let nextUnreachable = false;
     if (deps.demo) {
-      runs = demoRuns(demoNow);
-      logs = demoRunLogs(demoNow);
+      nextRuns = demoRuns(demoNow);
+      nextLogs = demoRunLogs(demoNow);
     } else if (deps.host) {
       // Both feeds at once: they are independent reads and the tree needs both to group by run.
-      [runs, logs] = await Promise.all([
+      [nextRuns, nextLogs] = await Promise.all([
         fetchRuns(deps.host, deps.token),
         fetchRunLogs(deps.host, deps.token),
       ]);
-    } else {
-      runs = [];
-      logs = [];
+      // The feeds read a refused connection as an empty list, so nothing answering at the address
+      // is asked separately: "nothing kept yet" would send the reader to run a target.
+      if (nextRuns.length === 0 && nextLogs.length === 0) {
+        nextUnreachable = !(await probeServer(deps.host)).ok;
+      }
     }
+    // A newer load, or a closed panel, owns the answer now.
+    if (disposed || generation !== loadGeneration) return;
+    runs = nextRuns;
+    logs = nextLogs;
+    unreachable = nextUnreachable;
     loaded = true;
     paint();
     runsPanel.applyDefault(runs.length > 0 || logs.length > 0);
+    deps.onState?.({ loaded, runs: buildRunRows(runs, logs, true).length, unreachable });
   }
 
+  let disposed = false;
   paint();
   void load();
   return {
+    bodyMeta: runsPanel.bodyMeta,
+    open: runsPanel.open,
+    dispose: () => {
+      disposed = true;
+      runsPanel.dispose();
+      controls.dispose();
+    },
     refresh: () => {
       void load();
     },
