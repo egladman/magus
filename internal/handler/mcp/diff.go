@@ -69,6 +69,8 @@ const reviewLookupTimeout = 5 * time.Second
 // because internal/handler/status has its own diffSource meaning something narrower.
 type workspaceSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
+	// DiffWith is Diff with options; the thread brief passes SkipOrder.
+	DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// ReviewOrigin says where this tree's changes are discussed, so the threads on that review
 	// can be read.
@@ -420,8 +422,10 @@ func (t *diffTool) threadBrief(ctx context.Context, id string) (review.ThreadBri
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    patch,
 		Comments: comments,
-		Annotate: t.src.Diff,
-		Anchors:  t.anchors,
+		Annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
+			return t.src.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
+		},
+		Anchors: t.anchors,
 		Variant:  prompt.Short,
 	})
 	if err != nil {

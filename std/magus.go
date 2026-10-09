@@ -1138,17 +1138,17 @@ var magusMCPTools = []MCPTool{
 			"It recomputes when the working tree has moved since the session was attached, and sets `recomputed` when it did. " +
 			"op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. " +
 			"op=resolve closes a comment. " +
-			"op=state with projection=thread and thread=<root comment id> returns {id, brief}: the review conversation, the hunk it is about, " +
+			"op=state with projection=thread and thread=<thread id> returns {id, brief}: the review thread, the hunk it is about, " +
 			"and what the graph knows about the symbols changed there (reach, public-to, checks, coverage, callers, notes), so read it before answering a reviewer. " +
-			"op=outline records at most 5 topics of at most 60 characters, one line each, about a conversation (thread, topics); the person sees them and types the reply themselves. " +
+			"op=outline records at most 5 topics of at most 60 characters, one line each, about a thread (thread, topics); the person sees them and types the reply themselves. " +
 			"An outline is never a reply and cannot be sent: you CANNOT reply to, publish to or approve a review, and an over-long outline is refused. " +
 			"Both writing ops REFUSE a path that is not in the change and a hunk index that does not exist. " +
 			"You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. " +
 			"Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
 		Params: []MCPParam{
 			{Name: "op", Type: TypeString, Doc: "One of: state (default), comment, suggest, resolve, outline."},
-			{Name: "projection", Type: TypeString, Doc: "Shapes op=state's response only - the writing ops ignore it. One of: full (default; today's whole session), summary (id/base/as_of/recomputed/cursor plus counts of files, hunks, comments, suggestions, and viewed - no bodies), conversation (cursor, viewed, comments, suggestions, id/base/as_of - no diff, patch, or hunks), patch (id/base/as_of/recomputed plus patch and hunks - no diff, comments, or suggestions), thread (with `thread`: {id, brief}, the brief for one review conversation - no session)."},
-			{Name: "thread", Type: TypeString, Doc: "Root comment id of a review conversation, as listed in op=state's threads (projection=thread, outline). A reply's id names its conversation."},
+			{Name: "projection", Type: TypeString, Doc: "Shapes op=state's response only - the writing ops ignore it. One of: full (default; today's whole session), summary (id/base/as_of/recomputed/cursor plus counts of files, hunks, comments, suggestions, and viewed - no bodies), conversation (cursor, viewed, comments, suggestions, id/base/as_of - no diff, patch, or hunks), patch (id/base/as_of/recomputed plus patch and hunks - no diff, comments, or suggestions), thread (with `thread`: {id, brief}, the brief for one review thread - no session)."},
+			{Name: "thread", Type: TypeString, Doc: "Thread id, the id of a thread's first comment, as listed in op=state's threads (projection=thread, outline). A reply's id names its thread."},
 			{Name: "topics", Type: TypeStringSlice, Doc: "At most 5 topics of at most 60 characters, one line each, that the person reads before typing their own reply (outline). Not a reply: anything longer is refused."},
 			{Name: "path", Type: TypeString, Doc: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
 			{Name: "hunk", Type: TypeInt, Doc: "0-based hunk index within the file, as reported by op=state's `hunks`; omit for the file as a whole. An index the file does not have is refused."},

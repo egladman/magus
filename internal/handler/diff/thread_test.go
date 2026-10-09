@@ -28,7 +28,12 @@ func (w fakeThreadWorkspace) WorkingDiff(context.Context, []string) (string, err
 	return w.patch, nil
 }
 
-func (fakeThreadWorkspace) Diff(_ context.Context, paths []string) (types.Diff, error) {
+// DiffWith refuses a call that does not set SkipOrder: a brief reads the code around one
+// thread and must never pay for the reading order of the whole changeset.
+func (fakeThreadWorkspace) DiffWith(_ context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+	if !opts.SkipOrder {
+		return types.Diff{}, errors.New("the brief asked for the reading order")
+	}
 	reach := 9
 	return types.Diff{
 		Base:         "working",

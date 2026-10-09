@@ -124,9 +124,9 @@ from. What it established:
 | A reviewer can mark a review as being read now. The mark is local; magus prints the `gh pr comment` line that tells the pull request, and the person runs it. It is a notice, not a hold: it does not stop the merge, and a merge that lands while the mark is set is reported to the reviewer | done (decided) |
 | Review time lost to merges that landed during an active review is measured by two opt-in metrics: a count of such merges and the time from the mark to the merge                                                                                                                               | done           |
 | A person enables auto-merge; an agent, or tooling acting for one, never does                                                                                                                                                                                                                   | done (decided) |
-| A review conversation from the forge shows with its replies under the hunk of its first comment, in the terminal and the console, and a reply goes to a named conversation                                                                                                                     | done           |
-| The host's resolved state is not fetched. A conversation carries only `outdated`, set when its commented line has left the head                                                                                                                                                                | done (decided) |
-| A person can ask magus for a brief on one conversation (`magus diff --thread`) and carry it to a model of their choice. It holds the conversation, its hunk, and what the graph proves about the symbols changed there; magus sends it nowhere                                                 | done           |
+| A review thread from the forge shows with its replies under the hunk of its first comment, in the terminal and the console, and a reply goes to a named thread                                                                                                                                 | done           |
+| The host's resolved state is not fetched. A thread carries only `outdated`, set when its commented line has left the head                                                                                                                                                                      | done (decided) |
+| A person can ask magus for a brief on one thread (`magus diff --thread`) and carry it to a model of their choice. It holds the thread, its hunk, and what the graph proves about the symbols changed there; magus sends it nowhere                                                              | done           |
 | An agent's outline of a reply is at most five topics of 60 characters that cannot be copied or inserted; the person types every reply                                                                                                                                                          | done           |
 
 ### 5. Text a stranger can read
@@ -167,7 +167,7 @@ Weighed and declined:
 - Marking a review as being read is a notice, and nothing holds a merge. A merge can still
   land under a reader. In exchange magus keeps no state on the forge, and the metrics show
   how often it happens.
-- A conversation the host calls resolved looks the same as an open one. Fetching that state
+- A thread the host calls resolved looks the same as an open one. Fetching that state
   takes a query the comments listing does not make, and `outdated` already says when the
   code moved.
 

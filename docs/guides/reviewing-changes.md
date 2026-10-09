@@ -165,21 +165,21 @@ If the review merges while the mark is set, magus reports `review.merged` and cl
 Two opt-in telemetry metrics, `magus.review.merged_while_reading` and its `.duration`,
 count how often that happens and what it cost. See [Review](../concepts/review.md#saying-you-are-reading).
 
-## Briefing your own model on a conversation
+## Briefing your own model on a thread
 
-A review conversation on the host shows with its replies under the hunk it started on.
+A review thread on the host shows with its replies under the hunk it started on.
 To get a model's help with one:
 
 ```sh
 magus diff --thread 2193847561
 ```
 
-The id is the first comment's, or any reply's. magus prints the conversation, its hunk, and
+The id is the thread id, the id of its first comment, or any reply's. magus prints the thread, its hunk, and
 what the graph knows about the symbols changed there, then stops. The brief asks for findings
 and leaves the reply to you, and it is yours to carry to whichever model you use. An agent
 that pairs with you over MCP may leave an outline of up to five short topics beside the
-conversation; you still type every reply. See
-[Review](../concepts/review.md#one-conversation) for what the brief holds.
+thread; you still type every reply. See
+[Review](../concepts/review.md#one-thread) for what the brief holds.
 
 ## Stepping through it in the terminal
 

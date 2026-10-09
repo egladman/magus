@@ -9,7 +9,8 @@
   magus cannot place goes in a final `unranked` group that says why. The same diff and index
   give the same order, and no model chooses it. The text report, the terminal viewer, `-o json`
   (as `order`) and the console's focus mode follow it. When the symbol index cannot be
-  brought current the order is left out and a note names `magus graph build`.
+  brought current, or a touched project that can be indexed has none built, the order is
+  left out and a note names `magus graph build`.
 - **`magus diff --unread` lists the hunks no read mark covers.** Marks are keyed by hunk
   content, so an edited hunk is unread again. It takes the same sources as the
   rest of `magus diff` (the working tree, `--rev`, a patch), prints text or `-o json`, and

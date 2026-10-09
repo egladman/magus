@@ -26,7 +26,7 @@ const threadLookupTimeout = 5 * time.Second
 // discussed, the patch, and the annotated changeset the thread is read against.
 type threadSource interface {
 	reviewSource
-	Diff(ctx context.Context, paths []string) (types.Diff, error)
+	DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
 }
 
 // ThreadOptions wires a [ThreadHandler].
@@ -93,8 +93,10 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    patch,
 		Comments: comments,
-		Annotate: ws.Diff,
-		Anchors:  h.opts.Anchors,
+		Annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
+			return ws.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
+		},
+		Anchors: h.opts.Anchors,
 		Variant:  prompt.Short,
 	})
 	if err != nil {

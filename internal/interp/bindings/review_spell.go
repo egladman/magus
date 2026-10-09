@@ -331,20 +331,6 @@ func decodeReviewComment(row any, where string) (types.ReviewComment, error) {
 	return c, nil
 }
 
-// boolField reads an optional bool field under the posture spell_decode.go states: absent and
-// null read as false, and a field of the wrong type names itself.
-func boolField(m map[string]any, key, where string) (bool, error) {
-	v, present := m[key]
-	if !present || v == nil {
-		return false, nil
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return false, fmt.Errorf("%s: field %q is %T, want bool", where, key, v)
-	}
-	return b, nil
-}
-
 func reviewDriver() (spells.Driver, bool) {
 	name := ReviewProvider()
 	if name == "" {

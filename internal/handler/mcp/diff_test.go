@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -50,6 +51,15 @@ func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error
 		files = append(files, types.DiffFile{Path: p, Role: types.DiffRoleSource})
 	}
 	return types.Diff{Base: "working", Files: files}, nil
+}
+
+// DiffWith serves the brief path, which must set SkipOrder: a brief reads the code around one
+// thread and must never pay for the reading order of the whole changeset.
+func (f *fakeDiffSrc) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+	if !opts.SkipOrder {
+		return types.Diff{}, errors.New("the brief asked for the reading order")
+	}
+	return f.Diff(ctx, paths)
 }
 
 func newDiffTool(t *testing.T, src *fakeDiffSrc) *diffTool {

@@ -13,7 +13,7 @@ import {
   placeThreads,
   threadIdOf,
 } from "./rows";
-import type { ReviewThread } from "./session";
+import type { ReviewComment } from "./session";
 
 const ONE_HUNK = [
   "diff --git a/x.ts b/x.ts",
@@ -79,7 +79,7 @@ test("a top-level comment listed late still leads, and a reply with none in the 
 // top-level comment of the list, so none of these may attach a comment to a thread it was not said
 // in, and each is still shown.
 test("a root that names no top-level comment heads a thread of its own", () => {
-  const ids = (cs: ReviewThread[]) => groupThreads(cs).map((g) => g.map((t) => t.id));
+  const ids = (cs: ReviewComment[]) => groupThreads(cs).map((g) => g.map((t) => t.id));
   assert.deepEqual(ids([{ ...thread("x", "x.ts", 0), root: "x" }]), [["x"]], "rooted at itself");
   assert.deepEqual(
     ids([

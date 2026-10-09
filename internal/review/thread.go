@@ -350,20 +350,9 @@ func hunkSymbols(file types.DiffFile, inChangeset bool, head types.ReviewComment
 func symbolNames(syms []types.DiffSymbol) []string {
 	out := make([]string, 0, len(syms))
 	for _, s := range syms {
-		out = append(out, "`"+symbolName(s)+"`")
+		out = append(out, "`"+changeset.SymbolName(s)+"`")
 	}
 	return out
-}
-
-func symbolName(s types.DiffSymbol) string {
-	switch {
-	case s.Qualified != "":
-		return s.Qualified
-	case s.Label != "":
-		return s.Label
-	default:
-		return s.ID
-	}
 }
 
 // symbolLines renders one changed symbol per line: its definition, then the facts that say who
@@ -391,7 +380,7 @@ func symbolLines(syms []types.DiffSymbol) []string {
 		if callers := callerLines(s.PublicThrough); callers != "" {
 			facts = append(facts, callers)
 		}
-		out = append(out, "`"+symbolName(s)+"` - "+strings.Join(facts, "; "))
+		out = append(out, "`"+changeset.SymbolName(s)+"` - "+strings.Join(facts, "; "))
 	}
 	return out
 }

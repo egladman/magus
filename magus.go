@@ -1469,22 +1469,23 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		for _, s := range res.ChangedSymbols {
 			defined[s.File] = true
 		}
-		lines, byHunk, pf := impact.ChangedLines(patch), impact.ChangedLinesByHunk(patch), readPatchFacts(patch)
+		byHunk, pf := impact.ChangedLinesByHunk(patch), readPatchFacts(patch)
 		for i := range out.Files {
 			f := &out.Files[i]
 			if defined[f.Path] || !strings.HasSuffix(f.Path, ".go") {
 				continue
 			}
-			syms := parsedGoSymbols(m.ws.Root, f.Path, lines[f.Path], pf)
+			hunks := byHunk[f.Path]
+			syms, perHunk := parsedGoSymbols(m.ws.Root, f.Path, hunks, pf)
 			f.Symbols = append(f.Symbols, syms...)
 			// Top-level declarations never nest, so no start or extent is needed to order them.
-			for _, hl := range byHunk[f.Path] {
-				for _, s := range parsedGoSymbols(m.ws.Root, f.Path, hl.Lines, pf) {
+			for j, hunkSyms := range perHunk {
+				for _, s := range hunkSyms {
 					if placesByFile[f.Path] == nil {
 						placesByFile[f.Path] = map[string]hunkPlace{}
 					}
 					p := placesByFile[f.Path][s.ID]
-					p.hunks = append(p.hunks, hl.Index)
+					p.hunks = append(p.hunks, hunks[j].Index)
 					placesByFile[f.Path][s.ID] = p
 				}
 			}
@@ -1521,7 +1522,9 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	if patchErr == nil {
 		attachHunks(out.Files, patch, placesByFile)
-		m.attachOrder(ctx, &out, graph, patch, m.orderSkip(ctx, touched, freshErr, indexed))
+		if !cfg.skipOrder {
+			m.attachOrder(ctx, &out, graph, patch, m.orderSkip(ctx, touched, freshErr, indexed))
+		}
 	}
 
 	out.SortForReading()

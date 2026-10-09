@@ -386,7 +386,7 @@ var boundaryEnums = []boundaryEnum{
 		Name: "DiffWhyRelation",
 		Type: reflect.TypeFor[types.DiffWhyRelation](),
 		Cases: []enumCase{{"none", ""}, {"starts", "starts"}, {"uses", "uses"}, {"usedBy", "used_by"},
-			{"implements", "implements"}, {"implementedBy", "implemented_by"}, {"continues", "continues"},
+			{"implements", "implements"}, {"implementedBy", "implemented_by"}, {"continues", "continues"}, {"continuedBy", "continued_by"},
 			{"sameStep", "same_step"}, {"tests", "tests"}, {"generated", "generated"}, {"unranked", "unranked"}},
 	},
 	{

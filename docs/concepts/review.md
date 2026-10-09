@@ -118,6 +118,11 @@ rename), so a short list is never mistaken for a whole one.
 The same diff and the same index always give the same order. No model chooses it. A change
 made of many small unconnected hunks gains little, because each lands in a group of one.
 
+When a project the change touches can be indexed and has no index built, magus leaves the
+order out and adds a note naming that project and the `magus graph build` that fixes it.
+Another project's index does not stand in: the uses of a changed symbol that live in the
+unindexed one are unknown, and an order drawn without them would read as "nothing is related".
+
 The order reaches every place you read a change:
 
 - the text report prints it under the file summary;
@@ -229,17 +234,17 @@ The overview reads those remarks out rather than counting them. A chip saying "1
 tells you something was said and withholds what, which leaves you to open a browser to find
 out, the one errand this whole page exists to save you.
 
-### Conversations
+### Threads
 
-A comment and the replies to it are one conversation. The host's comments say which
-conversation they belong to: `root` is the id of the first comment, `outdated` says the
-commented line has left the head, and `diff_hunk` is the host's copy of the hunk the comment
-was made on. magus places the whole conversation under the hunk of its first comment, in the
-console and in `magus diff`'s viewer, and answering a thread sends your reply into that
-conversation.
+A comment and the replies to it are one thread, and the id of its first comment is the
+thread id. The host's comments say which thread they belong to: `root` is the thread id (empty
+on the first comment), `outdated` says the commented line has left the head, and `diff_hunk`
+is the host's copy of the hunk the comment was made on. magus places the whole thread under
+the hunk of its first comment, in the console and in `magus diff`'s viewer, and answering a
+thread sends your reply into it.
 
-magus does not fetch whether the host marks a conversation resolved. `outdated` is the only
-state of that kind a conversation carries.
+magus does not fetch whether the host marks a thread resolved. `outdated` is the only
+state of that kind a thread carries.
 
 ## When somebody says something
 
@@ -443,14 +448,14 @@ changing the same files. What it does NOT carry is the durable half of a review 
 names the magus skills you already have rather than pasting copies of them, because a copy drifts
 from the installed one and spends your context on text your tools already loaded.
 
-### One conversation
+### One thread
 
 ```sh
 magus diff --thread 2193847561
 ```
 
-prints a brief for your model on one conversation on the review. The id is the first comment's id, or any
-reply's. It prints the exchange oldest first, the hunk it is about (the host's copy when the
+prints a brief for your model on one thread on the review. The id is the thread id, the id of
+its first comment, or any reply's. It prints the exchange oldest first, the hunk it is about (the host's copy when the
 comment is outdated), and what the symbol index knows about the symbols changed in that
 hunk: how many files reference them, which projects they are public to, the conformance
 findings, the coverage and the callers that cross a boundary. It adds the notes anchored to
@@ -464,9 +469,9 @@ sends the brief nowhere; carrying it to a model is your act. The console's
 
 ### An outline from an agent
 
-An agent pairing over MCP can leave an outline beside a conversation, with the diff tool's
+An agent pairing over MCP can leave an outline beside a thread, with the diff tool's
 `outline` op: at most five topics of 60 characters, one line each. The console shows it
-beside the conversation. It cannot be copied or pasted into the reply box, and it is held in
+beside the thread. It cannot be copied or pasted into the reply box, and it is held in
 memory for the session, never saved. A longer topic is refused with a message that you type
 the reply. The outline is something to think with while you write.
 

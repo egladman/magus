@@ -409,10 +409,6 @@ func IsTestPath(source string) bool {
 	return false
 }
 
-// TODO(order-fix): delete once dirs.go, duplication.go, naming.go, precedent.go, packagedeps.go,
-// symbol_decls.go and duplication_test.go call IsTestPath; the job could not write them.
-func isTestSource(source string) bool { return IsTestPath(source) }
-
 // refProvenance encodes a reference's occurrence count and capped line list into the
 // edge provenance string, e.g. "scip count=3 lines=10,20". KnowledgeEdge has only a
 // flat Provenance string (no attr map), so `magus refs` reads the count/lines back

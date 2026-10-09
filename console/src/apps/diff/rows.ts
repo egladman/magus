@@ -11,7 +11,7 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { DiffComment, DiffOutline, DiffTouch, ReviewThread } from "./session";
+import type { DiffComment, DiffOutline, DiffTouch, ReviewComment } from "./session";
 import { outlineHeading } from "./outline";
 import type { StepHead, StepPlacement, StepRows } from "./readingorder";
 
@@ -73,9 +73,9 @@ export function anchorLine(hunk: Hunk): number | undefined {
 // app claim a colleague said nothing, which is the single worst thing a review reader can
 // be told, so the caller lists them instead.
 export interface PlacedThreads {
-  readonly atHunk: Map<string, ReviewThread[]>;
-  readonly atFile: Map<string, ReviewThread[]>;
-  readonly elsewhere: readonly ReviewThread[];
+  readonly atHunk: Map<string, ReviewComment[]>;
+  readonly atFile: Map<string, ReviewComment[]>;
+  readonly elsewhere: readonly ReviewComment[];
 }
 
 // narrowToHunk re-buckets a placement for a stream that renders exactly ONE hunk, moving every
@@ -93,8 +93,8 @@ export function narrowToHunk(
   keep: string | readonly string[],
 ): PlacedThreads {
   const kept = new Set(typeof keep === "string" ? [keep] : keep);
-  const atHunk = new Map<string, ReviewThread[]>();
-  const spilled: ReviewThread[] = [];
+  const atHunk = new Map<string, ReviewComment[]>();
+  const spilled: ReviewComment[] = [];
   for (const [key, threads] of placed.atHunk) {
     if (kept.has(key)) atHunk.set(key, threads);
     else spilled.push(...threads);
@@ -114,11 +114,11 @@ export function narrowToHunk(
 // not place belongs under its file when that file is on screen, and is elsewhere when it is not.
 export function placeThreads(
   files: readonly DiffFile[],
-  threads: readonly ReviewThread[],
+  threads: readonly ReviewComment[],
 ): PlacedThreads {
-  const atHunk = new Map<string, ReviewThread[]>();
-  const atFile = new Map<string, ReviewThread[]>();
-  const elsewhere: ReviewThread[] = [];
+  const atHunk = new Map<string, ReviewComment[]>();
+  const atFile = new Map<string, ReviewComment[]>();
+  const elsewhere: ReviewComment[] = [];
   const shown = new Set(files.map((f) => f.path));
 
   // A thread lands where its top-level comment does, that first and replies after in list order.
@@ -139,7 +139,7 @@ export function placeThreads(
 // threadIdOf is the thread id a reply into this comment's thread is addressed to: the comment's
 // own `root`, or its `id` when it is the thread's top-level comment. It is right for the comments
 // groupThreads returns, which have had any root that names no top-level comment cleared.
-export function threadIdOf(comment: ReviewThread): string {
+export function threadIdOf(comment: ReviewComment): string {
   return comment.root || comment.id;
 }
 
@@ -154,13 +154,13 @@ export function threadIdOf(comment: ReviewThread): string {
 // comment is returned with its root cleared so threadIdOf reads its own id, and it is shown
 // rather than dropped, since "your colleague said nothing" is the one thing this app must not say
 // by accident.
-export function groupThreads(comments: readonly ReviewThread[]): ReviewThread[][] {
+export function groupThreads(comments: readonly ReviewComment[]): ReviewComment[][] {
   const topLevel = new Set<string>();
   for (const c of comments) if (!c.root && c.id) topLevel.add(c.id);
-  const isReply = (c: ReviewThread): boolean => !!c.root && c.root !== c.id && topLevel.has(c.root);
+  const isReply = (c: ReviewComment): boolean => !!c.root && c.root !== c.id && topLevel.has(c.root);
 
-  const byHead = new Map<string, ReviewThread[]>();
-  const out: ReviewThread[][] = [];
+  const byHead = new Map<string, ReviewComment[]>();
+  const out: ReviewComment[][] = [];
   for (const c of comments) {
     if (isReply(c)) continue;
     const head = c.root ? { ...c, root: "" } : c;
@@ -174,7 +174,7 @@ export function groupThreads(comments: readonly ReviewThread[]): ReviewThread[][
   return out;
 }
 
-function push(into: Map<string, ReviewThread[]>, key: string, t: ReviewThread): void {
+function push(into: Map<string, ReviewComment[]>, key: string, t: ReviewComment): void {
   const at = into.get(key);
   if (at) at.push(t);
   else into.set(key, [t]);
@@ -188,7 +188,7 @@ export type Row =
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
-  | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewThread }
+  | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewComment }
   | { readonly kind: "touch"; readonly file: DiffFile; readonly touch: DiffTouch }
   | { readonly kind: "quote"; readonly file: DiffFile; readonly text: string }
   // An agent's outline for the conversation above it: a heading row, then one row per topic.
@@ -220,7 +220,7 @@ const QUOTE_LINES = 6;
 // pushThread emits one comment of the host's review. A root whose line is gone is preceded by
 // the text of the hunk it was made on, since the code it was about no longer sits in the head to
 // be read beside it.
-function pushThread(rows: Row[], file: DiffFile, thread: ReviewThread): void {
+function pushThread(rows: Row[], file: DiffFile, thread: ReviewComment): void {
   if (thread.outdated && !thread.root && thread.diff_hunk) {
     for (const text of thread.diff_hunk.split("\n").slice(-QUOTE_LINES)) {
       rows.push({ kind: "quote", file, text });
@@ -235,7 +235,7 @@ function pushThread(rows: Row[], file: DiffFile, thread: ReviewThread): void {
 function pushThreads(
   rows: Row[],
   file: DiffFile,
-  threads: readonly ReviewThread[],
+  threads: readonly ReviewComment[],
   outlines?: ReadonlyMap<string, DiffOutline>,
 ): void {
   threads.forEach((thread, i) => {
