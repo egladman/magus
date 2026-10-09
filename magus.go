@@ -1522,6 +1522,8 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	}
 	if patchErr == nil {
 		attachHunks(out.Files, patch, places)
+		current := freshErr == nil && (indexed || len(m.symbolCapableIn(touched)) == 0)
+		m.attachOrder(ctx, &out, graph, patch, current)
 	}
 
 	out.SortForReading()

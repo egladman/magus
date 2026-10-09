@@ -143,9 +143,11 @@ flag diff/generated
 flag diff/impact
 flag diff/no-tui
 flag diff/patch
+flag diff/print-hook
 flag diff/prompt
 flag diff/reason
 flag diff/rev
+flag diff/unread
 flag diff/watch
 flag doctor/fix
 flag doctor/list

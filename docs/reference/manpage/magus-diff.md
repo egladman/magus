@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--impact] [--no-tui] [--watch] [--rev \<base\>...\<head\>] [--patch \<file\>|-] [\<path\>...] [flags]
+**magus** diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--print-hook] [--rev \<base\>...\<head\>] [--patch \<file\>|-] [\<path\>...] [flags]
 
 ## Description
 
@@ -97,6 +97,19 @@ audit. It asks for findings rather than review prose; the words your
 colleague reads should be yours. Add --impact for the rationale behind each
 instruction.
 
+The report ends with the reading order: the hunks grouped by what links them, a
+definition before its uses, an interface before its implementations, code before
+its tests, each with the sentence that placed it. -o json carries the same order
+under "order". It is absent, with a note naming the rebuild, when the symbol index
+is not current, because an order drawn without the uses would read as "nothing is
+related".
+
+--unread lists the hunks no read mark covers and always exits 0; a pre-push hook
+that blocked on it would be a gate, and a gate on a read count is the metric the
+paragraph below refuses. Where the marks cannot be read it says the state is
+unknown, never that everything is unread. --print-hook prints a pre-push script
+that runs it; magus prints it and you install it.
+
 A receipt covers a file at its CURRENT content, so editing it afterwards
 voids the receipt. Stepping a file through in the viewer earns one; --ack covers
 the changeset at once and takes an optional --reason kept with it. magus
@@ -134,6 +147,9 @@ performance metric, and a performance metric gets gamed rather than met.
 **--patch** *-*
 : Review a patch somebody handed you instead of the working tree; \`-\` reads stdin
 
+**--print-hook**
+: Print a pre-push git hook that runs --unread on the range being pushed, and exit. magus only prints it; save it as .git/hooks/pre-push and make it executable. The hook always exits 0
+
 **--prompt**
 : Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction
 
@@ -142,6 +158,9 @@ performance metric, and a performance metric gets gamed rather than met.
 
 **--rev** *string*
 : Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
+
+**--unread**
+: List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only
 
 **--watch**
 : Re-read and re-render whenever the working tree changes
@@ -193,6 +212,18 @@ magus diff --impact
 
 ```sh
 magus diff --no-tui
+```
+
+*List the hunks of a branch nobody has marked read*
+
+```sh
+magus diff --unread --rev main...HEAD
+```
+
+*Print a pre-push hook that lists them before you push*
+
+```sh
+magus diff --print-hook
 ```
 
 *Build a review prompt for the model of your choice*

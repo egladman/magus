@@ -102,7 +102,8 @@ const (
 	// DiffWhyGenerated is declared generated output.
 	DiffWhyGenerated DiffWhyRelation = "generated"
 	// DiffWhyUnranked could not be placed; Text names why (binary, deleted, moved, no index,
-	// no symbols, unlinked).
+	// no symbols). A hunk with symbols that nothing links to stands alone in its own
+	// connected group instead.
 	DiffWhyUnranked DiffWhyRelation = "unranked"
 )
 

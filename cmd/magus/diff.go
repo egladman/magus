@@ -65,6 +65,13 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
 		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
+	if rf.PrintHook {
+		if rf.Unread {
+			return usagef("magus diff: --print-hook prints the hook that runs --unread, so the two cannot be combined")
+		}
+		_, err := io.WriteString(os.Stdout, review.PrePushHook())
+		return err
+	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
 	// and one rule for what a word means beats two.
@@ -108,6 +115,9 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	}
 	if rf.Ack && rf.Watch {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
+	}
+	if rf.Unread && (rf.Ack || rf.Watch || rf.Prompt || rf.Impact || rf.Baseline != "") {
+		return usagef("magus diff: --unread lists hunks and returns, so it cannot be combined with --ack, --watch, --prompt, --impact or --baseline")
 	}
 	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
 	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
@@ -318,7 +328,7 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	// All four END in output the viewer has nowhere to put: a receipt count, a report, a
 	// prompt to copy, and a bump. They are requests for an answer rather than for somewhere
 	// to read.
-	case rf.Ack, rf.Impact, rf.Prompt, rf.Baseline != "":
+	case rf.Ack, rf.Impact, rf.Prompt, rf.Unread, rf.Baseline != "":
 		return false
 	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
 	// drives the terminal itself. A revision range is neither: it is a tree state magus can
@@ -371,6 +381,9 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	patch, base, err := src.readPatch(ctx, m, scopePaths)
 	if err != nil {
 		return err
+	}
+	if rf.Unread {
+		return printUnread(m, src, opts, patch)
 	}
 	if strings.TrimSpace(patch) == "" {
 		// An empty input is a STATE, and saying so beats printing an empty table that reads as
@@ -779,7 +792,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	if err != nil {
 		return err
 	}
-	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
+	files := diffOrderTUIFiles(rev, changeset.ParseHunks(patch))
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
@@ -1254,6 +1267,11 @@ func diffUsage(w io.Writer) {
 		"Build the index with `"+hint.GraphBuild.String()+"`.")
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
+		"Below the files the report prints the reading order of the hunks: a definition before its uses, an interface before its implementations, code before its tests,",
+		"each with the sentence that placed it and a count proving every hunk is placed once.",
+		"With no current symbol index there is no order, and a note names the rebuild.")
+	fmt.Fprintln(w, "")
+	tty.Prose(w, tty.SystemProbe,
 		"Exported API, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
 		"None of them is a sort key.")
 	fmt.Fprintln(w, "")
@@ -1286,6 +1304,12 @@ func diffUsage(w io.Writer) {
 		"Needs a terminal.")
 	tty.ProseItem(w, tty.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
 	tty.ProseItem(w, tty.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
+	tty.ProseItem(w, tty.SystemProbe, "  --unread      ",
+		"list the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks.",
+		"Where the marks cannot be read it says the read state is unknown. Text and -o json only.")
+	tty.ProseItem(w, tty.SystemProbe, "  --print-hook  ",
+		"print a pre-push git hook that runs --unread on the range being pushed. magus only prints it:",
+		"save it as .git/hooks/pre-push and make it executable. The hook always exits 0.")
 	tty.ProseItem(w, tty.SystemProbe, "  --rev         ",
 		"review a committed range instead of the working tree, as base...head:",
 		"a colleague's branch, or an agent's finished work")
@@ -1405,6 +1429,8 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
+	printDiffOrder(os.Stdout, rev, showGenerated)
+
 	if e := rev.ConformanceError; e != nil {
 		fmt.Printf("\nerror: conformance could not check this change: %s\n", diagnosticLine(*e))
 	}
@@ -1465,7 +1491,7 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	for _, fact := range diffFileFacts(f) {
 		fmt.Printf("      %s\n", fact)
 	}
-	// The story, last: it is the deepest context and the least urgent. A reader scanning for
+	// The agent touches, last: they are the deepest context and the least urgent. A reader scanning for
 	// risk should hit reach and coverage first and find the narrative when they stop to read.
 	for _, t := range f.Touches {
 		who := t.Host
@@ -1758,7 +1784,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// exactly as diffCmd's own load did.
 	p.Anchors = impactAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
-	// The trail and window trail.AttachTouches walks for the per-file story, read here for the
+	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
 	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), trail.DefaultReplayEvents)
 	var requiredIn func(string) bool

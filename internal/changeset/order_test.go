@@ -100,7 +100,8 @@ func TestOrderPutsDefinitionsFirstAndTestsAfterCode(t *testing.T) {
 func TestOrderEdges(t *testing.T) {
 	t.Parallel()
 
-	unranked := []string{"group unranked \"\" 2", "1 a.go#0 unranked", "2 b.go#0 unranked"}
+	// a.go changes S, so it reads on its own; b.go changes no symbol and nothing links it.
+	unlinked := []string{`group connected "S" 1`, "1 a.go#0 starts", `group unranked "" 1`, "2 b.go#0 unranked"}
 	tests := []struct {
 		name  string
 		files []OrderFile
@@ -123,7 +124,7 @@ func TestOrderEdges(t *testing.T) {
 				orderFile("b.go", orderHunk(0, 10, 3)),
 			},
 			sites: []OrderSite{orderUse("S", "a.go", 2)},
-			want:  unranked,
+			want:  unlinked,
 		},
 		{
 			name: "a use outside every hunk is no edge",
@@ -132,7 +133,7 @@ func TestOrderEdges(t *testing.T) {
 				orderFile("b.go", orderHunk(0, 10, 3)),
 			},
 			sites: []OrderSite{orderUse("S", "b.go", 40), orderUse("S", "b.go", 9), orderUse("S", "b.go", 13)},
-			want:  unranked,
+			want:  unlinked,
 		},
 		{
 			name: "a use in another file's lines is no edge",
@@ -141,7 +142,7 @@ func TestOrderEdges(t *testing.T) {
 				orderFile("b.go", orderHunk(0, 10, 3)),
 			},
 			sites: []OrderSite{orderUse("S", "c.go", 11)},
-			want:  unranked,
+			want:  unlinked,
 		},
 		{
 			name: "a pure deletion holds no use",
@@ -150,7 +151,7 @@ func TestOrderEdges(t *testing.T) {
 				orderFile("b.go", orderHunk(0, 10, 0)),
 			},
 			sites: []OrderSite{orderUse("S", "b.go", 10)},
-			want:  unranked,
+			want:  unlinked,
 		},
 	}
 	for _, tc := range tests {
@@ -264,11 +265,11 @@ func TestOrderChainsHunksOfOneDefinition(t *testing.T) {
 		`group connected "F" 2`,
 		"1 a.go#0 starts",
 		"1 a.go#1 continues",
-		`group unranked "" 1`,
-		"2 b.go#0 unranked",
-	}, orderOutline(order))
+		`group connected "G" 1`,
+		"2 b.go#0 starts",
+	}, orderOutline(order), "a hunk with symbols but no link is its own group, not unranked")
 	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyContinues, Step: 1, Symbol: "F", Text: "continues F from above"}, orderStepHunk(t, order, "a.go", 1).Why)
-	assert.Equal(t, "unlinked: no other changed hunk uses, implements or continues what it changes", orderStepHunk(t, order, "b.go", 0).Why.Text)
+	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyStarts, Text: "stands alone: no other changed hunk uses, implements or continues what it changes"}, orderStepHunk(t, order, "b.go", 0).Why)
 }
 
 func TestOrderPlacesAnInterfaceBeforeItsImplementation(t *testing.T) {

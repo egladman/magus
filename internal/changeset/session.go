@@ -31,7 +31,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -574,6 +576,28 @@ func (s *Store) saveViewed(digests []string) {
 // LoadDrafts reads the persisted unsent remarks WITHOUT a session, for the same reason
 // LoadSeenThreads exists: a job in its own process has no session to read.
 func (s *Store) LoadDrafts() []types.DiffComment { return s.loadDrafts() }
+
+// LoadViewed reads the persisted read marks WITHOUT a session, and unlike the loader a
+// session adopts them with, says when it could not. A file that was never written is no
+// error: nothing has been read. A file that exists and cannot be read or decoded is, because
+// the caller deciding what is unread must not take "unknown" for "none".
+func (s *Store) LoadViewed() ([]string, error) {
+	if s.viewedPath == "" {
+		return nil, errors.New("no state directory holds read marks")
+	}
+	b, err := os.ReadFile(s.viewedPath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("read marks: %w", err)
+	}
+	var out []string
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("read marks in %s: %w", s.viewedPath, err)
+	}
+	return out, nil
+}
 
 // LoadSeenThreads reads the persisted seen-thread watermark WITHOUT a session.
 //

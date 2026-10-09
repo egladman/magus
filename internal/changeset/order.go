@@ -86,6 +86,9 @@ type orderPlacement struct {
 	kind   orderEdgeKind
 	cycle  []string
 	fixed  *types.DiffWhy
+	// alone marks the only hunk of its group: it changes a symbol, and nothing links it to
+	// another changed hunk.
+	alone bool
 }
 
 type orderGroup struct {
@@ -151,7 +154,7 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 	}
 	var ranked []int
 	for _, id := range eligible {
-		if linked[id] {
+		if linked[id] || len(b.nodes[id].hunk.Symbols) > 0 {
 			ranked = append(ranked, id)
 			continue
 		}
@@ -289,13 +292,10 @@ func (b *orderBuilder) buildEdges(eligible []int) {
 
 func (b *orderBuilder) unlinkedReason(id int) string {
 	n := b.nodes[id]
-	switch {
-	case len(b.files[n.file].Symbols) == 0 && len(n.hunk.Symbols) == 0:
+	if len(b.files[n.file].Symbols) == 0 {
 		return "no symbol index covers this file"
-	case len(n.hunk.Symbols) == 0:
-		return "defines no changed symbol and uses none"
 	}
-	return "unlinked: no other changed hunk uses, implements or continues what it changes"
+	return "defines no changed symbol and uses none"
 }
 
 // condense assigns every ranked hunk the smallest hunk number of its strongly connected
@@ -464,7 +464,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 
 	placements := make([]orderPlacement, 0, len(sequence))
 	for k, rep := range sequence {
-		p := orderPlacement{nodes: sets[rep], how: "start", other: -1, cycle: cycles[rep]}
+		p := orderPlacement{nodes: sets[rep], how: "start", other: -1, cycle: cycles[rep], alone: len(members) == 1}
 		sort.Strings(p.cycle)
 		best := -1
 		for _, e := range incoming[rep] {
@@ -593,6 +593,9 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 		}
 	}
 	w := types.DiffWhy{Relation: types.DiffWhyStarts, Text: "starts the group"}
+	if p.alone {
+		w.Text = "stands alone: no other changed hunk uses, implements or continues what it changes"
+	}
 	symbol := b.labelOf(p.symbol)
 	switch p.how {
 	case "after":

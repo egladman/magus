@@ -2523,6 +2523,19 @@ audit. It asks for findings rather than review prose; the words your
 colleague reads should be yours. Add --impact for the rationale behind each
 instruction.
 
+The report ends with the reading order: the hunks grouped by what links them, a
+definition before its uses, an interface before its implementations, code before
+its tests, each with the sentence that placed it. -o json carries the same order
+under "order". It is absent, with a note naming the rebuild, when the symbol index
+is not current, because an order drawn without the uses would read as "nothing is
+related".
+
+--unread lists the hunks no read mark covers and always exits 0; a pre-push hook
+that blocked on it would be a gate, and a gate on a read count is the metric the
+paragraph below refuses. Where the marks cannot be read it says the state is
+unknown, never that everything is unread. --print-hook prints a pre-push script
+that runs it; magus prints it and you install it.
+
 A receipt covers a file at its CURRENT content, so editing it afterwards
 voids the receipt. Stepping a file through in the viewer earns one; --ack covers
 the changeset at once and takes an optional --reason kept with it. magus
@@ -2533,7 +2546,7 @@ terminal, and agent hosts are denied it outright.
 The count is never shown to anyone but the reader. There is no team view and
 no pull-request comment, because a read measure a second person can see is a
 performance metric, and a performance metric gets gamed rather than met.`,
-	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
+	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--print-hook] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted"},
@@ -2542,6 +2555,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
 		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
+		{Name: "unread", Kind: FlagBool, Doc: "List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only"},
+		{Name: "print-hook", Kind: FlagBool, Doc: "Print a pre-push git hook that runs --unread on the range being pushed, and exit. magus only prints it; save it as .git/hooks/pre-push and make it executable. The hook always exits 0"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
 		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
@@ -2555,6 +2570,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{"Include the generated files too", "magus diff --generated"},
 		{"Everything to know before landing it", "magus diff --impact"},
 		{"Print the report instead of opening the viewer", "magus diff --no-tui"},
+		{"List the hunks of a branch nobody has marked read", "magus diff --unread --rev main...HEAD"},
+		{"Print a pre-push hook that lists them before you push", "magus diff --print-hook"},
 		{"Build a review prompt for the model of your choice", "magus diff --prompt"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
