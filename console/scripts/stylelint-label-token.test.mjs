@@ -8,6 +8,12 @@ async function lint(code) {
   return stylelint.lint({ code, configFile });
 }
 
+// A literal size outside an uppercase run is magus/type-token's to report, so these cases look only
+// at this rule's own warnings.
+function labelWarnings(result) {
+  return result.results[0].warnings.filter((warning) => warning.rule === "magus/label-token");
+}
+
 test("label token accepts the label recipe", async () => {
   const result = await lint(`
     .console-runs__facet-head {
@@ -61,7 +67,7 @@ test("label token leaves a rule with no uppercase alone", async () => {
     }
   `);
 
-  assert.equal(result.errored, false);
+  assert.deepEqual(labelWarnings(result), []);
 });
 
 // text-transform carries other values, and none of them make a run a label.
@@ -73,5 +79,5 @@ test("label token ignores a non-uppercase transform", async () => {
     }
   `);
 
-  assert.equal(result.errored, false);
+  assert.deepEqual(labelWarnings(result), []);
 });
