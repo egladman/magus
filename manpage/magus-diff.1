@@ -3,7 +3,7 @@
 magus\-diff \- Read the working tree's changes in the order they deserve attention
 .SH SYNOPSIS
 .B magus
-.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [\-\-unread] [\-\-print\-hook] [\-\-rev <base>...<head>] [\-\-patch <file>|\-] [<path>...] [flags]"
+.RI "diff [\-\-generated] [\-\-impact] [\-\-no\-tui] [\-\-watch] [\-\-unread] [\-\-print\-hook] [\-\-thread <id>] [\-\-rev <base>...<head>] [\-\-patch <file>|\-] [<path>...] [flags]"
 .SH DESCRIPTION
 Read the working tree's uncommitted changes, annotated and ordered.
 .PP
@@ -87,6 +87,16 @@ audit. It asks for findings rather than review prose; the words your
 colleague reads should be yours. Add \-\-impact for the rationale behind each
 instruction.
 .PP
+\-\-thread <id> does the same for one conversation already on the review. It
+prints the whole exchange oldest first, the hunk it is about, the symbols
+changed in that hunk with the files that reference them, who they are public
+to, the conformance findings and the coverage, and the notes anchored to the
+file. The id is the conversation's root comment id, or any reply in it. It is
+a brief for you to carry: magus sends it nowhere, and it asks for findings and
+says the reply is yours to type. The comments in it are quoted from the host and
+are marked as other people's words, not instructions. It does not combine with
+\-\-prompt, \-\-unread, \-\-print\-hook, \-\-ack, \-\-watch or \-o name.
+.PP
 The report ends with the reading order: the hunks grouped by what links them, a
 definition before its uses, an interface before its implementations, code before
 its tests, each with the sentence that placed it. \-o json carries the same order
@@ -148,6 +158,9 @@ An optional note kept with an \-\-ack, for the next reader of the report
 .TP
 \fB\-\-rev\fR \fIstring\fR
 Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
+.TP
+\fB\-\-thread\fR \fIstring\fR
+Print the context for one review conversation, by its root comment id, to paste into your own LLM: the conversation, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or \-o json for {id, brief}
 .TP
 \fB\-\-unread\fR
 List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and \-o json only
@@ -220,6 +233,12 @@ magus diff --print-hook
 .PP
 .EX
 magus diff --prompt
+.EE
+.PP
+\fIBrief your own model on one review conversation\fR
+.PP
+.EX
+magus diff --thread 2193847561
 .EE
 .PP
 \fIMachine\-readable, for a script or a Buzz advisor\fR

@@ -873,6 +873,33 @@ type DiffSuggestion struct {
 	Declined bool `json:"declined" yaml:"declined"`
 }
 
+// DiffOutline is what an agent thinks a review conversation turns on, in a few topics, held for
+// the person to read before they type their reply.
+//
+// It is NOT a reply and is never offered as one. A reply to a colleague is words a person
+// chose, and generated text copied under their name is not that, so an outline is bounded to
+// short single-line topics, shown beside the conversation as the agent's, and has no path to
+// the host: nothing that publishes reads it, and a client renders it without a copy affordance.
+// The person who finds a topic useful types their own sentence about it.
+//
+// Held in memory with the session and never persisted: an outline is a pairing aid, and one
+// that survived a restart would outlast the conversation it was about.
+type DiffOutline struct {
+	// Thread is the root comment id of the conversation, never a reply's.
+	Thread string `json:"thread" yaml:"thread"`
+	// Topics are at most DiffOutlineTopics lines of at most DiffOutlineTopicRunes characters.
+	Topics []string `json:"topics" yaml:"topics"`
+	// AgentName is the label the agent gave itself, for attribution only.
+	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
+}
+
+// The bounds on a DiffOutline. They are what keep an outline a set of pointers: a topic that
+// can hold a paragraph is a reply with extra steps.
+const (
+	DiffOutlineTopics     = 5
+	DiffOutlineTopicRunes = 60
+)
+
 // DiffReview is the live review of one working tree's changeset: the shared object a console
 // tab, an MCP agent, and the CLI all read and write. It is not [DiffReviewed], which is one
 // fact inside its changeset: how far a reader got on an earlier pass.
@@ -912,6 +939,9 @@ type DiffReview struct {
 	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
 	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
 	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+	// Outlines are the agents' outlines of review conversations, at most one per conversation.
+	// They are shown to the person and offer no way to be sent; see DiffOutline.
+	Outlines []DiffOutline `json:"outlines,omitempty" yaml:"outlines,omitempty"`
 }
 
 // UnseenThreads returns the ids in threads the reader has not had on screen, in the order given.

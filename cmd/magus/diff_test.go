@@ -21,10 +21,8 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -269,7 +267,7 @@ func impactFixture() diffImpact {
 			Ref: "origin/main",
 			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
 		},
-		Anchors: []anchorHit{
+		Anchors: []review.AnchorHit{
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
 		},
@@ -582,18 +580,6 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 		Rebuilds: 2,
 		Projects: []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
 	}, r)
-}
-
-// TestDiffSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
-// anchors a symbol by its index id, so passing labels or paths would match nothing and the
-// section would report a clean tree it never checked.
-func TestDiffSymbolIDsAreWhatASymbolAnchorNames(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "a.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}, {ID: "", Label: "unindexed"}}},
-		{Path: "b.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}}},
-	}}
-	assert.Equal(t, []string{"a.go", "b.go"}, diffPaths(rev))
-	assert.Equal(t, []string{"m types/Diff#"}, diffSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
 }
 
 // stubDiffSession is the server's /api/v1/diff/session route, holding every request until the
@@ -1595,7 +1581,7 @@ func reviewFixture(t *testing.T, files map[string]string, roles map[string]strin
 // tests exercise the join the CLI and the console both go through rather than a second one.
 func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
 	t.Helper()
-	states, err := review.ReadStates(cache, diffPaths(rev), reviewedContent{root: root}.digest)
+	states, err := review.ReadStates(cache, review.ChangedPaths(rev), reviewedContent{root: root}.digest)
 	require.NoError(t, err)
 	rev.AttachReadState(states)
 	return rev
@@ -2078,6 +2064,21 @@ func TestDiffSourceFromFlags(t *testing.T) {
 	})
 }
 
+// TestDiffThreadRefusesToShareTheInvocation. --thread prints one brief and returns, so a flag
+// that asks for something else of the same run is a misunderstanding to name, not one to resolve
+// by picking a winner.
+func TestDiffThreadRefusesToShareTheInvocation(t *testing.T) {
+	for _, other := range []string{"--prompt", "--unread", "--print-hook", "--ack", "--watch"} {
+		t.Run(other, func(t *testing.T) {
+			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
+
+			require.Error(t, err)
+			assert.IsType(t, errUsage{}, err)
+			assert.Contains(t, err.Error(), "--thread prints the brief for one conversation")
+		})
+	}
+}
+
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
 // the unranked caveat's placement BEFORE the list, the generated fold in both states, and
 // the agent trail.
@@ -2380,32 +2381,3 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
 }
 
-// TestSymbolAnchorJoinsAgainstTheGraphsNodeID holds the two ends of the anchor join together.
-//
-// A note anchors a bare SCIP key, the diff reports its changed symbols as knowledge-graph node
-// ids, and this is the only layer where both spellings are in scope. It shipped comparing them
-// directly, so symbol anchors (the form the store's own template tells authors to prefer)
-// never matched, and the impact report said no note anchored what you had changed.
-func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
-	const key = "m internal/cache/Store#Put()."
-	changed := knowledge.AnchorNodeID("symbol", key, string(notes.ScopeShared))
-	require.NotEqual(t, key, changed,
-		"if the two spellings agreed, the join could not have been broken")
-
-	res := stampAnchorNodeIDs([]notes.ResolvedAnchor{{
-		Note: "put-is-not-idempotent", Pos: 0,
-		Anchor: notes.Anchor{Kind: notes.AnchorSymbol, Target: key},
-	}}, string(notes.ScopeShared))
-
-	hits := notes.AnchorHits(res, nil, []string{changed})
-
-	// Target stays the one the author wrote, not the graph's spelling.
-	assert.Equal(t, []notes.AnchorHit{{
-		Note:    "put-is-not-idempotent",
-		Pos:     0,
-		Kind:    notes.AnchorSymbol,
-		Target:  key,
-		Matched: changed,
-		Match:   notes.MatchSymbol,
-	}}, hits)
-}

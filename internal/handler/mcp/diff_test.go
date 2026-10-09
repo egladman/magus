@@ -2,13 +2,17 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -28,14 +32,15 @@ const agentPatch = `diff --git a/a.go b/a.go
 type fakeDiffSrc struct {
 	patch string
 	calls int
+	// branch is the review's branch. Empty, no provider is consulted and the tool reports no
+	// threads, which is the ordinary state of most workspaces and what most tests exercise around.
+	branch string
 }
 
 func (f *fakeDiffSrc) WorkingDiff(context.Context, []string) (string, error) { return f.patch, nil }
 
-// No branch and no remote, so no provider is consulted and the tool reports no threads. That
-// is the ordinary state of most workspaces and is what these tests exercise around.
 func (f *fakeDiffSrc) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{}
+	return types.ReviewOrigin{Branch: f.branch}
 }
 
 func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error) {
@@ -305,10 +310,131 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 //
 // publish is refused for the same reason it is refused everywhere else: an agent cannot make
 // anything leave the machine.
+//
+// The same holds for the person's own acts. Reading is a claim only the reader can make, so no op
+// marks a hunk read or moves the cursor, and the one thing an agent may leave about a
+// conversation, an outline, is bounded to a few short topics and refused past that: a paragraph
+// there would be a reply wearing another name.
 func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
-	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
-	for _, op := range []string{"reply", "publish", "approve"} {
-		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "body": "on it"})
+	withReviewThreads(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": float64(1), "author": "priya", "body": "why?"},
+	})
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	for _, op := range []string{"reply", "publish", "approve", "viewed", "read", "mark", "ack", "seen", "cursor", "reading"} {
+		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "thread": "t1", "body": "on it"})
 		require.Error(t, err, "op %q must not be reachable from the MCP tools", op)
 	}
+
+	sess := tool.sessions.Get(tool.root)
+	assert.Empty(t, sess.Viewed, "no op marks a hunk read")
+	assert.Equal(t, types.DiffCursor{Hunk: -1}, sess.Cursor, "no op moves the cursor")
+
+	long := strings.Repeat("a reply is what a person writes, ", 4)
+	_, err := invoke(t, tool, map[string]any{"op": "outline", "thread": "t1", "topics": []any{long}})
+	require.Error(t, err, "an over-long outline is a reply, and is refused")
+	assert.Contains(t, err.Error(), "the person types the reply")
+	assert.Empty(t, tool.sessions.Get(tool.root).Outlines, "and nothing of it is held")
+}
+
+// withReviewThreads wires a review provider whose review holds threads, so the tool's forge reads
+// have something to answer with.
+func withReviewThreads(t *testing.T, threads []any) {
+	t.Helper()
+	name := "fake-mcp-review-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReviewThreadsContract:
+				return threads, nil
+			default:
+				return nil, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+}
+
+var briefThreads = []any{
+	map[string]any{"id": "t1", "path": "a.go", "line": float64(9), "author": "priya", "body": "why added?"},
+	map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "for the cache"},
+}
+
+// TestProjectionThreadReturnsTheBriefAndNoSession. The brief is the whole conversation and the
+// hunk it sits in, and it is not the session: none of the session's bodies come with it.
+func TestProjectionThreadReturnsTheBriefAndNoSession(t *testing.T) {
+	withReviewThreads(t, briefThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t2"})
+	require.NoError(t, err)
+
+	reply, ok := resp.Data.(review.ThreadBriefReply)
+	require.True(t, ok, "projection=thread returns {id, brief}, got %T", resp.Data)
+	assert.Equal(t, "t1", reply.ID, "a reply's id answers with its conversation's root")
+	assert.Contains(t, reply.Brief, "- priya:\n  > why added?\n- marcus:\n  > for the cache")
+	assert.Contains(t, reply.Brief, "- where: a.go:9")
+	assert.Contains(t, reply.Brief, "+added")
+	assert.Contains(t, reply.Brief, "I will type the reply")
+	assert.Contains(t, reply.Brief, "note anchors: this server has no notes store wired")
+}
+
+func TestProjectionThreadRefusesWhatNamesNoConversation(t *testing.T) {
+	withReviewThreads(t, briefThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "needs thread")
+
+	_, err = invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t404"})
+	require.ErrorIs(t, err, review.ErrNoConversation)
+	assert.Contains(t, err.Error(), "op=state's threads")
+}
+
+// TestOutlineIsHeldForThePersonKeyedByTheRoot. An outline sent against a reply lands on the
+// conversation, a second one replaces the first, and the session shows it to the person.
+func TestOutlineIsHeldForThePersonKeyedByTheRoot(t *testing.T) {
+	withReviewThreads(t, briefThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{
+		"op": "outline", "thread": "t2", "topics": []any{"is the cache write racy?", "who calls Put"},
+		"agent_name": "scout",
+	})
+	require.NoError(t, err)
+	resp, err := invoke(t, tool, map[string]any{
+		"op": "outline", "thread": "t1", "topics": []any{"replaces the first"},
+	})
+	require.NoError(t, err)
+
+	sess := resp.Data.(*types.DiffReview)
+	assert.Equal(t, []types.DiffOutline{{Thread: "t1", Topics: []string{"replaces the first"}}}, sess.Outlines)
+	assert.Equal(t, sess.Outlines, tool.sessions.Get(tool.root).Outlines)
+}
+
+func TestOutlineRefusesWhatIsNotAPointer(t *testing.T) {
+	withReviewThreads(t, briefThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	cases := map[string]map[string]any{
+		"no thread":    {"op": "outline", "topics": []any{"a"}},
+		"no topics":    {"op": "outline", "thread": "t1"},
+		"six topics":   {"op": "outline", "thread": "t1", "topics": []any{"a", "b", "c", "d", "e", "f"}},
+		"a newline":    {"op": "outline", "thread": "t1", "topics": []any{"one\ntwo"}},
+		"not strings":  {"op": "outline", "thread": "t1", "topics": []any{"a", float64(2)}},
+		"not a list":   {"op": "outline", "thread": "t1", "topics": "a"},
+		"unknown id":   {"op": "outline", "thread": "t404", "topics": []any{"a"}},
+		"too long one": {"op": "outline", "thread": "t1", "topics": []any{strings.Repeat("x", types.DiffOutlineTopicRunes+1)}},
+	}
+	for name, params := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := invoke(t, tool, params)
+			require.Error(t, err)
+		})
+	}
+	assert.Empty(t, tool.sessions.Get(tool.root).Outlines)
 }

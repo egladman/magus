@@ -11,6 +11,8 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/prompt"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -34,6 +36,11 @@ import (
 //     always stamps agent), so a body that says otherwise is ignored. Same reasoning the
 //     notes store uses: a self-attested author is forgeable by whatever wrote the file.
 //
+// It cannot reply to, publish to, or approve a review either, and the one thing it can leave
+// about a conversation is an outline: a few short topics shown to the person, who types the
+// reply. projection=thread hands the agent the same brief the person can paste to their own
+// model, built from the graph, so an agent never answers from a bare hunk.
+//
 // It also cannot mark a hunk viewed, for a quieter reason: "read" is a claim only the reader
 // can make, and an agent ticking it off would erase the human's own account of what they have
 // actually looked at.
@@ -44,6 +51,10 @@ type diffTool struct {
 	// last attached, which is how an agent came to comment on a file that had no uncommitted
 	// changes, in a tree the CLI reported clean, with nothing objecting.
 	src workspaceSource
+	// anchors joins the workspace's notes stores against a changeset, for projection=thread.
+	// Nil is a server wired with no notes store, and the brief then names note anchors among
+	// what it could not measure.
+	anchors func(ctx context.Context, rev types.Diff) []review.AnchorHit
 }
 
 // reviewLookupTimeout bounds the two forge calls op=state makes. An agent asked for the
@@ -186,7 +197,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 			Hunks:      st.Hunks,
 		}, nil
 	default:
-		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, or patch)", projection)
+		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, patch, or thread)", projection)
 	}
 }
 
@@ -224,6 +235,15 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		// The whole session: the annotated changeset, where the human is, what they have read,
 		// and the conversation so far, recomputed first when the tree has moved underneath it.
 		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
+		if projection == "thread" {
+			// Not a narrowing of the session, so it never builds one: the brief is read from the
+			// working tree and the host alone.
+			reply, terr := t.threadBrief(ctx, strings.TrimSpace(paramString(req.Params, "thread", "")))
+			if terr != nil {
+				return spells.InvokeResponse{}, terr
+			}
+			return spells.InvokeResponse{Data: reply}, nil
+		}
 		st, serr := t.state(ctx, sess, wantsThreads(projection))
 		if serr != nil {
 			return spells.InvokeResponse{}, serr
@@ -293,9 +313,37 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		}
 		return spells.InvokeResponse{Data: t.sessions.ResolveComment(t.root, id, true)}, nil
 
+	case "outline":
+		// An outline is NOT a reply: it is a few short topics shown to the person, who types
+		// the reply. Held in memory with the session and never sent anywhere.
+		thread := strings.TrimSpace(paramString(req.Params, "thread", ""))
+		if thread == "" {
+			return spells.InvokeResponse{}, errors.New("mcp: outline needs thread, the root comment id of the conversation")
+		}
+		topics, perr := paramStrings(req.Params, "topics")
+		if perr != nil {
+			return spells.InvokeResponse{}, perr
+		}
+		if _, cerr := changeset.CheckOutline(topics); cerr != nil {
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: outline: %w", cerr)
+		}
+		root, rerr := t.conversationRoot(ctx, thread)
+		if rerr != nil {
+			return spells.InvokeResponse{}, rerr
+		}
+		out, oerr := t.sessions.SetOutline(t.root, types.DiffOutline{
+			Thread:    root,
+			Topics:    topics,
+			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
+		})
+		if oerr != nil {
+			return spells.InvokeResponse{}, fmt.Errorf("mcp: outline: %w", oerr)
+		}
+		return spells.InvokeResponse{Data: out}, nil
+
 	default:
 		return spells.InvokeResponse{}, errors.New(
-			"mcp: unknown op " + op + " (one of: state, comment, suggest, resolve)")
+			"mcp: unknown op " + op + " (one of: state, comment, suggest, resolve, outline)")
 	}
 }
 
@@ -355,6 +403,80 @@ func (t *diffTool) reviewThreads(ctx context.Context, hunks []changeset.FileHunk
 	// from the agent working on it.
 	threads, _ := bindings.ReviewThreads(ctx, at)
 	return changeset.PlaceThreads(hunks, threads)
+}
+
+// threadBrief renders the brief for the conversation id names, the same text `magus diff
+// --thread` and the console's route serve. It is context for the person's own model: the tool
+// returns it to the agent that asked and posts nothing to the review.
+func (t *diffTool) threadBrief(ctx context.Context, id string) (review.ThreadBriefReply, error) {
+	if id == "" {
+		return review.ThreadBriefReply{}, errors.New(
+			"mcp: projection=thread needs thread, the root comment id of a conversation in op=state's threads")
+	}
+	if t.src == nil {
+		return review.ThreadBriefReply{}, errors.New("mcp: projection=thread needs the workspace, which this server has not wired")
+	}
+	patch, err := t.src.WorkingDiff(ctx, nil)
+	if err != nil {
+		return review.ThreadBriefReply{}, err
+	}
+	in := review.ThreadInput{Hunks: changeset.ParseHunks(patch), Variant: prompt.Short}
+	in.Threads = t.reviewThreads(ctx, in.Hunks)
+	if len(in.Hunks) > 0 {
+		rev, rerr := t.src.Diff(ctx, changedPaths(in.Hunks))
+		if rerr != nil {
+			return review.ThreadBriefReply{}, rerr
+		}
+		in.Changeset = rev
+	}
+	if t.anchors != nil {
+		in.Anchors = t.anchors(ctx, in.Changeset)
+	} else {
+		in.AnchorsUnread = "this server has no notes store wired, so none was joined"
+	}
+	reply, err := review.ThreadBriefFor(in, id)
+	if errors.Is(err, review.ErrNoConversation) {
+		return review.ThreadBriefReply{}, fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
+	}
+	return reply, err
+}
+
+// conversationRoot resolves a comment id on the review to its conversation's root, so an outline
+// is keyed the way the console finds it. An id the review does not hold is refused: an outline
+// of a conversation that is not there would be shown beside nothing.
+func (t *diffTool) conversationRoot(ctx context.Context, id string) (string, error) {
+	if t.src == nil {
+		return "", errors.New("mcp: outline needs the workspace to read the review, which this server has not wired")
+	}
+	root, err := review.ConversationRoot(t.reviewThreads(ctx, nil), id)
+	if errors.Is(err, review.ErrNoConversation) {
+		return "", fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
+	}
+	return root, err
+}
+
+// paramStrings reads a list-of-strings parameter. JSON arrives as []any and a Go caller may
+// pass []string; anything else, or an element that is not a string, is refused rather than
+// dropped, so a malformed outline is told so instead of becoming a shorter one.
+func paramStrings(params map[string]any, key string) ([]string, error) {
+	switch v := params[key].(type) {
+	case nil:
+		return nil, nil
+	case []string:
+		return v, nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for i, e := range v {
+			s, ok := e.(string)
+			if !ok {
+				return nil, fmt.Errorf("mcp: %s[%d] is %T, want a string", key, i, e)
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("mcp: %s is %T, want a list of strings", key, v)
+	}
 }
 
 // validateAnchor refuses a coordinate the changeset does not contain.

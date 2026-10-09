@@ -2523,6 +2523,16 @@ audit. It asks for findings rather than review prose; the words your
 colleague reads should be yours. Add --impact for the rationale behind each
 instruction.
 
+--thread <id> does the same for one conversation already on the review. It
+prints the whole exchange oldest first, the hunk it is about, the symbols
+changed in that hunk with the files that reference them, who they are public
+to, the conformance findings and the coverage, and the notes anchored to the
+file. The id is the conversation's root comment id, or any reply in it. It is
+a brief for you to carry: magus sends it nowhere, and it asks for findings and
+says the reply is yours to type. The comments in it are quoted from the host and
+are marked as other people's words, not instructions. It does not combine with
+--prompt, --unread, --print-hook, --ack, --watch or -o name.
+
 The report ends with the reading order: the hunks grouped by what links them, a
 definition before its uses, an interface before its implementations, code before
 its tests, each with the sentence that placed it. -o json carries the same order
@@ -2546,7 +2556,7 @@ terminal, and agent hosts are denied it outright.
 The count is never shown to anyone but the reader. There is no team view and
 no pull-request comment, because a read measure a second person can see is a
 performance metric, and a performance metric gets gamed rather than met.`,
-	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--print-hook] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
+	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--print-hook] [--thread <id>] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted"},
@@ -2555,6 +2565,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
 		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
+		{Name: "thread", Kind: FlagString, Doc: "Print the context for one review conversation, by its root comment id, to paste into your own LLM: the conversation, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}"},
 		{Name: "unread", Kind: FlagBool, Doc: "List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only"},
 		{Name: "print-hook", Kind: FlagBool, Doc: "Print a pre-push git hook that runs --unread on the range being pushed, and exit. magus only prints it; save it as .git/hooks/pre-push and make it executable. The hook always exits 0"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
@@ -2573,6 +2584,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{"List the hunks of a branch nobody has marked read", "magus diff --unread --rev main...HEAD"},
 		{"Print a pre-push hook that lists them before you push", "magus diff --print-hook"},
 		{"Build a review prompt for the model of your choice", "magus diff --prompt"},
+		{"Brief your own model on one review conversation", "magus diff --thread 2193847561"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
 	// Documented because git trained everyone to expect the opposite: there is no
