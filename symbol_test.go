@@ -133,6 +133,43 @@ func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	assert.Equal(t, goIndexA, ref)
 }
 
+func TestSymbolIndexerSeedIsDueOnTheFirstTick(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.state[buzzIndexA] = &indexState{}
+
+	si.seed([]indexRef{goIndexA})
+
+	ref, ok := si.pickDue()
+	require.True(t, ok, "a seeded index opens no quiet window")
+	assert.Equal(t, goIndexA, ref)
+	assert.False(t, si.state[buzzIndexA].dirty, "an index left out of the seed stays clean")
+}
+
+func TestSymbolIndexerSeedKeepsThrottles(t *testing.T) {
+	si, _, clock := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{lastRun: clock.Add(-time.Minute)}
+	si.state[buzzIndexA] = &indexState{failures: 1, backoffTill: clock.Add(time.Minute)}
+
+	si.seed([]indexRef{goIndexA, buzzIndexA})
+
+	_, ok := si.pickDue()
+	assert.False(t, ok, "seeding bypasses neither the min interval nor a backoff")
+}
+
+func TestStaleIndexRefs(t *testing.T) {
+	status := func(path, op string, f types.SymbolIndexFreshness, detail string) types.SymbolIndexStatus {
+		return types.SymbolIndexStatus{Project: types.NewProjectRef(path, "/ws/"+path), Op: op, Freshness: f, Detail: detail}
+	}
+	got := staleIndexRefs([]types.SymbolIndexStatus{
+		status("fresh", "scip", types.SymbolIndexFresh, ""),
+		status("stale", "scip", types.SymbolIndexStale, ""),
+		status("unbuilt", "scip-buzz", types.SymbolIndexNotBuilt, ""),
+		status("no-indexer", "scip", types.SymbolIndexNotBuilt, "install scip-go"),
+		status("unvouched", "scip", types.SymbolIndexUnvouched, "tool cannot be probed"),
+	})
+	assert.Equal(t, []indexRef{{project: "stale", op: "scip"}, {project: "unbuilt", op: "scip-buzz"}}, got)
+}
+
 func TestSymbolIndexerExecuteSuccess(t *testing.T) {
 	si, runs, _ := newTestIndexer(t)
 	si.state[goIndexA] = &indexState{dirty: true}

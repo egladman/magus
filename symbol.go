@@ -135,6 +135,36 @@ func (si *symbolIndexer) mark(paths []string) {
 	}
 }
 
+// seed marks refs dirty without opening a quiet window, so each one is due on the first
+// tick that the min interval and backoff allow. State is in memory only, so this is how
+// an index that went stale while no server watched it gets reindexed before its project
+// is next edited.
+func (si *symbolIndexer) seed(refs []indexRef) {
+	si.mu.Lock()
+	defer si.mu.Unlock()
+	for _, ref := range refs {
+		st := si.state[ref]
+		if st == nil {
+			st = &indexState{}
+			si.state[ref] = st
+		}
+		st.dirty = true
+	}
+}
+
+// staleIndexRefs is the indexes a run would bring current: out of date, or never built
+// with its indexer installed. A missing indexer only fails into backoff, and an
+// unvouched index stays unvouched however often it runs.
+func staleIndexRefs(statuses []types.SymbolIndexStatus) []indexRef {
+	var out []indexRef
+	for _, s := range statuses {
+		if s.Freshness == types.SymbolIndexStale || (s.Freshness == types.SymbolIndexNotBuilt && s.Detail == "") {
+			out = append(out, indexRef{project: s.Project.Path, op: s.Op})
+		}
+	}
+	return out
+}
+
 // fireChange invokes onChange if set. Freshness can flip on a source edit (fresh ->
 // out-of-date) or when an index run completes (out-of-date -> up-to-date), so both call it.
 func (si *symbolIndexer) fireChange() {
@@ -376,6 +406,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 		defer watcher.Close()
 		si.loop(wctx, watcher.Events())
 	}()
+	go func() { si.seed(staleIndexRefs(m.SymbolIndexStatusByStamp(wctx))) }()
 	slog.Default().DebugContext(ctx, "magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)
