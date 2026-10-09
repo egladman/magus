@@ -1,6 +1,6 @@
 ---
 title: Reviewing your changes
-description: Read a changeset in the order that its consequences suggest, price what landing it costs before you push, and keep a bookmark of what you have read, from the terminal, your own editor, the console, or a patch someone sent you.
+description: Read a changeset in the order its symbols suggest, a definition before its uses, price what landing it costs before you push, list the hunks nobody has marked read, and keep a bookmark of what you have read, from the terminal, your own editor, the console, or a patch someone sent you.
 tags:
   [
     diff,
@@ -11,13 +11,15 @@ tags:
     tui,
     ack,
     patch,
+    reading-order,
+    unread,
   ]
 ---
 
 # Reviewing your changes
 
-`magus diff` reads the working tree's uncommitted changes. It takes no ref: the subject
-is always what you have not committed yet.
+`magus diff` reads the working tree's uncommitted changes. To read a committed range
+instead, name it with `--rev base...head`.
 
 ```sh
 magus diff
@@ -34,6 +36,39 @@ at the top and falls back to path order rather than implying an order it did not
 ```sh
 magus graph build
 ```
+
+## Reading in order
+
+Below the file list, the report prints the order to read the hunks in. A definition comes
+before its uses, an interface before its implementations, and a test after the code it
+exercises. Hunks linked that way form a group; larger groups come first, and between equals
+the one with the wider reach.
+
+Each hunk carries a sentence saying what placed it:
+
+- `starts the group` opens a group.
+- `uses Parse, defined in step 2` follows the hunk that defines `Parse`.
+- `defines Parse, used in step 3` precedes the hunk that uses it.
+- `implements Store, declared above` and `declares Store, implemented in step 4` pair an
+  interface with its implementations.
+- `tests Parse, defined above` follows the code the test exercises.
+
+Consecutive hunks from one file share a step. Hunks that use each other share one too.
+Generated output sits in a folded group (`--generated` shows it), and a hunk magus cannot
+place lands in a final `unranked` group that says why.
+
+The report ends with a completeness line, such as `14 hunks, 14 placed`. It names any hunk
+that is missing or repeated, and any changed file with no hunk to show, so you can tell a
+whole list from a short one. The same diff and index always give the same order, and no
+model chooses it.
+
+The terminal viewer walks the hunks in this order, and the console's focus mode shows it one
+step at a time. `-o json` carries it as `order`: `groups` of `steps`, each hunk with its
+`why`, and `count`.
+
+It needs the symbol index. When the index cannot be brought current, magus prints no order
+and a note says to run `magus graph build`. See [Review](../concepts/review.md#the-reading-order)
+for how the order is built.
 
 ## What landing it costs
 
@@ -94,6 +129,57 @@ read it" answerable.
 magus never infers a receipt from an editor or a session. A measure satisfied by scrolling
 would launder skimming into review, so `--ack` needs a terminal, and agent hosts are denied
 it outright.
+
+## Before you push
+
+Reading marks are kept by hunk content, so they answer a question the receipts above do not:
+which hunks of a range have you not marked read?
+
+```sh
+magus diff --unread --rev main...HEAD
+```
+
+It lists the hunks no mark covers and says how to open them in the viewer. It exits 0 whether
+or not anything is left, because a push held up by a read count would make the count the
+goal. If the marks cannot be read, it says the state is unknown and calls no hunk unread.
+`-o json` prints the same report.
+
+To see the list on every push, print the hook:
+
+```sh
+magus diff --print-hook
+```
+
+The script runs `--unread` on each range being pushed, writes to stderr and always exits 0.
+Save it as `.git/hooks/pre-push` and make it executable. magus prints it and never installs
+it.
+
+## Telling others you are reading
+
+The console's Diff page has a reading toggle for a review that is open on the host. It
+records a local mark, and for a GitHub pull request it shows the `gh pr comment` line that
+tells the others. You run that line if you want to; magus never does. The mark is a notice,
+and the merge queue ignores it.
+
+If the review merges while the mark is set, magus reports `review.merged` and clears the mark.
+Two opt-in telemetry metrics, `magus.review.merged_while_reading` and its `.duration`,
+count how often that happens and what it cost. See [Review](../concepts/review.md#saying-you-are-reading).
+
+## Briefing your own model on a conversation
+
+A review conversation on the host shows with its replies under the hunk it started on.
+To get a model's help with one:
+
+```sh
+magus diff --thread 2193847561
+```
+
+The id is the first comment's, or any reply's. magus prints the conversation, its hunk, and
+what the graph knows about the symbols changed there, then stops. The brief asks for findings
+and leaves the reply to you, and it is yours to carry to whichever model you use. An agent
+that pairs with you over MCP may leave an outline of up to five short topics beside the
+conversation; you still type every reply. See
+[Review](../concepts/review.md#one-conversation) for what the brief holds.
 
 ## Stepping through it in the terminal
 
