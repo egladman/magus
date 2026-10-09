@@ -242,11 +242,11 @@ func startWatch(ctx context.Context, m *magus.Magus) {
 }
 
 // watchWorkspace keeps m's knowledge graph and symbol indexes current until ctx ends: the
-// watcher invalidates the warm graph on source changes, so queries answer from memory
-// without re-parsing every magusfile per call, and the indexer re-runs SCIP in the
-// background, throttled and idle-gated. Neither is fatal: queries fall back to a
-// cache-first rebuild, and symbols go stale until a manual `magus run ::scip`. It reports
-// whether the symbol indexer started.
+// warm graph is built at start and rebuilt in the background after each source change, so
+// queries answer from memory without re-parsing every magusfile per call, and the indexer
+// re-runs SCIP in the background, throttled, starting with every index already stale at
+// start. Neither is fatal: queries fall back to a cache-first rebuild, and symbols go
+// stale until a manual `magus run ::scip`. It reports whether the symbol indexer started.
 func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
 		slog.Warn("[AGENT] knowledge-graph watcher unavailable; queries will rebuild per call", slog.String("error", werr.Error()))

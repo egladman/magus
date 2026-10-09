@@ -3,5 +3,5 @@ GOEXPERIMENT = "jsonv2"
 _.path = ["{{config_root}}"]
 
 [tools]
-go = "1.26.6"
+go = "1.26.9"
 node = "24"

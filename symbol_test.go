@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
@@ -131,6 +132,90 @@ func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	ref, ok := si.pickDue()
 	require.True(t, ok, "due once the quiet window elapses")
 	assert.Equal(t, goIndexA, ref)
+}
+
+func TestSymbolIndexerSeedIsDueOnTheFirstTick(t *testing.T) {
+	si, _, _ := newTestIndexer(t)
+	si.state[buzzIndexA] = &indexState{}
+
+	si.seed([]indexRef{goIndexA})
+
+	ref, ok := si.pickDue()
+	require.True(t, ok, "a seeded index opens no quiet window")
+	assert.Equal(t, goIndexA, ref)
+	assert.False(t, si.state[buzzIndexA].dirty, "an index left out of the seed stays clean")
+}
+
+func TestSymbolIndexerSeedKeepsThrottles(t *testing.T) {
+	si, _, clock := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{lastRun: clock.Add(-time.Minute)}
+	si.state[buzzIndexA] = &indexState{failures: 1, backoffTill: clock.Add(time.Minute)}
+
+	si.seed([]indexRef{goIndexA, buzzIndexA})
+
+	_, ok := si.pickDue()
+	assert.False(t, ok, "seeding bypasses neither the min interval nor a backoff")
+}
+
+func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
+	si, _, clock := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{dirty: true}
+	si.runIndex = func(context.Context, indexRef) error {
+		return fmt.Errorf("pkg/a: %w", types.DiagnosticErrorf(types.UndeclaredSourceModified, "a.go changed"))
+	}
+
+	si.execute(context.Background(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.True(t, st.dirty, "the edit still needs indexing")
+	assert.Zero(t, st.failures)
+	assert.True(t, st.backoffTill.IsZero(), "losing a race with an edit is not an indexer failure")
+	assert.Equal(t, *clock, st.lastRun, "the min interval still throttles the retry")
+}
+
+// TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
+// raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
+func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
+	const spellName = "zzz-source-mutation-spell"
+	root := t.TempDir()
+	src := filepath.Join(root, "a.txt")
+	require.NoError(t, os.WriteFile(src, []byte("before\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("touch"),
+		spells.WithSources("*.txt"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			return nil, os.WriteFile(src, []byte("after\n"), 0o644)
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "touch"}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.UndeclaredSourceModified)
+}
+
+func TestStaleIndexRefs(t *testing.T) {
+	status := func(path, op string, f types.SymbolIndexFreshness, detail string) types.SymbolIndexStatus {
+		return types.SymbolIndexStatus{Project: types.NewProjectRef(path, "/ws/"+path), Op: op, Freshness: f, Detail: detail}
+	}
+	got := staleIndexRefs([]types.SymbolIndexStatus{
+		status("fresh", "scip", types.SymbolIndexFresh, ""),
+		status("stale", "scip", types.SymbolIndexStale, ""),
+		status("unbuilt", "scip-buzz", types.SymbolIndexNotBuilt, ""),
+		status("no-indexer", "scip", types.SymbolIndexNotBuilt, "install scip-go"),
+		status("unvouched", "scip", types.SymbolIndexUnvouched, "tool cannot be probed"),
+	})
+	assert.Equal(t, []indexRef{{project: "stale", op: "scip"}, {project: "unbuilt", op: "scip-buzz"}}, got)
 }
 
 func TestSymbolIndexerExecuteSuccess(t *testing.T) {
