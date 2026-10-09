@@ -72,10 +72,10 @@ string loops).
 
 ## prose
 
-`prose` is not an analyzer, and golangci-lint never loads it. It judges four
+`prose` is not an analyzer, and golangci-lint never loads it. It judges five
 kinds of text: one symbol from a SCIP index (the doc comment, and the name of a
-function or method), a hand-written Markdown file, a skill, and a pull
-request's title and description. Its rules are this repository's policy, not magus's: the magus
+function or method), a hand-written Markdown file, a skill, a pull
+request's title and description, and the comments of a stylesheet. Its rules are this repository's policy, not magus's: the magus
 module never imports `libs/conventions`. `cmd/judge-docs` runs them. With no
 flag it reads the symbols of `magus\symbols()` as JSON on stdin, fed by
 `hack/lint/symbol-docs-follow-prose-rules.buzz`, and a finding points at the
@@ -87,34 +87,40 @@ agent loads as written, and `-kind skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
 the skill rules, and what only its full form shows meets the Markdown ones and
 `bare-rule`. `-kind guide` judges a procedural page (anything under `docs/guides/`) on the
-Markdown rules and the guide rules.
+Markdown rules and the guide rules. `-kind css` judges the comments of the
+stylesheets its arguments name, or of one on stdin when it names none (see
+below).
 It writes the findings as JSON on stdout.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
-| Rule               | Kinds        | Reports                                                        |
-| ------------------ | ------------ | -------------------------------------------------------------- |
-| `comment-block`    | doc          | a doc over 250 words                                           |
-| `comment-sentence` | doc          | a doc sentence over 60 words                                   |
-| `filler`           | all          | throat-clearing ("Note that") and filler adverbs ("simply")    |
-| `terms`            | all          | a spelling the glossary replaces ("sub-agent")                 |
-| `name-suffix`      | doc          | a function or method name whose last word is Of or For         |
-| `aside`            | doc          | a spaced hyphen spelling an em-dash, inline or ending a line   |
-| `history`          | doc          | a phrase narrating the change rather than the code ("used to") |
-| `docstub`          | doc          | a one-line doc that only repeats the symbol's name             |
-| `lead-context`     | pull request | a description that does not open with a paragraph of its goal  |
-| `reply-voice`      | Markdown, PR | a reply opener, a conversation, a bold-label list item         |
-| `tense`            | Markdown, PR | the future tense, and the author as the actor of a change      |
-| `hedge`            | Markdown, PR | a softener on a claim ("might fix", "probably")                |
-| `attribution`      | Markdown, PR | credit to a tool, or an account of how the work was made       |
-| `terse-sentence`   | skill        | a sentence over 25 words                                       |
-| `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
-| `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
-| `bare-rule`        | skill        | "rule" with no mechanism named, in either form of a skill      |
-| `second-person`    | guide        | we, us, our or ours where a guide addresses you                |
-| `step-verb`        | guide        | a numbered step that opens with no verb ("1. The target...")   |
-| `condescension`    | guide        | a word telling the reader a step is easy ("easy", "simple")    |
-| `template`         | skill source | a body that does not render, so neither form can be judged     |
+| Rule               | Kinds             | Reports                                                        |
+| ------------------ | ----------------- | -------------------------------------------------------------- |
+| `comment-block`    | doc, CSS          | a doc over 250 words                                           |
+| `comment-sentence` | doc, CSS          | a doc sentence over 60 words                                   |
+| `filler`           | all               | throat-clearing ("Note that") and filler adverbs ("simply")    |
+| `terms`            | all               | a spelling the glossary replaces ("sub-agent")                 |
+| `name-suffix`      | doc               | a function or method name whose last word is Of or For         |
+| `aside`            | doc, CSS          | a spaced hyphen spelling an em-dash, inline or ending a line   |
+| `history`          | doc, CSS          | a phrase narrating the change rather than the code ("used to") |
+| `docstub`          | doc               | a one-line doc that only repeats the symbol's name             |
+| `lead-context`     | pull request      | a description that does not open with a paragraph of its goal  |
+| `reply-voice`      | Markdown, PR, CSS | a reply opener, a conversation, a bold-label list item         |
+| `tense`            | Markdown, PR, CSS | the future tense, and the author as the actor of a change      |
+| `hedge`            | Markdown, PR, CSS | a softener on a claim ("might fix", "probably")                |
+| `attribution`      | Markdown, PR, CSS | credit to a tool, or an account of how the work was made       |
+| `terse-sentence`   | skill             | a sentence over 25 words                                       |
+| `terse-paragraph`  | skill             | a paragraph or list item over 60 words                         |
+| `wordy`            | skill             | a phrase with a shorter equivalent ("in order to")             |
+| `bare-rule`        | skill             | "rule" with no mechanism named, in either form of a skill      |
+| `second-person`    | guide             | we, us, our or ours where a guide addresses you                |
+| `step-verb`        | guide             | a numbered step that opens with no verb ("1. The target...")   |
+| `condescension`    | guide             | a word telling the reader a step is easy ("easy", "simple")    |
+| `restates`         | CSS               | a one-line comment that only names the code it sits on         |
+| `comment-budget`   | CSS               | a comment over the lines its place earns                       |
+| `block-budget`     | CSS               | a rule block whose comments, summed, outrun its size           |
+| `banned-word`      | CSS               | story, chapter, handoff, `lane`, `corpus`, `surface` as a noun |
+| `template`         | skill source      | a body that does not render, so neither form can be judged     |
 
 A skill and a guide take every Markdown and pull request rule but `lead-context`.
 A numbered list is a procedure, and `step-verb` judges it, only when one of its
@@ -129,3 +135,32 @@ Code in a doc, fenced or indented, is never judged. A backtick span still counts
 toward the budgets, but no wording rule reads inside one.
 A doc with a line opening in TODO, FIXME, BUG, `compat(until:`, `compat:` or
 `Deprecated:` is exempt from `history` and `docstub`.
+
+### CSS comments
+
+`prose.JudgeCSS` reads the `/* */` comments out of a stylesheet and attributes
+each to the code it speaks of: the rule header or declaration below it, or the
+declaration it follows on the same line. It then runs the doc rules, the wider
+written ones and the rules above marked CSS on each, so a comment meets the
+rules a Go comment and a Markdown page meet. `history` also reads "no longer",
+"the old", "W2" and the like, which a stylesheet's comments use to narrate what
+a rule replaced. A comment a tool reads (`stylelint-`, `biome-`, `prettier-ignore`,
+`!`, `# sourceMappingURL`) and a banner of rule lines are not judged.
+
+A comment's budget is set by where it sits, carrying over the Go comment
+budget in `hack/policy/comments.buzz`:
+
+| Place               | Lines |
+| ------------------- | ----- |
+| heading a file      | 8     |
+| above a rule        | 4     |
+| above a declaration | 3     |
+| between rules       | 3     |
+| inside a block      | 3     |
+| after a declaration | 2     |
+
+A block earns 6 comment lines and one more for every 5 statements directly
+inside it; the comment above its header and each comment inside it sum against
+that. `restates` judges a one-line comment against the header, and against the
+declarations of a block of four or fewer. The console's lint runs the judge over
+`console/src/**/*.css` and fails on any finding.

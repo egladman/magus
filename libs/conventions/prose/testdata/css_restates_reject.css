@@ -1,0 +1,18 @@
+/* The divider. */
+.divider { align-self: stretch; }
+
+.pane {
+  /* Border radius. */
+  border-radius: 0;
+  display: flex; /* display flex */
+}
+
+/* Sets the pane. */
+.pane { color: red; }
+
+/* No margin. */
+.pane { margin: 0; }
+
+/* Reset the padding. */
+.pane { padding: 0; }
+.pane { color: red; }

@@ -1,14 +1,19 @@
 // The code-comments rule, a write rule. A write to a Go file is graded against the
 // repository owner's comment budget: a block over its budget is advised, one over twice
-// its budget or above the package clause is denied. The first write of a session that
-// adds comments to any code file is advised to audit them against the comment rule. The
-// guard answers before the write lands, so the advice arrives with the write.
+// its budget or above the package clause is denied. A write to a stylesheet that adds a
+// comment is judged the same way: a comment over twice the largest budget is denied, and
+// one the prose judge of libs/conventions reports is advised. The first write of a session
+// that adds comments to any other code file is advised to audit them against the comment
+// rule. The guard answers before the write lands, so the advice arrives with the write.
 namespace agentpolicy\comments;
 
 import "std";
 import "fs";
+import "proc";
 import "magus";
+import "encoding/json";
 import "./hack/policy/helpers" as helpers;
+import "./libs/conventions/judge_docs" as judgeDocs;
 
 final commentAdvice = "This write adds code comments. Audit each one: keep only the comments that say "
     + "what the code cannot, which is why it is written this way, a constraint or invariant it relies "
@@ -313,6 +318,141 @@ export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
     return magus\guard.advise(houseStyle + "\n\n" + advised.join("\n") + "\n\n" + remedy);
 }
 
+// CssFinding is one finding of the prose judge over a stylesheet.
+export object CssFinding {
+    rule: str,
+    line: int,
+    message: str,
+}
+
+// cssJudgeRunner returns a judge that runs the built libs/conventions/cmd/judge-docs with
+// -kind css over a stylesheet's text. A judge that is missing, stale or did not run returns
+// null: the write then meets the generic advice rather than a block on a tool it cannot run.
+export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
+    final dir = workspace + "/libs/conventions";
+    return fun (css: str) > [CssFinding]? {
+        if (judgeDocs\whyStale(dir) != "") {
+            return null;
+        }
+        final run = proc\exec("{dir}/{judgeDocs\binary}", args: ["-kind", "css"],
+            opts: {"stdin": css, "quiet": true, "allow_failure": true}) catch null;
+        if (run == null or run!.code != 0) {
+            return null;
+        }
+        return parseCssFindings(run!.stdout);
+    };
+}
+
+// parseCssFindings reads judge-docs's findings, whose source is `stdin:<line>`.
+export fun parseCssFindings(stdout: str) > [CssFinding] {
+    final rows: [any] = json\parse(stdout) catch [<any>];
+    final found = mut [<CssFinding>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        final colon = source.indexOf(":");
+        var line = 0;
+        if (colon != null) {
+            line = std\parseInt(source.sub(colon! + 1)) ?? 0;
+        }
+        found.append(CssFinding{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "" });
+    }
+    return found;
+}
+
+// The most lines a CSS comment may span before the write is refused: twice the budget of a
+// header, the largest a comment here earns.
+final cssFileBudget = 8;
+
+final cssStyle = "CSS comments meet the same prose rules as Go ones: a comment says only what the code "
+    + "cannot, in a few lines. Budget: {cssFileBudget} lines heading a file, 4 above a rule, 3 above a "
+    + "declaration or between rules, 2 after a declaration, and a block's comments sum to a budget its "
+    + "size earns. A comment is also refused for repeating the code beside it, narrating a change, a "
+    + "banned word, or the writing rules of docs/conventions.md.";
+
+// longestAddedCssComment is the line count of the longest `/* */` comment of after whose
+// opening line before did not hold.
+export fun longestAddedCssComment(before: str, after: str) > int {
+    final had = mut {<str: bool>};
+    foreach (line in before.split("\n")) {
+        had[line.trim()] = true;
+    }
+    var longest = 0;
+    var run = 0;
+    var fresh = false;
+    var open = false;
+    foreach (line in after.split("\n")) {
+        final t = line.trim();
+        var rest = t;
+        if (!open) {
+            final at = t.indexOf("/*");
+            if (at == null) {
+                continue;
+            }
+            open = true;
+            run = 0;
+            fresh = !(had[t] ?? false);
+            rest = t.sub(at! + 2);
+        }
+        run = run + 1;
+        if (rest.indexOf("*/") != null) {
+            open = false;
+            if (fresh and run > longest) {
+                longest = run;
+            }
+        }
+    }
+    return longest;
+}
+
+// decideCss judges a write to a stylesheet that adds a comment as a Go write is judged: a
+// comment over twice the largest budget is refused, and a comment the prose judge reports,
+// on a line the write added, is advised with what it says. A write the judge cannot read,
+// or finds nothing in, meets the once-per-session advice.
+export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]?) > GuardVerdict {
+    final added = addedLines(before, after: after);
+    if (added == "" or !hasComment(added)) {
+        return magus\guard.allow();
+    }
+    final longest = longestAddedCssComment(before, after: after);
+    if (longest > denyFactor * cssFileBudget) {
+        return magus\guard.deny("Refused. " + cssStyle + "\n\n{path}: a comment of {longest} lines against a budget of at most "
+            + "{cssFileBudget}.\n\nCut it to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+    }
+    final found = judge(after);
+    if (found != null) {
+        final had = mut {<str: bool>};
+        foreach (line in before.split("\n")) {
+            had[line.trim()] = true;
+        }
+        final lines = after.split("\n");
+        final reasons = mut [<str>];
+        foreach (f in found!) {
+            if (f.line < 1 or f.line > lines.len()) {
+                continue;
+            }
+            if (had[lines[f.line - 1].trim()] ?? false) {
+                continue;
+            }
+            reasons.append("{path}:{f.line}: {f.message} [{f.rule}]");
+        }
+        if (reasons.len() > 0) {
+            return magus\guard.advise(cssStyle + "\n\n" + reasons.join("\n") + "\n\nCut each to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+        }
+    }
+    if (once("code-comments")) {
+        return magus\guard.advise(commentAdvice);
+    }
+    return magus\guard.allow();
+}
+
+// decideWrite grades a write: a stylesheet by decideCss, any other file by decideComments.
+export fun decideWrite(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]?) > GuardVerdict {
+    if (fileExtension(path) == ".css") {
+        return decideCss(path, before: before, after: after, once: once, judge: judge);
+    }
+    return decideComments(path, before: before, after: after, once: once);
+}
+
 // decideComments grades a Go write against the comment budget, then advises once per
 // session when a write to any code file adds comment lines.
 export fun decideComments(path: str, before: str, after: str, once: fun (key: str) > bool) > GuardVerdict {
@@ -468,4 +608,65 @@ test "an edit that leaves an old long comment alone passes; growing one is grade
     std\assert(v.decision == "advise" and v.reason.indexOf("5 lines against a budget of 3") != null, message: v.reason);
     final preamble = "// Package p is old.\n" + old;
     std\assert(decideComments("a.go", before: preamble, after: preamble + "\nfunc h() \{}\n", once: spent()).decision == "allow", message: "an old package comment is not the write's");
+}
+
+fun noJudge() > fun (css: str) > [CssFinding]? {
+    return fun (css: str) > [CssFinding]? { return null; };
+}
+
+fun judgeSays(rule: str, line: int) > fun (css: str) > [CssFinding]? {
+    return fun (css: str) > [CssFinding]? {
+        return [CssFinding{ rule = rule, line = line, message = "Drop 'simply': state the fact." }];
+    };
+}
+
+fun cssComment(n: int) > str {
+    final lines = mut [<str>];
+    var i = 0;
+    while (i < n) {
+        i = i + 1;
+        lines.append("   line {i} of a comment");
+    }
+    return "/*" + lines.join("\n") + " */\n";
+}
+
+test "a stylesheet write is judged by the prose judge on the lines it adds" {
+    final after = ".a \{ color: red; }\n\n/* Simply put. */\n.b \{ color: blue; }\n";
+    final v = decideWrite("/w/console/src/a.css", before: "", after: after, once: spent(), judge: judgeSays("filler", line: 3));
+    std\assert(v.decision == "advise", message: v.decision);
+    std\assert(v.reason.indexOf("/w/console/src/a.css:3: Drop 'simply': state the fact. [filler]") != null, message: v.reason);
+    std\assert(v.reason.indexOf("same prose rules as Go ones") != null, message: "states the rule");
+    final kept = decideWrite("a.css", before: after, after: after + ".c \{ color: pink; }\n", once: spent(), judge: judgeSays("filler", line: 3));
+    std\assert(kept.decision == "allow", message: "a finding on a comment the write did not add");
+    final unread = decideWrite("a.css", before: "", after: after, once: helpers\counter(), judge: noJudge());
+    std\assert(unread.decision == "advise" and unread.reason.indexOf("Skill(") == null and unread.reason.indexOf("keep only the comments") != null, message: "a judge that cannot run falls back to the generic advice once");
+}
+
+test "a stylesheet comment over twice the largest budget is refused" {
+    final v = decideWrite("a.css", before: "", after: cssComment(17) + ".a \{ color: red; }\n", once: spent(), judge: noJudge());
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.startsWith("Refused."), message: v.reason);
+    std\assert(v.reason.indexOf("a.css: a comment of 17 lines") != null, message: v.reason);
+    std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "16 lines");
+    final old = cssComment(30) + ".a \{ color: red; }\n";
+    std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "an old long comment is not the write's");
+}
+
+test "longestAddedCssComment counts the lines a new comment spans" {
+    std\assert(longestAddedCssComment("", after: "/* one */\n.a \{}\n") == 1, message: "one line");
+    std\assert(longestAddedCssComment("", after: "/* one\n   two\n   three */\n.a \{}\n/* four */\n") == 3, message: "the longest");
+    std\assert(longestAddedCssComment("", after: ".a \{ color: red; }\n") == 0, message: "none");
+    std\assert(longestAddedCssComment("/* one\n   two */\n", after: "/* one\n   two */\n") == 0, message: "kept");
+}
+
+test "judge findings parse from stdin lines" {
+    final rows = parseCssFindings("[\{\"node\":\"stdin\",\"source\":\"stdin:7\",\"rule\":\"history\",\"message\":\"m\",\"match\":\"x\"}]");
+    std\assert(rows.len() == 1 and rows[0].line == 7 and rows[0].rule == "history" and rows[0].message == "m", message: "{rows.len()}");
+    std\assert(parseCssFindings("not json").len() == 0, message: "unreadable");
+}
+
+test "a write to a file that is not a stylesheet meets the Go rules" {
+    final v = decideWrite("a.go", before: "", after: "package a\n// note\n", once: spent(), judge: judgeSays("filler", line: 2));
+    std\assert(v.decision == "allow" or v.decision == "advise", message: v.decision);
+    std\assert(v.reason.indexOf("same prose rules") == null, message: "not the CSS rule");
 }

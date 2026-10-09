@@ -35,6 +35,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 	want := []Rule{
 		RuleCommentBlock, RuleCommentSentence, RuleFiller, RuleTerms,
 		RuleNameSuffix, RuleAside, RuleHistory, RuleDocStub,
+		RuleRestates, RuleCommentBudget, RuleBlockBudget, RuleBannedWord,
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
 		RuleSecondPerson, RuleStepVerb, RuleCondescension, RuleTemplate,

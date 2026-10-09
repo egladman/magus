@@ -3,6 +3,7 @@ package prose
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -257,8 +258,13 @@ func history(in input) []Finding {
 
 	var out []Finding
 
+	patterns := historyPatterns
+	if in.kind == KindCSS {
+		patterns = append(slices.Clone(patterns), cssHistoryPatterns...)
+	}
+
 	for _, ln := range in.prose {
-		if at, phrase := historyPhrase(ln.text); at >= 0 {
+		if at, phrase := phraseIn(ln.text, patterns); at >= 0 {
 			out = append(out, Finding{Message: fmt.Sprintf(historyMessage, phrase), Match: phrase, Line: ln.line})
 		}
 	}
@@ -268,12 +274,14 @@ func history(in input) []Finding {
 
 // historyPhrase returns the offset and text of the first history phrase in
 // text, or -1. Backtick spans are literals and never match.
-func historyPhrase(text string) (int, string) {
+func historyPhrase(text string) (int, string) { return phraseIn(text, historyPatterns) }
+
+func phraseIn(text string, patterns []*regexp.Regexp) (int, string) {
 	masked := blankBackticks(text)
 
 	best, phrase := -1, ""
 
-	for _, re := range historyPatterns {
+	for _, re := range patterns {
 		for _, m := range re.FindAllStringIndex(masked, -1) {
 			if strings.EqualFold(masked[m[0]:m[1]], "used to") && purposeLead[prevWord(masked, m[0])] {
 				continue
@@ -308,14 +316,23 @@ func prevWord(s string, at int) string {
 // stub vocabulary, the shape gocritic's docStub targets: "Foo is a Foo",
 // "NewFoo creates a new Foo", "Foo ...".
 func docStub(in input) []Finding {
-	s := in.symbol
+	if text, ok := stub(in.symbol, nil); ok {
+		return []Finding{{Message: fmt.Sprintf(docStubMessage, in.symbol.Name), Match: text}}
+	}
+
+	return nil
+}
+
+// stub reports whether s's doc is one line of nothing but its name and stub
+// vocabulary and the words of extra, and returns that line.
+func stub(s Symbol, extra map[string]bool) (string, bool) {
 	if s.Name == "" || marked(s.Doc) {
-		return nil
+		return "", false
 	}
 
 	text := strings.TrimSpace(s.Doc)
 	if text == "" || strings.Contains(text, "\n") || spellsSyntax(text) {
-		return nil
+		return "", false
 	}
 
 	// words rather than identWords: a display name from another language can
@@ -330,12 +347,12 @@ func docStub(in input) []Finding {
 	}
 
 	for _, w := range words(text) {
-		if !known[w] && !stubWords[w] && !stopWords[w] {
-			return nil
+		if !known[w] && !stubWords[w] && !stopWords[w] && !extra[w] {
+			return "", false
 		}
 	}
 
-	return []Finding{{Message: fmt.Sprintf(docStubMessage, s.Name), Match: text}}
+	return text, true
 }
 
 // spellsSyntax reports whether text holds what no name can say: a token that
