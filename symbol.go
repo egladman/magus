@@ -41,8 +41,12 @@ import (
 const (
 	// Tuned for an agent session, where a stale index is read within seconds of the edit
 	// that staled it. A minute of quiet plus a five-minute ceiling meant the index was
-	// almost never current while anyone was working; one scip run is a few hundred ms.
-	defaultSymbolQuiet       = 10 * time.Second // sources must be this quiet before a re-index
+	// almost never current while anyone was working. The quiet window costs nothing: the
+	// min interval bounds how often a project re-indexes whatever it says. The min interval
+	// is the expensive knob. Measured 2026-10-09 on this repository's root project, a real
+	// reindex took 16s on 3-4 cores at 1.7 GiB, plus up to 11s merging the guard index,
+	// so 45s keeps it near a 60% duty cycle while someone edits.
+	defaultSymbolQuiet       = 3 * time.Second  // sources must be this quiet before a re-index
 	defaultSymbolMinInterval = 45 * time.Second // ceiling on how often one project re-indexes
 	symbolIndexTick          = 5 * time.Second  // how often the scheduler re-evaluates
 	symbolIndexBackoffBase   = 2 * time.Minute  // first backoff after a failed run (doubles, capped)
@@ -207,9 +211,9 @@ func (si *symbolIndexer) pickDue() (indexRef, bool) {
 //
 // It does NOT watch for contention and cancel itself. The limiter is already a FIFO-fair
 // semaphore bounding concurrent work, so an index run is one queued caller among many and
-// a user run behind it waits one scip op, a few hundred milliseconds. A second layer of
-// backpressure on top of that read the pool's queue depth to decide whether to yield, and
-// could not tell a waiting user from its OWN wait for a slot: on a saturated pool it
+// a user run behind it waits one scip op: under a second replayed, seconds for a real
+// reindex. A second layer of backpressure on top of that read the pool's queue depth to
+// decide whether to yield, and could not tell a waiting user from its OWN wait for a slot: on a saturated pool it
 // dispatched, queued for itself, read that as contention, cancelled, and repeated every
 // tick without ever finishing an index.
 func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
@@ -244,6 +248,13 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 	}
 	// A run that actually executed (completed or failed) stamps lastRun to throttle re-runs.
 	st.lastRun = si.now()
+	if errors.Is(err, types.UndeclaredSourceModified) {
+		// An edit landed while the indexer read the sources. The indexer writes none of
+		// them, so this is a lost race, not a broken indexer, and backing off would keep
+		// the index stale for minutes whenever someone edits during a run.
+		st.dirty = true
+		return
+	}
 	if err != nil {
 		st.failures++
 		st.dirty = true

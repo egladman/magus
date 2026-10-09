@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
@@ -154,6 +155,53 @@ func TestSymbolIndexerSeedKeepsThrottles(t *testing.T) {
 
 	_, ok := si.pickDue()
 	assert.False(t, ok, "seeding bypasses neither the min interval nor a backoff")
+}
+
+func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
+	si, _, clock := newTestIndexer(t)
+	si.state[goIndexA] = &indexState{dirty: true}
+	si.runIndex = func(context.Context, indexRef) error {
+		return fmt.Errorf("pkg/a: %w", types.DiagnosticErrorf(types.UndeclaredSourceModified, "a.go changed"))
+	}
+
+	si.execute(context.Background(), goIndexA)
+
+	st := si.state[goIndexA]
+	assert.True(t, st.dirty, "the edit still needs indexing")
+	assert.Zero(t, st.failures)
+	assert.True(t, st.backoffTill.IsZero(), "losing a race with an edit is not an indexer failure")
+	assert.Equal(t, *clock, st.lastRun, "the min interval still throttles the retry")
+}
+
+// TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
+// raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
+func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
+	const spellName = "zzz-source-mutation-spell"
+	root := t.TempDir()
+	src := filepath.Join(root, "a.txt")
+	require.NoError(t, os.WriteFile(src, []byte("before\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("touch"),
+		spells.WithSources("*.txt"),
+		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
+			return nil, os.WriteFile(src, []byte("after\n"), 0o644)
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	cfg := config.Defaults()
+	cfg.HistoryPath = filepath.Join(root, "history.json")
+	m, err := Open(t.Context(), root, WithWorkspaceRegistry(reg), WithLoadedConfig(cfg))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	err = m.Run(t.Context(), []types.Target{{Path: ".", Name: "touch"}})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.UndeclaredSourceModified)
 }
 
 func TestStaleIndexRefs(t *testing.T) {
