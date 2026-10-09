@@ -52,21 +52,19 @@
   --pf-t--global--dark--focus-ring--color--100: var(--pf-t--global--dark--color--brand--100);
 
   /* --- 1. Two-tier corner radius -------------------------------------------------------
-     PatternFly builds every component's radius from a small set of global primitives
-     (--...--radius--100..500) plus semantic aliases (small/medium/large/pill/...). We do NOT
-     want one uniform radius on everything - that reads flat. Instead two tiers:
+     PatternFly builds every component's radius from a small set of semantic aliases
+     (tiny/small/medium/large/pill) and the action/control role aliases. We do NOT want one
+     uniform radius on everything - that reads flat. Instead two tiers:
        - interactive controls (buttons, inputs, selects, the theme/gear/close buttons): 6px,
          clearly rounded, the primary "soft" cue. Set via the action/control role aliases.
        - containers and passive chrome (cards, menus/popovers, tabs, chips/labels): a much
-         subtler 2-3px so panels stay crisp and the rounded buttons stand out against them.
-     So the primitives/semantic aliases (which cards/menus/chips consume) stay small, and only
-     the action/control role aliases go to 6px. We pin each directly so nothing slips through
-     an untraced reference chain. */
-  --pf-t--global--border--radius--100: 2px;
-  --pf-t--global--border--radius--200: 2px;
-  --pf-t--global--border--radius--300: 3px;
-  --pf-t--global--border--radius--400: 3px;
-  --pf-t--global--border--radius--500: 4px; /* was 999px (pill) - crisp rounded rect, not a cylinder */
+         subtler 2-4px so panels stay crisp and the rounded buttons stand out against them. The
+         pill is 4px as well, a crisp rounded rect rather than a cylinder.
+     Only the semantic aliases are set. The numbered primitives behind them are PatternFly's own,
+     and nothing the console imports reads one. */
+  /* A fixed 2px for marks under ~20px tall (a count badge, a divider grip, a kind dot), where even
+     the tiny tier, rounder on Apple, turns the mark into a lozenge. It does not scale by platform. */
+  --console-radius-micro: 2px;
   /* Motion. One duration scale and one easing, so every state change in the console moves at a
      related pace instead of each app inventing its own.
    *
@@ -86,6 +84,15 @@
    * leaving. Anything slower reads as lag rather than as grace. */
   --console-motion-fast: 120ms;
   --console-motion: 190ms;
+  /* The two long ones: a remote collaborator's change flashing in the diff, and the cast
+     ceremony's mark turning into place. Neither is a state change, so neither is a PF duration. */
+  --console-motion-slow: 900ms;
+  --console-motion-ceremony: 1400ms;
+  /* One turn of a spinner and one breath of a pulse: loop periods, not state changes. */
+  --console-motion-spin: 1000ms;
+  --console-motion-breathe: 2400ms;
+  /* The launcher sigil's idle turn, slow enough to read as ambient rather than as activity. */
+  --console-motion-orbit: 90s;
   /* No easing token is defined here: --console-ease already exists further down this file. Defining
      a second one in an earlier block silently lost to it, which is the failure mode of a duplicated
      custom property - no error, just the other value. */
@@ -104,11 +111,6 @@
    whole scale up when theme.js has tagged the root data-platform="apple". Same two-tier idea
    (interactive controls rounder than containers), just softer overall to feel native on Apple. */
 :root[data-platform="apple"] {
-  --pf-t--global--border--radius--100: 4px;
-  --pf-t--global--border--radius--200: 5px;
-  --pf-t--global--border--radius--300: 6px;
-  --pf-t--global--border--radius--400: 7px;
-  --pf-t--global--border--radius--500: 9px;
   --pf-t--global--border--radius--tiny: 4px;
   --pf-t--global--border--radius--small: 6px;
   --pf-t--global--border--radius--medium: 7px;
@@ -521,6 +523,36 @@
   /* People - neutral */
   --console-node-owner:      #b4a9ac;  /* 6.38:1 */
   --console-node-author:     #cbbfc2;  /* 8.15:1 */
+}
+
+/* --- Syntax colours -------------------------------------------------------------------------
+   The docs site's One Light / One Dark palette (--syn-* in docs/src/styles/theme.css), so code reads
+   the same in the console and on the site. PatternFly has no syntax palette, and its colour steps
+   do not follow the theme, so these are plain colours with the dark set restated below. They are
+   copied because docs/ and console/ are separate bundles; syntax-palette.test.ts reads both files
+   and fails when the two stop agreeing. */
+:root {
+  --console-syntax-comment: #606a72;
+  --console-syntax-keyword: #705aae;
+  --console-syntax-string: #3a744c;
+  --console-syntax-number: #8d5e26;
+  --console-syntax-function: #2f6aad;
+}
+:root.pf-v6-theme-dark {
+  --console-syntax-comment: #9da6ae;
+  --console-syntax-keyword: #b79ae6;
+  --console-syntax-string: #8fc79b;
+  --console-syntax-number: #dbab77;
+  --console-syntax-function: #7fb2e6;
+}
+
+/* Chart series. The latency legend's swatches; tiles/latency.ts draws the lines from the same two
+   PatternFly colours, so a change here has to move there too. */
+:root {
+  --console-series-p50: var(--pf-t--global--color--nonstatus--blue--300);
+  --console-series-p95: var(--pf-t--global--color--nonstatus--teal--300);
+  /* A QR code needs a light ground in either theme, or a phone cannot read it. */
+  --console-qr-frame: var(--pf-t--color--white);
 }
 
 /* --- Diagram figures ------------------------------------------------------------------------

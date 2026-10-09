@@ -87,7 +87,7 @@
  *   DescriptionList     - label/value pairs
  *   HelperText          - the hint or error line under a field
  *   ClipboardCopy       - a value with its copy control
- *   NotificationDrawer, DataList - the history list and dense row lists
+ *   DataList            - dense row lists
  * Drawer, Badge, Label and Spinner are imported above. */
 @import "@patternfly/patternfly/components/Alert/alert-group.css";
 @import "@patternfly/patternfly/components/Popover/popover.css";
@@ -103,5 +103,4 @@
 @import "@patternfly/patternfly/components/DescriptionList/description-list.css";
 @import "@patternfly/patternfly/components/HelperText/helper-text.css";
 @import "@patternfly/patternfly/components/ClipboardCopy/clipboard-copy.css";
-@import "@patternfly/patternfly/components/NotificationDrawer/notification-drawer.css";
 @import "@patternfly/patternfly/components/DataList/data-list.css";

@@ -18,7 +18,7 @@
   display: flex; flex-direction: column; position: relative;
   margin-top: var(--pf-t--global--spacer--lg);
   height: calc(100svh - 12.5rem); min-height: 420px;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small); overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
   font-size: var(--pf-t--global--font--size--body--default);
@@ -45,7 +45,7 @@
   flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); align-items: center;
   min-height: var(--notes-bar-h); box-sizing: border-box;
   padding: 0 var(--notes-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-notes-app__bar[hidden] { display: none; }
 /* The bar's leading label - see the note on .console-runs__label; the two bars carry the same slot. */
@@ -83,7 +83,7 @@
   gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm); width: 100%;
   padding-block: var(--pf-t--global--spacer--xs); padding-inline: var(--notes-pad);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border: 0; border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--console-label-size); font-weight: var(--console-label-weight);
   letter-spacing: var(--console-label-tracking); text-transform: uppercase;
@@ -93,7 +93,7 @@
 .console-notes-app__store:hover { background: var(--pf-t--global--background--color--secondary--hover); }
 .console-notes-app__store-twist {
   flex: 0 0 auto; display: inline-flex;
-  transition: transform 0.12s;
+  transition: transform var(--console-motion-fast);
 }
 .console-notes-app__store[aria-expanded="true"] .console-notes-app__store-twist { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .console-notes-app__store-twist { transition: none; } }
@@ -110,7 +110,7 @@
    tint than selected, and selected alone also takes the accent rule and the bolder title. */
 .console-notes-app__note {
   display: block; width: 100%; text-align: start; appearance: none;
-  border: 0; border-inline-start: 3px solid transparent;
+  border: 0; border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
   background: none; color: inherit; font: inherit; cursor: pointer;
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--notes-pad);
   min-block-size: var(--console-control-block-size);
@@ -124,7 +124,7 @@
 .console-notes-app__note-top { display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-notes-app__note-title {
   flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
-  font-size: var(--pf-t--global--font--size--body--default); line-height: 1.3;
+  font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--heading);
 }
 .console-notes-app__note-age {
   flex: 0 0 auto; font-family: var(--pf-t--global--font--family--mono);
@@ -147,7 +147,7 @@
 .console-notes-app__issues {
   display: grid; gap: var(--pf-t--global--spacer--sm);
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--notes-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-notes-app__issues .pf-v6-c-alert__title { overflow-wrap: anywhere; }
 .console-notes-app__note-none {
@@ -173,7 +173,7 @@
   min-block-size: var(--notes-bar-h); box-sizing: border-box;
   padding-block: 0; padding-inline: var(--notes-pad);
   background: var(--pf-t--global--background--color--secondary--default);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-notes-app__detail-body {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -184,7 +184,7 @@
 .console-notes-app__title {
   margin: 0 0 var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--heading--h3);
-  line-height: 1.25; text-wrap: balance;
+  line-height: var(--pf-t--global--font--line-height--heading); text-wrap: balance;
 }
 .console-notes-app__subtitle {
   margin: 0 0 var(--pf-t--global--spacer--md); display: flex; flex-wrap: wrap; align-items: center;
@@ -198,7 +198,7 @@
    inside a paragraph reflows, and renderMarkdown has already joined those lines. `pre-wrap`
    here would undo that and put the author's hard wrapping back. */
 .console-notes-app__prose {
-  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.6;
+  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--body);
   overflow-wrap: anywhere;
   font-family: var(--pf-t--global--font--family--body);
   color: var(--pf-t--global--text--color--regular);
@@ -213,7 +213,7 @@
    sized down rather than competing with it. */
 .console-notes-app__md-h {
   margin: var(--pf-t--global--spacer--lg) 0 var(--pf-t--global--spacer--sm);
-  line-height: 1.3; text-wrap: balance;
+  line-height: var(--pf-t--global--font--line-height--heading); text-wrap: balance;
   font-size: var(--pf-t--global--font--size--body--lg);
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }
@@ -224,7 +224,7 @@
    that cannot be copied and run. */
 .console-notes-app__md-code {
   margin: 0 0 var(--pf-t--global--spacer--md); padding: var(--pf-t--global--spacer--sm); overflow-x: auto;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -243,18 +243,18 @@
 }
 .console-notes-app__md-quote {
   margin: 0 0 var(--pf-t--global--spacer--md); padding-inline-start: var(--pf-t--global--spacer--md);
-  border-inline-start: 2px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--strong) solid var(--pf-t--global--border--color--default);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-notes-app__md-rule {
   margin: var(--pf-t--global--spacer--md) 0; border: 0;
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-notes-app__prose a { color: var(--console-accent); }
 
 .console-notes-app__facts {
   margin-top: var(--pf-t--global--spacer--lg); padding-top: var(--pf-t--global--spacer--md);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   display: grid; gap: var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
 }
@@ -276,7 +276,7 @@
    They carry the only copy saying what a verdict means, and a tooltip is undiscoverable with a
    mouse and absent altogether on touch. */
 .console-notes-app__anchor-detail {
-  display: block; margin-top: var(--pf-t--global--spacer--xs); line-height: 1.45;
+  display: block; margin-top: var(--pf-t--global--spacer--xs); line-height: var(--pf-t--global--font--line-height--body);
   font-family: var(--pf-t--global--font--family--body);
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
@@ -310,7 +310,7 @@
 @container notes (min-width: 46rem) {
   .console-notes-app__pane {
     flex: 0 0 21rem;
-    border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+    border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   }
   .console-notes-app__detail { position: static; flex: 1 1 auto; min-width: 0; visibility: visible; }
   .console-notes-app__detail-bar { display: none; }
@@ -333,7 +333,7 @@
   .console-notes-app__title { font-size: var(--pf-t--global--font--size--heading--h2); }
   .console-notes-app__facts {
     margin-top: 0; padding-top: 0;
-    border-top: 0; border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+    border-top: 0; border-inline-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
     padding-inline-start: var(--pf-t--global--spacer--md);
   }
   .console-notes-app__facts-head:first-child { margin-top: 0; }
@@ -353,7 +353,7 @@
 .console-notes-app__thread-file {
   display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
   margin: var(--pf-t--global--spacer--sm) 0 0; padding-bottom: var(--pf-t--global--spacer--xs);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
   font-weight: var(--pf-t--global--font--weight--body--default);
@@ -364,7 +364,7 @@
 .console-notes-app__entry {
   position: relative;
   padding-block: var(--pf-t--global--spacer--xs); padding-inline: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--sm);
-  border-inline-start: 2px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--strong) solid var(--pf-t--global--border--color--default);
 }
 /* Person and agent are separated by hue, because a tool's output reading as a colleague's
    opinion is the one misreading a transcript must not allow. The author line says the same in
@@ -380,7 +380,7 @@
 }
 .console-notes-app__entry > .pf-v6-c-label { margin-bottom: var(--pf-t--global--spacer--xs); }
 .console-notes-app__entry-body {
-  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: 1.55;
+  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--body);
   white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: var(--pf-t--global--font--family--body);
   color: var(--pf-t--global--text--color--regular);

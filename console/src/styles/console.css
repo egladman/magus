@@ -66,7 +66,7 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -323,7 +323,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   left: 50%;
   transform: translate(-50%, -50%);
   background: var(--pf-t--global--text--color--subtle);
-  border-radius: 1px;
+  border-radius: var(--console-radius-micro);
 }
 #console-outlet [data-divider][data-dir="row"]::after { width: 2px; height: 1.5rem; }
 #console-outlet [data-divider][data-dir="col"]::after { width: 1.5rem; height: 2px; }
@@ -376,8 +376,8 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
 /* PF cards ship no border; the home launcher cards add a hairline. Match it here so the two launchers
    read the same. */
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card {
-  border: 1px solid var(--pf-t--global--border--color--default);
-  transition: border-color 0.18s var(--console-ease, ease), background 0.18s var(--console-ease, ease);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  transition: border-color var(--console-motion) var(--console-ease, ease), background var(--console-motion) var(--console-ease, ease);
 }
 #console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card:hover {
   border-color: var(--console-accent);
@@ -395,7 +395,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200), and the status bar */
+  z-index: var(--pf-t--global--z-index--md); /* above the drawer content (100) + panel (200), and the status bar */
   display: flex;
   flex-direction: column;
   align-items: flex-end; /* the map panel docks to the right; the close bar spans full width below it */
@@ -420,7 +420,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
      and lifted clear of the full-width close bar, with a shadow on all sides. */
   margin: 0 var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm) 0;
   background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   box-shadow: var(--pf-t--global--box-shadow--md);
 }
@@ -433,7 +433,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   height: var(--console-statusbar-h);
   margin: 0;
   border: none;
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: 0;
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   /* Opaque (PF secondary buttons are transparent) so the bar actually COVERS the status strip beneath
@@ -470,7 +470,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
    inline by main.ts's sizePanesMap to the WINDOW's aspect ratio, capped on the long edge. */
 .console-shell-panesmap {
   display: flex;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
   background: var(--pf-t--global--background--color--secondary--default);
@@ -492,7 +492,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   align-items: center;
   justify-content: center;
   padding: var(--pf-t--global--spacer--xs);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--primary--default);
   color: var(--pf-t--global--text--color--subtle);
@@ -506,7 +506,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
 /* The focused cell - the "you are here" ring, matching the accent treatment of the real tiled panes. */
 .console-shell-panesmap__cell[data-focus] {
   border-color: var(--console-accent);
-  outline: 2px solid var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
   outline-offset: -3px;
   color: var(--pf-t--global--text--color--regular);
   background: color-mix(in srgb, var(--console-accent) 10%, var(--pf-t--global--background--color--primary--default));
@@ -521,7 +521,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
 
 /* The focused cell's two split buttons, docked to its bottom edge: splitting acts on the pane the
    operator already pointed at. Each is a 24px target. */
-.console-shell-panesmap__splitctl { position: absolute; bottom: 2px; display: flex; gap: var(--pf-t--global--spacer--xs); }
+.console-shell-panesmap__splitctl { position: absolute; bottom: var(--pf-t--global--spacer--xs); display: flex; gap: var(--pf-t--global--spacer--xs); }
 .console-shell-panesmap__splitbtn {
   display: inline-flex;
   align-items: center;
@@ -529,7 +529,7 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
   min-inline-size: var(--pf-t--global--spacer--lg);
   min-block-size: var(--pf-t--global--spacer--lg);
   padding: 0;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--primary--default);
   color: var(--pf-t--global--text--color--regular);
@@ -576,7 +576,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   border-radius: 50%;
   cursor: help;
   user-select: none;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: none;
   color: var(--pf-t--global--text--color--subtle);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -599,7 +599,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    either side. */
 .console-help-popover {
   position: fixed;
-  z-index: var(--pf-t--global--z-index--400);
+  z-index: var(--pf-t--global--z-index--lg);
   max-inline-size: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
 }
 .console-help-popover.pf-m-bottom { margin-block-start: var(--pf-t--global--spacer--sm); }
@@ -631,7 +631,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      below). A real baseline under the strip in the hairline colour, so a screen with a single tab
      (the common state) still has an edge. NO cast: chrome that is meant to stay back must not lift. */
   background: var(--pf-t--global--background--color--primary--default);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag;
   app-region: drag;
 }
@@ -653,7 +653,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    so a radius here would need a bottom border that doubles it. Gated: below 48rem the tabs and the
    controls are stacked rows, not neighbours on one, and there is nothing to divide. */
 @media (min-width: 48rem) {
-  #console-tabs { border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
+  #console-tabs { border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
 }
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
@@ -703,7 +703,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     order: -1;
     height: var(--console-titlebar-h);
     justify-content: flex-end;
-    border-bottom: 1px solid var(--pf-t--global--border--color--default);
+    border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   }
   /* The command palette trigger splits off to the row's leading edge on a phone. auto margin, not order
      or a second flex line: it needs no DOM change, it just claims the row's slack. */
@@ -805,7 +805,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: fixed;
   min-width: 12rem;
   max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
-  z-index: var(--pf-t--global--z-index--400); /* over the title bar and the title-bar popovers (300) */
+  z-index: var(--pf-t--global--z-index--lg); /* over the title bar and the title-bar popovers (300) */
 }
 
 /* The tab's action buttons (actions, close) sit on the tab row. PF's tab action button is a plain button
@@ -844,7 +844,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* One hairline per tab, on the TRAILING edge only, so the run ends somewhere definite instead of
    trailing off into the bar. Nothing draws a LEADING border - to the first tab's left is the frame's own
    edge, and a hairline there doubles it. */
-#console-tabs .pf-v6-c-tabs__item { border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
+#console-tabs .pf-v6-c-tabs__item { border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
   background: transparent;
   /* Lifted on the SIDES, which is where its neighbors are. Top and bottom are the strip's own edges. */
@@ -868,7 +868,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    same "drop here" language as the Panes map's own drag-to-swap target. */
 #console-tabs .pf-v6-c-tabs__link[data-dragging] { opacity: 0.5; }
 #console-tabs .pf-v6-c-tabs__link[data-tab-drop] {
-  outline: 2px solid var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
   outline-offset: -2px;
 }
 
@@ -898,7 +898,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    chipped the corner of a phone screen. Change that breakpoint and this one moves with it. */
 @media (min-width: 48rem) {
   #console-frame {
-    border-left: 1px solid var(--pf-t--global--border--color--default);
+    border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
   }
 }
@@ -938,7 +938,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* --console-chrome, not the raw secondary token: the rail is the third face of the one continuous frame
      the title bar and status bar make. */
   background: var(--console-chrome);
-  transition: width 0.14s ease;
+  transition: width var(--console-motion-fast) ease;
   /* PF centers a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
      square icon button, so both are returned here - in PF's vocabulary, so a PF version bump carries. */
   --pf-v6-c-nav__link--AlignItems: center;
@@ -968,12 +968,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: absolute;
   inset-block-start: var(--pf-t--global--spacer--xs);
   inset-inline-end: var(--pf-t--global--spacer--xs);
+  display: grid;
+  place-items: center;
   min-inline-size: 1rem;
+  min-block-size: 1rem;
   padding-inline: var(--pf-t--global--spacer--xs);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1rem;
-  text-align: center;
-  border-radius: 2px;
+  line-height: 1;
+  border-radius: var(--console-radius-micro);
   background: var(--console-spruce);
   color: var(--pf-t--global--text--color--on-brand--default);
 }
@@ -1013,7 +1015,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   padding-block-start: 0;
   /* Air under the last row. */
   padding-block-end: var(--pf-t--global--spacer--sm);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 #console-sidebar .pf-v6-c-nav__link {
   position: relative; /* the open-tab marker below is absolutely placed against the row */
@@ -1049,7 +1051,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed; it is
    never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
-#console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity 0.1s ease; }
+#console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity var(--console-motion-fast) ease; }
 #console-sidebar:not([data-expanded]) .pf-v6-c-nav__link-text { opacity: 0; }
 /* The rail's two row markers: an edge bar running the FULL height of the row. OPEN somewhere else: this
    app has a tab, but it is not where you are. Deliberately QUIET - the border tone is the same value
@@ -1252,7 +1254,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-scope {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
   block-size: var(--console-control-block-size);
@@ -1269,7 +1271,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   letter-spacing: 0.01em;
   color: var(--pf-t--global--text--color--subtle);
   background: var(--pf-t--global--background--color--secondary--default);
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   white-space: nowrap;
 }
 #console-scope-btn {
@@ -1300,13 +1302,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-cast {
   position: fixed;
   inset: 0;
-  z-index: var(--pf-t--global--z-index--600);
+  z-index: var(--pf-t--global--z-index--2xl);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 72%, transparent);
   backdrop-filter: blur(7px);
   opacity: 0;
-  transition: opacity 320ms ease;
+  transition: opacity var(--pf-t--global--motion--duration--lg) ease;
 }
 .console-shell-cast[data-on] { opacity: 1; }
 /* Turning WHILE it draws, which is only legible because the figure is rotationally symmetric. */
@@ -1314,7 +1316,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--console-accent);
   transform: rotate(-120deg) scale(0.9);
   opacity: 0;
-  transition: transform 1400ms ease-in-out, opacity 420ms ease;
+  transition: transform var(--console-motion-ceremony) ease-in-out, opacity var(--pf-t--global--motion--duration--xl) ease;
 }
 .console-shell-cast[data-on] .console-shell-cast__mark { transform: rotate(0deg) scale(1); opacity: 1; }
 /* Someone who asked for less movement is not shown the ceremony at all (cast.ts skips it), but if a
@@ -1336,14 +1338,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   margin-block-end: var(--pf-t--global--spacer--sm);
   border-radius: 50%;
   background: color-mix(in srgb, currentcolor 10%, transparent);
-  border: 1px solid color-mix(in srgb, currentcolor 22%, transparent);
+  border: var(--pf-t--global--border--width--regular) solid color-mix(in srgb, currentcolor 22%, transparent);
 }
 [data-launcher-sigil][hidden] { display: none; }
 /* The mark turns, slowly enough that you notice it only if you look: about 4 degrees a second, below the
    threshold where peripheral vision registers motion. The MEDALLION stays put; only the drawing inside it
    turns. Linear, because any easing makes a continuous rotation visibly stutter at the seam. */
 @keyframes console-shell-sigil-turn { to { transform: rotate(360deg); } }
-[data-launcher-sigil] > svg { animation: console-shell-sigil-turn 90s linear infinite; }
+[data-launcher-sigil] > svg { animation: console-shell-sigil-turn var(--console-motion-orbit) linear infinite; }
 /* Both opt-outs, since one is the OS preference and the other is the console's own setting; the blanket
    data-motion rule near-zeroes durations, which for an infinite spin would read as a blur. */
 @media (prefers-reduced-motion: reduce) {
@@ -1380,19 +1382,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-scope__tag {
   margin-inline-start: var(--pf-t--global--spacer--sm);
   padding: 0 var(--pf-t--global--spacer--xs);
-  border-radius: 999px;
+  border-radius: var(--pf-t--global--border--radius--pill);
   font-size: var(--console-chip-size);
   font-weight: var(--console-chip-weight);
   letter-spacing: var(--console-chip-tracking);
   text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 /* The demo row is an ACTION, not one of the scopes above it - entering the demo changes whether anything
    on screen is real, which is a different question from which workspace to look at. */
 .console-shell-scope__demorow {
-  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   margin-block-start: var(--pf-t--global--spacer--xs);
   padding-block-start: var(--pf-t--global--spacer--xs);
 }
@@ -1400,7 +1402,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: absolute;
   top: var(--console-titlebar-h);
   inset-inline-end: var(--pf-t--global--spacer--sm);
-  z-index: var(--pf-t--global--z-index--400);
+  z-index: var(--pf-t--global--z-index--lg);
   min-inline-size: 14rem;
 }
 
@@ -1413,7 +1415,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   align-items: baseline;
   margin-block-end: var(--pf-t--global--spacer--md);
   padding-block-end: var(--pf-t--global--spacer--md);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-signin__label {
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -1430,7 +1432,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    as two things to study. The border belongs to the container so the rows inside stay light. */
 .console-shell-signin__menu {
   margin-block: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   box-shadow: none;
 }
@@ -1533,8 +1535,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   --pf-v6-c-card--m-selectable--hover--BorderColor: var(--card-accent);
   --pf-v6-c-card--m-selectable--focus--BorderColor: var(--card-accent);
   /* An explicit hairline (the PF card ships none), so cards keep a crisp edge on both grounds. */
-  border: 1px solid var(--pf-t--global--border--color--default);
-  transition: transform 0.18s var(--console-ease, ease), border-color 0.18s var(--console-ease, ease), background 0.18s var(--console-ease, ease);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  transition: transform var(--console-motion) var(--console-ease, ease), border-color var(--console-motion) var(--console-ease, ease), background var(--console-motion) var(--console-ease, ease);
 }
 /* The stretched action draws its own focus border; the global outline is drawn just inside the card,
    whose overflow would clip an outside ring. */
@@ -1573,15 +1575,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    z-index -1 (within the card's isolation context) keeps it behind the text but above the card ground. */
 .console-shell-launcher__watermark {
   position: absolute;
-  right: -1.1rem;
-  bottom: -1.4rem;
+  right: calc(var(--pf-t--global--spacer--md) * -1);
+  bottom: calc(var(--pf-t--global--spacer--lg) * -1);
   z-index: -1;
   width: 8.25rem;
   height: 8.25rem;
   color: var(--pf-t--global--text--color--regular);
   opacity: 0.05;
   pointer-events: none;
-  transition: transform 0.35s var(--console-ease, ease), opacity 0.35s var(--console-ease, ease);
+  transition: transform var(--pf-t--global--motion--duration--lg) var(--console-ease, ease), opacity var(--pf-t--global--motion--duration--lg) var(--console-ease, ease);
 }
 .console-shell-launcher__watermark svg { width: 100%; height: 100%; }
 .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:focus-visible) .console-shell-launcher__watermark {
@@ -1608,40 +1610,40 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Entrance: the cards fade-and-rise once on load, staggered 50ms apart. One-shot (forwards), and fully
    disabled under prefers-reduced-motion (below). Keep the step in ms: esbuild --minify rewrites `* 0.05s`
    to an invalid `/20s` and the whole cascade drops. */
-#console-outlet [data-app="home"] .console-shell-launcher__card { opacity: 0; animation: console-shell-launcher-rise 0.45s var(--console-ease, ease) forwards; animation-delay: calc((sibling-index() - 1) * 50ms + 20ms); }
+#console-outlet [data-app="home"] .console-shell-launcher__card { opacity: 0; animation: console-shell-launcher-rise var(--pf-t--global--motion--duration--xl) var(--console-ease, ease) forwards; animation-delay: calc(sibling-index() * var(--pf-t--global--motion--duration--xs)); }
 @keyframes console-shell-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
 
 /* One-shot "living" icon micro-motions on hover - each app's glyph animates ONCE, in character, and
    settles. data-motion on a single inner element (or the icon slot, for the gear and the note) picks the
    motion. All under 250ms-ish, none loop. Disabled under reduced-motion (below). */
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon[data-motion="gear"] svg { animation: console-shell-launcher-gear 0.6s var(--console-ease, ease); }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon[data-motion="gear"] svg { animation: console-shell-launcher-gear var(--pf-t--global--motion--duration--3xl) var(--console-ease, ease); }
 }
 @keyframes console-shell-launcher-gear { from { transform: rotate(0); } to { transform: rotate(30deg); } }
 /* The note is drawn askew and settles the rest of the way down on hover. */
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon[data-motion="settle"] svg { animation: console-shell-launcher-settle 0.6s var(--console-ease, ease); }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon[data-motion="settle"] svg { animation: console-shell-launcher-settle var(--pf-t--global--motion--duration--3xl) var(--console-ease, ease); }
 }
 @keyframes console-shell-launcher-settle { from { transform: rotate(-7deg); } to { transform: rotate(0); } }
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="bars"] { animation: console-shell-launcher-bars 0.6s var(--console-ease, ease); transform-origin: center bottom; transform-box: fill-box; }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="bars"] { animation: console-shell-launcher-bars var(--pf-t--global--motion--duration--3xl) var(--console-ease, ease); transform-origin: center bottom; transform-box: fill-box; }
 }
 @keyframes console-shell-launcher-bars { from { transform: scaleY(0.55); } to { transform: scaleY(1); } }
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="pulse"] { animation: console-shell-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="pulse"] { animation: console-shell-launcher-pulse var(--pf-t--global--motion--duration--3xl) var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
 }
 @keyframes console-shell-launcher-pulse { 40% { transform: scale(1.5); } }
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="bolt"] { animation: console-shell-launcher-flick 0.45s var(--console-ease, ease); }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="bolt"] { animation: console-shell-launcher-flick var(--pf-t--global--motion--duration--xl) var(--console-ease, ease); }
 }
 @keyframes console-shell-launcher-flick { 30% { opacity: 0.35; } 60% { opacity: 1; } }
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="wave"] { animation: console-shell-launcher-wave 0.7s var(--console-ease, ease); }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="wave"] { animation: console-shell-launcher-wave var(--pf-t--global--motion--duration--3xl) var(--console-ease, ease); }
 }
 @keyframes console-shell-launcher-wave { 50% { transform: translateY(-1.5px) scaleY(1.2); } }
 /* The keyboard's spacebar depresses and comes back - the smallest motion in the set. */
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="press"] { animation: console-shell-launcher-press 0.45s var(--console-ease, ease); }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="press"] { animation: console-shell-launcher-press var(--pf-t--global--motion--duration--xl) var(--console-ease, ease); }
 }
 @keyframes console-shell-launcher-press { 40% { transform: translateY(1px); } }
 /* The stopwatch hand sweeps one full turn. transform-box is view-box, not the fill-box the other
@@ -1649,7 +1651,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    fill-box origin would spin it about its own midpoint. view-box lets the origin be named in viewBox
    units - the dial's center. */
 @media (hover: hover) {
-  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="sweep"] { animation: console-shell-launcher-sweep 0.85s var(--console-ease, ease); transform-box: view-box; transform-origin: 12px 13.5px; }
+  .console-shell-launcher__card:has(.pf-v6-c-card__clickable-action:hover) .console-shell-launcher__icon [data-motion="sweep"] { animation: console-shell-launcher-sweep var(--console-motion-slow) var(--console-ease, ease); transform-box: view-box; transform-origin: 12px 13.5px; }
 }
 @keyframes console-shell-launcher-sweep { to { transform: rotate(360deg); } }
 
@@ -1669,7 +1671,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   top: 0;
   left: 0;
   right: 0;
-  z-index: var(--pf-t--global--z-index--400);
+  z-index: var(--pf-t--global--z-index--lg);
   display: flex;
   align-items: stretch;
   /* Match the title bar it drops over exactly - same token, so they cannot drift apart. */
@@ -1722,7 +1724,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* Slide-in: at rest (placeholder showing) the token run sits shifted right, leaving breathing room
      after the prompt; the first keystroke sets data-typed and it eases left. */
   transform: translateX(2.6rem);
-  transition: transform 0.28s var(--pf-t--global--motion--timing-function--decelerate, ease-out);
+  transition: transform var(--pf-t--global--motion--duration--lg) var(--pf-t--global--motion--timing-function--decelerate, ease-out);
 }
 .console-shell-commandbar__items[data-typed] { transform: translateX(0.75rem); }
 /* The empty answer ("No matching commands"): a live region of its own, zero-width while empty so it
@@ -1789,7 +1791,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--pf-t--global--text--color--subtle);
-  border-left: 1px solid var(--pf-t--global--border--color--default);
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-commandbar__preview:empty { border-left: 0; } /* no divider when nothing is selected */
 
@@ -1825,7 +1827,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     /* LEFT only, not the full-perimeter --lg blur: the panel's top and bottom edges already sit flush
        against the title bar and the status bar. */
     box-shadow: var(--pf-t--global--box-shadow--lg--left);
-    z-index: var(--pf-t--global--z-index--200);
+    z-index: var(--pf-t--global--z-index--sm);
   }
 }
 /* Pinned pin button: a POP OF ORANGE marks the depressed/"on" state so a pinned panel is unmistakable.
@@ -1856,7 +1858,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     flex-basis: auto;
     margin: 0;
     transform: none;
-    z-index: var(--pf-t--global--z-index--200);
+    z-index: var(--pf-t--global--z-index--sm);
   }
   /* No x-axis resize when the panel is a full-screen overlay: hide the splitter on a phone. */
   #console-refsplitter { display: none; }
@@ -1889,10 +1891,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-app="reference"] .console-shell-refdrawer__body {
   max-width: 46rem;
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 /* The cloned help + search sit in the panel's scrolling body; keep it dense and legible. */
-#console-refpanel .console-shell-refdrawer__body { font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.5; }
+#console-refpanel .console-shell-refdrawer__body { font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body); }
 .console-shell-refdrawer__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 /* The cloned help blocks read as stacked, expanded sections. */
 .console-shell-refdrawer__body > * { margin: 0 0 var(--pf-t--global--spacer--md); }
@@ -1925,7 +1927,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-refsearch {
   margin-bottom: var(--pf-t--global--spacer--md);
   padding-bottom: var(--pf-t--global--spacer--md);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-refsearch__note {
   margin: var(--pf-t--global--spacer--sm) 0 0;
@@ -1936,7 +1938,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   margin: var(--pf-t--global--spacer--sm) 0 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   max-height: 18rem;
   overflow-y: auto;
@@ -1947,7 +1949,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   padding: var(--pf-t--global--spacer--sm);
   text-decoration: none;
   color: inherit;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-refsearch__results > li:last-child .console-shell-refsearch__result { border-bottom: 0; }
 .console-shell-refsearch__result:hover,
@@ -1966,7 +1968,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* Matched terms highlighted in a result's title/snippet. Uses the accent tint so it reads on both the
    normal row and the accent-inverted hover/selected row. */
-.console-shell-refsearch__hl { background: color-mix(in srgb, var(--console-accent) 35%, transparent); color: inherit; border-radius: 2px; padding: 0; }
+.console-shell-refsearch__hl { background: color-mix(in srgb, var(--console-accent) 35%, transparent); color: inherit; border-radius: var(--console-radius-micro); padding: 0; }
 .console-shell-refsearch__result:hover .console-shell-refsearch__hl,
 .console-shell-refsearch__result[aria-selected="true"] .console-shell-refsearch__hl { background: color-mix(in srgb, var(--pf-t--global--text--color--on-brand--default) 30%, transparent); }
 /* Parsed-query preview: compact read-only chips showing how the query was interpreted (scope + value).
@@ -1978,8 +1980,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   gap: var(--pf-t--global--spacer--xs);
   padding: 0 var(--pf-t--global--spacer--xs);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  line-height: var(--pf-t--global--font--line-height--body);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -1995,7 +1997,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Keyboard shortcuts sheet (cheatsheet.ts): a read-only PF modal opened by holding "?" or the footer
    button. Sits above the drawer content on the PF modal z-index; the box is a two-column label/keys grid
    grouped by area, and stays scrollable for long lists. */
-#console-cheatsheet { z-index: var(--pf-t--global--z-index--400); }
+#console-cheatsheet { z-index: var(--pf-t--global--z-index--lg); }
 .console-shell-cheatsheet { max-height: min(80vh, 40rem); overflow-y: auto; }
 .console-shell-cheatsheet:focus-visible { outline-offset: var(--console-focus-inset); }
 .console-shell-cheatsheet__body { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
@@ -2041,8 +2043,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   padding: var(--pf-t--global--spacer--xs);
   min-width: 1.5rem;
   text-align: center;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-bottom-width: 2px;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-bottom-width: var(--pf-t--global--border--width--strong);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
   color: var(--pf-t--global--text--color--regular);
@@ -2082,7 +2084,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -2141,10 +2143,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    transition below is what makes that clear read as a FADE rather than a cut. The base [data-krow] rules
    live in overrides.css (it owns the keybindings grid); this only adds the transition + the
    highlighted-state paint, so it is additive regardless of sheet load order. */
-[data-kbeditor] [data-krow] { transition: background-color 0.6s ease, outline-color 0.6s ease; }
+[data-kbeditor] [data-krow] { transition: background-color var(--pf-t--global--motion--duration--3xl) ease, outline-color var(--pf-t--global--motion--duration--3xl) ease; }
 [data-kbeditor] [data-krow][data-kb-highlight] {
   background: color-mix(in srgb, var(--console-accent) 20%, transparent);
-  outline: 2px solid var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
   outline-offset: 2px;
 }
 
@@ -2160,7 +2162,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* Set the zoom cluster apart from the shell's status-bar icon buttons that follow it - flush together
      they are easy to misclick. A hairline divider plus trailing space gives it clearance. */
   padding-right: var(--pf-t--global--spacer--sm);
-  border-right: 1px solid var(--pf-t--global--border--color--default);
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-zoom .console-shell-zoom__button, .console-shell-zoom .console-shell-zoom__readout {
   appearance: none;
@@ -2172,7 +2174,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--subtle);
   user-select: none;
   border-radius: var(--pf-t--global--border--radius--small);
-  transition: color 0.12s, background 0.12s;
+  transition: color var(--console-motion-fast), background var(--console-motion-fast);
 }
 .console-shell-zoom .console-shell-zoom__button {
   display: inline-flex;

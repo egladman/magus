@@ -83,7 +83,7 @@ body[data-dash-native] { margin: 0; }
   padding-block: 0;
   padding-inline: var(--console-pad);
   background: var(--console-chrome);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-viewbar {
   display: flex;
@@ -121,7 +121,7 @@ body[data-dash-native] { margin: 0; }
   padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
   /* Flush with the CARD's outer edge: a heading is not in a box, the cards it heads are. */
   padding-inline: 0;
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-section__title {
   margin: 0;
@@ -219,7 +219,7 @@ body[data-dash-native] { margin: 0; }
   min-block-size: var(--pf-t--global--spacer--lg);
   color: inherit;
   text-decoration: none;
-  border-block-end: 1px dotted var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) dotted var(--pf-t--global--border--color--default);
 }
 .console-render-glosslink:hover {
   color: var(--console-accent);
@@ -270,7 +270,7 @@ body[data-dash-native] { margin: 0; }
   gap: var(--pf-t--global--spacer--xs);
   min-inline-size: 0;
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--primary--default);
   overflow: hidden;
@@ -302,7 +302,7 @@ body[data-dash-native] { margin: 0; }
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   font-family: var(--pf-t--global--font--family--mono);
   font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+  line-height: var(--pf-t--global--font--line-height--heading);
   /* A KPI never wraps or hyphenates. "742 MB" broken across two lines, or "3,979" losing its last
      digit, is not a smaller version of the number - it is a different one. If it cannot fit,
      clipping with an ellipsis at least LOOKS wrong, where a silent wrap reads as intentional. */
@@ -360,7 +360,7 @@ body[data-dash-native] { margin: 0; }
   inline-size: 100%;
   aspect-ratio: 1;
   border-radius: var(--pf-t--global--border--radius--tiny);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: transparent;
 }
 .console-dashboard-pool__slot[data-state="running"] { background: var(--console-status-running); border-color: var(--console-status-running); }
@@ -384,7 +384,7 @@ body[data-dash-native] { margin: 0; }
   border-radius: var(--pf-t--global--border--radius--tiny);
   margin-inline-end: var(--pf-t--global--spacer--xs);
   vertical-align: middle;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-legend--running::before { background: var(--console-status-running); border-color: var(--console-status-running); }
 .console-dashboard-legend--queued::before { border-style: dashed; border-color: var(--console-status-queued); background: transparent; }
@@ -402,11 +402,11 @@ body[data-dash-native] { margin: 0; }
   block-size: 0;
   border-radius: 0;
   border-width: 0;
-  border-block-start-width: 2px;
+  border-block-start-width: var(--pf-t--global--border--width--strong);
   background: none;
 }
-.console-dashboard-legend--p50::before { border-block-start-style: solid; border-color: var(--pf-t--global--color--nonstatus--blue--300); }
-.console-dashboard-legend--p95::before { border-block-start-style: dashed; border-color: var(--pf-t--global--color--nonstatus--teal--300); }
+.console-dashboard-legend--p50::before { border-block-start-style: solid; border-color: var(--console-series-p50); }
+.console-dashboard-legend--p95::before { border-block-start-style: dashed; border-color: var(--console-series-p95); }
 .console-dashboard-legend--p99::before { border-block-start-style: dotted; border-color: var(--pf-t--global--text--color--regular); }
 .console-dashboard-tile__note .console-dashboard-legend { margin-inline-start: var(--pf-t--global--spacer--sm); }
 
@@ -430,7 +430,7 @@ body[data-dash-native] { margin: 0; }
   justify-content: center;
   aspect-ratio: 1;
   border-radius: var(--pf-t--global--border--radius--tiny);
-  border: 1px solid var(--agent-host-accent, var(--console-stone));
+  border: var(--pf-t--global--border--width--regular) solid var(--agent-host-accent, var(--console-stone));
   background: transparent;
   color: var(--agent-host-accent, var(--console-stone));
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -479,7 +479,7 @@ body[data-dash-native] { margin: 0; }
   gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   margin-block-end: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border-inline-start: 3px solid var(--console-status-running);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-status-running);
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-dashboard-orchestration[data-state="attention"] { border-inline-start-color: var(--console-status-danger); }
@@ -507,7 +507,7 @@ body[data-dash-native] { margin: 0; }
      (below), so the row reserves its width as padding instead of as a gap. The row already clips,
      so its rounded corners trim the block for free. */
   padding-inline-start: calc(var(--pf-t--global--spacer--xl) + var(--pf-t--global--spacer--sm));
-  border-inline-start: 3px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--pf-t--global--border--color--default);
 }
 /* The tool name hugs the glyph; the meta is pushed to the far edge. */
 .console-dashboard-row.console-dashboard-agents__call .console-dashboard-row__cmd { margin-inline-end: auto; }
@@ -573,8 +573,8 @@ body[data-dash-native] { margin: 0; }
   gap: var(--pf-t--global--spacer--sm);
   align-items: center;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 3px solid var(--console-status-running);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-status-running);
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-dashboard-jobs__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
@@ -653,7 +653,7 @@ body[data-dash-native] { margin: 0; }
   block-size: 0.7em;
   border-radius: var(--pf-t--global--border--radius--tiny);
   background: var(--console-status-running);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 /* Ramp opacities by position (no inline styles): idle -> full. */
 .console-dashboard-util__ramp i:nth-child(1) { opacity: 0.06; }
@@ -669,7 +669,7 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-gantt__howto {
   margin: 0 0 var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-dashboard-gantt__scroll {
@@ -741,7 +741,7 @@ body[data-dash-native] { margin: 0; }
   block-size: 0;
   border-radius: 0;
   border-width: 0;
-  border-block-start: 2px dashed var(--pf-t--global--border--color--default);
+  border-block-start: var(--pf-t--global--border--width--strong) dashed var(--pf-t--global--border--color--default);
   background: none;
 }
 .console-dashboard-gantt__legend .console-dashboard-legend--running { color: var(--console-status-running); }
@@ -776,7 +776,7 @@ body[data-dash-native] { margin: 0; }
   column-gap: var(--pf-t--global--spacer--sm);
   row-gap: 0;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
   font-size: var(--pf-t--global--font--size--body--default);
@@ -816,7 +816,7 @@ body[data-dash-native] { margin: 0; }
    tile whose normal state is perfectly healthy. The border is the colour; the row says it in words. */
 .console-dashboard-row[data-stale="true"] {
   border-color: var(--pf-t--global--border--color--status--warning--default);
-  background: var(--pf-t--global--background--color--status--warning--default);
+  background: color-mix(in srgb, var(--console-status-warn) 18%, transparent);
 }
 /* Live-activity rows arrive and leave rather than blinking in and out. A running call ending is the
    one moment on this panel where something is genuinely changing; leaving slides right and
@@ -886,8 +886,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--md);
   padding: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 4px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--main--default) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--primary--default);
 }
@@ -903,7 +903,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   margin: 0;
   font-size: var(--pf-t--global--font--size--heading--sm);
   font-weight: var(--pf-t--global--font--weight--heading--bold);
-  line-height: 1.2;
+  line-height: var(--pf-t--global--font--line-height--heading);
 }
 /* The words are in the regular text colour: the mark and the rule carry the state, and the one
    verdict that is allowed a colour is the one that asks for a person. */
@@ -942,7 +942,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   justify-content: center;
   min-inline-size: 0;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -1020,8 +1020,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-attention__row {
   min-inline-size: 0;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 3px solid var(--console-status-warn);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-status-warn);
   border-radius: var(--pf-t--global--border--radius--tiny);
 }
 /* A permission is somebody being asked to authorize something, which is the one outcome a reader
@@ -1091,15 +1091,15 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   --log-pad: var(--pf-t--global--spacer--md);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--regular);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   /* AFTER the `border` shorthand, which would otherwise reset it back to 1px. A continuous left rule
      down the whole tail, the device the attention hero uses for its verdict: it binds the rows into
      one body of output and marks where it starts. Neutral grey: structure, not status. */
-  border-inline-start: 3px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--pf-t--global--border--color--default);
   overflow-wrap: anywhere;
 }
 
@@ -1114,7 +1114,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   gap: var(--pf-t--global--spacer--sm);
   margin-block-start: var(--pf-t--global--spacer--sm);
   padding-block-end: var(--pf-t--global--spacer--xs);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-insight__title {
   margin: 0;
@@ -1519,7 +1519,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   max-block-size: none;
   flex: 1 1 auto;
   min-block-size: 0;
-  line-height: 1.55;
+  line-height: var(--pf-t--global--font--line-height--body);
   --log-pad: var(--pf-t--global--spacer--sm);
 }
 /* The card body is already a column flex container (the canvas rules above), so the tile's own
@@ -1600,7 +1600,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--lg);
   overflow: visible;
   background: var(--pf-t--global--background--color--secondary--default);
-  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-alertrail > [role="status"] { visibility: visible; }
 /* Qualified to match the base rule's (1,2,0): unqualified this scored (0,3,0) and LOST to it, so
@@ -1645,8 +1645,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 4px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--main--default) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--tiny);
   background: var(--pf-t--global--background--color--primary--default);
 }
@@ -1663,7 +1663,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-alertrail__msg {
   min-inline-size: 0;
   font-size: var(--pf-t--global--font--size--body--lg);
-  line-height: 1.25;
+  line-height: var(--pf-t--global--font--line-height--heading);
   /* Two lines, then ellipsis. One line was too tight for a real failure message; unbounded wrapping
      would let a long message change the rail's height and shove the board around underneath it. */
   display: -webkit-box;
@@ -1697,7 +1697,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    ============================================================================================ */
 
 .uplot, .uplot *, .uplot *::before, .uplot *::after { box-sizing: border-box; }
-.uplot { font-family: var(--pf-t--global--font--family--body, system-ui, sans-serif); line-height: 1.5; width: min-content; }
+.uplot { font-family: var(--pf-t--global--font--family--body); line-height: var(--pf-t--global--font--line-height--body); width: min-content; }
 .u-title { text-align: center; font-size: var(--pf-t--global--font--size--heading--sm); font-weight: var(--pf-t--global--font--weight--heading--bold); }
 .u-wrap { position: relative; user-select: none; }
 .u-over, .u-under { position: absolute; }
@@ -1719,7 +1719,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .u-legend .u-off > * { opacity: 0.3; }
 .u-select { background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 8%, transparent); position: absolute; pointer-events: none; }
 .u-cursor-x, .u-cursor-y { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; }
-.u-hz .u-cursor-x, .u-vt .u-cursor-y { height: 100%; border-right: 1px dashed var(--console-chart-grid); }
-.u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: 1px dashed var(--console-chart-grid); }
+.u-hz .u-cursor-x, .u-vt .u-cursor-y { height: 100%; border-right: var(--pf-t--global--border--width--regular) dashed var(--console-chart-grid); }
+.u-hz .u-cursor-y, .u-vt .u-cursor-x { width: 100%; border-bottom: var(--pf-t--global--border--width--regular) dashed var(--console-chart-grid); }
 .u-cursor-pt { position: absolute; top: 0; left: 0; border-radius: 50%; border: 0 solid; pointer-events: none; will-change: transform; background-clip: padding-box !important; }
 .u-axis.u-off, .u-select.u-off, .u-cursor-x.u-off, .u-cursor-y.u-off, .u-cursor-pt.u-off { display: none; }

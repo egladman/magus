@@ -2,12 +2,25 @@ import colorToken from "./stylelint-color-token.mjs";
 import containerQuery from "./stylelint-container-query.mjs";
 import controlSizing from "./stylelint-control-sizing.mjs";
 import labelToken from "./stylelint-label-token.mjs";
+import shapeToken from "./stylelint-shape-token.mjs";
 import spacerToken from "./stylelint-spacer-token.mjs";
+import tokenExists from "./stylelint-token-exists.mjs";
+import tokenTier from "./stylelint-token-tier.mjs";
 import typeToken from "./stylelint-type-token.mjs";
 
 export default {
   extends: ["stylelint-config-standard"],
-  plugins: [colorToken, containerQuery, controlSizing, labelToken, spacerToken, typeToken],
+  plugins: [
+    colorToken,
+    containerQuery,
+    controlSizing,
+    labelToken,
+    shapeToken,
+    spacerToken,
+    tokenExists,
+    tokenTier,
+    typeToken,
+  ],
   rules: {
     // Existing console CSS intentionally uses BEM names, PatternFly custom properties,
     // dense declaration groups, and legacy-compatible color/media syntax. Keep the
@@ -45,12 +58,33 @@ export default {
     // many under 12px, and picked their weights per file. Type comes from the PatternFly size and
     // weight tokens (every named size step is 12px or larger) or the console's own; an uppercase run
     // is label-token's. A relative em or % is accepted only where it cannot shrink below the parent.
+    // Leading and family come from the same ramp as size: the two line-height tokens, the three
+    // family tokens, and the font shorthand only when each piece is one of those.
     "magus/type-token": true,
+    // PatternFly: "never use a token that ends in a number" and "do not use palette tokens". Base
+    // and palette tokens feed the semantic ones; consuming one pins a value the theme cannot move.
+    // tokens.css is the one file that adapts the base layer, so it is the one that may name it.
+    "magus/token-tier": [true, {
+      definitions: [
+        {
+          file: /(?:^|\/)src\/styles\/tokens\.css$/,
+          reason: "tokens.css adapts PatternFly's base and palette tokens into the console's semantic and --console-* slots",
+        },
+      ],
+    }],
+    // A mistyped token resolves to nothing and the declaration quietly falls back to the inherited
+    // value. Every --pf-t-- token and every --pf-v6-c-* or --pf-v6-l-* property the console declares
+    // or reads must exist in the installed PatternFly, which the rule reads from node_modules.
+    "magus/token-exists": true,
+    // Radius, border width and duration were written as 2px, 1px solid and 0.18s in hand-picked
+    // values that do not follow the console's two radius tiers or its motion scale. They take the
+    // PatternFly radius, border-width and motion-duration tokens, or the --console-motion* ones.
+    "magus/shape-token": true,
     // Spacing was invented per file in rem, so two panels that should line up differ by a fraction of
     // a rem that nobody chose. padding, margin, gap and inset take 0, auto, a percentage, a spacer
-    // token or a calc() of those. The one allowance is geometry that is data rather than spacing: a
-    // selector listed here (and the properties it covers, when only some are data), with the reason
-    // it is exempt, and nothing else. There is no file-wide ignore.
+    // token or a calc() of those; so do top, right, bottom and left. The one allowance is geometry
+    // that is data rather than spacing: a selector listed here (and the properties it covers, when
+    // only some are data), with the reason it is exempt, and nothing else. There is no file-wide ignore.
     "magus/spacer-token": [true, {
       geometry: [
         {

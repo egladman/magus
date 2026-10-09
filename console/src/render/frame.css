@@ -27,7 +27,7 @@
   margin-block-start: var(--pf-t--global--spacer--lg);
   block-size: calc(100svh - 12.5rem);
   min-block-size: 420px;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
@@ -40,7 +40,7 @@
   background: var(--pf-t--global--background--color--primary--default);
 }
 .console-render-panel[data-drag-over] {
-  outline: 2px dashed var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) dashed var(--console-accent);
   outline-offset: calc(var(--pf-t--global--spacer--sm) * -1);
 }
 .console-render-btn__icon { inline-size: 1em; block-size: 1em; flex: 0 0 auto; }
@@ -61,7 +61,7 @@
 .console-render-body {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.6;
+  line-height: var(--pf-t--global--font--line-height--body);
   zoom: var(--log-zoom, 1);
   /* No padding at the top: the body sits under its own header, and a gap there leaves the first row
      floating below the header's hairline. The bottom keeps clearance from the pane edge. */
@@ -74,8 +74,8 @@
    and a button may not contain buttons. The accent is a border, so it needs no shadow token. */
 .console-log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
 .console-render-section {
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 3px solid transparent;
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
 }
 .console-render-section:last-child { border-block-end: 0; }
 .console-render-section[data-status="fail"],
@@ -119,14 +119,14 @@
   text-overflow: ellipsis;
   color: var(--log-head-fg, var(--pf-t--global--text--color--regular));
 }
-/* CSS-drawn disclosure caret (points down when expanded); a border triangle keeps the source ASCII. */
+/* CSS-drawn disclosure caret (points down when expanded); a clipped box keeps the source ASCII. */
 .console-render-section__twist {
   flex: 0 0 auto;
   display: inline-block;
-  inline-size: 0;
-  block-size: 0;
-  border-inline: 0.3em solid transparent;
-  border-block-start: 0.36em solid var(--pf-t--global--text--color--subtle);
+  inline-size: 0.6em;
+  block-size: 0.36em;
+  background: var(--pf-t--global--text--color--subtle);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
   transition: transform var(--console-motion-fast);
 }
 .console-render-section[data-collapsed] .console-render-section__twist { transform: rotate(-90deg); }
@@ -194,7 +194,7 @@
   flex-direction: column;
   min-block-size: 0;
   min-inline-size: 0;
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   /* Chrome, so the chrome token: it sits against the navigation rail, and two planes there was the
      seam most visible on this app. */
   background: var(--console-chrome);
@@ -212,7 +212,7 @@
   gap: var(--pf-t--global--spacer--xs);
   min-block-size: var(--console-app-head-h);
   padding-inline: var(--log-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-log-body {
   flex: 1 1 auto;
@@ -271,7 +271,7 @@
   gap: var(--pf-t--global--spacer--xs);
   padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-log-runs__modes { inline-size: 100%; }
 .console-log-runs__modes .pf-v6-c-toggle-group__item { flex: 1 1 0; }
@@ -292,7 +292,7 @@
   margin-inline: var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-log-runs__empty > .pf-v6-c-button { margin-block-start: var(--pf-t--global--spacer--sm); }
 
@@ -335,7 +335,7 @@
 .console-log-runs__reopen {
   flex: 0 0 auto;
   align-self: stretch;
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: 0;
   padding-inline: var(--pf-t--global--spacer--xs);
   display: flex;

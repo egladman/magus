@@ -20,7 +20,7 @@
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
 /* A shared link has no picker or lens to offer and draws without asking for the runtime. */
@@ -36,8 +36,8 @@
   border-radius: 0;
   border-inline: 0;
   border-block-start: 0;
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 3px solid var(--console-slate);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-slate);
   padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
   box-shadow: none;
@@ -59,7 +59,7 @@
   gap: var(--pf-t--global--spacer--sm);
   padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-diagrams__runtime-status { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 
@@ -135,7 +135,7 @@
   flex-direction: column;
   min-block-size: 0;
   overflow-y: auto;
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-diagrams__aside-title {
   margin: 0;
@@ -167,7 +167,7 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
 /* A narrow pane stacks the node list under the figure. */
 @container graph (max-width: 47.99rem) {
   .console-diagrams__body { flex-direction: column; }
-  .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: 1px solid var(--pf-t--global--border--color--default); }
+  .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -81,7 +81,7 @@
   to { transform: rotate(360deg); }
 }
 .console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg {
-  animation: console-activity-spin 1s linear infinite;
+  animation: console-activity-spin var(--console-motion-spin) linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
   .console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg { animation: none; }

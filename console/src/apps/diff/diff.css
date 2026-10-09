@@ -3,18 +3,10 @@
  * PatternFly ships status COLOR tokens but no status BACKGROUND tokens, so the add/delete
  * tint is mixed here rather than named.
  *
- * The SYNTAX colours are PatternFly palette steps: dark ones for the light theme, light ones for
- * the dark theme, because the plain palette tokens do not follow the theme (see tokens.css). The
- * console used to carry the docs site's One Light / One Dark values as hex here; the colour rule
- * keeps palettes in tokens.css, and PatternFly's own steps are the nearest theme-aware set.
- *
- * Measured against the plain ground and the add and delete tints, the worst pair in each theme:
- *   light: keyword purple-50 5.7, string green-60 4.6, number orange-60 4.9, function blue-60 6.7,
- *          comment subtle 7+.
- *   dark:  keyword purple-30 5.4, string green-30 7.6, number orange-30 6.3, function blue-30 6.5,
- *          comment subtle 7+.
- * Every one clears AA (4.5:1) on the tinted rows, which is the ground the tint percentages below
- * were chosen to protect: a heavier tint lightens or darkens the ground the code is read on. */
+ * The SYNTAX colours are the --console-syntax-* tokens in tokens.css, the docs site's One Light /
+ * One Dark palette, so the console and the docs agree on what a keyword looks like. The tint
+ * percentages below were chosen to keep those colours at AA (4.5:1) on the tinted rows: a heavier
+ * tint lightens or darkens the ground the code is read on. */
 :root {
   --console-diff-add: var(--pf-t--global--color--status--success--default);
   --console-diff-del: var(--pf-t--global--color--status--danger--default);
@@ -27,20 +19,10 @@
      background: the secondary one is the darkest plane in dark and drew every header as a trench. */
   --console-diff-panel: var(--console-chrome);
   /* The width of the accent bar down a row's leading edge. */
-  --console-diff-bar: var(--pf-t--global--border--width--200);
-
-  --console-syn-comment: var(--pf-t--global--text--color--subtle);
-  --console-syn-keyword: var(--pf-t--color--purple--50);
-  --console-syn-string: var(--pf-t--color--green--60);
-  --console-syn-number: var(--pf-t--color--orange--60);
-  --console-syn-function: var(--pf-t--color--blue--60);
-}
-
-:root.pf-v6-theme-dark {
-  --console-syn-keyword: var(--pf-t--color--purple--30);
-  --console-syn-string: var(--pf-t--color--green--30);
-  --console-syn-number: var(--pf-t--color--orange--30);
-  --console-syn-function: var(--pf-t--color--blue--30);
+  --console-diff-bar: var(--pf-t--global--border--width--strong);
+  /* A code row's line box. It centres the text in a row the virtualizer fixes at ROW_HEIGHT in
+     rows.ts, so the two are the same number. */
+  --console-diff-row-line-height: 24px;
 }
 
 /* diff.css - the Review app: a sidebar and a virtualized hunk stream.
@@ -85,7 +67,7 @@
   gap: var(--pf-t--global--spacer--xs);
   min-block-size: var(--console-diff-head-block-size);
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 /* The console's one label voice (tokens.css), not a quieter one of this app's own. It labels a
@@ -105,7 +87,7 @@
   align-self: start;
   block-size: 100%;
   border-radius: 0;
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-diff-panel);
 }
 
@@ -120,7 +102,7 @@
      register; the chrome around it steps back onto the chrome plane. */
   background: var(--console-diff-panel);
   overflow: hidden;
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   /* No INLINE padding, and that is what makes the head's hairline reach both edges of the column:
      an inset here held the head's border-block-end short at each end. Each child spends the
      gutter itself. */
@@ -227,7 +209,7 @@
   padding-block-start: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
   background: var(--console-diff-panel);
-  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 /* Truncated from the START, and this is the one place that is right: a project path's LAST
@@ -319,7 +301,7 @@
 /* A disclosure's caret is a PF button icon that turns a quarter when its button is expanded. */
 .console-diff-disclosure__toggle .pf-v6-c-button__icon,
 .console-diff-sidebar__group .pf-v6-c-button__icon {
-  transition: transform 120ms ease-out;
+  transition: transform var(--console-motion-fast) ease-out;
 }
 
 .console-diff-disclosure__toggle[aria-expanded="true"] .pf-v6-c-button__icon,
@@ -359,7 +341,7 @@
   background: var(--console-diff-panel);
   display: flex;
   flex-direction: column;
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 /* The head is a PF Toolbar, sized and tiered like .console-diff-sidebar__head beside it, which
@@ -379,7 +361,7 @@
 }
 
 .console-diff-toolbar__head {
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 .console-diff-toolbar__head .pf-v6-c-toolbar__content-section,
@@ -552,7 +534,7 @@
    alert's icon and its screen-reader prefix, never a colour on an edge. */
 .console-diff-merged {
   padding: var(--pf-t--global--spacer--xs) var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 .console-diff-merged[hidden] {
@@ -569,7 +551,7 @@
 
 .console-diff-collaboration[data-flash] {
   border-radius: var(--pf-t--global--border--radius--small);
-  animation: console-diff-collab-flash 900ms ease-out;
+  animation: console-diff-collab-flash var(--console-motion-slow) ease-out;
 }
 
 @keyframes console-diff-collab-flash {
@@ -696,7 +678,7 @@
 
 /* Bounded in-place code context. */
 .console-diff-context {
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-diff-panel);
   max-block-size: 18rem;
   overflow: auto;
@@ -714,8 +696,8 @@
   justify-content: space-between;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   background: var(--console-diff-panel);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  font: var(--pf-t--global--font--body--sm);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  font-size: var(--pf-t--global--font--size--body--sm);
 }
 
 .console-diff-context__title {
@@ -734,7 +716,7 @@
   padding: var(--pf-t--global--spacer--sm);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
   white-space: pre;
 }
 
@@ -783,7 +765,7 @@
 }
 
 .console-diff-scroll:focus-visible {
-  outline: var(--pf-t--global--border--width--200) solid var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
   outline-offset: var(--console-focus-inset);
 }
 
@@ -808,7 +790,7 @@
   display: flex;
   align-items: center;
   height: 24px; /* MUST equal ROW_HEIGHT in main.ts */
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
   box-sizing: border-box;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--default);
@@ -903,7 +885,7 @@
   gap: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
   background: var(--console-diff-panel);
-  border-block: 1px solid var(--pf-t--global--border--color--default);
+  border-block: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--body);
   /* The sticky declaration is a no-op for the reason paintPinned (main.ts) gives: the window is
      transform-translated, and a sticky row cannot pin inside it. .console-diff-pinned does this
@@ -995,7 +977,7 @@
   padding-inline: var(--pf-t--global--spacer--sm);
   background: inherit;
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
 }
 
 .console-diff-row__actions .pf-v6-c-button {
@@ -1062,7 +1044,7 @@
 }
 
 .console-diff-row__side[data-side="right"] {
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 /* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row.
@@ -1121,14 +1103,14 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   padding: var(--pf-t--global--spacer--xs) var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   /* The chrome plane, not the highlight token: highlight is a saturated yellow that dominates in
      dark mode, drops the contrast of the text on it, and fights the diff for attention. This
      rail is meant to be PERIPHERAL until the reader chooses to act on it. The attention signal is
      a warning-toned rule on the leading edge: colour on an edge marks the strip without tinting
      anything the reader has to read through. */
   background: var(--console-diff-panel);
-  border-inline-start: var(--pf-t--global--border--width--300) solid
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid
     var(--pf-t--global--icon--color--status--warning--default);
 }
 
@@ -1183,7 +1165,7 @@
    * "this is a comment, and this is who wrote it", so the fill only has to separate the row from
    * the code around it. */
   background: var(--console-diff-panel);
-  border-inline-start: var(--pf-t--global--border--width--300) solid var(--console-accent);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-accent);
   color: var(--pf-t--global--text--color--regular);
   font-family: var(--pf-t--global--font--family--body);
   /* The body font is taller than the mono font at the same nominal size, so at the shared row
@@ -1191,7 +1173,7 @@
    * geometry is fixed and non-negotiable - every row is ROW_HEIGHT - so the TEXT has to fit
    * the row rather than the row growing to fit the text. */
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
 }
 
 /* An agent's comment is tinted differently from the reader's own. Not decoration: in a paired
@@ -1239,7 +1221,7 @@
   overflow-y: auto;
   padding: var(--pf-t--global--spacer--xs) var(--console-pad);
   background: var(--console-diff-panel);
-  border-block-start: var(--pf-t--global--border--width--200) solid var(--console-accent);
+  border-block-start: var(--pf-t--global--border--width--strong) solid var(--console-accent);
   font-size: var(--pf-t--global--font--size--body--default);
 }
 
@@ -1309,7 +1291,7 @@
   overflow-y: auto;
   max-height: 8rem;
   background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
 }
 
@@ -1368,7 +1350,7 @@
   margin-inline: 0;
   padding-inline-start: var(--pf-t--global--spacer--sm);
   color: var(--pf-t--global--text--color--subtle);
-  border-inline-start: var(--pf-t--global--border--width--200) solid
+  border-inline-start: var(--pf-t--global--border--width--strong) solid
     var(--pf-t--global--border--color--default);
 }
 
@@ -1381,9 +1363,9 @@
   color: var(--pf-t--global--text--color--subtle);
   font-family: var(--pf-t--global--font--family--body);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
   background: var(--console-diff-bg);
-  border-inline-start: var(--pf-t--global--border--width--200) dotted
+  border-inline-start: var(--pf-t--global--border--width--strong) dotted
     var(--pf-t--global--border--color--subtle);
 }
 
@@ -1400,14 +1382,14 @@
   padding-inline: var(--pf-t--global--spacer--sm);
   font-family: var(--pf-t--global--font--family--body);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
 }
 
 .console-diff-row--step {
   font-weight: var(--console-chip-weight);
   color: var(--pf-t--global--text--color--regular);
   background: var(--console-diff-panel);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 .console-diff-row--step[data-group="generated"],
@@ -1422,7 +1404,7 @@
 
 .console-diff-row--why {
   color: var(--pf-t--global--text--color--subtle);
-  border-inline-start: var(--pf-t--global--border--width--200) dotted
+  border-inline-start: var(--pf-t--global--border--width--strong) dotted
     var(--pf-t--global--border--color--subtle);
 }
 
@@ -1449,9 +1431,9 @@
   color: var(--pf-t--global--text--color--subtle);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 24px;
+  line-height: var(--console-diff-row-line-height);
   white-space: pre;
-  border-inline-start: var(--pf-t--global--border--width--300) solid
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid
     var(--pf-t--global--icon--color--status--info--default);
 }
 
@@ -1636,7 +1618,7 @@
 .console-diff-row__word {
   text-decoration-line: underline;
   text-decoration-color: var(--console-diff-add);
-  text-decoration-thickness: var(--pf-t--global--border--width--200);
+  text-decoration-thickness: var(--pf-t--global--border--width--strong);
   text-underline-offset: var(--pf-t--global--spacer--xs);
 }
 
@@ -1651,27 +1633,27 @@
  * distinguishing added from removed, and a rainbow on top of that competes with the signal the
  * reader actually came for.
  *
- * The values come from the --console-syn-* tokens at the top of this file. */
+ * The values come from the --console-syntax-* tokens in tokens.css. */
 .console-diff-tok--kw {
-  color: var(--console-syn-keyword);
+  color: var(--console-syntax-keyword);
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }
 
 .console-diff-tok--str {
-  color: var(--console-syn-string);
+  color: var(--console-syntax-string);
 }
 
 .console-diff-tok--num {
-  color: var(--console-syn-number);
+  color: var(--console-syntax-number);
 }
 
 .console-diff-tok--com {
-  color: var(--console-syn-comment);
+  color: var(--console-syntax-comment);
   font-style: italic;
 }
 
 .console-diff-tok--fn {
-  color: var(--console-syn-function);
+  color: var(--console-syntax-function);
 }
 
 /* A token inside a removed or added line keeps its colour; the row tint sits behind it. */

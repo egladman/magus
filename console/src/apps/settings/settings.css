@@ -52,7 +52,7 @@
   align-items: center;
   gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -94,7 +94,7 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -142,12 +142,12 @@
   overflow: auto;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-settings-diff__rawline { display: block; white-space: pre; }
 .console-settings-diff__rawline[data-diff="del"] {
   color: var(--pf-t--global--text--color--status--danger--default);
-  background: color-mix(in srgb, var(--pf-t--global--color--status--danger--100) 45%, transparent);
+  background: color-mix(in srgb, var(--console-status-danger) 45%, transparent);
 }
 .console-settings-diff__rawline[data-diff="add"] {
   color: var(--console-status-ok-text);
@@ -168,7 +168,7 @@
  * blocks in one scroll. */
 .console-settings-section + .console-settings-section {
   margin-top: var(--pf-t--global--spacer--xl); padding-top: var(--pf-t--global--spacer--lg);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-settings-section__title {
   margin: 0 0 var(--pf-t--global--spacer--sm); font-size: var(--pf-t--global--font--size--body--lg);
@@ -255,12 +255,12 @@
   max-height: 24rem;
   overflow: auto;
   padding: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

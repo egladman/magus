@@ -66,7 +66,7 @@
      and this is the fallback for a mount that chain does not reach. */
   flex: 1;
   min-height: 420px;
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
@@ -79,7 +79,7 @@
   /* The sidebar stacks several sections; in a short pane it scrolls inside itself, or it would
      spill over the canvas. */
   overflow-y: auto; overflow-x: hidden;
-  border-right: 1px solid var(--pf-t--global--border--color--default);
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   /* PRIMARY, not secondary: secondary is the page body's value, so the sidebar would be the page
      rather than a panel on it. The borders separate this column from the stage. */
   background: var(--pf-t--global--background--color--primary--default);
@@ -87,11 +87,11 @@
 /* A quiet filter, not a headline search: small, muted, with a magnifier at the leading edge. */
 .console-graph-sidebar__search {
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 #node-search {
   margin: 0; width: 100%;
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   padding-inline-start: var(--pf-t--global--spacer--xl);
   border-radius: var(--pf-t--global--border--radius--small);
 }
@@ -109,10 +109,10 @@
   width: 100%; margin: 0; text-align: left; cursor: pointer;
   display: flex; align-items: center; justify-content: flex-start; gap: var(--pf-t--global--spacer--sm);
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--console-pad);
-  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3;
+  font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--heading);
   color: var(--pf-t--global--text--color--subtle);
   background: transparent; text-decoration: none;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); border-radius: 0;
 }
 .console-graph-sidebar__count:hover { color: var(--pf-t--global--text--color--regular); background: color-mix(in srgb, var(--console-accent) 8%, transparent); text-decoration: none; }
 /* Links inside the app keep the accent in dark mode rather than the :visited colour. */
@@ -136,9 +136,9 @@
   display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--sm); max-width: 100%;
   min-block-size: var(--pf-t--global--spacer--lg);
   margin: 0; padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: transparent; cursor: pointer;
-  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.2;
+  font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--heading);
 }
 .console-graph-nodelist__pill:hover { border-color: var(--console-accent); background: var(--pf-t--global--background--color--primary--default); }
 /* The selected node: a check ahead of the name, so the mark is a shape and not only a border hue. */
@@ -168,7 +168,7 @@
      depends on. */
   padding-block: 0; padding-inline: var(--console-pad);
   background: var(--console-chrome);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; min-width: 0; }
 /* WRAPS, because the stage is a pane and the console splits panes: five buttons need about 486px
@@ -200,7 +200,7 @@
   margin: 0; padding: 0 var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--xs);
   font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 /* Two columns, row-major (grid, not multicol) so the palette's family grouping stays adjacent in
    reading order instead of being split down the middle. */
@@ -209,7 +209,7 @@
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--pf-t--global--spacer--xs);
   align-content: start;
-  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.5;
+  font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body);
   overflow-y: auto; min-height: 0;
 }
 #graph-legend li { list-style: none; min-width: 0; }
@@ -218,7 +218,7 @@
   min-block-size: var(--pf-t--global--spacer--lg);
   display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
   background: transparent; border: 0; border-radius: var(--pf-t--global--border--radius--small);
-  cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
+  cursor: pointer; font-size: inherit; line-height: var(--pf-t--global--font--line-height--body); text-align: left;
 }
 .console-graph-legend__row:hover { background: color-mix(in srgb, var(--console-accent) 14%, transparent); }
 /* A long name gives way to its count: the name ellipsizes and carries its full text in a title. */
@@ -242,8 +242,8 @@
   border-radius: 0;
   border-inline: 0;
   border-block-start: 0;
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  border-inline-start: 3px solid var(--console-slate);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-slate);
   box-shadow: none;
   --pf-v6-c-alert--PaddingBlockStart: var(--pf-t--global--spacer--sm);
   --pf-v6-c-alert--PaddingBlockEnd: var(--pf-t--global--spacer--sm);
@@ -312,7 +312,7 @@
   .console-graph-kinddot[data-kind="project"],
   .console-graph-kinddot[data-kind="module"],
   .console-graph-kinddot[data-kind="dir"],
-  .console-graph-kinddot[data-kind="file"] { border-radius: 0.12em; }
+  .console-graph-kinddot[data-kind="file"] { border-radius: var(--console-radius-micro); }
 
   /* Declarations - triangle */
   .console-graph-kinddot[data-kind="target"],
@@ -352,7 +352,7 @@
    border is here rather than on the card so it runs full height before the card renders. */
 .console-graph-detail {
   display: flex; flex-direction: column; min-height: 0; min-width: 0;
-  border-left: 1px solid var(--pf-t--global--border--color--default);
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 /* Explain card: plain HTML dl content, and the part of the column that scrolls. */
 #explain-card {
@@ -371,7 +371,7 @@
 #explain-card dd { margin: 0; overflow-wrap: anywhere; }
 /* The overview's closing paragraph: what to do next, quieter than the facts above it. */
 .console-graph-card__hint {
-  margin: var(--pf-t--global--spacer--md) 0 0; font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.45;
+  margin: var(--pf-t--global--spacer--md) 0 0; font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 #explain-card code { font-size: var(--pf-t--global--font--size--body--sm); }
@@ -383,7 +383,7 @@
   min-block-size: var(--pf-t--global--spacer--lg);
   font-size: var(--pf-t--global--font--size--body--sm); font-family: var(--pf-t--global--font--family--mono);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); cursor: pointer;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small); cursor: pointer;
 }
 .console-graph-card__ref:hover { border-color: var(--console-accent); }
 .console-graph-card__morerefs[hidden] { display: none; }
@@ -408,7 +408,7 @@
   .console-graph-detail {
     grid-column: 2;
     border-left: 0;
-    border-top: 1px solid var(--pf-t--global--border--color--default);
+    border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
     max-height: 16rem;
   }
   /* The builder is a working panel, not a readout, and needs room for its rows. */
@@ -437,7 +437,7 @@
   .console-graph-stage { order: -2; }
   .console-graph-detail__foot { order: -1; }
   #query-builder-host,
-  #explain-card { order: 1; border-top: 1px solid var(--pf-t--global--border--color--default); }
+  #explain-card { order: 1; border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
   /* No internal scrollers in the stacked flow: a swipe anywhere in the sidebar or the card scrolls
      the page. #node-list below keeps its cap - it is a deliberately bounded result list. */
   .console-graph-sidebar,
@@ -455,7 +455,7 @@
     flex: 0 0 auto;
     min-height: auto;
   }
-  .console-graph-sidebar { border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+  .console-graph-sidebar { border-right: 0; border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
   /* The canvas needs a definite height once it is a block in a scrolling column rather than a grid
      row: roughly two thirds of the screen, so the content below is visibly there to scroll to. */
   .console-graph-stage { height: min(68svh, 560px); }
@@ -486,7 +486,7 @@
 /* Reference disclosures (Views, Search syntax, Loading a graph by URL): an uppercase, muted summary
    label over a bordered, tinted panel that expands beneath it. The body is wrapped so only the
    content gets panel chrome. */
-.console-graph-help { margin: var(--pf-t--global--spacer--xs) 0 var(--console-pad); font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.5; border-bottom: none; }
+.console-graph-help { margin: var(--pf-t--global--spacer--xs) 0 var(--console-pad); font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body); border-bottom: none; }
 .console-graph-help > summary:not([role]) {
   width: fit-content; cursor: pointer;
   color: var(--pf-t--global--text--color--subtle); font-size: var(--console-label-size); font-weight: var(--console-label-weight);
@@ -495,7 +495,7 @@
 .console-graph-help[open] > summary { margin-bottom: var(--pf-t--global--spacer--sm); }
 .console-graph-help__body {
   padding: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
@@ -543,13 +543,13 @@
 .console-graph-help__example {
   width: auto; margin: 0; padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   min-block-size: var(--console-control-block-size);
-  font: inherit; font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3; text-align: left; color: inherit;
+  font: inherit; font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--heading); text-align: left; color: inherit;
   display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--xs);
   background: var(--pf-t--global--background--color--primary--default);
   /* The neutral default border token, so the pill reads as a quiet chip rather than an accent button.
      One corner radius keeps the chips part of the same UI as the disclosures and cards; the leading
      chevron carries the "clickable" signal. */
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   cursor: pointer;
   transition: border-color var(--console-motion-fast) var(--console-ease), background-color var(--console-motion-fast) var(--console-ease), box-shadow var(--console-motion-fast) var(--console-ease), color var(--console-motion-fast) var(--console-ease);
@@ -583,7 +583,7 @@
 .console-graph-views__clear {
   width: auto; margin: 0 0 0 auto; padding: var(--pf-t--global--spacer--sm);
   min-block-size: var(--pf-t--global--spacer--lg);
-  font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3;
+  font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--heading);
   background: transparent; border: 0; cursor: pointer; color: var(--pf-t--global--text--color--subtle);
 }
 .console-graph-views__clear:hover { color: var(--console-status-danger-text); text-decoration: underline; }
@@ -592,7 +592,7 @@
    copy button. The outer element is a div, not an input wrapper. */
 .console-graph-views__cmdbar {
   margin: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md) 0; padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
   font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--sm);
   display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
@@ -631,7 +631,7 @@
 /* Sidebar sections: the same framed row (a label over a bottom-divided block) throughout. */
 .console-graph-sidebar__modes {
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 /* Why a control cannot be used, stated under it. Subtle, because it is a fact about the session
    rather than a warning. */
@@ -658,13 +658,13 @@
   width: 100%;
   justify-content: center;
 }
-.console-graph-sidebar__modes .pf-v6-c-toggle-group__text { line-height: 1.3; }
+.console-graph-sidebar__modes .pf-v6-c-toggle-group__text { line-height: var(--pf-t--global--font--line-height--heading); }
 
 /* Scope: every emphasis currently applied, directly under the query field that is the commonest way
    to change it. Each is a PF Label; its close button is the only thing that clears it. */
 .console-graph-scope {
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--xs);
 }
 .console-graph-scope__pills { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--xs); }
@@ -680,18 +680,18 @@
    row; PF supplies the accent text and hover. */
 .console-graph-sidebar__unfold {
   width: 100%; margin: 0; display: flex; justify-content: center;
-  padding: var(--pf-t--global--spacer--sm); font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.3;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
+  padding: var(--pf-t--global--spacer--sm); font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--heading);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); border-radius: 0;
 }
 
 /* Suggestions after a graph loads. Each reuses the shared chip look; the rules here only fit that
    chip into this stacked, full-width container. */
 .console-graph-sidebar__suggestions {
   display: flex; flex-direction: column; align-items: stretch; gap: var(--pf-t--global--spacer--xs);
-  padding: var(--pf-t--global--spacer--sm); border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  padding: var(--pf-t--global--spacer--sm); border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__suggestion {
-  width: 100%; text-align: left; white-space: normal; font-size: var(--pf-t--global--font--size--body--sm); line-height: 1.35;
+  width: 100%; text-align: left; white-space: normal; font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-graph-sidebar__viewslabel {
   margin: 0 0 var(--pf-t--global--spacer--sm); padding: 0;
@@ -728,7 +728,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: var(--pf-t--global--spacer--sm);
   min-block-size: var(--console-app-head-h);
   padding-block: 0; padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-graph-qb__title { font-size: var(--console-label-size); font-weight: var(--console-label-weight); text-transform: uppercase; letter-spacing: var(--console-label-tracking); color: var(--pf-t--global--text--color--subtle); }
 .console-graph-qb__close { margin-inline-end: calc(-1 * var(--pf-t--global--spacer--sm)); }
@@ -739,7 +739,7 @@
 .console-graph-qb__count { margin: var(--pf-t--global--spacer--sm) 0 0; font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-graph-qb__count[hidden] { display: none; }
 .console-graph-qb__copyrow { display: flex; gap: var(--pf-t--global--spacer--md); margin-top: var(--pf-t--global--spacer--sm); }
-.console-graph-qb__foot { display: flex; gap: var(--pf-t--global--spacer--md); padding: var(--pf-t--global--spacer--sm) var(--console-pad); border-top: 1px solid var(--pf-t--global--border--color--default); }
+.console-graph-qb__foot { display: flex; gap: var(--pf-t--global--spacer--md); padding: var(--pf-t--global--spacer--sm) var(--console-pad); border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
 .console-graph-qb__foot[hidden] { display: none; }
 
 .console-graph-qb__rows { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); margin-bottom: var(--pf-t--global--spacer--md); }
@@ -766,7 +766,7 @@
 .console-graph-qb__preview {
   display: block; padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   font-family: var(--pf-t--global--font--family--mono); font-size: var(--pf-t--global--font--size--body--default);
   overflow-wrap: anywhere;
@@ -786,7 +786,7 @@
    line of its description. */
 .console-graph-qb__viewpick { color: var(--console-accent); font-size: var(--pf-t--global--font--size--body--sm); }
 .console-graph-qb__examples { margin-top: var(--pf-t--global--spacer--sm); }
-.console-graph-qb__caps { margin: 0 0 var(--pf-t--global--spacer--md); padding-bottom: var(--pf-t--global--spacer--sm); border-bottom: 1px solid var(--pf-t--global--border--color--default); font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__caps { margin: 0 0 var(--pf-t--global--spacer--md); padding-bottom: var(--pf-t--global--spacer--sm); border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 /* A detach that the browser refused: keep the control, mark it spent. */
 .console-graph-qb__detach[data-detach-failed] { opacity: 0.45; }
 
@@ -803,7 +803,7 @@
   align-items: center;
   min-block-size: var(--console-app-bar-h);
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-graph-figures-controls[hidden] { display: none; }
 .console-graph-figures-controls .console-render-btn__icon { width: 1em; height: 1em; flex: 0 0 auto; }

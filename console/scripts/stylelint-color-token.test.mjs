@@ -130,13 +130,6 @@ test("color token reports a raw shadow once, not once per reading", async () => 
   assert.equal(warnings.length, 1);
 });
 
-test("color token leaves other shadows to their own rules", async () => {
-  const warnings = await flagged(`
-    .console-a { text-shadow: 0 1px var(--console-accent); filter: drop-shadow(0 1px 2px var(--console-accent)); }
-  `);
-
-  assert.deepEqual(warnings, []);
-});
 
 // A palette has to be written somewhere. tokens.css is the one file that may define colours in
 // custom properties, and only there.
@@ -186,4 +179,63 @@ test("color token refuses a definition allowance with no reason or a string file
 
     assert.ok(result.results[0].invalidOptionWarnings.length > 0);
   }
+});
+
+test("color token rejects a named colour in a colour property and in a custom property", async () => {
+  const warnings = await flagged(`
+    .console-a { color: red; }
+    .console-b { background: white url("x.svg") no-repeat; }
+    .console-c { border: var(--pf-t--global--border--width--regular) solid Gray; }
+    .console-d { background: linear-gradient(to right, transparent, Black); }
+    .console-e { fill: rebeccapurple; stroke: tan; }
+    .console-f { --console-x: olive; }
+  `);
+
+  assert.equal(warnings.length, 7);
+});
+
+test("color token accepts transparent, currentcolor and a name that is not a colour here", async () => {
+  const warnings = await flagged(`
+    .console-a { color: currentcolor; background: transparent; border-color: transparent; }
+    .console-b { font-family: var(--pf-t--global--font--family--mono); grid-area: header; }
+    .console-c { animation-name: red; content: "red"; background: url("red.svg") var(--console-red); }
+    .console-d { color: var(--console-plum); }
+  `);
+
+  assert.deepEqual(warnings, []);
+});
+
+test("color token lets tokens.css define a named colour in a custom property only", async () => {
+  const code = ":root { --console-x: olive; } .a { color: olive; }";
+  const warnings = await flagged(code, "/repo/console/src/styles/tokens.css");
+
+  assert.equal(warnings.length, 1);
+});
+
+test("color token allows text-shadow none only", async () => {
+  const accepted = await flagged(`
+    .console-a { text-shadow: none; }
+    .console-b { text-shadow: inherit; }
+  `);
+  const rejected = await flagged(`
+    .console-a { text-shadow: 0 1px 0 var(--console-accent); }
+    .console-b { text-shadow: var(--pf-t--global--box-shadow--md); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 2);
+});
+
+test("color token rejects a drop-shadow filter and leaves other filters alone", async () => {
+  const accepted = await flagged(`
+    .console-a { filter: blur(2px); backdrop-filter: blur(7px); }
+    .console-b { filter: none; }
+  `);
+  const rejected = await flagged(`
+    .console-a { filter: drop-shadow(0 1px 2px var(--console-accent)); }
+    .console-b { filter: blur(1px) drop-shadow(0 0 4px); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 2);
 });

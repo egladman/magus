@@ -72,8 +72,8 @@
    which the log viewer also queries to dock its zoom control. */
 #console-statusbar [data-cluster]:first-child { flex: 1 1 0; overflow: hidden; }
 #console-statusbar .console-shell-statusbar__right { flex: 0 0 auto; margin-left: auto; }
-#console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: 1.35; } /* the zoom stepper docks as one of these */
-#console-statusbar [data-item] { white-space: nowrap; line-height: 1.35; }
+#console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: var(--pf-t--global--font--line-height--body); } /* the zoom stepper docks as one of these */
+#console-statusbar [data-item] { white-space: nowrap; line-height: var(--pf-t--global--font--line-height--body); }
 /* Counts are for looking at, and the first thing to go: below 40rem the bar cannot hold them beside the
    tray (measured 473px of content in a 375px bar, which pushed Share and Activity off the end). */
 @media (max-width: 40rem) {
@@ -85,7 +85,7 @@
    monospace, not by being dim. */
 #console-statusbar .console-shell-statusbar__version {
   white-space: nowrap;
-  line-height: 1.35;
+  line-height: var(--pf-t--global--font--line-height--body);
   cursor: default;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -163,7 +163,7 @@
 /* Names the icon's orientation (setPanesIcon keeps it in sync) - tiling is not a metaphor every reader
    already carries, and the glyph alone assumes it is. Own line-height: the button wants its icon at
    line-height 0, which would squash this text to nothing. */
-#console-statusbar .console-shell-statusbar__panes-label { line-height: 1.35; white-space: nowrap; }
+#console-statusbar .console-shell-statusbar__panes-label { line-height: var(--pf-t--global--font--line-height--body); white-space: nowrap; }
 /* Below ~26rem there is less bar than content even so, and the word is what goes: the glyph is the live
    readout, the word only names it (the accessible name still carries it). The fill goes with it - it
    exists to bind the pair into one pill. */
@@ -182,7 +182,7 @@
   min-width: 0;
   min-block-size: var(--pf-t--global--spacer--lg);
   font-size: inherit;
-  line-height: 1.35;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
   text-decoration: none;
 }
@@ -200,7 +200,7 @@
   left: auto;
   min-width: 15rem;
   max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
-  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
+  z-index: var(--pf-t--global--z-index--md); /* above the drawer content (100) + panel (200) */
 }
 
 /* --- Right-docked side panels ---------------------------------------------------------------------
@@ -222,8 +222,8 @@
   display: flex;
   flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
-  border-left: 1px solid var(--pf-t--global--border--color--default);
-  z-index: var(--pf-t--global--z-index--300); /* above the drawer content (100) + panel (200) */
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  z-index: var(--pf-t--global--z-index--md); /* above the drawer content (100) + panel (200) */
 }
 /* Bottom fade: the panels are the PRIMARY (white) background, but the status bar they dock above is the
    SECONDARY (grey) rail - a hard edge between the two reads as a clash. A short gradient at the panel's
@@ -257,8 +257,8 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -18px;
-  width: 18px;
+  left: calc(var(--pf-t--global--spacer--lg) * -1);
+  width: var(--pf-t--global--spacer--lg);
   background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
   pointer-events: none;
 }
@@ -270,7 +270,7 @@
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-panel__title,
 .console-shell-notify__title {
@@ -319,7 +319,11 @@
 /* Header actions: the "Dismiss older" menu beside "Clear all". */
 .console-shell-notify__actions { display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-shell-notify__older { position: relative; }
-.console-shell-notify__older-btn { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__older-btn {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  --pf-v6-c-button--PaddingBlockStart: var(--pf-t--global--spacer--control--vertical--compact);
+  --pf-v6-c-button--PaddingBlockEnd: var(--pf-t--global--spacer--control--vertical--compact);
+}
 .console-shell-notify__older-menu {
   position: absolute;
   top: calc(100% + var(--pf-t--global--spacer--xs));
@@ -330,7 +334,7 @@
   flex-direction: column;
   padding: var(--pf-t--global--spacer--xs);
   background: var(--pf-t--global--background--color--primary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   box-shadow: var(--pf-t--global--box-shadow--lg);
 }
@@ -351,7 +355,7 @@
   margin: 0;
   padding: var(--pf-t--global--spacer--md);
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-notify__item {
@@ -359,8 +363,8 @@
   align-items: flex-start;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-  border-left: 3px solid transparent;
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-left: var(--pf-t--global--border--width--extra-strong) solid transparent;
 }
 .console-shell-notify__item:last-child { border-bottom: none; }
 .console-shell-notify__item[data-unseen] { background: var(--pf-t--global--background--color--secondary--default); }
@@ -372,7 +376,7 @@
 .console-shell-notify__item-msg {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.35;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--regular);
   overflow-wrap: anywhere;
 }
@@ -382,16 +386,21 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   padding: 0 var(--pf-t--global--spacer--xs);
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
 .console-shell-notify__item-time { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-.console-shell-notify__item-link { font-size: var(--pf-t--global--font--size--body--sm); --pf-v6-c-button--PaddingBlock: 0; }
+.console-shell-notify__item-link {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  --pf-v6-c-button--PaddingBlockStart: var(--pf-t--global--spacer--control--vertical--compact);
+  --pf-v6-c-button--PaddingBlockEnd: var(--pf-t--global--spacer--control--vertical--compact);
+}
 .console-shell-notify__item-dismiss {
   flex: 0 0 auto;
-  --pf-v6-c-button--PaddingInline: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-button--PaddingInlineStart: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-button--PaddingInlineEnd: var(--pf-t--global--spacer--xs);
   min-block-size: var(--pf-t--global--spacer--lg);
   min-inline-size: var(--pf-t--global--spacer--lg);
   color: var(--pf-t--global--text--color--subtle);
@@ -414,7 +423,7 @@
   padding: 0 var(--pf-t--global--spacer--xs);
   white-space: nowrap;
   background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   color: var(--pf-t--global--text--color--regular);
 }
@@ -437,7 +446,7 @@
   align-items: center;
   gap: var(--pf-t--global--spacer--md);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 [data-kbeditor] [data-krow] > span:first-child { flex: 1 1 auto; min-width: 0; } /* label grows */
 [data-kbeditor] [data-chord][data-capturing] { color: var(--console-accent); font-weight: var(--pf-t--global--font--weight--body--bold); }
@@ -504,7 +513,7 @@
 /* Light frame around the QR so quiet-zone contrast holds in dark mode too. */
 .console-shell-share__qr {
   padding: var(--pf-t--global--spacer--sm);
-  background: var(--pf-t--color--white);
+  background: var(--console-qr-frame);
   border-radius: var(--pf-t--global--border--radius--tiny);
   line-height: 0;
 }
@@ -523,7 +532,7 @@
   color: var(--pf-t--global--text--color--subtle);
   cursor: pointer;
   padding: var(--pf-t--global--spacer--xs);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: transparent;
 }
@@ -577,8 +586,8 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  border-left: 2px solid transparent;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-left: var(--pf-t--global--border--width--strong) solid transparent;
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-shell-activity__row[data-outcome="pass"] { border-left-color: var(--console-status-ok); }
 .console-shell-activity__row[data-outcome="fail"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
@@ -607,7 +616,7 @@
   margin: 0;
   padding: var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty[hidden] { display: none; }

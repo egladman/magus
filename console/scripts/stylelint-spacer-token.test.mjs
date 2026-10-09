@@ -137,11 +137,42 @@ test("spacer token watches the longhands and logical properties, and only them",
   const warnings = await flagged(`
     .console-a { padding-top: 1rem; padding-block-end: 1rem; margin-right: 1rem; margin-inline: 1rem; }
     .console-b { inset-inline-end: 1rem; row-gap: 1rem; column-gap: 1rem; grid-gap: 1rem; }
-    .console-c { width: 1rem; top: 1rem; border-width: 1px; line-height: 1.5; scroll-margin: 1rem; letter-spacing: 0.04em; }
+    .console-c { width: 1rem; border-width: 1px; line-height: 1.5; scroll-margin: 1rem; letter-spacing: 0.04em; }
     .console-d { --console-card-pad: 1rem; --gap: 8px; }
   `);
 
   assert.equal(warnings.length, 8);
+});
+
+test("spacer token places top, right, bottom and left by the same vocabulary", async () => {
+  const accepted = await flagged(`
+    .console-a { top: 0; left: auto; right: 50%; bottom: calc(100% + var(--pf-t--global--spacer--xs)); }
+    .console-b { top: var(--pf-t--global--spacer--sm); inset-inline-end: var(--pf-t--global--spacer--xs); }
+    .console-c { right: calc(var(--pf-t--global--spacer--md) * -1); }
+  `);
+  const rejected = await flagged(`
+    .console-a { top: 1px; left: -18px; right: -1.1rem; bottom: 2px; }
+    .console-b { inset-block-start: 4px; inset: 0 auto 0 8px; }
+    .console-c { top: var(--pf-t--global--spacer--200); left: var(--bp-u); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 8);
+});
+
+// A sticky pane sits under the top chrome and a floating note inside the launcher column: where a
+// box is placed may name the size of the fixed thing it is placed against, how much room it leaves may not.
+test("spacer token lets placement, and only placement, name a shell bar or column size", async () => {
+  const accepted = await flagged(`
+    .console-a { top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); inset-block-start: var(--console-titlebar-h); }
+    .console-b { right: max(var(--pf-t--global--spacer--md), (100% - var(--console-launcher-w)) / 2); }
+  `);
+  const rejected = await flagged(`
+    .console-a { padding-top: var(--console-topchrome-h); margin-inline: var(--console-launcher-w); gap: var(--console-statusbar-h); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 3);
 });
 
 test("spacer token checks a rule inside a media query", async () => {

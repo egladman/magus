@@ -58,7 +58,7 @@
   padding-inline: var(--console-pad);
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-plan-intro__link { font-size: inherit; }
 
@@ -83,7 +83,7 @@
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-plan-summary {
   margin: 0;
@@ -130,7 +130,7 @@
      lets them. A row wider than the column is a bug that would otherwise scroll the whole index. */
   overflow-x: hidden;
   overflow-y: auto;
-  border-right: 1px solid var(--pf-t--global--border--color--default);
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-plan-list { margin: 0; padding: var(--pf-t--global--spacer--xs) 0; list-style: none; }
@@ -199,12 +199,12 @@
   padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: calc(var(--pf-t--global--spacer--sm) + var(--console-plan-depth, 0) * var(--pf-t--global--spacer--sm)) var(--pf-t--global--spacer--sm);
   border: 0;
-  border-inline-start: 2px solid transparent;
+  border-inline-start: var(--pf-t--global--border--width--strong) solid transparent;
   border-radius: 0;
   background: transparent;
   color: inherit;
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   text-align: start;
   cursor: pointer;
 }
@@ -358,7 +358,7 @@
 }
 
 .console-plan-node[data-state="running"] .console-plan-node__box {
-  animation: console-plan-breathe 2.4s ease-in-out infinite;
+  animation: console-plan-breathe var(--console-motion-breathe) ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -405,7 +405,7 @@
   min-height: 0;
   overflow-y: auto;
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border-left: 1px solid var(--pf-t--global--border--color--default);
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   font-size: var(--pf-t--global--font--size--body--default);
 }
 .console-plan-detail__head {
@@ -487,7 +487,7 @@
   flex-direction: column;
   gap: var(--pf-t--global--spacer--xs);
   padding: var(--pf-t--global--spacer--xs) 0;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-plan-detail__runtitle { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
 .console-plan-detail__runmeta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
@@ -571,7 +571,7 @@
   min-block-size: var(--console-app-head-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-plan-tree__heading {
   font-size: var(--console-label-size);
@@ -584,7 +584,7 @@
 .console-plan-reopen {
   grid-area: tree;
   align-self: stretch;
-  border-right: 1px solid var(--pf-t--global--border--color--default);
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-plan-reopen[hidden] { display: none; }

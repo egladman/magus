@@ -64,6 +64,11 @@ export function parseVar(text) {
   return { name: fn.args.slice(0, comma).trim(), fallback: fn.args.slice(comma + 1).trim() };
 }
 
+// Every custom property a value reads through var(), fallbacks included.
+export function referencedProperties(value) {
+  return [...value.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)].map((match) => match[1]);
+}
+
 // Walks a calc()/min()/max()/clamp() body and judges every operand with `operand`. Operators and
 // commas are skipped; a bare number is a multiplier or divisor, never a length, so it passes.
 // Returns false at the first operand that fails.

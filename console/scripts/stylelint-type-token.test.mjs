@@ -161,8 +161,121 @@ test("type token checks a rule inside a media query and ignores @font-face", asy
 
 test("type token ignores properties that only look like type", async () => {
   const warnings = await flagged(`
-    .console-a { line-height: 1.5; letter-spacing: 0.04em; font-family: monospace; font: inherit; }
+    .console-a { letter-spacing: 0.04em; font-style: italic; font-variant-numeric: tabular-nums; }
   `);
 
   assert.deepEqual(warnings, []);
+});
+
+test("type token accepts exactly the weight tokens PatternFly defines", async () => {
+  const warnings = await flagged(`
+    .console-a { font-weight: var(--pf-t--global--font--weight--body--default); }
+    .console-b { font-weight: var(--pf-t--global--font--weight--body--bold); }
+    .console-c { font-weight: var(--pf-t--global--font--weight--heading--default); }
+    .console-d { font-weight: var(--pf-t--global--font--weight--heading--bold); }
+    .console-e { font-weight: var(--pf-t--global--font--weight--body--legacy); }
+    .console-f { font-weight: var(--pf-t--global--font--weight--heading--legacy); }
+    .console-g { font-weight: var(--pf-t--global--font--weight--body--bold--legacy); }
+    .console-h { font-weight: var(--pf-t--global--font--weight--heading--bold--legacy); }
+  `);
+
+  assert.deepEqual(warnings, []);
+});
+
+test("type token rejects a weight name PatternFly does not define", async () => {
+  const warnings = await flagged(`
+    .console-a { font-weight: var(--pf-t--global--font--weight--body--default--legacy); }
+    .console-b { font-weight: var(--pf-t--global--font--weight--heading--default--legacy); }
+    .console-c { font-weight: var(--pf-t--global--font--weight--body--semibold); }
+  `);
+
+  assert.equal(warnings.length, 3);
+});
+
+test("type token accepts the named heading sizes and rejects an invented one", async () => {
+  const warnings = await flagged(`
+    .console-a { font-size: var(--pf-t--global--font--size--heading--h1); }
+    .console-b { font-size: var(--pf-t--global--font--size--heading--lg); }
+    .console-c { font-size: var(--pf-t--global--font--size--heading--2xl); }
+    .console-d { font-size: var(--pf-t--global--font--size--heading--huge); }
+    .console-e { font-size: var(--pf-t--global--font--size--heading--h7); }
+  `);
+
+  assert.equal(warnings.length, 2);
+});
+
+test("type token takes line-height from the two PatternFly tokens", async () => {
+  const warnings = await flagged(`
+    .console-a { line-height: var(--pf-t--global--font--line-height--body); }
+    .console-b { line-height: var(--pf-t--global--font--line-height--heading); }
+    .console-c { line-height: var(--console-diff-row-line-height); }
+    .console-d { line-height: inherit; }
+    .console-e { line-height: normal; }
+  `);
+
+  assert.deepEqual(warnings, []);
+});
+
+// 0 collapses the line box and 1 is the glyph's em; neither is leading for running text.
+test("type token allows line-height 0 and 1 and rejects every other number or length", async () => {
+  const warnings = await flagged(`
+    .console-a { line-height: 0; }
+    .console-b { line-height: 1; }
+    .console-c { line-height: 1.5; }
+    .console-d { line-height: 1.35; }
+    .console-e { line-height: 24px; }
+    .console-f { line-height: 1rem; }
+    .console-g { line-height: var(--pf-t--global--font--line-height--200); }
+    .console-h { line-height: var(--pf-t--global--spacer--md); }
+  `);
+
+  assert.equal(warnings.length, 6);
+});
+
+test("type token takes font-family from the three PatternFly family tokens", async () => {
+  const accepted = await flagged(`
+    .console-a { font-family: var(--pf-t--global--font--family--body); }
+    .console-b { font-family: var(--pf-t--global--font--family--heading); }
+    .console-c { font-family: var(--pf-t--global--font--family--mono); }
+    .console-d { font-family: inherit; }
+  `);
+  const rejected = await flagged(`
+    .console-a { font-family: monospace; }
+    .console-b { font-family: "Menlo", monospace; }
+    .console-c { font-family: var(--pf-t--global--font--family--300); }
+    .console-d { font-family: var(--pf-t--global--font--family--mono, monospace); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 4);
+});
+
+test("type token reads the font shorthand piece by piece", async () => {
+  const accepted = await flagged(`
+    .console-a { font: inherit; }
+    .console-b { font: var(--pf-t--global--font--size--body--sm) / var(--pf-t--global--font--line-height--body) var(--pf-t--global--font--family--body); }
+    .console-c { font: italic var(--pf-t--global--font--weight--body--bold) var(--pf-t--global--font--size--body--default) var(--pf-t--global--font--family--mono); }
+  `);
+  const rejected = await flagged(`
+    .console-a { font: 12px sans-serif; }
+    .console-b { font: bold var(--pf-t--global--font--size--body--sm); }
+    .console-c { font: var(--pf-t--global--font--body--sm); }
+    .console-d { font: var(--pf-t--global--spacer--sm); }
+  `);
+
+  assert.deepEqual(accepted, []);
+  assert.equal(rejected.length, 4);
+});
+
+test("type token still checks leading and family on an uppercase run", async () => {
+  const warnings = await flagged(`
+    .console-a {
+      font-size: 0.66rem;
+      text-transform: uppercase;
+      line-height: 1.7;
+      font-family: monospace;
+    }
+  `);
+
+  assert.equal(warnings.length, 2);
 });

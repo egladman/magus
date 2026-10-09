@@ -28,7 +28,7 @@
   min-block-size: var(--console-app-bar-h);
   padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
 /* The page's heading, in the same voice as the Dashboard bar's OPERATIONS, so a reader switching
@@ -71,7 +71,7 @@
    strip scrolls; in a narrow page it folds behind its summary instead. */
 .console-runs__filters {
   flex: 0 0 auto;
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
 .console-runs__filters-summary {
@@ -136,7 +136,7 @@
   overflow: auto;
   margin: 0;
   padding: 0;
-  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-runs__detail {
   flex: 1 1 30rem;
@@ -164,7 +164,7 @@
   padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
   border: 0;
-  border-inline-start: 3px solid transparent;
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -180,7 +180,7 @@
   white-space: nowrap;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--default);
-  line-height: 1.45;
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-runs__row-meta {
   grid-column: 2;
@@ -188,7 +188,7 @@
   flex-wrap: wrap;
   gap: 0 var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.45;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-runs__row-meta > :not(:first-child)::before { content: "\00b7"; margin-inline-end: var(--pf-t--global--spacer--sm); }
@@ -198,7 +198,7 @@
 .console-runs__detail-head {
   margin-block-end: var(--pf-t--global--spacer--lg);
   padding-block-end: var(--pf-t--global--spacer--md);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-runs__detail-title {
   display: flex;
@@ -213,7 +213,7 @@
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--lg);
   font-weight: var(--pf-t--global--font--weight--body--bold);
-  line-height: 1.4;
+  line-height: var(--pf-t--global--font--line-height--body);
   overflow-wrap: anywhere;
 }
 .console-runs__pill { flex: 0 0 auto; }
@@ -233,13 +233,13 @@
   font-weight: var(--console-label-weight);
   letter-spacing: var(--console-label-tracking);
   text-transform: uppercase;
-  line-height: 1.6;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-runs__fact-value {
   margin: 0;
   min-inline-size: 0;
-  line-height: 1.6;
+  line-height: var(--pf-t--global--font--line-height--body);
   overflow-wrap: anywhere;
 }
 /* The parenthetical half of a fact ("1h ago" beside the clock time): same row, lower contrast, so
@@ -269,7 +269,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: var(--pf-t--global--spacer--sm);
   padding-block: var(--pf-t--global--spacer--sm);
-  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-runs__target-line { display: contents; }
 .console-runs__target-name {
@@ -307,14 +307,14 @@
 .console-runs__target-error {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--console-status-danger-text);
   overflow-wrap: anywhere;
 }
 .console-runs__note {
   margin-block: var(--pf-t--global--spacer--sm) 0;
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.55;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Mono alone, no chip. A padded fill inside a sentence pushes the punctuation after it away from the
@@ -342,7 +342,7 @@
     overflow: visible;
     border-inline-end: 0;
   }
-  .console-runs__list { border-block-end: 1px solid var(--pf-t--global--border--color--default); }
+  .console-runs__list { border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
   .console-runs__back { display: inline-flex; }
 }
 @container console-runs (max-width: 39.999rem) {

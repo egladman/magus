@@ -24,7 +24,7 @@
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
 /* The three toggles scroll sideways inside their own row rather than pushing the bar to several
@@ -56,7 +56,7 @@
 }
 .console-tools__note:not(:empty) {
   padding-block: var(--pf-t--global--spacer--sm);
-  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 
 /* --- Table ----------------------------------------------------------------------
