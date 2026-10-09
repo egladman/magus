@@ -273,8 +273,8 @@ export function demoSession(): DiffReview {
         { path: "tools/migrate", seed: false },
       ],
       notes: [
-        "history lens walked the last 214 commits: libs/authkit/audience.go appears in none of them, so it carries no churn and no hotspot rank",
-        "no coverage measured for docs (the project declares no coverage-producing target)",
+        "Churn is measured over the last 214 commits. libs/authkit/audience.go is in none of them, so it has no churn and no hotspot rank.",
+        "Coverage was not measured for docs: the project declares no target that produces it.",
       ],
       order: demoOrder(),
       files: [

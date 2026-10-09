@@ -596,7 +596,7 @@ export async function fetchThreadBrief(
   root: string,
   signal: AbortSignal,
 ): Promise<string | null> {
-  const what = "the conversation brief";
+  const what = "the thread brief";
   try {
     const q = new URLSearchParams({ id: root });
     const res = await fetch(`http://${host}/api/v1/diff/thread?${q}`, {
@@ -611,7 +611,7 @@ export async function fetchThreadBrief(
     }
     const body = (await res.json()) as { brief?: unknown };
     if (typeof body.brief !== "string" || body.brief === "") {
-      reportFailure("Review", "The server sent no brief for this conversation.", "thread:empty");
+      reportFailure("Review", "The server sent no brief for this thread.", "thread:empty");
       return null;
     }
     return body.brief;

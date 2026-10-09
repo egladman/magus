@@ -9,6 +9,7 @@ import {
   type SessionTurn,
 } from "@wire/viewer/v1alpha1/viewer_pb";
 import { createServerTransport, getLiveToken } from "../../lib/server";
+import { inlineAlert } from "../../ui/alert";
 import { h } from "../../desktop/view";
 import type { DiffTouch } from "./session";
 
@@ -28,6 +29,8 @@ export async function fetchSessionActivity(
     const client = createClient(ViewerService, createServerTransport(host, getLiveToken()));
     return { activity: await client.getSessionActivity({ session, path }, { signal }) };
   } catch (e) {
+    // The toast is the transport's: createServerTransport reports every failed call, so this
+    // only has to hand the reason to the panel, which says it beside the part it could not show.
     return { failed: e instanceof ConnectError ? e.rawMessage : String(e) };
   }
 }
@@ -98,8 +101,20 @@ export function renderAgentSession(
 ): void {
   body.replaceChildren();
 
+  // The server not answering is a failure, and says so as one. The unavailable sentences below
+  // still name each part of the transcript the panel could not show.
+  if (result && "failed" in result) {
+    body.append(
+      inlineAlert({
+        variant: "danger",
+        title: "Could not read the agent session",
+        body: result.failed,
+      }),
+    );
+  }
+
   const ran = h("section", "console-diff-agent__ran");
-  ran.append(h("h4", "console-diff-agent__heading", "Ran before this write"));
+  ran.append(h("h3", "console-diff-agent__heading", "Ran before this write"));
   if (touch.ran?.length) {
     const list = h("ul", "console-diff-agent__programs");
     // The wire carries newest first; a reader follows a session forwards.
@@ -112,10 +127,10 @@ export function renderAgentSession(
   body.append(ran);
 
   const turns = h("section", "console-diff-agent__turns");
-  turns.append(h("h4", "console-diff-agent__heading", "Transcript"));
+  turns.append(h("h3", "console-diff-agent__heading", "Transcript"));
   body.append(turns);
   if (!result) {
-    turns.append(h("p", "console-diff-agent__empty", "Loading session..."));
+    turns.append(h("p", "console-diff-agent__empty", "Loading session…"));
     return;
   }
 

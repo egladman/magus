@@ -35,6 +35,15 @@ async function settle(turns = 12): Promise<void> {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
+// readoutItems is what the readout row says: its labels and its counted items, as text.
+function readoutItems(): string[] {
+  return [
+    ...document.querySelectorAll(
+      ".console-diff-toolbar__stats .pf-v6-c-label, .console-diff-toolbar__stats [data-stat]",
+    ),
+  ].map((el) => el.textContent ?? "");
+}
+
 test("#demo renders the changeset with no server", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
@@ -67,9 +76,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   assert.equal(document.querySelectorAll(".console-diff-sidebar__item").length, 11);
   assert.equal(document.querySelector(".console-diff-sidebar__group")?.textContent, "3 generated");
 
-  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
-    (el) => el.textContent,
-  );
+  const chips = readoutItems();
   // The showcase must never pass itself off as the reader's own tree - but it says so through
   // the shell's connection pill, the one place every app says it. A second badge here made
   // the diff the only app announcing demo twice, in a style nothing else uses.
@@ -231,9 +238,7 @@ test("#demo places the review's threads beside the code they are about", async (
   const threads = [...document.querySelectorAll('.console-diff-row[data-author="review"]')];
   assert.ok(threads.length > 0, "a colleague's remark has to reach the stream");
 
-  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
-    (el) => el.textContent,
-  );
+  const chips = readoutItems();
   assert.ok(chips.includes("#482"), "the open review is named");
   // One human comment in the fixture is already published, so the draft count is what is left
   // to send rather than everything the reader has written.
@@ -241,7 +246,7 @@ test("#demo places the review's threads beside the code they are about", async (
   // A thread on a file this changeset does not touch has nowhere in the stream to sit. It is
   // counted rather than dropped: "your colleague said nothing" is the one thing this app
   // must never say by accident.
-  assert.ok(chips.includes("1 elsewhere"));
+  assert.ok(chips.includes("1 comment elsewhere"));
 
   dispose.deactivate();
 });
@@ -256,7 +261,7 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   assert.ok(box, "publishing has to show what is about to leave");
   // The whole address, not just the review: repo and number, so "send" never means somewhere
   // the reader would have to guess.
-  assert.match(box?.textContent ?? "", /Send 1 remark to acme\/acme #482/);
+  assert.match(box?.textContent ?? "", /Send 1 comment to acme\/acme #482/);
   // And the network, said out loud. Everything else on this app is local; the one act that
   // leaves the machine names the host it leaves for, before it leaves.
   assert.match(box?.textContent ?? "", /Posts over the network to github\.com/);
@@ -274,9 +279,7 @@ test("#demo shows the batch before it sends it, and sending clears the drafts", 
   await settle();
 
   assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the box closes");
-  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
-    (el) => el.textContent,
-  );
+  const chips = readoutItems();
   assert.ok(
     !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
     `nothing is left to send, got ${chips.join(", ")}`,
@@ -310,11 +313,18 @@ test("#demo focus mode shows one step and counts the whole pass", async () => {
 
   const root = document.querySelector<HTMLElement>(".console-diff-layout");
   assert.equal(root?.dataset.focus, "on");
-  assert.match(
-    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
-    /step 1 of 12, 0 of 14 hunks read/,
+  assert.equal(
+    document.querySelector(".console-diff-progress__text")?.textContent,
+    "Step 1 of 12",
     "the pass is counted over the changeset, not over what is on screen",
   );
+  const bar = document.querySelector(".console-diff-progress [role=progressbar]");
+  assert.equal(
+    bar?.getAttribute("aria-valuetext"),
+    "0 of 14 hunks read",
+    "and the bar counts hunks read",
+  );
+  assert.equal(bar?.getAttribute("aria-valuemax"), "14");
   // The first step is the two hunks of the claims contract, shown together: the heading names
   // the group and the hunk count, and the hunk under it carries the server's reason. (The second
   // hunk starts below the virtualized window, so only the heading proves it is in the step.)
@@ -381,9 +391,12 @@ test("#demo focus mode marks read and advances on one key", async () => {
   assert.ok(dispatchCommand("diff.viewed.toggle"));
   await settle();
 
-  assert.match(
-    document.querySelector(".console-diff-progress__text")?.textContent ?? "",
-    /step 2 of 12, 2 of 14 hunks read/,
+  assert.equal(document.querySelector(".console-diff-progress__text")?.textContent, "Step 2 of 12");
+  assert.equal(
+    document
+      .querySelector(".console-diff-progress [role=progressbar]")
+      ?.getAttribute("aria-valuetext"),
+    "2 of 14 hunks read",
     "one key marks every hunk of this step and moves to the next",
   );
 
@@ -507,7 +520,7 @@ test("#demo lets the elsewhere threads be read, not just counted", async () => {
 
   assert.ok(dispatchCommand("diff.overview"));
   const text = document.querySelector(".console-diff-overview")?.textContent ?? "";
-  assert.match(text, /Said on the review, elsewhere/);
+  assert.match(text, /Comments on the review, elsewhere/);
   assert.match(text, /scope-only tokens on the health path/);
   dispose.deactivate();
 });
@@ -525,12 +538,10 @@ test("#demo lets a staged remark be discarded without sending it", async () => {
   drop.click();
   await settle();
 
-  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
-    (el) => el.textContent,
-  );
+  const chips = readoutItems();
   assert.ok(
     !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
-    `the discarded remark is gone, got ${chips.join(", ")}`,
+    `the discarded comment is gone, got ${chips.join(", ")}`,
   );
 });
 
@@ -612,6 +623,10 @@ test("#demo offers every verdict the server allowed", async () => {
   const choices = [
     ...document.querySelectorAll<HTMLInputElement>(".console-diff-composer__verdict input"),
   ];
+  assert.ok(
+    document.querySelector(".console-diff-composer__verdict.pf-v6-c-radio"),
+    "the choices are PF radios, each with its label",
+  );
   assert.deepEqual(
     choices.map((c) => c.value),
     ["comment", "approve", "request_changes"],
@@ -660,22 +675,28 @@ test("the toolbar's controls sit in a row, actions apart from the readout", asyn
   const zones: [string, string[]][] = [
     [
       "console-diff-toolbar__actions",
-      ["console-diff-toolbar__verdict", "console-diff-toolbar__focus"],
+      [
+        "console-diff-toolbar__verdict",
+        "console-diff-toolbar__overview",
+        "console-diff-toolbar__mode",
+        "console-diff-toolbar__focus",
+      ],
     ],
     [
       "console-diff-toolbar__readout",
       ["console-diff-toolbar__stats", "console-diff-toolbar__keyswrap"],
     ],
-    // The legend itself sits behind the disclosure, not loose in the readout.
-    ["console-diff-toolbar__keyswrap", ["console-diff-toolbar__keys"]],
+    // The legend itself sits behind a popover, not loose in the readout.
+    ["console-diff-toolbar__keyswrap", ["console-diff-popover"]],
   ];
   for (const [row, members] of zones) {
     const parent = document.querySelector(`.${row}`);
     assert.ok(parent, `${row} exists`);
     for (const cls of members) {
-      const el = document.querySelector(`.${cls}`);
-      assert.ok(el, `${cls} is rendered`);
-      assert.equal(el.parentElement, parent, `${cls} is in ${row}, not the stack`);
+      // Looked up inside the row, and compared as a boolean: a failed assert.equal on two DOM
+      // nodes prints both trees, which does not finish.
+      const el = parent.querySelector(`:scope > .${cls}`);
+      assert.ok(el, `${cls} is rendered directly in ${row}, not the stack`);
     }
   }
 
@@ -697,16 +718,16 @@ test("focus mode hides the readout row and takes the key legend with it", async 
   const progress = document.querySelector<HTMLElement>(".console-diff-progress");
   assert.ok(readout && keys && progress);
   assert.equal(readout.hidden, false);
-  assert.equal(keys.parentElement, readout, "the legend rides the readout in the dense view");
+  assert.ok(keys.parentElement === readout, "the legend rides the readout in the dense view");
 
   await setFocusMode(true);
   assert.equal(readout.hidden, true, "the row goes, not just the chips inside it");
   assert.equal(progress.hidden, false);
-  assert.equal(keys.parentElement, progress, "the legend moves to the row that is still drawn");
+  assert.ok(progress.contains(keys), "the legend moves to the row that is still drawn");
 
   await setFocusMode(false);
   assert.equal(readout.hidden, false);
-  assert.equal(keys.parentElement, readout, "and comes back with it");
+  assert.ok(keys.parentElement === readout, "and comes back with it");
 
   dispose.deactivate();
 });
@@ -836,16 +857,24 @@ test("#demo's reading toggle shows since when and the command to copy", async ()
   toggle.click();
   await settle();
   assert.equal(toggle.getAttribute("aria-pressed"), "true");
+  assert.ok(
+    toggle.classList.contains("pf-m-selected"),
+    "the pressed state is drawn by PF's toggle group, not by a border of our own",
+  );
   const strip = document.querySelector<HTMLElement>(".console-diff-reading");
   assert.equal(strip?.hidden, false);
-  assert.match(
-    strip?.querySelector(".console-diff-reading__since")?.textContent ?? "",
-    /^reading since /,
-  );
-  const command = strip?.querySelector<HTMLElement>("code.console-diff-reading__command");
+  const since = strip?.querySelector<HTMLElement>(".console-diff-reading__since");
+  assert.match(since?.textContent ?? "", /^reading since /);
+  // The command is in a popover off the head, open as the mark turns on.
+  assert.equal(since?.getAttribute("aria-expanded"), "true");
+  const command = strip?.querySelector<HTMLElement>("code.pf-v6-c-clipboard-copy__text");
   assert.match(command?.textContent ?? "", /^gh pr comment 482 --repo acme\/acme/);
   assert.equal(command?.isContentEditable, false);
-  assert.equal(strip?.querySelector("button")?.textContent, "Copy");
+  assert.equal(
+    strip?.querySelector("button.pf-m-plain[aria-label='Copy command']")?.textContent,
+    "",
+    "an icon button: its name is the aria-label",
+  );
 
   toggle.click();
   await settle();

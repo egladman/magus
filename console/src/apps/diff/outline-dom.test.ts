@@ -85,7 +85,7 @@ test("#demo shows the agent's outline beside the conversation, with nothing to c
 
   const rows = [...document.querySelectorAll<HTMLElement>(".console-diff-row--outline")];
   assert.deepEqual(
-    rows.map((r) => r.textContent),
+    rows.map((r) => r.querySelector(".console-diff-row__outline")?.textContent),
     [
       "claude-code suggests covering:",
       "who verifies against two audiences",
@@ -122,25 +122,19 @@ test("#demo's reply box refuses an outline topic pasted into it", async () => {
   dispose.deactivate();
 });
 
-test("#demo's Copy brief says the showcase has no server, rather than doing nothing", async () => {
+// The showcase has no server to build a brief from, so it withholds the button the way it
+// withholds Peek, rather than offering one that can only fail.
+test("#demo withholds Copy brief, and keeps Reply on the thread's root", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
 
-  const button = document.querySelector<HTMLButtonElement>(
-    '.console-diff-row__brief[data-thread-id="th1"]',
-  );
-  assert.ok(button, "one Copy brief on the conversation's root");
+  assert.equal(document.querySelectorAll(".console-diff-row__brief").length, 0);
   assert.equal(
-    document.querySelectorAll('.console-diff-row__brief[data-thread-id="th1"]').length,
+    document.querySelectorAll('.console-diff-row__reply[data-thread-id="th1"]').length,
     1,
+    "the thread is still answerable",
   );
-
-  const toasts = await toastsDuring(async () => {
-    button.click();
-    await settle(2);
-  });
-  assert.deepEqual(toasts, ["The showcase has no server to build a brief from."]);
   dispose.deactivate();
 });
 
