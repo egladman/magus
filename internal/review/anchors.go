@@ -52,63 +52,73 @@ func (h AnchorHit) Line() string {
 	return line + " [" + marker + "]"
 }
 
-// AnchorStore is one declared notes store: where it lives and what putting a note there means.
-type AnchorStore struct {
+// NoteDirs are the notes locations a workspace declares, as written in its config. An empty
+// field is a store the workspace does not declare.
+type NoteDirs struct {
+	Shared, Private string
+}
+
+// NoteStore is one declared notes store: where it lives and what putting a note there means.
+type NoteStore struct {
 	Dir   string
 	Scope notes.Scope
 }
 
-// AnchorStores resolves the workspace's declared notes stores, shared first. A store the
-// workspace does not declare is skipped, and a misdeclared one is an error.
+// NoteStores resolves the notes stores declared in dirs, shared first. A store the workspace does
+// not declare is skipped, and a misdeclared one is an error.
 //
 // Declaring neither is the default rather than a fault, so it yields no stores and no error.
-func AnchorStores(root, shared, private string) ([]AnchorStore, error) {
-	var out []AnchorStore
+func NoteStores(workspaceRoot string, dirs NoteDirs) ([]NoteStore, error) {
+	var out []NoteStore
 	for _, s := range []struct {
 		scope    notes.Scope
 		declared string
-	}{{notes.ScopeShared, shared}, {notes.ScopePrivate, private}} {
-		dir, err := notes.Dir(root, s.scope, s.declared)
+	}{{notes.ScopeShared, dirs.Shared}, {notes.ScopePrivate, dirs.Private}} {
+		dir, err := notes.Dir(workspaceRoot, s.scope, s.declared)
 		if errors.Is(err, notes.ErrDisabled) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("notes: %w", err)
+			return nil, err
 		}
-		out = append(out, AnchorStore{Dir: dir, Scope: s.scope})
+		out = append(out, NoteStore{Dir: dir, Scope: s.scope})
 	}
 	return out, nil
 }
 
 // ChangesetAnchors joins the declared notes stores against everything rev changed.
 //
-// loadGraph supplies the graph the anchors are graded against and is called only when a store
-// is declared. A graph that will not load costs the drift column and a workspace declaring no
-// store costs the section; the report around either still prints. includeSymbols belongs to
-// the loader: a note anchored to a symbol is the point of symbol anchors, and without the
-// symbol shards every one of them would report as dangling.
-func ChangesetAnchors(ctx context.Context, root, shared, private string, loadGraph func(context.Context) (*knowledge.Graph, error), rev types.Diff) []AnchorHit {
-	stores, err := AnchorStores(root, shared, private)
-	if err != nil || len(stores) == 0 {
-		return nil
+// A misdeclared store is returned as an error rather than as no anchors: the section would
+// otherwise read as a clean tree that was never checked. loadGraph supplies the graph the
+// anchors are graded against and is called only when a store is declared; it must load the
+// symbol shards, because without them every symbol anchor would report as dangling. A graph
+// that will not load costs the drift column, and a workspace declaring no store costs the
+// section; the report around either still prints.
+func ChangesetAnchors(ctx context.Context, workspaceRoot string, dirs NoteDirs, loadGraph func(context.Context) (*knowledge.Graph, error), rev types.Diff) ([]AnchorHit, error) {
+	stores, err := NoteStores(workspaceRoot, dirs)
+	if err != nil {
+		return nil, fmt.Errorf("note anchors: %w", err)
+	}
+	if len(stores) == 0 {
+		return nil, nil
 	}
 	g, err := loadGraph(ctx)
 	if err != nil {
 		g = nil
 	}
-	return JoinAnchors(ctx, root, stores, g, ChangedPaths(rev), ChangedSymbolIDs(rev))
+	return joinAnchors(ctx, workspaceRoot, stores, g, ChangedPaths(rev), changedSymbolIDs(rev)), nil
 }
 
-// JoinAnchors joins every note anchor in stores against the changed files and symbols.
+// joinAnchors joins every note anchor in stores against the changed files and symbols.
 //
 // g is the knowledge graph the anchors are graded against; nil costs the drift column and
 // nothing else, since notes.ResolveAnchors grades every anchor ungraded without a resolver, so
 // the answer to WHAT is anchored survives a graph that would not load. A store that cannot be
 // read contributes nothing.
-func JoinAnchors(ctx context.Context, root string, stores []AnchorStore, g *knowledge.Graph, files, symbols []string) []AnchorHit {
+func joinAnchors(ctx context.Context, workspaceRoot string, stores []NoteStore, g *knowledge.Graph, files, symbols []string) []AnchorHit {
 	var resolver *knowledge.NoteResolver
 	if g != nil {
-		r := knowledge.NewNoteResolver(root, g)
+		r := knowledge.NewNoteResolver(workspaceRoot, g)
 		resolver = &r
 	}
 
@@ -122,7 +132,7 @@ func JoinAnchors(ctx context.Context, root string, stores []AnchorStore, g *know
 		if err != nil {
 			continue
 		}
-		resolved = append(resolved, StampAnchorNodeIDs(ra, string(st.Scope))...)
+		resolved = append(resolved, stampAnchorNodeIDs(ra, string(st.Scope))...)
 	}
 
 	hits := notes.AnchorHits(resolved, files, symbols)
@@ -136,7 +146,7 @@ func JoinAnchors(ctx context.Context, root string, stores []AnchorStore, g *know
 	return out
 }
 
-// StampAnchorNodeIDs mints each anchor's graph node id in place and returns the same slice.
+// stampAnchorNodeIDs mints each anchor's graph node id in place and returns the same slice.
 //
 // This is the only layer allowed to know both vocabularies: internal/notes must not learn the
 // graph (see its Resolver doc), and the graph mints ids from one place so two hand-kept copies
@@ -144,7 +154,7 @@ func JoinAnchors(ctx context.Context, root string, stores []AnchorStore, g *know
 // a node id and never matches, which is the join's headline case.
 //
 // scope is the ANCHORING store's, because a note-to-note anchor names a note in the same store.
-func StampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.ResolvedAnchor {
+func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.ResolvedAnchor {
 	for i := range res {
 		res[i].NodeID = knowledge.AnchorNodeID(string(res[i].Anchor.Kind), res[i].Anchor.Target, scope)
 	}
@@ -160,8 +170,8 @@ func ChangedPaths(rev types.Diff) []string {
 	return out
 }
 
-// ChangedSymbolIDs is every changed symbol's index id, which is what a symbol anchor names.
-func ChangedSymbolIDs(rev types.Diff) []string {
+// changedSymbolIDs is every changed symbol's index id, which is what a symbol anchor names.
+func changedSymbolIDs(rev types.Diff) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, f := range rev.Files {

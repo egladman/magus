@@ -1,5 +1,5 @@
-// conversations.test.ts - how the host's flat comment list becomes conversations, where they land,
-// and what an outdated one quotes. Pure: rows.ts has no DOM.
+// threads.test.ts - how the host's flat comment list becomes threads, where they land, and what an
+// outdated one quotes. Pure: rows.ts has no DOM.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,12 +7,13 @@ import { patchFixture } from "./fixtures";
 import {
   buildRows,
   commentKey,
-  conversations,
+  groupThreads,
   maxLineChars,
   narrowToHunk,
   placeThreads,
-  rootOf,
+  threadIdOf,
 } from "./rows";
+import type { ReviewThread } from "./session";
 
 const ONE_HUNK = [
   "diff --git a/x.ts b/x.ts",
@@ -43,10 +44,10 @@ function thread(id: string, path: string, hunk: number) {
   return { id, path, hunk, line: 11, author: "dana", body: `remark ${id}` };
 }
 
-// The wire is flat: one record per comment, a reply naming its conversation's first comment as
-// its root. The conversation is assembled at render time, because the host's record does not nest.
-test("a conversation is its root followed by its replies, oldest first", () => {
-  const grouped = conversations([
+// The wire is flat: one record per comment, a reply naming its thread's top-level comment as its
+// root. The thread is assembled at render time, because the host's record does not nest.
+test("a thread is its top-level comment followed by its replies, oldest first", () => {
+  const grouped = groupThreads([
     thread("t1", "x.ts", 0),
     thread("t2", "x.ts", 0),
     { ...thread("t1a", "x.ts", 0), root: "t1" },
@@ -55,14 +56,15 @@ test("a conversation is its root followed by its replies, oldest first", () => {
   assert.deepEqual(
     grouped.map((c) => c.map((t) => t.id)),
     [["t1", "t1a", "t1b"], ["t2"]],
-    "two conversations interleaved in the listing each keep their own replies, in list order",
+    "two threads interleaved in the listing each keep their own replies, in list order",
   );
 });
 
-// A reply listed before its root still sits behind it, and one whose root the host did not send
-// is kept rather than dropped: "a colleague said nothing" is the one thing this app must not say.
-test("a root listed late still leads, and a reply with no root in the list is kept", () => {
-  const grouped = conversations([
+// A reply listed before its top-level comment still sits behind it, and one whose top-level
+// comment the host did not send is kept rather than dropped: "a colleague said nothing" is the one
+// thing this app must not say.
+test("a top-level comment listed late still leads, and a reply with none in the list is kept", () => {
+  const grouped = groupThreads([
     { ...thread("r1", "x.ts", 0), root: "t1" },
     thread("t1", "x.ts", 0),
     { ...thread("o1", "x.ts", 0), root: "gone" },
@@ -73,14 +75,47 @@ test("a root listed late still leads, and a reply with no root in the list is ke
   );
 });
 
-test("rootOf is the thread's own root, or its id when it is the first comment", () => {
-  assert.equal(rootOf(thread("t1", "x.ts", 0)), "t1");
-  assert.equal(rootOf({ ...thread("t1a", "x.ts", 0), root: "t1" }), "t1");
+// The same inputs changeset.GroupThreads is tested with. A root counts only when it names a
+// top-level comment of the list, so none of these may attach a comment to a thread it was not said
+// in, and each is still shown.
+test("a root that names no top-level comment heads a thread of its own", () => {
+  const ids = (cs: ReviewThread[]) => groupThreads(cs).map((g) => g.map((t) => t.id));
+  assert.deepEqual(ids([{ ...thread("x", "x.ts", 0), root: "x" }]), [["x"]], "rooted at itself");
+  assert.deepEqual(
+    ids([
+      { ...thread("a", "x.ts", 0), root: "b" },
+      { ...thread("b", "x.ts", 0), root: "a" },
+    ]),
+    [["a"], ["b"]],
+    "rooted at each other",
+  );
+  assert.deepEqual(
+    ids([
+      thread("h", "x.ts", 0),
+      { ...thread("r", "x.ts", 0), root: "h" },
+      { ...thread("rr", "x.ts", 0), root: "r" },
+    ]),
+    [["h", "r"], ["rr"]],
+    "a reply to a reply",
+  );
 });
 
-// A reply can carry a line the head no longer has while its root still has one. Placing each
-// comment alone would split the conversation across the file heading and the hunk.
-test("a conversation lands where its root does", () => {
+test("threadIdOf is the comment's own root, or its id when it is a top-level comment", () => {
+  assert.equal(threadIdOf(thread("t1", "x.ts", 0)), "t1");
+  assert.equal(threadIdOf({ ...thread("t1a", "x.ts", 0), root: "t1" }), "t1");
+});
+
+// A comment whose root names nothing is a thread head, so the id a reply to it is addressed to
+// is its own: the server finds no thread under the root the host named.
+test("an orphaned reply is addressed by its own id", () => {
+  const [group] = groupThreads([{ ...thread("o1", "x.ts", 0), root: "gone" }]);
+  assert.equal(threadIdOf(group[0]), "o1");
+  assert.equal(group[0].root, "", "the stray root is cleared so it renders as a head");
+});
+
+// A reply can carry a line the head no longer has while its top-level comment still has one.
+// Placing each comment alone would split the thread across the file heading and the hunk.
+test("a thread lands where its top-level comment does", () => {
   const placed = placeThreads(patchFixture(ONE_HUNK), [
     thread("t1", "x.ts", 0),
     { ...thread("t1a", "x.ts", -1), root: "t1" },
@@ -92,7 +127,7 @@ test("a conversation lands where its root does", () => {
   assert.equal(placed.atFile.size, 0);
 });
 
-test("a conversation on a file outside the changeset stays together in elsewhere", () => {
+test("a thread on a file outside the changeset stays together in elsewhere", () => {
   const placed = placeThreads(patchFixture(ONE_HUNK), [
     thread("t1", "other.ts", -1),
     { ...thread("t1a", "other.ts", -1), root: "t1" },

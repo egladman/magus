@@ -3,6 +3,7 @@ package diff
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,20 +49,22 @@ func getThread(h http.Handler, query string) *httptest.ResponseRecorder {
 	return w
 }
 
-func TestThreadRouteServesTheBriefForAConversation(t *testing.T) {
+func TestThreadRouteServesTheBriefForAThread(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
 	})
-	h := NewThreadHandler(fakeThreadWorkspace{patch: threadRoutePatch}, nil)
-	h.Anchors = func(_ context.Context, rev types.Diff) []review.AnchorHit {
-		return []review.AnchorHit{{Note: "new-is-cheap", Kind: notes.AnchorFile, Target: "a.go", Matched: rev.Files[0].Path}}
-	}
+	h := NewThreadHandler(ThreadOptions{
+		Workspace: fakeThreadWorkspace{patch: threadRoutePatch},
+		Anchors: func(_ context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+			return []review.AnchorHit{{Note: "new-is-cheap", Kind: notes.AnchorFile, Target: "a.go", Matched: rev.Files[0].Path}}, nil
+		},
+	}, nil)
 
 	w := getThread(h, "?id=t1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefReply
+	var got review.ThreadBriefResult
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.Equal(t, "t1", got.ID)
 	assert.Contains(t, got.Brief, "- priya:\n  > why new?\n- marcus:\n  > see the cache")
@@ -72,19 +75,19 @@ func TestThreadRouteServesTheBriefForAConversation(t *testing.T) {
 	assert.NotContains(t, got.Brief, "no notes store wired")
 }
 
-// TestThreadRouteAnswersAReplyIdWithTheRoot. A client holding the id of the reply it just saw
-// arrive gets the conversation, and learns the root id to key it by.
-func TestThreadRouteAnswersAReplyIdWithTheRoot(t *testing.T) {
+// TestThreadRouteAnswersAReplyIdWithTheThreadId. A client holding the id of the reply it just saw
+// arrive gets the thread, and learns the thread id to key it by.
+func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
 	})
-	h := NewThreadHandler(fakeThreadWorkspace{patch: threadRoutePatch}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t2")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefReply
+	var got review.ThreadBriefResult
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.Equal(t, "t1", got.ID)
 }
@@ -95,12 +98,12 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 	})
-	h := NewThreadHandler(fakeThreadWorkspace{patch: threadRoutePatch}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefReply
+	var got review.ThreadBriefResult
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.Contains(t, got.Brief, "note anchors: this server has no notes store wired, so none was joined")
 	assert.NotContains(t, got.Brief, "## Notes anchored here")
@@ -110,7 +113,7 @@ func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 	})
-	h := NewThreadHandler(fakeThreadWorkspace{patch: threadRoutePatch}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
 
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "").Code, "no id")
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "?id=%20").Code, "a blank id")
@@ -125,9 +128,27 @@ func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
 
 func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
 	// No provider is wired here, so no review can be found.
-	h := NewThreadHandler(fakeThreadWorkspace{}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{}}, nil)
 	assert.Equal(t, http.StatusNotFound, getThread(h, "?id=t1").Code)
 
-	assert.Equal(t, http.StatusNotFound, getThread(NewThreadHandler(nil, nil), "?id=t1").Code,
+	assert.Equal(t, http.StatusNotFound, getThread(NewThreadHandler(ThreadOptions{}, nil), "?id=t1").Code,
 		"a server with no workspace has no review to brief")
+}
+
+// A misdeclared notes store is a fault the person has to fix, so the route reports it rather than
+// serving a brief whose anchors section reads as a clean tree nobody checked.
+func TestThreadRouteReportsAnAnchorsFailure(t *testing.T) {
+	withReviewProvider(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
+	})
+	h := NewThreadHandler(ThreadOptions{
+		Workspace: fakeThreadWorkspace{patch: threadRoutePatch},
+		Anchors: func(context.Context, types.Diff) ([]review.AnchorHit, error) {
+			return nil, errors.New("note anchors: knowledge.notes.shared escapes the workspace")
+		},
+	}, nil)
+
+	w := getThread(h, "?id=t1")
+
+	assert.GreaterOrEqual(t, w.Code, http.StatusInternalServerError, w.Body.String())
 }

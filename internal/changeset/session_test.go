@@ -396,7 +396,7 @@ func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	root := t.TempDir()
 	require.NotNil(t, store.Attach(root, "", types.Diff{}, ""))
 
-	threads := []types.ReviewThread{{ID: "t1"}, {ID: "t2"}}
+	threads := []types.ReviewComment{{ID: "t1"}, {ID: "t2"}}
 	require.Equal(t, []string{"t1", "t2"}, store.Get(root).UnseenThreads(threads))
 
 	store.MarkThreadsSeen(root, []string{"t1"})
@@ -409,14 +409,14 @@ func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	// A thread deleted on the host and another added nets zero on a count and must not hide the
 	// new one.
 	store.MarkThreadsSeen(root, []string{"t2"})
-	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenThreads([]types.ReviewThread{{ID: "t1"}, {ID: "t3"}}))
+	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenThreads([]types.ReviewComment{{ID: "t1"}, {ID: "t3"}}))
 }
 
 // A thread with no id cannot be tracked, and calling it new forever would mark the conversation
 // unread on every render.
 func TestUnseenThreadsIgnoresAnUnidentifiedThread(t *testing.T) {
 	var sess types.DiffReview
-	assert.Empty(t, sess.UnseenThreads([]types.ReviewThread{{ID: ""}}))
+	assert.Empty(t, sess.UnseenThreads([]types.ReviewComment{{ID: ""}}))
 }
 
 // TestTrackHunksRelocatesADraftWhoseCodeMoved is the end-to-end shape of the anchor: a remark

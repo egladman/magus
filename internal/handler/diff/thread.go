@@ -17,39 +17,46 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// threadLookupTimeout bounds the two forge calls one brief makes. A client asked for a text
-// and must not wait on a stranger's outage to get it.
+// threadLookupTimeout bounds the forge calls one brief makes, and only those. A client asked for
+// a text and must not wait on a stranger's outage to get it; the annotation that follows is this
+// server's own work and runs as long as it takes.
 const threadLookupTimeout = 5 * time.Second
 
 // threadSource is what the brief route reads from the workspace: where this tree's changes are
-// discussed, the patch, and the annotated changeset the conversation is read against.
+// discussed, the patch, and the annotated changeset the thread is read against.
 type threadSource interface {
 	reviewSource
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
 }
 
-// ThreadHandler serves GET /api/v1/diff/thread?id=<root comment id>: the brief a person pastes
-// to their own model to ask about one review conversation.
+// ThreadOptions wires a [ThreadHandler].
+type ThreadOptions struct {
+	// Workspace is where the tree's changes are read from. Nil answers that no review is open,
+	// which is what a server with no workspace has.
+	Workspace threadSource
+	// Anchors joins the workspace's notes stores against the changeset. Nil is a server with no
+	// notes wiring, and the brief then names note anchors among what it could not measure.
+	Anchors func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
+}
+
+// ThreadHandler serves GET /api/v1/diff/thread?id=<thread id>: the brief a person pastes to
+// their own model to ask about one review thread.
 //
 // The answer is {"id", "brief"} and nothing more. The route only renders text: it posts nothing
 // to the host and sends nothing to a model, and the console shows the text with a copy
 // affordance the person uses, because carrying it across is theirs to do.
 //
 // Its own route rather than a field of the review lookup, for the reason that lookup has one:
-// it costs the changeset annotation on top of a forge round trip, and the conversation must
-// paint before anything that annotates is allowed to hold it up.
+// it costs the changeset annotation on top of a forge round trip, and the thread must paint
+// before anything that annotates is allowed to hold it up.
 type ThreadHandler struct {
 	handler.Base
-	workspace threadSource
-	// Anchors joins the workspace's notes stores against the changeset. Nil is a server with no
-	// notes wiring, and the brief then names note anchors among what it could not measure.
-	Anchors func(ctx context.Context, rev types.Diff) []review.AnchorHit
+	opts ThreadOptions
 }
 
-// NewThreadHandler returns the conversation-brief handler. A nil workspace answers that no
-// review is open, which is what a server with no workspace has.
-func NewThreadHandler(workspace threadSource, log *slog.Logger) *ThreadHandler {
-	h := &ThreadHandler{workspace: workspace}
+// NewThreadHandler returns the thread-brief handler.
+func NewThreadHandler(opts ThreadOptions, log *slog.Logger) *ThreadHandler {
+	h := &ThreadHandler{opts: opts}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -60,59 +67,47 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	id := strings.TrimSpace(r.URL.Query().Get("id"))
 	if id == "" {
-		handler.Refuse(w, r, rpcerr.Invalid("thread requires an id parameter: the root comment id of the conversation"))
+		handler.Refuse(w, r, rpcerr.Invalid("thread requires an id parameter: the id of a thread's top-level comment"))
 		return
 	}
-	if h.workspace == nil {
+	ws := h.opts.Workspace
+	if ws == nil {
 		handler.Refuse(w, r, rpcerr.NotFound("no review is open: this server has no workspace"))
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), threadLookupTimeout)
-	defer cancel()
-	from := h.workspace.ReviewOrigin(ctx)
-	at := bindings.FindReview(ctx, from.Branch, from.Remote)
+	ctx := r.Context()
+	// The comments that decoded are used even when one did not: a malformed remark is no reason
+	// to withhold the rest of a thread. The failure is named only when it left the id
+	// unfindable, which is when it matters.
+	at, comments, commentsErr := bindings.ReviewCommentsOf(ctx, ws.ReviewOrigin(ctx), threadLookupTimeout)
 	if !at.Open() {
 		handler.Refuse(w, r, rpcerr.NotFound("no review is open for this branch: "+at.Reason))
 		return
 	}
-	// The threads that decoded are used even when one did not: a malformed remark is no reason
-	// to withhold the rest of a conversation. The failure is named only when it left the id
-	// unfindable, which is when it matters.
-	threads, threadsErr := bindings.ReviewThreads(ctx, at)
-
-	in := review.ThreadInput{Threads: threads, Variant: prompt.Short}
-	patch, err := h.workspace.WorkingDiff(ctx, nil)
+	patch, err := ws.WorkingDiff(ctx, nil)
 	if err != nil {
 		h.Fail(w, r, "thread", err)
 		return
 	}
-	in.Hunks = changeset.ParseHunks(patch)
-	if len(in.Hunks) > 0 {
-		paths := make([]string, 0, len(in.Hunks))
-		for _, f := range in.Hunks {
-			paths = append(paths, f.Path)
-		}
-		rev, derr := h.workspace.Diff(ctx, paths)
-		if derr != nil {
-			h.Fail(w, r, "thread", derr)
-			return
-		}
-		in.Changeset = rev
-	}
-	switch {
-	case h.Anchors != nil:
-		in.Anchors = h.Anchors(ctx, in.Changeset)
-	default:
-		in.AnchorsUnread = "this server has no notes store wired, so none was joined"
+	in, err := review.NewThreadInput(ctx, review.ThreadParts{
+		Patch:    patch,
+		Comments: comments,
+		Annotate: ws.Diff,
+		Anchors:  h.opts.Anchors,
+		Variant:  prompt.Short,
+	})
+	if err != nil {
+		h.Fail(w, r, "thread", err)
+		return
 	}
 
-	reply, err := review.ThreadBriefFor(in, id)
+	reply, err := review.ThreadBrief(in, id)
 	switch {
-	case errors.Is(err, review.ErrNoConversation):
+	case errors.Is(err, changeset.ErrNoThread):
 		msg := err.Error()
-		if threadsErr != nil {
-			msg += " (the review was only partly read: " + threadsErr.Error() + ")"
+		if commentsErr != nil {
+			msg += " (the review was only partly read: " + commentsErr.Error() + ")"
 		}
 		handler.Refuse(w, r, rpcerr.NotFound(msg))
 	case err != nil:

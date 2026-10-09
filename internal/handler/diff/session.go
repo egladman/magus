@@ -394,14 +394,14 @@ type reviewSessionRequest struct {
 	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
 	// serve: it means nothing outside the session that produced it.
 	Line int `json:"line,omitempty"`
-	// resolve / answer, and the THREAD for reply. One field because they are the same
-	// question (which one) and never asked together.
+	// resolve / answer, and the review comment a reply answers. One field because they are the
+	// same question (which one) and never asked together.
 	ID string `json:"id,omitempty"`
-	// Root is, for reply, the id of the first comment of the conversation to answer
-	// (types.ReviewThread.Root of any reply in it, or the ID of the root comment itself). It wins
-	// over ID, so a client holding a reply can name its conversation without finding the root,
-	// and may leave ID empty.
-	Root string `json:"root,omitempty"`
+	// Thread is, for reply, the thread to answer: the [types.ReviewComment].Root of any reply in
+	// it, or the ID of its top-level comment. It wins over ID, so a client holding a reply can
+	// name its thread without finding the top-level comment, and may leave ID empty. The wire
+	// name stays "root", the name a reply's own Root field has.
+	Thread string `json:"root,omitempty"`
 	// Verdict is what the published review should SAY: "comment" (the default), "approve", or
 	// "request_changes". It is a REQUEST, not a decision: the server resolves it against who
 	// opened the review, and a self-review is always a comment however this is set.
@@ -491,7 +491,7 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	if err := bindings.ReplyReview(ctx, at, replyThread(req), req.Body); err != nil {
+	if err := bindings.ReplyReview(ctx, at, replyThread(ctx, at, req), req.Body); err != nil {
 		return nil, err
 	}
 	// A reply needs a review, not an attached session, so a nil session here is not a failure.
@@ -503,12 +503,28 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 	return &types.DiffReview{Cursor: types.DiffCursor{Hunk: -1}}, nil
 }
 
-// replyThread is the host thread a reply goes to: the conversation's root when the client named
-// one, else the thread it addressed. Hosts attach a reply to a conversation by its first comment,
-// so answering a reply's own id would open nothing.
-func replyThread(req reviewSessionRequest) string {
-	if req.Root != "" {
-		return req.Root
+// replyThread is the thread id a reply goes to. Hosts attach a reply to a thread by its
+// top-level comment, so answering a reply's own id would open nothing: the id the client named
+// (its Thread, else its ID) is looked up on the review and resolved to its thread's, the way
+// every other reader of the review does.
+//
+// A review that cannot be read, or that holds no such comment, sends the name as given. The
+// host knows its own ids and refuses one it does not; this lookup only corrects the one mistake
+// a client can make from what it was shown.
+func replyThread(ctx context.Context, at types.ReviewTarget, req reviewSessionRequest) string {
+	name := requestedThread(req)
+	comments, _, _ := bindings.ReviewCommentsReached(ctx, at)
+	if th, err := changeset.FindThread(comments, name); err == nil {
+		return th.ID()
+	}
+	return name
+}
+
+// requestedThread is the thread a reply names before the review is consulted: its Thread when
+// the client sent one, else the comment it addressed.
+func requestedThread(req reviewSessionRequest) string {
+	if req.Thread != "" {
+		return req.Thread
 	}
 	return req.ID
 }
@@ -690,11 +706,11 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "reply":
 		// 400 rather than 502: an incomplete request is the caller's mistake, and reporting it
 		// as a bad gateway sends them to look at their network.
-		if replyThread(req) == "" || strings.TrimSpace(req.Body) == "" {
+		if requestedThread(req) == "" || strings.TrimSpace(req.Body) == "" {
 			handler.Refuse(w, r, rpcerr.Invalid("reply needs a thread and something to say"))
 			return
 		}
-		// ID and Root are HOST thread ids here, not local comment ids.
+		// ID and Thread are HOST comment ids here, not local comment ids.
 		var err error
 		sess, err = h.reply(r.Context(), req)
 		if err != nil {
@@ -780,25 +796,25 @@ func NewReviewLookupHandler(workspace reviewSource, log *slog.Logger) *ReviewLoo
 	return h
 }
 
-// place resolves each thread onto the hunk holding its line, so the terminal viewer and the console read one answer
-// instead of computing it twice. An unreadable patch leaves them at -1, which renders against
-// the file rather than against the wrong hunk.
-func (h *ReviewLookupHandler) place(ctx context.Context, threads []types.ReviewThread) []types.ReviewThread {
-	if len(threads) == 0 {
-		return threads
+// place resolves each comment onto the hunk holding its line, so the terminal viewer and the
+// console read one answer instead of computing it twice. An unreadable patch leaves them at -1,
+// which renders against the file rather than against the wrong hunk.
+func (h *ReviewLookupHandler) place(ctx context.Context, comments []types.ReviewComment) []types.ReviewComment {
+	if len(comments) == 0 {
+		return comments
 	}
 	patch, err := h.workspace.WorkingDiff(ctx, nil)
 	if err != nil {
-		return threads
+		return comments
 	}
-	return changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
+	return changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
 }
 
-// diffReviewResponse is the wire shape: the target, flattened, plus its threads.
+// diffReviewResponse is the wire shape: the target, flattened, plus the review's comments.
 //
-// Threads is always an array, never null. A client rendering "what colleagues said" iterates
-// it, and a null would make every caller write the same guard for a state that means exactly
-// what an empty list means.
+// Comments is always an array, never null, and travels as "threads" for the clients that already
+// read it. A client rendering "what colleagues said" iterates it, and a null would make every
+// caller write the same guard for a state that means exactly what an empty list means.
 type diffReviewResponse struct {
 	ID   string `json:"id"`
 	Repo string `json:"repo,omitempty"`
@@ -820,7 +836,7 @@ type diffReviewResponse struct {
 	// on.
 	Verdicts     []types.ReviewVerdict `json:"verdicts"`
 	VerdictLimit string                `json:"verdict_limit,omitempty"`
-	Threads      []types.ReviewThread  `json:"threads"`
+	Comments     []types.ReviewComment `json:"threads"`
 }
 
 // remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
@@ -855,41 +871,41 @@ func (h *ReviewLookupHandler) serve(w http.ResponseWriter, r *http.Request) {
 		Reason:       at.Reason,
 		Verdicts:     at.AllowedVerdicts(),
 		VerdictLimit: at.VerdictLimit(),
-		Threads:      []types.ReviewThread{},
+		Comments:     []types.ReviewComment{},
 	}
 	if at.Open() && h.workspace != nil {
 		out.Host = remoteHost(h.workspace.ReviewOrigin(r.Context()).Remote)
 	}
 	if at.Open() {
-		threads, err := bindings.ReviewThreads(r.Context(), at)
-		out.Threads = append(out.Threads, h.place(r.Context(), threads)...)
-		h.markNew(out.Threads)
+		comments, err := bindings.ReviewComments(r.Context(), at)
+		out.Comments = append(out.Comments, h.place(r.Context(), comments)...)
+		h.markNew(out.Comments)
 		if err != nil {
-			// The threads that DID decode still travel, and the reason rides beside them.
-			// Answering 502 here would hide a readable conversation behind one malformed
-			// remark, and dropping the remark silently would say a colleague said nothing.
+			// The comments that DID decode still travel, and the reason rides beside them.
+			// Answering 502 here would hide a readable review behind one malformed remark, and
+			// dropping the remark silently would say a colleague said nothing.
 			out.Reason = err.Error()
 		}
 	}
 	handler.WriteJSON(w, r, out)
 }
 
-// markNew flags the threads the reader has not had on screen before. It READS the watermark and
+// markNew flags the comments the reader has not had on screen before. It READS the watermark and
 // never moves it.
 //
 // Serving a response is not rendering one. Advancing here meant an aborted fetch, a refresh
 // mid-flight, or a second tab silently consumed the marks, and the notification with them, since
 // the job that raises it compares against this same watermark. The client says when it has shown
-// them, through the session's `seen` op; until it does, the same threads keep arriving marked.
-func (h *ReviewLookupHandler) markNew(threads []types.ReviewThread) {
-	if h.Sessions == nil || len(threads) == 0 {
+// them, through the session's `seen` op; until it does, the same comments keep arriving marked.
+func (h *ReviewLookupHandler) markNew(comments []types.ReviewComment) {
+	if h.Sessions == nil || len(comments) == 0 {
 		return
 	}
 	sess := h.Sessions.Get(h.Root)
 	if sess == nil {
 		return
 	}
-	unseen := sess.UnseenThreads(threads)
+	unseen := sess.UnseenThreads(comments)
 	if len(unseen) == 0 {
 		return
 	}
@@ -897,9 +913,9 @@ func (h *ReviewLookupHandler) markNew(threads []types.ReviewThread) {
 	for _, id := range unseen {
 		fresh[id] = struct{}{}
 	}
-	for i := range threads {
-		if _, ok := fresh[threads[i].ID]; ok {
-			threads[i].New = true
+	for i := range comments {
+		if _, ok := fresh[comments[i].ID]; ok {
+			comments[i].New = true
 		}
 	}
 }

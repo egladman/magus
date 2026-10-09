@@ -1,6 +1,7 @@
 package review
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ func TestChangedSymbolIDsAreWhatASymbolAnchorNames(t *testing.T) {
 		{Path: "b.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}}},
 	}}
 	assert.Equal(t, []string{"a.go", "b.go"}, ChangedPaths(rev))
-	assert.Equal(t, []string{"m types/Diff#"}, ChangedSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
+	assert.Equal(t, []string{"m types/Diff#"}, changedSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
 }
 
 // TestSymbolAnchorJoinsAgainstTheGraphsNodeID holds the two ends of the anchor join together.
@@ -36,7 +37,7 @@ func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
 	require.NotEqual(t, key, changed,
 		"if the two spellings agreed, the join could not have been broken")
 
-	res := StampAnchorNodeIDs([]notes.ResolvedAnchor{{
+	res := stampAnchorNodeIDs([]notes.ResolvedAnchor{{
 		Note: "put-is-not-idempotent", Pos: 0,
 		Anchor: notes.Anchor{Kind: notes.AnchorSymbol, Target: key},
 	}}, string(notes.ScopeShared))
@@ -54,25 +55,45 @@ func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
 	}}, hits)
 }
 
-// TestAnchorStoresSkipsWhatIsNotDeclared. A workspace declaring neither store is the default,
+// TestNoteStoresSkipsWhatIsNotDeclared. A workspace declaring neither store is the default,
 // and it must read as "no anchors" rather than as an error the report prints around.
-func TestAnchorStoresSkipsWhatIsNotDeclared(t *testing.T) {
+func TestNoteStoresSkipsWhatIsNotDeclared(t *testing.T) {
 	root := t.TempDir()
 
-	none, err := AnchorStores(root, "", "")
+	none, err := NoteStores(root, NoteDirs{})
 	require.NoError(t, err)
 	assert.Empty(t, none)
 
-	shared, err := AnchorStores(root, "notes", "")
+	shared, err := NoteStores(root, NoteDirs{Shared: "notes"})
 	require.NoError(t, err)
-	assert.Equal(t, []AnchorStore{{Dir: filepath.Join(root, "notes"), Scope: notes.ScopeShared}}, shared)
+	assert.Equal(t, []NoteStore{{Dir: filepath.Join(root, "notes"), Scope: notes.ScopeShared}}, shared)
+}
+
+// A misdeclared store is an error to the caller. Returning no anchors instead would print a
+// section that reads as a clean tree nobody checked.
+func TestChangesetAnchorsReturnsAMisdeclaredStoreAsAnError(t *testing.T) {
+	root := t.TempDir()
+	load := func(context.Context) (*knowledge.Graph, error) {
+		t.Fatal("the graph is only loaded once a store is declared and valid")
+		return nil, nil
+	}
+
+	hits, err := ChangesetAnchors(t.Context(), root, NoteDirs{Shared: "../outside"}, load, types.Diff{})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "note anchors")
+	assert.Nil(t, hits)
+
+	hits, err = ChangesetAnchors(t.Context(), root, NoteDirs{}, load, types.Diff{})
+	require.NoError(t, err, "declaring no store is the default, not a fault")
+	assert.Nil(t, hits)
 }
 
 // TestJoinAnchorsReadsAFileAnchorWithoutAGraph. Grading needs the graph and naming does not: a
 // graph that would not load leaves the hit in place and marks it ungraded, never absent.
 func TestJoinAnchorsReadsAFileAnchorWithoutAGraph(t *testing.T) {
 	root := t.TempDir()
-	stores, err := AnchorStores(root, "notes", "")
+	stores, err := NoteStores(root, NoteDirs{Shared: "notes"})
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(stores[0].Dir, 0o755))
 	require.NoError(t, notes.Save(stores[0].Dir, notes.Note{
@@ -82,7 +103,7 @@ func TestJoinAnchorsReadsAFileAnchorWithoutAGraph(t *testing.T) {
 		Body:    "Put and Get change together.\n",
 	}))
 
-	hits := JoinAnchors(t.Context(), root, stores, nil, []string{"internal/cache/cache.go"}, nil)
+	hits := joinAnchors(t.Context(), root, stores, nil, []string{"internal/cache/cache.go"}, nil)
 
 	require.Len(t, hits, 1)
 	assert.Equal(t, "cache-pairs", hits[0].Note)

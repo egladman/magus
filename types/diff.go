@@ -211,6 +211,9 @@ type DiffOptions struct {
 	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
 	MinCohort int     `json:"-" yaml:"-"`
 	MinShare  float64 `json:"-" yaml:"-"`
+	// SkipOrder leaves Diff.Order unset. A reader of the order asks for it; a thread brief reads
+	// the code around one comment and has no use for a ranking of the whole changeset.
+	SkipOrder bool `json:"-" yaml:"-"`
 }
 
 // The conformance checks, by Check.Name. Each derives its norm from the workspace's own symbol
@@ -807,12 +810,13 @@ func (r ReviewTarget) Open() bool { return r.ID != "" }
 // Merged reports whether the host says this review has landed.
 func (r ReviewTarget) Merged() bool { return r.State == "merged" }
 
-// ReviewThread is one comment already on the review, written by anybody.
+// ReviewComment is one comment already on the review, written by anybody. A thread is a root
+// comment and the replies made to it, named by the root's ID (the "thread id").
 //
-// Read-only here. A thread belongs to the host, which is the record every participant sees;
+// Read-only here. A comment belongs to the host, which is the record every participant sees;
 // magus renders it so a reader never leaves to find out what a colleague said, and replies
 // through the provider rather than editing a local copy that would silently diverge.
-type ReviewThread struct {
+type ReviewComment struct {
 	ID   string `json:"id" yaml:"id"`
 	Path string `json:"path" yaml:"path"`
 	// Line is the new-side line the host anchored this remark to.
@@ -821,19 +825,20 @@ type ReviewThread struct {
 	// this changeset does.
 	//
 	// Resolved by magus rather than by each client, because the arithmetic is the only hard
-	// part of placing a thread and two clients doing it independently is how the same remark
+	// part of placing a comment and two clients doing it independently is how the same remark
 	// comes to sit against different code in the terminal and the browser. -1 is ordinary: the
 	// working tree moves after a colleague writes, and a review covers commits a working diff
 	// does not.
 	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
-	// Root is the ID of the first comment in the conversation this one belongs to, and is empty
-	// on that first comment itself.
+	// Root is the thread id a reply belongs to: the ID of the top-level comment it answers. It is
+	// empty on a top-level comment, and [DiffOutline].Thread holds the same id.
 	//
 	// The wire stays flat, one record per comment, so each reply keeps its own ID and its own
-	// place in the SeenThreads watermark: a new reply to an old conversation is still new.
-	// Grouping replies under their root is a rendering decision made where the threads are shown.
+	// place in the SeenThreads watermark: a new reply to an old thread is still new. Root counts
+	// only when it names a top-level comment in the same list; changeset.GroupThreads is the one
+	// definition, and treats any other comment as the head of a thread of its own.
 	Root string `json:"root,omitempty" yaml:"root,omitempty"`
 	// Outdated reports that the line this comment was made on no longer exists in the head. Line
 	// is then whatever the host last recorded, and Hunk is usually -1.
@@ -842,7 +847,7 @@ type ReviewThread struct {
 	// then. It is the only record of the code an outdated comment was about, since that code is
 	// no longer at Line. Empty when the provider does not report one.
 	DiffHunk string `json:"diff_hunk,omitempty" yaml:"diff_hunk,omitempty"`
-	// New reports that the reader has not had this thread on screen before. magus's own
+	// New reports that the reader has not had this comment on screen before. magus's own
 	// annotation rather than anything the host said: every other field here belongs to the
 	// review, and this one belongs to the reader's history with it.
 	New bool `json:"new,omitempty" yaml:"new,omitempty"`
@@ -873,31 +878,35 @@ type DiffSuggestion struct {
 	Declined bool `json:"declined" yaml:"declined"`
 }
 
-// DiffOutline is what an agent thinks a review conversation turns on, in a few topics, held for
-// the person to read before they type their reply.
+// DiffOutline is what an agent thinks a review thread turns on, in a few topics, held for the
+// person to read before they type their reply.
 //
 // It is NOT a reply and is never offered as one. A reply to a colleague is words a person
 // chose, and generated text copied under their name is not that, so an outline is bounded to
-// short single-line topics, shown beside the conversation as the agent's, and has no path to
-// the host: nothing that publishes reads it, and a client renders it without a copy affordance.
-// The person who finds a topic useful types their own sentence about it.
+// short single-line topics, shown beside the thread as the agent's, and has no path to the
+// host: nothing that publishes reads it, and a client renders it without a copy affordance.
+// The person who finds a topic useful types their own sentence about it. The agent that tries
+// to write more than a pointer is told so, and that the reply is the person's to type.
 //
 // Held in memory with the session and never persisted: an outline is a pairing aid, and one
-// that survived a restart would outlast the conversation it was about.
+// that survived a restart would outlast the thread it was about.
 type DiffOutline struct {
-	// Thread is the root comment id of the conversation, never a reply's.
+	// Thread is the thread id the outline is about: the ID of the thread's top-level comment,
+	// the same value a reply carries in [ReviewComment].Root.
 	Thread string `json:"thread" yaml:"thread"`
-	// Topics are at most DiffOutlineTopics lines of at most DiffOutlineTopicRunes characters.
+	// Topics are at most DiffOutlineMaxTopics lines of at most DiffOutlineMaxTopicRunes characters.
 	Topics []string `json:"topics" yaml:"topics"`
-	// AgentName is the label the agent gave itself, for attribution only.
+	// AgentName is the label the agent gave itself, for attribution only. It is bounded by
+	// DiffOutlineMaxAgentNameRunes and held to the same single-line rule as a topic.
 	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
 }
 
 // The bounds on a DiffOutline. They are what keep an outline a set of pointers: a topic that
 // can hold a paragraph is a reply with extra steps.
 const (
-	DiffOutlineTopics     = 5
-	DiffOutlineTopicRunes = 60
+	DiffOutlineMaxTopics         = 5
+	DiffOutlineMaxTopicRunes     = 60
+	DiffOutlineMaxAgentNameRunes = 40
 )
 
 // DiffReview is the live review of one working tree's changeset: the shared object a console
@@ -939,17 +948,17 @@ type DiffReview struct {
 	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
 	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
 	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
-	// Outlines are the agents' outlines of review conversations, at most one per conversation.
+	// Outlines are the agents' outlines of review threads, at most one per thread.
 	// They are shown to the person and offer no way to be sent; see DiffOutline.
 	Outlines []DiffOutline `json:"outlines,omitempty" yaml:"outlines,omitempty"`
 }
 
-// UnseenThreads returns the ids in threads the reader has not had on screen, in the order given.
+// UnseenThreads returns the ids in comments the reader has not had on screen, in the order given.
 //
 // Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
 // and another added nets zero, and the new one is then never reported.
-func (s DiffReview) UnseenThreads(threads []ReviewThread) []string {
-	if len(threads) == 0 {
+func (s DiffReview) UnseenThreads(comments []ReviewComment) []string {
+	if len(comments) == 0 {
 		return nil
 	}
 	seen := make(map[string]struct{}, len(s.SeenThreads))
@@ -957,7 +966,7 @@ func (s DiffReview) UnseenThreads(threads []ReviewThread) []string {
 		seen[id] = struct{}{}
 	}
 	var out []string
-	for _, t := range threads {
+	for _, t := range comments {
 		if _, ok := seen[t.ID]; !ok && t.ID != "" {
 			out = append(out, t.ID)
 		}

@@ -447,7 +447,7 @@ func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 2)
 
-	got := PlaceThreads(files, []types.ReviewThread{
+	got := PlaceThreads(files, []types.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11},
 		{ID: "t2", Path: "a.go", Line: 40},
 		// The line moved out from under this remark. It still belongs to the file, and the
@@ -464,15 +464,52 @@ func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
 	assert.Len(t, got, 4, "every thread survives placement")
 }
 
-// A conversation is anchored where it began. The host keeps its replies there even when the line
+// A reply takes its head's Path along with its Hunk. A Hunk index means nothing against another
+// file, so a reply that kept its own Path would be bucketed under a file its Hunk does not index.
+func TestPlaceThreadsGivesAReplyItsHeadsPathAndHunk(t *testing.T) {
+	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
+		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n")
+
+	got := PlaceThreads(files, []types.ReviewComment{
+		{ID: "r1", Path: "a.go", Line: 11},
+		{ID: "r2", Path: "b.go", Line: 3, Root: "r1"},
+		{ID: "r3", Root: "r1"},
+	})
+
+	assert.Equal(t, []string{"a.go", "a.go", "a.go"}, []string{got[0].Path, got[1].Path, got[2].Path})
+	assert.Equal(t, []int{0, 0, 0}, []int{got[0].Hunk, got[1].Hunk, got[2].Hunk})
+}
+
+// A comment whose Root does not name a top-level comment in the list heads a thread of its own,
+// so it is placed by its own line instead of borrowing a Hunk from a comment that is no head.
+func TestPlaceThreadsIgnoresARootThatIsNotATopLevelComment(t *testing.T) {
+	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
+		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n")
+
+	got := PlaceThreads(files, []types.ReviewComment{
+		{ID: "self", Path: "a.go", Line: 11, Root: "self"},
+		{ID: "a", Path: "a.go", Line: 11, Root: "b"},
+		{ID: "b", Path: "a.go", Line: 900, Root: "a"},
+		{ID: "top", Path: "a.go", Line: 900},
+		{ID: "nested", Path: "a.go", Line: 11, Root: "a"},
+	})
+
+	hunks := map[string]int{}
+	for _, c := range got {
+		hunks[c.ID] = c.Hunk
+	}
+	assert.Equal(t, map[string]int{"self": 0, "a": 0, "b": -1, "top": -1, "nested": 0}, hunks)
+}
+
+// A thread is anchored where it began. The host keeps its replies there even when the line
 // has since moved, and a reply sent to "elsewhere" alone would be read without the code it
-// answers. An outdated root is unplaced whatever its recorded line says, and its replies with it.
-func TestPlaceThreadsKeepsAConversationUnderItsRoot(t *testing.T) {
+// answers. An outdated head is unplaced whatever its recorded line says, and its replies with it.
+func TestPlaceThreadsKeepsAThreadUnderItsHead(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n" +
 		"@@ -40,2 +40,2 @@\n-x\n+y\n")
 
-	got := PlaceThreads(files, []types.ReviewThread{
+	got := PlaceThreads(files, []types.ReviewComment{
 		// The reply precedes its root in the list: the host's order is not ours to assume.
 		{ID: "r2", Path: "a.go", Line: 900, Root: "r1"},
 		{ID: "r1", Path: "a.go", Line: 11},
@@ -504,7 +541,7 @@ func TestPlaceThreadsKeepsAConversationUnderItsRoot(t *testing.T) {
 func TestPlaceThreadsMatchesTheNewSideNotTheOld(t *testing.T) {
 	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
 		"@@ -100,2 +5,2 @@\n-old\n+new\n")
-	got := PlaceThreads(files, []types.ReviewThread{
+	got := PlaceThreads(files, []types.ReviewComment{
 		{ID: "new", Path: "a.go", Line: 5},
 		{ID: "old", Path: "a.go", Line: 100},
 	})

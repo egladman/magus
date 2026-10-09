@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 
@@ -78,6 +80,18 @@ type Options struct {
 	// listed and answers it as a tool error, so an agent reads the diagnostic rather than
 	// finding no server. Read per call: the answer moves from failed to loading.
 	Unavailable func() error
+}
+
+// ReviewAnchors joins the workspace's declared notes stores against a changeset, for a review
+// brief. The server's diff thread route and the diff tool share it so both name the same
+// anchors. The graph, with symbol shards, is loaded only when a store is declared, and a
+// misdeclared store is returned as an error rather than as no anchors.
+func (o Options) ReviewAnchors() func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+	notes := o.Config.Knowledge.Notes
+	dirs := review.NoteDirs{Shared: notes.Shared, Private: notes.Private}
+	return func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+		return review.ChangesetAnchors(ctx, o.Magus.Root(), dirs, o.Magus.KnowledgeGraphWithSymbols, rev)
+	}
 }
 
 func (o Options) validate() error {

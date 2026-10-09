@@ -48,7 +48,7 @@ import {
   anchorLine,
   maxLineChars,
   placeThreads,
-  rootOf,
+  threadIdOf,
   touchText,
   LINE_PREFIX_CHARS,
   type PlacedThreads,
@@ -102,7 +102,7 @@ import {
   reportSessionFailure,
 } from "./session";
 import { setMarkdown } from "./markdown";
-import { guardOutline, guardReply, outlineKey, outlinesByRoot } from "./outline";
+import { guardOutline, guardReply, outlineKey, outlinesByThread } from "./outline";
 import { copyThreadBrief } from "./thread-brief";
 import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
@@ -1052,7 +1052,7 @@ export function activate(host: HTMLElement): AppInstance {
       // find the conversation without counting rows.
       const replyBtn = h("button", "console-diff-row__reply", "Reply") as HTMLButtonElement;
       replyBtn.type = "button";
-      replyBtn.dataset.threadId = rootOf(thread);
+      replyBtn.dataset.threadId = threadIdOf(thread);
       replyBtn.title = "Reply to this conversation on the review (a)";
       replyBtn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1063,11 +1063,11 @@ export function activate(host: HTMLElement): AppInstance {
       // it to a model is theirs to do; this only puts the text on their clipboard.
       const briefBtn = h("button", "console-diff-row__brief", "Copy brief") as HTMLButtonElement;
       briefBtn.type = "button";
-      briefBtn.dataset.threadId = rootOf(thread);
+      briefBtn.dataset.threadId = threadIdOf(thread);
       briefBtn.title = "Copy a brief of this conversation, to paste to your own model";
       briefBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        void copyBrief(rootOf(thread), briefBtn);
+        void copyBrief(threadIdOf(thread), briefBtn);
       });
       el.append(briefBtn);
       return el;
@@ -1700,7 +1700,7 @@ export function activate(host: HTMLElement): AppInstance {
       touches,
       state.threads ?? undefined,
       placement ?? undefined,
-      outlinesByRoot(state.session?.outlines),
+      outlinesByThread(state.session?.outlines),
     );
     state.hunks = hunkRowIndexes(state.rows);
     state.hunkOrdinalByRow = hunkOrdinal(state.rows);
@@ -2944,8 +2944,8 @@ export function activate(host: HTMLElement): AppInstance {
     composeReply(thread);
   };
 
-  // composeReply opens the reply box for the conversation `thread` belongs to. The reply goes to
-  // the conversation's root whichever of its comments was clicked.
+  // composeReply opens the reply box for the thread `thread` belongs to. The reply goes to the
+  // thread id whichever of its comments was clicked.
   const composeReply = (thread: ReviewThread): void => {
     const existing = scroll.querySelector<HTMLTextAreaElement>(
       ".console-diff-composer__input textarea",
@@ -2986,7 +2986,7 @@ export function activate(host: HTMLElement): AppInstance {
         field.disabled = true;
         commit.disabled = true;
         where.textContent = "Sending...";
-        void sendReply(rootOf(thread), body).then((failure) => {
+        void sendReply(threadIdOf(thread), body).then((failure) => {
           if (disposed) return;
           if (!failure) {
             close();
@@ -3007,9 +3007,9 @@ export function activate(host: HTMLElement): AppInstance {
     field.focus();
   };
 
-  // copyBrief puts the brief for the conversation rooted at `root` on the clipboard. Every way it
-  // can fail is a toast, including the showcase, which has no server to build one.
-  const copyBrief = async (root: string, btn: HTMLButtonElement): Promise<void> => {
+  // copyBrief puts the brief for the thread `threadId` names on the clipboard. Every way it can
+  // fail is a toast, including the showcase, which has no server to build one.
+  const copyBrief = async (threadId: string, btn: HTMLButtonElement): Promise<void> => {
     const hp = demo ? null : host_();
     if (!hp) {
       const why = demo
@@ -3019,7 +3019,7 @@ export function activate(host: HTMLElement): AppInstance {
       return;
     }
     btn.disabled = true;
-    const copied = await copyThreadBrief(hp, root, controller.signal);
+    const copied = await copyThreadBrief(hp, threadId, controller.signal);
     btn.disabled = false;
     if (disposed || !copied) return;
     btn.textContent = "Copied";
@@ -3028,20 +3028,20 @@ export function activate(host: HTMLElement): AppInstance {
     }, 1200);
   };
 
-  // sendReply posts one reply into the conversation rooted at `root` and returns the failure to
-  // show, or "" when it left.
-  const sendReply = async (root: string, body: string): Promise<string> => {
+  // sendReply posts one reply into the thread `threadId` names and returns the failure to show,
+  // or "" when it left.
+  const sendReply = async (threadId: string, body: string): Promise<string> => {
     if (demo) {
       // The showcase answers for real, into memory, so a reader trying it finds out what it
       // does rather than meeting a dead key.
-      state.review = applyDemoReply(state.review, root, body);
+      state.review = applyDemoReply(state.review, threadId, body);
       await rebuild();
       return "";
     }
     const hp = host_();
     if (!hp) return "Connect a server to reply.";
     try {
-      await reply(hp, root, body, controller.signal);
+      await reply(hp, threadId, body, controller.signal);
       if (disposed) return "";
       // Re-read rather than appending locally: the thread belongs to the host, and this is
       // also how the reader finds out what else was said while they were typing.

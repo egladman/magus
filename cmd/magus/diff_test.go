@@ -2074,7 +2074,7 @@ func TestDiffThreadRefusesToShareTheInvocation(t *testing.T) {
 
 			require.Error(t, err)
 			assert.IsType(t, errUsage{}, err)
-			assert.Contains(t, err.Error(), "--thread prints the brief for one conversation")
+			assert.Contains(t, err.Error(), "--thread prints the brief for one thread")
 		})
 	}
 }
@@ -2380,4 +2380,3 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	require.Len(t, files[0].Hunks, 1)
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
 }
-

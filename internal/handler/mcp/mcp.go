@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -172,16 +171,6 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 	return mcplib.NewTool(d.Name, opts...)
 }
 
-// NoteAnchors joins the workspace's declared notes stores against a changeset, for a review
-// brief. The server's diff thread route and the diff tool share it so both name the same
-// anchors. The graph, with symbol shards, is loaded only when a store is declared.
-func (o Options) NoteAnchors() func(ctx context.Context, rev types.Diff) []review.AnchorHit {
-	notes := o.Config.Knowledge.Notes
-	return func(ctx context.Context, rev types.Diff) []review.AnchorHit {
-		return review.ChangesetAnchors(ctx, o.Magus.Root(), notes.Shared, notes.Private, o.Magus.KnowledgeGraphWithSymbols, rev)
-	}
-}
-
 // allToolDrivers constructs every MCP tool the server exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
 func allToolDrivers(opts Options) []spells.Driver {
@@ -197,7 +186,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&statusTool{opts: opts},
 		&consoleTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
 		&configTool{cfg: opts.Config},
-		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus, anchors: opts.NoteAnchors()},
+		&diffTool{sessions: opts.DiffSessions, workspaceRoot: opts.Magus.Root(), src: opts.Magus, anchors: opts.ReviewAnchors()},
 	}
 }
 

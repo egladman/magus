@@ -532,8 +532,8 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
-		Comments: []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorUnattributed, Body: "mine"}},
-		Threads:  []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
+		Comments:       []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorUnattributed, Body: "mine"}},
+		ReviewComments: []types.ReviewComment{{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "theirs"}},
 	})
 
 	text := everyRowText(m)
@@ -549,8 +549,8 @@ func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
 func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
-		Files:   []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
-		Threads: []types.ReviewThread{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
+		Files:          []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
+		ReviewComments: []types.ReviewComment{{ID: "t1", Path: "a.go", Hunk: -1, Author: "marcus", Body: "moved away"}},
 	})
 	assert.NotEqual(t, -1, indexOfSubstring(everyRowText(m), "moved away"))
 }
@@ -563,7 +563,7 @@ func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: []File{{Path: "a.go", Hunks: []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}}}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "t1", Path: "elsewhere.go", Line: 12, Hunk: -1, Author: "priya", Body: "on another file"},
 		},
 	})
@@ -585,7 +585,7 @@ func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
 			Generated: true,
 			Hunks:     []Hunk{{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"}},
 		}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "t1", Path: "gen/api.go", Line: 3, Hunk: 0, Author: "marcus", Body: "regenerate this"},
 		},
 	})
@@ -602,7 +602,7 @@ func twoThreadFile() Input {
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+fresh"}, Digest: "d0"},
 			{Index: 1, Header: "@@ -9 +9 @@", NewStart: 9, Lines: []string{"-x", "+y"}, Digest: "d1"},
 		}}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "near the top"},
 			{ID: "t2", Path: "a.go", Hunk: 1, Author: "marcus", Body: "further down"},
 		},
@@ -644,7 +644,7 @@ func TestARemarkNewToThisReaderSaysSo(t *testing.T) {
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+two"}, Digest: "d0"},
 		}}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "t1", Path: "a.go", Hunk: 0, Author: "priya", Body: "arrived since you looked", New: true},
 			{ID: "t2", Path: "a.go", Hunk: 0, Author: "marcus", Body: "you weighed this one already"},
 		},
@@ -655,16 +655,16 @@ func TestARemarkNewToThisReaderSaysSo(t *testing.T) {
 	assert.NotContains(t, text[indexOfSubstring(text, "you weighed this one already")], "new to you")
 }
 
-// A conversation reads as its first comment and then its replies, oldest first, indented. The
-// host sends one record per comment and the replies need not sit next to their root, so the
-// grouping is the viewer's to do; each reply still carries its own id for the watermark.
-func TestRepliesDrawUnderTheirRootOldestFirst(t *testing.T) {
+// A thread reads as its top-level comment and then its replies, oldest first, indented. The host
+// sends one record per comment and the replies need not sit next to their head, so the grouping
+// is the viewer's to do; each reply still carries its own id for the watermark.
+func TestRepliesDrawUnderTheirThreadHeadOldestFirst(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
 		}}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "r1", Path: "a.go", Hunk: 0, Author: "priya", Body: "why"},
 			{ID: "s1", Path: "a.go", Hunk: 0, Author: "dana", Body: "other topic"},
 			{ID: "r2", Path: "a.go", Hunk: 0, Root: "r1", Author: "marcus", Body: "first answer"},
@@ -679,7 +679,7 @@ func TestRepliesDrawUnderTheirRootOldestFirst(t *testing.T) {
 			text = append(text, r.Text)
 		}
 	}
-	assert.Equal(t, []string{"r1", "r2", "r3", "s1"}, thread, "the replies follow their root, then the next conversation")
+	assert.Equal(t, []string{"r1", "r2", "r3", "s1"}, thread, "the replies follow their head, then the next thread")
 	assert.Equal(t, []string{
 		"  | priya, on the review: why",
 		"  |   marcus, on the review: first answer",
@@ -691,15 +691,15 @@ func TestRepliesDrawUnderTheirRootOldestFirst(t *testing.T) {
 		"every comment is still reported seen on its own id")
 }
 
-// An outdated conversation has lost its line, so the host's text of the code is the only thing
-// left to say what it was about. Its replies follow it wherever it lands.
-func TestAnOutdatedConversationShowsItsDiffHunkAndKeepsItsReplies(t *testing.T) {
+// An outdated thread has lost its line, so the host's text of the code is the only thing left to
+// say what it was about. Its replies follow it wherever it lands.
+func TestAnOutdatedThreadShowsItsDiffHunkAndKeepsItsReplies(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
 		Files: []File{{Path: "a.go", Hunks: []Hunk{
 			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
 		}}},
-		Threads: []types.ReviewThread{
+		ReviewComments: []types.ReviewComment{
 			{ID: "r1", Path: "a.go", Line: 40, Hunk: -1, Outdated: true, Author: "priya",
 				Body: "drop this", DiffHunk: "@@ -38,2 +38,2 @@\n-gone()\n+kept()\n"},
 			{ID: "r2", Path: "a.go", Line: 40, Hunk: -1, Root: "r1", Author: "marcus", Body: "done"},
@@ -725,7 +725,109 @@ func TestAnOutdatedConversationShowsItsDiffHunkAndKeepsItsReplies(t *testing.T) 
 		"  | dana, on the review, outdated: stale",
 		"  |   priya, on the review: agreed",
 	}, got[indexOfSubstring(got, "other.go:7"):],
-		"elsewhere: the reply follows its root even though its own line differs")
+		"elsewhere: the reply follows its head even though its own line differs")
+}
+
+// The host's Root is data a stranger controls. A comment rooted at itself, two comments rooted at
+// each other, a reply to a reply and a reply to nothing each used to index a slot that was not
+// there; none may panic or attach a comment to a thread it was not said in, and every one is
+// still drawn.
+func TestMalformedRootsDrawEveryCommentAndNeverPanic(t *testing.T) {
+	t.Parallel()
+	files := []File{{Path: "a.go", Hunks: []Hunk{
+		{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
+	}}}
+	cases := map[string][]types.ReviewComment{
+		"rooted at itself": {{ID: "x", Root: "x", Path: "a.go", Hunk: 0, Author: "ana", Body: "self"}},
+		"rooted at each other": {
+			{ID: "a", Root: "b", Path: "a.go", Hunk: 0, Author: "ana", Body: "first"},
+			{ID: "b", Root: "a", Path: "a.go", Hunk: 0, Author: "ben", Body: "second"},
+		},
+		"a reply to a reply": {
+			{ID: "h", Path: "a.go", Hunk: 0, Author: "ana", Body: "head"},
+			{ID: "r", Root: "h", Path: "a.go", Hunk: 0, Author: "ben", Body: "reply"},
+			{ID: "rr", Root: "r", Path: "a.go", Hunk: 0, Author: "cy", Body: "nested"},
+		},
+		"a reply to nothing": {{ID: "r", Root: "gone", Path: "a.go", Hunk: 0, Author: "ana", Body: "lost"}},
+		"unplaced and cyclic": {
+			{ID: "a", Root: "b", Path: "a.go", Hunk: -1, Author: "ana", Body: "first"},
+			{ID: "b", Root: "a", Path: "other.go", Hunk: -1, Author: "ben", Body: "second"},
+		},
+	}
+	for name, in := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var m *Model
+			require.NotPanics(t, func() { m = New(Input{Files: files, ReviewComments: in}) })
+
+			text := everyRowText(m)
+			for _, c := range in {
+				assert.NotEqual(t, -1, indexOfSubstring(text, c.Body), "%q is drawn", c.Body)
+			}
+			m.resize(50)
+			var seen []string
+			for _, c := range in {
+				seen = append(seen, c.ID)
+			}
+			assert.ElementsMatch(t, seen, m.takeShownThreads())
+		})
+	}
+}
+
+// A reply to a reply is a thread of its own, not a second-level reply under the first thread.
+func TestAReplyToAReplyDrawsAsItsOwnThread(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
+		}}},
+		ReviewComments: []types.ReviewComment{
+			{ID: "h", Path: "a.go", Hunk: 0, Author: "ana", Body: "head"},
+			{ID: "r", Root: "h", Path: "a.go", Hunk: 0, Author: "ben", Body: "reply"},
+			{ID: "rr", Root: "r", Path: "a.go", Hunk: 0, Author: "cy", Body: "nested"},
+		},
+	})
+
+	var text []string
+	for _, r := range m.Rows() {
+		if r.Thread != "" {
+			text = append(text, r.Text)
+		}
+	}
+	assert.Equal(t, []string{
+		"  | ana, on the review: head",
+		"  |   ben, on the review: reply",
+		"  | cy, on the review: nested",
+	}, text)
+}
+
+// What a colleague or an agent wrote reaches the terminal as typed, so an escape sequence in a
+// comment, the host's copy of a hunk or an author name must be written out rather than run.
+func TestHostTextNeverReachesTheTerminalAsAControlSequence(t *testing.T) {
+	t.Parallel()
+	const esc = "\x1b[2J\x1b]0;owned\x07"
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
+		}}},
+		Comments:    []types.DiffComment{{Path: "a.go", Hunk: 0, Author: types.DiffAuthorAgent, AgentName: "bot" + esc, Body: "agent" + esc}},
+		Suggestions: []types.DiffSuggestion{{Path: "a.go", Hunk: 0, Reason: "look" + esc}},
+		ReviewComments: []types.ReviewComment{
+			{ID: "h", Path: "a.go", Hunk: 0, Author: "ana" + esc, Body: "body" + esc + "\rovertyped\nsecond" + esc},
+			{ID: "o", Path: "a.go", Hunk: -1, Outdated: true, Author: "ben", Body: "stale", DiffHunk: "@@ -1 +1 @@\n+hunk" + esc},
+		},
+	})
+
+	for _, r := range m.Rows() {
+		if r.Kind == RowLine || r.Kind == RowHunk || r.Kind == RowFile {
+			continue
+		}
+		assert.NotContains(t, r.Text, "\x1b", "row %q", r.Text)
+		assert.NotContains(t, r.Text, "\x07", "row %q", r.Text)
+		assert.NotContains(t, r.Text, "\r", "row %q", r.Text)
+	}
+	text := strings.Join(everyRowText(m), "\n")
+	assert.Contains(t, text, "<U+001B>[2J<U+001B>]0;owned<U+0007>", "the sequence is written out, where a reader sees it")
 }
 
 // everyRowText is the visible text of every row, for asserting on order and presence. Named

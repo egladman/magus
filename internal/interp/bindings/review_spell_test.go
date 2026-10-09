@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,17 +67,17 @@ func TestFindReviewTurnsASpellFailureIntoAReason(t *testing.T) {
 	assert.Contains(t, at.Reason, "boom")
 }
 
-func TestReviewThreadsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T) {
+func TestReviewCommentsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{map[string]any{
 			"id": "t1", "path": "a.go", "line": float64(12),
 			"author": "priya", "body": "why",
 		}}, nil
 	})
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, types.ReviewThread{
+	assert.Equal(t, types.ReviewComment{
 		ID: "t1", Path: "a.go", Line: 12, Hunk: -1, Author: "priya", Body: "why",
 	}, got[0])
 	// -1, not 0. The zero value is a VALID hunk index, so a thread nothing placed would
@@ -84,7 +85,7 @@ func TestReviewThreadsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T
 	assert.Equal(t, -1, got[0].Hunk)
 }
 
-func TestReviewThreadsDecodesReplyOutdatedAndHunk(t *testing.T) {
+func TestReviewCommentsDecodesReplyOutdatedAndHunk(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{map[string]any{
 			"id": "t2", "root": "t1", "path": "a.go", "line": float64(0),
@@ -92,10 +93,10 @@ func TestReviewThreadsDecodesReplyOutdatedAndHunk(t *testing.T) {
 			"diff_hunk": "@@ -1,2 +1,3 @@\n x",
 		}}, nil
 	})
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, types.ReviewThread{
+	assert.Equal(t, types.ReviewComment{
 		ID: "t2", Root: "t1", Path: "a.go", Hunk: -1, Author: "eli", Body: "because",
 		Outdated: true, DiffHunk: "@@ -1,2 +1,3 @@\n x",
 	}, got[0])
@@ -103,14 +104,14 @@ func TestReviewThreadsDecodesReplyOutdatedAndHunk(t *testing.T) {
 
 // A spell written before these fields existed still decodes, and what it leaves out reads as a
 // root comment on a live line with no hunk text.
-func TestReviewThreadsDecodesASpellThatOmitsTheReplyFields(t *testing.T) {
+func TestReviewCommentsDecodesASpellThatOmitsTheReplyFields(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{map[string]any{
 			"id": "t1", "path": "a.go", "line": float64(3), "author": "priya", "body": "why",
 			"root": nil, "outdated": nil, "diff_hunk": nil,
 		}}, nil
 	})
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Empty(t, got[0].Root)
@@ -118,52 +119,53 @@ func TestReviewThreadsDecodesASpellThatOmitsTheReplyFields(t *testing.T) {
 	assert.Empty(t, got[0].DiffHunk)
 }
 
-func TestReviewThreadsNamesAMistypedOutdatedFlag(t *testing.T) {
+func TestReviewCommentsNamesAMistypedOutdatedFlag(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{map[string]any{"id": "t1", "path": "a.go", "outdated": "yes"}}, nil
 	})
-	_, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	_, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `field "outdated"`)
 }
 
 // Absent reads as the zero value, not as an error: the posture spell_decode.go states for this
 // whole layer. A review with no threads is not a malformed provider.
-func TestReviewThreadsTreatsNothingAsNoThreads(t *testing.T) {
+func TestReviewCommentsTreatsNothingAsNoComments(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) { return nil, nil })
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
 // A malformed thread does not take the readable ones down with it. Returning only the error
 // would leave the client saying a colleague said nothing, which is the worst thing it can say.
-func TestReviewThreadsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
+func TestReviewCommentsReturnsWhatItReadAlongsideTheReason(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{
 			map[string]any{"id": "t1", "path": "a.go", "body": "readable"},
 			map[string]any{"id": "t2", "line": "not a number"},
 		}, nil
 	})
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "want int")
 	require.Len(t, got, 1, "the thread that decoded still travels")
 	assert.Equal(t, "readable", got[0].Body)
 }
 
-// The unreachable host is the fact ReviewThreads swallows on purpose, and a caller that reports a
-// COUNT rather than rendering the threads cannot afford to lose it: an empty review and a review
-// nobody could read produce the same number. Reported here so the count can refuse to be taken.
-func TestReviewThreadsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing.T) {
+// The unreachable host is the fact ReviewComments swallows on purpose, and a caller that reports
+// a COUNT rather than rendering the comments cannot afford to lose it: an empty review and a
+// review nobody could read produce the same number. Reported here so the count can refuse to be
+// taken.
+func TestReviewCommentsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) { return nil, errors.New("dial: connection refused") })
-	threads, reached, err := ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	comments, reached, err := ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err, "an unreachable host is still not this call's failure")
-	assert.Empty(t, threads)
+	assert.Empty(t, comments)
 	assert.False(t, reached)
 
 	withReviewSpell(t, func(string) (any, error) { return []any{}, nil })
-	_, reached, err = ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.NoError(t, err)
 	assert.True(t, reached, "a review with no threads is a host that answered")
 
@@ -172,16 +174,47 @@ func TestReviewThreadsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing.
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{map[string]any{"id": "t2", "line": "not a number"}}, nil
 	})
-	_, reached, err = ReviewThreadsReached(context.Background(), types.ReviewTarget{ID: "482"})
+	_, reached, err = ReviewCommentsReached(context.Background(), types.ReviewTarget{ID: "482"})
 	require.Error(t, err)
 	assert.True(t, reached)
 }
 
+// ReviewCommentsOf is the lookup every transport makes: the review for a branch, then its
+// comments, and a review that is not there says why instead of reading as an empty one.
+func TestReviewCommentsOfFindsTheReviewThenReadsItsComments(t *testing.T) {
+	withReviewSpell(t, func(op string) (any, error) {
+		if op == spells.FindReviewContract {
+			return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+		}
+		return []any{map[string]any{"id": "t1", "path": "a.go", "body": "why"}}, nil
+	})
+
+	at, comments, err := ReviewCommentsOf(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+
+	require.NoError(t, err)
+	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
+	require.Len(t, comments, 1)
+	assert.Equal(t, "t1", comments[0].ID)
+
+	withReviewSpell(t, func(op string) (any, error) {
+		if op == spells.FindReviewContract {
+			return nil, errors.New("boom")
+		}
+		t.Fatal("no comments are asked for when no review is open")
+		return nil, nil
+	})
+	at, comments, err = ReviewCommentsOf(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+	require.NoError(t, err)
+	assert.False(t, at.Open())
+	assert.Contains(t, at.Reason, "boom")
+	assert.Empty(t, comments)
+}
+
 // A closed target consults no provider at all: there is nothing to ask about.
-func TestReviewThreadsAsksNothingWithoutAnOpenReview(t *testing.T) {
+func TestReviewCommentsAsksNothingWithoutAnOpenReview(t *testing.T) {
 	asked := false
 	withReviewSpell(t, func(string) (any, error) { asked = true; return nil, nil })
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{})
 	require.NoError(t, err)
 	assert.Empty(t, got)
 	assert.False(t, asked, "a closed target must not reach the provider")
@@ -264,7 +297,7 @@ func TestReplyReviewTreatsAnyNonTrueAnswerAsARefusal(t *testing.T) {
 // Every row is attempted. Returning at the first malformed one drops the threads AFTER it, so
 // a provider with one bad remark near the top renders as a conversation nobody had, and the
 // reader has no way to tell that from silence.
-func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
+func TestReviewCommentsKeepsReadingPastAMalformedRow(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
 		return []any{
 			map[string]any{"id": "t1", "path": "a.go", "body": "before"},
@@ -272,7 +305,7 @@ func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
 			map[string]any{"id": "t3", "path": "b.go", "body": "after"},
 		}, nil
 	})
-	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	got, err := ReviewComments(context.Background(), types.ReviewTarget{ID: "482"})
 
 	require.Error(t, err)
 	require.Len(t, got, 2, "the readable threads on BOTH sides of the bad one survive")

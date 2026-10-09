@@ -64,8 +64,9 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
 		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
-	if rf.Thread != "" && (rf.Prompt || rf.Unread || rf.PrintHook || rf.Ack || rf.Watch) {
-		return usagef("magus diff: --thread prints the brief for one conversation and returns, so it cannot be combined with --prompt, --unread, --print-hook, --ack or --watch")
+	briefing := rf.Thread != ""
+	if briefing && (rf.Prompt || rf.Unread || rf.PrintHook || rf.Ack || rf.Watch) {
+		return usagef("magus diff: --thread prints the brief for one thread and returns, so it cannot be combined with --prompt, --unread, --print-hook, --ack or --watch")
 	}
 	if rf.PrintHook {
 		if rf.Unread {
@@ -141,7 +142,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if rf.Thread != "" && opts.Format == outputName {
+	if briefing && opts.Format == outputName {
 		return usagef("magus diff: --thread prints one brief, not a list of names, so it cannot be combined with -o name")
 	}
 	term := diffTUITerm{
@@ -153,7 +154,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	tui := rf.Thread == "" && wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
+	tui := !briefing && wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
 		// The viewer can join a server's review, which ran with the server's gates, so the
@@ -391,7 +392,25 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return printUnread(m, src, opts, patch)
 	}
 	if rf.Thread != "" {
-		return printThread(ctx, m, src, opts, rf, gates, rootOverride, patch, base)
+		variant := prompt.Short
+		if rf.Impact {
+			variant = prompt.Full
+		}
+		return printThread(ctx, m, threadPrint{
+			opts:    opts,
+			id:      rf.Thread,
+			patch:   patch,
+			variant: variant,
+			annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
+				// The brief never reads the reading order, and ranking the whole changeset is not cheap.
+				g := gates
+				g.Patch, g.SkipOrder = patch, true
+				return annotateDiff(ctx, m, readReviewedContent(ctx, m, src), paths, base, rf.Baseline, g)
+			},
+			anchors: func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+				return impactAnchors(ctx, rootOverride, rev)
+			},
+		})
 	}
 	if strings.TrimSpace(patch) == "" {
 		// An empty input is a STATE, and saying so beats printing an empty table that reads as
@@ -482,7 +501,10 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 
 	var pre *diffImpact
 	if impact {
-		p := collectImpact(ctx, m, rootOverride, rev)
+		p, err := collectImpact(ctx, m, rootOverride, rev)
+		if err != nil {
+			return fmt.Errorf("magus diff: %w", err)
+		}
 		pre = &p
 	}
 
@@ -573,38 +595,41 @@ func hintReviewPrompt(w io.Writer, rev types.Diff, rf *gen.DiffFlags) {
 // the most expensive thing in the command on a repository with a hundred stale branches.
 const branchOverlapLimit = 20
 
-// printThread prints the brief for one review conversation and returns.
+// threadPrint is what printThread prints a brief from. The patch, the changeset annotation and
+// the notes join are the CLI's own; assembling a brief from them is review.NewThreadInput's.
+type threadPrint struct {
+	opts OutputOptions
+	// id names the thread: its top-level comment, or any reply in it.
+	id    string
+	patch string
+	// variant is the full form when --impact asked for it, as it does for --prompt.
+	variant  prompt.Variant
+	annotate func(ctx context.Context, paths []string) (types.Diff, error)
+	anchors  func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
+}
+
+// printThread prints the brief for one review thread and returns.
 //
 // An empty patch is not a refusal: a review outlives the tree it was written on, and the brief
-// then carries the conversation and the host's own copy of the hunk. --impact selects the full
-// form, as it does for --prompt.
-func printThread(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, gates types.DiffOptions, rootOverride, patch, base string) error {
-	rev := types.Diff{Base: base}
-	if strings.TrimSpace(patch) != "" {
-		gates.Patch = patch
-		var err error
-		rev, err = annotateDiff(ctx, m, readReviewedContent(ctx, m, src), changedPathsFromPatch(patch), base, rf.Baseline, gates)
-		if err != nil {
-			return err
-		}
+// then carries the thread and the host's own copy of the hunk.
+func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
+	comments, reason := reviewComments(ctx, m)
+	in, err := review.NewThreadInput(ctx, review.ThreadParts{
+		Patch:    t.patch,
+		Comments: comments,
+		Annotate: t.annotate,
+		Anchors:  t.anchors,
+		Variant:  t.variant,
+	})
+	if err != nil {
+		return fmt.Errorf("magus diff: %w", err)
 	}
-	threads, reason := reviewThreads(ctx, m)
-	variant := prompt.Short
-	if rf.Impact {
-		variant = prompt.Full
-	}
-	reply, err := review.ThreadBriefFor(review.ThreadInput{
-		Changeset: rev,
-		Hunks:     changeset.ParseHunks(patch),
-		Threads:   threads,
-		Anchors:   impactAnchors(ctx, rootOverride, rev),
-		Variant:   variant,
-	}, rf.Thread)
+	reply, err := review.ThreadBrief(in, t.id)
 	if err != nil {
 		switch {
 		case reason != "":
 			err = fmt.Errorf("%w (the review was only partly read: %s)", err, reason)
-		case len(threads) == 0:
+		case len(comments) == 0:
 			err = fmt.Errorf("%w (no comments were found: is a review open for this branch?)", err)
 		}
 		return fmt.Errorf("magus diff: %w", err)
@@ -612,9 +637,9 @@ func printThread(ctx context.Context, m *magus.Magus, src diffInput, opts Output
 	if reason != "" {
 		fmt.Fprintf(os.Stderr, "magus diff: part of the review could not be read: %s\n", reason)
 	}
-	switch opts.Format {
+	switch t.opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, reply)
+		return emitFormatted(t.opts, reply)
 	}
 	_, err = io.WriteString(os.Stdout, reply.Brief)
 	return err
@@ -862,8 +887,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	threads, _ := reviewThreads(ctx, m)
-	threads = changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
+	comments, _ := reviewComments(ctx, m)
+	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -877,9 +902,9 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 			// What colleagues said, so a terminal reader is not sent to a browser to find out.
 			// The incompleteness reason is dropped because the viewer takes the terminal over
 			// immediately; `magus notes capture` keeps it, where a reader can still see it.
-			Threads:  threads,
-			Unfolded: showGenerated,
-			Link:     pathLinker(m.Root()),
+			ReviewComments: comments,
+			Unfolded:       showGenerated,
+			Link:           pathLinker(m.Root()),
 		},
 		Sync: sync,
 		// Called at quit rather than computed here, so the line reports the fold the reader
@@ -1373,7 +1398,7 @@ func diffUsage(w io.Writer) {
 	tty.ProseItem(w, tty.SystemProbe, "  --prompt      ",
 		"print a review prompt to paste into your own LLM: the context magus has, never a drafted review")
 	tty.ProseItem(w, tty.SystemProbe, "  --thread      ",
-		"print the context for one review conversation, named by its root comment id, to paste into your own LLM:",
+		"print the context for one review thread, named by its thread id (its first comment's), to paste into your own LLM:",
 		"the exchange, its hunk, and what the graph knows about the symbols changed there.",
 		"It asks for findings and leaves the reply for you to type.")
 	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
@@ -1551,8 +1576,8 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	for _, fact := range diffFileFacts(f) {
 		fmt.Printf("      %s\n", fact)
 	}
-	// The agent touches, last: they are the deepest context and the least urgent. A reader scanning for
-	// risk should hit reach and coverage first and find the narrative when they stop to read.
+	// Agent touches come last: they are the deepest context and the least urgent, and a reader
+	// scanning for risk should meet reach and coverage first.
 	for _, t := range f.Touches {
 		who := t.Host
 		if who == "" {
@@ -1807,7 +1832,7 @@ const impactListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffImpact {
+func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) (diffImpact, error) {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -1842,7 +1867,13 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
 	// the override they were first handed, so the anchors' graph load must spell the root
 	// exactly as diffCmd's own load did.
-	p.Anchors = impactAnchors(ctx, rootOverride, rev)
+	anchors, aerr := impactAnchors(ctx, rootOverride, rev)
+	if aerr != nil {
+		// Not a lens that degrades: a misdeclared notes store is a fault in the workspace's own
+		// config, and an anchors section that went missing would read as a clean tree.
+		return diffImpact{}, aerr
+	}
+	p.Anchors = anchors
 	p.Rationale = collectRationale(m.Root(), rev)
 	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
@@ -1852,7 +1883,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 		requiredIn = reviewRequiredMatcher(ws)
 	}
 	p.Review = collectReview(rev, requiredIn, bulkReasons(m.CacheDir(), rev))
-	return p
+	return p, nil
 }
 
 // computeImpactReach renders what types.Diff has carried since the impact join landed and
@@ -2206,9 +2237,10 @@ func changedPathsFromPatch(patch string) []string {
 
 // impactAnchors joins the declared notes stores against the changeset. root is the override
 // diffCmd's own load was handed, because the graph loader is once-per-process and keyed on it.
-func impactAnchors(ctx context.Context, root string, rev types.Diff) []review.AnchorHit {
-	notes := globalCfg.Knowledge.Notes
-	return review.ChangesetAnchors(ctx, root, notes.Shared, notes.Private, func(ctx context.Context) (*knowledge.Graph, error) {
+func impactAnchors(ctx context.Context, root string, rev types.Diff) ([]review.AnchorHit, error) {
+	declared := globalCfg.Knowledge.Notes
+	dirs := review.NoteDirs{Shared: declared.Shared, Private: declared.Private}
+	return review.ChangesetAnchors(ctx, root, dirs, func(ctx context.Context) (*knowledge.Graph, error) {
 		return loadKnowledgeGraph(ctx, root, false, false, true)
 	}, rev)
 }

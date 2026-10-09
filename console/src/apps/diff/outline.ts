@@ -12,9 +12,9 @@ export function outlineHeading(outline: DiffOutline): string {
   return `${outline.agent_name || "an agent"} suggests covering:`;
 }
 
-// outlinesByRoot keys outlines by the conversation they were left for. The server keeps one per
-// conversation, so a later entry for the same root would only be a stale duplicate.
-export function outlinesByRoot(
+// outlinesByThread keys outlines by the thread id they were left for. The server keeps one per
+// thread, so a later entry for the same id would only be a stale duplicate.
+export function outlinesByThread(
   outlines: readonly DiffOutline[] | undefined,
 ): ReadonlyMap<string, DiffOutline> {
   const out = new Map<string, DiffOutline>();

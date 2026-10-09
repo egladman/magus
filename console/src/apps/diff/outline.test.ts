@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { patchFixture } from "./fixtures";
-import { outlineHeading, outlineKey, outlinesByRoot, pastesOutline } from "./outline";
+import { outlineHeading, outlineKey, outlinesByThread, pastesOutline } from "./outline";
 import { buildRows, placeThreads } from "./rows";
 import type { DiffOutline } from "./session";
 
@@ -50,7 +50,7 @@ test("an outline sits after the last comment of its conversation", () => {
     undefined,
     placed,
     undefined,
-    outlinesByRoot([outline]),
+    outlinesByThread([outline]),
   );
 
   const shape = rows
@@ -75,7 +75,7 @@ test("an outline for a conversation that is not on screen draws nothing", () => 
     undefined,
     placeThreads(files, [thread("t2", 0)]),
     undefined,
-    outlinesByRoot([outline]),
+    outlinesByThread([outline]),
   );
   assert.equal(rows.filter((r) => r.kind === "outline").length, 0);
 });
@@ -90,9 +90,9 @@ test("a paste holding an outline topic is recognised, however it was rewrapped",
   assert.ok(!pastesOutline("who calls Put", []), "no outline, nothing to refuse");
 });
 
-test("outlinesByRoot keys by conversation and outlineKey moves with the topics", () => {
-  assert.equal(outlinesByRoot([outline]).get("t1"), outline);
-  assert.equal(outlinesByRoot(undefined).size, 0);
+test("outlinesByThread keys by thread id and outlineKey moves with the topics", () => {
+  assert.equal(outlinesByThread([outline]).get("t1"), outline);
+  assert.equal(outlinesByThread(undefined).size, 0);
   assert.equal(outlineKey(undefined), outlineKey([]));
   assert.notEqual(outlineKey([outline]), outlineKey([{ ...outline, topics: ["other"] }]));
 });

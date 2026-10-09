@@ -121,10 +121,11 @@ export function placeThreads(
   const elsewhere: ReviewThread[] = [];
   const shown = new Set(files.map((f) => f.path));
 
-  // A conversation lands where its root does, root first and replies after in list order. The
-  // wire is flat, and a reply can carry a line the head no longer has even while its root
-  // still has one; placing each comment on its own would split a conversation across hunks.
-  for (const [head, ...replies] of conversations(threads)) {
+  // A thread lands where its top-level comment does, that first and replies after in list order.
+  // The wire is flat, and a reply can carry a line the head no longer has even while the
+  // top-level comment still has one; placing each comment on its own would split a thread across
+  // hunks.
+  for (const [head, ...replies] of groupThreads(threads)) {
     const all = [head, ...replies];
     if (head.hunk >= 0 && shown.has(head.path)) {
       for (const t of all) push(atHunk, commentKey(head.path, head.hunk), t);
@@ -135,36 +136,41 @@ export function placeThreads(
   return { atHunk, atFile, elsewhere };
 }
 
-// rootOf is the id a reply into this comment's conversation is addressed to: the comment's own
-// `root`, or its `id` when it is itself the first comment.
-export function rootOf(thread: ReviewThread): string {
-  return thread.root || thread.id;
+// threadIdOf is the thread id a reply into this comment's thread is addressed to: the comment's
+// own `root`, or its `id` when it is the thread's top-level comment. It is right for the comments
+// groupThreads returns, which have had any root that names no top-level comment cleared.
+export function threadIdOf(comment: ReviewThread): string {
+  return comment.root || comment.id;
 }
 
-// conversations groups the host's flat comments into conversations, each a root followed by its
-// replies, in the order the roots first appear. Replies keep list order, which is oldest first.
+// groupThreads groups the host's flat comments into threads, each a top-level comment followed by
+// its replies, in the order the top-level comments first appear. Replies keep list order, which
+// is oldest first. It mirrors changeset.GroupThreads in Go, the one definition: the two must
+// agree on what a thread is or the thread id this app sends names nothing the server knows.
 //
-// A reply whose root is not in the list (the host trimmed it, or a page boundary fell between
-// them) still shows: the first such reply heads a conversation of its own rather than the
-// remark being dropped, since "your colleague said nothing" is the one thing this app must not
-// say by accident.
-export function conversations(threads: readonly ReviewThread[]): ReviewThread[][] {
-  const byRoot = new Map<string, ReviewThread[]>();
+// A comment is a reply only when its `root` names a top-level comment (one with no root) in the
+// list. Anything else heads a thread of its own: a reply whose top-level comment the host
+// trimmed, a comment rooted at itself, two rooted at each other, or a reply to a reply. Such a
+// comment is returned with its root cleared so threadIdOf reads its own id, and it is shown
+// rather than dropped, since "your colleague said nothing" is the one thing this app must not say
+// by accident.
+export function groupThreads(comments: readonly ReviewThread[]): ReviewThread[][] {
+  const topLevel = new Set<string>();
+  for (const c of comments) if (!c.root && c.id) topLevel.add(c.id);
+  const isReply = (c: ReviewThread): boolean => !!c.root && c.root !== c.id && topLevel.has(c.root);
+
+  const byHead = new Map<string, ReviewThread[]>();
   const out: ReviewThread[][] = [];
-  for (const t of threads) {
-    const key = rootOf(t);
-    const at = byRoot.get(key);
-    if (at) {
-      at.push(t);
-      continue;
-    }
-    const fresh = [t];
-    byRoot.set(key, fresh);
-    out.push(fresh);
+  for (const c of comments) {
+    if (isReply(c)) continue;
+    const head = c.root ? { ...c, root: "" } : c;
+    const group = [head];
+    out.push(group);
+    // The first top-level comment of an id heads the replies that name it.
+    if (!c.root && c.id && !byHead.has(c.id)) byHead.set(c.id, group);
   }
-  // A root listed after one of its replies still leads. Array.prototype.sort is stable, so
-  // replies keep their list order behind it.
-  for (const group of out) group.sort((a, b) => Number(Boolean(a.root)) - Number(Boolean(b.root)));
+  // A second pass, because a reply can precede its top-level comment in the order the host sent.
+  for (const c of comments) if (isReply(c)) byHead.get(c.root as string)?.push(c);
   return out;
 }
 
@@ -235,8 +241,8 @@ function pushThreads(
   threads.forEach((thread, i) => {
     pushThread(rows, file, thread);
     const next = threads[i + 1];
-    if (next && rootOf(next) === rootOf(thread)) return;
-    const outline = outlines?.get(rootOf(thread));
+    if (next && threadIdOf(next) === threadIdOf(thread)) return;
+    const outline = outlines?.get(threadIdOf(thread));
     if (!outline) return;
     rows.push({ kind: "outline", file, text: outlineHeading(outline), head: true });
     for (const topic of outline.topics) {

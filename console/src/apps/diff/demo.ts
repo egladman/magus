@@ -661,27 +661,27 @@ export function applyDemoPublish(session: DiffReview): DiffReview {
   };
 }
 
-// applyDemoReply is the showcase's reply: the answer joins the conversation rooted at `root`.
+// applyDemoReply is the showcase's reply: the answer joins the thread `threadId` names.
 //
-// Appended after the conversation's last comment rather than at the end of the list, because
-// that is where a reply belongs, and a showcase that piled every answer at the bottom would
-// teach the reader a shape the real app does not have.
+// Appended after the thread's last comment rather than at the end of the list, because that is
+// where a reply belongs, and a showcase that piled every answer at the bottom would teach the
+// reader a shape the real app does not have.
 export function applyDemoReply(
   review: ReviewInfo | null,
-  root: string,
+  threadId: string,
   body: string,
 ): ReviewInfo | null {
   if (!review) return review;
-  const head = review.threads.find((t) => t.id === root);
+  const head = review.threads.find((t) => t.id === threadId);
   if (!head) return review;
   let last = -1;
   review.threads.forEach((t, i) => {
-    if (t.id === root || t.root === root) last = i;
+    if (t.id === threadId || t.root === threadId) last = i;
   });
   const threads = [...review.threads];
   threads.splice(last + 1, 0, {
-    id: `${root}-r${last + 1}`,
-    root,
+    id: `${threadId}-r${last + 1}`,
+    root: threadId,
     path: head.path,
     line: head.line,
     // A reply lands where the conversation landed, which is what keeps it beside the same code

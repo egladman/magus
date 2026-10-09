@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -204,33 +205,52 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 	return nil
 }
 
-// ReviewThreads reads the comment threads already on the review.
+// ReviewCommentsOf finds the review open for from and reads its comments.
+//
+// bound limits the two forge calls together and nothing the caller does afterwards: a client
+// asked for a changeset must not wait on a stranger's outage to get one, but its own work on
+// that changeset is not the stranger's to cut short.
+//
+// at is not Open when there is nothing to read, and at.Reason says why. err is
+// [ReviewComments]'s, with the comments that did decode beside it.
+func ReviewCommentsOf(ctx context.Context, from types.ReviewOrigin, bound time.Duration) (at types.ReviewTarget, comments []types.ReviewComment, err error) {
+	ctx, cancel := context.WithTimeout(ctx, bound)
+	defer cancel()
+	at = FindReview(ctx, from.Branch, from.Remote)
+	if !at.Open() {
+		return at, nil, nil
+	}
+	comments, err = ReviewComments(ctx, at)
+	return at, comments, err
+}
+
+// ReviewComments reads the comments already on the review, a thread's replies included.
 //
 // Empty on an unreachable host, for the reason FindReview gives about itself: this is the one
 // call that makes a local client depend on a host being reachable, and the client has to keep
-// working when it is not. Nil error, empty list; ReviewThreadsReached is for the caller that
+// working when it is not. Nil error, empty list; ReviewCommentsReached is for the caller that
 // cannot afford to lose that distinction.
 //
-// A MALFORMED thread is different, and is reported. Dropping one leaves the client saying a
+// A MALFORMED comment is different, and is reported. Dropping one leaves the client saying a
 // colleague said nothing, which is the single worst thing a review reader can be told, and
-// the threads that did decode still come back, so the caller shows what it has and says what
+// the comments that did decode still come back, so the caller shows what it has and says what
 // it could not read.
-func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewThread, error) {
-	threads, _, err := ReviewThreadsReached(ctx, at)
-	return threads, err
+func ReviewComments(ctx context.Context, at types.ReviewTarget) ([]types.ReviewComment, error) {
+	comments, _, err := ReviewCommentsReached(ctx, at)
+	return comments, err
 }
 
-// ReviewThreadsReached is ReviewThreads plus the one fact ReviewThreads deliberately swallows:
-// whether the host answered at all.
+// ReviewCommentsReached is ReviewComments plus the one fact ReviewComments deliberately
+// swallows: whether the host answered at all.
 //
-// For the caller that turns the threads into a NUMBER rather than rendering the ones it got. A
-// count taken from an empty list says "nothing was said" about a conversation nobody could read,
-// and those are opposite facts. A client that RENDERS wants ReviewThreads: staying up against a
+// For the caller that turns the comments into a NUMBER rather than rendering the ones it got. A
+// count taken from an empty list says "nothing was said" about a review nobody could read, and
+// those are opposite facts. A client that RENDERS wants ReviewComments: staying up against a
 // host it cannot reach is the whole point of that contract.
 //
 // reached is false only when the host was asked and did not answer. Nothing to ask (no provider
 // wired, no review open) reports true, because no host failed.
-func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads []types.ReviewThread, reached bool, err error) {
+func ReviewCommentsReached(ctx context.Context, at types.ReviewTarget) (comments []types.ReviewComment, reached bool, err error) {
 	drv, ok := reviewDriver()
 	if !ok || !at.Open() {
 		return nil, true, nil
@@ -254,63 +274,75 @@ func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads [
 	if !ok {
 		return nil, true, fmt.Errorf("%s returned %T, want a list", where, resp.Data)
 	}
-	out := make([]types.ReviewThread, 0, len(rows))
-	// Every row is attempted. Returning at the first bad one would drop the threads AFTER it,
-	// so a provider with one malformed remark near the top would render as a conversation
-	// nobody had, which is the failure this whole path is written to avoid.
+	out := make([]types.ReviewComment, 0, len(rows))
+	// Every row is attempted. Returning at the first bad one would drop the comments AFTER it,
+	// so a provider with one malformed remark near the top would render as a review nobody had
+	// commented on, which is the failure this whole path is written to avoid.
 	var bad []error
 	for i, r := range rows {
-		t, derr := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
+		c, derr := decodeReviewComment(r, fmt.Sprintf("%s[%d]", where, i))
 		if derr != nil {
 			bad = append(bad, derr)
 			continue
 		}
-		out = append(out, t)
+		out = append(out, c)
 	}
 	return out, true, errors.Join(bad...)
 }
 
-func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
+func decodeReviewComment(row any, where string) (types.ReviewComment, error) {
 	m, ok := row.(map[string]any)
 	if !ok {
-		return types.ReviewThread{}, fmt.Errorf("%s is %T, want a record", where, row)
+		return types.ReviewComment{}, fmt.Errorf("%s is %T, want a record", where, row)
 	}
 	// UNPLACED until something places it. The zero value is a valid hunk index, so leaving it
-	// would render every thread against the first hunk of its file (the wrong code, stated
+	// would render every comment against the first hunk of its file (the wrong code, stated
 	// confidently) on any path that does not reach changeset.PlaceThreads.
-	t := types.ReviewThread{Hunk: -1}
+	c := types.ReviewComment{Hunk: -1}
 	var err error
-	if t.ID, err = strField(m, "id", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.ID, err = strField(m, "id", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if t.Path, err = strField(m, "path", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.Path, err = strField(m, "path", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if t.Line, err = intField(m, "line", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.Line, err = intField(m, "line", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if t.Author, err = strField(m, "author", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.Author, err = strField(m, "author", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if t.Body, err = strField(m, "body", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.Body, err = strField(m, "body", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	// root, outdated and diff_hunk are newer than the first five, so a spell that omits them
-	// still decodes: absent reads as empty and false, which is "a root comment on a live line".
-	if t.Root, err = strField(m, "root", where); err != nil {
-		return types.ReviewThread{}, err
+	// compat(until: the spell contract in docs/concepts/review.md names root, outdated and
+	// diff_hunk as required and no review spell in the registry returns a record without them):
+	// a spell written before they existed still decodes, and absent reads as empty and false,
+	// which is "a top-level comment on a live line".
+	if c.Root, err = strField(m, "root", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if t.DiffHunk, err = strField(m, "diff_hunk", where); err != nil {
-		return types.ReviewThread{}, err
+	if c.DiffHunk, err = strField(m, "diff_hunk", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	if v := m["outdated"]; v != nil {
-		b, ok := v.(bool)
-		if !ok {
-			return types.ReviewThread{}, fmt.Errorf("%s: field %q is %T, want bool", where, "outdated", v)
-		}
-		t.Outdated = b
+	if c.Outdated, err = boolField(m, "outdated", where); err != nil {
+		return types.ReviewComment{}, err
 	}
-	return t, nil
+	return c, nil
+}
+
+// boolField reads an optional bool field under the posture spell_decode.go states: absent and
+// null read as false, and a field of the wrong type names itself.
+func boolField(m map[string]any, key, where string) (bool, error) {
+	v, present := m[key]
+	if !present || v == nil {
+		return false, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("%s: field %q is %T, want bool", where, key, v)
+	}
+	return b, nil
 }
 
 func reviewDriver() (spells.Driver, bool) {

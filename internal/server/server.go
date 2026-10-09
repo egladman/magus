@@ -322,12 +322,14 @@ func (s *Server) Serve(ctx context.Context) error {
 			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
 			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
 			// The review store lets the lookup response say which threads the reader has not
-			// seen before; without it the conversation still serves, just unmarked.
+			// seen before; without it the comments still serve, just unmarked.
 			diffLookupH.Sessions = diffSessions
 			diffLookupH.Root = opts.Magus.Root()
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
-			diffThreadH := diffhandler.NewThreadHandler(svc, log)
-			diffThreadH.Anchors = opts.NoteAnchors()
+			diffThreadH := diffhandler.NewThreadHandler(diffhandler.ThreadOptions{
+				Workspace: svc,
+				Anchors:   opts.ReviewAnchors(),
+			}, log)
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
 			// the same two sources the console already trusts (the service for structure and

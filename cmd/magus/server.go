@@ -1104,9 +1104,9 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// tell them apart.
 	//
 	// The error is a MALFORMED remark and never the unreachable host, so it is dropped rather
-	// than read: the threads that decoded are in hand, and one unreadable record must not blank
+	// than read: the comments that decoded are in hand, and one unreadable record must not blank
 	// the only report this merge will get.
-	threads, reached, _ := bindings.ReviewThreadsReached(ctx, at)
+	comments, reached, _ := bindings.ReviewCommentsReached(ctx, at)
 	if !reached {
 		// Not the job's failure to report: a forge that could not be reached is a fact about the
 		// network, and raising it would mark this job failed on the trail every fifteen minutes
@@ -1117,7 +1117,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
 	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(comments); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
@@ -1134,7 +1134,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Merged() {
 		return nil
 	}
-	said := len(threads) + len(drafts)
+	said := len(comments) + len(drafts)
 	// A merge under a reader is worth reporting however little was said: the reader was in the
 	// middle of it. The mark must have been set against THIS review; one left over from a branch
 	// that has since moved to another pull request says nothing about this merge.
