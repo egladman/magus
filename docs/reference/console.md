@@ -53,7 +53,7 @@ Every route under the console's `/api/v1/` prefix, enumerated:
 | `GET /api/v1/diff`                 | Working-tree changes annotated with role, blast radius, changed-symbol reach, and coverage ([`magus diff`](manpage/magus-diff.md)) |
 | `GET /api/v1/diff/patch`           | The same changes as one unified patch, without the annotation (much cheaper)                                                       |
 | `GET /api/v1/diff/context`         | Supporting context for a changed symbol (callers, definitions) beyond the patch itself                                             |
-| `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments                                                                |
+| `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments, the reading-now mark                                          |
 | `GET /api/v1/diff/review`          | Which review this branch has open on the forge, and what colleagues have already said on it                                        |
 | `GET /api/v1/diff/branches`        | Other branches changing the same files                                                                                             |
 | `POST /api/v1/diff/run`            | Run a target against the working tree; the one MUTATING route in this table, bounded to what the magusfile declares                |

@@ -1056,6 +1056,10 @@ func serverReload(ctx context.Context, args []string) error {
 // this tree means the reader never opened a review here, and no forge is asked anything at all.
 // Opening a review is the opt-in.
 //
+// A merge that lands while the reader has marked the review as being read is reported even when
+// nothing was said on it, and is counted with the time the reader had been at it; see
+// [changeset.Reading].
+//
 // It records rather than notifies. The event is the durable fact; the console's watcher reads the
 // trail for it, exactly as it already does for a share being opened. Normally reached via
 // `magus job run check-review`.
@@ -1080,9 +1084,11 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	store := changeset.NewStore(m.CacheDir())
 	seen := store.LoadSeenThreads()
 	drafts := store.LoadDrafts()
-	if len(seen) == 0 && len(drafts) == 0 {
+	reading, isReading := store.LoadReading()
+	if len(seen) == 0 && len(drafts) == 0 && !isReading {
 		// Nothing persisted means nobody has read or drafted anything in a review here, which is
-		// the opt-in: no forge is asked about a workspace whose reviews were never opened.
+		// the opt-in: no forge is asked about a workspace whose reviews were never opened. Saying
+		// "I am reading this now" is opening one.
 		return nil
 	}
 	from := m.ReviewOrigin(ctx)
@@ -1129,11 +1135,26 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 	said := len(threads) + len(drafts)
-	if said == 0 {
+	// A merge under a reader is worth reporting however little was said: the reader was in the
+	// middle of it. The mark must have been set against THIS review; one left over from a branch
+	// that has since moved to another pull request says nothing about this merge.
+	underReader := isReading && reading.Matches(at)
+	if said == 0 && !underReader {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
 		// would train the reader to ignore the ones that matter. A forge that could not be
 		// reached returned above rather than landing here, so this really is "nothing was said".
 		return nil
+	}
+	if underReader {
+		// Cleared before anything is recorded, so the next tick cannot count this merge twice. A
+		// failure to clear is an error and not a warning: recording anyway would repeat the merge
+		// every fifteen minutes with a duration that grew each time.
+		if err := store.ClearReading(ctx); err != nil {
+			return fmt.Errorf("server %s: clear the reading mark: %w", job.NameCheckReview, err)
+		}
+		if tel := m.Telemetry(); tel != nil {
+			tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
+		}
 	}
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),

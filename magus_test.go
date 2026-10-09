@@ -1067,6 +1067,7 @@ func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)    
 func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
 func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
 func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
+func (p *recordingProvider) RecordReviewMergedWhileReading(context.Context, float64)         {}
 func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true

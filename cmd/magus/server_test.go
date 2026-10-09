@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
@@ -330,7 +333,7 @@ func TestEnsureConsoleServerReturnsWithoutSpawning(t *testing.T) {
 //
 // The provider is asked for a MERGED review, since the merged report is the job's whole output
 // and the branch under test decides whether it is written.
-func checkReviewWorkspace(t *testing.T, threads func() (any, error)) (context.Context, string, *magus.Magus) {
+func checkReviewWorkspace(t *testing.T, threads func() (any, error), opts ...magus.Option) (context.Context, string, *magus.Magus) {
 	t.Helper()
 	// The job parses its own flags, and that binding writes defaults into the global config.
 	saved := globalCfg
@@ -342,7 +345,7 @@ func checkReviewWorkspace(t *testing.T, threads func() (any, error)) (context.Co
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
 		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	m, err := magus.Open(context.Background(), root)
+	m, err := magus.Open(context.Background(), root, opts...)
 	require.NoError(t, err, "fixture workspace must open")
 
 	name := "fake-job-review-" + t.Name()
@@ -417,6 +420,82 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 
 	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()),
 		"a count taken from an unreachable host is a number nobody can act on")
+}
+
+// mergeWhileReadingRecorder is a real (disabled) provider that also remembers what the job told it
+// about reviews that merged under a reader.
+type mergeWhileReadingRecorder struct {
+	observability.Provider
+	secs []float64
+}
+
+func (r *mergeWhileReadingRecorder) RecordReviewMergedWhileReading(_ context.Context, secs float64) {
+	r.secs = append(r.secs, secs)
+}
+
+func newMergeWhileReadingRecorder(t *testing.T) *mergeWhileReadingRecorder {
+	t.Helper()
+	base, err := otlp.New(t.Context(), observability.Config{})
+	require.NoError(t, err)
+	return &mergeWhileReadingRecorder{Provider: base}
+}
+
+// The reader was in the middle of it, so the merge is reported although nobody said anything: no
+// remarks, no drafts, no seen threads. The mark is the only trace that a review was opened here.
+func TestCheckReviewReportsAMergeUnderAReaderWithNothingSaid(t *testing.T) {
+	rec := newMergeWhileReadingRecorder(t)
+	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	started := time.Now().Add(-90 * time.Second)
+	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, started)
+	require.NoError(t, err)
+
+	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
+
+	merged := mergedReviewEvents(t, m.CacheDir())
+	require.Len(t, merged, 1)
+	assert.Equal(t, "acme/acme: 0", merged[0].Preview)
+	require.Len(t, rec.secs, 1, "one merge under a reader is one observation")
+	assert.InDelta(t, 90.0, rec.secs[0], 5.0, "the duration is the time from the mark to the merge")
+	_, stillMarked := changeset.NewStore(m.CacheDir()).LoadReading()
+	assert.False(t, stillMarked, "reported once: the mark is cleared")
+
+	// The next tick finds nothing to report, and counts nothing.
+	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
+	assert.Len(t, mergedReviewEvents(t, m.CacheDir()), 1)
+	assert.Len(t, rec.secs, 1)
+}
+
+// A mark set against another review says nothing about this merge. The branch has moved to a new
+// pull request, and counting the old mark would put a reader under a merge they never started on.
+func TestCheckReviewIgnoresAMarkForAnotherReview(t *testing.T) {
+	rec := newMergeWhileReadingRecorder(t)
+	ctx, _, m := checkReviewWorkspace(t, func() (any, error) { return []any{}, nil }, magus.WithProvider(rec))
+	_, err := changeset.NewStore(m.CacheDir()).SetReading(ctx, types.ReviewTarget{ID: "7", Repo: "acme/acme"}, time.Now())
+	require.NoError(t, err)
+
+	require.NoError(t, serverCheckReview(ctx, m.Root(), nil))
+
+	assert.Empty(t, mergedReviewEvents(t, m.CacheDir()), "nothing was said and the mark is not this review's")
+	assert.Empty(t, rec.secs)
+	_, stillMarked := changeset.NewStore(m.CacheDir()).LoadReading()
+	assert.True(t, stillMarked, "another review's mark is not this job's to clear")
+}
+
+// With a remark on the merged review the report is today's, and a reader who was not reading
+// costs the metric nothing: the two facts are independent.
+func TestCheckReviewCountsNoReadingWhenNobodyWasReading(t *testing.T) {
+	rec := newMergeWhileReadingRecorder(t)
+	ctx, root, m := checkReviewWorkspace(t, func() (any, error) {
+		return []any{map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"}}, nil
+	}, magus.WithProvider(rec))
+	reader := changeset.NewStore(m.CacheDir())
+	reader.Attach(root, "main", types.Diff{Base: "main"}, "asof")
+	reader.MarkThreadsSeen(root, []string{"t1"})
+
+	require.NoError(t, serverCheckReview(ctx, root, nil))
+
+	assert.Len(t, mergedReviewEvents(t, m.CacheDir()), 1)
+	assert.Empty(t, rec.secs)
 }
 
 // TestDetachedChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits

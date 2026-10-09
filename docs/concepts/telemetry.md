@@ -168,12 +168,14 @@ attention request, the agent guard grading a write) reach the
 [activity trail](../guides/integrations/server.md) instead. Read each row for
 what it counts, not for all three.
 
-| Metric                                 | Instrument | Unit             | Attributes                              | Meaning                                            |
-| -------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
-| `magus.lease.registrations`            | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
-| `magus.attention.disposition.duration` | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
-| `magus.review.remarks`                 | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                       |
-| `magus.review.publishes`               | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
+| Metric                                       | Instrument | Unit             | Attributes                              | Meaning                                            |
+| -------------------------------------------- | ---------- | ---------------- | --------------------------------------- | -------------------------------------------------- |
+| `magus.lease.registrations`                  | counter    | `{registration}` | `verdict`                               | A worker registered the base it actually landed on |
+| `magus.attention.disposition.duration`       | histogram  | `s`              | `severity`                              | How long a request waited, from raised to disposed |
+| `magus.review.remarks`                       | counter    | `{remark}`       | `author ∈ {unattributed, agent}`        | A remark drafted on a change                       |
+| `magus.review.publishes`                     | counter    | `{publish}`      | `verdict`, `downgraded ∈ {true, false}` | A review published, by the verdict that landed     |
+| `magus.review.merged_while_reading`          | counter    | `{merge}`        | none                                    | A review merged while its reader was reading       |
+| `magus.review.merged_while_reading.duration` | histogram  | `s`              | none                                    | Time from the reader's mark to the merge           |
 
 `verdict` on registrations is `match`, `revision-match`, `diverged` or `unknown`;
 a rising `diverged` share says a fleet's workers are building on trees their
@@ -196,6 +198,15 @@ by another build can never mint a series.
 write to one store. `magus.review.publishes` is deliberately **not**: how a change
 was judged, split by who wrote it, is the first half of a threshold that blocks
 work by author kind, and magus does not build the instrument that invites one.
+
+`magus.review.merged_while_reading` and its `.duration` measure review time lost to
+a merge. They are recorded by the `check-review` job, so a merge is counted on the
+first tick after it lands, and only when the reader had marked **that** review as
+being read (the `reading` op on the console's review route). The mark is local and
+cleared once reported, so a merge is counted once. Neither instrument carries an
+attribute: a review id or repository name is unbounded, and the duration is the
+whole fact. Like every metric here they reach a backend only when telemetry
+export is on.
 
 ## Traces (spans)
 

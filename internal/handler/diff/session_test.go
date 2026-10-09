@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/changeset"
+	mcpgen "github.com/egladman/magus/internal/handler/mcp/gen"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
@@ -861,4 +862,153 @@ func TestDiffBranchesLeavesUnsupportedEmptyWhenTheBackendAnswered(t *testing.T) 
 	var got diffBranchesResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	assert.Empty(t, got.Unsupported)
+}
+
+// githubReview is a workspace whose branch lives on github.com, which is what the reading
+// command is built for.
+type githubReview struct{ fakeReview }
+
+func (githubReview) ReviewOrigin(context.Context) types.ReviewOrigin {
+	return types.ReviewOrigin{Branch: "feat/x", Remote: "git@github.com:acme/acme.git"}
+}
+
+// withReviewTarget registers a provider that answers the review lookup with target.
+func withReviewTarget(t *testing.T, target map[string]any) {
+	t.Helper()
+	name := "fake-reading-review-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == spells.FindReviewContract {
+				return target, nil
+			}
+			return map[string]any{}, nil
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+}
+
+func readingHandler(t *testing.T, ws reviewSource) (*ReviewHandler, *changeset.Store) {
+	t.Helper()
+	store := changeset.NewStore(t.TempDir())
+	return NewReviewHandler(ReviewOptions{Sessions: store, Workspace: ws, Root: t.TempDir()}, nil), store
+}
+
+// The op marks the review locally and answers with the command the person may run. The mark
+// needs no attached session: a reader can say they are reading before any hunk is fetched.
+func TestReadingMarksTheReviewAndPrintsTheForgeCommand(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme", "viewer": "eli"})
+	h, store := readingHandler(t, githubReview{})
+
+	w := post(t, h, `{"op":"reading","on":true}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	var got readingResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	mark, marked := store.LoadReading()
+	require.True(t, marked)
+	assert.Equal(t, changeset.Reading{Review: "482", Repo: "acme/acme", Since: got.Since}, mark)
+	assert.Equal(t, readingResponse{
+		Reading: true,
+		Since:   mark.Since,
+		Command: "gh pr comment 482 --repo acme/acme --body 'eli is reading this now'",
+	}, got)
+	assert.NotZero(t, got.Since)
+}
+
+func TestReadingOffClearsTheMark(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme"})
+	h, store := readingHandler(t, githubReview{})
+	require.Equal(t, http.StatusOK, post(t, h, `{"op":"reading","on":true}`).Code)
+
+	w := post(t, h, `{"op":"reading","on":false}`)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.JSONEq(t, `{"reading":false}`, w.Body.String())
+	_, marked := store.LoadReading()
+	assert.False(t, marked)
+}
+
+// Only GitHub's shape is known, so any other forge gets the mark and no command rather than a
+// guessed one.
+func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme"})
+	h, store := readingHandler(t, fakeReview{})
+
+	w := post(t, h, `{"op":"reading","on":true}`)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got readingResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.True(t, got.Reading)
+	assert.Empty(t, got.Command)
+	_, marked := store.LoadReading()
+	assert.True(t, marked)
+}
+
+func TestReadingCommandRefusesWhatIsNotSafeToPaste(t *testing.T) {
+	const remote = "https://github.com/acme/acme.git"
+	for name, at := range map[string]types.ReviewTarget{
+		"id not a number": {ID: "482; rm -rf ~", Repo: "acme/acme"},
+		"repo with quote": {ID: "482", Repo: "acme/acme'x"},
+		"repo with space": {ID: "482", Repo: "acme/ac me"},
+	} {
+		assert.Empty(t, readingCommand(at, remote), name)
+	}
+	assert.Equal(t, "gh pr comment 7 --repo acme/acme --body 'A reviewer is reading this now'",
+		readingCommand(types.ReviewTarget{ID: "7", Repo: "acme/acme", Viewer: "x'; echo hi; '"}, remote),
+		"a login that is not a login is dropped, not quoted")
+	assert.Empty(t, readingCommand(types.ReviewTarget{ID: "7", Repo: "acme/acme"}, "https://gitlab.com/acme/acme.git"))
+}
+
+// A review that has landed has nothing left to hold, and recording the mark would make the next
+// job tick report a merge under a reader who started after it.
+func TestReadingAMergedReviewIsRefused(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme", "state": "merged"})
+	h, store := readingHandler(t, githubReview{})
+
+	w := post(t, h, `{"op":"reading","on":true}`)
+
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	_, marked := store.LoadReading()
+	assert.False(t, marked)
+}
+
+func TestReadingWithNoReviewIsAnError(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "", "reason": "no pull request for this branch"})
+	h, _ := readingHandler(t, githubReview{})
+
+	w := post(t, h, `{"op":"reading","on":true}`)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "no pull request for this branch")
+}
+
+// "I am reading this now" is a person's statement, so no agent tool may offer it. The MCP diff
+// tool refuses every op outside its own list (see TestNoAgentReachableOpSpeaksToAPerson there);
+// this pins that its advertised ops never grow a reading one while the human route keeps it.
+func TestTheAgentDiffToolDoesNotOfferReading(t *testing.T) {
+	var ops string
+	for _, tool := range mcpgen.Registry {
+		if tool.Name != "diff" {
+			continue
+		}
+		for _, p := range tool.Params {
+			if p.Name == "op" {
+				ops = p.Description
+			}
+		}
+	}
+	require.NotEmpty(t, ops, "the diff tool's op parameter moved; update this pin with it")
+	assert.NotContains(t, ops, "reading")
+}
+
+// A server with nowhere to keep the mark must say so rather than answer as if it had recorded one.
+func TestReadingWithNoStateDirIsAnError(t *testing.T) {
+	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme"})
+	h := NewReviewHandler(ReviewOptions{Sessions: changeset.NewStore(""), Workspace: githubReview{}, Root: t.TempDir()}, nil)
+
+	w := post(t, h, `{"op":"reading","on":true}`)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
 }
