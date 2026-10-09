@@ -42,6 +42,11 @@ type commandRuleInput struct {
 	// preauth is the served `next` that already cleared this command, "" for any other.
 	preauth string
 	lease   string
+	// mcpTool is the magus MCP tool the command is the rendering of, "" for a shell line.
+	mcpTool string
+	// readOnly is an mcpTool call that only reads, which the command it renders as does
+	// not always show.
+	readOnly bool
 }
 
 // gradeWorkspaceCommand asks the workspace's magus\guard.command rule about a command the

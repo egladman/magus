@@ -576,6 +576,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// there to pin a location.
 	callDir := ""
 	description := ""
+	mcpTool, readOnlyTool := "", false
 	var write writeFields
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
@@ -621,6 +622,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		input = env.Value
+		mcpTool, readOnlyTool = env.MCPTool, env.ReadOnlyTool
 		description = env.Description
 		write = env.Write
 		hasInput = input != ""
@@ -1039,6 +1041,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			dialect:     shellD,
 			preauth:     preauth,
 			lease:       actingLease,
+			mcpTool:     mcpTool,
+			readOnly:    readOnlyTool,
 		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
 		if !req.DryRun && (verdict.Decision == "pass" || verdict.Decision == "advise") {
@@ -1369,6 +1373,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// being present: requiring `op` left the tools that do not carry one,
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
+		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
@@ -1503,6 +1508,10 @@ func HostAttribution(raw string) (session, transcript string) {
 type hookRequest struct {
 	Value  string
 	IsPath bool
+	// MCPTool is the magus MCP tool Value is the rendering of, "" for any other request.
+	// ReadOnlyTool is whether that call only reads, which the line cannot always say.
+	MCPTool      string
+	ReadOnlyTool bool
 	// Description is the label the caller wrote for a shell command, "" when it wrote none.
 	Description string
 	// Write is the text a file write carries, each field empty when the host sent none.

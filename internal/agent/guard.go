@@ -181,7 +181,13 @@ var guardInputs = []string{"command", "path", "mcp"}
 // cwd names rather than their own, because a config written for 20 starts every hook in
 // the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
 // session's PATH that a shell line in the config used to.
-const GuardTemplateVersion = 20
+//
+// 21: the glue finds the workspace root by the nearest magus.yaml rather than the nearest
+// magusfile.buzz, and a magus that cannot load the tree denies every call that changes
+// state instead of passing it. A copy still walking to the magusfile resolves no ./magus
+// from a project directory and judges with whatever PATH holds, which is the binary that
+// cannot load the tree.
+const GuardTemplateVersion = 21
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

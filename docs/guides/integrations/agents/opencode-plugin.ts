@@ -36,7 +36,7 @@
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 20
+// magus-guard-template: 21
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
@@ -141,9 +141,26 @@ function argString(args: unknown, keys: readonly string[]): string {
   return "";
 }
 
+/** The nearest directory at or above dir holding the file name, or null when none does. */
+function nearestWith(name: string, dir: string): string | null {
+  for (let at = dir; ; ) {
+    if (existsSync(join(at, name))) return at;
+    const parent = dirname(at);
+    if (parent === at) return null;
+    at = parent;
+  }
+}
+
 /**
  * The binary belonging to the workspace this process is inside, found by walking up to
- * the magusfile, or null when that workspace has not built one.
+ * the workspace root, or null when that workspace has not built one.
+ *
+ * The root is the nearest magus.yaml, the file magus.FindRoot treats as "the workspace
+ * starts here", exactly as lib/hook.buzz resolves it. The nearest magusfile.buzz is wrong:
+ * console/, docs/ and libs/* each carry one and no binary, so a call made from any of them
+ * found no ./magus and fell to PATH. The nearest magus.yaml still never climbs into a
+ * parent checkout, since a worktree nested under one holds its own. Only a tree with no
+ * magus.yaml above falls back to the nearest magusfile.buzz.
  *
  * Walked rather than testing `./magus` alone: a plugin runs in the host's session
  * directory, and that is not always the workspace root: a session opened in a
@@ -152,15 +169,11 @@ function argString(args: unknown, keys: readonly string[]): string {
  * the workspace at all, that is the entire guard failing open.
  */
 function workspaceMagus(): string | null {
-  for (let dir = process.cwd(); ; ) {
-    if (existsSync(join(dir, "magusfile.buzz"))) {
-      const bin = join(dir, "magus");
-      return existsSync(bin) ? bin : null;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
+  const root =
+    nearestWith("magus.yaml", process.cwd()) ?? nearestWith("magusfile.buzz", process.cwd());
+  if (root === null) return null;
+  const bin = join(root, "magus");
+  return existsSync(bin) ? bin : null;
 }
 
 export const MagusGuard: Plugin = async () => {

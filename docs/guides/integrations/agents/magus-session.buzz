@@ -30,7 +30,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 20
+// magus-guard-template: 21
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";

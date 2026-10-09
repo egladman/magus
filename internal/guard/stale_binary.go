@@ -292,7 +292,10 @@ func commandCall(in commandRuleInput) unloadedCall {
 		call.what, call.changes = call.verb, true
 		return call
 	}
-	call.changes = !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
+	if in.mcpTool != "" {
+		call.what = "this call to the magus " + in.mcpTool + " tool"
+	}
+	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
 	return call
 }
 

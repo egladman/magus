@@ -62,6 +62,32 @@ var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 	hint.ToolBuzz:   {command: hint.Buzz, operands: []string{"path"}},
 }
 
+// mcpReadOnlyTools say, per magus tool, whether one call only reads. It decides what a
+// binary that cannot load the tree still lets through: the line a call renders as names
+// the CLI verb it stands for, and a tool is not always that verb (the buzz tool is a pure
+// transform where `magus buzz` runs a script). A tool absent here is not judged read-only,
+// and TestEveryMCPToolIsClassifiedForAStaleBinary fails until a new one is added.
+var mcpReadOnlyTools = map[hint.ToolName]func(input map[string]any) bool{
+	hint.ToolStatus:  func(map[string]any) bool { return true },
+	hint.ToolConfig:  func(map[string]any) bool { return true },
+	hint.ToolConsole: func(map[string]any) bool { return true },
+	hint.ToolBuzz:    func(map[string]any) bool { return true },
+	// The ops that write into the person's review session are not reads; the handler
+	// defaults an op that is absent or not text to state.
+	hint.ToolDiff: func(input map[string]any) bool {
+		op, ok := input["op"].(string)
+		return !ok || strings.TrimSpace(op) == "state"
+	},
+	// A script can do anything the client host module can.
+	hint.ToolClient: func(map[string]any) bool { return false },
+}
+
+// mcpReadsOnly reports a call to the magus tool name that only reads.
+func mcpReadsOnly(name string, input map[string]any) bool {
+	reads, ok := mcpReadOnlyTools[hint.ToolName(name)]
+	return ok && reads(input)
+}
+
 // buildCall is the command line a magus tool call is judged as. The trail
 // records this same string, so a later audit reads what was graded.
 func buildCall(name string, input map[string]any, cwd string) string {

@@ -199,8 +199,10 @@ renders comes from the built-in rules alone and the workspace's own rules judged
 nothing. When neither the working tree nor its approved copy loads, and the binary is
 older than the tree (a name the magusfile calls that this build predates, such as
 `magus\guard.builtins`) or the checkout holds no `./magus`, the guard denies every write:
-file edits, spawns, pushes and every shell command that changes state. Reads, `git
-status` and the fix still run, and the denial names the one command to run. The workspace
+file edits, spawns, pushes and every shell command that changes state, and the magus MCP
+tools that write: `client`, which runs a script, and `diff` with any `op` other than
+`state`. The tools that only read (`status`, `config`, `console`, `buzz`, `diff` with
+`op=state`) still answer. Reads, `git status` and the fix still run, and the denial names the one command to run. The workspace
 needs only to show a guard rule in its magusfile for this, so a fresh worktree is covered
 before any policy has loaded in its cache.
 

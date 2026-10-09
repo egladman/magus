@@ -102,6 +102,35 @@ and the stricter answer stands, as for
 [`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval). An agent's edit
 can tighten the policy that grades it and cannot loosen it.
 
+## When the magus judging the call cannot load the tree
+
+Failing open assumes the rule could have run. When the magus answering the hook cannot
+load the workspace at all, no rule in the magusfile was asked, so a pass from the
+built-ins says little. If it is older than the tree (the magusfile calls a name that
+build predates) or the checkout holds no `./magus`, and the magusfile visibly registers
+a guard rule, the guard denies every call that changes state: file edits, subagent
+spawns, pushes, the magus verbs that write shared state, shell commands it cannot show
+are read-only, and the magus MCP tools that write (`client`, and `diff` with any `op`
+other than `state`). Reads still run, as do `git status` and the fix itself, so the
+session can repair what denied it. The deny names the cause and the one command to run.
+
+The remedy depends on who is asking:
+
+- The orchestrator or a person rebuilds with `./magus run go-build .`. Where that
+  binary cannot load the tree either, or the checkout holds none, they bootstrap with
+  the command the deny prints.
+- A worker holding a lease never builds a binary. There is one per base: the
+  orchestrator builds it in the root and places a copy in the worker's checkout with
+  `hack/dev/bootstrap-worktree.buzz`, so the deny tells the worker to ask for that.
+
+A failure that is not a stale binary, such as a typo in a magusfile, still denies only the
+calls a previously loaded policy gated, and still names the failing line.
+
+Two cases still fail open. A magus too old to run `magus shell` at all never produces a
+verdict, so the host's hook reports its own error and the call goes ahead; `magus doctor`
+and `magus agent harness verify` report that before a session starts. And no magus on
+PATH leaves nothing to answer.
+
 ## What it costs
 
 The guard reads its rules from the root magusfile alone, not the whole workspace, and

@@ -5,11 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -307,6 +309,77 @@ func TestReadOnlyLine(t *testing.T) {
 	} {
 		assert.Equal(t, want, readOnlyLine(line, DialectBash), line)
 	}
+}
+
+func mcpEnvelope(t *testing.T, tool string, input map[string]any) string {
+	t.Helper()
+	return hookJSON(t, map[string]any{
+		"session_id": "s1", "hook_event_name": "PreToolUse", "tool_name": "mcp__magus__" + tool, "tool_input": input,
+	})
+}
+
+// A magus MCP tool that changes state is denied while the binary cannot load the tree,
+// like the CLI verb it is the other door to; the tools that only read still answer.
+func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+
+	for name, call := range map[string]string{
+		"client script":     mcpEnvelope(t, "client", map[string]any{"script": "import \"magus\";\nfun main(args: [str]) > void !> any { magus\\cmd(\"agent\", args: [\"install\"]); }"}),
+		"client path":       mcpEnvelope(t, "client", map[string]any{"path": "missing.buzz"}),
+		"diff comment":      mcpEnvelope(t, "diff", map[string]any{"op": "comment", "path": "a.go", "body": "x"}),
+		"diff suggest":      mcpEnvelope(t, "diff", map[string]any{"op": "suggest", "path": "a.go", "reason": "x"}),
+		"diff resolve":      mcpEnvelope(t, "diff", map[string]any{"op": "resolve", "id": "c1"}),
+		"diff outline":      mcpEnvelope(t, "diff", map[string]any{"op": "outline", "topics": []string{"a"}}),
+		"diff unknown op":   mcpEnvelope(t, "diff", map[string]any{"op": "frobnicate"}),
+		"client no content": mcpEnvelope(t, "client", map[string]any{}),
+	} {
+		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, "deny", v.Decision, name)
+		assert.Contains(t, v.Reason, "That magus is older than the tree.", name)
+		assert.Contains(t, v.Reason, "Rebuild it: `./magus run go-build .`.", name)
+		assert.Contains(t, v.Reason, "this call to the magus "+strings.Fields(name)[0]+" tool is denied", name)
+	}
+
+	for name, call := range map[string]string{
+		"status":       mcpEnvelope(t, "status", map[string]any{}),
+		"config":        mcpEnvelope(t, "config", map[string]any{}),
+		"console":       mcpEnvelope(t, "console", map[string]any{"app": "diff"}),
+		"buzz":          mcpEnvelope(t, "buzz", map[string]any{"script": "fun transform(input: any, args: [str]) > any { return input; }"}),
+		"diff default":  mcpEnvelope(t, "diff", map[string]any{}),
+		"diff state":    mcpEnvelope(t, "diff", map[string]any{"op": " state ", "projection": "summary"}),
+		"diff non-text": mcpEnvelope(t, "diff", map[string]any{"op": 7}),
+	} {
+		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: "s1"})
+		assert.NotEqual(t, "deny", v.Decision, "%s: %s", name, v.Reason)
+	}
+}
+
+// A leased worker is told to ask the orchestrator for a binary, never to build one.
+func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
+	ctx, _ := fleetFixture(t, fleetLeases()[0])
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+
+	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	require.Equal(t, "deny", worker.Decision, worker.Reason)
+	assert.Contains(t, worker.Reason, "ask it to run `magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a`")
+	assert.NotContains(t, worker.Reason, "go-build")
+
+	reads := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "status", map[string]any{}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	assert.NotEqual(t, "deny", reads.Decision, reads.Reason)
+}
+
+// Every magus MCP tool is classified, so a new one cannot reach a stale binary unjudged.
+func TestEveryMCPToolIsClassifiedForAStaleBinary(t *testing.T) {
+	for _, tool := range hint.AllToolNames {
+		_, ok := mcpReadOnlyTools[tool]
+		assert.True(t, ok, "%s has no entry in mcpReadOnlyTools", tool)
+	}
+	assert.Len(t, mcpReadOnlyTools, len(hint.AllToolNames), "an entry names no tool")
 }
 
 func TestRecoveryLine(t *testing.T) {
