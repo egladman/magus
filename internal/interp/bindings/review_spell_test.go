@@ -84,6 +84,49 @@ func TestReviewThreadsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T
 	assert.Equal(t, -1, got[0].Hunk)
 }
 
+func TestReviewThreadsDecodesReplyOutdatedAndHunk(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) {
+		return []any{map[string]any{
+			"id": "t2", "root": "t1", "path": "a.go", "line": float64(0),
+			"author": "eli", "body": "because", "outdated": true,
+			"diff_hunk": "@@ -1,2 +1,3 @@\n x",
+		}}, nil
+	})
+	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, types.ReviewThread{
+		ID: "t2", Root: "t1", Path: "a.go", Hunk: -1, Author: "eli", Body: "because",
+		Outdated: true, DiffHunk: "@@ -1,2 +1,3 @@\n x",
+	}, got[0])
+}
+
+// A spell written before these fields existed still decodes, and what it leaves out reads as a
+// root comment on a live line with no hunk text.
+func TestReviewThreadsDecodesASpellThatOmitsTheReplyFields(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) {
+		return []any{map[string]any{
+			"id": "t1", "path": "a.go", "line": float64(3), "author": "priya", "body": "why",
+			"root": nil, "outdated": nil, "diff_hunk": nil,
+		}}, nil
+	})
+	got, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Empty(t, got[0].Root)
+	assert.False(t, got[0].Outdated)
+	assert.Empty(t, got[0].DiffHunk)
+}
+
+func TestReviewThreadsNamesAMistypedOutdatedFlag(t *testing.T) {
+	withReviewSpell(t, func(string) (any, error) {
+		return []any{map[string]any{"id": "t1", "path": "a.go", "outdated": "yes"}}, nil
+	})
+	_, err := ReviewThreads(context.Background(), types.ReviewTarget{ID: "482"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `field "outdated"`)
+}
+
 // Absent reads as the zero value, not as an error: the posture spell_decode.go states for this
 // whole layer. A review with no threads is not a malformed provider.
 func TestReviewThreadsTreatsNothingAsNoThreads(t *testing.T) {

@@ -295,6 +295,21 @@ func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
 	if t.Body, err = strField(m, "body", where); err != nil {
 		return types.ReviewThread{}, err
 	}
+	// root, outdated and diff_hunk are newer than the first five, so a spell that omits them
+	// still decodes: absent reads as empty and false, which is "a root comment on a live line".
+	if t.Root, err = strField(m, "root", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if t.DiffHunk, err = strField(m, "diff_hunk", where); err != nil {
+		return types.ReviewThread{}, err
+	}
+	if v := m["outdated"]; v != nil {
+		b, ok := v.(bool)
+		if !ok {
+			return types.ReviewThread{}, fmt.Errorf("%s: field %q is %T, want bool", where, "outdated", v)
+		}
+		t.Outdated = b
+	}
 	return t, nil
 }
 

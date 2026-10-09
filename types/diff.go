@@ -822,6 +822,20 @@ type ReviewThread struct {
 	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
+	// Root is the ID of the first comment in the conversation this one belongs to, and is empty
+	// on that first comment itself.
+	//
+	// The wire stays flat, one record per comment, so each reply keeps its own ID and its own
+	// place in the SeenThreads watermark: a new reply to an old conversation is still new.
+	// Grouping replies under their root is a rendering decision made where the threads are shown.
+	Root string `json:"root,omitempty" yaml:"root,omitempty"`
+	// Outdated reports that the line this comment was made on no longer exists in the head. Line
+	// is then whatever the host last recorded, and Hunk is usually -1.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
+	// DiffHunk is the host's own text of the hunk this comment was made on, as the host saw it
+	// then. It is the only record of the code an outdated comment was about, since that code is
+	// no longer at Line. Empty when the provider does not report one.
+	DiffHunk string `json:"diff_hunk,omitempty" yaml:"diff_hunk,omitempty"`
 	// New reports that the reader has not had this thread on screen before. magus's own
 	// annotation rather than anything the host said: every other field here belongs to the
 	// review, and this one belongs to the reader's history with it.
