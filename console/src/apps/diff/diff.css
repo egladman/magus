@@ -778,11 +778,11 @@
 }
 
 /* max-content alone sizes each row to its OWN text, so a row shorter than the diff's longest
-   line - a code line, a hunk header, a comment, or a story - stopped short of the scroll width
+   line - a code line, a hunk header, a comment, or a touch - stopped short of the scroll width
    that longest line established, and its background (the add/delete tint, or the hunk/comment
    gray) exposed untinted background past its own last character when the reader scrolled right.
    --console-diff-min-row-width (main.ts, from maxLineChars in rows.ts) is that scroll width in
-   PIXELS, not ch: ch is relative to each element's OWN font, and a comment or story row renders
+   PIXELS, not ch: ch is relative to each element's OWN font, and a comment or touch row renders
    in the body font rather than mono, so the same ch count there resolved to a different, smaller
    pixel width than on a code line and fell short all over again.
    width:max-content is what still lets a row LONGER than the floor grow past it (a comment
@@ -1300,10 +1300,10 @@
   border-inline-start: 2px solid var(--pf-t--global--border--color--default);
 }
 
-/* The story: who wrote this file and what they were reading when they did. Sits under the file
+/* The touch: who wrote this file and what they were reading when they did. Sits under the file
  * heading, dimmer than a comment - it is context a reader may want, not something addressed to
  * them, and it must not compete with the code or with an actual remark. */
-.console-diff-row--story {
+.console-diff-row--touch {
   gap: var(--pf-t--global--spacer--xs);
   padding-inline-start: 7ch;
   color: var(--pf-t--global--text--color--subtle);
@@ -1314,11 +1314,137 @@
   border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
 }
 
-.console-diff-row__story {
+.console-diff-row__touch {
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The step heading and the reason under each hunk of a step. Focus mode puts them above the code
+ * they describe: the heading says where in the order the reader is, the reason says why this hunk
+ * is here. Subtle, like the touch row, because they orient the reader rather than address them. */
+.console-diff-row--step,
+.console-diff-row--why {
+  gap: var(--pf-t--global--spacer--sm);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  font-family: var(--pf-t--global--font--family--body);
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 24px;
+  overflow: hidden;
+}
+
+.console-diff-row--step {
+  font-weight: var(--console-chip-weight);
+  color: var(--pf-t--global--text--color--regular);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.console-diff-row--step[data-group="generated"],
+.console-diff-row--step[data-group="unranked"] {
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-row__group {
+  flex: 1 1 auto;
+  overflow: hidden;
+  font-family: var(--pf-t--global--font--family--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-row--why {
+  color: var(--pf-t--global--text--color--subtle);
+  border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
+}
+
+.console-diff-row__symbol {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+.console-diff-row__why {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A reply sits under its root, one indent further in. The border stays the review's colour, so
+ * the pair still reads as one conversation. */
+.console-diff-row--comment[data-reply] {
+  padding-inline-start: 11ch;
+}
+
+/* The code an outdated conversation was about, quoted from the host's own text of the hunk. Mono
+ * and dim: it is a quotation of lines that may no longer exist, not a line of this diff. */
+.console-diff-row--quote {
+  padding-inline-start: 7ch;
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  line-height: 24px;
+  white-space: pre;
+  overflow: hidden;
+  border-inline-start: 3px solid var(--pf-t--global--icon--color--status--info--default);
+}
+
+.console-diff-row__reply {
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  color: var(--console-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--pf-t--global--font--size--xs);
+}
+.console-diff-row__reply:hover { text-decoration: underline; }
+
+/* The reading mark, under the toolbar: since when, and the command the person may run. Same
+ * strip shape as the progress line, for the same reason - each direct child of the toolbar pays
+ * for its own gutter. */
+.console-diff-reading {
+  display: flex;
+  flex: 0 1 auto;
+  gap: var(--pf-t--global--spacer--sm);
+  align-items: center;
+  min-width: 0;
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--console-pad);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+
+.console-diff-reading[hidden] {
+  display: none;
+}
+
+.console-diff-reading__since {
+  flex: 0 0 auto;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-reading__command {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.console-diff-toolbar__reading {
+  flex: 0 0 auto;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+
+.console-diff-toolbar__reading[aria-pressed="true"] {
+  border-color: var(--console-accent);
 }
 
 .console-diff-row__transcript {

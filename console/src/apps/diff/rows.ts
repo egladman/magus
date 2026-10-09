@@ -12,6 +12,7 @@
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
 import type { DiffComment, DiffTouch, ReviewThread } from "./session";
+import type { StepHead, StepPlacement, StepRows } from "./readingorder";
 
 export type ViewMode = "unified" | "split";
 
@@ -86,11 +87,15 @@ export interface PlacedThreads {
 // what it said until this existed.
 //
 // A remark under the FILE heading stays there - the heading is still on screen.
-export function narrowToHunk(placed: PlacedThreads, keep: string): PlacedThreads {
+export function narrowToHunk(
+  placed: PlacedThreads,
+  keep: string | readonly string[],
+): PlacedThreads {
+  const kept = new Set(typeof keep === "string" ? [keep] : keep);
   const atHunk = new Map<string, ReviewThread[]>();
   const spilled: ReviewThread[] = [];
   for (const [key, threads] of placed.atHunk) {
-    if (key === keep) atHunk.set(key, threads);
+    if (kept.has(key)) atHunk.set(key, threads);
     else spilled.push(...threads);
   }
   if (spilled.length === 0) return placed;
@@ -115,12 +120,51 @@ export function placeThreads(
   const elsewhere: ReviewThread[] = [];
   const shown = new Set(files.map((f) => f.path));
 
-  for (const t of threads) {
-    if (t.hunk >= 0 && shown.has(t.path)) push(atHunk, commentKey(t.path, t.hunk), t);
-    else if (shown.has(t.path)) push(atFile, t.path, t);
-    else elsewhere.push(t);
+  // A conversation lands where its root does, root first and replies after in list order. The
+  // wire is flat, and a reply can carry a line the head no longer has even while its root
+  // still has one; placing each comment on its own would split a conversation across hunks.
+  for (const [head, ...replies] of conversations(threads)) {
+    const all = [head, ...replies];
+    if (head.hunk >= 0 && shown.has(head.path)) {
+      for (const t of all) push(atHunk, commentKey(head.path, head.hunk), t);
+    } else if (shown.has(head.path)) {
+      for (const t of all) push(atFile, head.path, t);
+    } else elsewhere.push(...all);
   }
   return { atHunk, atFile, elsewhere };
+}
+
+// rootOf is the id a reply into this comment's conversation is addressed to: the comment's own
+// `root`, or its `id` when it is itself the first comment.
+export function rootOf(thread: ReviewThread): string {
+  return thread.root || thread.id;
+}
+
+// conversations groups the host's flat comments into conversations, each a root followed by its
+// replies, in the order the roots first appear. Replies keep list order, which is oldest first.
+//
+// A reply whose root is not in the list (the host trimmed it, or a page boundary fell between
+// them) still shows: the first such reply heads a conversation of its own rather than the
+// remark being dropped, since "your colleague said nothing" is the one thing this app must not
+// say by accident.
+export function conversations(threads: readonly ReviewThread[]): ReviewThread[][] {
+  const byRoot = new Map<string, ReviewThread[]>();
+  const out: ReviewThread[][] = [];
+  for (const t of threads) {
+    const key = rootOf(t);
+    const at = byRoot.get(key);
+    if (at) {
+      at.push(t);
+      continue;
+    }
+    const fresh = [t];
+    byRoot.set(key, fresh);
+    out.push(fresh);
+  }
+  // A root listed after one of its replies still leads. Array.prototype.sort is stable, so
+  // replies keep their list order behind it.
+  for (const group of out) group.sort((a, b) => Number(Boolean(a.root)) - Number(Boolean(b.root)));
+  return out;
 }
 
 function push(into: Map<string, ReviewThread[]>, key: string, t: ReviewThread): void {
@@ -138,7 +182,15 @@ export type Row =
   | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
   | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewThread }
-  | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
+  | { readonly kind: "touch"; readonly file: DiffFile; readonly touch: DiffTouch }
+  | { readonly kind: "quote"; readonly file: DiffFile; readonly text: string }
+  | { readonly kind: "step"; readonly head: StepHead }
+  | {
+      readonly kind: "why";
+      readonly file: DiffFile;
+      readonly hunk: Hunk;
+      readonly place: StepPlacement;
+    }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
@@ -146,6 +198,22 @@ export type Row =
       readonly left: DiffLine | null;
       readonly right: DiffLine | null;
     };
+
+// QUOTE_LINES caps how much of an outdated conversation's diff_hunk is quoted. A host sends the
+// whole hunk its comment was made on, and the tail is the part nearest the remark.
+const QUOTE_LINES = 6;
+
+// pushThread emits one comment of the host's review. A root whose line is gone is preceded by
+// the text of the hunk it was made on, since the code it was about no longer sits in the head to
+// be read beside it.
+function pushThread(rows: Row[], file: DiffFile, thread: ReviewThread): void {
+  if (thread.outdated && !thread.root && thread.diff_hunk) {
+    for (const text of thread.diff_hunk.split("\n").slice(-QUOTE_LINES)) {
+      rows.push({ kind: "quote", file, text });
+    }
+  }
+  rows.push({ kind: "thread", file, thread });
+}
 
 // buildRows flattens files into the row array for one view mode.
 //
@@ -160,21 +228,23 @@ export function buildRows(
   comments?: Map<string, DiffComment[]>,
   touches?: Map<string, readonly DiffTouch[]>,
   threads?: PlacedThreads,
+  step?: StepRows,
 ): Row[] {
   const rows: Row[] = [];
+  if (step) rows.push({ kind: "step", head: step.head });
   for (const file of files) {
     rows.push({ kind: "file", file });
     // A thread whose line this changeset does not contain still belongs to this file, so it
     // sits under the heading rather than being dropped. A colleague said it; the reader hears
     // it, even when the line it was about has since moved.
     for (const thread of threads?.atFile.get(file.path) ?? []) {
-      rows.push({ kind: "thread", file, thread });
+      pushThread(rows, file, thread);
     }
-    // The story sits under the FILE heading rather than under a hunk, because that is the
+    // The touch sits under the FILE heading rather than under a hunk, because that is the
     // granularity the trail records: an agent wrote the file, and what it had read applies to
     // the edit as a whole. Pinning it to one hunk would claim a precision the data lacks.
     for (const touch of touches?.get(file.path) ?? []) {
-      rows.push({ kind: "story", file, touch });
+      rows.push({ kind: "touch", file, touch });
     }
     // The hunk's OWN index, never its position in the array handed in. A caller rendering a
     // subset of a file passes a shorter list, and keying by position would look that slice's
@@ -182,10 +252,12 @@ export function buildRows(
     for (const hunk of file.hunks) {
       const index = hunk.index;
       rows.push({ kind: "hunk", file, hunk, index });
+      const place = step?.places.get(commentKey(file.path, index));
+      if (place) rows.push({ kind: "why", file, hunk, place });
       // The host's threads first, then this session's own remarks. What a colleague already
       // said is context for what you are about to write, not a footnote to it.
       for (const thread of threads?.atHunk.get(commentKey(file.path, index)) ?? []) {
-        rows.push({ kind: "thread", file, thread });
+        pushThread(rows, file, thread);
       }
       for (const c of comments?.get(commentKey(file.path, index)) ?? []) {
         rows.push({ kind: "comment", file, comment: c });
@@ -385,12 +457,12 @@ export function rowAt(offsets: readonly number[], y: number): number {
   return lo;
 }
 
-// storyText is the sentence a story row renders (main.ts renderRow reads it too, so the two
+// touchText is the sentence a touch row renders (main.ts renderRow reads it too, so the two
 // cannot drift the way a second copy of this composition would). "wrote this after reading X,
 // Y" is the whole point of the row - it is what the agent was looking at when it decided to
 // write this, which no forge can say - and with no reads recorded the sentence stops at the
 // author rather than inventing a reason.
-export function storyText(touch: DiffTouch): string {
+export function touchText(touch: DiffTouch): string {
   const read = touch.read ?? [];
   return read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
 }
@@ -419,7 +491,7 @@ function columnWidth(text: string): number {
 }
 
 // maxLineChars is the rendered width, in character-columns, of the longest line of text the
-// unified view renders - a code line, but also a hunk header, a comment, or a story, any of
+// unified view renders - a code line, but also a hunk header, a comment, or a touch, any of
 // which can outrun the longest code line. The renderer turns it into a per-row min-width floor
 // (diff.css), because a virtualized row otherwise sizes to its OWN text and stops there: a
 // row shorter than whichever row is actually widest had its background end at its own last
@@ -437,7 +509,9 @@ export function maxLineChars(rows: readonly Row[]): number {
     if (row.kind === "line") bump(row.line.text);
     else if (row.kind === "hunk") bump(row.hunk.header);
     else if (row.kind === "comment") bump(row.comment.body);
-    else if (row.kind === "story") bump(storyText(row.touch));
+    else if (row.kind === "touch") bump(touchText(row.touch));
+    else if (row.kind === "quote") bump(row.text);
+    else if (row.kind === "why") bump(row.place.why.text);
   }
   return max;
 }

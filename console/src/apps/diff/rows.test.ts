@@ -18,7 +18,7 @@ import {
   maxLineChars,
   narrowToHunk,
   placeThreads,
-  storyText,
+  touchText,
   ROW_HEIGHT,
   FILE_ROW_HEIGHT,
   type Row,
@@ -424,7 +424,7 @@ const SHORT_LINES = [
   "",
 ].join("\n");
 
-// A hunk header, a comment, and a story sentence can each be longer than every code line in
+// A hunk header, a comment, and a touch sentence can each be longer than every code line in
 // the diff - main.ts renders all of them as .console-diff-row, sharing the same width floor, so
 // maxLineChars has to consider all four kinds or the shorter ones fall short of whichever one
 // is actually widest (the bug this function exists to prevent).
@@ -458,7 +458,7 @@ test("maxLineChars picks up a comment longer than every code line", () => {
   assert.equal(maxLineChars(rows), comments[0].body.length);
 });
 
-test("maxLineChars picks up a story sentence longer than every code line", () => {
+test("maxLineChars picks up a touch sentence longer than every code line", () => {
   const touches = new Map([
     [
       "x.ts",
@@ -466,9 +466,9 @@ test("maxLineChars picks up a story sentence longer than every code line", () =>
     ],
   ]);
   const rows = buildRows(patchFixture(SHORT_LINES), "unified", undefined, touches);
-  const story = rows.find((r) => r.kind === "story");
-  assert.ok(story);
-  assert.equal(maxLineChars(rows), storyText(story.touch).length);
+  const touch = rows.find((r) => r.kind === "touch");
+  assert.ok(touch);
+  assert.equal(maxLineChars(rows), touchText(touch.touch).length);
 });
 
 test("maxLineChars applies in split mode too: hunk headers are emitted regardless of view mode", () => {

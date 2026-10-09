@@ -6,7 +6,7 @@
 // reader meets at /console/diff/#demo is the real app with fabricated input, not a
 // screenshot of one.
 //
-// The changeset is the SAME story every other showcase tells (demo-scenario.ts): the
+// The changeset is the SAME scenario every other showcase tells (demo-scenario.ts): the
 // uncommitted `feat/authkit-claims` branch of the fictional acme monorepo, where one shared
 // library's claims type grew an audience and took down a Go token verifier and a TypeScript
 // web client with it. The trail's reindex-after-checkout beat, the failing
@@ -20,7 +20,17 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import type { DiffReview, ReviewInfo, SessionOp } from "./session";
+import type {
+  DiffGroup,
+  DiffHunkRef,
+  DiffOrder,
+  DiffReview,
+  DiffStepHunk,
+  Reading,
+  ReviewInfo,
+  SessionOp,
+} from "./session";
+import { DEMO_FILES } from "./gen/demo";
 
 // The patch is an array of lines rather than one template literal because Go struct tags are
 // backtick-quoted: a template literal would need every one of them escaped, and an escaped
@@ -36,13 +46,203 @@ const HINT_OUTPUT =
 const HINT_UNCLAIMED =
   "no project declares this path: it invalidates no cache key, but directory containment still seeds its owning project into the affected set, so touching it reruns work; declare it, or ignore it deliberately";
 
-// The agent that wrote most of this branch, and the transcript the story rows point at. magus
+// The agent that wrote most of this branch, and the transcript the touch rows point at. magus
 // never opens the transcript - the path is shown so the reader can open their own host's log.
 const AGENT = {
   host: "claude-code",
   session: "sess-7f21",
   transcript: "~/.claude/projects/acme/7f21.jsonl",
 } as const;
+
+// ref addresses one fixture hunk the way the server's order does. The digest is read from the
+// parsed fixture rather than repeated here, so the order cannot drift from the patch it orders.
+function ref(path: string, index: number): DiffHunkRef {
+  const hunk = DEMO_FILES.find((f) => f.path === path)?.hunks?.find((h) => h.index === index);
+  if (!hunk) throw new Error(`demo order names ${path} hunk ${index}, which the fixture lacks`);
+  return { path, index, digest: hunk.digest };
+}
+
+function placed(
+  path: string,
+  index: number,
+  label: string,
+  why: DiffStepHunk["why"],
+): DiffStepHunk {
+  return { hunk: ref(path, index), label, why };
+}
+
+// demoOrder is the reading order the server would send for the acme changeset: the claims
+// contract first, then each thing that follows from it, then the generated output, then the two
+// hunks nothing could place. Every one of the 14 hunks appears once, which is what count says.
+function demoOrder(): DiffOrder {
+  const claims = "Claims";
+  const groups: DiffGroup[] = [
+    {
+      kind: "connected",
+      label: claims,
+      hunks: 7,
+      reach: 38,
+      steps: [
+        {
+          number: 1,
+          hunks: [
+            placed("libs/authkit/claims.go", 0, claims, {
+              relation: "starts",
+              text: "defines Claims; the steps below use it",
+            }),
+            placed("libs/authkit/claims.go", 1, "Claims.Valid", {
+              relation: "continues",
+              text: "continues the previous hunk of this file",
+            }),
+          ],
+        },
+        {
+          number: 2,
+          hunks: [
+            placed("libs/authkit/audience.go", 0, "Audience", {
+              relation: "used_by",
+              step: 1,
+              symbol: "Audience",
+              text: "defines Audience, which Claims uses (step 1)",
+            }),
+          ],
+        },
+        {
+          number: 3,
+          hunks: [
+            placed("services/identity/internal/token/verify.go", 0, "Verifier.Verify", {
+              relation: "uses",
+              step: 1,
+              symbol: "Claims.Valid",
+              text: "uses Claims.Valid, defined in step 1",
+            }),
+          ],
+        },
+        {
+          number: 4,
+          hunks: [
+            placed(
+              "services/identity/internal/token/verify_test.go",
+              0,
+              "TestVerifyAudienceMismatch",
+              {
+                relation: "tests",
+                step: 3,
+                symbol: "Verifier.Verify",
+                text: "tests Verifier.Verify, changed in step 3",
+              },
+            ),
+          ],
+        },
+        {
+          number: 5,
+          hunks: [
+            placed("services/gateway/internal/mint/token.go", 0, "Minter.For", {
+              relation: "uses",
+              step: 1,
+              symbol: "Claims",
+              text: "uses Claims, defined in step 1",
+            }),
+          ],
+        },
+        {
+          number: 6,
+          hunks: [
+            placed("services/gateway/internal/mint/token_test.go", 0, "TestMinterFor", {
+              relation: "tests",
+              step: 5,
+              symbol: "Minter.For",
+              text: "tests Minter.For, changed in step 5",
+            }),
+          ],
+        },
+      ],
+    },
+    {
+      kind: "connected",
+      label: "SessionClaims",
+      hunks: 2,
+      reach: 14,
+      steps: [
+        {
+          number: 7,
+          hunks: [
+            placed("apps/dashboard/src/api/session.ts", 0, "SessionClaims", {
+              relation: "starts",
+              text: "defines SessionClaims; canReach uses it",
+            }),
+            placed("apps/dashboard/src/api/session.ts", 1, "canReach", {
+              relation: "uses",
+              step: 7,
+              symbol: "SessionClaims",
+              text: "uses SessionClaims, defined in this step",
+            }),
+          ],
+        },
+      ],
+    },
+    {
+      kind: "generated",
+      hunks: 3,
+      reach: 0,
+      steps: [
+        {
+          number: 8,
+          hunks: [
+            placed("libs/protocol/gen/token_pb.go", 0, "Token.GetClaims", {
+              relation: "generated",
+              text: "generated output, read after the source that produced it",
+            }),
+          ],
+        },
+        {
+          number: 9,
+          hunks: [
+            placed("apps/dashboard/src/gen/session_pb.ts", 0, "", {
+              relation: "generated",
+              text: "generated output, read after the source that produced it",
+            }),
+          ],
+        },
+        {
+          number: 10,
+          hunks: [
+            placed("docs/gen/auth/tokens.html", 0, "", {
+              relation: "generated",
+              text: "generated output, read after the source that produced it",
+            }),
+          ],
+        },
+      ],
+    },
+    {
+      kind: "unranked",
+      hunks: 2,
+      reach: 0,
+      steps: [
+        {
+          number: 11,
+          hunks: [
+            placed("services/identity/internal/token/legacy_audience.go", 0, "", {
+              relation: "unranked",
+              text: "deleted file: nothing is left to link a definition to",
+            }),
+          ],
+        },
+        {
+          number: 12,
+          hunks: [
+            placed("docs/auth/tokens.md", 0, "", {
+              relation: "unranked",
+              text: "prose defines no indexed symbol",
+            }),
+          ],
+        },
+      ],
+    },
+  ];
+  return { groups, count: { hunks: 14, placed: 14, complete: true } };
+}
 
 // demoSession returns the annotated changeset and the paired-review state.
 //
@@ -76,6 +276,7 @@ export function demoSession(): DiffReview {
         "history lens walked the last 214 commits: libs/authkit/audience.go appears in none of them, so it carries no churn and no hotspot rank",
         "no coverage measured for docs (the project declares no coverage-producing target)",
       ],
+      order: demoOrder(),
       files: [
         {
           path: "libs/authkit/claims.go",
@@ -236,7 +437,7 @@ export function demoSession(): DiffReview {
           visibility: "internal",
           reach: 3,
           churn: { commits: 24, authors: 2, score: 2304, rank: 4 },
-          // No reads recorded, so the story row stops at the author rather than inventing a
+          // No reads recorded, so the touch row stops at the author rather than inventing a
           // reason - the case worth having in the showcase.
           touches: [{ host: AGENT.host, session: AGENT.session }],
         },
@@ -336,13 +537,14 @@ export function demoSession(): DiffReview {
 }
 
 // demoReview is the pull request the acme branch has open, and what has already been said on
-// it. Same story as everything else in this file: the claims contract grew an audience, and
+// it. Same scenario as everything else in this file: the claims contract grew an audience, and
 // the people who consume it are asking about it in public.
 //
-// The four threads cover every way a remark can land, which is the point of having four. Two
-// sit on hunks the reader can see. One is on a file in this changeset but a line outside its
-// hunks, because the code moved after the remark was written. One is on a file this changeset
-// does not touch at all, because a review covers commits a working diff does not.
+// The threads cover every way a remark can land. Two sit on hunks the reader can see, and one of
+// them is a conversation with two replies. Two are on a file in this changeset but a line outside
+// its hunks, because the code moved after the remark was written; one of those is outdated and
+// carries the host's text of the hunk it was made on. One is on a file this changeset does not
+// touch at all, because a review covers commits a working diff does not.
 //
 // The last two are why placement is not just a lookup: an app that dropped them would be
 // telling the reader a colleague said nothing, which is the worst thing a review can say.
@@ -366,6 +568,43 @@ export function demoReview(): ReviewInfo {
         hunk: 0,
         author: "priya",
         body: "Audience as a slice means a token can verify at two services. Was that the intent, or should it be one?",
+      },
+      // The rest of th1's conversation. The wire is flat, so each reply is a record of its own
+      // naming the conversation's first comment as its root, listed after it, oldest first.
+      {
+        id: "th1-a",
+        root: "th1",
+        path: "libs/authkit/claims.go",
+        line: 24,
+        hunk: 0,
+        author: "marcus",
+        body: "One service. The verifier compares against a single audience today.",
+      },
+      {
+        id: "th1-b",
+        root: "th1",
+        path: "libs/authkit/claims.go",
+        line: 24,
+        hunk: 0,
+        author: "priya",
+        body: "Then the docstring should say so. I will hold the approval until it does.",
+      },
+      {
+        // A remark on a line this branch has since rewritten: the host keeps the hunk it was
+        // made on, and the line is gone from the head, so it sits under the file heading with
+        // that text quoted above it.
+        id: "th5",
+        path: "services/identity/internal/token/verify.go",
+        line: 12,
+        hunk: -1,
+        outdated: true,
+        diff_hunk:
+          "@@ -10,6 +10,6 @@ func (v *Verifier) Verify(ctx context.Context, raw string)\n" +
+          " \tclaims, err := v.parse(raw)\n" +
+          "-\tif claims.Audience != v.service {\n" +
+          '+\tif claims.Audience != v.service && claims.Scope == "" {',
+        author: "marcus",
+        body: "This fallback to scope lets a scope-only token through. Is that still wanted?",
       },
       {
         id: "th2",
@@ -413,33 +652,47 @@ export function applyDemoPublish(session: DiffReview): DiffReview {
   };
 }
 
-// applyDemoReply is the showcase's reply: the answer joins the thread it answers.
+// applyDemoReply is the showcase's reply: the answer joins the conversation rooted at `root`.
 //
-// Appended directly after the thread rather than at the end, because that is where a reply
-// belongs in a conversation, and a showcase that piled every answer at the bottom would teach
-// the reader a shape the real app does not have.
+// Appended after the conversation's last comment rather than at the end of the list, because
+// that is where a reply belongs, and a showcase that piled every answer at the bottom would
+// teach the reader a shape the real app does not have.
 export function applyDemoReply(
   review: ReviewInfo | null,
-  thread: string,
+  root: string,
   body: string,
 ): ReviewInfo | null {
   if (!review) return review;
-  const at = review.threads.findIndex((t) => t.id === thread);
-  if (at < 0) return review;
-  const answered = review.threads[at];
-  if (!answered) return review;
+  const head = review.threads.find((t) => t.id === root);
+  if (!head) return review;
+  let last = -1;
+  review.threads.forEach((t, i) => {
+    if (t.id === root || t.root === root) last = i;
+  });
   const threads = [...review.threads];
-  threads.splice(at + 1, 0, {
-    id: `${thread}-r`,
-    path: answered.path,
-    line: answered.line,
-    // A reply lands where the thread it answers landed, which is what keeps it beside the same
-    // code rather than jumping to the file heading.
-    hunk: answered.hunk,
+  threads.splice(last + 1, 0, {
+    id: `${root}-r${last + 1}`,
+    root,
+    path: head.path,
+    line: head.line,
+    // A reply lands where the conversation landed, which is what keeps it beside the same code
+    // rather than jumping to the file heading.
+    hunk: head.hunk,
     author: "you",
     body,
   });
   return { ...review, threads };
+}
+
+// demoReading is the showcase's reading mark. The command is the line the server would hand the
+// person to run; the showcase shows it and, like the real app, never runs it.
+export function demoReading(on: boolean): Reading | null {
+  if (!on) return null;
+  return {
+    reading: true,
+    since: Date.now(),
+    command: "gh pr comment 482 --repo acme/acme --body 'eli is reading this now'",
+  };
 }
 
 // demoRun is the showcase's stand-in for the server's run route: pressing the verdict button has

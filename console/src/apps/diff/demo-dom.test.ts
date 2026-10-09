@@ -48,9 +48,9 @@ test("#demo renders the changeset with no server", async () => {
   );
   assert.equal(paths[0], "libs/authkit/claims.go");
 
-  // Rows the server's annotations produce, not the patch's: a story row is a touch, and the
+  // Rows the server's annotations produce, not the patch's: a touch row is one, and the
   // text row proves the patch body reached the virtualizer.
-  assert.ok(document.querySelector(".console-diff-row--story"));
+  assert.ok(document.querySelector(".console-diff-row--touch"));
   const text = [...document.querySelectorAll(".console-diff-row__text")].map(
     (el) => el.textContent,
   );
@@ -298,10 +298,10 @@ async function setFocusMode(on: boolean): Promise<void> {
   await settle();
 }
 
-// Focus mode: one hunk, and a pass that says where it is. The counts describe the WHOLE
-// changeset while the stream shows one hunk, which is the part worth pinning - a progress line
-// computed from what is on screen would read "hunk 1 of 1" forever.
-test("#demo focus mode shows one hunk and counts the whole pass", async () => {
+// Focus mode: one step, and a pass that says where it is. The counts describe the WHOLE
+// changeset while the stream shows one step, which is the part worth pinning - a progress line
+// computed from what is on screen would read "step 1 of 1" forever.
+test("#demo focus mode shows one step and counts the whole pass", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
@@ -312,11 +312,58 @@ test("#demo focus mode shows one hunk and counts the whole pass", async () => {
   assert.equal(root?.dataset.focus, "on");
   assert.match(
     document.querySelector(".console-diff-progress__text")?.textContent ?? "",
-    /hunk 1 of 14/,
+    /step 1 of 12, 0 of 14 hunks read/,
     "the pass is counted over the changeset, not over what is on screen",
   );
-  // One hunk heading in the stream is the whole claim of the mode.
-  assert.equal(document.querySelectorAll(".console-diff-row--hunk").length, 1);
+  // The first step is the two hunks of the claims contract, shown together: the heading names
+  // the group and the hunk count, and the hunk under it carries the server's reason. (The second
+  // hunk starts below the virtualized window, so only the heading proves it is in the step.)
+  assert.match(
+    document.querySelector(".console-diff-row--step")?.textContent ?? "",
+    /Step 1 of 12.*Claims.*2 hunks/,
+  );
+  assert.match(
+    document.querySelector(".console-diff-row--why")?.textContent ?? "",
+    /defines Claims; the steps below use it/,
+  );
+  assert.equal(
+    document.querySelectorAll(".console-diff-row--step").length,
+    1,
+    "one heading for the step, not one per hunk",
+  );
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
+// The order's later groups follow the connected ones, and the reason each hunk carries is the
+// server's sentence rather than anything the console derived.
+test("#demo focus mode walks the generated and unplaced groups after the connected ones", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+  for (let i = 0; i < 7; i++) {
+    assert.ok(dispatchCommand("diff.hunk.next"));
+    await settle();
+  }
+  const step = document.querySelector<HTMLElement>(".console-diff-row--step");
+  assert.equal(step?.dataset.group, "generated");
+  assert.match(step?.textContent ?? "", /Step 8 of 12.*generated output/);
+  assert.match(
+    document.querySelector(".console-diff-row--why")?.textContent ?? "",
+    /generated output, read after the source that produced it/,
+  );
+
+  for (let i = 0; i < 3; i++) {
+    assert.ok(dispatchCommand("diff.hunk.next"));
+    await settle();
+  }
+  assert.equal(
+    document.querySelector<HTMLElement>(".console-diff-row--step")?.dataset.group,
+    "unranked",
+  );
 
   await setFocusMode(false);
   dispose.deactivate();
@@ -336,8 +383,8 @@ test("#demo focus mode marks read and advances on one key", async () => {
 
   assert.match(
     document.querySelector(".console-diff-progress__text")?.textContent ?? "",
-    /hunk 2 of 14, 1 read/,
-    "one key marks this hunk and moves to the next",
+    /step 2 of 12, 2 of 14 hunks read/,
+    "one key marks every hunk of this step and moves to the next",
   );
 
   await setFocusMode(false);
@@ -680,6 +727,130 @@ test("the head names the app and the two sides being compared", async () => {
     head?.querySelector(".console-diff-toolbar__scope")?.textContent,
     "working tree vs HEAD",
   );
+
+  dispose.deactivate();
+});
+
+// A conversation on the review is its root and then its replies, indented under it. The wire is
+// flat, so this is the grouping done at render time; the first hunk of claims.go carries one.
+test("#demo renders a conversation as a root with its replies indented beneath it", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>('.console-diff-row[data-author="review"]'),
+  ];
+  const ids = rows.map((el) => el.dataset.commentId);
+  const at = ids.indexOf("th1");
+  assert.deepEqual(
+    ids.slice(at, at + 3),
+    ["th1", "th1-a", "th1-b"],
+    "root first, replies oldest first",
+  );
+  assert.equal(rows[at]?.hasAttribute("data-reply"), false);
+  assert.equal(rows[at + 1]?.hasAttribute("data-reply"), true);
+  assert.equal(rows[at + 2]?.hasAttribute("data-reply"), true);
+  // One Reply for the conversation, on its root, and none on the replies.
+  const buttons = [...document.querySelectorAll<HTMLButtonElement>(".console-diff-row__reply")];
+  assert.equal(buttons.filter((b) => b.dataset.threadId === "th1").length, 1);
+  assert.equal(rows[at + 1]?.querySelector(".console-diff-row__reply"), null);
+
+  dispose.deactivate();
+});
+
+// A remark whose line has gone from the head: the host's own text of the hunk stands in for the
+// code. It sits on verify.go, which the reading order reaches at its third step; focus mode keeps
+// the stream to that step, so the rows are within the virtualized window.
+test("#demo marks an outdated conversation and quotes the code it was about", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  await setFocusMode(true);
+  for (let i = 0; i < 2; i++) {
+    assert.ok(dispatchCommand("diff.hunk.next"));
+    await settle();
+  }
+  const outdated = document.querySelector<HTMLElement>('.console-diff-row[data-comment-id="th5"]');
+  assert.ok(outdated, "the outdated remark is on the stream, not dropped");
+  assert.match(outdated.textContent ?? "", /outdated/);
+  const quoted = [...document.querySelectorAll(".console-diff-row--quote")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(quoted.some((t) => t?.includes("claims.Audience != v.service && claims.Scope")));
+
+  await setFocusMode(false);
+  dispose.deactivate();
+});
+
+// The button and the `a` key are the same act on the same conversation. The reply lands in the
+// conversation it answers (its root), not beside it as a new one.
+test("#demo's Reply button answers the conversation by its root", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const button = document.querySelector<HTMLButtonElement>(
+    '.console-diff-row__reply[data-thread-id="th1"]',
+  );
+  assert.ok(button);
+  button.click();
+  const box = document.querySelector<HTMLElement>(".console-diff-composer");
+  assert.match(box?.textContent ?? "", /Reply to priya/);
+  const field = box?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(field);
+  field.value = "agreed";
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+  await settle();
+
+  const ids = [
+    ...document.querySelectorAll<HTMLElement>('.console-diff-row[data-author="review"]'),
+  ].map((el) => el.dataset.commentId ?? "");
+  const at = ids.indexOf("th1");
+  assert.equal(
+    ids[at + 3]?.startsWith("th1-r"),
+    true,
+    `the reply follows the whole conversation: ${ids}`,
+  );
+  const reply = document.querySelector<HTMLElement>(
+    `.console-diff-row[data-comment-id="${ids[at + 3]}"]`,
+  );
+  assert.equal(reply?.hasAttribute("data-reply"), true);
+
+  dispose.deactivate();
+});
+
+// The reading mark: pressed state, since when, and a command the person may copy. It is shown in
+// a read-only element and never run from here.
+test("#demo's reading toggle shows since when and the command to copy", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const toggle = document.querySelector<HTMLButtonElement>(".console-diff-toolbar__reading");
+  assert.ok(toggle);
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
+  assert.equal(document.querySelector<HTMLElement>(".console-diff-reading")?.hidden, true);
+
+  toggle.click();
+  await settle();
+  assert.equal(toggle.getAttribute("aria-pressed"), "true");
+  const strip = document.querySelector<HTMLElement>(".console-diff-reading");
+  assert.equal(strip?.hidden, false);
+  assert.match(
+    strip?.querySelector(".console-diff-reading__since")?.textContent ?? "",
+    /^reading since /,
+  );
+  const command = strip?.querySelector<HTMLElement>("code.console-diff-reading__command");
+  assert.match(command?.textContent ?? "", /^gh pr comment 482 --repo acme\/acme/);
+  assert.equal(command?.isContentEditable, false);
+  assert.equal(strip?.querySelector("button")?.textContent, "Copy");
+
+  toggle.click();
+  await settle();
+  assert.equal(toggle.getAttribute("aria-pressed"), "false");
+  assert.equal(document.querySelector<HTMLElement>(".console-diff-reading")?.hidden, true);
 
   dispose.deactivate();
 });

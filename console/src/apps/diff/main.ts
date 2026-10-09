@@ -48,7 +48,8 @@ import {
   anchorLine,
   maxLineChars,
   placeThreads,
-  storyText,
+  rootOf,
+  touchText,
   LINE_PREFIX_CHARS,
   type PlacedThreads,
   type Row,
@@ -64,6 +65,15 @@ import {
   riskChips,
   type OrderedChangeset,
 } from "./order";
+import {
+  firstUnreadStep,
+  readingSteps,
+  stepFiles,
+  stepIndexOf,
+  stepRows,
+  type ReadingStep,
+  type StepRows,
+} from "./readingorder";
 import { reportFailure } from "../../lib/notifications";
 import { detectLanguage, tokenize, type Language } from "./syntax";
 import {
@@ -77,7 +87,9 @@ import {
   mutate,
   publish,
   reply,
+  setReading,
   HttpError,
+  type Reading,
   type DiffComment,
   type DiffReview,
   type DiffAnnotation,
@@ -99,6 +111,7 @@ import {
   applyDemoPublish,
   applyDemoReply,
   applyDemoOp,
+  demoReading,
 } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../../desktop/commands";
@@ -216,18 +229,26 @@ interface State {
   // default, which is what makes a second pass cost only the second pass: a reviewer who asked
   // for changes comes back to a changeset that is mostly what they already read.
   showSettled: boolean;
-  // focus narrows the stream to ONE hunk. The counts, the reading order and the threads are all
+  // focus narrows the stream to ONE step: the hunks the reading order shows together, or a single
+  // hunk when the server computed no order. The counts, the reading order and the threads are all
   // still computed over the whole changeset - what changes is how much of it is asked of the
   // reader at once.
   focus: boolean;
-  // focusAt is the hunk focus mode is showing, held as a path and the hunk's own index rather
-  // than a row number: rows are rebuilt on every fold, mode switch and annotation, and a row
-  // number would point at different code afterwards.
+  // focusAt is a hunk of the step focus mode is showing, held as a path and the hunk's own index
+  // rather than a row number: rows are rebuilt on every fold, mode switch and annotation, and a
+  // row number would point at different code afterwards. The step is whichever one holds it.
   focusAt: { path: string; index: number } | null;
   // pairs is every (file, hunk) in the visible changeset, in reading order, and it is built
-  // BEFORE the focus slice - which is what lets "hunk 4 of 14" and the progress bar keep
-  // describing the whole pass while the stream shows one hunk.
+  // BEFORE the focus slice - which is what lets "step 4 of 9" and the progress bar keep
+  // describing the whole pass while the stream shows one step.
   pairs: { path: string; index: number; digest: string }[];
+  // steps is pairs grouped into the units focus mode moves between. ordered says the server's
+  // order produced them; false means each is one hunk in file order and there is no reason to show.
+  steps: ReadingStep[];
+  ordered: boolean;
+  // reading is the review's "I am reading this" mark as the server last answered it. Null is
+  // off, or never asked.
+  reading: Reading | null;
   // branches maps a path to the other branches changing it, as of the reader's last fetch. Null
   // until the lookup lands, and null is not an empty map: one means "not asked yet or the backend
   // cannot say", the other would mean "asked, and nothing competes".
@@ -451,6 +472,9 @@ export function activate(host: HTMLElement): AppInstance {
     focus: focusCell.get(),
     focusAt: null,
     pairs: [],
+    steps: [],
+    ordered: false,
+    reading: null,
     branches: null,
     branchesUnsupported: "",
     roleFilter: hashRole(),
@@ -656,11 +680,55 @@ export function activate(host: HTMLElement): AppInstance {
   // holds. The legend is a reading rather than an action, so it goes to the readout row it
   // annotates - beside the counts, and the first thing to go when that row runs out of room.
   const actions = h("div", "console-diff-toolbar__actions");
-  actions.append(verdictButton, focusButton);
+
+  // The reading mark. A toggle rather than a one-shot because the mark has an end: leaving the
+  // review clears it, and a mark that cannot be cleared reads as a claim nobody can retract.
+  const readingButton = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__reading",
+    "Reading",
+  ) as HTMLButtonElement;
+  readingButton.type = "button";
+  readingButton.setAttribute("aria-pressed", "false");
+  readingButton.title = "Mark this review as being read. Nothing is sent to the review host.";
+  readingButton.addEventListener("click", () => void toggleReading());
+
+  // While the mark is on: since when, and the command the PERSON may run to tell the review's
+  // participants. The command is shown and copyable and never run from here, because the one
+  // sentence that leaves this machine is typed by a person, like every other.
+  const readingEl = h("div", "console-diff-reading");
+  readingEl.hidden = true;
+  const readingSince = h("span", "console-diff-reading__since");
+  const readingCommand = h("code", "console-diff-reading__command");
+  readingCommand.setAttribute("aria-label", "Command that tells the review you are reading");
+  const readingCopy = h(
+    "button",
+    "pf-v6-c-button pf-m-link pf-m-small console-diff-reading__copy",
+    "Copy",
+  ) as HTMLButtonElement;
+  readingCopy.type = "button";
+  readingCopy.addEventListener("click", () => {
+    const command = state.reading?.command;
+    if (!command) return;
+    (navigator.clipboard?.writeText(command) ?? Promise.reject(new Error("no clipboard"))).then(
+      () => {
+        readingCopy.textContent = "Copied";
+      },
+      (e: unknown) =>
+        reportFailure(
+          "Review",
+          "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
+          "reading:copy",
+        ),
+    );
+  });
+  readingEl.append(readingSince, readingCommand, readingCopy);
+
+  actions.append(verdictButton, readingButton, focusButton);
   head.append(eyebrow, scopeEl, actions);
   readout.append(statsEl, keysWrap);
 
-  toolbar.append(head, readout, collaborationNotice, progressEl);
+  toolbar.append(head, readout, collaborationNotice, readingEl, progressEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -875,12 +943,45 @@ export function activate(host: HTMLElement): AppInstance {
         el.append(label("read", "pf-m-green", "Marked read. Press v to unmark."));
       return el;
     }
-    if (row.kind === "story") {
-      const el = h("div", "console-diff-row console-diff-row--story");
+    if (row.kind === "step") {
+      const { head } = row;
+      const el = h("div", "console-diff-row console-diff-row--step");
+      el.dataset.group = head.group ?? "";
+      el.append(h("span", "console-diff-row__step", `Step ${head.position} of ${head.total}`));
+      // The group is named by the symbol its first hunk defines. The generated and unranked
+      // groups have no such name, so they say what they are.
+      const group =
+        head.group === "generated"
+          ? "generated output"
+          : head.group === "unranked"
+            ? "not placed by the order"
+            : head.label;
+      if (group) el.append(h("span", "console-diff-row__group", group));
+      el.append(
+        label(`${head.hunks} ${head.hunks === 1 ? "hunk" : "hunks"}`, undefined, "In this step"),
+      );
+      return el;
+    }
+    if (row.kind === "why") {
+      const el = h("div", "console-diff-row console-diff-row--why");
+      el.dataset.relation = row.place.why.relation;
+      if (row.place.label) el.append(h("span", "console-diff-row__symbol", row.place.label));
+      el.append(h("span", "console-diff-row__why", row.place.why.text));
+      return el;
+    }
+    if (row.kind === "quote") {
+      // The outdated conversation's code, as the host saw it. Plain text: it is a quotation
+      // of lines that may no longer exist, not a line of this diff to highlight.
+      const el = h("div", "console-diff-row console-diff-row--quote");
+      el.append(h("span", "console-diff-row__text", row.text || " "));
+      return el;
+    }
+    if (row.kind === "touch") {
+      const el = h("div", "console-diff-row console-diff-row--touch");
       const who = h("span", "console-diff-row__who");
       who.textContent = row.touch.host || "agent";
-      const what = h("span", "console-diff-row__story");
-      what.textContent = storyText(row.touch);
+      const what = h("span", "console-diff-row__touch");
+      what.textContent = touchText(row.touch);
       el.append(who, what);
       const ran = row.touch.ran ?? [];
       if (ran.length) {
@@ -910,18 +1011,41 @@ export function activate(host: HTMLElement): AppInstance {
       // A colleague's remark, already on the host's review. It renders in the comment row's
       // shape and NOT in its colors: the reader has to be able to tell at a glance what is
       // still theirs to send from what the world has already seen.
+      const thread = row.thread;
       const el = h("div", "console-diff-row console-diff-row--comment");
       el.dataset.author = "review";
+      // Each comment keeps its own id: the seen watermark advances per comment, and a reply is
+      // new on its own even when its root is not.
+      el.dataset.commentId = thread.id;
+      // A reply sits under its root, indented; the root is the conversation's head.
+      if (thread.root) el.dataset.reply = "";
       const who = h("span", "console-diff-row__who");
-      who.textContent = row.thread.author || "review";
+      who.textContent = thread.author || "review";
       const said = h("span", "console-diff-row__comment console-diff-md");
-      setMarkdown(said, row.thread.body);
+      setMarkdown(said, thread.body);
       el.append(who, said);
       // "new" first: it is the reason to read this row rather than skim past it, and the server
       // marks it only on the response that first carried the thread - so it answers "since last
       // time" rather than "recently", which decays into a badge that is always on.
-      if (row.thread.new) el.append(label("new", "pf-m-orange"));
+      if (thread.new) el.append(label("new", "pf-m-orange"));
+      if (thread.root) return el;
+      if (thread.outdated) {
+        el.append(
+          label("outdated", "pf-m-grey", "The line this was said about is no longer in the code"),
+        );
+      }
       el.append(label("on the review", "pf-m-blue"));
+      // One Reply per conversation, on its root, keyed by the root's id so a test or a script can
+      // find the conversation without counting rows.
+      const replyBtn = h("button", "console-diff-row__reply", "Reply") as HTMLButtonElement;
+      replyBtn.type = "button";
+      replyBtn.dataset.threadId = rootOf(thread);
+      replyBtn.title = "Reply to this conversation on the review (a)";
+      replyBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        composeReply(thread);
+      });
+      el.append(replyBtn);
       return el;
     }
     if (row.kind === "comment") {
@@ -1464,7 +1588,7 @@ export function activate(host: HTMLElement): AppInstance {
 
   // monoCharWidth measures the mono font's actual character advance, in pixels, so the row-width
   // floor below can be set in px instead of ch. ch is relative to EACH element's own font, and a
-  // comment or story row renders in the body font (see .console-diff-row--comment), not mono - the
+  // comment or touch row renders in the body font (see .console-diff-row--comment), not mono - the
   // same ch count on those rows resolved to a smaller pixel width than on a code line, so their
   // background fell short of the scroll width all over again. The probe is measured off-DOM
   // (position: absolute, visibility: hidden) and over many characters, not one, because a single
@@ -1482,48 +1606,46 @@ export function activate(host: HTMLElement): AppInstance {
     return width;
   };
 
-  // focusSlice narrows the file list to the one hunk focus mode is showing.
-  //
-  // A slice, not a filter of the rows: buildRows takes files, so everything downstream - the
-  // offsets, the hunk marks, the thread placement - recomputes for what is actually on screen
-  // rather than being patched afterwards. It is safe to renumber nothing because a hunk carries
-  // its own index (see Hunk.index); keying by array position here would move every remark.
-  const focusSlice = (files: DiffFile[]): DiffFile[] => {
-    const want = state.focusAt;
-    for (const file of files) {
-      if (want && file.path !== want.path) continue;
-      for (const hunk of file.hunks) {
-        if (want && hunk.index !== want.index) continue;
-        state.focusAt = { path: file.path, index: hunk.index };
-        return [{ ...file, hunks: [hunk] }];
-      }
-    }
-    // The hunk went away - a fold, a re-read, a tree that moved. Fall back to the first one
-    // rather than showing nothing: an empty stream would read as "the change is gone".
-    const first = files[0];
-    const firstHunk = first?.hunks[0];
-    if (!first || !firstHunk) return files;
-    state.focusAt = { path: first.path, index: firstHunk.index };
-    return [{ ...first, hunks: [firstHunk] }];
-  };
-
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated, state.showSettled);
     // Built from the WHOLE visible changeset, before any narrowing, because the counts describe
-    // the pass and not the screen.
-    state.pairs = state.files.flatMap((f) =>
-      f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
+    // the pass and not the screen. The steps are the server's reading order laid over exactly
+    // these hunks, or one step per hunk in file order when it sent none.
+    state.steps = readingSteps(
+      state.session?.diff?.order,
+      state.files.flatMap((f) =>
+        f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
+      ),
+    );
+    state.ordered = state.steps.some((s) => s.group !== undefined);
+    state.pairs = state.steps.flatMap((s) =>
+      s.hunks.map((h) => ({ path: h.path, index: h.index, digest: h.digest })),
     );
     // Resume on the FIRST rebuild of a remembered pass, not just when the mode is toggled on.
-    // setFocus seeds focusAt, but a reader who left in focus mode arrives with it null, and
-    // focusSlice's fallback is the first hunk - so the remembered preference, which is the common
-    // path, restarted the pass at the top every time and the docs promised otherwise.
-    if (state.focus && state.pairs.length > 0) {
+    // setFocus seeds focusAt, but a reader who left in focus mode arrives with it null, so the
+    // remembered preference, which is the common path, would restart the pass at the top every
+    // time and the docs promise otherwise.
+    //
+    // The slice is a narrowing of the file list, not a filter of the rows: buildRows takes files,
+    // so everything downstream - the offsets, the hunk marks, the thread placement - recomputes
+    // for what is on screen. Nothing is renumbered because a hunk carries its own index (see
+    // Hunk.index); keying by array position here would move every remark.
+    let placement: StepRows | null = null;
+    if (state.focus && state.steps.length > 0) {
       state.focusAt ??= firstUnread();
-      state.files = focusSlice(state.files);
+      // The step went away - a fold, a re-read, a tree that moved. Fall back to the first one
+      // rather than showing nothing: an empty stream would read as "the change is gone".
+      const at = Math.max(0, stepIndexOf(state.steps, state.focusAt));
+      const step = state.steps[at];
+      const first = step?.hunks[0];
+      if (step && first) {
+        state.focusAt = { path: first.path, index: first.index };
+        state.files = stepFiles(step, state.files);
+        if (state.ordered) placement = stepRows(state.steps, at);
+      }
     }
     // Touches come from the annotations, so the first paint has none and the stream gains the
-    // story rows when the review lands - the same two-phase shape everything else here uses.
+    // touch rows when the review lands - the same two-phase shape everything else here uses.
     const touches = new Map<string, readonly DiffTouch[]>();
     for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
@@ -1532,14 +1654,16 @@ export function activate(host: HTMLElement): AppInstance {
     // group or switching to split changes which hunk a line sits in, and a placement computed
     // once would leave a colleague's remark pinned to whatever used to be there.
     state.threads = state.review ? placeThreads(state.files, state.review.threads) : null;
-    // Focus mode renders ONE hunk, so a remark on any other hunk of the same file is bucketed
-    // under a key nothing emits - rendered nowhere, counted nowhere, and absent from the
-    // elsewhere listing that exists to guarantee no remark is ever silently dropped. Moving them
-    // to elsewhere is what keeps that guarantee true when the stream narrows.
+    // Focus mode renders one step, so a remark on any hunk outside it is bucketed under a key
+    // nothing emits - rendered nowhere, counted nowhere, and absent from the elsewhere listing
+    // that exists to guarantee no remark is ever silently dropped. Moving them to elsewhere is
+    // what keeps that guarantee true when the stream narrows.
     if (state.focus && state.threads) {
       state.threads = narrowToHunk(
         state.threads,
-        state.focusAt ? commentKey(state.focusAt.path, state.focusAt.index) : "",
+        state.focusAt
+          ? state.files.flatMap((f) => f.hunks.map((x) => commentKey(f.path, x.index)))
+          : "",
       );
     }
     state.rows = buildRows(
@@ -1548,6 +1672,7 @@ export function activate(host: HTMLElement): AppInstance {
       byHunk(state.session?.comments ?? []),
       touches,
       state.threads ?? undefined,
+      placement ?? undefined,
     );
     state.hunks = hunkRowIndexes(state.rows);
     state.hunkOrdinalByRow = hunkOrdinal(state.rows);
@@ -1635,6 +1760,54 @@ export function activate(host: HTMLElement): AppInstance {
       );
     }
     return chips;
+  };
+
+  // renderReading draws the reading mark: the toggle's pressed state, and while it is on, since
+  // when and the command for the person to run.
+  const renderReading = (): void => {
+    const on = state.reading !== null;
+    readingButton.setAttribute("aria-pressed", on ? "true" : "false");
+    readingEl.hidden = !on;
+    if (!state.reading) return;
+    const since = state.reading.since;
+    readingSince.textContent = since
+      ? `reading since ${new Date(since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "reading";
+    const command = state.reading.command ?? "";
+    readingCommand.textContent = command;
+    readingCommand.hidden = command === "";
+    readingCopy.hidden = command === "";
+    readingCopy.textContent = "Copy";
+  };
+
+  // toggleReading asks the server to mark, or unmark, the review as being read. The button holds
+  // its old state until the server answers: a refusal (no review is open, or it already merged)
+  // leaves the mark as it was and surfaces as a toast, so the pressed state never claims more
+  // than the server recorded.
+  const toggleReading = async (): Promise<void> => {
+    const on = state.reading === null;
+    if (demo) {
+      state.reading = demoReading(on);
+      renderReading();
+      return;
+    }
+    const hp = host_();
+    if (!hp) {
+      reportFailure(
+        "Review",
+        "Connect a server to mark this review as being read.",
+        "reading:no-server",
+      );
+      return;
+    }
+    readingButton.disabled = true;
+    const res = await setReading(hp, on, controller.signal);
+    if (disposed) return;
+    readingButton.disabled = false;
+    if (res) {
+      state.reading = res.reading ? res : null;
+      renderReading();
+    }
   };
 
   const renderToolbar = (): void => {
@@ -1929,7 +2102,9 @@ export function activate(host: HTMLElement): AppInstance {
     focusText.textContent = state.focus ? "Leave focus" : "Focus";
     focusButton.title = state.focus
       ? "Show the whole changeset again (f)"
-      : "Read one hunk at a time (f)";
+      : state.ordered
+        ? "Read one step at a time, in the order the changes depend on each other (f)"
+        : "Read one hunk at a time (f)";
     progressEl.hidden = !state.focus;
     // The whole READOUT goes, not just the counts inside it. Hiding statsEl alone left the row
     // standing at its --console-diff-head-block-size floor with the key disclosure floating alone
@@ -1946,16 +2121,20 @@ export function activate(host: HTMLElement): AppInstance {
     if (!state.focus) return;
     const total = state.pairs.length;
     const read = readCount();
-    const at = pairAt();
+    const at = stepAt();
     progressFill.style.width = total > 0 ? `${(read / total) * 100}%` : "0%";
     const left = state.files[0]?.path ?? "";
     const drafted = drafts().length;
     // Position, then what is left, then what the pass has produced so far. The last one is why a
     // draft count belongs here: it is the evidence that reading is turning into something.
+    //
+    // With an order the position is a step, and the read count stays in hunks: a step holds
+    // several, and "3 of 9 read" would be a different count from the bar above it.
+    const position = state.ordered
+      ? `step ${at + 1} of ${state.steps.length}, ${read} of ${total} hunks read`
+      : `hunk ${at + 1} of ${total}, ${read} read`;
     progressText.textContent =
-      `hunk ${at + 1} of ${total}, ${read} read` +
-      (drafted > 0 ? `, ${drafted} drafted` : "") +
-      (left ? ` - ${left}` : "");
+      position + (drafted > 0 ? `, ${drafted} drafted` : "") + (left ? ` - ${left}` : "");
   };
 
   const renderSidebar = (): void => {
@@ -2230,10 +2409,9 @@ export function activate(host: HTMLElement): AppInstance {
 
   // --- focus mode -----------------------------------------------------------
 
-  const pairAt = (): number =>
-    state.pairs.findIndex(
-      (p) => p.path === state.focusAt?.path && p.index === state.focusAt?.index,
-    );
+  // stepAt is the position of the step on screen among all of them, or -1 when the focused hunk
+  // is no longer in the changeset.
+  const stepAt = (): number => stepIndexOf(state.steps, state.focusAt);
 
   const readCount = (): number => state.pairs.filter((p) => state.viewed.has(p.digest)).length;
 
@@ -2241,16 +2419,16 @@ export function activate(host: HTMLElement): AppInstance {
   // picks up where it stopped instead of starting at the top - which is the whole reason to
   // read this way: the pass has to survive being interrupted.
   const firstUnread = (): { path: string; index: number } | null => {
-    const p = state.pairs.find((x) => !state.viewed.has(x.digest)) ?? null;
-    return p ? { path: p.path, index: p.index } : null;
+    const first = firstUnreadStep(state.steps, state.viewed)?.hunks[0];
+    return first ? { path: first.path, index: first.index } : null;
   };
 
-  // focusStep moves the pass. Forward past the last hunk is not a dead end: the reading is
-  // finished, so it opens the batch that reading produced. The pass gets a conclusion rather
-  // than running out.
+  // focusStep moves the pass by one step. Forward past the last one is not a dead end: the
+  // reading is finished, so it opens the batch that reading produced. The pass gets a conclusion
+  // rather than running out.
   const focusStep = (dir: 1 | -1): void => {
-    const at = pairAt();
-    // The focused hunk is no longer in the changeset - a fold, a rebase, a tree that moved under
+    const at = stepAt();
+    // The focused step is no longer in the changeset - a fold, a rebase, a tree that moved under
     // the reader. Resume rather than arithmetic on -1, which stepped FORWARD to index 0 and
     // silently restarted the pass at the top while stepping BACK did nothing at all.
     if (at < 0) {
@@ -2258,12 +2436,12 @@ export function activate(host: HTMLElement): AppInstance {
       void rebuild();
       return;
     }
-    const p = state.pairs[at + dir];
-    if (!p) {
+    const next = state.steps[at + dir]?.hunks[0];
+    if (!next) {
       if (dir === 1) endOfPass();
       return;
     }
-    state.focusAt = { path: p.path, index: p.index };
+    state.focusAt = { path: next.path, index: next.index };
     void rebuild();
   };
 
@@ -2285,13 +2463,17 @@ export function activate(host: HTMLElement): AppInstance {
   // the move are independent, so the move happens now and the count catches up when the write
   // lands.
   const focusRead = (): void => {
-    const p = state.pairs[pairAt()];
-    if (!p) return;
+    const step = state.steps[stepAt()];
+    if (!step) return;
     if (!canCollaborate()) {
       flashCollaborationNotice();
       return;
     }
-    if (!state.viewed.has(p.digest)) void sync({ op: "viewed", digest: p.digest, on: true });
+    // Every hunk of the step: the step is the unit the reader just finished, and leaving one
+    // unmarked would bring the pass back to it as "unread".
+    for (const h of step.hunks) {
+      if (!state.viewed.has(h.digest)) void sync({ op: "viewed", digest: h.digest, on: true });
+    }
     focusStep(1);
   };
 
@@ -2710,12 +2892,13 @@ export function activate(host: HTMLElement): AppInstance {
     }
   };
 
-  // replyHere answers the thread nearest the cursor, so a conversation can be finished without
-  // leaving for the browser.
+  // replyHere answers the conversation nearest the cursor, so it can be finished without leaving
+  // for the browser.
   //
-  // "Nearest" is the first thread rendered under the cursor's hunk, falling back to the file's.
-  // That is the same rule resolveHere uses, and it is the rule a reader already has in their
-  // head: the remark they can see.
+  // "Nearest" is the first conversation rendered under the cursor's hunk, falling back to the
+  // file's. That is the same rule resolveHere uses, and it is the rule a reader already has in
+  // their head: the remark they can see. The list holds a root before its replies, so the first
+  // comment is the head of that conversation.
   const replyHere = (): void => {
     const i = currentHunkRow();
     const row = i === null ? undefined : state.rows[i];
@@ -2727,6 +2910,12 @@ export function activate(host: HTMLElement): AppInstance {
       flashPublishNotice("No thread here to answer. Press c to write a remark of your own.");
       return;
     }
+    composeReply(thread);
+  };
+
+  // composeReply opens the reply box for the conversation `thread` belongs to. The reply goes to
+  // the conversation's root whichever of its comments was clicked.
+  const composeReply = (thread: ReviewThread): void => {
     const existing = scroll.querySelector<HTMLTextAreaElement>(
       ".console-diff-composer__input textarea",
     );
@@ -2766,7 +2955,7 @@ export function activate(host: HTMLElement): AppInstance {
         field.disabled = true;
         commit.disabled = true;
         where.textContent = "Sending...";
-        void sendReply(thread.id, body).then((failure) => {
+        void sendReply(rootOf(thread), body).then((failure) => {
           if (disposed) return;
           if (!failure) {
             close();
@@ -2787,19 +2976,20 @@ export function activate(host: HTMLElement): AppInstance {
     field.focus();
   };
 
-  // sendReply posts one reply and returns the failure to show, or "" when it left.
-  const sendReply = async (thread: string, body: string): Promise<string> => {
+  // sendReply posts one reply into the conversation rooted at `root` and returns the failure to
+  // show, or "" when it left.
+  const sendReply = async (root: string, body: string): Promise<string> => {
     if (demo) {
       // The showcase answers for real, into memory, so a reader trying it finds out what it
       // does rather than meeting a dead key.
-      state.review = applyDemoReply(state.review, thread, body);
+      state.review = applyDemoReply(state.review, root, body);
       await rebuild();
       return "";
     }
     const hp = host_();
     if (!hp) return "Connect a server to reply.";
     try {
-      await reply(hp, thread, body, controller.signal);
+      await reply(hp, root, body, controller.signal);
       if (disposed) return "";
       // Re-read rather than appending locally: the thread belongs to the host, and this is
       // also how the reader finds out what else was said while they were typing.

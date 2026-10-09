@@ -1,4 +1,4 @@
-// agent.ts - the session panel behind a story row: what the agent ran, the turns leading up to
+// agent.ts - the session panel behind a touch row: what the agent ran, the turns leading up to
 // its write, and a plain statement of every transcript part the server could not show.
 
 import { createClient, ConnectError } from "@connectrpc/connect";

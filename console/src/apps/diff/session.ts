@@ -11,6 +11,7 @@
 // joining.
 
 import { authHeaders, readRefusal, reportFetchFailure, reportHttpStatus } from "../../lib/server";
+import { reportFailure } from "../../lib/notifications";
 
 // The wire shapes, mirroring types.Review and types.DiffReview. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
@@ -69,6 +70,91 @@ export interface DiffAPI {
   readonly body: number;
 }
 
+// DiffHunkInfo mirrors types.DiffHunk. index and digest are the address the parsed patch, the read
+// marks and DiffOrder share; they are copied from the patch and never recomputed here.
+export interface DiffHunkInfo {
+  readonly index: number;
+  readonly digest: string;
+  readonly old_start: number;
+  readonly old_count: number;
+  readonly new_start: number;
+  readonly new_count: number;
+  readonly declaration?: string;
+  readonly symbols?: readonly string[];
+}
+
+// DiffHunkRef mirrors types.DiffHunkRef: one hunk addressed across files.
+export interface DiffHunkRef {
+  readonly path: string;
+  readonly index: number;
+  readonly digest: string;
+}
+
+// DiffGroupKind mirrors types.DiffGroupKind. "unranked" is always the last group.
+export type DiffGroupKind = "connected" | "generated" | "unranked";
+
+// DiffWhyRelation mirrors the types.DiffWhy* constants: the relationship that placed a hunk.
+export type DiffWhyRelation =
+  | "starts"
+  | "uses"
+  | "used_by"
+  | "implements"
+  | "implemented_by"
+  | "continues"
+  | "same_step"
+  | "tests"
+  | "generated"
+  | "unranked";
+
+// DiffWhy mirrors types.DiffWhy. text is the rendered sentence, so no client derives its own.
+export interface DiffWhy {
+  readonly relation: DiffWhyRelation;
+  readonly step?: number;
+  readonly symbol?: string;
+  readonly cycle?: readonly string[];
+  readonly text: string;
+}
+
+// DiffStepHunk mirrors types.DiffStepHunk: one placed hunk and what placed it.
+export interface DiffStepHunk {
+  readonly hunk: DiffHunkRef;
+  readonly label?: string;
+  readonly why: DiffWhy;
+}
+
+// DiffStep mirrors types.DiffStep: one screen of the reading order. number counts across the
+// whole order, from 1.
+export interface DiffStep {
+  readonly number: number;
+  readonly hunks: readonly DiffStepHunk[];
+}
+
+// DiffGroup mirrors types.DiffGroup: a set of connected steps.
+export interface DiffGroup {
+  readonly kind: DiffGroupKind;
+  readonly label?: string;
+  readonly hunks: number;
+  readonly reach: number;
+  readonly steps: readonly DiffStep[];
+}
+
+// DiffOrderCount mirrors types.DiffOrderCount, the line proving every hunk appears once.
+export interface DiffOrderCount {
+  readonly hunks: number;
+  readonly placed: number;
+  readonly complete: boolean;
+  readonly repeated?: readonly DiffHunkRef[];
+  readonly missing?: readonly DiffHunkRef[];
+  readonly bare?: readonly string[];
+}
+
+// DiffOrder mirrors types.DiffOrder: the order to read the changeset's hunks in. Absent on the
+// wire when magus could not compute one, which is not an empty order.
+export interface DiffOrder {
+  readonly groups: readonly DiffGroup[];
+  readonly count: DiffOrderCount;
+}
+
 export interface DiffCoverage {
   readonly ratio: number;
   readonly covered_stmts: number;
@@ -98,6 +184,9 @@ export interface DiffAnnotation {
   readonly hint?: string;
   readonly coverage?: DiffCoverage;
   readonly symbols?: readonly DiffSymbol[];
+  // hunks is every hunk of the file's patch, in patch order, with the address the reading order
+  // refers to. Mirrors types.DiffHunk.
+  readonly hunks?: readonly DiffHunkInfo[];
   // null when no symbol index was loaded, which is NOT zero: "nothing references this" and
   // "nobody looked" are different facts, and the ordering depends on this one.
   readonly reach: number | null;
@@ -128,6 +217,9 @@ export interface Diff {
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
   readonly api?: DiffAPI;
+  // order is the changeset's hunks in the order to read them. Absent means the server could not
+  // compute one, and focus mode then falls back to the files' own order.
+  readonly order?: DiffOrder;
   // Why the conformance checks could not run. When set, no symbol carries checks, and that
   // absence means nothing was checked.
   readonly conformance_error?: {
@@ -198,6 +290,15 @@ export interface ReviewThread {
   // new reports that this thread had not been on screen before. magus's annotation rather than
   // anything the host said, and it is true only on the response that first carried the thread.
   readonly new?: boolean;
+  // root is the id of the first comment of the conversation this one belongs to, empty on the
+  // root itself. The wire is flat, one record per comment, and the conversation is assembled at
+  // render time (see conversations in rows.ts).
+  readonly root?: string;
+  // outdated reports that the line this comment was made on no longer exists in the head.
+  readonly outdated?: boolean;
+  // diff_hunk is the host's own text of the hunk the comment was made on, kept so an outdated
+  // conversation still shows the code it was about.
+  readonly diff_hunk?: string;
 }
 
 // ReviewInfo is which review this branch has open, plus what has already been said on it.
@@ -443,7 +544,11 @@ export async function publish(
   return (await res.json()) as DiffReview;
 }
 
-// reply answers one thread on the host's review.
+// reply answers one conversation on the host's review.
+//
+// root is the id of the conversation's first comment: a thread's own `root`, or its `id` when it
+// is itself a root (see rootOf in rows.ts). The host threads a reply by its root, so any other
+// comment's id would start a second conversation instead of joining this one.
 //
 // Throws like publish and for the same reason: it is a sentence a colleague is waiting for,
 // and a reader told it was sent when it never left will believe the conversation is finished.
@@ -453,18 +558,59 @@ export async function publish(
 // said while they were typing.
 export async function reply(
   host: string,
-  thread: string,
+  root: string,
   body: string,
   signal: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`http://${host}/api/v1/diff/session`, {
     method: "POST",
     headers: { ...authHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ op: "reply", id: thread, body }),
+    body: JSON.stringify({ op: "reply", root, body }),
     signal,
   });
   if (!res.ok) {
     throw new Error((await readRefusal(res))?.message ?? `server answered ${res.status}`);
+  }
+}
+
+// Reading is what the reading op answers: whether this review is marked as being read, since
+// when (unix milliseconds), and the command the PERSON may run to tell the review's participants.
+export interface Reading {
+  readonly reading: boolean;
+  readonly since?: number;
+  readonly command?: string;
+}
+
+// setReading marks, or unmarks, the review as being read right now.
+//
+// The mark is local to magus. command is a line for the person to copy and run if they want
+// colleagues to see it; nothing here runs it, because the one sentence that leaves the machine is
+// typed by a person.
+//
+// A refusal (502 no review, 409 already merged) surfaces as a toast carrying the server's own
+// words and resolves to null, so the toggle can put itself back: the mark did not change.
+export async function setReading(
+  host: string,
+  on: boolean,
+  signal: AbortSignal,
+): Promise<Reading | null> {
+  try {
+    const res = await fetch(`http://${host}/api/v1/diff/session`, {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ op: "reading", on }),
+      signal,
+    });
+    if (!res.ok) {
+      const refusal = res.status === 401 ? null : await readRefusal(res);
+      if (refusal) reportFailure("Review", refusal.message, `reading:${res.status}`, refusal.help);
+      else reportHttpStatus(host, "the reading mark", res.status);
+      return null;
+    }
+    return (await res.json()) as Reading;
+  } catch (e) {
+    reportFetchFailure(host, "the reading mark", e);
+    return null;
   }
 }
 
