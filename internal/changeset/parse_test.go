@@ -464,6 +464,40 @@ func TestPlaceThreadsResolvesALineOntoItsHunk(t *testing.T) {
 	assert.Len(t, got, 4, "every thread survives placement")
 }
 
+// A conversation is anchored where it began. The host keeps its replies there even when the line
+// has since moved, and a reply sent to "elsewhere" alone would be read without the code it
+// answers. An outdated root is unplaced whatever its recorded line says, and its replies with it.
+func TestPlaceThreadsKeepsAConversationUnderItsRoot(t *testing.T) {
+	files := ParseHunks("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n" +
+		"@@ -10,3 +10,3 @@\n ten\n-old\n+new\n" +
+		"@@ -40,2 +40,2 @@\n-x\n+y\n")
+
+	got := PlaceThreads(files, []types.ReviewThread{
+		// The reply precedes its root in the list: the host's order is not ours to assume.
+		{ID: "r2", Path: "a.go", Line: 900, Root: "r1"},
+		{ID: "r1", Path: "a.go", Line: 11},
+		// Outdated, with a recorded line that still falls inside a hunk.
+		{ID: "o1", Path: "a.go", Line: 40, Outdated: true},
+		{ID: "o2", Path: "a.go", Line: 40, Root: "o1"},
+		// A comment on no line at all, as a host reports a whole-file remark.
+		{ID: "z1", Path: "a.go", Line: 0},
+		// A reply whose root this list does not hold is placed by its own line.
+		{ID: "x1", Path: "a.go", Line: 40, Root: "gone"},
+		{ID: "x2", Path: "a.go", Line: 900, Root: "gone"},
+	})
+
+	hunks := map[string]int{}
+	for _, th := range got {
+		hunks[th.ID] = th.Hunk
+	}
+	assert.Equal(t, map[string]int{
+		"r1": 0, "r2": 0, "o1": -1, "o2": -1, "z1": -1, "x1": 1, "x2": -1,
+	}, hunks)
+	assert.Equal(t, []string{"r2", "r1", "o1", "o2", "z1", "x1", "x2"},
+		[]string{got[0].ID, got[1].ID, got[2].ID, got[3].ID, got[4].ID, got[5].ID, got[6].ID},
+		"placement keeps the order given")
+}
+
 // The NEW side, always: a host anchors an inline comment to the line as it stands after the
 // change, and matching the old side would land a remark about new code on whatever used to be
 // there. This hunk's two sides deliberately disagree about which lines they cover.

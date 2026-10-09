@@ -394,6 +394,11 @@ type reviewSessionRequest struct {
 	// resolve / answer, and the THREAD for reply. One field because they are the same
 	// question (which one) and never asked together.
 	ID string `json:"id,omitempty"`
+	// Root is, for reply, the id of the first comment of the conversation to answer
+	// (types.ReviewThread.Root of any reply in it, or the ID of the root comment itself). It wins
+	// over ID, so a client holding a reply can name its conversation without finding the root,
+	// and may leave ID empty.
+	Root string `json:"root,omitempty"`
 	// Verdict is what the published review should SAY: "comment" (the default), "approve", or
 	// "request_changes". It is a REQUEST, not a decision: the server resolves it against who
 	// opened the review, and a self-review is always a comment however this is set.
@@ -483,7 +488,7 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	if err := bindings.ReplyReview(ctx, at, req.ID, req.Body); err != nil {
+	if err := bindings.ReplyReview(ctx, at, replyThread(req), req.Body); err != nil {
 		return nil, err
 	}
 	// A reply needs a review, not an attached session, so a nil session here is not a failure.
@@ -493,6 +498,16 @@ func (h *ReviewHandler) reply(ctx context.Context, req reviewSessionRequest) (*t
 		return sess, nil
 	}
 	return &types.DiffReview{Cursor: types.DiffCursor{Hunk: -1}}, nil
+}
+
+// replyThread is the host thread a reply goes to: the conversation's root when the client named
+// one, else the thread it addressed. Hosts attach a reply to a conversation by its first comment,
+// so answering a reply's own id would open nothing.
+func replyThread(req reviewSessionRequest) string {
+	if req.Root != "" {
+		return req.Root
+	}
+	return req.ID
 }
 
 // findReview resolves the review publish and reply both need, or the reason there is none.
@@ -587,11 +602,11 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "reply":
 		// 400 rather than 502: an incomplete request is the caller's mistake, and reporting it
 		// as a bad gateway sends them to look at their network.
-		if req.ID == "" || strings.TrimSpace(req.Body) == "" {
+		if replyThread(req) == "" || strings.TrimSpace(req.Body) == "" {
 			handler.Refuse(w, r, rpcerr.Invalid("reply needs a thread and something to say"))
 			return
 		}
-		// ID is a HOST thread id here, not a local comment id.
+		// ID and Root are HOST thread ids here, not local comment ids.
 		var err error
 		sess, err = h.reply(r.Context(), req)
 		if err != nil {

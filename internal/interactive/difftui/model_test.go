@@ -655,6 +655,79 @@ func TestARemarkNewToThisReaderSaysSo(t *testing.T) {
 	assert.NotContains(t, text[indexOfSubstring(text, "you weighed this one already")], "new to you")
 }
 
+// A conversation reads as its first comment and then its replies, oldest first, indented. The
+// host sends one record per comment and the replies need not sit next to their root, so the
+// grouping is the viewer's to do; each reply still carries its own id for the watermark.
+func TestRepliesDrawUnderTheirRootOldestFirst(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-old", "+new"}, Digest: "d0"},
+		}}},
+		Threads: []types.ReviewThread{
+			{ID: "r1", Path: "a.go", Hunk: 0, Author: "priya", Body: "why"},
+			{ID: "s1", Path: "a.go", Hunk: 0, Author: "dana", Body: "other topic"},
+			{ID: "r2", Path: "a.go", Hunk: 0, Root: "r1", Author: "marcus", Body: "first answer"},
+			{ID: "r3", Path: "a.go", Hunk: 0, Root: "r1", Author: "priya", Body: "second answer"},
+		},
+	})
+
+	var thread, text []string
+	for _, r := range m.Rows() {
+		if r.Thread != "" {
+			thread = append(thread, r.Thread)
+			text = append(text, r.Text)
+		}
+	}
+	assert.Equal(t, []string{"r1", "r2", "r3", "s1"}, thread, "the replies follow their root, then the next conversation")
+	assert.Equal(t, []string{
+		"  | priya, on the review: why",
+		"  |   marcus, on the review: first answer",
+		"  |   priya, on the review: second answer",
+		"  | dana, on the review: other topic",
+	}, text)
+	m.resize(50)
+	assert.ElementsMatch(t, []string{"r1", "r2", "r3", "s1"}, m.takeShownThreads(),
+		"every comment is still reported seen on its own id")
+}
+
+// An outdated conversation has lost its line, so the host's text of the code is the only thing
+// left to say what it was about. Its replies follow it wherever it lands.
+func TestAnOutdatedConversationShowsItsDiffHunkAndKeepsItsReplies(t *testing.T) {
+	t.Parallel()
+	m := New(Input{
+		Files: []File{{Path: "a.go", Hunks: []Hunk{
+			{Index: 0, Header: "@@ -1 +1 @@", NewStart: 1, Lines: []string{"-x", "+y"}, Digest: "d0"},
+		}}},
+		Threads: []types.ReviewThread{
+			{ID: "r1", Path: "a.go", Line: 40, Hunk: -1, Outdated: true, Author: "priya",
+				Body: "drop this", DiffHunk: "@@ -38,2 +38,2 @@\n-gone()\n+kept()\n"},
+			{ID: "r2", Path: "a.go", Line: 40, Hunk: -1, Root: "r1", Author: "marcus", Body: "done"},
+			{ID: "e1", Path: "other.go", Line: 7, Hunk: -1, Outdated: true, Author: "dana",
+				Body: "stale", DiffHunk: "@@ -7 +7 @@\n+old()"},
+			{ID: "e2", Path: "other.go", Line: 9, Hunk: -1, Root: "e1", Author: "priya", Body: "agreed"},
+		},
+	})
+
+	got := everyRowText(m)
+	assert.Equal(t, []string{
+		"  | > @@ -38,2 +38,2 @@",
+		"  | > -gone()",
+		"  | > +kept()",
+		"  | priya, on the review, outdated: drop this",
+		"  |   marcus, on the review: done",
+	}, got[indexOfSubstring(got, "@@ -38,2"):indexOfSubstring(got, "done")+1],
+		"under the file heading: the code, the outdated first comment, then its reply")
+	assert.Equal(t, []string{
+		"  other.go:7",
+		"  | > @@ -7 +7 @@",
+		"  | > +old()",
+		"  | dana, on the review, outdated: stale",
+		"  |   priya, on the review: agreed",
+	}, got[indexOfSubstring(got, "other.go:7"):],
+		"elsewhere: the reply follows its root even though its own line differs")
+}
+
 // everyRowText is the visible text of every row, for asserting on order and presence. Named
 // away from render.go's rowText, which renders ONE row and is the package's real one.
 func everyRowText(m *Model) []string {

@@ -562,6 +562,12 @@ func PatchDigest(patch string) string {
 // change, which is the side a reader is looking at; matching the old side would land a remark
 // about new code on whatever used to be there.
 //
+// A reply takes its root's Hunk and Path, even when its own line no longer matches: the host
+// keeps a conversation anchored where it began, and a reply stranded in "elsewhere" alone would
+// be read without the code it answers. A reply whose root is not in threads is placed by its own
+// line. An outdated root (Outdated, or no line) is unplaced, so its replies follow it to the
+// file heading or to "elsewhere".
+//
 // Threads are returned in the order given, so a caller that renders them keeps the
 // conversation's order.
 func PlaceThreads(files []FileHunks, threads []types.ReviewThread) []types.ReviewThread {
@@ -573,18 +579,35 @@ func PlaceThreads(files []FileHunks, threads []types.ReviewThread) []types.Revie
 		byPath[f.Path] = f.Hunks
 	}
 	out := make([]types.ReviewThread, 0, len(threads))
+	roots := make(map[string]int, len(threads))
 	for _, t := range threads {
 		t.Hunk = -1
-		for _, h := range byPath[t.Path] {
-			if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
-				// Hunk.Index, not the slice position. They agree while a caller passes every
-				// hunk of a file, and Index exists precisely so one that filters cannot
-				// silently renumber what a thread is anchored to.
-				t.Hunk = h.Index
-				break
+		if !t.Outdated && t.Line > 0 {
+			for _, h := range byPath[t.Path] {
+				if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
+					// Hunk.Index, not the slice position. They agree while a caller passes every
+					// hunk of a file, and Index exists precisely so one that filters cannot
+					// silently renumber what a thread is anchored to.
+					t.Hunk = h.Index
+					break
+				}
 			}
 		}
+		if t.Root == "" && t.ID != "" {
+			roots[t.ID] = len(out)
+		}
 		out = append(out, t)
+	}
+	// A second pass, because a reply can precede its root in the order the host sent.
+	for i := range out {
+		r, ok := roots[out[i].Root]
+		if out[i].Root == "" || !ok {
+			continue
+		}
+		out[i].Hunk = out[r].Hunk
+		if out[i].Path == "" {
+			out[i].Path = out[r].Path
+		}
 	}
 	return out
 }

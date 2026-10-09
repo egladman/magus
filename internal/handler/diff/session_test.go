@@ -618,6 +618,47 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 	assert.Empty(t, store.Get(root).Comments, "a reply belongs to the host's record, not this session")
 }
 
+// A reply is addressed to a conversation by its first comment. Root names it, so a client holding
+// a reply need not find the root first, and it wins over ID when both arrive.
+func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
+	var threads []string
+	name := "fake-reply-recorder-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReplyReviewContract:
+				threads = append(threads, req.Params["thread"].(string))
+				return true, nil
+			default:
+				return nil, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+
+	root := t.TempDir()
+	h := NewReviewHandler(ReviewOptions{
+		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: root,
+	}, nil)
+
+	for _, body := range []string{
+		`{"op":"reply","id":"th1","body":"agreed"}`,
+		`{"op":"reply","id":"th2","root":"th1","body":"agreed"}`,
+		`{"op":"reply","root":"th1","body":"agreed"}`,
+	} {
+		require.Equal(t, http.StatusOK, post(t, h, body).Code, body)
+	}
+	assert.Equal(t, []string{"th1", "th1", "th1"}, threads,
+		"no root answers the thread addressed; a root answers its conversation, with or without an id")
+
+	empty := post(t, h, `{"op":"reply","body":"agreed"}`)
+	assert.Equal(t, http.StatusBadRequest, empty.Code, "neither an id nor a root names no conversation")
+	assert.Len(t, threads, 3, "and the host was not asked")
+}
+
 // The whole route, end to end: the provider's threads come back placed against the working
 // patch, so the client renders them beside the code rather than working the anchors out itself.
 func TestReviewRouteServesPlacedThreads(t *testing.T) {

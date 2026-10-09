@@ -78,6 +78,9 @@ type Input struct {
 	// changeset.PlaceThreads. A thread whose line this changeset does not contain (Hunk < 0) renders
 	// under the file heading rather than being dropped: a colleague said it, and a viewer that
 	// silently withheld it would be telling the reader nobody had.
+	//
+	// One entry per comment, in the host's order. A reply (Root set) is drawn under its root,
+	// oldest first; the viewer groups them, so the watermark still counts each comment.
 	Threads []types.ReviewThread
 	// Unfolded starts with generated files expanded, which is what --generated asks for.
 	Unfolded bool
@@ -140,6 +143,9 @@ type Model struct {
 	// changeset does not contain.
 	threads  map[hunkRef][]types.ReviewThread
 	unplaced map[string][]types.ReviewThread
+	// order is each thread's position in the host's list, which is the order a conversation's
+	// replies read in. The buckets above lose it once the elsewhere list gathers them from maps.
+	order map[string]int
 	// shown is the threads already reported as read, so a remark leaves the viewer once rather
 	// than on every frame it stays on screen.
 	shown map[string]bool
@@ -174,6 +180,7 @@ func New(in Input) *Model {
 		suggests: map[hunkRef][]types.DiffSuggestion{},
 		threads:  map[hunkRef][]types.ReviewThread{},
 		unplaced: map[string][]types.ReviewThread{},
+		order:    map[string]int{},
 		shown:    map[string]bool{},
 		hunk:     -1,
 		height:   1,
@@ -197,7 +204,8 @@ func New(in Input) *Model {
 		k := hunkRef{path: s.Path, hunk: s.Hunk}
 		m.suggests[k] = append(m.suggests[k], s)
 	}
-	for _, t := range in.Threads {
+	for i, t := range in.Threads {
+		m.order[t.ID] = i
 		if t.Hunk < 0 {
 			m.unplaced[t.Path] = append(m.unplaced[t.Path], t)
 			continue
@@ -549,8 +557,8 @@ func (m *Model) rebuild() {
 		}
 		// Threads whose line this changeset no longer contains, under the heading rather than
 		// dropped. The line moved after a colleague wrote; what they said still stands.
-		for _, t := range m.unplaced[f.Path] {
-			m.rows = append(m.rows, threadRows(t, i, -1)...)
+		for _, c := range m.conversations(m.unplaced[f.Path]) {
+			m.rows = append(m.rows, threadRows(c, i, -1)...)
 		}
 		for hi := range f.Hunks {
 			h := &f.Hunks[hi]
@@ -600,25 +608,66 @@ func (m *Model) elsewhereRows(shown map[string]bool) []Row {
 	if len(out) == 0 {
 		return nil
 	}
-	slices.SortFunc(out, func(a, b types.ReviewThread) int {
-		if c := strings.Compare(a.Path, b.Path); c != 0 {
+	convs := m.conversations(out)
+	slices.SortFunc(convs, func(a, b conversation) int {
+		if c := strings.Compare(a.root.Path, b.root.Path); c != 0 {
 			return c
 		}
-		if c := cmp.Compare(a.Line, b.Line); c != 0 {
+		if c := cmp.Compare(a.root.Line, b.root.Line); c != 0 {
 			return c
 		}
-		return strings.Compare(a.ID, b.ID)
+		return strings.Compare(a.root.ID, b.root.ID)
 	})
 	rows := []Row{
 		{Kind: RowBlank, File: -1, Hunk: -1},
 		{Kind: RowFile, File: -1, Hunk: -1, Text: fmt.Sprintf("said on the review, elsewhere (%d)", len(out))},
 	}
-	for _, t := range out {
+	for _, c := range convs {
 		rows = append(rows, Row{Kind: RowFact, File: -1, Hunk: -1,
-			Text: fmt.Sprintf("  %s:%d", t.Path, t.Line)})
-		rows = append(rows, threadRows(t, -1, -1)...)
+			Text: fmt.Sprintf("  %s:%d", c.root.Path, c.root.Line)})
+		rows = append(rows, threadRows(c, -1, -1)...)
 	}
 	return rows
+}
+
+// conversation is a comment and the replies made to it.
+type conversation struct {
+	root    types.ReviewThread
+	replies []types.ReviewThread
+}
+
+// conversations groups ts into what a reader takes to be one thread each: the first comment, then
+// its replies in the order the host listed them, which is the order they were written.
+//
+// Roots keep the order given. A reply whose root is not in ts stands as a conversation of its
+// own rather than vanishing, so a host that sent a reply without its parent still shows it.
+func (m *Model) conversations(ts []types.ReviewThread) []conversation {
+	if len(ts) == 0 {
+		return nil
+	}
+	has := make(map[string]bool, len(ts))
+	for _, t := range ts {
+		has[t.ID] = true
+	}
+	var out []conversation
+	at := make(map[string]int, len(ts))
+	var replies []types.ReviewThread
+	for _, t := range ts {
+		if t.Root == "" || !has[t.Root] {
+			at[t.ID] = len(out)
+			out = append(out, conversation{root: t})
+			continue
+		}
+		replies = append(replies, t)
+	}
+	slices.SortStableFunc(replies, func(a, b types.ReviewThread) int {
+		return cmp.Compare(m.order[a.ID], m.order[b.ID])
+	})
+	for _, r := range replies {
+		c := &out[at[r.Root]]
+		c.replies = append(c.replies, r)
+	}
+	return out
 }
 
 // talkRows are the comments and pending suggestions anchored to one hunk.
@@ -632,8 +681,8 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	var out []Row
 	// The host's threads first. What a colleague already said is context for the remark you are
 	// about to write, not a footnote to it: the same order the console renders.
-	for _, t := range m.threads[k] {
-		out = append(out, threadRows(t, file, row)...)
+	for _, c := range m.conversations(m.threads[k]) {
+		out = append(out, threadRows(c, file, row)...)
 	}
 	for _, c := range m.comments[k] {
 		who := string(c.Author)
@@ -658,17 +707,45 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	return out
 }
 
-// threadRows renders one remark from the host's review, wrapped the way a comment is.
+// threadRows renders one conversation from the host's review: its first comment, then each reply
+// indented beneath it.
+//
+// A conversation whose line is gone (the host marked it outdated, or this changeset holds no
+// hunk for it) carries the host's own text of the code it was about. That text is the only record
+// of what was said against, since the code is no longer at the line.
+func threadRows(c conversation, file, hunk int) []Row {
+	var out []Row
+	if c.root.Outdated || c.root.Hunk < 0 {
+		for _, line := range strings.Split(strings.TrimRight(c.root.DiffHunk, "\n"), "\n") {
+			if line == "" {
+				continue
+			}
+			out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Thread: c.root.ID,
+				Text: "  | > " + line})
+		}
+	}
+	out = append(out, commentRows(c.root, file, hunk, "  | ")...)
+	for _, r := range c.replies {
+		out = append(out, commentRows(r, file, hunk, "  |   ")...)
+	}
+	return out
+}
+
+// commentRows renders one remark from the host's review, wrapped the way a comment is.
 //
 // It says "on the review" rather than naming the author alone, because the reader has to be
 // able to tell what the world has already seen from what is still theirs to send. The console
 // draws the same distinction with a colour it cannot use here.
-func threadRows(t types.ReviewThread, file, hunk int) []Row {
+func commentRows(t types.ReviewThread, file, hunk int, lead string) []Row {
 	who := t.Author
 	if who == "" {
 		who = "review"
 	}
 	said := who + ", on the review"
+	// A reply says nothing of its own line: the conversation's first comment is what went stale.
+	if t.Outdated && t.Root == "" {
+		said += ", outdated"
+	}
 	// Said out loud, because drawing the remark is also what marks it seen. A reader who was
 	// never told which ones had arrived since last time loses that distinction to their own
 	// scrolling, and it is the whole point of the watermark.
@@ -678,9 +755,9 @@ func threadRows(t types.ReviewThread, file, hunk int) []Row {
 	lines := strings.Split(t.Body, "\n")
 	out := make([]Row, 0, len(lines))
 	for j, line := range lines {
-		text := "  | " + line
+		text := lead + line
 		if j == 0 {
-			text = fmt.Sprintf("  | %s: %s", said, line)
+			text = fmt.Sprintf("%s%s: %s", lead, said, line)
 		}
 		out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Thread: t.ID, Text: text})
 	}
