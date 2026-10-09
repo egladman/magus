@@ -1,6 +1,7 @@
 /* diagrams.css - the Graph's Figures mode: a bar (figure and lens) over the figure's own control row,
    then the figure beside its node list. A CHROME app: the bars run full bleed and the figure
-   meets the pane edge. The figure's colours are the --magus-diagram-* tokens in tokens.css. */
+   meets the pane edge. The figure's colours are the --magus-diagram-* tokens in tokens.css. The width
+   rule is an @container query against the Graph's pane root (.console-graph-main, graph.css). */
 
 .console-diagrams {
   display: flex;
@@ -15,7 +16,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
@@ -25,9 +26,9 @@
 /* A shared link has no picker or lens to offer and draws without asking for the runtime. */
 .console-diagrams__bar[hidden],
 .console-diagrams__controls .pf-v6-c-button[hidden] { display: none; }
-.console-diagrams__lens { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.console-diagrams__field { display: inline-flex; align-items: center; gap: 0.4rem; }
-.console-diagrams__field-label { font-size: 0.85rem; color: var(--pf-t--global--text--color--subtle); }
+.console-diagrams__lens { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+.console-diagrams__field { display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+.console-diagrams__field-label { font-size: var(--pf-t--global--font--size--body--default); color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
 
 /* The console's inline notice: full bleed, severity in the left rule, never a card over the figure. */
 .console-diagrams__notices:empty { display: none; }
@@ -37,7 +38,7 @@
   border-block-start: 0;
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   border-inline-start: 3px solid var(--console-slate);
-  padding-block: 0.4rem;
+  padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
   box-shadow: none;
 }
@@ -55,12 +56,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
-  padding-block: 0.35rem;
+  gap: var(--pf-t--global--spacer--sm);
+  padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-diagrams__runtime-status { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
+.console-diagrams__runtime-status { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 
 .console-diagrams__figure {
   flex: 1 1 auto;
@@ -70,7 +71,28 @@
   margin: 0;
   background: var(--magus-diagram-paper);
 }
-/* pan-y, never none: none would also take the browser's own pinch zoom and page scroll away. */
+/* What stands in for the frame while there is no figure: a spinner or a PF empty state, centred in
+   the room the frame would have had. */
+.console-diagrams__state {
+  flex: 1 1 auto;
+  min-block-size: 18rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.console-diagrams__state[hidden],
+.console-diagrams__frame[hidden] { display: none; }
+.console-diagrams__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-diagrams__loading p { margin: 0; }
+/* pan-y, never none: none would also take the browser's own pinch zoom and page scroll away. The
+   focus ring is the console's one (console.css); only the offset is set, because the frame's own
+   overflow would clip a ring drawn outside it. */
 .console-diagrams__frame {
   flex: 1 1 auto;
   min-block-size: 18rem;
@@ -79,7 +101,7 @@
   cursor: grab;
 }
 .console-diagrams__frame[data-dragging] { cursor: grabbing; }
-.console-diagrams__frame:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+.console-diagrams__frame:focus-visible { outline-offset: var(--console-focus-inset); }
 .console-diagrams__frame[aria-busy="true"] { opacity: 0.6; }
 .console-diagrams__frame > svg {
   display: block;
@@ -90,9 +112,9 @@
 .console-diagrams__frame > svg[data-entering] { opacity: 0; }
 .console-diagrams__caption {
   flex: 0 0 auto;
-  padding-block: 0.3rem;
+  padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
-  font-size: 0.8rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
 
@@ -105,8 +127,7 @@
 .console-diagrams__frame [data-edge][data-hot],
 .console-diagrams__frame [data-edge][data-lit] { stroke: var(--magus-diagram-accent); }
 .console-diagrams__frame a[data-node] { cursor: pointer; }
-.console-diagrams__frame [data-node]:focus { outline: none; }
-.console-diagrams__frame [data-node]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 3px; }
+.console-diagrams__frame [data-node]:focus-visible { outline-offset: var(--pf-t--global--spacer--xs); }
 
 .console-diagrams__aside {
   flex: 0 0 16rem;
@@ -118,29 +139,33 @@
 }
 .console-diagrams__aside-title {
   margin: 0;
-  padding-block: 0.4rem;
+  padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--console-pad);
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: var(--pf-t--global--font--size--body--default);
+  font-weight: var(--pf-t--global--font--weight--heading--default);
 }
-.console-diagrams__nodes { margin: 0; padding: 0 0 0.5rem; list-style: none; }
+.console-diagrams__nodes { margin: 0; padding: 0 0 var(--pf-t--global--spacer--sm); list-style: none; }
 .console-diagrams__node {
   display: flex;
   flex-direction: column;
-  padding-block: 0.2rem;
+  padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
 }
-.console-diagrams__node[data-dim] { opacity: 0.5; }
-.console-diagrams__node[data-lit] { font-weight: 600; }
+/* A node the focus has dimmed is set apart by the subtle text colour, which keeps its contrast; fading
+   the row to half opacity dropped the text under the minimum. */
+.console-diagrams__node[data-dim],
+.console-diagrams__node[data-dim] .pf-v6-c-button { color: var(--pf-t--global--text--color--subtle); }
+.console-diagrams__node[data-lit] { font-weight: var(--pf-t--global--font--weight--heading--default); }
 .console-diagrams__source {
   font-family: var(--pf-t--global--font--family--mono);
-  font-size: 0.75rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
   overflow-wrap: anywhere;
 }
 a.console-diagrams__source { color: var(--pf-t--global--text--color--link--default); }
 
-@media (max-width: 48rem) {
+/* A narrow pane stacks the node list under the figure. */
+@container graph (max-width: 47.99rem) {
   .console-diagrams__body { flex-direction: column; }
   .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: 1px solid var(--pf-t--global--border--color--default); }
 }

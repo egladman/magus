@@ -248,6 +248,31 @@ describe("a prepared figure", () => {
     assert.match(el.textContent ?? "", /exceeds the budget of 9/);
   });
 
+  test("a notice names its severity in words and draws it as a shape, never a letter", () => {
+    const danger = notice("danger", "Could not read the figure", "HTTP 500");
+    assert.equal(danger.getAttribute("role"), "alert", "a failure is always announced");
+    assert.match(danger.textContent ?? "", /Danger alert/);
+    assert.ok(danger.querySelector(".pf-v6-c-alert__icon svg"), "the icon is PF's glyph");
+    assert.doesNotMatch(
+      danger.querySelector(".pf-v6-c-alert__icon")?.textContent ?? "",
+      /\S/,
+      "no letter standing in for the icon",
+    );
+    const info = notice("info", "Nothing to draw", "");
+    assert.equal(info.getAttribute("role"), "status");
+    assert.equal(info.querySelector(".pf-v6-c-alert__description"), null, "no empty description");
+  });
+
+  test("a notice body may be a node, for a command that wants a <code> element", () => {
+    const body = document.createElement("p");
+    body.append(
+      "Start one with ",
+      Object.assign(document.createElement("code"), { textContent: "magus server start" }),
+    );
+    const el = notice("info", "No server", body);
+    assert.equal(el.querySelector("code")?.textContent, "magus server start");
+  });
+
   // Every role cssVarPalette paints (magus/figure, libs/figure/figure.buzz) needs a console
   // definition, or that role falls back to its light hex on a dark console.
   test("tokens.css defines every --magus-diagram-* role", () => {

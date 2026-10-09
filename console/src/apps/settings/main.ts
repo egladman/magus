@@ -31,9 +31,10 @@ import {
   saveNodeShapes,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
+import { reportFailure } from "../../lib/notifications";
 import { probeServer, normalizeServerHost, resolveServerHost } from "../../lib/server";
 import { h } from "../../desktop/view";
-import { serverGuideLink } from "../../desktop/connectPrompt";
+import { SERVER_GUIDE_URL } from "../../desktop/connectPrompt";
 import {
   bigPictureSplitCell,
   collapsedCardsCell,
@@ -47,6 +48,15 @@ import { LICENSE_TEXT } from "./license";
 import { buildTokensSection } from "./tokens";
 import { buildInstallSection } from "./install";
 import type { InstallStore } from "../../lib/install";
+import {
+  expandable,
+  formGroup,
+  helperText,
+  horizontalForm,
+  radios,
+  setStatusLine,
+  switchControl,
+} from "./controls";
 import {
   buildSettingsEnvelope,
   type LayoutSettings,
@@ -85,7 +95,7 @@ const noSearch: SearchProvider<null> = {
   apply: () => ({ matches: 0 }),
 };
 
-// The poll intervals the select offers, and their display labels (also used by the pending diff).
+// The poll intervals the radios offer, and their display labels (also used by the pending diff).
 const POLL_OPTIONS: [string, string][] = [
   ["5000", "5s"],
   ["10000", "10s"],
@@ -95,7 +105,7 @@ const POLL_OPTIONS: [string, string][] = [
 const pollLabel = (ms: number): string =>
   POLL_OPTIONS.find(([v]) => v === String(ms))?.[1] ?? Math.round(ms / 1000) + "s";
 
-// The three theme choices, ordered for the toggle group. "auto" reads as "System" everywhere user-facing.
+// The three theme choices, in the order they are offered. "auto" reads as "System" everywhere user-facing.
 const THEME_ORDER: ThemePref[] = ["auto", "light", "dark"];
 const THEME_LABEL: Record<ThemePref, string> = { auto: "System", light: "Light", dark: "Dark" };
 
@@ -138,41 +148,19 @@ function writeLayout(next: LayoutSettings): void {
   sidebarExpandedCell.set(next.sidebarExpanded);
 }
 
-// buildFormGroup wraps a control in a PF horizontal FormGroup. The label is a real <label for> when the
-// control has an id, else a plain span.
-function buildFormGroup(
-  labelText: string,
-  controlId: string | null,
-  control: HTMLElement,
-  help?: string,
-): HTMLElement {
-  const group = h("div", "pf-v6-c-form__group");
-  const labelWrap = h("div", "pf-v6-c-form__group-label");
-  if (controlId) {
-    const label = h("label", "pf-v6-c-form__label");
-    label.htmlFor = controlId;
-    label.append(h("span", "pf-v6-c-form__label-text", labelText));
-    labelWrap.append(label);
-  } else {
-    const label = h("span", "pf-v6-c-form__label");
-    label.append(h("span", "pf-v6-c-form__label-text", labelText));
-    labelWrap.append(label);
-  }
-  const controlWrap = h("div", "pf-v6-c-form__group-control");
-  controlWrap.append(control);
-  if (help) controlWrap.append(h("p", "console-settings-form__help", help));
-  group.append(labelWrap, controlWrap);
-  return group;
+interface SectionOptions {
+  lede?: string;
+  // Marks a section that only makes sense with a keyboard, which a touch-only device hides.
+  keyboard?: boolean;
 }
 
-// buildPanel wraps a section body as a tab panel. The tab label already names the section, so there is
-// no in-panel heading - the lede, when present, is the only intro copy above the body.
 // buildSection wraps one settings section with a heading (and optional lede) so several sections read as
 // distinct, titled blocks when several are stacked in a single tab panel.
-function buildSection(title: string, body: HTMLElement, lede?: string): HTMLElement {
+function buildSection(title: string, body: HTMLElement, opts: SectionOptions = {}): HTMLElement {
   const sec = h("section", "console-settings-section");
+  if (opts.keyboard) sec.dataset.input = "keyboard";
   sec.append(h("h2", "console-settings-section__title", title));
-  if (lede) sec.append(h("p", "console-settings-section__lede", lede));
+  if (opts.lede) sec.append(h("p", "console-settings-section__lede", opts.lede));
   sec.append(body);
   return sec;
 }
@@ -203,8 +191,8 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   setHidden: (id: string, hidden: boolean) => void;
 } {
   const root = h("div", "console-settings-tabs__wrap");
-  const nav = h("div", "pf-v6-c-tabs console-settings-tabs");
-  nav.dataset.controlSize = "";
+  const nav = h("div", "pf-v6-c-tabs");
+  nav.dataset.controlSize = "default";
   const list = h("ul", "pf-v6-c-tabs__list");
   list.setAttribute("role", "tablist");
   list.setAttribute("aria-label", "Settings sections");
@@ -251,7 +239,8 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
 
   for (const t of tabs) {
     const item = h("li", "pf-v6-c-tabs__item");
-    const btn = h("button", "pf-v6-c-tabs__link console-settings-tabs__tab") as HTMLButtonElement;
+    item.setAttribute("role", "presentation");
+    const btn = h("button", "pf-v6-c-tabs__link");
     btn.type = "button";
     btn.id = "console-settings-tab-" + t.id;
     btn.setAttribute("role", "tab");
@@ -289,10 +278,11 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   return { root, setHidden };
 }
 
-// externalLink builds an anchor that opens off-app. The console is an installed PWA, so every outbound
-// link goes to a new tab (target=_blank) with rel=noopener to sever the opener reference.
+// externalLink builds an anchor that opens off-app, as a PF inline link button. The console is an
+// installed PWA, so every outbound link goes to a new tab (target=_blank) with rel=noopener to sever
+// the opener reference.
 function externalLink(href: string, text: string): HTMLAnchorElement {
-  const a = h("a", "console-settings-about__link", text);
+  const a = h("a", "pf-v6-c-button pf-m-link pf-m-inline", text);
   a.href = href;
   a.target = "_blank";
   a.rel = "noopener";
@@ -300,14 +290,13 @@ function externalLink(href: string, text: string): HTMLAnchorElement {
 }
 
 // buildAbout builds the About section body: a source link, the reporting links, and the full license
-// folded into a native <details> disclosure (the codebase's existing fold idiom, no JS needed) so it
-// does not dominate the page. It is static, so it takes no draft/commit wiring.
+// folded into a PF expandable section so it does not dominate the page. It is static, so it takes no
+// draft/commit wiring.
 function buildAbout(): HTMLElement {
   const body = h("div", "console-settings-about");
 
-  // A short link list: source, then the issue tracker. Kept as a plain description-free row set -
-  // version info already lives in the status bar, so this stays quiet. (Discussions/feature-request
-  // link dropped: the repo does not enable Discussions; the issue tracker covers both.)
+  // Version info already lives in the status bar, so this stays quiet. The issue tracker covers
+  // bugs and feature requests alike: the repository does not enable Discussions.
   const links = h("ul", "console-settings-about__links");
   const linkRow = (label: string, link: HTMLAnchorElement): HTMLElement => {
     const li = h("li", "console-settings-about__row");
@@ -320,14 +309,14 @@ function buildAbout(): HTMLElement {
   );
   body.append(links);
 
-  // The full license, verbatim from license.ts, in a collapsed disclosure. Preformatted + monospace so
-  // the GPL's own layout is preserved, and scrollable within a bounded height so it never runs the page.
-  const details = h("details", "console-settings-about__license");
-  details.append(
-    h("summary", "console-settings-about__licensesummary", "License (GPL-3.0-or-later)"),
-    h("pre", "console-settings-about__licensetext", LICENSE_TEXT),
+  // The full license, verbatim from license.ts. Preformatted + monospace so the GPL's own layout is
+  // preserved, and scrollable within a bounded height so it never runs the page.
+  body.append(
+    expandable(
+      "License (GPL-3.0-or-later)",
+      h("pre", "console-settings-about__licensetext", LICENSE_TEXT),
+    ),
   );
-  body.append(details);
   return body;
 }
 
@@ -361,7 +350,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   };
   const keymapDraft = createDraftCell<Keymap>({ ...committed.keymap }, () => recompute());
   const draftPrefs = (): Settings => ({
-    // A bare port in the server-host field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
+    // A bare port in the server-address field expands to the literal loopback IP (8787 -> 127.0.0.1:8787),
     // so the committed/stored value is a canonical host resolveServerHost accepts. Empty stays empty
     // (loopback default); an unparsable value is kept as-typed so the Test button can report on it.
     poll: draftScalar.poll,
@@ -389,32 +378,39 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
 
   const page = h("div", "console-settings-page");
   page.dataset.app = "settings";
-  // No page heading: the app's own tab (the top tab bar) already reads "Settings", so an h1 here
-  // just repeats it. The section sub-tabs below carry the naming from here down.
+  // The app's tab reads "Settings" but the page has no heading of its own, so a hidden one gives the
+  // sections beneath it an outline to hang from.
+  const body = h("div", "console-settings-page__body");
+  body.append(h("h1", "pf-v6-screen-reader", "Settings"));
 
-  // --- Action bar: a staged-config bar - pending indicator + Save & Apply / Save / Reset ---
+  // --- Action bar: a staged-config bar - what the buttons do + Save & Apply / Save / Reset ---
   const bar = h("div", "console-settings-actionbar");
-  const count = h("span", "console-settings-actionbar__count");
+  const barNote = h(
+    "p",
+    "console-settings-actionbar__note",
+    "Save & Apply applies the changes to this session now. Save keeps them for the next load. Reset discards them.",
+  );
+  barNote.id = "console-settings-actionbar-note";
   const actions = h("div", "console-settings-actionbar__actions");
   // Standard PatternFly button hierarchy, no custom accent colors: Save & Apply = primary (persist +
   // hot-reload now), Save = secondary (persist for the next load), Reset = a quiet link (discard the draft).
-  const applyBtn = h("button", "pf-v6-c-button pf-m-primary", "Save & Apply") as HTMLButtonElement;
-  const saveBtn = h("button", "pf-v6-c-button pf-m-secondary", "Save") as HTMLButtonElement;
-  const resetBtn = h("button", "pf-v6-c-button pf-m-link", "Reset") as HTMLButtonElement;
-  for (const b of [applyBtn, saveBtn, resetBtn]) b.type = "button";
-  applyBtn.title = "Persist and apply changes to this session now";
-  saveBtn.title = "Persist changes for the next load, without applying them now";
-  resetBtn.title = "Discard staged changes and restore the saved values";
+  const applyBtn = h("button", "pf-v6-c-button pf-m-primary", "Save & Apply");
+  const saveBtn = h("button", "pf-v6-c-button pf-m-secondary", "Save");
+  const resetBtn = h("button", "pf-v6-c-button pf-m-link", "Reset");
+  for (const b of [applyBtn, saveBtn, resetBtn]) {
+    b.type = "button";
+    b.setAttribute("aria-describedby", barNote.id);
+  }
   actions.append(applyBtn, saveBtn, resetBtn);
-  bar.append(count, actions);
+  bar.append(barNote, actions);
 
+  // A live line for what just happened (a staged preset, an import, a clipboard failure). Hidden when
+  // there is nothing to say, so it leaves no empty band.
   const status = h("p", "console-settings-actionbar__status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
-  const setStatus = (msg: string, kind: "ok" | "error"): void => {
-    status.textContent = msg;
-    status.dataset.kind = kind;
-  };
+  const setStatus = (msg: string, kind: "ok" | "error"): void => setStatusLine(status, msg, kind);
+  setStatus("", "ok");
 
   // The pending diff, hidden when the draft matches the baseline. A header carries the title and a
   // Pretty|Raw view toggle (a PF ToggleGroup, matching the log viewer's Pretty|Raw switch): Pretty is
@@ -422,8 +418,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // green).
   let diffView: "pretty" | "raw" = "pretty";
   const diffWrap = h("section", "console-settings-diff");
+  diffWrap.setAttribute("aria-label", "Pending changes");
   const diffHead = h("div", "console-settings-diff__head");
-  diffHead.append(h("h2", "console-settings-diff__title", "Pending changes"));
+  const diffTitle = h("h2", "console-settings-diff__title", "Pending changes");
+  diffHead.append(diffTitle);
 
   const viewToggle = h("div", "pf-v6-c-toggle-group console-settings-diff__view");
   viewToggle.dataset.controlSize = "compact";
@@ -435,7 +433,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     ["raw", "Raw"],
   ] as const) {
     const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    const btn = h("button", "pf-v6-c-toggle-group__button");
     btn.type = "button";
     btn.append(h("span", "pf-v6-c-toggle-group__text", labelText));
     btn.addEventListener("click", () => {
@@ -479,10 +477,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   }
 
   function renderPending(changes: PendingChange[]): void {
-    count.textContent =
-      changes.length === 0
-        ? "No pending changes"
-        : changes.length + (changes.length === 1 ? " pending change" : " pending changes");
+    diffTitle.textContent =
+      changes.length === 0 ? "Pending changes" : "Pending changes (" + changes.length + ")";
     diffList.replaceChildren();
     for (const c of changes) {
       const item = h("li", "console-settings-diff__item");
@@ -506,62 +502,53 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     renderPending(changes);
     const none = changes.length === 0;
     // Hide the whole action bar when the draft matches the saved settings - there is nothing to save,
-    // apply, or reset, so the bar (and its "No pending changes" line) is just noise. It reappears the
-    // moment a control stages a change.
+    // apply, or reset, so the bar is just noise. It reappears the moment a control stages a change.
     bar.hidden = none;
     saveBtn.disabled = none;
     applyBtn.disabled = none;
     resetBtn.disabled = none;
   }
 
-  // --- General: refresh rate + server host ---
-  const generalForm = h("form", "pf-v6-c-form pf-m-horizontal");
-  generalForm.addEventListener("submit", (e) => e.preventDefault());
-
-  const pollControl = h("span", "pf-v6-c-form-control");
-  const pollSelect = h("select");
-  pollSelect.id = "console-settings-poll";
-  for (const [ms, lab] of POLL_OPTIONS) {
-    const opt = h("option");
-    opt.value = ms;
-    opt.textContent = lab;
-    pollSelect.append(opt);
-  }
-  pollSelect.value = String(draftScalar.poll);
-  pollControl.append(pollSelect);
-  pollSelect.addEventListener("change", () => {
-    draftScalar.poll = Number(pollSelect.value);
-    recompute();
-  });
+  // --- Connection: refresh rate + server address ---
+  const pollRadios = radios(
+    "console-settings-poll",
+    POLL_OPTIONS.map(([value, label]) => ({ value, label })),
+    (value) => {
+      draftScalar.poll = Number(value);
+      recompute();
+    },
+  );
+  pollRadios.set(String(draftScalar.poll));
 
   const hostControl = h("span", "pf-v6-c-form-control");
   const hostInput = h("input");
   hostInput.id = "console-settings-host";
   hostInput.type = "text";
-  hostInput.placeholder = "127.0.0.1:7391";
+  hostInput.placeholder = "Example 127.0.0.1:7391";
   hostInput.spellcheck = false;
   hostInput.autocomplete = "off";
   hostInput.value = draftScalar.host;
   hostControl.append(hostInput);
-  // The Test result stays under the field it describes, where a failure's instructions can be read
-  // while fixing the address, rather than in a toast that is gone in six seconds.
-  const hostTestStatus = h("p", "console-settings-form__help");
-  hostTestStatus.setAttribute("role", "status");
-  hostTestStatus.hidden = true;
+
+  // The address field's own help names what to type and where the guide is, as text the input
+  // points at; the Test verdict sits under it, where a failure's instructions can be read while
+  // fixing the address, rather than in a toast that is gone in six seconds.
+  const hostHelp = helperText(
+    "The loopback server to connect to by default. A bare port such as 8787 expands to 127.0.0.1:8787. Leave empty for the default loopback.",
+  );
+  const guide = h("a", "pf-v6-c-button pf-m-link pf-m-inline", "Setup guide");
+  guide.href = SERVER_GUIDE_URL;
+  guide.target = "_blank";
+  guide.rel = "noopener";
+  hostHelp.el.querySelector(".pf-v6-c-helper-text__item-text")?.append(" ", guide);
+  const hostTest = helperText();
   // Bumped whenever the status is cleared, so a probe that answers after the field was edited, reset
   // or imported does not write a verdict about an address no longer in it.
   let hostTestGeneration = 0;
-  const showHostTestStatus = (message: string, kind: "pending" | "ok" | "error"): void => {
-    hostTestStatus.textContent = message;
-    hostTestStatus.dataset.kind = kind;
-    hostTestStatus.hidden = false;
-  };
   const clearHostTestStatus = (): void => {
     hostTestGeneration++;
     testBtn.disabled = false;
-    hostTestStatus.textContent = "";
-    delete hostTestStatus.dataset.kind;
-    hostTestStatus.hidden = true;
+    hostTest.set("");
   };
 
   hostInput.addEventListener("input", () => {
@@ -570,32 +557,31 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     recompute();
   });
 
-  // Test attaches to the field so a typed host can be checked BEFORE saving it - the draft value is what
-  // gets probed.
-  const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test") as HTMLButtonElement;
+  // Test attaches to the field so a typed address can be checked BEFORE saving it - the draft value is
+  // what gets probed.
+  const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test");
   testBtn.type = "button";
-  testBtn.title = "Try to reach a server at this address";
   testBtn.addEventListener("click", () => {
     const raw = hostInput.value.trim();
     if (!raw) {
-      showHostTestStatus("Enter an address to test, for example 127.0.0.1:7391.", "error");
+      hostTest.set("Enter an address to test, for example 127.0.0.1:7391.", "error");
       return;
     }
     const generation = hostTestGeneration;
     testBtn.disabled = true;
-    showHostTestStatus("Testing...", "pending");
+    hostTest.set("Testing...");
     void probeServer(raw).then((res) => {
       if (generation !== hostTestGeneration) return;
       testBtn.disabled = false;
       // "Answered", not "connected" or "200": the response is opaque cross-origin, so the status code
       // and body are unreadable - this proves a server answered at that address, nothing more.
       if (res.ok) {
-        showHostTestStatus(
+        hostTest.set(
           "A server answered at " + res.url + ". Save & Apply to connect the console to it.",
-          "ok",
+          "success",
         );
       } else {
-        showHostTestStatus(res.reason, "error");
+        hostTest.set(res.reason, "error");
       }
     });
   });
@@ -605,193 +591,115 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   hostFill.append(hostControl);
   const testItem = h("div", "pf-v6-c-input-group__item");
   testItem.append(testBtn);
-  const guideItem = h("div", "pf-v6-c-input-group__item");
-  guideItem.append(serverGuideLink());
-  hostGroup.append(hostFill, testItem, guideItem);
+  hostGroup.append(hostFill, testItem);
   const hostField = h("div");
-  hostField.append(hostGroup, hostTestStatus);
+  hostField.append(hostGroup);
 
-  generalForm.append(
-    buildFormGroup(
-      "Refresh rate",
-      pollSelect.id,
-      pollControl,
-      "How often the VCS insight lenses re-poll the server.",
-    ),
-  );
-  generalForm.append(
-    buildFormGroup(
-      "Server host",
-      hostInput.id,
-      hostField,
-      "The loopback server to connect to by default. Enter a bare port (for example 8787) and it expands to 127.0.0.1:8787, or give a full 127.0.0.1:port. Leave empty for the default loopback.",
-    ),
+  const hostRow = formGroup({
+    label: "Server address",
+    control: hostField,
+    controlId: hostInput.id,
+    help: hostHelp,
+  });
+  hostRow.querySelector(".pf-v6-c-form__group-control")?.append(hostTest.el);
+  hostInput.setAttribute("aria-describedby", hostHelp.id + " " + hostTest.id);
+
+  const connectionForm = horizontalForm(
+    formGroup({
+      label: "Refresh rate",
+      control: pollRadios.el,
+      groupRole: "radiogroup",
+      help: helperText("How often the views that poll re-read the server."),
+    }),
+    hostRow,
   );
 
-  // --- Appearance: a 3-way theme toggle group (staged; applies on Save & Apply) ---
-  const themeGroup = h("div", "pf-v6-c-toggle-group console-settings-theme");
-  themeGroup.setAttribute("role", "group");
-  themeGroup.setAttribute("aria-label", "Color theme");
-  const themeButtons = new Map<ThemePref, HTMLButtonElement>();
-  for (const t of THEME_ORDER) {
-    const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
-    btn.type = "button";
-    btn.append(h("span", "pf-v6-c-toggle-group__text", THEME_LABEL[t]));
-    btn.addEventListener("click", () => {
-      draftScalar.theme = t;
-      paintThemeToggle();
+  // --- Appearance: theme, motion, focus ring, node shapes (staged; applies on Save & Apply) ---
+  const themeRadios = radios(
+    "console-settings-theme",
+    THEME_ORDER.map((value) => ({ value, label: THEME_LABEL[value] })),
+    (value) => {
+      draftScalar.theme = value;
       recompute();
-    });
-    item.append(btn);
-    themeGroup.append(item);
-    themeButtons.set(t, btn);
-  }
-  function paintThemeToggle(): void {
-    for (const [t, btn] of themeButtons) {
-      const on = draftScalar.theme === t;
-      btn.classList.toggle("pf-m-selected", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    }
-  }
-  paintThemeToggle();
-  // The Appearance panel body: the two toggle groups stacked in a column (same layout as a panel).
-  const themeBody = h("div", "console-settings-panel");
-  themeBody.append(
-    buildFormGroup(
-      "Theme",
-      null,
-      themeGroup,
-      "System follows your operating system. Applies on Save & Apply.",
-    ),
+    },
   );
+  themeRadios.set(draftScalar.theme);
 
-  // A 2-way focus-ring toggle group, mirrored on the theme toggle above. Off (default) shows the
-  // split-pane focus outline only during keyboard navigation; On always shows it, including after a
-  // mouse click.
-  const focusRingGroup = h("div", "pf-v6-c-toggle-group console-settings-focusring");
-  focusRingGroup.setAttribute("role", "group");
-  focusRingGroup.setAttribute("aria-label", "Focus ring");
-  const focusRingButtons = new Map<boolean, HTMLButtonElement>();
-  for (const v of [false, true]) {
-    const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
-    btn.type = "button";
-    btn.append(h("span", "pf-v6-c-toggle-group__text", v ? "On" : "Off"));
-    btn.addEventListener("click", () => {
-      draftScalar.focusRing = v;
-      paintFocusRingToggle();
+  // Motion: "System" is not "no reduction": it honors prefers-reduced-motion, which is why the other
+  // option is labeled Reduced rather than Off - it reduces motion here even when the OS is not asking
+  // for it anywhere.
+  const motionRadios = radios<MotionPref>(
+    "console-settings-motion",
+    [
+      { value: "auto", label: "System" },
+      { value: "reduced", label: "Reduced" },
+    ],
+    (value) => {
+      draftScalar.motion = value;
       recompute();
-    });
-    item.append(btn);
-    focusRingGroup.append(item);
-    focusRingButtons.set(v, btn);
-  }
-  function paintFocusRingToggle(): void {
-    for (const [v, btn] of focusRingButtons) {
-      const on = draftScalar.focusRing === v;
-      btn.classList.toggle("pf-m-selected", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    }
-  }
-  paintFocusRingToggle();
-  themeBody.append(
-    buildFormGroup(
-      "Focus ring",
-      null,
-      focusRingGroup,
-      "Always show the outline on the focused pane. Off shows it only during keyboard navigation.",
-    ),
+    },
+  );
+  motionRadios.set(draftScalar.motion);
+
+  // Off (default) shows the split-pane focus outline only during keyboard navigation; On always shows
+  // it, including after a mouse click.
+  const focusRingSwitch = switchControl((on) => {
+    draftScalar.focusRing = on;
+    recompute();
+  });
+  focusRingSwitch.set(draftScalar.focusRing);
+
+  // Node shapes: a shape per family as well as a colour; off draws every node as a circle.
+  const shapesSwitch = switchControl((on) => {
+    draftScalar.nodeShapes = on;
+    recompute();
+  });
+  shapesSwitch.set(draftScalar.nodeShapes);
+
+  const appearanceForm = horizontalForm(
+    formGroup({
+      label: "Theme",
+      control: themeRadios.el,
+      groupRole: "radiogroup",
+      help: helperText("System follows your operating system. Applies on Save & Apply."),
+    }),
+    formGroup({
+      label: "Motion",
+      control: motionRadios.el,
+      groupRole: "radiogroup",
+      help: helperText(
+        "Reduced stills animation across the console, including the graph's physics layout. System follows your operating system's reduced-motion setting.",
+      ),
+    }),
+    formGroup({
+      label: "Focus ring",
+      control: focusRingSwitch.el,
+      help: helperText(
+        "On always shows the outline on the focused pane. Off shows it only during keyboard navigation.",
+      ),
+    }),
+    formGroup({
+      label: "Node shapes",
+      control: shapesSwitch.el,
+      help: helperText(
+        "Gives each graph node a shape for its family as well as a color, so kinds stay tellable apart without relying on hue. Off draws every node as a circle.",
+      ),
+    }),
   );
 
-  // Motion, same 2-way shape. "System" is not "no reduction": it honors prefers-reduced-motion,
-  // which is why the other option is labeled Reduced rather than Off - it reduces motion here even
-  // when the OS is not asking for it anywhere.
-  const motionGroup = h("div", "pf-v6-c-toggle-group");
-  motionGroup.setAttribute("role", "group");
-  motionGroup.setAttribute("aria-label", "Motion");
-  const motionButtons = new Map<MotionPref, HTMLButtonElement>();
-  for (const v of ["auto", "reduced"] as MotionPref[]) {
-    const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
-    btn.type = "button";
-    btn.append(h("span", "pf-v6-c-toggle-group__text", v === "auto" ? "System" : "Reduced"));
-    btn.addEventListener("click", () => {
-      draftScalar.motion = v;
-      paintMotionToggle();
-      recompute();
-    });
-    item.append(btn);
-    motionGroup.append(item);
-    motionButtons.set(v, btn);
-  }
-  function paintMotionToggle(): void {
-    for (const [v, btn] of motionButtons) {
-      const on = draftScalar.motion === v;
-      btn.classList.toggle("pf-m-selected", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    }
-  }
-  paintMotionToggle();
-  themeBody.append(
-    buildFormGroup(
-      "Motion",
-      null,
-      motionGroup,
-      "Reduced stills animation across the console, including the graph's physics layout. " +
-        "System follows your operating system's reduced-motion setting.",
-    ),
-  );
-
-  // Node shapes, same 2-way shape again.
-  const shapesGroup = h("div", "pf-v6-c-toggle-group");
-  shapesGroup.setAttribute("role", "group");
-  shapesGroup.setAttribute("aria-label", "Node shapes");
-  const shapesButtons = new Map<boolean, HTMLButtonElement>();
-  for (const v of [true, false]) {
-    const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
-    btn.type = "button";
-    btn.append(h("span", "pf-v6-c-toggle-group__text", v ? "On" : "Off"));
-    btn.addEventListener("click", () => {
-      draftScalar.nodeShapes = v;
-      paintShapesToggle();
-      recompute();
-    });
-    item.append(btn);
-    shapesGroup.append(item);
-    shapesButtons.set(v, btn);
-  }
-  function paintShapesToggle(): void {
-    for (const [v, btn] of shapesButtons) {
-      const on = draftScalar.nodeShapes === v;
-      btn.classList.toggle("pf-m-selected", on);
-      btn.setAttribute("aria-pressed", on ? "true" : "false");
-    }
-  }
-  paintShapesToggle();
-  themeBody.append(
-    buildFormGroup(
-      "Node shapes",
-      null,
-      shapesGroup,
-      "Give each graph node a shape for its family as well as a color, so kinds stay " +
-        "tellable apart without relying on hue. Off draws every node as a circle.",
-    ),
-  );
-
-  // --- Keybindings: an optional keymap-PROFILE strip above the shared editor core over the DRAFT keymap.
-  // The strip is a truthful readout of the current bindings, not a separate selection. Picking a named
+  // --- Keybindings: an optional keymap-PROFILE row above the shared editor core over the DRAFT keymap.
+  // The row is a truthful readout of the current bindings, not a separate selection. Picking a named
   // preset stages its whole binding set into the draft immediately - there is no separate "Apply", since
-  // the page's own Save / Save & Apply is what commits it, so a preset Apply button just duplicated that.
-  // "Custom" is the derived fallback the strip lands on whenever the draft matches no preset - including
-  // after any manual edit in the editor below - so the strip can never claim a preset the bindings no
-  // longer match. ---
+  // the page's own Save / Save & Apply is what commits it.
+  // "Custom" is the derived fallback the row lands on whenever the draft matches no preset - including
+  // after any manual edit in the editor below - so it can never claim a preset the bindings no longer
+  // match. ---
   const editor = createKeybindingsEditor({
     commands: kb.commands,
     defaults: kb.defaults,
     keymap: keymapDraft,
   });
+  const stopNaming = nameEditorControls(editor.el);
   let keybindingsContent: HTMLElement = editor.el;
   let disposeProfile = (): void => {};
   if (deps.presets && deps.presetList && deps.presetList.length) {
@@ -820,62 +728,49 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       return "custom";
     };
 
-    // The strip is the presets as one-click loads: clicking a segment REPLACES the draft with that whole
-    // binding set (the page's Save / Save & Apply commits it - a separate preset Apply just duplicated
-    // that). The segment matching the current draft lights up; when the draft matches no preset, none
-    // lights and a muted "Custom" tag names that state. Custom is a READOUT, never a button - so it can
-    // never be "picked" and never competes with the Default preset (which just means "the console
-    // defaults"); you reach Custom only by editing a row below.
-    const presetGroup = h("div", "pf-v6-c-toggle-group console-settings-presets__group");
-    presetGroup.setAttribute("role", "group");
-    presetGroup.setAttribute("aria-label", "Keymap preset");
-    const presetButtons = new Map<string, HTMLButtonElement>();
-    const customTag = h("span", "console-settings-presets__custom", "Custom") as HTMLElement;
-    customTag.title =
-      "Your bindings match no preset. Pick one to replace them, or keep editing the rows below.";
-    const paintProfile = (): void => {
-      const active = activeProfile();
-      for (const [id, btn] of presetButtons) {
-        const on = id === active;
-        btn.classList.toggle("pf-m-selected", on);
-        btn.setAttribute("aria-pressed", on ? "true" : "false");
-      }
-      customTag.hidden = active !== "custom";
-    };
-    for (const p of presetList) {
-      const item = h("div", "pf-v6-c-toggle-group__item");
-      const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
-      btn.type = "button";
-      btn.append(h("span", "pf-v6-c-toggle-group__text", p.label));
-      btn.title =
-        "Replace the keymap with the " +
-        p.label +
-        " preset. It stages into the draft; Save or Save & Apply keeps it.";
-      btn.addEventListener("click", () => {
-        keymapDraft.set({ ...presets[p.id] }); // fires the subscription (repaint) and the cell's onChange (recompute)
+    // The presets are one-click loads: picking one REPLACES the draft with that whole binding set (the
+    // page's Save / Save & Apply commits it). The option matching the current draft is checked; when the
+    // draft matches no preset none is, and a "Custom" label names that state. Custom is a READOUT,
+    // never an option - you reach it only by editing a row below.
+    const presetRadios = radios(
+      "console-settings-presets",
+      presetList.map((p) => ({ value: p.id, label: p.label })),
+      (id) => {
+        keymapDraft.set({ ...presets[id] }); // fires the subscription (repaint) and the cell's onChange (recompute)
+        const label = presetList.find((p) => p.id === id)?.label ?? id;
         setStatus(
-          "Staged the " + p.label + " keymap. Edit any row, or Save / Save & Apply to keep it.",
+          "Staged the " + label + " keymap. Edit any row, or Save / Save & Apply to keep it.",
           "ok",
         );
-      });
-      item.append(btn);
-      presetGroup.append(item);
-      presetButtons.set(p.id, btn);
-    }
-    // Repaint on every keymap change - a preset click, an editor edit, an import, or a Reset - so the lit
-    // segment always reflects the real bindings. recompute() is driven separately by the draft cell's onChange.
+      },
+    );
+    const customTag = h("span", "pf-v6-c-label pf-m-outline pf-m-compact");
+    const customContent = h("span", "pf-v6-c-label__content");
+    customContent.append(h("span", "pf-v6-c-label__text", "Custom bindings"));
+    customTag.append(customContent);
+    presetRadios.el.append(customTag);
+    const paintProfile = (): void => {
+      const active = activeProfile();
+      presetRadios.set(active === "custom" ? null : active);
+      customTag.hidden = active !== "custom";
+    };
+    // Repaint on every keymap change - a preset pick, an editor edit, an import, or a Reset - so the
+    // checked option always reflects the real bindings. recompute() is driven separately by the draft
+    // cell's onChange.
     disposeProfile = keymapDraft.subscribe(() => paintProfile());
     paintProfile();
 
-    const strip = h("div", "console-settings-presets__row");
-    strip.append(presetGroup, customTag);
     const wrap = h("div");
     wrap.append(
-      buildFormGroup(
-        "Keymap preset",
-        null,
-        strip,
-        "Pick a preset to replace your bindings, then edit any row below. The strip shows Custom once your bindings differ from every preset. The Emacs, Vim, and VS Code presets use multi-key sequences like Ctrl+X then O.",
+      horizontalForm(
+        formGroup({
+          label: "Keymap preset",
+          control: presetRadios.el,
+          groupRole: "radiogroup",
+          help: helperText(
+            "Picking a preset replaces your bindings and stays pending until you save. The Emacs, Vim and VS Code presets use sequences like Ctrl+X then O.",
+          ),
+        }),
       ),
       editor.el,
     );
@@ -889,30 +784,40 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   copyBtn.type = "button";
   const downloadBtn = h("button", "pf-v6-c-button pf-m-secondary", "Download");
   downloadBtn.type = "button";
-  ioActions.append(copyBtn, downloadBtn);
 
-  const importActions = h("div", "console-settings-io__actions");
-  const fileLabel = h("label", "pf-v6-c-button pf-m-secondary console-settings-io__file");
-  fileLabel.append(h("span", "pf-v6-c-button__text", "Import from file"));
-  const fileInput = h("input") as HTMLInputElement;
+  // A real button opens the picker, so it takes the console's one focus ring; the file input behind it
+  // is never reached by keyboard.
+  const importBtn = h("button", "pf-v6-c-button pf-m-secondary", "Import from file");
+  importBtn.type = "button";
+  const fileInput = h("input");
   fileInput.type = "file";
   fileInput.accept = "application/json,.json";
-  fileLabel.append(fileInput);
-  importActions.append(fileLabel);
+  fileInput.hidden = true;
+  fileInput.tabIndex = -1;
+  importBtn.addEventListener("click", () => fileInput.click());
+  ioActions.append(copyBtn, downloadBtn, importBtn, fileInput);
 
   const exportJson = (): string =>
     JSON.stringify(buildSettingsEnvelope(draftPrefs(), readLayout()), null, 2);
 
+  const clipboardFailed = (why: string): void => {
+    setStatus(why + " Use Download instead.", "error");
+    reportFailure(
+      "Settings",
+      "Could not copy the settings: " + why + " Use Download instead.",
+      "settings:copy",
+    );
+  };
   copyBtn.addEventListener("click", () => {
     const text = exportJson();
     const clip = navigator.clipboard;
     if (clip && typeof clip.writeText === "function") {
       clip.writeText(text).then(
         () => setStatus("Copied settings to the clipboard.", "ok"),
-        () => setStatus("Could not access the clipboard. Use Download instead.", "error"),
+        () => clipboardFailed("The browser would not let this page use the clipboard."),
       );
     } else {
-      setStatus("Clipboard is unavailable here. Use Download instead.", "error");
+      clipboardFailed("Clipboard is unavailable here.");
     }
   });
 
@@ -989,7 +894,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     if (!file) return;
     file.text().then(
       (text) => applyImport(text),
-      () => setStatus("Could not read that file.", "error"),
+      () => {
+        setStatus("Could not read that file.", "error");
+        reportFailure("Settings", "Could not read that file.", "settings:import:read");
+      },
     );
     fileInput.value = ""; // allow re-picking the same file
   });
@@ -998,10 +906,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     h(
       "p",
       "console-settings-io__lede",
-      "Settings live in this browser. Copy or download the current draft to move it to another machine, or import a saved file to stage it.",
+      "Settings live in this browser. Copy or download them, unsaved changes included, to move them to another machine, or import a saved file to stage it.",
     ),
     ioActions,
-    importActions,
   );
 
   // loadDraft replaces the whole draft (scalars + keymap) and reseeds every control. Backs Reset
@@ -1013,13 +920,13 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     draftScalar.focusRing = p.focusRing;
     draftScalar.motion = p.motion;
     draftScalar.nodeShapes = p.nodeShapes;
-    pollSelect.value = String(p.poll);
+    pollRadios.set(String(p.poll));
     hostInput.value = p.host;
     clearHostTestStatus();
-    paintThemeToggle();
-    paintFocusRingToggle();
-    paintMotionToggle();
-    paintShapesToggle();
+    themeRadios.set(p.theme);
+    motionRadios.set(p.motion);
+    focusRingSwitch.set(p.focusRing);
+    shapesSwitch.set(p.nodeShapes);
     keymapDraft.set({ ...p.keymap }); // re-renders the editor via its subscription; onChange recomputes
     recompute();
   }
@@ -1107,8 +1014,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     onDenied: () => tabs.setHidden("access", true),
   });
 
-  // Two tabs. General stacks the staged client sections (server address, appearance, keybindings,
-  // backup) plus About; Access hosts the one live server-facing section. The action bar and pending
+  // Two tabs. General stacks the staged client sections (connection, appearance, keybindings, backup)
+  // plus Install and About; Access hosts the one live server-facing section. The action bar and pending
   // diff stay above the tabs: the staged draft is shared across the staged sections, so its commit
   // controls are global to the app, not per-tab.
   const tabs = buildSettingsTabs([
@@ -1116,45 +1023,70 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       id: "general",
       label: "General",
       panel: buildStackedPanel(
-        buildSection("General", generalForm),
-        buildSection("Appearance", themeBody),
-        buildSection(
-          "Install",
-          installSection.el,
-          "Install the console as an app on this device. This acts on your browser, so it applies immediately rather than staging above.",
-        ),
-        buildSection(
-          "Keybindings",
-          keybindingsContent,
-          "Rebind the console's tab, pane, and command-bar shortcuts. Changes stage here and land on Save or Save & Apply.",
-        ),
-        buildSection("Backup", io, "Export the current draft, or import a saved set to stage it."),
-        buildSection("About", buildAbout(), "Source, license, and where to report bugs."),
+        buildSection("Connection", connectionForm),
+        buildSection("Appearance", appearanceForm),
+        buildSection("Install", installSection.el, {
+          lede: "Install the console as an app on this device. This acts on your browser, so it applies immediately rather than staging above.",
+        }),
+        buildSection("Keybindings", keybindingsContent, { keyboard: true }),
+        buildSection("Backup", io),
+        buildSection("About", buildAbout()),
       ),
     },
     {
       id: "access",
       label: "Access",
       panel: buildStackedPanel(
-        buildSection(
-          "Access tokens",
-          tokensSection.el,
-          "List and revoke the server's connector tokens and the active read-only share token. Minting stays a CLI-only operation: the console can never create a token.",
-        ),
+        buildSection("Access tokens", tokensSection.el, {
+          lede: "List and revoke the server's connector tokens and the active read-only share token. Minting stays a CLI-only operation: the console can never create a token.",
+        }),
       ),
     },
   ]);
 
-  page.append(bar, status, diffWrap, tabs.root);
+  body.append(bar, status, diffWrap, tabs.root);
+  page.append(body);
   host.append(page);
 
   recompute();
   return () => {
     disposeProfile();
+    stopNaming();
     editor.destroy();
     installSection.destroy();
     tokensSection?.destroy();
   };
+}
+
+// nameEditorControls gives each keybinding row's controls a name that says which command they act on.
+// The editor (desktop/keybindings.ts) repaints its rows whenever the keymap changes, and every row
+// carries the same Record, Clear and reset buttons, so a reader that lists the controls hears the same
+// three names thirty times over. The labels are stamped on every repaint.
+function nameEditorControls(root: HTMLElement): () => void {
+  const stamp = (): void => {
+    for (const row of root.querySelectorAll<HTMLElement>("[data-krow]")) {
+      const label = row.firstElementChild?.textContent ?? row.dataset.command ?? "";
+      const buttons = row.querySelectorAll<HTMLButtonElement>("[data-kactions] button");
+      const verbs = ["", "Clear the shortcut for ", "Reset to default: "];
+      buttons.forEach((btn, i) => {
+        if (i === 0) {
+          const text = btn.textContent?.trim() ?? "Record";
+          btn.setAttribute(
+            "aria-label",
+            (text === "Cancel" ? "Cancel recording the shortcut for " : "Record a shortcut for ") +
+              label,
+          );
+        } else {
+          btn.setAttribute("aria-label", (verbs[i] ?? "") + label);
+        }
+      });
+    }
+  };
+  stamp();
+  if (typeof MutationObserver === "undefined") return () => {};
+  const observer = new MutationObserver(stamp);
+  observer.observe(root, { childList: true, subtree: true });
+  return () => observer.disconnect();
 }
 
 // ensureStylesheet adds the app's page-scoped stylesheet once (idempotent by id).

@@ -60,7 +60,7 @@ export interface DiagramClientOptions {
   readonly fetch?: typeof fetch;
 }
 
-const SOURCE = "Diagrams";
+const SOURCE = "Figures";
 
 export function diagramsUrl(host: string): string {
   return "http://" + host + "/api/v1/diagrams";
@@ -71,7 +71,7 @@ export function diagramUrl(host: string, id: string, lens: Lens): string {
 }
 
 export function listDiagrams(opts: DiagramClientOptions): Promise<DiagramRead<DiagramEntry[]>> {
-  return read(opts, diagramsUrl(opts.host), "the diagram list", parseListing);
+  return read(opts, diagramsUrl(opts.host), "the figure list", parseListing);
 }
 
 export function renderDiagram(
@@ -79,7 +79,7 @@ export function renderDiagram(
   id: string,
   lens: Lens,
 ): Promise<DiagramRead<RenderedDiagram>> {
-  return read(opts, diagramUrl(opts.host, id, lens), "diagram " + id, parseRendered);
+  return read(opts, diagramUrl(opts.host, id, lens), "figure " + id, parseRendered);
 }
 
 // readFailure maps a non-2xx status to a failure. body is the server's message (see readRefusal),

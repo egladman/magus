@@ -3,7 +3,9 @@
    table here is a page, not a tile. Shares the console's semantic tokens, the layer meant to be
    shared. */
 
+/* The pane is the container, so the bar answers to the width it was given, not the window's. */
 .console-tools {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   block-size: 100%;
@@ -18,52 +20,72 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--pf-t--global--spacer--sm);
   min-block-size: var(--console-app-bar-h);
   padding-block: 0;
   padding-inline: var(--console-pad);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
-.console-tools__label {
-  flex: 0 0 auto;
-  font-size: var(--console-label-size);
-  font-weight: var(--console-label-weight);
-  letter-spacing: var(--console-label-tracking);
-  text-transform: uppercase;
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-tools__filters { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-/* A pressed filter takes the app accent, so the ones narrowing the table are readable at a
-   glance without reading their counts. */
-.console-tools__filter[aria-pressed="true"] {
-  background: var(--console-accent);
-  border-color: var(--console-accent);
-  color: var(--pf-t--global--text--color--on-brand--default);
-}
+/* The three toggles scroll sideways inside their own row rather than pushing the bar to several
+   rows tall; in a narrow pane they take the whole first row and the count and Refresh share the next. */
+.console-tools__filters { max-inline-size: 100%; overflow-x: auto; }
+.console-tools__filter { white-space: nowrap; }
 .console-tools__count {
-  white-space: nowrap;
-  font-size: 0.8rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-tools__refresh { margin-inline-start: auto; }
+@container (max-width: 40rem) {
+  .console-tools__filters { flex: 1 1 100%; }
+}
+
+/* A failed refresh over a table still on screen. Empty when the last read worked, so it takes no room. */
+.console-tools__stale { padding-inline: var(--console-pad); }
+.console-tools__stale:empty { display: none; }
+.console-tools__stale:not(:empty) { padding-block: var(--pf-t--global--spacer--sm); }
 
 /* Says where the end-of-life columns came from when that is not a live answer. Empty when there is
    nothing to say, so it takes no room then. */
 .console-tools__note {
   margin: 0;
   padding-inline: var(--console-pad);
-  font-size: 0.8rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-tools__note:not(:empty) { padding-block: 0.4rem; border-block-end: 1px solid var(--pf-t--global--border--color--default); }
+.console-tools__note:not(:empty) {
+  padding-block: var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
 
 /* --- Table ----------------------------------------------------------------------
-   The table itself is the shared one (styles/table.css); this box scrolls it, so a wide one never
-   scrolls the page. */
-.console-tools__table { flex: 1 1 auto; min-block-size: 0; overflow: auto; padding-inline: var(--console-pad); }
+   The table itself is the shared one (styles/table.css), whose wrapper is the one scroll container.
+   This box only gives that wrapper a height: a one-row grid hands its item the box's whole height as
+   a definite size, so the wrapper scrolls the rows under a header that stays put, and the page itself
+   never scrolls. */
+.console-tools__table {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  padding-inline: var(--console-pad);
+}
+.console-tools__table[hidden] { display: none; }
+/* PF truncates a header to a one-pixel cell with an ellipsis unless the cell is nowrap, which the
+   shared table does not set: eleven columns came out as "T.", "V..." and "P...". PF's own cell
+   properties take the truncation off for this table's header. */
+.console-tools__table .pf-v6-c-table__thead {
+  --pf-v6-c-table--cell--MinWidth: 0;
+  --pf-v6-c-table--cell--MaxWidth: none;
+  --pf-v6-c-table--cell--Overflow: visible;
+  --pf-v6-c-table--cell--TextOverflow: clip;
+}
 
 /* --- Connect prompt -------------------------------------------------------------- */
-.console-tools__empty { padding: 2.5rem var(--console-pad); max-inline-size: 34rem; }
-.console-tools__empty-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.console-tools__empty {
+  padding-block: var(--pf-t--global--spacer--2xl);
+  padding-inline: var(--console-pad);
+  max-inline-size: 34rem;
+}
+.console-tools__empty[hidden] { display: none; }

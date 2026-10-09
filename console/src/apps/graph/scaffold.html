@@ -10,14 +10,20 @@
       <summary>Views</summary>
       <div class="console-graph-help__body">
       <p>Each view answers a developer question. The search box speaks the same grammar as <code>magus query</code>. Click an example to run it.</p>
-      <table class="console-graph-help__table">
-        <thead><tr><th>Question</th><th>View</th><th>CLI equivalent</th></tr></thead>
-        <tbody>
-          <tr><td>What breaks if I change this?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
-          <tr><td>Why does A depend on B?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
-          <tr><td>What's slow?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td><code>magus graph deps -o json</code></td></tr>
-          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td>no CLI equivalent</td></tr>
-          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td>no CLI equivalent</td></tr>
+      <table class="pf-v6-c-table pf-m-compact" aria-label="Views and their CLI equivalents">
+        <thead class="pf-v6-c-table__thead">
+          <tr class="pf-v6-c-table__tr">
+            <th class="pf-v6-c-table__th" scope="col">Question</th>
+            <th class="pf-v6-c-table__th" scope="col">View</th>
+            <th class="pf-v6-c-table__th" scope="col">CLI equivalent</th>
+          </tr>
+        </thead>
+        <tbody class="pf-v6-c-table__tbody">
+          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What breaks if I change this?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td class="pf-v6-c-table__td"><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
+          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">Why does A depend on B?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td class="pf-v6-c-table__td"><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
+          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's slow?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td class="pf-v6-c-table__td"><code>magus graph deps -o json</code></td></tr>
+          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's a hub?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td class="pf-v6-c-table__td">no CLI equivalent</td></tr>
+          <tr class="pf-v6-c-table__tr"><td class="pf-v6-c-table__td">What's dead?</td><td class="pf-v6-c-table__td"><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td class="pf-v6-c-table__td">no CLI equivalent</td></tr>
         </tbody>
       </table>
       </div>
@@ -66,7 +72,7 @@
                shared glyph exists so that "every console app's help affordance is an identical
                circle (the graph query prompt, the log filter)", and this was the query prompt. -->
           <div class="console-graph-display__sublabelrow">
-            <p class="console-graph-querybar__prompt" id="query-prompt">magus query</p>
+            <label class="console-graph-querybar__prompt" id="query-prompt" for="node-search">magus query</label>
             <!-- attachHelpPopover (main.ts) upgrades this into a tap-to-open popover, reading the
                  title= below as its body and stripping the attribute - a bare title tooltip never
                  fires on touch, so on mobile this used to do nothing. -->
@@ -75,7 +81,8 @@
           <div class="pf-v6-c-input-group console-graph-querybar">
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
-                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" list="node-suggestions" disabled>
+                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" spellcheck="false" autocomplete="off" list="node-suggestions" disabled>
+                <svg class="console-graph-querybar__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <!-- Completion candidates from GraphService.ResolveNodes, filled only in live mode.
                      A native datalist rather than a bespoke dropdown: it is keyboard- and
                      screen-reader-correct for free, and an EMPTY one (offline, where there is
@@ -116,11 +123,9 @@
           <span class="console-graph-sidebar__chevron" aria-hidden="true"></span>
         </button>
         <ul id="node-list" aria-label="Graph nodes" hidden></ul>
-        <!-- VIEW: how the graph is DRAWN - arrangement and color, the two halves of one question,
-             which were split across an always-visible block and a collapsed disclosure. The layout
-             toggle stays always-visible (Decision 3, discoverability phase): it is the manual
-             override for the arrangement axis, and main.ts drives selection and each button's
-             disabled/title from syncLayoutToggle. -->
+        <!-- VIEW: how the graph is DRAWN - arrangement, source and color. The arrangement toggle
+             is always visible: it is the manual override for the arrangement axis, and main.ts
+             drives selection and each button's disabled/title from syncLayoutToggle. -->
         <div class="console-graph-sidebar__modes">
           <div class="console-graph-display__sublabelrow">
           <p class="console-graph-sidebar__modeslabel" id="arrangement-label">Arrangement</p>
@@ -136,9 +141,29 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
           </div>
           <p id="arrangement-note" class="console-graph-display__unavailable" hidden></p>
-          <!-- Color and Graph pair on one row: each is a short toggle group, and stacked they
-               spent two full rows of a 20rem column on controls that together do not fill one. -->
-          <div class="console-graph-sidebar__viewpair">
+          <!-- SOURCE: which graph is loaded, on a row of its own. Switchable only against a live
+               server that serves both flavors; in a snapshot, a dropped file or the demo both buttons
+               are disabled. Loading a different graph entirely is the stage toolbar's Open file.
+               main.ts drives selection and disabled/title from syncGraphKindToggle/switchGraphKind. -->
+          <div class="console-graph-sidebar__viewcell">
+          <div class="console-graph-display__sublabelrow">
+          <p class="console-graph-display__sublabel" id="graphkind-label">Graph</p>
+          <!-- Why the switch is unavailable, on the shared "?" glyph (console-render-help-glyph +
+               attachHelpPopover in main.ts) rather than a line of italic text under the control.
+               syncGraphKindToggle shows the glyph only when not live. -->
+          <button id="graphkind-note" type="button" class="console-render-help-glyph" hidden aria-label="Why the graph switch is unavailable" title="Live workspace only">?</button>
+          </div>
+          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
+          </div>
+          </div>
+          <!-- Figures is a different view, not a third graph, so it is a button that opens it and
+               not a segment of the single-select group above. -->
+          <div class="console-graph-sidebar__viewcell">
+            <button id="graph-figures-open" type="button" class="pf-v6-c-button pf-m-secondary pf-m-small pf-m-block" data-graph-mode="figures"><span class="pf-v6-c-button__text">Open Figures</span></button>
+            <p class="console-graph-display__controlhint">Figures are diagrams a running server draws from this graph, in place of the explorer.</p>
+          </div>
           <div class="console-graph-sidebar__viewcell">
           <div class="console-graph-display__sublabelrow">
           <p class="console-graph-display__sublabel" id="color-label">Color</p>
@@ -152,29 +177,8 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Computed here from the layered layout; there is no layer: query field to type."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
             <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
           </div>
-          </div>
-          <!-- SOURCE: which graph is loaded. Switchable only against a live server that serves
-               both flavors - in a snapshot, a dropped file or the demo both buttons are disabled,
-               which is most sessions, so it shares a row rather than taking one. Loading a
-               different graph entirely is the stage toolbar's Open file. main.ts drives selection
-               and disabled/title from syncGraphKindToggle/switchGraphKind. -->
-          <div class="console-graph-sidebar__viewcell">
-          <div class="console-graph-display__sublabelrow">
-          <p class="console-graph-display__sublabel" id="graphkind-label">Graph</p>
-          <!-- Why the switch is unavailable, on the shared "?" glyph (console-render-help-glyph +
-               attachHelpPopover in main.ts) rather than a line of italic text under the control:
-               it is one fact about the session, and a permanent row of it cost more of a 20rem
-               column than it earned. syncGraphKindToggle shows the glyph only when not live. -->
-          <button id="graphkind-note" type="button" class="console-render-help-glyph" hidden aria-label="Why the graph switch is unavailable" title="Live workspace only">?</button>
-          </div>
-          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graph-mode="figures" title="Figures a running server draws from this workspace's graph. Opens in place of the explorer."><span class="pf-v6-c-toggle-group__text">Figures</span></button></div>
-          </div>
-          </div>
-          </div>
           <p class="console-graph-display__controlhint">Color paints over the kind palette; click an active one to clear it.</p>
+          </div>
           <!-- The KEY for whatever coloring is active, directly under the control that sets it.
                It used to float over the canvas at 88% opacity, which put it on top of the stage's
                workspace label and the top-left of the graph itself. Its rows are filters
@@ -205,7 +209,7 @@
               <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-lg" data-overflow-group="graphtools">
                 <div class="pf-v6-c-toolbar__toggle">
                   <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, fullscreen">
-                    <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="currentColor"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg></span>
+                    <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></span>
                   </button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
@@ -232,7 +236,7 @@
                   <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
-                  <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
+                  <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
                 </div>
               </div>
             </div>
@@ -250,7 +254,10 @@
         <!-- A live control, so it belongs here and not in a [data-ref-section] block: main.ts
              wires it by id, and the drawer's clones are id-stripped. Un-hidden in live mode. -->
         <div id="live-remember-row" class="console-graph-live__rememberrow" hidden>
-          <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
+          <div class="pf-v6-c-check">
+            <input class="pf-v6-c-check__input" type="checkbox" id="live-remember-cb">
+            <label class="pf-v6-c-check__label" for="live-remember-cb">Remember this workspace (stores the token in localStorage)</label>
+          </div>
         </div>
         <!-- Empty state: shown when nothing is loaded (no #data/#src/#port and the demo has
              not been launched). Mirrors the log viewer's empty state - an intuitive prompt
@@ -265,19 +272,20 @@
                 <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
               </svg>
             </div>
-            <h1 class="pf-v6-c-empty-state__title-text">Nothing loaded yet</h1>
+            <h1 class="pf-v6-c-empty-state__title-text">No graph loaded</h1>
             <div class="pf-v6-c-empty-state__body">
-              <p>This renders a magus workspace's dependency graph in your browser. Nothing is uploaded.</p>
+              <p>Explore a workspace's projects, targets and dependencies as a graph.</p>
               <div class="pf-v6-c-empty-state__actions" data-empty-ways>
                 <div data-empty-way>
                   <span data-empty-way-label>Open your workspace</span>
                   <pre data-empty-cmd><code>magus graph open</code></pre>
-                  <span data-empty-hint>Renders your repo's graph here.</span>
                 </div>
-                <!-- No button, matching every other app: the Workspace menu is the one way in. -->
+                <!-- No button, matching every other app. The demo is the magus repo's committed
+                     graph, which only the #demo fragment loads; the Workspace menu's acme demo is
+                     synthetic data for the other apps and does not feed this one. -->
                 <div data-empty-way>
                   <span data-empty-way-label>Try the demo</span>
-                  <span data-empty-hint>Pick acme from the Workspace menu. Loads the magus project's committed graph export.</span>
+                  <span data-empty-hint>Add <code>#demo</code> to the address to load the magus repo's own graph.</span>
                 </div>
               </div>
             </div>
@@ -293,31 +301,26 @@
              open. A panel rather than a modal: a modal covers the canvas, and the canvas is the
              preview - the whole point is watching the graph narrow as you pick terms. -->
         <div id="query-builder-host" hidden></div>
-        <div id="explain-card" aria-live="polite" hidden></div>
+        <div id="explain-card" hidden></div>
+        <!-- The card is not a live region: it holds dozens of buttons and would read them all on every
+             selection. This one line says which node the card now describes. -->
+        <p id="explain-status" class="pf-v6-screen-reader" role="status"></p>
         <div class="console-graph-detail__foot">
           <!-- Term-prompt view command bar (same idiom as playground.html), populated by
                renderViewCommand(). Hidden when the active view has no exact CLI equivalent. -->
-          <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view"></div>
-          <!-- The app's live region, as the console's inline notice. The icon slot is not
-               decoration: PF lays the component out as a grid around it, and an alert without one
-               reads as body text. role=status because the layout toggle shows which mode is active
-               but announces nothing when one changes on its own (switchLayout's scale guard). -->
-          <div id="graph-status" class="pf-v6-c-alert pf-m-info console-graph-hint" role="status" hidden>
-            <div class="pf-v6-c-alert__icon" aria-hidden="true">i</div>
-            <p class="pf-v6-c-alert__title" id="graph-status-text"></p>
-            <div class="pf-v6-c-alert__action">
-              <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline" id="graph-status-action" hidden></button>
-            </div>
-          </div>
+          <div id="view-cmd" class="console-graph-views__cmdbar" hidden role="group" aria-label="CLI command for active view"></div>
+          <!-- The app's notice. setStatus (main.ts) fills it with ui/alert.ts's inline Alert, which
+               carries its own icon, severity word and live role, so this host has none. -->
+          <div id="graph-status" class="console-graph-hint" hidden></div>
         </div>
       </div>
     </section>
 
     <!-- Figures mode (setGraphMode in main.ts) replaces the explorer above with the diagrams view,
          the Dashboard Jobs shape: a way back, then the host the view builds into. -->
-    <nav id="graph-figures-controls" class="console-graph-figures-controls" aria-label="Graph detail" hidden>
-      <button type="button" id="graph-figures-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__text">Back to graph</span></button>
-    </nav>
+    <div id="graph-figures-controls" class="console-graph-figures-controls" hidden>
+      <button type="button" id="graph-figures-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></span><span class="pf-v6-c-button__text">Back to graph</span></button>
+    </div>
     <section id="graph-figures-host" aria-label="Figures" hidden></section>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>

@@ -2,6 +2,7 @@
 // Listeners beyond the list's own live in interact.ts.
 
 import { h } from "../../../desktop/view";
+import { inlineAlert } from "../../../ui/alert";
 import type { DiagramNode } from "./api";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -134,17 +135,17 @@ export function markListFocus(
 
 export type NoticeTone = "danger" | "warning" | "info";
 
-// notice builds the console's inline alert; severity shows in the left rule (diagrams.css).
-export function notice(tone: NoticeTone, title: string, body: string): HTMLElement {
-  const el = h("div", "pf-v6-c-alert pf-m-inline pf-m-" + tone + " console-diagrams__notice");
-  el.setAttribute("role", tone === "info" ? "status" : "alert");
-  const icon = h("div", "pf-v6-c-alert__icon", tone === "info" ? "i" : "!");
-  icon.setAttribute("aria-hidden", "true");
-  el.append(icon, h("p", "pf-v6-c-alert__title", title));
-  if (body) {
-    const desc = h("div", "pf-v6-c-alert__description");
-    desc.append(h("p", undefined, body));
-    el.append(desc);
-  }
+// notice builds the console's inline alert (ui/alert.ts): the icon, the severity word a screen
+// reader hears before the title, and the live role the severity warrants all come from it, so the
+// notices host needs no live region of its own. Severity also shows in the left rule
+// (diagrams.css). A body is plain text or a node, for a command that wants a <code> element.
+export function notice(tone: NoticeTone, title: string, body: string | Node): HTMLElement {
+  const el = inlineAlert({
+    variant: tone,
+    title,
+    body: body === "" ? undefined : body,
+    live: true,
+  });
+  el.classList.add("console-diagrams__notice");
   return el;
 }
