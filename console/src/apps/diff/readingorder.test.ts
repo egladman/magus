@@ -24,12 +24,12 @@ const ref = (a: HunkAddress): DiffHunkRef => ({ path: a.path, index: a.index, di
 
 function placed(a: HunkAddress, text: string, label = ""): DiffStepHunk {
   const why: DiffWhy = { relation: "uses", text };
-  return { hunk: ref(a), label, why };
+  return { ref: ref(a), label, why };
 }
 
 function order(groups: DiffGroup[]): DiffOrder {
-  const hunks = groups.reduce((n, g) => n + g.hunks, 0);
-  return { groups, count: { hunks, placed: hunks, complete: true } };
+  const hunkCount = groups.reduce((n, g) => n + g.hunk_count, 0);
+  return { groups, count: { hunk_count: hunkCount, placed: hunkCount, complete: true } };
 }
 
 const A0 = addr("a.go", 0);
@@ -43,7 +43,7 @@ const ORDER = order([
   {
     kind: "connected",
     label: "Thing",
-    hunks: 3,
+    hunk_count: 3,
     reach: 4,
     steps: [
       { number: 1, hunks: [placed(B0, "defines Thing", "Thing")] },
@@ -52,11 +52,16 @@ const ORDER = order([
   },
   {
     kind: "generated",
-    hunks: 1,
+    hunk_count: 1,
     reach: 0,
     steps: [{ number: 3, hunks: [placed(G0, "generated")] }],
   },
-  { kind: "unranked", hunks: 1, reach: 0, steps: [{ number: 4, hunks: [placed(U0, "prose")] }] },
+  {
+    kind: "unranked",
+    hunk_count: 1,
+    reach: 0,
+    steps: [{ number: 4, hunks: [placed(U0, "prose")] }],
+  },
 ]);
 
 test("steps follow the server's order, not the file order", () => {
@@ -118,7 +123,7 @@ test("a hunk the order places twice is shown at its first place only", () => {
     {
       kind: "connected",
       label: "T",
-      hunks: 3,
+      hunk_count: 3,
       reach: 1,
       steps: [
         { number: 1, hunks: [placed(A0, "first")] },
@@ -201,7 +206,7 @@ test("stepFiles slices the files down to the step, keeping each hunk's own index
       {
         kind: "connected",
         label: "cycle",
-        hunks: 2,
+        hunk_count: 2,
         reach: 1,
         steps: [{ number: 1, hunks: [placed(b0, "b"), placed(a1, "a")] }],
       },

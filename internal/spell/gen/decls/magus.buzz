@@ -206,7 +206,7 @@ export object DiffWhy {
 }
 
 export object DiffStepHunk {
-    hunk: DiffHunkRef = DiffHunkRef{},
+    ref: DiffHunkRef = DiffHunkRef{},
     label: str = "",
     why: DiffWhy = DiffWhy{},
 }
@@ -219,18 +219,18 @@ export object DiffStep {
 export object DiffGroup {
     kind: DiffGroupKind = DiffGroupKind.none,
     label: str = "",
-    hunks: int = 0,
+    hunkCount: int = 0,
     reach: int = 0,
     steps: [DiffStep] = [],
 }
 
 export object DiffOrderCount {
-    hunks: int = 0,
+    hunkCount: int = 0,
     placed: int = 0,
     complete: bool = false,
     repeated: [DiffHunkRef] = [],
     missing: [DiffHunkRef] = [],
-    bare: [str] = [],
+    filesWithoutHunks: [str] = [],
 }
 
 export object DiffOrder {

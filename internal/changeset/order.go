@@ -2,6 +2,7 @@ package changeset
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -75,12 +76,24 @@ type orderEdge struct {
 	kind          orderEdgeKind
 }
 
+// orderHow says how a placement relates to the step that explains it.
+type orderHow int
+
+const (
+	// orderStarts opens a group, or follows nothing.
+	orderStarts orderHow = iota
+	// orderAfter follows other, the definer.
+	orderAfter
+	// orderBefore precedes other, the later user.
+	orderBefore
+)
+
 // orderPlacement is one strongly connected set of hunks and the edge that put it where it is.
 type orderPlacement struct {
 	nodes []int
-	// how is "start", "after" (other is the definer it follows) or "before" (other is the
-	// later user it precedes). The generated and unranked groups carry fixed instead.
-	how    string
+	// how relates the placement to other. The generated and unranked groups carry fixed
+	// instead.
+	how    orderHow
 	other  int
 	symbol string
 	kind   orderEdgeKind
@@ -196,12 +209,12 @@ func (b *orderBuilder) normalize() {
 		f := &b.files[fi]
 		f.Hunks = append([]types.DiffHunk(nil), f.Hunks...)
 		sort.SliceStable(f.Hunks, func(i, j int) bool { return f.Hunks[i].Index < f.Hunks[j].Index })
-		if len(f.Hunks) == 0 && !containsString(b.bare, f.Path) {
+		if len(f.Hunks) == 0 && !slices.Contains(b.bare, f.Path) {
 			b.bare = append(b.bare, f.Path)
 		}
 		for _, s := range f.Symbols {
 			if _, ok := b.labels[s.ID]; !ok {
-				b.labels[s.ID] = orderSymbolName(s)
+				b.labels[s.ID] = SymbolName(s)
 			}
 		}
 		isTest := b.in.IsTest != nil && b.in.IsTest(f.Path)
@@ -394,7 +407,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 		sets[b.rep[m]] = append(sets[b.rep[m]], m)
 		reach = max(reach, b.nodes[m].reach)
 	}
-	testOnly := map[int]bool{}
+	testSteps := map[int]bool{}
 	indeg := map[int]int{}
 	succ := map[int][]int{}
 	for rep, g := range sets {
@@ -403,7 +416,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 		for _, m := range g {
 			all = all && b.nodes[m].test
 		}
-		testOnly[rep] = all
+		testSteps[rep] = all
 	}
 	pairs := map[[2]int]bool{}
 	var local []orderEdge
@@ -431,7 +444,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 	for len(ready) > 0 {
 		best := 0
 		for i, r := range ready {
-			if placedBefore(r, ready[best], testOnly) {
+			if placedBefore(r, ready[best], testSteps) {
 				best = i
 			}
 		}
@@ -453,7 +466,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 		a, c := b.rep[e.definer], b.rep[e.user]
 		if a == c {
 			label := b.labelOf(e.symbol)
-			if !containsString(cycles[a], label) {
+			if !slices.Contains(cycles[a], label) {
 				cycles[a] = append(cycles[a], label)
 			}
 			continue
@@ -464,21 +477,21 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 
 	placements := make([]orderPlacement, 0, len(sequence))
 	for k, rep := range sequence {
-		p := orderPlacement{nodes: sets[rep], how: "start", other: -1, cycle: cycles[rep], alone: len(members) == 1}
+		p := orderPlacement{nodes: sets[rep], how: orderStarts, other: -1, cycle: cycles[rep], alone: len(members) == 1}
 		sort.Strings(p.cycle)
 		best := -1
 		for _, e := range incoming[rep] {
 			if at := position[b.rep[e.definer]]; at > best {
 				best = at
-				p.how, p.other, p.symbol, p.kind = "after", e.definer, e.symbol, e.kind
+				p.how, p.other, p.symbol, p.kind = orderAfter, e.definer, e.symbol, e.kind
 			}
 		}
-		if p.how == "start" && k > 0 {
+		if p.how == orderStarts && k > 0 {
 			soonest := len(sequence)
 			for _, e := range outgoing[rep] {
 				if at := position[b.rep[e.user]]; at < soonest {
 					soonest = at
-					p.how, p.other, p.symbol, p.kind = "before", e.user, e.symbol, e.kind
+					p.how, p.other, p.symbol, p.kind = orderBefore, e.user, e.symbol, e.kind
 				}
 			}
 		}
@@ -489,9 +502,9 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 
 // placedBefore reports whether step a goes before step b: code before tests, then hunk
 // order.
-func placedBefore(a, b int, testOnly map[int]bool) bool {
-	if testOnly[a] != testOnly[b] {
-		return !testOnly[a]
+func placedBefore(a, b int, testSteps map[int]bool) bool {
+	if testSteps[a] != testSteps[b] {
+		return !testSteps[a]
 	}
 	return a < b
 }
@@ -521,7 +534,7 @@ func (b *orderBuilder) render(groups []orderGroup) types.DiffOrder {
 	order := types.DiffOrder{Groups: make([]types.DiffGroup, 0, len(groups))}
 	step := 0
 	for gi, g := range groups {
-		out := types.DiffGroup{Kind: g.kind, Hunks: g.size, Reach: g.reach}
+		out := types.DiffGroup{Kind: g.kind, HunkCount: g.size, Reach: g.reach}
 		if g.kind == types.DiffGroupConnected {
 			out.Label = b.groupLabel(g)
 		}
@@ -532,7 +545,7 @@ func (b *orderBuilder) render(groups []orderGroup) types.DiffOrder {
 				p := g.placements[pi]
 				for k, n := range p.nodes {
 					ds.Hunks = append(ds.Hunks, types.DiffStepHunk{
-						Hunk:  b.nodes[n].ref,
+						Ref:   b.nodes[n].ref,
 						Label: b.hunkLabel(n),
 						Why:   b.why(p, k, step),
 					})
@@ -598,7 +611,7 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 	}
 	symbol := b.labelOf(p.symbol)
 	switch p.how {
-	case "after":
+	case orderAfter:
 		step := b.stepOf[p.other]
 		w.Step, w.Symbol = step, symbol
 		switch {
@@ -615,7 +628,7 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 			w.Relation = types.DiffWhyUses
 			w.Text = fmt.Sprintf("uses %s, defined %s", symbol, stepAt(step, here, "above", "in step"))
 		}
-	case "before":
+	case orderBefore:
 		step := b.stepOf[p.other]
 		w.Step, w.Symbol = step, symbol
 		switch p.kind {
@@ -623,6 +636,7 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 			w.Relation = types.DiffWhyImplementedBy
 			w.Text = fmt.Sprintf("declares %s, implemented %s", symbol, stepAt(step, here, "below", "in step"))
 		case orderEdgeContinues:
+			w.Relation = types.DiffWhyContinuedBy
 			w.Text = fmt.Sprintf("begins %s, which continues %s", symbol, stepAt(step, here, "below", "in step"))
 		default:
 			w.Relation = types.DiffWhyUsedBy
@@ -657,24 +671,20 @@ func (b *orderBuilder) testOnly(p orderPlacement) bool {
 // count walks the groups and checks them against the input, so a hunk lost or placed twice
 // shows up instead of being assumed away.
 func (b *orderBuilder) count(groups []types.DiffGroup) types.DiffOrderCount {
-	type key struct {
-		path  string
-		index int
-	}
-	seen := map[key]int{}
+	seen := map[string]int{}
 	placed := 0
 	for _, g := range groups {
 		for _, s := range g.Steps {
 			for _, h := range s.Hunks {
-				seen[key{h.Hunk.Path, h.Hunk.Index}]++
+				seen[h.Ref.Key()]++
 				placed++
 			}
 		}
 	}
-	count := types.DiffOrderCount{Hunks: len(b.nodes), Placed: placed, Bare: b.bare}
-	reported := map[key]bool{}
+	count := types.DiffOrderCount{HunkCount: len(b.nodes), Placed: placed, FilesWithoutHunks: b.bare}
+	reported := map[string]bool{}
 	for _, n := range b.nodes {
-		k := key{n.ref.Path, n.ref.Index}
+		k := n.ref.Key()
 		if reported[k] {
 			continue
 		}
@@ -686,7 +696,7 @@ func (b *orderBuilder) count(groups []types.DiffGroup) types.DiffOrderCount {
 			count.Repeated = append(count.Repeated, n.ref)
 		}
 	}
-	count.Complete = placed == count.Hunks && len(count.Repeated) == 0 && len(count.Missing) == 0
+	count.Complete = placed == count.HunkCount && len(count.Repeated) == 0 && len(count.Missing) == 0
 	return count
 }
 
@@ -694,26 +704,30 @@ func (b *orderBuilder) labelOf(id string) string {
 	if l, ok := b.labels[id]; ok {
 		return l
 	}
-	return qualifySymbolID(id, id)
+	return qualifySymbolID(id)
 }
 
-func orderSymbolName(s types.DiffSymbol) string {
+// SymbolName is how a changed symbol reads in prose: its qualified name, else its label, else
+// its ID cut down to the descriptors. It is the one name the reading order and the review
+// text share.
+func SymbolName(s types.DiffSymbol) string {
 	switch {
 	case s.Qualified != "":
 		return s.Qualified
 	case s.Label != "":
 		return s.Label
 	}
-	return qualifySymbolID(s.ID, s.ID)
+	return qualifySymbolID(s.ID)
 }
 
 // qualifySymbolID names a symbol by its SCIP descriptors, so two methods called alike on
-// different receivers read apart: `goShapes.typeClass`.
-func qualifySymbolID(id, fallback string) string {
+// different receivers read apart: `goShapes.typeClass`. An ID with no descriptors left names
+// itself.
+func qualifySymbolID(id string) string {
 	name := id[strings.LastIndex(id, "/")+1:]
 	name = strings.TrimRight(strings.NewReplacer("()", "", "#", ".").Replace(name), ".")
 	if name == "" {
-		return fallback
+		return id
 	}
 	return name
 }
@@ -724,13 +738,4 @@ func fixedOrderPlacement(id int, why types.DiffWhy) orderPlacement {
 
 func unrankedOrderWhy(reason string) types.DiffWhy {
 	return types.DiffWhy{Relation: types.DiffWhyUnranked, Text: reason}
-}
-
-func containsString(xs []string, s string) bool {
-	for _, x := range xs {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

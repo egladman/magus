@@ -226,7 +226,25 @@ type Span struct {
 // each change in a declaration. Inside a ranged span that rule would hand a new field's lines
 // to the field declared above it, so a definition a closed range encloses is never nearest.
 func Touched(spans []Span, lines []int) map[string]bool {
-	// enclosedTo is the last line of the ranges enclosing each span's start, itself aside.
+	return touchedLines(spans, enclosingEnds(spans), lines)
+}
+
+// TouchedByHunk is Touched for each hunk of one file: it maps a span's ID to the Index of
+// every hunk that changed a line of it, in the order hunks come. The table of enclosing ranges
+// is built once for the file, where calling Touched per hunk would build it per hunk.
+func TouchedByHunk(spans []Span, hunks []HunkLines) map[string][]int {
+	enclosedTo := enclosingEnds(spans)
+	out := map[string][]int{}
+	for _, h := range hunks {
+		for id := range touchedLines(spans, enclosedTo, h.Lines) {
+			out[id] = append(out[id], h.Index)
+		}
+	}
+	return out
+}
+
+// enclosingEnds is the last line of the ranges enclosing each span's start, itself aside.
+func enclosingEnds(spans []Span) []int {
 	enclosedTo := make([]int, len(spans))
 	for i, s := range spans {
 		for j, r := range spans {
@@ -235,6 +253,10 @@ func Touched(spans []Span, lines []int) map[string]bool {
 			}
 		}
 	}
+	return enclosedTo
+}
+
+func touchedLines(spans []Span, enclosedTo []int, lines []int) map[string]bool {
 	out := map[string]bool{}
 	for _, l := range lines {
 		contained, nearest := false, 0

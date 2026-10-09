@@ -1238,27 +1238,41 @@ func parseSymbolIndexCached(ctx context.Context, in symbolIngestInputs, decl res
 	return syms, err
 }
 
-// symbolKeyOccurrences returns key's sites in decl's index, from the occurrence file while
-// the index is unmoved.
-func symbolKeyOccurrences(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, key string) (symbols.KeyOccurrences, error) {
+// symbolKeysOccurrences returns each of keys' sites in decl's index, from the occurrence file
+// while the index is unmoved. A stale or unreadable occurrence file costs one decode of the
+// index for all the keys, not one per key.
+func symbolKeysOccurrences(ctx context.Context, in symbolIngestInputs, decl resolvedSymbolIndex, keys []string) (map[string]symbols.KeyOccurrences, error) {
 	if _, err := os.Stat(decl.path); err != nil {
-		return symbols.KeyOccurrences{}, err
+		return nil, err
 	}
 	c := newSymbolIndexCache(in, decl)
 	if c.key != "" {
-		occ, err := symbols.ReadKeyOccurrences(c.occPath, c.key, key)
-		if err == nil {
-			return occ, nil
+		out := make(map[string]symbols.KeyOccurrences, len(keys))
+		var failed error
+		for _, key := range keys {
+			occ, err := symbols.ReadKeyOccurrences(c.occPath, c.key, key)
+			if err != nil {
+				failed = err
+				break
+			}
+			out[key] = occ
 		}
-		if !errors.Is(err, symbols.ErrOccurrenceFileStale) {
-			in.log.DebugContext(ctx, "knowledge: occurrence file unreadable, decoding the index", slog.String("index", decl.path), slog.String("error", err.Error()))
+		if failed == nil {
+			return out, nil
+		}
+		if !errors.Is(failed, symbols.ErrOccurrenceFileStale) {
+			in.log.DebugContext(ctx, "knowledge: occurrence file unreadable, decoding the index", slog.String("index", decl.path), slog.String("error", failed.Error()))
 		}
 	}
 	_, occ, err := decodeSymbolIndex(ctx, in, decl, c)
 	if err != nil {
-		return symbols.KeyOccurrences{}, err
+		return nil, err
 	}
-	return occ[key], nil
+	out := make(map[string]symbols.KeyOccurrences, len(keys))
+	for _, key := range keys {
+		out[key] = occ[key]
+	}
+	return out, nil
 }
 
 // The cached parse is gob: the key first, so a stale file is rejected before its records
@@ -1425,29 +1439,47 @@ func symbolIndexTimes(decls []resolvedSymbolIndex) map[string]time.Time {
 // symbols.Verify), which is the conservative outcome for an index that names the symbol
 // nowhere.
 func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (read SymbolOccurrenceRead, ok bool) {
+	reads, ok := SymbolsOccurrences(ctx, ws, root, cfg, log, []string{key})
+	return reads[key], ok
+}
+
+// SymbolsOccurrences is SymbolOccurrences for several keys in one pass over the declared
+// indexes, for a caller that asks about every changed symbol of a diff: listing the spells and
+// projects, resolving the declarations and decoding a stale index each happen once, not once
+// per key. Every key has an entry in the result, empty when nothing names it. ok is false when
+// the probe itself could not run.
+func SymbolsOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, keys []string) (reads map[string]SymbolOccurrenceRead, ok bool) {
 	if log == nil {
 		log = slog.Default()
 	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: occurrence read cannot list spells", slog.String("error", err.Error()))
-		return SymbolOccurrenceRead{}, false
+		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
 		log.WarnContext(ctx, "knowledge: occurrence read cannot list projects", slog.String("error", err.Error()))
-		return SymbolOccurrenceRead{}, false
+		return nil, false
 	}
-	return symbolOccurrences(ctx, symbolIngestInputs{
+	return symbolsOccurrences(ctx, symbolIngestInputs{
 		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
 		projects: projects, spells: spells, log: log,
-	}, key), true
+	}, keys), true
 }
 
 // symbolOccurrences is the testable half of SymbolOccurrences: it takes the same resolved
 // inputs loadKnowledgeSymbols and symbolGaps do, so none of the three can disagree about
 // which indexes exist.
-func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (read SymbolOccurrenceRead) {
+func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) SymbolOccurrenceRead {
+	return symbolsOccurrences(ctx, in, []string{key})[key]
+}
+
+// symbolsOccurrences is symbolOccurrences for several keys in one pass: the declarations are
+// resolved once, each index is opened once and decoded at most once, and each source file is
+// read once to verify every key's sites. Every key's read carries the same Unreadable gaps,
+// since a hole in an index is a hole for each symbol.
+func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []string) map[string]SymbolOccurrenceRead {
 	log := in.log
 	dirByPath := map[string]string{}
 	for _, p := range in.projects.Projects {
@@ -1461,8 +1493,9 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 	// SymbolGaps cannot cover this one: it deliberately does a single Stat per declared
 	// index and never decodes, so a corrupt index that stats fine reads there as covered.
 	// That is a fair trade for describing fan-in and the wrong one for driving an edit.
+	var unreadable []types.KnowledgeSymbolGap
 	gap := func(project, detail string) {
-		read.Unreadable = append(read.Unreadable, types.KnowledgeSymbolGap{
+		unreadable = append(unreadable, types.KnowledgeSymbolGap{
 			Project: types.NewProjectRef(project, dirByPath[project]),
 			State:   types.SymbolIndexNotBuilt,
 			Detail:  detail,
@@ -1472,6 +1505,10 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 	// Every declared index is read, not just the defining project's: a symbol defined in
 	// one project is referenced from others, and a rewrite that stopped at the definition's
 	// own index would leave every cross-project call site untouched.
+	reads := make(map[string]SymbolOccurrenceRead, len(keys))
+	for _, key := range keys {
+		reads[key] = SymbolOccurrenceRead{}
+	}
 	for _, decl := range symbolIndexDeclarations(ctx, in) {
 		if ctx.Err() != nil {
 			// Stop reading indexes on cancellation, but keep what was already gathered: the
@@ -1479,7 +1516,7 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 			gap(decl.project, "not read: cancelled")
 			continue
 		}
-		found, err := symbolKeyOccurrences(ctx, in, decl, key)
+		foundBy, err := symbolKeysOccurrences(ctx, in, decl, keys)
 		var decodeErr symbolDecodeError
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
@@ -1502,12 +1539,16 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 		// One index names the symbol; the others may only reference it. Union rather than
 		// first-wins, so a spelling that appears in a second project's index is still
 		// recognized at that project's occurrences.
-		for _, n := range found.Names {
-			if !slices.Contains(read.Names, n) {
-				read.Names = append(read.Names, n)
+		for _, key := range keys {
+			read, found := reads[key], foundBy[key]
+			for _, n := range found.Names {
+				if !slices.Contains(read.Names, n) {
+					read.Names = append(read.Names, n)
+				}
 			}
+			read.Files = append(read.Files, found.Files...)
+			reads[key] = read
 		}
-		read.Files = append(read.Files, found.Files...)
 	}
 
 	// Each index contributes its own files, so the merged list needs re-sorting to stay
@@ -1517,14 +1558,30 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 	// the "files are independent" contract both assume one entry per path. No overlap exists
 	// in this repo (every nested Go project has its own module), so this holds the contract
 	// rather than fixing an observed break.
-	slices.SortFunc(read.Files, func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) })
-	read.Files = mergeOccurrenceFiles(read.Files)
-	if err := symbols.VerifyOccurrences(ctx, read.Files, read.Names, func(p string) ([]byte, error) {
-		return os.ReadFile(filepath.Join(in.root, filepath.FromSlash(p)))
-	}); err != nil {
-		log.WarnContext(ctx, "knowledge: occurrence verification stopped early", slog.String("error", err.Error()))
+	type sourceRead struct {
+		body []byte
+		err  error
 	}
-	return read
+	sources := map[string]sourceRead{}
+	readSource := func(p string) ([]byte, error) {
+		if s, ok := sources[p]; ok {
+			return s.body, s.err
+		}
+		body, err := os.ReadFile(filepath.Join(in.root, filepath.FromSlash(p)))
+		sources[p] = sourceRead{body, err}
+		return body, err
+	}
+	for _, key := range keys {
+		read := reads[key]
+		slices.SortFunc(read.Files, func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) })
+		read.Files = mergeOccurrenceFiles(read.Files)
+		if err := symbols.VerifyOccurrences(ctx, read.Files, read.Names, readSource); err != nil {
+			log.WarnContext(ctx, "knowledge: occurrence verification stopped early", slog.String("error", err.Error()))
+		}
+		read.Unreadable = slices.Clone(unreadable)
+		reads[key] = read
+	}
+	return reads
 }
 
 // mergeOccurrenceFiles folds entries sharing a path into one, concatenating and re-sorting
@@ -1626,6 +1683,11 @@ func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, boo
 // hold a Magus: the pairing SymbolGaps keeps, since the two answers are read together.
 func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurrenceRead, bool) {
 	return SymbolOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), key)
+}
+
+// SymbolsOccurrences is the method form of the package-level SymbolsOccurrences.
+func (m *Magus) SymbolsOccurrences(ctx context.Context, keys []string) (map[string]SymbolOccurrenceRead, bool) {
+	return SymbolsOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), keys)
 }
 
 // resolvedSymbolIndex pairs a project with the absolute path of its SCIP index and the

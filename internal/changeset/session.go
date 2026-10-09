@@ -45,6 +45,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// ErrNoStateDir is what a Store with no state directory answers when asked to read or record a
+// persisted mark.
+var ErrNoStateDir = errors.New("no state directory")
+
 // Store holds the live sessions and the persisted viewed set.
 //
 // One session per workspace root rather than an unbounded map keyed by an opaque id: a review
@@ -547,15 +551,8 @@ func (s *Store) saveDrafts(drafts []types.DiffComment) {
 // error: losing review progress is a nuisance, and failing to open a review because a
 // progress file is corrupt would be worse than forgetting what was read.
 func (s *Store) loadViewed() []string {
-	if s.viewedPath == "" {
-		return nil
-	}
-	b, err := os.ReadFile(s.viewedPath)
+	out, err := s.LoadViewed()
 	if err != nil {
-		return nil
-	}
-	var out []string
-	if err := json.Unmarshal(b, &out); err != nil {
 		return nil
 	}
 	return out
@@ -583,7 +580,7 @@ func (s *Store) LoadDrafts() []types.DiffComment { return s.loadDrafts() }
 // the caller deciding what is unread must not take "unknown" for "none".
 func (s *Store) LoadViewed() ([]string, error) {
 	if s.viewedPath == "" {
-		return nil, errors.New("no state directory holds read marks")
+		return nil, fmt.Errorf("read marks: %w", ErrNoStateDir)
 	}
 	b, err := os.ReadFile(s.viewedPath)
 	switch {

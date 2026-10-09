@@ -75,9 +75,9 @@ export function readingSteps(
     for (const step of group.steps) {
       const hunks: ReadingHunk[] = [];
       for (const h of step.hunks) {
-        const key = addressKey(h.hunk);
+        const key = addressKey(h.ref);
         const seen = want.get(key);
-        if (!seen || seen.digest !== h.hunk.digest || placed.has(key)) continue;
+        if (!seen || seen.digest !== h.ref.digest || placed.has(key)) continue;
         placed.add(key);
         hunks.push({ ...seen, label: h.label ?? "", why: h.why });
       }

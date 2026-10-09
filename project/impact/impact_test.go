@@ -405,6 +405,32 @@ func TestTouched(t *testing.T) {
 	}
 }
 
+func TestTouchedByHunkNamesTheHunksThatChangedEachSpan(t *testing.T) {
+	spans := []Span{
+		{ID: "f", Start: 3, End: 6},
+		{ID: "g", Start: 8, End: 12},
+		{ID: "g.inner", Start: 9, End: 10},
+	}
+	hunks := []HunkLines{
+		{Index: 0, Lines: []int{4}},
+		{Index: 2, Lines: []int{5, 9}},
+		{Index: 3, Lines: []int{20}},
+	}
+
+	got := TouchedByHunk(spans, hunks)
+
+	require.Equal(t, map[string][]int{"f": {0, 2}, "g": {2}, "g.inner": {2}}, got)
+	var all []int
+	for _, h := range hunks {
+		all = append(all, h.Lines...)
+	}
+	union := map[string]bool{}
+	for id := range got {
+		union[id] = true
+	}
+	require.Equal(t, Touched(spans, all), union, "the hunks together touch what the whole file's lines do")
+}
+
 // callGraphStub is a CallGraph read from maps.
 type callGraphStub struct {
 	callers  map[string][]string

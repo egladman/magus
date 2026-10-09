@@ -41,10 +41,10 @@ func orderIsTest(path string) bool { return strings.HasSuffix(path, "_test.go") 
 func orderOutline(o types.DiffOrder) []string {
 	var out []string
 	for _, g := range o.Groups {
-		out = append(out, fmt.Sprintf("group %s %q %d", g.Kind, g.Label, g.Hunks))
+		out = append(out, fmt.Sprintf("group %s %q %d", g.Kind, g.Label, g.HunkCount))
 		for _, st := range g.Steps {
 			for _, h := range st.Hunks {
-				out = append(out, fmt.Sprintf("%d %s#%d %s", st.Number, h.Hunk.Path, h.Hunk.Index, h.Why.Relation))
+				out = append(out, fmt.Sprintf("%d %s %s", st.Number, h.Ref.Key(), h.Why.Relation))
 			}
 		}
 	}
@@ -56,7 +56,7 @@ func orderStepHunk(t *testing.T, o types.DiffOrder, path string, index int) type
 	for _, g := range o.Groups {
 		for _, st := range g.Steps {
 			for _, h := range st.Hunks {
-				if h.Hunk.Path == path && h.Hunk.Index == index {
+				if h.Ref.Path == path && h.Ref.Index == index {
 					return h
 				}
 			}
@@ -221,7 +221,7 @@ func TestOrderRanksGroupsBySizeThenReachThenPath(t *testing.T) {
 
 	var labels []string
 	for _, g := range order.Groups {
-		labels = append(labels, fmt.Sprintf("%s:%d:%d", g.Label, g.Hunks, g.Reach))
+		labels = append(labels, fmt.Sprintf("%s:%d:%d", g.Label, g.HunkCount, g.Reach))
 	}
 	assert.Equal(t, []string{"P:3:0", "Q:2:9", "N:2:0"}, labels, "largest first, then reach, then path")
 }
@@ -270,6 +270,27 @@ func TestOrderChainsHunksOfOneDefinition(t *testing.T) {
 	}, orderOutline(order), "a hunk with symbols but no link is its own group, not unranked")
 	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyContinues, Step: 1, Symbol: "F", Text: "continues F from above"}, orderStepHunk(t, order, "a.go", 1).Why)
 	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyStarts, Text: "stands alone: no other changed hunk uses, implements or continues what it changes"}, orderStepHunk(t, order, "b.go", 0).Why)
+}
+
+func TestOrderNamesTheContinuationOfAHunkPlacedBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	order := OrderHunks(OrderInput{
+		Files: []OrderFile{
+			orderFile("a.go", orderHunk(0, 1, 3, "G")),
+			orderFile("b.go", orderHunk(0, 1, 3, "F")),
+			orderFile("c.go", orderHunk(0, 1, 3, "F")),
+		},
+		Sites: []OrderSite{orderUse("G", "c.go", 2)},
+	})
+
+	assert.Equal(t, []string{
+		`group connected "G" 3`,
+		"1 a.go#0 starts",
+		"2 b.go#0 continued_by",
+		"3 c.go#0 continues",
+	}, orderOutline(order))
+	assert.Equal(t, types.DiffWhy{Relation: types.DiffWhyContinuedBy, Step: 3, Symbol: "F", Text: "begins F, which continues in step 3"}, orderStepHunk(t, order, "b.go", 0).Why)
 }
 
 func TestOrderPlacesAnInterfaceBeforeItsImplementation(t *testing.T) {
@@ -374,10 +395,10 @@ func TestOrderPutsGeneratedThenUnrankedGroupsLast(t *testing.T) {
 	assert.Equal(t, "defines no changed symbol and uses none", orderStepHunk(t, order, "withsyms.go", 0).Why.Text)
 	assert.Equal(t, "generated output; its source carries the review", orderStepHunk(t, order, "gen/out.go", 0).Why.Text)
 	assert.True(t, order.Count.Complete)
-	assert.Equal(t, 7, order.Count.Hunks)
+	assert.Equal(t, 7, order.Count.HunkCount)
 }
 
-func TestOrderNamesAFileWithNoHunkInBare(t *testing.T) {
+func TestOrderNamesAFileWithNoHunk(t *testing.T) {
 	t.Parallel()
 
 	order := OrderHunks(OrderInput{
@@ -388,8 +409,8 @@ func TestOrderNamesAFileWithNoHunkInBare(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, []string{"also.bin", "logo.png"}, order.Count.Bare)
-	assert.Equal(t, 1, order.Count.Hunks)
+	assert.Equal(t, []string{"also.bin", "logo.png"}, order.Count.FilesWithoutHunks)
+	assert.Equal(t, 1, order.Count.HunkCount)
 	assert.True(t, order.Count.Complete)
 }
 
@@ -439,10 +460,10 @@ func TestOrderQualifiesASymbolByItsDescriptors(t *testing.T) {
 		{"symbol:gomod m `m/pkg/knowledge`/goShapes#typeClass().", "goShapes.typeClass"},
 		{"symbol:gomod m `m/pkg`/Precedents().", "Precedents"},
 		{"weird", "weird"},
-		{"pkg/", "fallback"},
+		{"pkg/", "pkg/"},
 	}
 	for _, tc := range tests {
-		assert.Equal(t, tc.want, qualifySymbolID(tc.id, "fallback"), tc.id)
+		assert.Equal(t, tc.want, qualifySymbolID(tc.id), tc.id)
 	}
 }
 
@@ -525,20 +546,21 @@ func TestOrderPlacesEveryHunkExactlyOnce(t *testing.T) {
 		total := 0
 		for _, st := range g.Steps {
 			for _, h := range st.Hunks {
-				counted[fmt.Sprintf("%s#%d", h.Hunk.Path, h.Hunk.Index)]++
+				counted[h.Ref.Key()]++
 				total++
 			}
 		}
-		assert.Equal(t, g.Hunks, total, "group size matches its steps")
+		assert.Equal(t, g.HunkCount, total, "group size matches its steps")
 	}
 	hunks := 0
 	for _, f := range in.Files {
 		for _, h := range f.Hunks {
 			hunks++
-			assert.Equal(t, 1, counted[fmt.Sprintf("%s#%d", f.Path, h.Index)], "%s#%d", f.Path, h.Index)
+			ref := types.DiffHunkRef{Path: f.Path, Index: h.Index}
+			assert.Equal(t, 1, counted[ref.Key()], ref.Key())
 		}
 	}
-	assert.Equal(t, types.DiffOrderCount{Hunks: hunks, Placed: hunks, Complete: true, Bare: []string{"logo.png"}}, order.Count)
+	assert.Equal(t, types.DiffOrderCount{HunkCount: hunks, Placed: hunks, Complete: true, FilesWithoutHunks: []string{"logo.png"}}, order.Count)
 
 	step := 0
 	for _, g := range order.Groups {

@@ -1183,7 +1183,7 @@ func ObjectDiffWhy(v types.DiffWhy) vm.Value {
 
 func ObjectDiffStepHunk(v types.DiffStepHunk) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("hunk", ObjectDiffHunkRef(v.Hunk))
+	out.MapSet("ref", ObjectDiffHunkRef(v.Ref))
 	out.MapSet("label", vm.StrValue(v.Label))
 	out.MapSet("why", ObjectDiffWhy(v.Why))
 	return out
@@ -1204,7 +1204,7 @@ func ObjectDiffGroup(v types.DiffGroup) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("kind", vm.StrValue(string(v.Kind)))
 	out.MapSet("label", vm.StrValue(v.Label))
-	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
+	out.MapSet("hunkCount", vm.IntValue(int64(v.HunkCount)))
 	out.MapSet("reach", vm.IntValue(int64(v.Reach)))
 	itemsSteps := make([]vm.Value, len(v.Steps))
 	for indexSteps := range v.Steps {
@@ -1216,7 +1216,7 @@ func ObjectDiffGroup(v types.DiffGroup) vm.Value {
 
 func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
+	out.MapSet("hunkCount", vm.IntValue(int64(v.HunkCount)))
 	out.MapSet("placed", vm.IntValue(int64(v.Placed)))
 	out.MapSet("complete", vm.BoolValue(v.Complete))
 	itemsRepeated := make([]vm.Value, len(v.Repeated))
@@ -1229,11 +1229,11 @@ func ObjectDiffOrderCount(v types.DiffOrderCount) vm.Value {
 		itemsMissing[indexMissing] = ObjectDiffHunkRef(v.Missing[indexMissing])
 	}
 	out.MapSet("missing", vm.ListValue(itemsMissing))
-	itemsBare := make([]vm.Value, len(v.Bare))
-	for indexBare := range v.Bare {
-		itemsBare[indexBare] = vm.StrValue(v.Bare[indexBare])
+	itemsFilesWithoutHunks := make([]vm.Value, len(v.FilesWithoutHunks))
+	for indexFilesWithoutHunks := range v.FilesWithoutHunks {
+		itemsFilesWithoutHunks[indexFilesWithoutHunks] = vm.StrValue(v.FilesWithoutHunks[indexFilesWithoutHunks])
 	}
-	out.MapSet("bare", vm.ListValue(itemsBare))
+	out.MapSet("filesWithoutHunks", vm.ListValue(itemsFilesWithoutHunks))
 	return out
 }
 

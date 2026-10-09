@@ -280,7 +280,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 				nsLang[sym.Key] = l
 			}
 			for _, def := range sym.Defs {
-				if isTestSource(def) {
+				if IsTestPath(def) {
 					continue
 				}
 				if fileNS[def] == nil {
@@ -318,7 +318,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 		for _, sym := range syms {
 			if sym.Key != "" && sym.Namespace == sym.Key {
 				for _, ref := range sym.Refs {
-					if isTestSource(ref.Path) {
+					if IsTestPath(ref.Path) {
 						continue
 					}
 					for from := range fileNS[ref.Path] {
@@ -326,7 +326,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 					}
 				}
 			}
-			if sym.Namespace == "" || isTestSource(sym.Source) {
+			if sym.Namespace == "" || IsTestPath(sym.Source) {
 				continue
 			}
 			for _, c := range sym.Calls {
@@ -374,7 +374,7 @@ func foldImports(symbols map[string][]types.KnowledgeSymbol) map[string]foldedIm
 func testRefCount(refs []types.KnowledgeSymbolRef) int {
 	n := 0
 	for _, ref := range refs {
-		if isTestSource(ref.Path) {
+		if IsTestPath(ref.Path) {
 			n++
 		}
 	}
@@ -389,10 +389,11 @@ var (
 	testPrefixes = []string{"test_"}
 )
 
-// isTestSource reports whether a path (or a symbol Source, "<path>:<line>") is a test
-// file. One predicate for every caller in this package, so the Go-only suffix check that
-// used to live inline in testRefCount cannot drift from the rule the lenses apply.
-func isTestSource(source string) bool {
+// IsTestPath reports whether a path (or a symbol Source, "<path>:<line>") is a test file.
+// It recognizes Go (_test.go), TypeScript and JavaScript (.test and .spec), and Python
+// (test_*.py, *_test.py) by file name alone, which is what the symbol indexes cover. One
+// predicate for the lenses and the reading order, so they cannot drift apart.
+func IsTestPath(source string) bool {
 	path, _, _ := strings.Cut(source, ":")
 	base := path[strings.LastIndex(path, "/")+1:]
 	for _, s := range testSuffixes {
@@ -407,6 +408,10 @@ func isTestSource(source string) bool {
 	}
 	return false
 }
+
+// TODO(order-fix): delete once dirs.go, duplication.go, naming.go, precedent.go, packagedeps.go,
+// symbol_decls.go and duplication_test.go call IsTestPath; the job could not write them.
+func isTestSource(source string) bool { return IsTestPath(source) }
 
 // refProvenance encodes a reference's occurrence count and capped line list into the
 // edge provenance string, e.g. "scip count=3 lines=10,20". KnowledgeEdge has only a

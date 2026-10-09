@@ -101,6 +101,7 @@ export type DiffWhyRelation =
   | "implements"
   | "implemented_by"
   | "continues"
+  | "continued_by"
   | "same_step"
   | "tests"
   | "generated"
@@ -117,7 +118,7 @@ export interface DiffWhy {
 
 // DiffStepHunk mirrors types.DiffStepHunk: one placed hunk and what placed it.
 export interface DiffStepHunk {
-  readonly hunk: DiffHunkRef;
+  readonly ref: DiffHunkRef;
   readonly label?: string;
   readonly why: DiffWhy;
 }
@@ -133,19 +134,19 @@ export interface DiffStep {
 export interface DiffGroup {
   readonly kind: DiffGroupKind;
   readonly label?: string;
-  readonly hunks: number;
+  readonly hunk_count: number;
   readonly reach: number;
   readonly steps: readonly DiffStep[];
 }
 
 // DiffOrderCount mirrors types.DiffOrderCount, the line proving every hunk appears once.
 export interface DiffOrderCount {
-  readonly hunks: number;
+  readonly hunk_count: number;
   readonly placed: number;
   readonly complete: boolean;
   readonly repeated?: readonly DiffHunkRef[];
   readonly missing?: readonly DiffHunkRef[];
-  readonly bare?: readonly string[];
+  readonly files_without_hunks?: readonly string[];
 }
 
 // DiffOrder mirrors types.DiffOrder: the order to read the changeset's hunks in. Absent on the

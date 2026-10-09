@@ -68,7 +68,7 @@ function placed(
   label: string,
   why: DiffStepHunk["why"],
 ): DiffStepHunk {
-  return { hunk: ref(path, index), label, why };
+  return { ref: ref(path, index), label, why };
 }
 
 // demoOrder is the reading order the server would send for the acme changeset: the claims
@@ -80,7 +80,7 @@ function demoOrder(): DiffOrder {
     {
       kind: "connected",
       label: claims,
-      hunks: 7,
+      hunk_count: 7,
       reach: 38,
       steps: [
         {
@@ -161,7 +161,7 @@ function demoOrder(): DiffOrder {
     {
       kind: "connected",
       label: "SessionClaims",
-      hunks: 2,
+      hunk_count: 2,
       reach: 14,
       steps: [
         {
@@ -183,7 +183,7 @@ function demoOrder(): DiffOrder {
     },
     {
       kind: "generated",
-      hunks: 3,
+      hunk_count: 3,
       reach: 0,
       steps: [
         {
@@ -217,7 +217,7 @@ function demoOrder(): DiffOrder {
     },
     {
       kind: "unranked",
-      hunks: 2,
+      hunk_count: 2,
       reach: 0,
       steps: [
         {
@@ -241,7 +241,7 @@ function demoOrder(): DiffOrder {
       ],
     },
   ];
-  return { groups, count: { hunks: 14, placed: 14, complete: true } };
+  return { groups, count: { hunk_count: 14, placed: 14, complete: true } };
 }
 
 // demoSession returns the annotated changeset and the paired-review state.

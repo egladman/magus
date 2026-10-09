@@ -5,11 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/types"
 )
@@ -69,7 +71,7 @@ func orderStepPaths(o types.DiffOrder) []string {
 	for _, g := range o.Groups {
 		for _, s := range g.Steps {
 			for _, h := range s.Hunks {
-				out = append(out, string(g.Kind)+" "+h.Hunk.Path+" "+string(h.Why.Relation))
+				out = append(out, string(g.Kind)+" "+h.Ref.Path+" "+string(h.Why.Relation))
 			}
 		}
 	}
@@ -173,11 +175,111 @@ func TestDiffOrderIsAbsentWhenTheIndexIsNotCurrent(t *testing.T) {
 	out := types.Diff{Files: orderDiffFiles(orderPatch, nil)}
 	var m *Magus
 
-	m.attachOrder(context.Background(), &out, nil, orderPatch, false)
+	m.attachOrder(context.Background(), &out, nil, orderPatch, "the symbol index is not current for this tree")
 
 	assert.Nil(t, out.Order)
 	require.Len(t, out.Notes, 1)
+	assert.Contains(t, out.Notes[0], "the symbol index is not current for this tree")
 	assert.Contains(t, out.Notes[0], "graph build")
+}
+
+func TestDiffOrderIndexGap(t *testing.T) {
+	t.Parallel()
+
+	built := map[string]time.Time{"libs/a": {}}
+	display := func(p string) string { return "project " + p }
+	tests := []struct {
+		name    string
+		fresh   error
+		indexed bool
+		capable []string
+		built   map[string]time.Time
+		listed  bool
+		want    string
+	}{
+		{name: "every touched project has an index", indexed: true, capable: []string{"libs/a"}, built: built, listed: true},
+		{name: "no touched project is symbol-capable", capable: nil, listed: true},
+		{name: "the freshen failed", fresh: assert.AnError, indexed: true, capable: []string{"libs/a"}, built: built, listed: true, want: "the symbol index is not current for this tree"},
+		{name: "no index loaded at all", capable: []string{"libs/a"}, listed: true, want: "the symbol index is not current for this tree"},
+		{name: "the indexes could not be listed", indexed: true, capable: []string{"libs/a"}, want: "the symbol indexes could not be listed"},
+		{
+			name: "one touched project has no index while another does", indexed: true, listed: true, built: built,
+			capable: []string{"libs/a", "libs/z", "libs/b"}, want: "no symbol index is built for project libs/b, project libs/z",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, indexGap(tc.fresh, tc.indexed, tc.capable, tc.built, tc.listed, display))
+		})
+	}
+}
+
+func TestDiffOrderPartialNoteNamesEveryCause(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, partialOrderNote(false, true, nil))
+	assert.Equal(t,
+		"reading order is partial: the symbol indexes could not be listed, so some uses of the changed symbols are missing; and the symbol index of libs/a, libs/b could not be read; rebuild it with `magus graph build`",
+		partialOrderNote(false, false, []string{"libs/a", "libs/b"}))
+	assert.Equal(t,
+		"reading order is partial: it was cancelled before every symbol index was read, so some uses of the changed symbols are missing",
+		partialOrderNote(true, false, []string{"libs/a"}), "a cancelled review is reported as cancelled, not as unreadable indexes")
+}
+
+func TestDiffOrderSymbolsOccurrencesAnswersEachKeyAsTheSingleKeyReadDoes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg/a/pkg/a"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg/a/pkg/a/a.go"), []byte("Foo\n"), 0o644))
+	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
+	projects, spells := goWorkspace("pkg/a")
+	in := ingest(config.Config{}, root, cacheDir, projects, spells)
+	foo, absent := "gomod example.com/a Foo#", "gomod example.com/a Nothing#"
+
+	reads := symbolsOccurrences(t.Context(), in, []string{foo, absent})
+
+	assert.Equal(t, symbolOccurrences(t.Context(), in, foo), reads[foo])
+	assert.Empty(t, reads[absent].Files, "a key no index names has an entry with no sites")
+	assert.Empty(t, reads[absent].Unreadable)
+	require.Len(t, reads[foo].Files, 1)
+}
+
+func TestDiffOrderSymbolsOccurrencesRecordsACorruptIndexOnEveryKey(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, ".magus")
+	path := goIndexPath(cacheDir, filepath.Join(root, "pkg/a"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
+	projects, spells := goWorkspace("pkg/a")
+
+	reads := symbolsOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{"gomod example.com/a Foo#", "gomod example.com/a Bar#"})
+
+	require.Len(t, reads, 2)
+	for key, read := range reads {
+		require.Len(t, read.Unreadable, 1, key)
+		assert.Equal(t, "pkg/a", read.Unreadable[0].Project.Path, key)
+	}
+}
+
+func TestDiffOrderRefusesAPatchPathOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+
+	outside := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "x.go"), []byte("package p\nvar X = 1\n"), 0o644))
+	root := filepath.Join(t.TempDir(), "ws")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	rel, err := filepath.Rel(root, filepath.Join(outside, "x.go"))
+	require.NoError(t, err)
+	patch := "diff --git a/" + filepath.ToSlash(rel) + " b/" + filepath.ToSlash(rel) + "\n--- a/" + filepath.ToSlash(rel) + "\n+++ b/" + filepath.ToSlash(rel) + "\n@@ -1,1 +1,2 @@\n package p\n+var X = 1\n"
+
+	moved := movedFiles(root, patch)
+
+	assert.Equal(t, map[string]bool{filepath.ToSlash(rel): true}, moved, "the file the path names exists and matches, and is still not read")
 }
 
 func TestDiffOrderChangedDefinitionsAreUniqueAndSorted(t *testing.T) {
