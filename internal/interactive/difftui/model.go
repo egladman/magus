@@ -560,7 +560,7 @@ func (m *Model) rebuild() {
 		}
 		// Threads whose line this changeset no longer contains, under the heading rather than
 		// dropped. The line moved after a colleague wrote; what they said still stands.
-		for _, th := range m.threadsOf(m.unplaced[f.Path]) {
+		for _, th := range m.hostOrderedThreads(m.unplaced[f.Path]) {
 			m.rows = append(m.rows, threadRows(th, i, -1)...)
 		}
 		for hi := range f.Hunks {
@@ -611,7 +611,7 @@ func (m *Model) elsewhereRows(shown map[string]bool) []Row {
 	if len(out) == 0 {
 		return nil
 	}
-	threads := m.threadsOf(out)
+	threads := m.hostOrderedThreads(out)
 	slices.SortFunc(threads, func(a, b changeset.Thread) int {
 		if c := strings.Compare(a.Head.Path, b.Head.Path); c != 0 {
 			return c
@@ -633,10 +633,10 @@ func (m *Model) elsewhereRows(shown map[string]bool) []Row {
 	return rows
 }
 
-// threadsOf groups cs into threads with [changeset.GroupThreads], after putting them back in the
-// host's order: the buckets they came from are gathered from maps, and replies read in the order
-// they were written.
-func (m *Model) threadsOf(cs []types.ReviewComment) []changeset.Thread {
+// hostOrderedThreads groups cs into threads with [changeset.GroupThreads], after putting them back
+// in the host's order: the buckets they came from are gathered from maps, and replies read in the
+// order they were written.
+func (m *Model) hostOrderedThreads(cs []types.ReviewComment) []changeset.Thread {
 	ordered := slices.Clone(cs)
 	slices.SortStableFunc(ordered, func(a, b types.ReviewComment) int {
 		return cmp.Compare(m.hostIndex[a.ID], m.hostIndex[b.ID])
@@ -655,7 +655,7 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	var out []Row
 	// The host's threads first. What a colleague already said is context for the remark you are
 	// about to write, not a footnote to it: the same order the console renders.
-	for _, th := range m.threadsOf(m.reviewAt[k]) {
+	for _, th := range m.hostOrderedThreads(m.reviewAt[k]) {
 		out = append(out, threadRows(th, file, row)...)
 	}
 	for _, c := range m.comments[k] {

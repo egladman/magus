@@ -177,7 +177,7 @@ func OrderHunks(in OrderInput) types.DiffOrder {
 	var connected []orderGroup
 	b.condense(ranked)
 	for _, members := range b.components(ranked) {
-		connected = append(connected, b.groupOf(members))
+		connected = append(connected, b.orderMembers(members))
 	}
 	sort.SliceStable(connected, func(i, j int) bool {
 		a, c := connected[i], connected[j]
@@ -396,9 +396,9 @@ func (b *orderBuilder) components(ranked []int) [][]int {
 	return out
 }
 
-// groupOf orders one connected set of hunks. A step waits for every step it uses; among
+// orderMembers orders one connected set of hunks. A step waits for every step it uses; among
 // steps that are ready, code goes before tests and hunk order breaks ties.
-func (b *orderBuilder) groupOf(members []int) orderGroup {
+func (b *orderBuilder) orderMembers(members []int) orderGroup {
 	inGroup := map[int]bool{}
 	sets := map[int][]int{}
 	reach := 0
@@ -465,7 +465,7 @@ func (b *orderBuilder) groupOf(members []int) orderGroup {
 	for _, e := range local {
 		a, c := b.rep[e.definer], b.rep[e.user]
 		if a == c {
-			label := b.labelOf(e.symbol)
+			label := b.symbolLabel(e.symbol)
 			if !slices.Contains(cycles[a], label) {
 				cycles[a] = append(cycles[a], label)
 			}
@@ -573,7 +573,7 @@ func (b *orderBuilder) groupLabel(g orderGroup) string {
 	for _, p := range g.placements {
 		for _, n := range p.nodes {
 			if syms := b.nodes[n].hunk.Symbols; len(syms) > 0 {
-				return b.labelOf(syms[0])
+				return b.symbolLabel(syms[0])
 			}
 		}
 	}
@@ -582,7 +582,7 @@ func (b *orderBuilder) groupLabel(g orderGroup) string {
 
 func (b *orderBuilder) hunkLabel(n int) string {
 	if syms := b.nodes[n].hunk.Symbols; len(syms) > 0 {
-		return b.labelOf(syms[0])
+		return b.symbolLabel(syms[0])
 	}
 	return b.nodes[n].hunk.Declaration
 }
@@ -609,7 +609,7 @@ func (b *orderBuilder) why(p orderPlacement, k, here int) types.DiffWhy {
 	if p.alone {
 		w.Text = "stands alone: no other changed hunk uses, implements or continues what it changes"
 	}
-	symbol := b.labelOf(p.symbol)
+	symbol := b.symbolLabel(p.symbol)
 	switch p.how {
 	case orderAfter:
 		step := b.stepOf[p.other]
@@ -700,7 +700,7 @@ func (b *orderBuilder) count(groups []types.DiffGroup) types.DiffOrderCount {
 	return count
 }
 
-func (b *orderBuilder) labelOf(id string) string {
+func (b *orderBuilder) symbolLabel(id string) string {
 	if l, ok := b.labels[id]; ok {
 		return l
 	}

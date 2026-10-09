@@ -48,11 +48,12 @@ fix the pure function that produced it and its test, then run it again.
    ```
 
    It queues a `green` stack by the label on its top and reruns a `red` that is not
-   the change's, once per head. It prints each command it ran. It never enables
-   auto-merge: for a `green` pull request in no stack it prints the command under
-   `for_person`, and you tell the person to run it. It never acts on
-   `red-inherited`: nothing in the change is broken, and the queue would refuse it
-   for main's failures.
+   the change's, once per head. It prints each command it ran.
+
+   - It never enables auto-merge. For a `green` pull request in no stack it prints
+     the command under `for_person`; you tell the person to run it.
+   - It never acts on `red-inherited`. Nothing in the change is broken, and the
+     queue would refuse it for main's failures.
 
 3. For every record whose `model` is `sonnet` or `opus`, spawn one agent of that
    model:

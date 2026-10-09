@@ -105,8 +105,8 @@ export function readingSteps(
   return out;
 }
 
-// stepIndexOf is the position of the step holding the hunk at (path, index), or -1.
-export function stepIndexOf(
+// findStepIndex is the position of the step holding the hunk at (path, index), or -1.
+export function findStepIndex(
   steps: readonly ReadingStep[],
   at: { path: string; index: number } | null,
 ): number {

@@ -11,7 +11,7 @@ import {
   maxLineChars,
   narrowToHunk,
   placeThreads,
-  threadIdOf,
+  commentThreadId,
 } from "./rows";
 import type { ReviewComment } from "./session";
 
@@ -100,16 +100,16 @@ test("a root that names no top-level comment heads a thread of its own", () => {
   );
 });
 
-test("threadIdOf is the comment's own root, or its id when it is a top-level comment", () => {
-  assert.equal(threadIdOf(thread("t1", "x.ts", 0)), "t1");
-  assert.equal(threadIdOf({ ...thread("t1a", "x.ts", 0), root: "t1" }), "t1");
+test("commentThreadId is the comment's own root, or its id when it is a top-level comment", () => {
+  assert.equal(commentThreadId(thread("t1", "x.ts", 0)), "t1");
+  assert.equal(commentThreadId({ ...thread("t1a", "x.ts", 0), root: "t1" }), "t1");
 });
 
 // A comment whose root names nothing is a thread head, so the id a reply to it is addressed to
 // is its own: the server finds no thread under the root the host named.
 test("an orphaned reply is addressed by its own id", () => {
   const [group] = groupThreads([{ ...thread("o1", "x.ts", 0), root: "gone" }]);
-  assert.equal(threadIdOf(group[0]), "o1");
+  assert.equal(commentThreadId(group[0]), "o1");
   assert.equal(group[0].root, "", "the stray root is cleared so it renders as a head");
 });
 

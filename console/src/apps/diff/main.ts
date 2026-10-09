@@ -48,7 +48,7 @@ import {
   anchorLine,
   maxLineChars,
   placeThreads,
-  threadIdOf,
+  commentThreadId,
   touchText,
   LINE_PREFIX_CHARS,
   type PlacedThreads,
@@ -69,7 +69,7 @@ import {
   firstUnreadStep,
   readingSteps,
   stepFiles,
-  stepIndexOf,
+  findStepIndex,
   stepRows,
   type ReadingStep,
   type StepRows,
@@ -1052,7 +1052,7 @@ export function activate(host: HTMLElement): AppInstance {
       // find the conversation without counting rows.
       const replyBtn = h("button", "console-diff-row__reply", "Reply") as HTMLButtonElement;
       replyBtn.type = "button";
-      replyBtn.dataset.threadId = threadIdOf(thread);
+      replyBtn.dataset.threadId = commentThreadId(thread);
       replyBtn.title = "Reply to this conversation on the review (a)";
       replyBtn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -1063,11 +1063,11 @@ export function activate(host: HTMLElement): AppInstance {
       // it to a model is theirs to do; this only puts the text on their clipboard.
       const briefBtn = h("button", "console-diff-row__brief", "Copy brief") as HTMLButtonElement;
       briefBtn.type = "button";
-      briefBtn.dataset.threadId = threadIdOf(thread);
+      briefBtn.dataset.threadId = commentThreadId(thread);
       briefBtn.title = "Copy a brief of this conversation, to paste to your own model";
       briefBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        void copyBrief(threadIdOf(thread), briefBtn);
+        void copyBrief(commentThreadId(thread), briefBtn);
       });
       el.append(briefBtn);
       return el;
@@ -1662,7 +1662,7 @@ export function activate(host: HTMLElement): AppInstance {
       state.focusAt ??= firstUnread();
       // The step went away - a fold, a re-read, a tree that moved. Fall back to the first one
       // rather than showing nothing: an empty stream would read as "the change is gone".
-      const at = Math.max(0, stepIndexOf(state.steps, state.focusAt));
+      const at = Math.max(0, findStepIndex(state.steps, state.focusAt));
       const step = state.steps[at];
       const first = step?.hunks[0];
       if (step && first) {
@@ -2439,7 +2439,7 @@ export function activate(host: HTMLElement): AppInstance {
 
   // stepAt is the position of the step on screen among all of them, or -1 when the focused hunk
   // is no longer in the changeset.
-  const stepAt = (): number => stepIndexOf(state.steps, state.focusAt);
+  const stepAt = (): number => findStepIndex(state.steps, state.focusAt);
 
   const readCount = (): number => state.pairs.filter((p) => state.viewed.has(p.digest)).length;
 
@@ -2986,7 +2986,7 @@ export function activate(host: HTMLElement): AppInstance {
         field.disabled = true;
         commit.disabled = true;
         where.textContent = "Sending...";
-        void sendReply(threadIdOf(thread), body).then((failure) => {
+        void sendReply(commentThreadId(thread), body).then((failure) => {
           if (disposed) return;
           if (!failure) {
             close();

@@ -396,10 +396,10 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffReview, withThread
 // Silent on failure and bounded by its own deadline, on the forge calls alone. The changeset is
 // what the agent asked for, and holding it behind somebody else's forge is the reason the
 // console gave this a separate route. The error is dropped and the comments are not:
-// ReviewCommentsOf returns everything it could read alongside it, and a malformed remark is no
+// OriginReviewComments returns everything it could read alongside it, and a malformed remark is no
 // reason to hide the rest of a thread from the agent working on it.
 func (t *diffTool) reviewComments(ctx context.Context) []types.ReviewComment {
-	_, comments, _ := bindings.ReviewCommentsOf(ctx, t.src.ReviewOrigin(ctx), reviewLookupTimeout)
+	_, comments, _ := bindings.OriginReviewComments(ctx, t.src.ReviewOrigin(ctx), reviewLookupTimeout)
 	return comments
 }
 

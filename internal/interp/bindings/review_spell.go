@@ -205,7 +205,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 	return nil
 }
 
-// ReviewCommentsOf finds the review open for from and reads its comments.
+// OriginReviewComments finds the review open for from and reads its comments.
 //
 // bound limits the two forge calls together and nothing the caller does afterwards: a client
 // asked for a changeset must not wait on a stranger's outage to get one, but its own work on
@@ -213,7 +213,7 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 //
 // at is not Open when there is nothing to read, and at.Reason says why. err is
 // [ReviewComments]'s, with the comments that did decode beside it.
-func ReviewCommentsOf(ctx context.Context, from types.ReviewOrigin, bound time.Duration) (at types.ReviewTarget, comments []types.ReviewComment, err error) {
+func OriginReviewComments(ctx context.Context, from types.ReviewOrigin, bound time.Duration) (at types.ReviewTarget, comments []types.ReviewComment, err error) {
 	ctx, cancel := context.WithTimeout(ctx, bound)
 	defer cancel()
 	at = FindReview(ctx, from.Branch, from.Remote)

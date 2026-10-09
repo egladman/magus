@@ -80,7 +80,7 @@ func (h *ThreadHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// The comments that decoded are used even when one did not: a malformed remark is no reason
 	// to withhold the rest of a thread. The failure is named only when it left the id
 	// unfindable, which is when it matters.
-	at, comments, commentsErr := bindings.ReviewCommentsOf(ctx, ws.ReviewOrigin(ctx), threadLookupTimeout)
+	at, comments, commentsErr := bindings.OriginReviewComments(ctx, ws.ReviewOrigin(ctx), threadLookupTimeout)
 	if !at.Open() {
 		handler.Refuse(w, r, rpcerr.NotFound("no review is open for this branch: "+at.Reason))
 		return

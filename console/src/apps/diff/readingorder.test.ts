@@ -8,7 +8,7 @@ import {
   firstUnreadStep,
   readingSteps,
   stepFiles,
-  stepIndexOf,
+  findStepIndex,
   stepRows,
   type HunkAddress,
 } from "./readingorder";
@@ -160,11 +160,11 @@ test("an empty changeset has no steps", () => {
   assert.deepEqual(readingSteps(undefined, []), []);
 });
 
-test("stepIndexOf finds the step holding any of its hunks", () => {
+test("findStepIndex finds the step holding any of its hunks", () => {
   const steps = readingSteps(ORDER, VISIBLE);
-  assert.equal(stepIndexOf(steps, { path: "a.go", index: 1 }), 1);
-  assert.equal(stepIndexOf(steps, { path: "a.go", index: 7 }), -1);
-  assert.equal(stepIndexOf(steps, null), -1);
+  assert.equal(findStepIndex(steps, { path: "a.go", index: 1 }), 1);
+  assert.equal(findStepIndex(steps, { path: "a.go", index: 7 }), -1);
+  assert.equal(findStepIndex(steps, null), -1);
 });
 
 test("a pass resumes at the first step with a hunk still unread", () => {

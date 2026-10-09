@@ -20,7 +20,8 @@ type Thread struct {
 	Replies []types.ReviewComment
 }
 
-// ID is the thread id.
+// ID returns the head comment's id, the value every reply carries in Root. A reply is addressed
+// to a thread by this id.
 func (t Thread) ID() string { return t.Head.ID }
 
 // Comments returns the head followed by its replies.

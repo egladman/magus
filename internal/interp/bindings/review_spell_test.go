@@ -179,9 +179,9 @@ func TestReviewCommentsReachedTellsAnUnreachableHostFromAnEmptyReview(t *testing
 	assert.True(t, reached)
 }
 
-// ReviewCommentsOf is the lookup every transport makes: the review for a branch, then its
+// OriginReviewComments is the lookup every transport makes: the review for a branch, then its
 // comments, and a review that is not there says why instead of reading as an empty one.
-func TestReviewCommentsOfFindsTheReviewThenReadsItsComments(t *testing.T) {
+func TestOriginReviewCommentsFindsTheReviewThenReadsItsComments(t *testing.T) {
 	withReviewSpell(t, func(op string) (any, error) {
 		if op == spells.FindReviewContract {
 			return map[string]any{"id": "482", "repo": "acme/acme"}, nil
@@ -189,7 +189,7 @@ func TestReviewCommentsOfFindsTheReviewThenReadsItsComments(t *testing.T) {
 		return []any{map[string]any{"id": "t1", "path": "a.go", "body": "why"}}, nil
 	})
 
-	at, comments, err := ReviewCommentsOf(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+	at, comments, err := OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 
 	require.NoError(t, err)
 	assert.Equal(t, types.ReviewTarget{ID: "482", Repo: "acme/acme"}, at)
@@ -203,7 +203,7 @@ func TestReviewCommentsOfFindsTheReviewThenReadsItsComments(t *testing.T) {
 		t.Fatal("no comments are asked for when no review is open")
 		return nil, nil
 	})
-	at, comments, err = ReviewCommentsOf(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
+	at, comments, err = OriginReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, time.Minute)
 	require.NoError(t, err)
 	assert.False(t, at.Open())
 	assert.Contains(t, at.Reason, "boom")

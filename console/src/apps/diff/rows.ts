@@ -136,10 +136,10 @@ export function placeThreads(
   return { atHunk, atFile, elsewhere };
 }
 
-// threadIdOf is the thread id a reply into this comment's thread is addressed to: the comment's
+// commentThreadId is the thread id a reply into this comment's thread is addressed to: the comment's
 // own `root`, or its `id` when it is the thread's top-level comment. It is right for the comments
 // groupThreads returns, which have had any root that names no top-level comment cleared.
-export function threadIdOf(comment: ReviewComment): string {
+export function commentThreadId(comment: ReviewComment): string {
   return comment.root || comment.id;
 }
 
@@ -151,7 +151,7 @@ export function threadIdOf(comment: ReviewComment): string {
 // A comment is a reply only when its `root` names a top-level comment (one with no root) in the
 // list. Anything else heads a thread of its own: a reply whose top-level comment the host
 // trimmed, a comment rooted at itself, two rooted at each other, or a reply to a reply. Such a
-// comment is returned with its root cleared so threadIdOf reads its own id, and it is shown
+// comment is returned with its root cleared so commentThreadId reads its own id, and it is shown
 // rather than dropped, since "your colleague said nothing" is the one thing this app must not say
 // by accident.
 export function groupThreads(comments: readonly ReviewComment[]): ReviewComment[][] {
@@ -242,8 +242,8 @@ function pushThreads(
   threads.forEach((thread, i) => {
     pushThread(rows, file, thread);
     const next = threads[i + 1];
-    if (next && threadIdOf(next) === threadIdOf(thread)) return;
-    const outline = outlines?.get(threadIdOf(thread));
+    if (next && commentThreadId(next) === commentThreadId(thread)) return;
+    const outline = outlines?.get(commentThreadId(thread));
     if (!outline) return;
     rows.push({ kind: "outline", file, text: outlineHeading(outline), head: true });
     for (const topic of outline.topics) {
