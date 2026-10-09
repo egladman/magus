@@ -142,6 +142,9 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 // are callable (see isCallableSuffix). An indexer emitting no enclosing ranges yields no
 // calls, which is the honest result.
 //
+// Implements comes from the SymbolInformation relationships marked IsImplementation, kept
+// for interfaces the workspace defines.
+//
 // declaredLanguage is the language the producing spell adapts, used when the index does
 // not say: SCIP makes Document.Language optional and scip-typescript sets it on nothing.
 // The document wins when it has a value; the declaration fills the gap.
@@ -180,11 +183,16 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 	// is read from the document that holds it.
 	type docKey struct{ doc, key string }
 	infoIn := map[docKey]*scip.SymbolInformation{}
+	// implements is implementer key -> interface key. Like calls it buffers keys the
+	// workspace does not define: whether an interface is defined here is only knowable
+	// after every document is read.
+	implements := map[string]map[string]bool{}
 	for _, doc := range idx.Documents {
 		for _, si := range doc.Symbols {
 			if info, ok := parseMoniker(si.Symbol); ok {
 				infoByKey[info.Key] = si
 				infoIn[docKey{doc.RelativePath, info.Key}] = si
+				noteImplements(implements, info.Key, si)
 			}
 		}
 	}
@@ -320,6 +328,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 		}
 		a.sym.Refs = sortedRefs(a.refs)
 		a.sym.Calls = sortedCalls(calls[a.sym.Key], defined)
+		a.sym.Implements = sortedImplements(implements[a.sym.Key], defined)
 		out = append(out, a.sym)
 	}
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
@@ -548,6 +557,41 @@ func sortedCalls(m map[string]int, defined map[string]bool) []types.KnowledgeSym
 		return nil
 	}
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbolCall) int { return cmp.Compare(x.Key, y.Key) })
+	return out
+}
+
+// noteImplements records the interfaces si declares itself an implementation of. scip-go
+// sets IsImplementation on a type's relationship to each interface it satisfies and on a
+// method's relationship to the interface method it satisfies; a self-relationship is
+// ignored. A symbol's information can appear in several documents, so the keys union.
+func noteImplements(implements map[string]map[string]bool, key string, si *scip.SymbolInformation) {
+	for _, rel := range si.Relationships {
+		if !rel.IsImplementation || scip.IsLocalSymbol(rel.Symbol) {
+			continue
+		}
+		target, ok := parseMoniker(rel.Symbol)
+		if !ok || target.Key == key {
+			continue
+		}
+		set := implements[key]
+		if set == nil {
+			set = map[string]bool{}
+			implements[key] = set
+		}
+		set[target.Key] = true
+	}
+}
+
+// sortedImplements is sortedCalls for implementation relationships: keys the workspace
+// defines, sorted and deduplicated.
+func sortedImplements(m map[string]bool, defined map[string]bool) []string {
+	var out []string
+	for k := range m {
+		if defined[k] {
+			out = append(out, k)
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

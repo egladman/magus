@@ -88,6 +88,32 @@ func TestAssembleSymbolsEmitsCallEdges(t *testing.T) {
 	assert.Empty(t, lines, "call sites live on the file's references edge, not repeated per pair")
 }
 
+// An implementation points at its interface, in the direction a dependency-first ordering
+// reads, and the edge needs no provenance: the indexer's relationship is the whole claim.
+func TestAssembleSymbolsEmitsImplementsEdges(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{
+			Key:        "example.com/foo Impl#",
+			Label:      "Impl",
+			Source:     "pkg/foo/impl.go:5",
+			Defs:       []string{"pkg/foo/impl.go"},
+			Implements: []string{"example.com/foo Iface#"},
+		},
+		{
+			Key:    "example.com/foo Iface#",
+			Label:  "Iface",
+			Source: "pkg/foo/iface.go:3",
+			Defs:   []string{"pkg/foo/iface.go"},
+		},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, []types.TargetGraphProject{{Path: "pkg/foo"}})}).Output()
+
+	_, ok := findEdge(out, "symbol:example.com/foo Impl#", "symbol:example.com/foo Iface#", types.RelationImplements)
+	assert.True(t, ok, "the implementer reaches the interface")
+	_, ok = findEdge(out, "symbol:example.com/foo Iface#", "symbol:example.com/foo Impl#", types.RelationImplements)
+	assert.False(t, ok, "the edge is not mirrored")
+}
+
 // TestAssembleShardsIngestsSymbols: a project with declared symbols yields a
 // per-project @symbols shard in the assembled set, merged into the graph.
 func TestAssembleShardsIngestsSymbols(t *testing.T) {

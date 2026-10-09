@@ -346,9 +346,11 @@ version.
 Edges are directed and carry provenance and a confidence tag: `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
-Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
-`documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
-function, and code symbol to code symbol from a SCIP index. `rationale_for` points at a
+Relations: `depends_on`, `contains`, `uses`, `calls`, `implements`, `imports`,
+`references`, `documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
+function, and code symbol to code symbol from a SCIP index. `implements` runs from an
+implementing type or method to the interface or interface method it satisfies, both
+symbols, from the relationships the indexer records. `rationale_for` points at a
 buzz function, or at its symbol once a Buzz index covers the file.
 
 Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
@@ -556,7 +558,9 @@ machine's cache holds, and a function id resolves to its symbol in `magus refs`.
 Each ingested index becomes a per-project `<project>@symbols` shard: `symbol` nodes
 (keyed by their version-stripped SCIP moniker), `defines` edges from the defining
 file, `references` edges from each using file (one per file, carrying an
-occurrence count and capped lines), and `calls` edges between symbols.
+occurrence count and capped lines), `calls` edges between symbols, and `implements`
+edges from an implementation to the interface it satisfies, when the indexer records
+implementation relationships and the interface is defined in this workspace.
 
 A call edge is attributed, not inferred: SCIP records an enclosing range for each
 definition, so a reference occurrence that falls inside one was written in that

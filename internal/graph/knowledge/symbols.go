@@ -201,6 +201,9 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		for _, c := range sym.Calls {
 			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(c.Key), types.RelationCalls, callProvenance(c)))
 		}
+		for _, iface := range sym.Implements {
+			s.Edges = append(s.Edges, extractedEdge(sID, symbolID(iface), types.RelationImplements, ""))
+		}
 	}
 	return s
 }

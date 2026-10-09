@@ -329,6 +329,22 @@ func TestKnowledgeRelationShapesForMarkersAndPackages(t *testing.T) {
 	assert.False(t, KnowledgeRelationAllows(RelationDocuments, KindDocSection, KindSpell))
 }
 
+func TestKnowledgeRelationImplements(t *testing.T) {
+	var def *KnowledgeRelationDefinition
+	for _, d := range KnowledgeRelationDefinitions() {
+		if d.ID == RelationImplements {
+			def = &d
+		}
+	}
+	require.NotNil(t, def, "implements is declared in the vocabulary")
+	assert.Equal(t, "implements", def.ForwardLabel)
+	assert.Equal(t, "implemented by", def.ReverseLabel)
+
+	assert.True(t, KnowledgeRelationAllows(RelationImplements, KindSymbol, KindSymbol))
+	assert.False(t, KnowledgeRelationAllows(RelationImplements, KindFile, KindSymbol))
+	assert.False(t, KnowledgeRelationAllows(RelationImplements, KindFunction, KindFunction))
+}
+
 // Edge attrs are additive: an edge without any marshals exactly as it did before them.
 func TestKnowledgeEdgeAttrsJSONKeys(t *testing.T) {
 	e := KnowledgeEdge{Source: "dir:a", Target: "dir:b", Relation: RelationCalls, Confidence: ConfidenceDeclared, Score: 1}

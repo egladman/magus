@@ -457,6 +457,63 @@ func TestParseIndexCallsAttributesToInnermostBody(t *testing.T) {
 	assert.Equal(t, want, callsOf(t, syms, "gomod example.com/foo Outer()."), "outer keeps only what inner does not enclose")
 }
 
+func implementsOf(t *testing.T, syms []types.KnowledgeSymbol, key string) []string {
+	t.Helper()
+	for _, s := range syms {
+		if s.Key == key {
+			return s.Implements
+		}
+	}
+	t.Fatalf("no symbol %q in %d parsed", key, len(syms))
+	return nil
+}
+
+// scip-go marks both a type and a method with an IsImplementation relationship to what
+// it satisfies; the parse keeps the workspace-defined targets, sorted and deduplicated,
+// and drops a dependency's interface and a self-relationship.
+func TestParseIndexReadsImplementsRelationships(t *testing.T) {
+	const (
+		iface       = "scip-go gomod example.com/foo v1 Iface#"
+		ifaceMethod = "scip-go gomod example.com/foo v1 Iface#Do()."
+		other       = "scip-go gomod example.com/foo v1 Another#"
+		impl        = "scip-go gomod example.com/foo v1 Impl#"
+		implMethod  = "scip-go gomod example.com/foo v1 Impl#Do()."
+		external    = "scip-go gomod example.com/dep v1 Reader#"
+	)
+	def := func(sym string, line int32) *scip.Occurrence {
+		return &scip.Occurrence{Symbol: sym, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{line, 5, 11}}
+	}
+	idx := &scip.Index{Documents: []*scip.Document{{
+		RelativePath: "pkg/foo/foo.go",
+		Language:     "go",
+		Symbols: []*scip.SymbolInformation{
+			{Symbol: iface, DisplayName: "Iface", Kind: scip.SymbolInformation_Interface},
+			{Symbol: ifaceMethod, DisplayName: "Do", Kind: scip.SymbolInformation_Method},
+			{Symbol: other, DisplayName: "Another", Kind: scip.SymbolInformation_Interface},
+			{Symbol: impl, DisplayName: "Impl", Kind: scip.SymbolInformation_Struct, Relationships: []*scip.Relationship{
+				{Symbol: other, IsImplementation: true},
+				{Symbol: iface, IsImplementation: true},
+				{Symbol: iface, IsImplementation: true},
+				{Symbol: external, IsImplementation: true},
+				{Symbol: impl, IsImplementation: true},
+				{Symbol: other, IsReference: true},
+			}},
+			{Symbol: implMethod, DisplayName: "Do", Kind: scip.SymbolInformation_Method, Relationships: []*scip.Relationship{
+				{Symbol: ifaceMethod, IsImplementation: true},
+			}},
+		},
+		Occurrences: []*scip.Occurrence{def(iface, 0), def(ifaceMethod, 1), def(other, 2), def(impl, 10), def(implMethod, 11)},
+	}}}
+	syms, err := ParseIndex(t.Context(), marshalIndex(t, idx), "", "")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"gomod example.com/foo Another#", "gomod example.com/foo Iface#"},
+		implementsOf(t, syms, "gomod example.com/foo Impl#"))
+	assert.Equal(t, []string{"gomod example.com/foo Iface#Do()."},
+		implementsOf(t, syms, "gomod example.com/foo Impl#Do()."))
+	assert.Empty(t, implementsOf(t, syms, "gomod example.com/foo Iface#"), "an interface implements nothing")
+}
+
 // An indexer that emits no enclosing ranges gives no calls rather than a guess.
 func TestParseIndexNoEnclosingRangeYieldsNoCalls(t *testing.T) {
 	doc := fnDoc(&scip.Occurrence{Symbol: calleeMoniker, Range: []int32{3, 2, 8}})

@@ -179,6 +179,7 @@ const RELATIONS = [
   "contains",
   "imports",
   "calls",
+  "implements",
   "uses",
   "references",
   "documents",
