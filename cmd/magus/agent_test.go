@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -462,6 +463,29 @@ func TestEverySkillFitsTheSkillGuidance(t *testing.T) {
 			assert.LessOrEqual(t, refLines, 500, "%s reference.md is %d lines", def.Name, refLines)
 			assert.Contains(t, r.Reference, "\n## Contents\n", "%s: a reference file is read in part, so it carries a contents list", def.Name)
 			assert.Contains(t, r.Body, "](reference.md)", "%s: SKILL.md links its reference file, or nothing points a reader at it", def.Name)
+		}
+	}
+}
+
+// A skill names a command through {{cmd}}, which resolves it against the registry, so a
+// renamed command fails the install instead of shipping prose that names a verb that is gone.
+// Fenced blocks are exempt: they show a whole command line as typed.
+func TestSkillSourcesNameCommandsThroughTheTemplate(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+	literal := regexp.MustCompile("`magus [a-z][a-z-]*")
+	for _, def := range defs {
+		for file, src := range map[string]string{"SKILL.md": def.Body, "reference.md": def.Reference} {
+			fenced := false
+			for i, line := range strings.Split(src, "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "```") {
+					fenced = !fenced
+					continue
+				}
+				if m := literal.FindString(line); !fenced && m != "" {
+					t.Errorf("%s/%s:%d types %s literally; write {{cmd \"<path>\"}} instead", def.Name, file, i+1, m)
+				}
+			}
 		}
 	}
 }

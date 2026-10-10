@@ -17,7 +17,7 @@ magus graph deps -o tree     # the declared project DAG
 
 MCP: `{{tool "client"}}` covers the same ground through `{{buzz "stats"}}`, `{{buzz "insight"}}`
 (hotspots, affinity, and ownership on one report), and `{{buzz "query"}}`.
-Insight has no CLI verb; without MCP, read one lens through `magus buzz`:
+Insight has no CLI verb; without MCP, read one lens through `{{cmd "buzz"}}`:
 
 ```sh
 magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().affinity)); }'
@@ -58,7 +58,7 @@ proposing a merge:
   line count.
 - Two importers in different trees means a merge makes one depend on the other.
 
-`magus graph stats` reports orphans (zero importers), an adjacent question. The
+`{{cmd "graph stats"}}` reports orphans (zero importers), an adjacent question. The
 expensive cases have one importer, not none.
 
 WRONG: proposing a merge because a package is under N lines.
@@ -67,27 +67,27 @@ and nothing it exports would need to be exported once merged.
 
 ## Sizing a specific refactor
 
-1. Blast radius of a node: `magus explain <node>` shows its edges and how many
+1. Blast radius of a node: `{{cmd "explain"}} <node>` shows its edges and how many
    nodes reach it.{{if .Full}} A high reached-by count means migration plan, not quick
    rename.{{end}}
-2. Fan-in of a symbol: `magus refs <symbol>` lists the defining file and every
+2. Fan-in of a symbol: `{{cmd "refs"}} <symbol>` lists the defining file and every
    referencing file:line from the SCIP index. Run it before moving or renaming any
    exported symbol.{{if .Full}} An empty result states which kind of empty it is:
    `absent` is verified, `unknown` names the projects with no symbol index; build
-   them with `magus graph build` before trusting it.{{else}} An empty result carries a
+   them with `{{cmd "graph build"}}` before trusting it.{{else}} An empty result carries a
    verdict; `unknown` means an index is missing, not that nothing uses it.{{end}}
-3. How two things relate: `magus path <a> <b>` gives the shortest edge chain{{if .Full}};
+3. How two things relate: `{{cmd "path"}} <a> <b>` gives the shortest edge chain{{if .Full}};
    use it to test whether a proposed boundary separates them{{end}}.
-4. Owners: `magus query kind=owner` (from CODEOWNERS) says whose review a move
+4. Owners: `{{cmd "query"}} kind=owner` (from CODEOWNERS) says whose review a move
    needs.
 
 ## Match the existing conventions
 
 Derive the pattern from the graph instead of imposing one:
 
-- where similar code lives: `magus query kind=<kind> <term>`;
+- where similar code lives: `{{cmd "query"}} kind=<kind> <term>`;
 - which modules import which: `relation=imports`;
-- how projects segment: `magus graph deps`.{{if .Full}}
+- how projects segment: `{{cmd "graph deps"}}`.{{if .Full}}
 
 A suggestion that follows the workspace's own conventions costs less than an
 imported ideal.{{end}}
@@ -142,13 +142,13 @@ cries wolf teaches people to route around it{{if .Full}}, taking the real findin
 
 ## Verify the change
 
-After restructuring, show the impact in graph terms: `magus graph diff --rev <base>
+After restructuring, show the impact in graph terms: `{{cmd "graph diff"}} --rev <base>
 -o markdown` lists the nodes and edges the change added, removed, or
 altered{{if .Full}} (blast radius as data, suitable for a PR description){{end}}. Then run
-`magus affected ci` to prove the affected projects still pass.
+`{{cmd "affected"}} ci` to prove the affected projects still pass.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To look at structure, offer an export
-(`magus graph export -o json` or `-o graphml`) for Gephi, yEd, or a browser graph
+(`{{cmd "graph export"}} -o json` or `-o graphml`) for Gephi, yEd, or a browser graph
 tool{{if .Full}}; do not hand-draw diagrams of what the graph already knows{{end}}.

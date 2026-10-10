@@ -13,16 +13,16 @@ Two jobs share one file by claiming declarations in it: `<file>#<declaration>`, 
 as `internal/agent/catalog.go#SkillVersion`.
 
 - A claim names one file, never a glob.
-- The file needs a diff driver (`magus doctor` lists the managed ones); otherwise
+- The file needs a diff driver (`{{cmd "doctor"}}` lists the managed ones); otherwise
   fork refuses with {{mgslink "MGS3031"}}.
 - Two jobs that must edit the SAME declaration still have one owner. Give it to one
   job, or order them with `--depends-on`{{if .Full}}. Claiming the whole file, or a glob over its directory, is
   what serializes every other job that needed one function in it{{end}}.
 
-The check is `<target> <project> [-- args]` with the `magus run` implied (`"test ."`,
+The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"test ."`,
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
 
-Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `magus job fork` from a
+Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `{{cmd "job fork"}}` from a
 terminal{{if .Full}}: the same store and the same authorization either way, so a
 job forked by hand and one an agent forked are indistinguishable to everything that
 reads them{{end}}. A worker holding a lease forks its own units the same way, naming its
@@ -40,7 +40,7 @@ from an older revision than the tree you partitioned{{if .Full}}, and every diff
 silently lies when the recorded base is not the real one{{end}}.
 
 - A worker whose spawn title names its job (`<parent>/<role> <job>`) is bound and
-  records its base on its first call. Any other worker runs `magus job exec <its id>`
+  records its base on its first call. Any other worker runs `{{cmd "job exec"}} <its id>`
   once to record it.
 - The guard binds the caller that ran it, keyed on the host's session and subagent
   ids. Workers sharing a tree each hold their own lease, and none binds you{{if .Full}}. Nothing to pass: the
@@ -85,21 +85,21 @@ That write records each dropped path with its digest at that moment. Hand the di
 to the job taking the path over. One that no longer matches at verification means the
 waiter built on a tree the releaser never saw.
 
-Moving a live job's boundary is yours. Change its record and run `magus job apply -f
+Moving a live job's boundary is yours. Change its record and run `{{cmd "job apply"}} -f
 <file>` (`-f -` reads stdin).
 
 - The record is the whole spec: one write widens or revokes write paths and adds
   goals, and the job keeps its state{{if .Full}}. A re-fork would hand a taken job out again as
   declared{{end}}.
 - `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes mid-flight is a goal you add this way, so `magus job
-  wait` grades it from a recorded run.
+- A check you find the job owes mid-flight is a goal you add this way, so
+  `{{cmd "job wait"}}` grades it from a recorded run.
 - A revoked path is recorded as a release with its digest. The worker's next write
   there is refused, naming the revocation.
-- Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
-  names `magus describe job` and tells it to ask you.
+- Ending a whole job stays `{{cmd "job exit"}} <job>`. A worker never widens: its refusal
+  names `{{cmd "describe job"}}` and tells it to ask you.
 
-Advance the row on every state change. `magus ls jobs` then shows which live jobs
+Advance the row on every state change. `{{cmd "ls jobs"}}` then shows which live jobs
 claim intersecting `write_paths` and how long since each row was touched. A reported
 overlap is a pair you either intended or must repartition.
 
@@ -158,11 +158,11 @@ before reporting upward.{{end}}
 ## Declare the criteria magus can check for you
 
 A job's acceptance criteria are prose a reader grades. A GOAL is the part magus grades
-itself, from evidence the worker cannot author. `magus job wait` refuses to record pass
+itself, from evidence the worker cannot author. `{{cmd "job wait"}}` refuses to record pass
 until every one verifies.
 
 - Goals are data: write them in the job record's `goals`, never as flags.
-- `magus job fork` refuses a job that writes and declares neither a check nor a goal.
+- `{{cmd "job fork"}}` refuses a job that writes and declares neither a check nor a goal.
 - `{{tool "client"}}` (`{{buzz "job.put"}}`) takes the same `goals` array.
 
 A record on stdin declares a `paths` goal and two `symbol` goals:
@@ -217,7 +217,7 @@ Ask where a job stands without advancing it:
 magus describe job <job>
 ```
 
-It prints where each goal stands beside the terms: the same grading `magus job wait`
+It prints where each goal stands beside the terms: the same grading `{{cmd "job wait"}}`
 does, recording nothing. Use it instead of asking a worker how it is going.
 
 SEQUENCE goals with `depends_on` between them; a failed prerequisite propagates. Do
@@ -274,20 +274,20 @@ is one of the three reads above.
 
 A blocked worker RAISES; it never stalls quietly.
 
-- Piping the block to `magus session notify --outcome waiting` (blocked on input) or
+- Piping the block to `{{cmd "session notify"}} --outcome waiting` (blocked on input) or
   `--outcome permission` (blocked on approval) opens a durable request in this
   repository. No other outcome opens one.
-- `magus session attention` lists what is open{{if .Full}}, keyed by repository identity rather
+- `{{cmd "session attention"}}` lists what is open{{if .Full}}, keyed by repository identity rather
   than by checkout path, so a request raised inside a worker's own isolated tree is
-  listed in yours{{end}}. `magus session attention -q` prints nothing and exits 1 on an empty
+  listed in yours{{end}}. `{{cmd "session attention"}} -q` prints nothing and exits 1 on an empty
   queue: the form to test from a loop.
 - Nothing closes a request by itself. The orchestrator, or any human, disposes it
-  with `magus session dispose <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
+  with `{{cmd "session dispose"}} <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
   request magus could answer on its own would not have needed a person{{end}}.
 - A worker that raised one waits for the disposition; it never chooses for itself.
 
-`magus session` is how the root audits what a job RAN, as opposed to what it reported.
-`magus session --since 2h -o json` answers what the fleet has been doing.
+`{{cmd "session"}}` is how the root audits what a job RAN, as opposed to what it reported.
+`{{cmd "session"}} --since 2h -o json` answers what the fleet has been doing.
 
 {{if .Full}}Each invocation carries the job it was launched under (the same `magus.lease` channel).
 It also carries its claimed spawner label and parent span, and the targets it finished

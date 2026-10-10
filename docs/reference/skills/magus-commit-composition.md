@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `73042740fbed` |
+| `skill-content` | `bd8aea338bdd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -221,8 +221,8 @@ Three signals, strongest first:
 - **Blast radius.** Groups that reach disjoint project sets are separable; groups
   that reach the same set usually want one commit.
 - **Symbol coupling.** A rename's sites belong together, however many directories
-  they span. If refs reports a project not-indexed, run `magus graph
-  build` first: `unknown, not absent` is not an empty result.
+  they span. If refs reports a project not-indexed, run
+  `magus graph build` first: `unknown, not absent` is not an empty result.
 
 ## Where this stops
 

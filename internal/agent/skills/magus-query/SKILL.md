@@ -32,32 +32,32 @@ last resort: no server AND no CLI, or a human asking what the committed index sa
 ## Act in this order
 
 1. Ask the workspace what exists, with the verb that answers your question:
-   - `magus describe targets`: every target; `-o name` for bare names.
-   - `magus ls`: every project with its spell, sources, outputs, depends_on.
-   - `magus describe spells`, `magus describe projects`.{{if .Full}}
+   - `{{cmd "describe targets"}}`: every target; `-o name` for bare names.
+   - `{{cmd "ls"}}`: every project with its spell, sources, outputs, depends_on.
+   - `{{cmd "describe"}} spells`, `{{cmd "describe"}} projects`.{{if .Full}}
 
    These are live, so they
    are right even mid-change, and they take a `-o json` for machine reading.{{end}}
 
 2. Then reach for the verbs. Prefer an MCP tool when this host exposes it.
-   - Call the tool itself to check availability. `magus status --probe=mcp` tests
+   - Call the tool itself to check availability. `{{cmd "status"}} --probe=mcp` tests
      the loopback HTTP listener, so it can fail while stdio or Unix-socket MCP
      works.
    - If the tool is missing or its call fails, use the CLI equivalent from the same
      row below. Do not stop or grep.
-   - `magus status --probe=readiness` checks that this workspace is loaded on the
+   - `{{cmd "status"}} --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Never start a server only to unlock a tool.{{if .Full}} CLI
      fallback remains correct, but has no tool discovery or warm server graph.{{end}}
 
    | question                                      | MCP                                              | CLI                                |
    | --------------------------------------------- | ------------------------------------------------ | ---------------------------------- |
-   | find and relate entities                      | `{{tool "client"}}` (`{{buzz "query"}}`)         | `magus query "<terms>"`            |
-   | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "explain"}}`)       | `magus explain <node>`             |
-   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "path"}}`)          | `magus path <a> <b>`               |
-   | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "stats"}}`)         | `magus graph stats`                |
-   | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "refs"}}`)          | `magus refs <symbol>`              |
-   | what a branch changed in the graph            | (export + diff) | `magus graph diff <baseline.json>` |
+   | find and relate entities                      | `{{tool "client"}}` (`{{buzz "query"}}`)         | `{{cmd "query"}} "<terms>"`            |
+   | one node: its edges, provenance, blast radius | `{{tool "client"}}` (`{{buzz "explain"}}`)       | `{{cmd "explain"}} <node>`             |
+   | how do two nodes relate                       | `{{tool "client"}}` (`{{buzz "path"}}`)          | `{{cmd "path"}} <a> <b>`               |
+   | where risk concentrates                       | `{{tool "client"}}` (`{{buzz "stats"}}`)         | `{{cmd "graph stats"}}`                |
+   | where a code symbol is defined and used       | `{{tool "client"}}` (`{{buzz "refs"}}`)          | `{{cmd "refs"}} <symbol>`              |
+   | what a branch changed in the graph            | (export + diff) | `{{cmd "graph diff"}} <baseline.json>` |
 
    Prefer these over grep and glob for anything in the magus domain. `{{buzz "refs"}}`
    needs a workspace that declares a SCIP index (`knowledge.symbols` in config).{{if .Full}} It
@@ -68,7 +68,7 @@ last resort: no server AND no CLI, or a human asking what the committed index sa
    - `absent`: magus searched every symbol index this workspace declares, and the
      thing is not there.
    - `unknown`: it names the projects it could not search. Build those with
-     `magus graph build` to turn the answer into a fact.
+     `{{cmd "graph build"}}` to turn the answer into a fact.
 
    A result can name its own next step, with real ids filled in{{if .Full}}. Text
    mode prints the commands under a `next:` label; `-o json` carries a `next` field.
@@ -77,14 +77,14 @@ last resort: no server AND no CLI, or a human asking what the committed index sa
    It is a suggestion, never an order{{end}}.
 
 {{if .Full}}   The graph relates entities; the evaluated dispatch plan lives one verb over.
-{{end}}   `magus describe target <name>` prints, per project, the resolved source globs,
+{{end}}   `{{cmd "describe target"}} <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target{{if .Full}}; use it
    when the question is "what feeds or comes out of this target", not "what relates
    to it"{{end}}.
 
 ## Rewriting a symbol everywhere it appears
 
-`magus refs <symbol>` answers "where is this used" at file granularity. Its line list
+`{{cmd "refs"}} <symbol>` answers "where is this used" at file granularity. Its line list
 is CAPPED, so a rewrite driven off it silently skips sites. Add `--occurrences` for the
 edit-precise view: every occurrence, uncapped, with start and end line/column. Each
 range is checked against the file on disk.
@@ -94,7 +94,7 @@ magus refs <symbol> --occurrences -o json
 ```
 
 magus reports the sites; YOU apply the edits. It never rewrites the tree{{if .Full}}, the same way
-`magus affected` names what a change reaches without touching it{{end}}.
+`{{cmd "affected"}}` names what a change reaches without touching it{{end}}.
 
 **Never drive the rewrite from a pattern**: not `sed -i`, not a scripted
 substitute-and-write.
@@ -106,9 +106,9 @@ substitute-and-write.
   enumerate what still moved. Widening the pattern until the errors stop is the
   same mistake.
 
-**A not-indexed project is a stop, not an empty result.** `magus refs` says
+**A not-indexed project is a stop, not an empty result.** `{{cmd "refs"}}` says
 `verdict: unknown, not absent` and names the projects it could not see. Run
-`magus graph build` and ask again.{{if .Full}} Reading that verdict as "no matches" and falling
+`{{cmd "graph build"}}` and ask again.{{if .Full}} Reading that verdict as "no matches" and falling
 back to text search misses every site in an unindexed project.{{end}} A fresh worktree
 starts unindexed, so this is the normal state when you most want a rename.
 
@@ -138,7 +138,7 @@ appended a new use without disturbing existing ranges leaves every site verifyin
 while adding one magus never saw{{else}}: a newly appended use verifies nothing and is
 never seen{{end}}.
 
-- `magus status` reports which indexes are fresh. Re-index first when the tree has
+- `{{cmd "status"}}` reports which indexes are fresh. Re-index first when the tree has
   moved since you last did.
 - Check the verdict for projects that declare no index at all; those are not
   searched.
@@ -176,14 +176,14 @@ Every Markdown heading in the workspace is a `docsection` node, so documentation
 QUERYABLE, not something to read whole. To find WHERE something is explained, query
 the section; do not cat or grep the file:
 
-- `magus query "kind=docsection <terms>"` returns the heading whose section covers
+- `{{cmd "query"}} "kind=docsection <terms>"` returns the heading whose section covers
   your terms. Each result's id and Source are `<path>#<anchor>`, a citable pointer
   to the exact passage. Read that one section, not the whole page.
-- Scope it with `project=<p>` and combine free-text terms.{{if .Full}} `magus explain
+- Scope it with `project=<p>` and combine free-text terms.{{if .Full}} `{{cmd "explain"}}
   "docsection:<path>#<anchor>"` shows the page a section belongs to and what it links to; a
   page `contains` its sections and a section contains the headings nested under it, so you
   can walk the outline.{{end}}
-- Prose only: code files are not indexed this way. `magus refs` and the entity
+- Prose only: code files are not indexed this way. `{{cmd "refs"}}` and the entity
   kinds above cover code and the domain model.
 
 Reading one file whose path you know is fine. This replaces the SCAN, not a targeted
@@ -208,7 +208,7 @@ same fragment a link into the rendered page carries{{end}}.
   - `duration_p75_ms`, `cache_hit_rate`, `run_samples`, `last_output_ref`, and
     `last_run_ok` are OBSERVED from local run history{{if .Full}}, not derived from sources; read them as history, not
     guarantees{{end}}.
-  - `magus query output <ref>` on a target's `last_output_ref` fetches its latest
+  - `{{cmd "query output"}} <ref>` on a target's `last_output_ref` fetches its latest
     captured run{{if .Full}} (a target-to-output hop). The ref is a `refxxxxxxxx` id, and
     `last_run_ok` is that run's `true`/`false` outcome{{end}}.{{if .Full}}
   - With `knowledge.vcs` enabled, file nodes also carry `vcs_last_commit`,
@@ -219,22 +219,22 @@ same fragment a link into the rendered page carries{{end}}.
 
 If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover.{{if .Full}} Combine that with dependency edges to
-answer "who owns the blast radius of this change": `magus explain <node>` for the
-node's owners and dependents, or `magus query kind=owner` to list owners. Only
-declared CODEOWNERS ownership appears; it is not blame-inferred.{{else}} `magus explain
-<node>` shows owners plus dependents; `magus query kind=owner` lists them. Ownership is
+answer "who owns the blast radius of this change": `{{cmd "explain"}} <node>` for the
+node's owners and dependents, or `{{cmd "query"}} kind=owner` to list owners. Only
+declared CODEOWNERS ownership appears; it is not blame-inferred.{{else}} `{{cmd "explain"}}
+<node>` shows owners plus dependents; `{{cmd "query"}} kind=owner` lists them. Ownership is
 declared only, never blame-inferred.{{end}}
 
 ## What other sessions already did here
 
 Agents before you left a record{{if .Full}}. Where a workspace declares a session adapter,
-`magus graph build` folds each host's transcripts into a local store, and
-`magus explain` and `magus session` read it back{{else}}, where the workspace declares a session adapter{{end}}:
+`{{cmd "graph build"}}` folds each host's transcripts into a local store, and
+`{{cmd "explain"}}` and `{{cmd "session"}}` read it back{{else}}, where the workspace declares a session adapter{{end}}:
 
-- `magus explain <node>` ends with an `agent sessions:` line when any loaded session
+- `{{cmd "explain"}} <node>` ends with an `agent sessions:` line when any loaded session
   touched that file{{if .Full}}: reads, writes, distinct sessions, how long ago, and any write
   the host refused{{end}}. Silence means nothing touched it.
-- `magus session` lists those sessions; `magus session show <id>` opens one, joined
+- `{{cmd "session"}}` lists those sessions; `{{cmd "session show"}} <id>` opens one, joined
   against this checkout's guard trail.
 
 {{if .Full}}Read it BEFORE a non-trivial edit, for the reason the git half of the same output
@@ -252,16 +252,16 @@ workspace declares no adapter, the common case.
 
 - `--global` unions every workspace registered in config (`knowledge.workspaces`);
   IDs are namespaced per workspace (`web//spell:go`).
-- `magus affected`, `{{tool "client"}}` (`{{buzz "insight"}}`), and `magus describe` sit beside the
-  graph. `magus graph export -o json` dumps the whole graph for bulk analysis.
-- To show a PR's domain impact, run `magus graph diff --rev main -o markdown` for a
+- `{{cmd "affected"}}`, `{{tool "client"}}` (`{{buzz "insight"}}`), and `{{cmd "describe"}}` sit beside the
+  graph. `{{cmd "graph export"}} -o json` dumps the whole graph for bulk analysis.
+- To show a PR's domain impact, run `{{cmd "graph diff"}} --rev main -o markdown` for a
   CI comment{{if .Full}} (nodes/edges added, removed, or changed); `--rev` builds the base graph from
   that revision's files, or pass a `graph export -o json` baseline file instead{{end}}.
 
 ## Do not render the graph yourself
 
 magus emits; it does not render. To LOOK at the graph, do not draw it: OFFER the
-human an export. `magus graph export -o json` (or `-o graphml`) opens in Gephi, yEd,
+human an export. `{{cmd "graph export"}} -o json` (or `-o graphml`) opens in Gephi, yEd,
 or a browser graph tool.{{if .Full}} The emit-never-render convention that governs magus
 governs you too.{{end}}
 

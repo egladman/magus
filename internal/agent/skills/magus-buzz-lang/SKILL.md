@@ -231,7 +231,7 @@ fun main(args: [str]) > void !> any {
 }
 ```
 
-`magus\describe.<noun>` returns the typed record `magus describe <noun> -o json` prints.
+`magus\describe.<noun>` returns the typed record `{{cmd "describe"}} <noun> -o json` prints.
 `magus\cmd(sub, args: [...])` runs any other subcommand. Members that declare into a
 loaded workspace (`magus\project`, the provider selections) exist only in a magusfile;
 anywhere else they raise {{mgslink "MGS1022"}}.
