@@ -158,7 +158,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 				cwd := proc.CwdFromContext(hctx)
 				r, rerr := magus.FindRoot(cwd)
 				if rerr != nil {
-					return fmt.Errorf("proc: cannot locate workspace root from %s: %w", cwd, rerr)
+					return fmt.Errorf("locate workspace root from %s: %w", cwd, rerr)
 				}
 				root = r
 			}

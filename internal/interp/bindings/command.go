@@ -278,7 +278,7 @@ func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string
 		if opName != "" {
 			where = fmt.Sprintf("op %q: ", opName)
 		}
-		return "", fmt.Errorf("spell: %s%q is not a value the runner provides", where, tok)
+		return "", fmt.Errorf("%s%q is not a value the runner provides", where, tok)
 	}
 	rbin, err := resolve(bin)
 	if err != nil {

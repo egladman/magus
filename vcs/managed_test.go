@@ -139,7 +139,7 @@ func TestManagedSectionPresent(t *testing.T) {
 
 	torn := write("torn", tornBanner+"\n")
 	_, err = managedSectionPresent(torn, generatedMarkers)
-	require.EqualError(t, err, "vcs: "+torn+`: line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
+	require.EqualError(t, err, torn+`: line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
 }
 
 func TestEnsureShShebang(t *testing.T) {
@@ -269,7 +269,7 @@ func TestWriteManagedSectionRefusesATornSection(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(torn), 0o644))
 
 	changed, err := writeManagedSection(path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
-	require.EqualError(t, err, "vcs: "+path+`: line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
+	require.EqualError(t, err, path+`: line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
 	assert.False(t, changed)
 	assertFile(t, path, torn, 0o644)
 }

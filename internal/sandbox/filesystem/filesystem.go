@@ -14,7 +14,7 @@ import (
 
 // ErrDenied is returned by Ruleset.Check when a requested operation falls outside
 // the configured allowlist.
-var ErrDenied = errors.New("sandbox: operation denied by the sandbox policy")
+var ErrDenied = errors.New("operation denied by the sandbox policy")
 
 // Access is one kind of filesystem access a check asks about.
 type Access int
@@ -105,15 +105,15 @@ const maxSymlinks = 40
 // open: the landlock layer confines magus's children, never magus itself.
 func normalizePath(path string) (string, error) {
 	if path == "" {
-		return "", errors.New("sandbox: empty path")
+		return "", errors.New("empty path")
 	}
 	if strings.IndexByte(path, 0) >= 0 {
-		return "", errors.New("sandbox: path contains NUL")
+		return "", errors.New("path contains NUL")
 	}
 	if !filepath.IsAbs(path) {
 		wd, err := os.Getwd()
 		if err != nil {
-			return "", fmt.Errorf("sandbox: %w", err)
+			return "", err
 		}
 		// Joined by hand: filepath.Join cleans, and cleaning before resolution is the bug.
 		path = wd + string(filepath.Separator) + path
@@ -139,18 +139,18 @@ func normalizePath(path string) (string, error) {
 			resolved = next
 			continue
 		case err != nil:
-			return "", fmt.Errorf("sandbox: %w", err)
+			return "", err
 		case info.Mode()&fs.ModeSymlink == 0:
 			resolved = next
 			continue
 		}
 		links++
 		if links > maxSymlinks {
-			return "", fmt.Errorf("sandbox: %s: too many levels of symbolic links", path)
+			return "", &fs.PathError{Op: "resolve", Path: path, Err: syscall.ELOOP}
 		}
 		target, err := os.Readlink(next)
 		if err != nil {
-			return "", fmt.Errorf("sandbox: %w", err)
+			return "", err
 		}
 		if filepath.IsAbs(target) {
 			tvol := filepath.VolumeName(target)

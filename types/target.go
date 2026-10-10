@@ -81,7 +81,7 @@ var targetNameRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 // describes the violation.
 func ValidateTargetName(name string) error {
 	if !targetNameRe.MatchString(name) {
-		return fmt.Errorf("magus: target name %q: must contain only letters, digits, '-' or '_'", name)
+		return fmt.Errorf("target name %q: must contain only letters, digits, '-' or '_'", name)
 	}
 	return nil
 }
@@ -90,7 +90,7 @@ func ValidateTargetName(name string) error {
 // Charms share the target-name charset (letters, digits, '-' and '_').
 func ValidateCharmName(name string) error {
 	if !targetNameRe.MatchString(name) {
-		return fmt.Errorf("magus: charm %q: must contain only letters, digits, '-' or '_'", name)
+		return fmt.Errorf("charm %q: must contain only letters, digits, '-' or '_'", name)
 	}
 	return nil
 }
@@ -383,7 +383,7 @@ func (t Target) String() string { return t.Path + ":" + t.Name }
 // each charm are constrained to the target-name charset.
 func ParseTarget(s string) (Target, error) {
 	if s == "" {
-		return Target{}, fmt.Errorf("magus: target string is empty")
+		return Target{}, fmt.Errorf("target string is empty")
 	}
 	target := s
 	var charms, declaredCharms []string
@@ -391,11 +391,11 @@ func ParseTarget(s string) (Target, error) {
 		target = s[:i]
 		charmPart := s[i+1:]
 		if charmPart == "" {
-			return Target{}, fmt.Errorf("magus: target %q: charm must not be empty", s)
+			return Target{}, fmt.Errorf("target %q: charm must not be empty", s)
 		}
 		for _, g := range strings.Split(charmPart, ",") {
 			if err := ValidateCharmName(g); err != nil {
-				return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
+				return Target{}, fmt.Errorf("target %q: %w", s, err)
 			}
 			// NormalizeCharm, not Normalize: the compat alias is a rewritten spelling
 			// like any casing fold, so it lands in DeclaredCharms and the CLI teaches
@@ -407,7 +407,7 @@ func ParseTarget(s string) (Target, error) {
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {
-		return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
+		return Target{}, fmt.Errorf("target %q: %w", s, err)
 	}
 	var declared string
 	if n := Normalize(target); n != target {

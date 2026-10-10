@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -94,7 +95,7 @@ func agentUsage(w io.Writer) {
 
 func agentUsageErr() error {
 	agentUsage(os.Stderr)
-	return fmt.Errorf("agent: a subcommand is required (try: install)")
+	return errors.New("a subcommand is required (try: magus agent install)")
 }
 
 // agentInstallCmd renders the embedded skills and either writes them under

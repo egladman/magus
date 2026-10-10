@@ -561,7 +561,7 @@ func (c *Cache) saveSpellCache(ctx context.Context, key SpellCacheKey, roots []S
 		return res, err
 	}
 	if err := c.RemoteNamespace(spellCacheNamespace).Put(ctx, key.pointerKey(now), strings.NewReader(string(ptr))); err != nil {
-		return res, fmt.Errorf("cache: stored %s but not its pointer: %w", name, err)
+		return res, fmt.Errorf("stored %s but not its pointer: %w", name, err)
 	}
 	return res, nil
 }

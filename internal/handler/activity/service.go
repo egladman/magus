@@ -253,7 +253,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 		}
 	}
 	if err == nil {
-		err = errors.New("trail: no workspace holds this payload")
+		err = errors.New("no workspace holds this payload")
 	}
 	return nil, connect.NewError(connect.CodeNotFound, err)
 }

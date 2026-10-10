@@ -342,7 +342,7 @@ func command(ctx context.Context, policy *sandbox.Policy, confined bool, name, r
 	start := time.Now()
 	c, err = sandbox.Command(ctx, policy, resolved, args...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("sandbox: confine %s: %w", name, err)
+		return nil, nil, fmt.Errorf("confine %s: %w", name, err)
 	}
 	sandbox.RecordLaunch(ctx, time.Since(start).Seconds(), "applied")
 	// Args ends with the command's own argv; its argv[0] is the name as the target wrote it.
