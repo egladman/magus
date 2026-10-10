@@ -12,6 +12,8 @@ import "vcs";
 import "http";
 import "project/../libs/gopherbuzz";
 import "project/../libs/textsearch";
+// Imported for judge_build: the prose rule pages render from the linked judge's catalog.
+import "project/../libs/conventions" as proseJudge;
 import "project/.." as workspace;
 // The guide embeds these templates verbatim, so a template edit must rerun this project's gates.
 import "project/guides/integrations/agents";
@@ -53,6 +55,7 @@ magus\project({
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
                 "../internal/agent/skills/**/*.md",
                 "../hack/magusfile/ruledocs.buzz", "../internal/guard/**/*.go",
+                "../libs/conventions/prose/**/*.go", "../libs/conventions/cmd/judge-docs/**/*.go",
                 "../cmd/magus-utils/**/*.go"],
     // No project-wide outputs: each stage declares its own, so a hit restores only its files.
     "targets": {
@@ -97,12 +100,15 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
         // ruledocs renders the running binary's guard catalog, which internal/guard compiles in.
         workspace\file("hack/magusfile/ruledocs.buzz"), workspace\file("internal/guard/**/*.go"),
+        // The prose pages render from the linked judge's catalog, which these sources decide.
+        workspace\file("libs/conventions/prose/**/*.go"),
+        workspace\file("libs/conventions/cmd/judge-docs/**/*.go"),
         workspace\file("cmd/magus-utils/**/*.go"),
         // The .proto files are redundant with the descriptor, kept so a key change names the schema.
         workspace\file("proto/magus/**/*.proto"),
         workspace\file("proto/gen/descriptor.binpb"),
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "reference/spell-contract.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/prose/*.md", "reference/api/**/*.md", "benchmarks/**/*.md");
     // Hand-written pages with a generated region between markers; as outputs, clean would delete them.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
         "concepts/review.md",
@@ -117,6 +123,9 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
     ruledocs\write("reference/rules", rules: magus\describe.rule());
+    ctx.needs(proseJudge\judge_build);
+    ruledocs\writeProse("reference/prose",
+        raw: proc\exec("../libs/conventions/gen/judge-docs", ["-catalog"], ".", {}).stdout);
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     fs\mkdirAll("benchmarks");
@@ -145,6 +154,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     pruneGeneratedPageCopies("reference/skills/*.md");
     pruneGeneratedPageCopies("reference/manpage/*.md");
     pruneGeneratedPageCopies("reference/rules/*.md");
+    pruneGeneratedPageCopies("reference/prose/*.md");
 }
 
 // Removes macOS-style "name 3.md" copies, and only byte-identical ones: these pages mix
@@ -228,7 +238,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
-        "reference/rules", "reference/api"];
+        "reference/rules", "reference/prose", "reference/api"];
     // Repeats content-generate's declaration: the write is attributed here too, or MGS4007.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
         "reference/config *.md");
