@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-33-geed4f9361 (commit eed4f9361, 2026-10-08T09:30:42-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-52-g23893c105-dirty (commit 23893c105e43931d88ac2b7ed10aadf3a3275d16, 2026-10-10T12:15:15-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -112,6 +112,7 @@ docs/reference/api/**/*.md merge=magus linguist-generated
 docs/reference/buzz/*.md merge=magus linguist-generated
 docs/reference/config.md merge=magus linguist-generated
 docs/reference/manpage/*.md merge=magus linguist-generated
+docs/reference/prose/*.md merge=magus linguist-generated
 docs/reference/rules/*.md merge=magus linguist-generated
 docs/reference/skills/*.md merge=magus linguist-generated
 docs/reference/spell-contract.md merge=magus linguist-generated
