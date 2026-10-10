@@ -72,7 +72,7 @@ var catalog = []CatalogEntry{
 	},
 	{
 		Name: NameCheckDrift,
-		Desc: "notice, without blocking, when the last commit left generated output stale",
+		Desc: "notice, without blocking, when the last commit left generated output stale, and how many hunks a push would send are unread",
 		Argv: []string{"server", NameCheckDrift},
 	},
 }

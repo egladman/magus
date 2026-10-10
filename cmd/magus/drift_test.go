@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -318,4 +320,45 @@ func TestBuildDriftNoticeBothClasses(t *testing.T) {
 		"Reformat: magus run format:rw .\n" +
 		"abc1234 is already pushed; do not amend or rebase published history. Commit the fix as a new, follow-up commit instead."
 	assert.Equal(t, want, got)
+}
+
+const driftRangePatch = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n-c\n+d\n"
+
+// TestUnreadRangeLineCountsWhatNoMarkCovers pins the one line the drift job adds for the range a
+// push sends: silent when there is nothing to read or nothing unread, a count otherwise, and
+// "unknown", never "all unread", when the marks cannot be read.
+func TestUnreadRangeLineCountsWhatNoMarkCovers(t *testing.T) {
+	first := changeset.ParseHunks(driftRangePatch)[0].Hunks[0].Digest
+
+	line := unreadRangeLine("@{upstream}...HEAD", driftRangePatch, []string{first}, nil)
+	assert.True(t, strings.HasPrefix(line, "1 of 2 hunks of this range (@{upstream}...HEAD) unread; read them with "), line)
+	assert.Contains(t, line, "diff --unread --rev @{upstream}...HEAD")
+
+	all := []string{first, changeset.ParseHunks(driftRangePatch)[0].Hunks[1].Digest}
+	assert.Empty(t, unreadRangeLine("@{upstream}...HEAD", driftRangePatch, all, nil), "a range read in full says nothing")
+	assert.Empty(t, unreadRangeLine("@{upstream}...HEAD", "", nil, nil), "an empty range says nothing")
+	assert.Equal(t,
+		"read state unknown for the 2 hunks of this range (@{upstream}...HEAD): the read marks could not be read (permission denied)",
+		unreadRangeLine("@{upstream}...HEAD", driftRangePatch, nil, errors.New("permission denied")))
+}
+
+// TestPushRangeUnreadReadsTheRangeAgainstTheUpstream runs against a real repository: the range is
+// what HEAD holds that its upstream does not, and a branch with no remote has no range to read.
+func TestPushRangeUnreadReadsTheRangeAgainstTheUpstream(t *testing.T) {
+	dir := initGitRepo(t)
+	writeAndCommit(t, dir, "a.txt", "a\n", "first")
+	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
+	require.NoError(t, err)
+	cache := t.TempDir()
+
+	assert.Empty(t, pushRangeUnread(context.Background(), res, dir, cache, ""), "no upstream and no remote: no range")
+
+	remote := t.TempDir()
+	runGit(t, remote, "init", "--bare")
+	runGit(t, dir, "remote", "add", "origin", remote)
+	runGit(t, dir, "push", "-u", "origin", "HEAD")
+	writeAndCommit(t, dir, "a.txt", "a\nb\n", "second")
+
+	assert.Contains(t, pushRangeUnread(context.Background(), res, dir, cache, "origin"),
+		"1 of 1 hunks of this range (@{upstream}...HEAD) unread")
 }
