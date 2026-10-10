@@ -155,6 +155,7 @@ its descendants before reporting upward. The root still verifies the combined
 result independently.{{else}}Make acceptance criteria observable: named tests, artifacts, diagnostics, API
 behavior, or review checks. A child that hands work on evaluates its descendants
 before reporting upward.{{end}}
+
 ## Declare the criteria magus can check for you
 
 A job's acceptance criteria are prose a reader grades. A GOAL is the part magus grades

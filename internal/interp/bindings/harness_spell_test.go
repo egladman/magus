@@ -28,7 +28,7 @@ func loadShippedHarness(t *testing.T, id string) agent.HarnessDescriptor {
 
 func scoutInstructions(t *testing.T) string {
 	t.Helper()
-	agents, err := agent.Agents()
+	agents, err := agent.ShippedAgents()
 	require.NoError(t, err)
 	require.Len(t, agents, 1)
 	assert.Equal(t, "magus-scout", agents[0].Name)

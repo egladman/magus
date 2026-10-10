@@ -1,3 +1,10 @@
+---
+name: "magus-scout"
+description: "Answers standalone lookups and proves or refutes claims about a magus workspace with read-only magus queries, reporting each command and its output ref. Use for where-is, what-depends-on, is-this-generated and did-this-pass questions; not for edits or design."
+model: inherit
+readonly: true
+---
+
 # magus-scout
 
 Answer a lookup or prove a claim about this workspace with read-only magus queries, then stop.

@@ -347,10 +347,7 @@ import (
 // magus's own rather than the workspace's, and says the published site follows main.
 // magus-upstream-source is new: the last-resort read of magus's code at the binary's
 // commit, which `magus version -o json` now reports in full.
-// 116: magus-multi-agent starts every spawn at the economy tier, proves claims with parallel
-// economy jobs, keeps them short-lived, and judges cost per completed job. A skill may ship a
-// reference.md beside SKILL.md; magus-multi-agent moves its job-record detail there to fit
-// the 500-line SKILL.md budget, and every full form carries a contents list.
+// 116: economy-first spawns, the magus-scout agent, reference.md files and contents lists.
 const SkillVersion = 116
 
 const skillLicense = "GPL-3.0-or-later"

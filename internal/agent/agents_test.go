@@ -9,7 +9,7 @@ import (
 )
 
 func TestHarnessShippedAgentsAreCompleteAndHostNeutral(t *testing.T) {
-	agents, err := Agents()
+	agents, err := ShippedAgents()
 	require.NoError(t, err)
 	require.NotEmpty(t, agents)
 
@@ -27,27 +27,29 @@ func TestHarnessShippedAgentsAreCompleteAndHostNeutral(t *testing.T) {
 }
 
 func TestHarnessScoutIsReadOnlyAndEconomy(t *testing.T) {
-	agents, err := Agents()
+	agents, err := ShippedAgents()
 	require.NoError(t, err)
 	require.Len(t, agents, 1)
 	scout := agents[0]
-	assert.Equal(t, "magus-scout", scout.Name)
-	assert.True(t, scout.ReadOnly)
-	assert.Equal(t, AgentClassEconomy, scout.Class)
 	for _, command := range []string{"magus query", "magus refs", "magus describe", "magus affected --explain", "magus query output"} {
 		assert.Contains(t, scout.Instructions, command)
 	}
+	// The body is prose checked above; the rest of the record is compared whole.
+	scout.Instructions = ""
+	assert.Equal(t, Agent{Name: "magus-scout", Description: agentDefs[0].Description, ReadOnly: true, Class: ClassEconomy}, scout)
 }
 
 func TestHarnessAgentParamsCarryEveryField(t *testing.T) {
-	params, err := AgentParams()
+	params, err := ShippedAgentParams()
+	require.NoError(t, err)
+	agents, err := ShippedAgents()
 	require.NoError(t, err)
 	require.Len(t, params, 1)
-	got, ok := params[0].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "magus-scout", got["name"])
-	assert.Equal(t, true, got["read_only"])
-	assert.Equal(t, "economy", got["class"])
-	assert.Contains(t, got, "description")
-	assert.Contains(t, got, "instructions")
+	assert.Equal(t, map[string]any{
+		"name":         "magus-scout",
+		"description":  agents[0].Description,
+		"instructions": agents[0].Instructions,
+		"read_only":    true,
+		"class":        ClassEconomy,
+	}, params[0])
 }

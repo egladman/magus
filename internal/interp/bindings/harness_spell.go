@@ -79,7 +79,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	}
-	agents, err := agent.AgentParams()
+	agents, err := agent.ShippedAgentParams()
 	if err != nil {
 		return agent.HarnessDescriptor{}, "", false, err
 	}

@@ -12,9 +12,9 @@ import (
 //go:embed agents
 var agentFS embed.FS
 
-// AgentClassEconomy marks an agent whose work is bounded lookups, so a host that picks a
+// ClassEconomy marks an agent whose work is bounded lookups, so a host that picks a
 // model per agent can give it the cheapest tier it offers.
-const AgentClassEconomy = "economy"
+const ClassEconomy = "economy"
 
 // Agent is a named subagent every agent host can route to by its Description. magus
 // ships it host-neutral: each harness spell renders it in its host's file format and
@@ -41,21 +41,21 @@ func (a Agent) Params() map[string]any {
 	}
 }
 
-// shippedAgents holds what a Markdown body cannot: everything but the instructions.
-var shippedAgents = []Agent{
+// agentDefs holds what a Markdown body cannot: everything but the instructions.
+var agentDefs = []Agent{
 	{
 		Name:        "magus-scout",
 		Description: "Answers standalone lookups and proves or refutes claims about a magus workspace with read-only magus queries, reporting each command and its output ref. Use for where-is, what-depends-on, is-this-generated and did-this-pass questions; not for edits or design.",
 		ReadOnly:    true,
-		Class:       AgentClassEconomy,
+		Class:       ClassEconomy,
 	},
 }
 
-// Agents returns the agents magus ships, with instructions read from the embedded
+// ShippedAgents returns the agents magus ships, with instructions read from the embedded
 // Markdown.
-func Agents() ([]Agent, error) {
-	out := make([]Agent, 0, len(shippedAgents))
-	for _, a := range shippedAgents {
+func ShippedAgents() ([]Agent, error) {
+	out := make([]Agent, 0, len(agentDefs))
+	for _, a := range agentDefs {
 		body, err := agentFS.ReadFile(path.Join("agents", a.Name+".md"))
 		if err != nil {
 			return nil, fmt.Errorf("agent: read %s: %w", a.Name, err)
@@ -66,10 +66,10 @@ func Agents() ([]Agent, error) {
 	return out, nil
 }
 
-// AgentParams renders every shipped agent as the "agents" list a harness_agents
+// ShippedAgentParams renders every shipped agent as the "agents" list a harness_agents
 // invocation carries.
-func AgentParams() ([]any, error) {
-	agents, err := Agents()
+func ShippedAgentParams() ([]any, error) {
+	agents, err := ShippedAgents()
 	if err != nil {
 		return nil, err
 	}

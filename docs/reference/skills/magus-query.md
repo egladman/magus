@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 15082
-skill_short_bytes: 10494
+skill_full_bytes: 15093
+skill_short_bytes: 10505
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `d1093e10d156` |
+| `skill-content` | `0cbb3382f618` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -64,8 +64,8 @@ That covers "what exists", "what depends on X", "where is Y used", and "how do A
 B relate". Do not open Grep or Glob for it. If the graph cannot answer, say so,
 then fall back: falling back silently hides the gap.
 
-A lookup you need only the answer to goes to the `magus-scout` agent where your harness
-installed it, or to a worker on your host's cheapest model.
+Send a lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
 generated index for humans, true only as of its last regeneration. Read it only as a
@@ -289,8 +289,8 @@ source or scored by a rubric, and says which. If the graph cannot answer, say so
 then fall back: a silent fallback hides the gap that should be
 reported.
 
-A lookup you need only the answer to goes to the `magus-scout` agent where your harness
-installed it, or to a worker on your host's cheapest model. Answering
+Send a lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model. Answering
 from the graph takes no judgment, so the strongest model spends its tokens for nothing
 there, and a scout's short context keeps every lookup cheap.
 

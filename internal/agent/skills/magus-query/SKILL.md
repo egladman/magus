@@ -14,8 +14,8 @@ source or scored by a rubric, and says which.{{end}} If the graph cannot answer,
 then fall back{{if .Full}}: a silent fallback hides the gap that should be
 reported{{else}}: falling back silently hides the gap{{end}}.
 
-A lookup you need only the answer to goes to the `magus-scout` agent where your harness
-installed it, or to a worker on your host's cheapest model.{{if .Full}} Answering
+Send a lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model.{{if .Full}} Answering
 from the graph takes no judgment, so the strongest model spends its tokens for nothing
 there, and a scout's short context keeps every lookup cheap.{{end}}
 

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25924
-skill_short_bytes: 19193
+skill_full_bytes: 25957
+skill_short_bytes: 19224
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `685607eb1279` |
+| `skill-content` | `7a885ca8ac03` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -230,18 +230,23 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy. Fork one read-only job per claim,
-input, or variant, and run them all at once. Spawn the `magus-scout` agent for each
-where your harness installed it. Each reports its command and output
-ref. Many economy
-workers finish in about the time one principal worker takes, for far fewer tokens.
-The principal tier only reconciles the claims where workers disagree.
+To prove something, brute-force it at economy:
 
-Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript. A worker resends its whole context every turn, and
-some providers raise a tier's price past a prompt size, so a long-lived cheap worker
-crosses it silently. Where the host's pricing has such a step, the brief names it, and
-the worker reports and stops before its context passes it.
+- Fork one read-only job per claim, input, or variant, and run them all at once.
+- Spawn the `magus-scout` agent for each where your harness installed it.
+- Each reports its command and output ref.
+- The principal tier only reconciles the claims where workers disagree.
+
+Many economy workers finish in about the time one principal worker takes, for far
+fewer tokens.
+
+Keep economy jobs short-lived:
+
+- The brief points at evidence (paths, output refs, the row) and carries no transcript.
+- A worker resends its whole context every turn. Some providers raise a tier's price
+  past a prompt size, so a long-lived cheap worker crosses it silently.
+- Where the host's pricing has such a step, the brief names it. The worker reports
+  and stops before its context passes it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.
@@ -396,18 +401,22 @@ worker can say so instead of widening silently.
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
 
-After the spawn, the row carries the job. A worker records the base it LANDED on,
-which can differ from the checkpoint you handed it. A denied worker coordinates and
-never works around. Every row ends in pass, fail, or NO-RETURN, and the root writes
-which: silence is not a pass. [reference.md](reference.md) covers bases, read paths,
-releasing a path, moving a live job's boundary, how magus ends abandoned jobs, and
-what `magus job wait` checks.
+After the spawn, the row carries the job:
+
+- A worker records the base it LANDED on, which can differ from the checkpoint you
+  handed it.
+- A denied worker coordinates and never works around.
+- Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
+  not a pass.
+
+[reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
+job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
 
 ## Declare the criteria magus can check for you
 
 A GOAL is the part of a job's criteria magus grades itself, from evidence the worker
-cannot author: a check that passed, or paths or symbols changed, present, absent or
-unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
+cannot author. It is a check that passed, or paths or symbols changed, present, absent
+or unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
 each verifies. [reference.md](reference.md) has the table and the rename pattern.
 
 ## Observe through the correct control plane
@@ -706,20 +715,24 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy. Fork one read-only job per claim,
-input, or variant, and run them all at once. Spawn the `magus-scout` agent for each
-where your harness installed it. Each reports its command and output
-ref, so evidence settles the claim and not a worker's reading. Many economy
-workers finish in about the time one principal worker takes, for far fewer tokens.
-The principal tier only reconciles the claims where workers disagree.
+To prove something, brute-force it at economy:
 
-Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
-row) and carries no transcript. A worker resends its whole context every turn, and
-some providers raise a tier's price past a prompt size, so a long-lived cheap worker
-crosses it silently. Where the host's pricing has such a step, the brief names it, and
-the worker reports and stops before its context passes it. magus does not
-count tokens, so only the worker can honor the line, and the root forks a fresh job for
-the rest.
+- Fork one read-only job per claim, input, or variant, and run them all at once.
+- Spawn the `magus-scout` agent for each where your harness installed it.
+- Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
+- The principal tier only reconciles the claims where workers disagree.
+
+Many economy workers finish in about the time one principal worker takes, for far
+fewer tokens.
+
+Keep economy jobs short-lived:
+
+- The brief points at evidence (paths, output refs, the row) and carries no transcript.
+- A worker resends its whole context every turn. Some providers raise a tier's price
+  past a prompt size, so a long-lived cheap worker crosses it silently.
+- Where the host's pricing has such a step, the brief names it. The worker reports
+  and stops before its context passes it. magus does not count tokens, so
+  only the worker can honor the line, and the root forks a fresh job for the rest.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.
@@ -898,18 +911,22 @@ worker can say so instead of widening silently.
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
 
-After the spawn, the row carries the job. A worker records the base it LANDED on,
-which can differ from the checkpoint you handed it. A denied worker coordinates and
-never works around. Every row ends in pass, fail, or NO-RETURN, and the root writes
-which: silence is not a pass. [reference.md](reference.md) covers bases, read paths,
-releasing a path, moving a live job's boundary, how magus ends abandoned jobs, and
-what `magus job wait` checks.
+After the spawn, the row carries the job:
+
+- A worker records the base it LANDED on, which can differ from the checkpoint you
+  handed it.
+- A denied worker coordinates and never works around.
+- Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
+  not a pass.
+
+[reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
+job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
 
 ## Declare the criteria magus can check for you
 
 A GOAL is the part of a job's criteria magus grades itself, from evidence the worker
-cannot author: a check that passed, or paths or symbols changed, present, absent or
-unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
+cannot author. It is a check that passed, or paths or symbols changed, present, absent
+or unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
 each verifies. [reference.md](reference.md) has the table and the rename pattern.
 
 ## Observe through the correct control plane
