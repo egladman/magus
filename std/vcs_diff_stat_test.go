@@ -34,8 +34,7 @@ func TestDiffStatRaisesForADriverThatCannotCount(t *testing.T) {
 	assert.Nil(t, got)
 	var unsupported *types.VCSUnsupportedError
 	require.ErrorAs(t, err, &unsupported)
-	assert.Equal(t, types.CapDiffStater, unsupported.Capability)
-	assert.Equal(t, "fake", unsupported.VCS)
+	assert.Equal(t, &types.VCSUnsupportedError{VCS: "fake", Capability: types.CapDiffStater}, unsupported)
 }
 
 func TestDiffStatRaisesWhenTheBackendFails(t *testing.T) {

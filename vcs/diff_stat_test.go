@@ -145,9 +145,7 @@ func TestDiffStatParsesUnifiedDiffs(t *testing.T) {
 	t.Run("a rename names where the file came from", func(t *testing.T) {
 		got := count(t, "diff --git a/old name b/new name\nrename from old name\nrename to new name\n")
 		require.Len(t, got, 1)
-		assert.Equal(t, "new name", got[0].Path)
-		assert.Equal(t, "old name", got[0].from)
-		assert.False(t, got[0].copied)
+		assert.Equal(t, diffEntry{FileStat: types.FileStat{Path: "new name"}, from: "old name"}, got[0])
 	})
 	t.Run("a quoted path comes from the plus line", func(t *testing.T) {
 		got := count(t, "diff --git \"a/t\\303\\251\" \"b/t\\303\\251\"\n--- \"a/t\\303\\251\"\n+++ \"b/t\\303\\251\"\n@@ -0,0 +1 @@\n+x\n")
