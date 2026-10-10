@@ -932,13 +932,20 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	case r.Level >= slog.LevelInfo:
 		label, color = "info", colDim
 	}
-	attrs := formatAttrs(r)
+	component := recordStr(r, attr.ComponentKey)
+	notice, isNotice := recordAttr(r, attr.NoticeKey)
+	var attrs string
+	if isNotice {
+		attrs = formatAttrs(r, attr.ErrorKey)
+	} else {
+		attrs = formatAttrs(r)
+	}
 	if colorize && attrs != "" {
 		attrs = tty.Colorize(attrs, colDim)
 	}
-	component := recordStr(r, attr.ComponentKey)
-	if notice, ok := recordAttr(r, attr.NoticeKey); ok {
-		h.printNotice(colorize, color, cmp.Or(notice.String(), component), r.Message, attrs)
+	if isNotice {
+		label := cmp.Or(notice.String(), component)
+		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordStr(r, attr.ErrorKey)), attrs)
 		h.printWhy(colorize, "  ", recordStr(r, attr.WhyKey))
 		h.printNext(recordStr(r, attr.NextKey))
 		return
@@ -951,6 +958,21 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	// Under the message, past the glyph and its space.
 	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordStr(r, attr.WhyKey))
 	h.printNext(recordStr(r, attr.NextKey))
+}
+
+// noticeText joins a notice's message and its [attr.Error]. An error that originated in
+// the label's own package opens with the label, which the line already prints.
+func noticeText(label, msg, err string) string {
+	if err == "" {
+		return msg
+	}
+	if label != "" {
+		err = strings.TrimPrefix(err, label+": ")
+	}
+	if msg == "" {
+		return err
+	}
+	return msg + ": " + err
 }
 
 // printNotice puts the label before the message, colored above info, with no glyph: a
@@ -997,13 +1019,16 @@ func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the
 // component (handleGeneric prints it ahead of the message), the why (printed on its own
-// line under it), the elapsed time (a wait's message already states it) and the noisy
-// "dir" correlation attr unless the record is at debug level or below.
-func formatAttrs(r slog.Record) string {
+// line under it), the elapsed time (a wait's message already states it), the keys in
+// skip, and the noisy "dir" correlation attr unless the record is at debug level or below.
+func formatAttrs(r slog.Record, skip ...string) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
 		switch a.Key {
 		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey, attr.NextKey, attr.NoticeKey:
+			return true
+		}
+		if slices.Contains(skip, a.Key) {
 			return true
 		}
 		if a.Key == "dir" && r.Level > slog.LevelDebug {

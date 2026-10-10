@@ -3,6 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -242,6 +243,16 @@ func TestPrettyHandlerNotice(t *testing.T) {
 		{"label", slog.LevelInfo, []slog.Attr{attr.Hint()}, "hint: pass --force\n"},
 		{"component when unlabeled", slog.LevelWarn, []slog.Attr{attr.Notice(""), attr.Component("magus")}, "magus: pass --force\n"},
 		{"bare", slog.LevelInfo, []slog.Attr{attr.Notice("")}, "pass --force\n"},
+		{
+			"an error from elsewhere keeps its origin", slog.LevelError,
+			[]slog.Attr{attr.Notice(""), attr.Component("magus"), attr.Error(errors.New("broker: no socket"))},
+			"magus: pass --force: broker: no socket\n",
+		},
+		{
+			"an error from the label's own package names it once", slog.LevelError,
+			[]slog.Attr{attr.Notice(""), attr.Component("broker"), attr.Error(errors.New("broker: no socket"))},
+			"broker: pass --force: no socket\n",
+		},
 		{
 			"why and next", slog.LevelInfo,
 			[]slog.Attr{attr.Notice("console"), attr.Why("server is v0.4"), attr.Next("magus server restart")},

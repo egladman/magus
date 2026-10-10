@@ -21,6 +21,8 @@ const (
 	NoticeKey = "notice"
 	// HintLabel is the [Notice] label of advice. See [Hint].
 	HintLabel = "hint"
+	// ErrorKey carries the error a record reports. See [Error].
+	ErrorKey = "error"
 )
 
 // Component attaches the name of the part of magus that logged a record.
@@ -42,6 +44,12 @@ func Next(cmd string) slog.Attr { return slog.String(NextKey, cmd) }
 // entry. The pretty display prints "label: message" with no level glyph, and colors the
 // label above info. An empty label prints the component instead.
 func Notice(label string) slog.Attr { return slog.String(NoticeKey, label) }
+
+// Error attaches the error a record reports. An error is never a record's message: the
+// label names who is speaking and the error names where it failed, so a notice prints
+// "label: message: error", and the name once when the error originated in the label's
+// own package.
+func Error(err error) slog.Attr { return slog.Any(ErrorKey, err) }
 
 // Hint marks a record as advice, printed "hint: message". A quiet display keeps an info
 // hint, since a hint is what -s still surfaces.

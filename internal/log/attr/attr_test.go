@@ -1,6 +1,7 @@
 package attr
 
 import (
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ func TestAttrKeysAndKinds(t *testing.T) {
 		{Next("magus server start"), NextKey, slog.KindString},
 		{Notice("console"), NoticeKey, slog.KindString},
 		{Hint(), NoticeKey, slog.KindString},
+		{Error(errors.New("no socket")), ErrorKey, slog.KindAny},
 	}
 	for _, tc := range cases {
 		assert.Equal(t, tc.key, tc.attr.Key)
