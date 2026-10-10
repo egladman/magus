@@ -9,6 +9,14 @@ Default charms: rw (local runs write; CI strips them with `--no-default-charms`)
 
 A **target** is a named unit of work (build, test, lint, ...) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
 
+## Contents
+
+- Route by question
+- Quick start
+- Query first
+- Project: magus
+- Project: libs/figure
+
 ## Route by question
 
 | To find out                | Run                            |
@@ -53,7 +61,7 @@ magus graph export -o json  # the whole graph
 | charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                                 |
 | module     | built in | `magus query kind=module`     |                                                                                                                       |
 | method     | built in | `magus query kind=method`     |                                                                                                                       |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3018`, `MGS3030`                                                                                       |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3030`, `MGS1021`                                                                                       |
 | doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/guides/integrations/agents/guard.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                              |
 | file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                             |

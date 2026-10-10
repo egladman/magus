@@ -2470,6 +2470,11 @@ func ObjectHarnessPlan(v types.HarnessPlan) vm.Value {
 	out.MapSet("files", mappedFiles)
 	out.MapSet("merge", vm.StrValue(v.Merge))
 	out.MapSet("mcpHint", vm.StrValue(v.MCPHint))
+	itemsAgentHints := make([]vm.Value, len(v.AgentHints))
+	for indexAgentHints := range v.AgentHints {
+		itemsAgentHints[indexAgentHints] = vm.StrValue(v.AgentHints[indexAgentHints])
+	}
+	out.MapSet("agentHints", vm.ListValue(itemsAgentHints))
 	itemsWired := make([]vm.Value, len(v.Wired))
 	for indexWired := range v.Wired {
 		itemsWired[indexWired] = ObjectHarnessWired(v.Wired[indexWired])

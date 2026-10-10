@@ -22,7 +22,7 @@ and a generator overwrites without asking.{{end}}
 An installed skill carries a content stamp{{if .Full}} in its frontmatter and footer{{end}}.
 Two silent things happen to an edit there:
 
-- `magus doctor` reports the file as stale and tells you to reinstall.
+- `{{cmd "doctor"}}` reports the file as stale and tells you to reinstall.
 - `{{cmd "agent install"}} <dir> --force` erases it.
 
 So treat a file whose frontmatter says `source: magus` as read-only.{{if .Full}} Neither failure
@@ -154,7 +154,7 @@ import "ghcr.io/egladman/magus/spells/harness/opencode";
 To adapt one, declare an override; change no import and no provider call.
 
 1. Copy the shipped spell into the workspace:
-   `magus spell pull magus/spell/harness/cursor harness/cursor`. Keep
+   `{{cmd "spell pull"}} magus/spell/harness/cursor harness/cursor`. Keep
    `mgs_getName()` as the host id (`cursor`, `claude-code`, ...) so describe and
    verify still resolve it.
 2. In `magus.yaml`, replace the registry path with that directory, as Go's

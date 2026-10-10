@@ -258,15 +258,13 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	jobs, err := store.List()
+	// The store's report, not the bare rows: magus\job.list and JobService's ListJobs
+	// build the same one, so the three doors cannot disagree about a row.
+	ctx := context.Background()
+	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	if err != nil {
 		return err
 	}
-	// The list, not the bare rows: the overlaps are derived by the same constructor
-	// magus\job.list and the console's route use, so the three doors cannot
-	// disagree about whether two jobs claim one path.
-	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
-	ctx := context.Background()
 	list, me, err := joinInflight(ctx, root, store, list)
 	if err != nil {
 		return err
@@ -278,9 +276,6 @@ func lsJobs(root string, args []string) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
-	}
-	if opts.Format != outputName {
-		list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
 	}
 	switch opts.Format {
 	case outputName:

@@ -3,8 +3,8 @@ title: magus-upstream-docs
 generated_from: internal/agent/skills/magus-upstream-docs/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-upstream-docs]
-skill_full_bytes: 4688
-skill_short_bytes: 3743
+skill_full_bytes: 5144
+skill_short_bytes: 3908
 ---
 
 # magus-upstream-docs
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `39a0ab3fe8ed` |
+| `skill-content` | `d21462073818` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -59,6 +59,9 @@ magus agent install --tar | tar -xO -f - magus-upstream-docs/SKILL.md
 magus ships one official documentation site. Use it for a magus-domain fact the
 workspace graph cannot give: the docs are the source of
 truth for magus's behavior.
+
+Send a docs lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model.
 
 Two places serve the same pages:
 
@@ -163,6 +166,9 @@ it; the pages themselves carry the WHAT. Use it for a magus-domain fact the
 workspace graph cannot give: the docs are the source of truth for
 magus's own behavior, so read them rather than guessing.
 
+Send a docs lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model.
+
 Two places serve the same pages:
 
 - In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section
@@ -170,6 +176,16 @@ Two places serve the same pages:
   the skill is dogfooded, so prefer it here.
 - Published: `https://eli.gladman.cc/magus/`. Every page is also raw Markdown at
   `<page-url>index.md`.
+
+## Contents
+
+- In a magus workspace, ask the graph for the passage
+- Fast path: start from the index, do not guess URLs
+- URL scheme
+- Where things live (stable IDs route straight to a page)
+- Traversing within the docs
+- The published site follows main, not your build
+- In the magus repo
 
 ## In a magus workspace, ask the graph for the passage
 

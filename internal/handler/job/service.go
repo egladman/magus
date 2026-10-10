@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -86,29 +87,61 @@ const jobsPrefix = "jobs/"
 // binary, and a job with no row has not run rather than not existing.
 func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJobsRequest]) (*connect.Response[jobv1.ListJobsResponse], error) {
 	running := s.runningByArgv(ctx)
-	rows := s.rows()
-	byID := make(map[string]types.Job, len(rows))
-	for _, row := range rows {
+	list := s.report(ctx)
+	byID := make(map[string]types.Job, len(list.Jobs))
+	for _, row := range list.Jobs {
 		byID[row.ID] = row
 	}
 	all := jobstore.All()
-	out := make([]*jobv1.Job, 0, len(all)+len(rows))
+	out := make([]*jobv1.Job, 0, len(all)+len(list.Jobs))
 	catalog := make(map[string]bool, len(all))
 	for _, j := range all {
 		catalog[j.Name] = true
 		out = append(out, s.job(j, running, byID[j.Name]))
 	}
-	for _, row := range rows {
+	for _, row := range list.Jobs {
 		if !catalog[row.ID] {
 			out = append(out, delegatedJob(row))
 		}
 	}
-	return connect.NewResponse(&jobv1.ListJobsResponse{Jobs: out, Overlaps: overlaps(rows)}), nil
+	resp := &jobv1.ListJobsResponse{
+		Jobs:     out,
+		Overlaps: wireOverlaps(list.Overlaps),
+		Overdue:  list.Overdue,
+		Orphans:  list.Orphans,
+		Stale:    list.Stale,
+	}
+	for _, b := range list.Blocked {
+		resp.Blocked = append(resp.Blocked, &jobv1.JobBlock{Job: b.Job, On: b.On, State: string(b.State)})
+	}
+	for _, r := range list.ReadOnly {
+		resp.ReadOnly = append(resp.ReadOnly, &jobv1.JobReadOnly{Job: r.Job, Lacks: r.Lacks})
+	}
+	return connect.NewResponse(resp), nil
 }
 
-// rows reads the job store, empty when there is none or it will not read. A listing that
-// drops the delegated jobs beats one that fails: the catalog beside it is still true, and
-// the server's maintenance service must not go dark because a plan file is unreadable.
+// report is the store's [jobstore.Store.Report], the list `magus ls jobs` prints, empty
+// when there is no store or it will not read. A listing that drops the delegated jobs
+// beats one that fails: the catalog beside it is still true, and the server's maintenance
+// service must not go dark because a plan file is unreadable. An unreadable stale window
+// flags no row stale and is logged, for the same reason.
+func (s *Service) report(ctx context.Context) types.JobList {
+	if s.store == nil {
+		return types.NewJobList(nil)
+	}
+	staleAfter, err := s.store.StaleAfter()
+	if err != nil {
+		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale",
+			slog.String("error", err.Error()))
+	}
+	list, err := s.store.Report(ctx, time.Now().Unix(), staleAfter)
+	if err != nil {
+		return types.NewJobList(nil)
+	}
+	return list
+}
+
+// rows reads the job store, empty when there is none or it will not read; see [Service.report].
 func (s *Service) rows() []types.Job {
 	if s.store == nil {
 		return nil
@@ -130,13 +163,15 @@ func (s *Service) row(name string) types.Job {
 	return types.Job{}
 }
 
-// overlaps derives the pairs claiming common ground through the same constructor every
-// other read door uses, so two doors cannot disagree about whether an overlap exists.
-func overlaps(rows []types.Job) []*jobv1.JobOverlap {
-	derived := types.NewJobList(rows).Overlaps
+// wireOverlaps maps the overlaps [jobstore.Store.Report] derived and measured.
+func wireOverlaps(derived []types.JobOverlap) []*jobv1.JobOverlap {
 	out := make([]*jobv1.JobOverlap, 0, len(derived))
 	for _, o := range derived {
-		out = append(out, &jobv1.JobOverlap{JobA: o.JobA, JobB: o.JobB, PathsA: o.PathsA, PathsB: o.PathsB})
+		w := &jobv1.JobOverlap{JobA: o.JobA, JobB: o.JobB, PathsA: o.PathsA, PathsB: o.PathsB, Claims: o.Claims}
+		if f := o.Footprint; f != nil {
+			w.Footprint = &jobv1.JobOverlapFootprint{Verdict: f.Verdict, Shared: f.Shared, Reason: f.Reason}
+		}
+		out = append(out, w)
 	}
 	return out
 }
@@ -274,6 +309,18 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Goals:      wireGoals(row.Goals),
 		Result:     wireJobResult(row.Result),
 		Deadline:   row.Deadline,
+
+		EndReason:     row.EndReason,
+		WriteProof:    string(row.WriteProof),
+		ReportedBase:  row.ReportedBase,
+		BaseVerdict:   string(row.BaseVerdict),
+		CheckoutRoot:  row.CheckoutRoot,
+		Registered:    row.Registered,
+		RegisteredBy:  wireOrigin(row.RegisteredBy),
+		Attempt:       wireAttempt(row.Attempt),
+		Integration:   wireIntegration(row.Integration),
+		SchemaVersion: int32(row.Version),
+		Requires:      row.Requires,
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
@@ -281,10 +328,56 @@ func delegatedJob(row types.Job) *jobv1.Job {
 	for _, r := range row.Releases {
 		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt})
 	}
+	for _, g := range row.GateAttempts {
+		j.GateAttempts = append(j.GateAttempts, &jobv1.JobGateAttempt{GateId: g.GateID, Attempt: wireAttempt(&g.Attempt)})
+	}
+	for _, u := range row.Unattributed {
+		j.Unattributed = append(j.Unattributed, &jobv1.JobUnattributedWrite{Path: u.Path, Digest: u.Digest, At: u.At})
+	}
+	for _, e := range row.Entries {
+		j.Entries = append(j.Entries, &jobv1.JobEntry{Path: e.Path, By: wireOrigin(e.By), At: e.At, Consumed: e.Consumed})
+	}
 	if row.LastRun != nil {
 		j.LastRun = storedRun(row.LastRun)
 	}
 	return j
+}
+
+// wireOrigin maps who did something to a row, nil for the zero Origin a row written before
+// origins were recorded carries.
+func wireOrigin(o types.Origin) *jobv1.JobOrigin {
+	if o == (types.Origin{}) {
+		return nil
+	}
+	w := &jobv1.JobOrigin{
+		User: o.User, Uid: o.UID, EntryPoint: string(o.EntryPoint),
+		Host: o.Host, Session: o.Session, Agent: o.Agent,
+	}
+	if c := o.Credential; c != (types.Credential{}) {
+		w.Credential = &activityv1.Credential{Class: string(c.Kind), Id: c.ID, Name: c.Name, Grant: c.Grant.String()}
+	}
+	return w
+}
+
+func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
+	if a == nil {
+		return nil
+	}
+	return &jobv1.JobAttempt{
+		Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
+		Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
+	}
+}
+
+func wireIntegration(in *types.JobIntegration) *jobv1.JobIntegration {
+	if in == nil {
+		return nil
+	}
+	w := &jobv1.JobIntegration{Checkout: in.Checkout, At: in.At, Verified: in.Verified}
+	for _, g := range in.Gates {
+		w.Gates = append(w.Gates, &jobv1.JobGateStatus{Id: g.ID, Verified: g.Verified, OutputRef: g.OutputRef, Violations: g.Violations})
+	}
+	return w
 }
 
 // storedRun maps the row's own run record to the wire JobRun.
@@ -353,11 +446,17 @@ func wireJobResult(r *types.JobResult) *jobv1.JobResult {
 	if r == nil {
 		return nil
 	}
-	return &jobv1.JobResult{
-		ChangedPaths:    r.ChangedPaths,
-		UnresolvedRisks: r.UnresolvedRisks,
-		Descendants:     r.Descendants,
+	w := &jobv1.JobResult{
+		ChangedPaths:        r.ChangedPaths,
+		UnresolvedRisks:     r.UnresolvedRisks,
+		Descendants:         r.Descendants,
+		ValidationCommand:   r.Validation.Command,
+		ValidationOutputRef: r.Validation.OutputRef,
 	}
+	for _, g := range r.GateEvidence {
+		w.GateEvidence = append(w.GateEvidence, &jobv1.JobGateEvidence{GateId: g.GateID, OutputRef: g.OutputRef})
+	}
+	return w
 }
 
 // targetSize is the current magnitude of what a job maintains. Not every job shrinks a resource

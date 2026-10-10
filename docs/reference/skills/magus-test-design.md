@@ -3,7 +3,7 @@ title: magus-test-design
 generated_from: internal/agent/skills/magus-test-design/SKILL.md
 description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior."
 tags: [agents, skills, magus-test-design]
-skill_full_bytes: 10232
+skill_full_bytes: 10563
 skill_short_bytes: 6230
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `6e01e650d37a` |
+| `skill-content` | `d3af205ce8f1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -219,6 +219,17 @@ Do not use it:
 This skill observes evidence and recommends. It does not choose the repository's
 test policy, enable a service, create credentials, or decide what runs locally, on a
 commit, or in CI.
+
+## Contents
+
+- Gather only the evidence the decision needs
+- Select the closest boundary that can falsify the contract
+- Make execution conditions visible
+- Decide which collaborators are real
+- Assert what the caller can observe
+- Name and record the proposed case
+- Deliver the recommendation
+- Evidence gate for delegated work
 
 ## Gather only the evidence the decision needs
 

@@ -258,6 +258,87 @@ export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
     return claude_mcp();
 }
 
+// claude_yaml_quote renders text as a YAML double-quoted scalar, so a colon, a quote or a
+// newline in a description cannot change what the frontmatter means.
+fun claude_yaml_quote(text: str) > str {
+    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+    return "\"" + escaped + "\"";
+}
+
+// claude_agent renders one shipped agent as a Claude Code subagent file. A read-only agent
+// is limited to the tools that cannot change the workspace, and the economy class runs on
+// Claude Code's cheapest model alias.
+fun claude_agent(agent: {str: any}) > {str: any} {
+    final name = "{agent["name"]}";
+    var content = "---\nname: " + claude_yaml_quote(name) + "\ndescription: " + claude_yaml_quote("{agent["description"]}") + "\n";
+    if (agent["read_only"] == true) {
+        content = content + "tools: Read, Grep, Glob, Bash\n";
+    }
+    if ("{agent["class"]}" == "economy") {
+        content = content + "model: haiku\n";
+    }
+    content = content + "---\n\n" + "{agent["instructions"]}".trim() + "\n";
+    return {
+        "path": ".claude/agents/{name}.md",
+        "content": content,
+    };
+}
+
+fun claude_agents(agents: [any]) > [any] {
+    final files: mut [any] = mut [];
+    foreach (agent in agents) {
+        files.append(claude_agent(agent as {str: any}));
+    }
+    return files;
+}
+
+// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
+export fun harness_agents(target: Target, cb: fun(any)) > [any] {
+    final req = {<str: any>};
+    cb(req);
+    final agents = req["agents"];
+    if (agents == null) { return []; }
+    return claude_agents(agents as [any]);
+}
+
+fun claude_scout_fixture(read_only: bool, class: str) > {str: any} {
+    return {
+        "name": "magus-scout",
+        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        "instructions": "First line.\n\nSecond line.\n",
+        "read_only": read_only,
+        "class": class,
+    };
+}
+
+test "harness_agents renders a read-only economy agent with limited tools and the cheap model" {
+    final file = claude_agent(claude_scout_fixture(true, class: "economy"));
+    assert\equal("{file["path"]}", ".claude/agents/magus-scout.md", "Claude Code reads .claude/agents");
+    assert\equal(
+        "{file["content"]}",
+        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ntools: Read, Grep, Glob, Bash\nmodel: haiku\n---\n\nFirst line.\n\nSecond line.\n",
+        "frontmatter then the instructions",
+    );
+}
+
+test "harness_agents leaves tools and model unset for a writable agent of another class" {
+    final content = "{claude_agent(claude_scout_fixture(false, class: "standard"))["content"]}";
+    assert\isTrue(content.indexOf("tools:") == null, "no tool restriction");
+    assert\isTrue(content.indexOf("model:") == null, "the host default model applies");
+}
+
+test "harness_agents renders nothing when the call carries no agents" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
+}
+
+test "claude_agents renders one file per agent, in order" {
+    final files = claude_agents([claude_scout_fixture(true, class: "economy"), claude_scout_fixture(false, class: "standard")]);
+    assert\equal(files.len(), 2, "one file per agent");
+    assert\equal("{files[1]["path"]}", ".claude/agents/magus-scout.md", "path");
+}
+
 test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "claude-code", "id must match magus\\harness.provider wiring and --id");
 }

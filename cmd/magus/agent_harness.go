@@ -259,6 +259,9 @@ func writeHarnessPlan(w io.Writer, plan types.HarnessPlan) error {
 	if plan.MCPHint != "" {
 		printf("mcp %s (user-owned; Magus does not write host MCP config):\n%s\n", plan.ID, plan.MCPHint)
 	}
+	for _, h := range plan.AgentHints {
+		printf("agents %s (user-owned model choice): %s\n", plan.ID, h)
+	}
 	return err
 }
 

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -438,6 +439,54 @@ func TestEveryEmbeddedSkillHasBothForms(t *testing.T) {
 		require.Equal(t, f.Name, s.Name)
 		assert.Less(t, len(s.Body), len(f.Body),
 			"%s marks no rationale, so the short form installs the same bytes; curate it or drop the claim", f.Name)
+	}
+}
+
+// Anthropic's skill guidance caps a SKILL.md body at 500 lines, and gives a reference file
+// over 100 lines a contents list. The full form is that reference copy, so it carries one;
+// the short form is read whole and carries none.
+func TestEverySkillFitsTheSkillGuidance(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+
+	for _, def := range defs {
+		for _, v := range []agent.Variant{agent.VariantShort, agent.VariantFull} {
+			r, err := agentSkills.Render(def, v)
+			require.NoError(t, err)
+			lines := strings.Count(r.Body, "\n") + 1
+			assert.LessOrEqual(t, lines, 500, "%s (%s) is %d lines; move enumeration and examples into its full-only arms, or split it", def.Name, v, lines)
+			assert.Equal(t, v == agent.VariantFull, strings.Contains(r.Body, "\n## Contents\n"), "%s (%s): only the full form carries a contents list", def.Name, v)
+			if r.Reference == "" {
+				continue
+			}
+			refLines := strings.Count(r.Reference, "\n") + 1
+			assert.LessOrEqual(t, refLines, 500, "%s reference.md is %d lines", def.Name, refLines)
+			assert.Contains(t, r.Reference, "\n## Contents\n", "%s: a reference file is read in part, so it carries a contents list", def.Name)
+			assert.Contains(t, r.Body, "](reference.md)", "%s: SKILL.md links its reference file, or nothing points a reader at it", def.Name)
+		}
+	}
+}
+
+// A skill names a command through {{cmd}}, which resolves it against the registry, so a
+// renamed command fails the install instead of shipping prose that names a verb that is gone.
+// Fenced blocks are exempt: they show a whole command line as typed.
+func TestSkillSourcesNameCommandsThroughTheTemplate(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+	literal := regexp.MustCompile("`magus [a-z][a-z-]*")
+	for _, def := range defs {
+		for file, src := range map[string]string{"SKILL.md": def.Body, "reference.md": def.Reference} {
+			fenced := false
+			for i, line := range strings.Split(src, "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "```") {
+					fenced = !fenced
+					continue
+				}
+				if m := literal.FindString(line); !fenced && m != "" {
+					t.Errorf("%s/%s:%d types %s literally; write {{cmd \"<path>\"}} instead", def.Name, file, i+1, m)
+				}
+			}
+		}
 	}
 }
 

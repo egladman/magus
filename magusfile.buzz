@@ -129,6 +129,9 @@ magus\project({
         "opencode.json",
         // Claude Code keeps its hooks in settings.json, which the glob above misses.
         ".claude/settings.json",
+        // The repository's Claude Code plugin marketplace; it lists the mod in
+        // docs/guides/integrations/agents/claude-code-mod.
+        ".claude-plugin/marketplace.json",
         "spells/harness/**/*.buzz",
         // No spell claims these, so a refresh would not invalidate the tests that read them.
         "testdata/hosts/**/*.json",

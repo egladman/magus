@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -1055,30 +1054,28 @@ var guardAdviceSkillCoverage = map[string]string{
 // while the OpenCode plugin's own comment claimed "the same guidance ships in the
 // installed skills, which is why the skills and the guard say the same things".
 //
-// Sources rather than installed copies, because the source is what a contributor
-// edits and what `magus agent install` regenerates from.
+// Rendered rather than raw, because a skill names a command through {{cmd}} and the host
+// reads what that renders to. Full form plus reference file: everything a skill teaches.
 func TestGuardAdviceHasSkillCoverage(t *testing.T) {
-	const embeddedSkillDir = "skills"
-	entries, err := fs.ReadDir(skillFS, embeddedSkillDir)
-	require.NoError(t, err, "read %s", embeddedSkillDir)
+	c := NewCatalog(skillFS, "", 6)
+	defs, err := c.EmbeddedSkills()
+	require.NoError(t, err)
 
 	var allBodies strings.Builder
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		body, err := fs.ReadFile(skillFS, path.Join(embeddedSkillDir, entry.Name(), "SKILL.md"))
-		require.NoError(t, err, "read skill %s", entry.Name())
-		allBodies.Write(body)
+	for _, def := range defs {
+		r, err := c.Render(def, VariantFull)
+		require.NoError(t, err, "render skill %s", def.Name)
+		allBodies.WriteString(r.Body)
+		allBodies.WriteString(r.Reference)
 	}
 	all := allBodies.String()
 
 	for advisory, token := range guardAdviceSkillCoverage {
 		assert.Contains(t, all, token,
-			"the %s advisory teaches %q, and no skill under %s mentions it.\n"+
+			"the %s advisory teaches %q, and no shipped skill mentions it.\n"+
 				"An advise reaches the model on Claude Code only, so a skill is where the other three\n"+
 				"hosts learn this. Add it to the skill that owns the topic, or drop the advisory.",
-			advisory, token, embeddedSkillDir)
+			advisory, token)
 	}
 }
 

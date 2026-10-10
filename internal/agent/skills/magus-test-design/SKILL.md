@@ -43,7 +43,7 @@ Prefer `{{tool "client"}}` (`{{buzz "describe.evaluatedTarget"}}`, `{{buzz "expl
 `{{buzz "path"}}`); fall back to the CLI commands above. Do not start a server only to
 review test design.
 
-An `unknown` from `magus refs` is missing evidence, not proof of no callers: record
+An `unknown` from `{{cmd "refs"}}` is missing evidence, not proof of no callers: record
 it. Never infer the tier from a filename, an existing mock, or a target called
 `test`.
 

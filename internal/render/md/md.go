@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -301,3 +302,35 @@ func Bold(s string) string { return "**" + s + "**" }
 
 // Link renders a markdown link.
 func Link(text, href string) string { return "[" + text + "](" + href + ")" }
+
+// WithContents returns doc with a "## Contents" list of its second-level headings inserted
+// before the first of them, so a reader who opens a long document partway through still
+// sees every section. Headings inside fenced code are not sections. A document with fewer
+// than two sections is returned unchanged.
+//
+// Anthropic's skill guidance gives a reference file over 100 lines a contents list; callers
+// decide which documents are reference reading, since a short one read whole needs none.
+func WithContents(doc string) string {
+	lines := strings.Split(doc, "\n")
+	first := -1
+	var sections []string
+	fenced := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, "```") {
+			fenced = !fenced
+			continue
+		}
+		if fenced || !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		if first < 0 {
+			first = i
+		}
+		sections = append(sections, "- "+strings.TrimSpace(strings.TrimPrefix(line, "## ")))
+	}
+	if len(sections) < 2 {
+		return doc
+	}
+	contents := append(append([]string{"## Contents", ""}, sections...), "")
+	return strings.Join(slices.Concat(lines[:first], contents, lines[first:]), "\n")
+}

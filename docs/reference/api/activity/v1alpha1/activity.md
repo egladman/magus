@@ -105,7 +105,7 @@ Source: [activity.proto:165](https://github.com/egladman/magus/blob/main/proto/m
 | `name`  | string | 3 | empty for the operator and a share link |
 | `grant` | string | 4 | e.g. "console=write" or "mcp=write"     |
 
-Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [WatchActivityEvents (response)](activity.md#watchactivityevents).
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [ListJobs (response)](../../job/v1alpha1/job.md#listjobs), [RunJob (response)](../../job/v1alpha1/job.md#runjob), [WatchActivityEvents (response)](activity.md#watchactivityevents).
 
 ### GetPayloadRequest
 

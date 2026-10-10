@@ -3,7 +3,7 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7178
+skill_full_bytes: 7359
 skill_short_bytes: 4922
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `2ca18daf7755` |
+| `skill-content` | `81b6a13cc913` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -189,6 +189,15 @@ magus agent install --tar | tar -xO -f - magus-change-summary-full/SKILL.md
 
 Turn a large workspace's recent change history into a short, evidence-backed
 brief. The output is a decision aid, not a chronological commit dump.
+
+## Contents
+
+- Gather evidence
+- Write the brief
+- Write a changelog entry
+- Answer a granular diff question
+- Resume a review from a checkpoint
+- Hand a change to a second reader
 
 ## Gather evidence
 

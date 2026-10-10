@@ -1,0 +1,52 @@
+{
+  "name": "magus",
+  "version": "0.1.0",
+  "description": "magus in Claude Code: health of the binary, guard and server; a pane of jobs, runs and agents; prompt-cache expiry and cost warnings",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "cacheGate": {
+      "type": "string",
+      "title": "Cache expiry gate",
+      "description": "What happens when you submit after the prompt cache expired: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
+      "default": "warn",
+      "options": ["off", "warn", "confirm"]
+    },
+    "cacheWarnMinutes": {
+      "type": "number",
+      "title": "Cache warning window (minutes)",
+      "description": "Show the band above the prompt once this little time is left on the cache.",
+      "default": 2
+    },
+    "gateMinTokens": {
+      "type": "number",
+      "title": "Gate threshold (tokens)",
+      "description": "Warn or hold only when the context the next prompt re-sends is at least this large.",
+      "default": 50000
+    },
+    "cacheTtl": {
+      "type": "string",
+      "title": "Prompt-cache TTL",
+      "description": "auto uses what Claude Code reports or what the mod observes, assuming 5m until then.",
+      "default": "auto",
+      "options": ["auto", "5m", "1h"]
+    },
+    "subagentTokenBudget": {
+      "type": "number",
+      "title": "Subagent token budget",
+      "description": "Flag a subagent once its input, output and cache tokens pass this. 0 turns it off.",
+      "default": 100000
+    },
+    "ratesFile": {
+      "type": "string",
+      "title": "Rates file",
+      "description": "Absolute path to your own rates JSON (same shape as the mod's rates.json). Empty uses the mod's.",
+      "default": ""
+    },
+    "ratesStaleDays": {
+      "type": "number",
+      "title": "Rates age warning (days)",
+      "description": "Say so when the rates file's checked date is older than this.",
+      "default": 60
+    }
+  }
+}

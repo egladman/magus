@@ -30,13 +30,13 @@ produces confident, fluent false positives, because the "violation" did
 compile and run.{{else}}Getting this wrong produces confident false positives.{{end}} Buzz parses in one of two modes, and most of what the correctness and
 conformance lenses check applies to only one:
 
-- **Strict** (upstream parity), `magus buzz <file>`'s default:
+- **Strict** (upstream parity), `{{cmd "buzz"}} <file>`'s default:
   - rejects top-level control flow outside a function
     (`if`/`while`/`for`/`foreach`/`do-until`/`try`/`throw`/`return`/`break`/`continue`/
     a bare block);
   - requires every call argument after the first to be labeled (`name: value`)
     unless it is a bare identifier.
-- **Embedded** (relaxed): neither restriction applies. `magus buzz --embedded` opts a
+- **Embedded** (relaxed): neither restriction applies. `{{cmd "buzz"}} --embedded` opts a
   script in. A magusfile and a spell are embedded UNCONDITIONALLY, with no
   opt-out{{if .Full}}; every code path that loads one passes the embedded option before
   the author's own code runs, so there is no author-visible switch to get wrong{{end}}.
@@ -48,9 +48,9 @@ strict mode to a magusfile is not a strict reading; it is a wrong one.
 Judge a standalone script by how it is invoked{{if .Full}}, not by
 guessing from its shape{{end}}:
 
-- Run by a bare `magus buzz <file>` (no `--embedded`): strict mode applies, and a
+- Run by a bare `{{cmd "buzz"}} <file>` (no `--embedded`): strict mode applies, and a
   top-level `if` is a genuine defect.
-- Strict mode does not apply when it runs by `magus buzz --embedded <file>`, from
+- Strict mode does not apply when it runs by `{{cmd "buzz"}} --embedded <file>`, from
   inside another Buzz program (`magus\cmd("buzz", ...)`), or its header comment names
   the mode.
 - Unclear: check the CI workflow or wrapper that calls it before flagging a
@@ -220,7 +220,7 @@ were the language.{{end}}
   GOPHERBUZZ. Upstream treats `!> ErrType` as a real error set. gopherbuzz checks only
   that a raising call is propagated or caught, never what it raises.
   - Calling a `!> str` function from one declaring no raise is BZZ1006, "call may
-    raise but is neither declared with !> nor caught". It is a real and common gate{{if .Full}}: it is what a script invoked by `magus buzz`
+    raise but is neither declared with !> nor caught". It is a real and common gate{{if .Full}}: it is what a script invoked by `{{cmd "buzz"}}`
     trips on when it calls something like `fs\listDir` without declaring
     `!>`{{end}}.
   - A function declaring `!> int` may throw a `str` and nothing objects{{if .Full}}, so the named type is documentation while the arrow

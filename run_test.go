@@ -1454,6 +1454,7 @@ func TestProbeToolsRefusesAPresentToolThatCannotBeProbed(t *testing.T) {
 	assert.Contains(t, err.Error(), "go:golangci-lint reports no version in /tmp/api")
 	assert.Contains(t, err.Error(), "panic: runtime error", "the tool's own words reach the person")
 	assert.Equal(t, "No cache key could tell the tool's upgrades apart.", types.DiagnosticRationale(err))
+	assert.Contains(t, err.Error(), "run install /", "names the step a fresh checkout is usually missing")
 	assert.Nil(t, got, "no key lines at all, so no caller can mint a key that leaves the tool out")
 
 	calls = 0

@@ -3,7 +3,7 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 18939
+skill_full_bytes: 19183
 skill_short_bytes: 13051
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `35611a0c408b` |
+| `skill-content` | `1823adfe3633` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -297,6 +297,17 @@ It covers the LANGUAGE: is the code idiomatic, is it correct, does it run where 
 author thinks it runs. Magusfile/target/spell CONTRACTS (caching, `ctx.needs`, wards,
 op kinds, charms, command vs service) belong to magus-buzz-lang and it already covers them; restating them here would only
 drift out of sync with it.
+
+## Contents
+
+- Authority labels
+- Establish the mode before applying anything
+- Lens: idiom and style
+- Lens: skeptic and correctness
+- Lens: upstream conformance
+- Running the three lenses
+- Merging the findings
+- What this skill does not do
 
 ## Authority labels
 

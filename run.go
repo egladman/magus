@@ -1348,9 +1348,11 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 			// A cancelled run keys nothing, and its failure says nothing about the tool.
 			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
 		default:
+			// The usual cause is a fresh checkout: a launcher such as pnpm runs, and the tool it
+			// would exec was never installed beside it.
 			return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
-				"%s:%s reports no version in %s: %v; fix the tool or its probe",
-				s.Name(), tool, dir, err).
+				"%s:%s reports no version in %s: %v; if its dependencies were never installed here, run `%s`",
+				s.Name(), tool, dir, err, hint.Run.With("install", "/")).
 				WithWhy("No cache key could tell the tool's upgrades apart.")
 		}
 	}

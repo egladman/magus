@@ -79,7 +79,34 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	}
+	agents, err := agent.ShippedAgentParams()
+	if err != nil {
+		return agent.HarnessDescriptor{}, "", false, err
+	}
+	agentsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessAgentsContract, Params: map[string]any{"agents": agents}})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
+		}
+	} else if agentsResp.Data != nil {
+		if err := decodeHarnessAgents(agentsResp.Data, &d); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
+		}
+	}
 	return d, "spell:" + id, true, nil
+}
+
+// decodeHarnessAgents reads the agents list through the descriptor's own JSON shape, like
+// prompts.
+func decodeHarnessAgents(data any, d *agent.HarnessDescriptor) error {
+	if _, ok := data.([]any); !ok {
+		return fmt.Errorf("want list, got %T", data)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, &d.Agents)
 }
 
 // decodeHarnessPrompts reads the prompts list through the descriptor's own JSON shape, so a
