@@ -82,7 +82,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 
 	workspace := resolveRootOrEmpty(root)
 	if workspace == "" {
-		return fmt.Errorf("magus events: no magus workspace found from this directory; run it inside a workspace, or name one with --root <path>")
+		return fmt.Errorf("magus events: no magus workspace found from this directory, run it inside a workspace or name one with --root <path>")
 	}
 	// The contract says every event carries an ABSOLUTE root, because a subscriber
 	// watching two workspaces routes on it and a relative path resolves against the
@@ -152,7 +152,7 @@ func parseStreamFilter(csv string) (types.StreamFilter, error) {
 		}
 		t, err := types.ParseStreamEventType(name)
 		if err != nil {
-			return types.StreamFilter{}, fmt.Errorf("magus events: %w (known types: %s)", err, strings.Join(streamTypeNames(), ", "))
+			return types.StreamFilter{}, fmt.Errorf("magus events (known types: %s): %w", strings.Join(streamTypeNames(), ", "), err)
 		}
 		out.Types = append(out.Types, t)
 	}

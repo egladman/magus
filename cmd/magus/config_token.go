@@ -101,7 +101,7 @@ func configTokenGenerate(args []string) error {
 	} else {
 		path, err = auth.SaveNewOperator(tok)
 		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("magus config token generate: a token already exists; pass --force to rotate it")
+			return fmt.Errorf("magus config token generate: a token already exists, pass --force to rotate it")
 		}
 	}
 	if err != nil {

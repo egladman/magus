@@ -119,11 +119,11 @@ func notesStores(root, only string) ([]notesStore, error) {
 	}
 	if len(out) == 0 {
 		if only != "" {
-			return nil, fmt.Errorf("magus notes: this workspace declares no %s notes store; set knowledge.notes.%s in magus.yaml", only, only)
+			return nil, fmt.Errorf("magus notes: this workspace declares no %s notes store, set knowledge.notes.%s in magus.yaml", only, only)
 		}
-		return nil, errors.New("magus notes: this workspace declares no notes store.\n" +
-			"  knowledge.notes.shared   a directory IN the repo: your team gets these, and git records who wrote each one\n" +
-			"  knowledge.notes.private  a directory anywhere: only this machine has them, and nothing attributes them")
+		return nil, errors.New("magus notes: this workspace declares no notes store, set knowledge.notes.shared " +
+			"(a directory IN the repo: your team gets these, and git records who wrote each one) or knowledge.notes.private " +
+			"(a directory anywhere: only this machine has them, and nothing attributes them)")
 	}
 	return out, nil
 }
@@ -145,7 +145,7 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 			// The note EXISTS and could not be read. Reporting that as "no such note"
 			// sends the reader hunting for a missing file, and lets `notes edit` scaffold
 			// a second copy in the other store on top of the broken one.
-			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w (%s store): %w", name, errUnreadableNote, st.scope, err)
+			return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q (%s store): %w", name, st.scope, unreadableNoteError{err})
 		}
 	}
 	switch len(found) {
@@ -154,7 +154,7 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 	case 1:
 		return note, found[0], nil
 	default:
-		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q %w", name, errAmbiguousNote)
+		return store.Note{}, notesStore{}, fmt.Errorf("magus notes: %q: %w", name, errAmbiguousNote)
 	}
 }
 
@@ -162,7 +162,7 @@ func findNote(stores []notesStore, name string) (store.Note, notesStore, error) 
 // "not found" instead of treating both as "nothing here". It carries the fix as well as
 // the diagnosis, because it is the text every wrapping caller prints and a reader told
 // the name is ambiguous still needs the flag that resolves it.
-var errAmbiguousNote = errors.New("exists in both stores; say which with --shared or --private")
+var errAmbiguousNote = errors.New("exists in both stores, say which with --shared or --private")
 
 // errUnreadableNote marks a note whose file is THERE and unreadable, so a caller can
 // tell it apart from "not found" the way errAmbiguousNote separates out "in both". It
@@ -170,6 +170,17 @@ var errAmbiguousNote = errors.New("exists in both stores; say which with --share
 // every case of that switch and was handled as if the name were free, scaffolding a
 // second copy in the other store on top of the broken one.
 var errUnreadableNote = errors.New("exists but could not be read")
+
+// unreadableNoteError reports why a note could not be read and still matches
+// errUnreadableNote, so the reason follows the sentinel without a second %w in the
+// wrapping format.
+type unreadableNoteError struct{ cause error }
+
+func (e unreadableNoteError) Error() string {
+	return errUnreadableNote.Error() + ": " + e.cause.Error()
+}
+
+func (e unreadableNoteError) Unwrap() []error { return []error{errUnreadableNote, e.cause} }
 
 // notesScopeFlags binds the pair of filters every subcommand accepts.
 func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
@@ -180,7 +191,7 @@ func notesScopeFlags(fs *flag.FlagSet) (*bool, *bool) {
 func notesScope(shared, private bool) (string, error) {
 	switch {
 	case shared && private:
-		return "", errors.New("magus notes: --shared and --private are opposites; pass neither to see both")
+		return "", errors.New("magus notes: --shared and --private are opposites, pass neither to see both")
 	case shared:
 		return knowledge.ScopeShared, nil
 	case private:
@@ -448,7 +459,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	case errors.Is(err, errUnreadableNote):
 		// The name is TAKEN, just not readable. Falling through would treat it as free
 		// and scaffold a second copy beside the broken one, so refuse and say what to fix.
-		return fmt.Errorf("%w\n  fix the file's permissions or contents, then edit it again", err)
+		return fmt.Errorf("fix the file's permissions or contents, then edit it again: %w", err)
 	}
 	dir := target.dir
 	path := existing
@@ -468,7 +479,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	}
 	editor := strings.TrimSpace(firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
 	if editor == "" {
-		return fmt.Errorf("magus notes edit: neither $VISUAL nor $EDITOR is set; set one to your editor, pipe the body in, or open %s directly", path)
+		return fmt.Errorf("magus notes edit: neither $VISUAL nor $EDITOR is set, set one to your editor, pipe the body in, or open %s directly", path)
 	}
 	// scaffolded holds the bytes Save just laid down, so the cleanup below can tell an
 	// untouched placeholder from something the author started writing. Read back rather
@@ -521,7 +532,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// failed is the re-attestation, and reporting it as success would leave the author
 		// believing their note is fingerprinted against today's code when it is not. So it
 		// is a real error, with the saved path named so nobody goes looking for lost work.
-		return fmt.Errorf("magus notes edit: saved %s, but its anchors could not be fingerprinted because the knowledge graph would not load; run `%s` again once it does: %w", path, hint.NotesEdit.With(pos[0]), err)
+		return fmt.Errorf("magus notes edit: saved %s, but its anchors could not be fingerprinted because the knowledge graph would not load, run `%s` again once it does: %w", path, hint.NotesEdit.With(pos[0]), err)
 	}
 	changed, err := store.RecordDigests(ctx, dir, pos[0], notesRevision(ctx, root), res.ForScope(string(target.scope)))
 	if err != nil {
@@ -665,7 +676,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		return fmt.Errorf("magus notes edit: reading stdin: %w", err)
 	}
 	if strings.TrimSpace(string(body)) == "" {
-		return errors.New("magus notes edit: stdin was empty; a note with no prose is not a note")
+		return errors.New("magus notes edit: stdin was empty, a note with no prose is not a note")
 	}
 
 	n, err := store.Get(dir, name)
@@ -676,7 +687,7 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 		// accumulate duplicates on every run, and each duplicate re-reports every dangling
 		// or drifted finding for the rest of the note's life.
 		if len(anchors) != 0 {
-			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused; its anchors are what the note is about, and piping new prose does not change that. Edit the note with `%s` (no pipe) to change them", name, hint.NotesEdit.With(name))
+			return fmt.Errorf("magus notes edit: %q already exists, so --anchor is refused, its anchors are what the note is about and piping new prose does not change that, edit the note with `%s` (no pipe) to change them", name, hint.NotesEdit.With(name))
 		}
 	case errors.Is(err, os.ErrNotExist):
 		n = store.Note{Name: name, Title: strings.ReplaceAll(name, "-", " ")}
@@ -688,10 +699,10 @@ func notesWriteFromStdin(ctx context.Context, root, dir string, target notesStor
 			n.Anchors = append(n.Anchors, parsed)
 		}
 	default:
-		return fmt.Errorf("magus notes edit: %q exists but could not be read; repair it before overwriting: %w", name, err)
+		return fmt.Errorf("magus notes edit: %q exists but could not be read, repair it before overwriting: %w", name, err)
 	}
 	if len(n.Anchors) == 0 {
-		return errors.New("magus notes edit: a new note piped from stdin needs at least one --anchor (kind:target); an unanchored note is a diary entry nobody will find again")
+		return errors.New("magus notes edit: a new note piped from stdin needs at least one --anchor (kind:target), an unanchored note is a diary entry nobody will find again")
 	}
 	n.Body = string(body)
 	if err := store.Save(dir, n); err != nil {
@@ -793,7 +804,7 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 		}
 	}
 	if failures == 0 && dangling != 0 {
-		return fmt.Errorf("magus notes verify: %d dangling anchor%s; re-anchor the note or remove the anchor",
+		return fmt.Errorf("magus notes verify: %d dangling anchor%s, re-anchor the note or remove the anchor",
 			dangling, plural(dangling, "", "s"))
 	}
 	if failures != 0 {
@@ -866,7 +877,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		// one notesStores knows about. It does NOT quietly fall back to shared: that would
 		// turn a safety default into a surprise commit of somebody's half-finished sentence.
 		if defaulted {
-			return fmt.Errorf("%w\n  --shared            put this transcript in the repository, where review sees it", err)
+			return fmt.Errorf("pass --shared to put this transcript in the repository, where review sees it: %w", err)
 		}
 		return err
 	}
@@ -882,7 +893,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
 	if _, err := store.Get(target.dir, noteName); err == nil {
-		return fmt.Errorf("magus notes capture: %q already exists in the %s store; pass --name to keep both, because overwriting it would destroy a transcript nothing can recreate", noteName, target.scope)
+		return fmt.Errorf("magus notes capture: %q already exists in the %s store, pass --name to keep both because overwriting it would destroy a transcript nothing can recreate", noteName, target.scope)
 	}
 	if err := store.Save(target.dir, n); err != nil {
 		return fmt.Errorf("magus notes capture: %w", err)

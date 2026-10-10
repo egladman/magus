@@ -35,7 +35,7 @@ import (
 func attentionRoot(root string) (string, error) {
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return "", fmt.Errorf("magus session: no magus workspace found from this directory, and the queue is per-repository; run it inside a workspace, or name one with --root <path>")
+		return "", fmt.Errorf("magus session: no magus workspace found from this directory, and the queue is per-repository, run it inside a workspace or name one with --root <path>")
 	}
 	return root, nil
 }
@@ -255,11 +255,11 @@ func disposeError(err error, ref, dir string) error {
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s; run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s, run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
 	case errors.As(err, &ambiguous):
-		return fmt.Errorf("magus session dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
+		return fmt.Errorf("magus session dispose, name one of them or add enough characters to tell them apart: %w", ambiguous)
 	case errors.As(err, &disposed):
-		return fmt.Errorf("magus session dispose: %w; a request closes once and stays closed, so run `"+hint.SessionAttention.String()+"` to see what is still open", disposed)
+		return fmt.Errorf("magus session dispose, a request closes once and stays closed so run `"+hint.SessionAttention.String()+"` to see what is still open: %w", disposed)
 	}
 	return err
 }

@@ -172,7 +172,7 @@ func describeSpellContent(content oci.Content) (spellBuildResult, error) {
 func shippedSpellDir(name string) (string, error) {
 	dir, ok := spell.ShippedDir(name)
 	if !ok {
-		return "", fmt.Errorf("magus ships no spell %q; `magus spell ls %s` lists them", name, shippedSpellsPath)
+		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, shippedSpellsPath)
 	}
 	return dir, nil
 }
@@ -428,7 +428,7 @@ func pullReference(root, arg string) (oci.Reference, error) {
 func workspaceSpells(root string) (string, config.SpellsConfig, error) {
 	wsRoot := resolveRootOrEmpty(root)
 	if wsRoot == "" {
-		return "", config.SpellsConfig{}, fmt.Errorf("no workspace here to read magus.yaml from; pass --root")
+		return "", config.SpellsConfig{}, fmt.Errorf("no workspace here to read magus.yaml from, pass --root")
 	}
 	cfg, err := config.LoadWithRoot("", wsRoot)
 	if err != nil {
@@ -749,7 +749,7 @@ func spellVCS(ctx context.Context, root, dir string) (types.VCSDriver, error) {
 		return nil, err
 	}
 	if res.VCS == nil {
-		return nil, fmt.Errorf("%s is under no VCS; commit the spell to a repository first", dir)
+		return nil, fmt.Errorf("%s is under no VCS, commit the spell to a repository first", dir)
 	}
 	return res.VCS, nil
 }

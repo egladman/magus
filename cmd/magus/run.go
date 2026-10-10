@@ -734,7 +734,7 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
 		}
 		if resolved == "" || resolved == "/" {
-			return nil, fmt.Errorf("run: --skip %s: name one project; there is no all-projects skip", arg)
+			return nil, fmt.Errorf("run: --skip %s: name one project, there is no all-projects skip", arg)
 		}
 		// ExpandPath is the existence check, and the same one a positional gets:
 		// an unknown project errors here with its did-you-mean.
@@ -754,7 +754,7 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 		}
 	}
 	if len(targets) > 0 && len(kept) == 0 {
-		return nil, errors.New("run: --skip removed every selected project; nothing would run")
+		return nil, errors.New("run: --skip removed every selected project, nothing would run")
 	}
 	return kept, nil
 }

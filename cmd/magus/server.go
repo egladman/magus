@@ -484,7 +484,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 		return nil
 	}
 	if sock := resolveServerAddr(""); proc.SocketLive(ctx, sock) {
-		return fmt.Errorf("the server is running on %s but its console is not serving at %s; check console.enabled and mcp.address", sock, addr)
+		return fmt.Errorf("the server is running on %s but its console is not serving at %s, check console.enabled and mcp.address", sock, addr)
 	}
 
 	fmt.Fprintf(os.Stderr, "magus: starting the server to serve the console, from %s.\n", root)
@@ -503,7 +503,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 		}
 		if time.Now().After(deadline) {
 			reapSpawned(ctx, pid, "")
-			return fmt.Errorf("server (pid %d) did not serve the console at %s within %s; see %s", pid, addr, consoleReadyTimeout, logPath)
+			return fmt.Errorf("server (pid %d) did not serve the console at %s within %s, see %s", pid, addr, consoleReadyTimeout, logPath)
 		}
 		select {
 		case <-ctx.Done():
@@ -714,7 +714,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	name := args[0]
 	job, ok := job.Lookup(name)
 	if !ok {
-		return fmt.Errorf("magus job run: no job named %q; run `%s` to list them", name, hint.JobRun)
+		return fmt.Errorf("magus job run: no job named %q, run `%s` to list them", name, hint.JobRun)
 	}
 	addr := resolveServerAddr("")
 	if !proc.SocketLive(ctx, addr) {

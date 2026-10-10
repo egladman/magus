@@ -230,8 +230,8 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
 			r.mu.Unlock()
-			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server",
-				errWorkspaceUndeclared, root)
+			return nil, fmt.Errorf("workspace %q is not in this server's declared list, add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server: %w",
+				root, errWorkspaceUndeclared)
 		}
 	}
 	e, ok := r.entries[root]

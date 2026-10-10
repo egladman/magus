@@ -133,7 +133,7 @@ func stringField(m map[string]any, key string) string {
 func splitUsage(usage map[string]any, runID string, index int64) (usageCounts, bool, error) {
 	for _, key := range []string{"input_tokens", "output_tokens"} {
 		if _, ok := intField(usage, key); !ok {
-			return usageCounts{}, false, fmt.Errorf("%s: assistant record %d has no %s; refusing to report zero tokens", runID, index, key)
+			return usageCounts{}, false, fmt.Errorf("%s: assistant record %d has no %s, refusing to report zero tokens", runID, index, key)
 		}
 	}
 	var write5m, write1h int64
@@ -264,7 +264,7 @@ func (t *transcript) takeAssistant(message map[string]any) error {
 	t.turns++
 	usage, ok := message["usage"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("%s: assistant record %d has no message.usage; refusing to report zero tokens", t.runID, t.turns)
+		return fmt.Errorf("%s: assistant record %d has no message.usage, refusing to report zero tokens", t.runID, t.turns)
 	}
 	counts, assumed, err := splitUsage(usage, t.runID, t.turns)
 	if err != nil {

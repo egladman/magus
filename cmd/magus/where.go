@@ -123,7 +123,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if patternCount > 1 {
-		return fmt.Errorf("magus where: conflicting pattern flags; use only one of --filter, --glob, --regex, --literal")
+		return fmt.Errorf("magus where: conflicting pattern flags, use only one of --filter, --glob, --regex, --literal")
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -132,7 +132,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 	all := ws.All()
 	if len(all) == 0 {
-		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `%s` to bootstrap one", hint.Init)
+		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project), run `%s` to bootstrap one", hint.Init)
 	}
 
 	var matchFn func(string) bool

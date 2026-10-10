@@ -102,7 +102,7 @@ func runCast(args []string) error {
 	// Without this a mistyped subcommand would be ignored and the default
 	// render would run in its place.
 	if fs.NArg() > 0 {
-		return fmt.Errorf("unknown subcommand %q; the only one is shots", fs.Arg(0))
+		return fmt.Errorf("unknown subcommand %q, the only one is shots", fs.Arg(0))
 	}
 
 	if *showcase {
@@ -258,15 +258,12 @@ func checkNoise(capture string, allowFailures bool) error {
 	if len(bad) == 0 {
 		return nil
 	}
-	msg := fmt.Sprintf("the recorded session is not clean (%d warning or failure lines); fix the recording environment and re-record", len(bad))
-	for i, b := range bad {
-		if i == 3 {
-			msg += fmt.Sprintf("\n  ... and %d more", len(bad)-3)
-			break
-		}
-		msg += "\n  " + b
+	shown := bad[:min(len(bad), 3)]
+	msg := strings.Join(shown, ", ")
+	if len(bad) > len(shown) {
+		msg += fmt.Sprintf(", and %d more", len(bad)-len(shown))
 	}
-	return fmt.Errorf("%s", msg)
+	return fmt.Errorf("the recorded session is not clean (%d warning or failure lines), fix the recording environment and re-record: %s", len(bad), msg)
 }
 
 // stripSGR removes CSI escape sequences so a diagnostic quoting a captured line
@@ -301,7 +298,7 @@ func stripSGR(s string) string {
 func renderFile(path string, theme screen.Theme) (string, error) {
 	capture, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read capture: %w (re-record with -record)", err)
+		return "", fmt.Errorf("read capture (re-record with -record): %w", err)
 	}
 	return render(string(capture), theme)
 }
@@ -323,7 +320,7 @@ func render(capture string, theme screen.Theme) (string, error) {
 func replay(capture string) ([]*screen.Screen, error) {
 	segments := split(capture)
 	if len(segments) < 2 {
-		return nil, fmt.Errorf("capture has %d command segments; expected the session's several", len(segments))
+		return nil, fmt.Errorf("capture has %d command segments, expected the session's several", len(segments))
 	}
 
 	s := screen.New(cols, rows)

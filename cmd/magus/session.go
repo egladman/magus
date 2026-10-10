@@ -596,8 +596,8 @@ func sessionLoad(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(summary.Rejects) > 0 {
-		return fmt.Errorf("magus session load: %d line(s) rejected and not loaded:\n  %s",
-			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), loadRejectsShown)], "\n  "))
+		return fmt.Errorf("magus session load: %d line(s) rejected and not loaded: %s",
+			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), loadRejectsShown)], ", "))
 	}
 	return nil
 }
@@ -900,7 +900,7 @@ func sessionShow(root string, args []string) error {
 	}
 	events := sessions.AgentEvents(fold, rest[0])
 	if len(events) == 0 {
-		return fmt.Errorf("magus session show: no loaded events for session %q in %s; load a host transcript with `%s`",
+		return fmt.Errorf("magus session show: no loaded events for session %q in %s, load a host transcript with `%s`",
 			rest[0], dir, hint.SessionLoad.String())
 	}
 

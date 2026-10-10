@@ -691,7 +691,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if target == "" {
-		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
+		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`), run `%s` to list available targets",
 			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
@@ -1567,7 +1567,7 @@ func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, onl
 	for _, name := range only {
 		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
 		if !known[clean] {
-			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, hint.Ls)
+			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace, run `%s` to list them", name, hint.Ls)
 		}
 		want[clean] = true
 	}

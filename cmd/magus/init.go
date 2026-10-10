@@ -95,7 +95,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	// real user's global config, so refuse rather than silently writing there: make
 	// the caller say which config --root's scoping should mean.
 	if root != "" && !inf.Global && !inf.Local {
-		return fmt.Errorf("init: --root requires --local or --global (--root does not scope the default config path; " +
+		return fmt.Errorf("init: --root requires --local or --global (--root does not scope the default config path, " +
 			"pass --local to write magus.yaml into --root, or --global to confirm the write to $XDG_CONFIG_HOME/magus/)")
 	}
 

@@ -100,7 +100,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	if opts.Good == "" {
 		lastPass := rt.LastPassTime(projectPath, bf.Target)
 		if lastPass.IsZero() {
-			return errors.New("bisect: no passing run found in history; provide --good <sha>")
+			return errors.New("bisect: no passing run found in history, provide --good <sha>")
 		}
 		opts.GoodBefore = lastPass.Add(time.Minute)
 		fmt.Fprintf(os.Stderr, "bisect: deriving good commit from last recorded pass: %s\n",

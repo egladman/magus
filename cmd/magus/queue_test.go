@@ -377,12 +377,12 @@ func TestQueueDescribeRendersTheRerunARefusalAsksFor(t *testing.T) {
 	_, err := f.run(t, "", "describe", "--provider", "local.buzz", "--base", "main", "--app", "hidden")
 	var refused *types.SetupRefusedError
 	require.ErrorAs(t, err, &refused)
-	assert.EqualError(t, err, "magus queue describe: no id for hidden: https://example.invalid/apps/hidden; then run: magus --root "+root+
-		" queue describe --provider local.buzz --base main --app 'hidden:<id>'")
+	assert.EqualError(t, err, "magus queue describe: retry with magus --root "+root+
+		" queue describe --provider local.buzz --base main --app 'hidden:<id>': no id for hidden: https://example.invalid/apps/hidden")
 	_, err = f.run(t, "", "describe", "--status-context", "my gate", "--remote", "origin", "--vcs", "git", "--app", "unknown",
 		"--base", "main", "--provider", "local.buzz")
-	assert.EqualError(t, err, "magus queue describe: no app is named unknown: https://example.invalid/apps; then run: magus --root "+root+
-		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>'")
+	assert.EqualError(t, err, "magus queue describe: retry with magus --root "+root+
+		" queue describe --provider local.buzz --base main --status-context 'my gate' --remote origin --vcs git --app '<slug>': no app is named unknown: https://example.invalid/apps")
 }
 
 // --app is the provider's to read: the queue hands it over exactly as given.
