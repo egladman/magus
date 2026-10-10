@@ -57,7 +57,7 @@ func observe(ctx context.Context, h slog.Handler) context.Context {
 func TestSettleQuietlyPrintsNothingWhenTheRunPasses(t *testing.T) {
 	run := Quietly(func(ctx context.Context, inv []string) error {
 		fmt.Println("[pass] magus generate (ran, 2.1s)")
-		slog.Info("wrote internal/gen/mocks/store.go")
+		slog.InfoContext(ctx, "wrote internal/gen/mocks/store.go")
 		emitResult(ctx, journal.Event{Project: ".", Target: "generate:rw", Status: journal.StatusPass, Ref: "out1"})
 		return exec.Command("sh", "-c", "echo 'INF mockery generating mocks'; echo 'wrote x' >&2").Run()
 	}, observe)
