@@ -118,6 +118,7 @@ linters:
     - providerio
     - fieldwise
     - diagmsg
+    - errorstrings
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -316,6 +317,18 @@ linters:
             - {file: symbol.go, reason: staged}
             - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
+
+      # A plain Go error is a fragment its callers chain context onto with ": ".
+      # diagmsg judges what magus prints; this judges errors.New and fmt.Errorf,
+      # including one built only to wrap inside a coded diagnostic. With module
+      # set, the same block judges a lib module's packages when its run enables
+      # this linter; libs/gopherbuzz is excluded below.
+      errorstrings:
+        type: module
+        description: judges errors.New and fmt.Errorf text as a fragment chained with ": "
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
 
       asciistrings:
         type: module
@@ -792,6 +805,9 @@ linters:
       - path: ^libs/gopherbuzz/token/token\.go$
         linters: [stutter]
         text: ^token\.Tokenize stutters
+      # gopherbuzz's error text follows upstream Buzz's, not Go's convention.
+      - path: ^libs/gopherbuzz/
+        linters: [errorstrings]
       - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
         linters: [stutter]
         text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters

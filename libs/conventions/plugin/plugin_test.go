@@ -21,6 +21,10 @@ func TestPluginsRegister(t *testing.T) {
 			"fields": []any{map[string]any{"type": "a.Verdict", "field": "Deny"}},
 			"allow":  []any{map[string]any{"file": "cmd/app/main.go", "rule": "message-length", "reason": "staged"}},
 		},
+		"errorstrings": map[string]any{
+			"module": "example.com/m", "files": []any{"cmd/app/*.go"}, "rules": []any{"error-join"},
+			"allow": []any{map[string]any{"file": "cmd/app/main.go", "rule": "error-join", "reason": "staged"}},
+		},
 		"fieldwise":     map[string]any{"report-partial": true},
 		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
