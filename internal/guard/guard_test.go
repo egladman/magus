@@ -1191,7 +1191,7 @@ func TestJobStoreRowsMemo(t *testing.T) {
 
 // recoverableRules are the compiled rules that refused before they advised by default.
 var recoverableRules = []string{
-	"brief-command", "busy-wait", "buzz-unbriefed", "chained-run", "exit-status-echo",
+	"architecture-unbriefed", "brief-command", "busy-wait", "buzz-unbriefed", "chained-run", "exit-status-echo",
 	"filter-without-input", "grep-reader", "interpreter-rewrite", "magus-timeout",
 	"output-pipe", "output-redirect", "process-poll", "raw-tool", "read-navigation",
 	"scripted-rewrite", "search-translation", "sed-in-place", "sibling-checkout",

@@ -295,6 +295,65 @@ stdout '"permissionDecision":"deny"'
 
 cd $WORK
 
+# --- magus-command.buzz: a prompt the person submitted ------------------------
+#
+# An event that names no tool and carries text at `prompt` is the person's prompt, not a
+# call. The glue hands it to `magus shell --prompt` and says NOTHING: a prompt hook's
+# stdout reaches the model, and a recorded topic is not news to it. What the record does
+# shows on the next call, which architecture-unbriefed holds until the agent loads the
+# architecture skill. The workspace sets that rule to deny, since it only advises by
+# default.
+
+cd arch-ws
+
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stdout .
+! stderr .
+
+# case: command/deny
+stdin $WORK/arch-bash.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+stdout '"permissionDecision":"deny"'
+stdout 'magus-architecture-review'
+
+# case: command/pass
+# Loading the skill clears it.
+stdin $WORK/arch-skill.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stdout .
+stdin $WORK/arch-bash.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stdout .
+
+# case: command/pass
+# A prompt that asks no structure question records nothing, so that session's next call runs.
+stdin $WORK/prompt-ordinary.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stdout .
+! stderr .
+stdin $WORK/arch-bash-s2.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stdout .
+
+# case: path/deny
+# The path entry declares the capability too, and a write that creates a directory waits
+# on the same load whatever was asked.
+stdin $WORK/arch-new-dir.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+! stderr 'unsupported argument'
+stdout '"permissionDecision":"deny"'
+stdout 'creating the new directory'
+
+# case: path/advise
+# Unflagged, the rule stands down and the new-directory advisory speaks instead.
+stdin $WORK/arch-new-dir.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+stdout 'additionalContext'
+stdout 'NEW DIRECTORY'
+
+cd $WORK
+
 # case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
 # denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
 # three advisory families a rendered call could reach each need machine state a script
@@ -626,6 +685,13 @@ env __MAGUS_BIN=$WORK/nonexistent-magus
 # record was skipped.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# A prompt is as silent: the guard's unavailable notice would reach the model as context
+# on every turn, and nothing about the prompt itself was ever going to be enforced.
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
 ! stdout .
 ! stderr .
 
@@ -993,6 +1059,26 @@ magus\project({
     "no_language": "fixture workspace: only the guard's view of an ungated push matters here",
 });
 magus\guard.builtins({"spawn-unbriefed": "deny"});
+-- arch-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of a prompt and the call after it matters here",
+});
+magus\guard.builtins({"architecture-unbriefed": "deny"});
+-- prompt-architecture.json --
+{"session_id": "arch-1", "hook_event_name": "UserPromptSubmit", "prompt": "does this respect our current architecture patterns?"}
+-- prompt-ordinary.json --
+{"session_id": "arch-2", "hook_event_name": "UserPromptSubmit", "prompt": "fix the flaky cache test"}
+-- arch-bash.json --
+{"session_id": "arch-1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- arch-bash-s2.json --
+{"session_id": "arch-2", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- arch-new-dir.json --
+{"session_id": "arch-3", "tool_name": "Write", "tool_input": {"file_path": "newpkg/new.go", "content": "package newpkg\n"}}
+-- arch-skill.json --
+{"session_id": "arch-1", "tool_name": "Skill", "tool_input": {"skill": "magus-architecture-review"}}
 -- push-rules.rules --
 prefix_rule(
     pattern = ["git", "push"],

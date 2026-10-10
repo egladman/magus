@@ -30,6 +30,15 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // the decision is made. Measured: a directory was added for a helper with two
 // callers that belonged in an existing one, with the skill installed and never read.
 func adviseNewSourceDir(path string) string {
+	if dir := newSourceDir(path); dir != "" {
+		return newSourceDirAdvice(dir)
+	}
+	return ""
+}
+
+// newSourceDir is the workspace-relative directory a write to path would create, or ""
+// when it creates none. architecture-unbriefed gates the same act this advises on.
+func newSourceDir(path string) string {
 	dir, ok := workspaceRelativeDir(path)
 	if !ok {
 		return ""
@@ -56,7 +65,7 @@ func adviseNewSourceDir(path string) string {
 	} else if !os.IsNotExist(err) {
 		return "" // unreadable: say nothing rather than guess
 	}
-	return newSourceDirAdvice(dir)
+	return dir
 }
 
 // workspaceRelativeDir returns the slash-separated directory of path relative to the

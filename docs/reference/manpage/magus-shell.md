@@ -41,6 +41,11 @@ applies to a read, so the verdict is always pass and the activity event
 previews as observed rather than as a guard decision. Which of a host's tools
 only look is the caller's knowledge, never magus's.
 
+--prompt reads the input as a prompt the person submitted. Nothing is judged
+and nothing is said back: the guard records the topics the prompt raises, such
+as a question about package structure, and a rule reads that record on the
+agent's next call. The prompt text itself is not kept.
+
 --agent-name, --session, --transcript, and --event are attribution, not policy.
 They record who produced the observation on the activity event, and the verdict
 never reads what they say. The host name is an opaque label rather than a set
@@ -94,10 +99,13 @@ not block every tool call.
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
 **--observes-skill-loads**
-: This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down
+: This host's wiring reports skill loads to magus, so a rule may require one before a spawn, a write or a command; without it those rules stand down
 
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
+
+**--prompt**
+: Read the input as a prompt the person submitted, without judging it: it records the topics the prompt raises for a later rule, and the verdict is always pass
 
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
@@ -117,7 +125,7 @@ not block every tool call.
 ## Exit status
 
 **0**
-: The input is allowed: pass, or advise, which attaches context and does not block. --observe always lands here, because it judges nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call.
+: The input is allowed: pass, or advise, which attaches context and does not block. --observe and --prompt always land here, because they judge nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call.
 
 **1**
 : Not returned by a verdict. A wrapper should treat anything other than 2 as allowed rather than enumerating codes, so that a future signal added here does not start blocking commands.

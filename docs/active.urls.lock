@@ -629,6 +629,7 @@ reference/manpage/magus/
 reference/remote-spells/
 reference/rules/
 reference/rules/agent-sign-off/
+reference/rules/architecture-unbriefed/
 reference/rules/backtick-substitution/
 reference/rules/brief-command/
 reference/rules/busy-wait/
@@ -739,6 +740,8 @@ reference/skills/magus-query/
 reference/skills/magus-run/
 reference/skills/magus-sdk/
 reference/skills/magus-test-design/
+reference/skills/magus-upstream-docs/
+reference/skills/magus-upstream-source/
 reference/skills/magus-vcs-hygiene/
 reference/skills/magus-vcs/
 reference/skills/magus-workspace-rules/

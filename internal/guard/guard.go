@@ -422,6 +422,9 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
+	// Prompt reads the input as a prompt the person submitted. It judges nothing and
+	// records only the topics the prompt raises, for a rule to read on a later call.
+	Prompt bool
 	// DryRun reaches the verdict the call would and writes nothing: the session state the
 	// rules spend is read from a discarded copy, and no trail line, policy record, binding
 	// or registration is made. One difference in wording: a repeated deny is shown in full,
@@ -454,7 +457,7 @@ type Request struct {
 	//
 	// False is the safe answer: rules that need it stand down, which is what keeps them
 	// from denying forever on a host that can never satisfy them.
-	ObservesSkillLoads bool
+	ReportsSkills bool
 	// RewritesInput is the third capability: the input is a shell command the host runs,
 	// and the wiring's reply hands the host Verdict.UpdatedCommand to run in its place.
 	// Without it the guard closes no stdin, since a host that never receives the
@@ -563,6 +566,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
+	if req.Prompt {
+		if !req.DryRun {
+			recordPromptTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
+		}
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	}
 	isPath := req.IsPath
 	// Where the call runs, which the bootstrap rule reads even when no workspace resolves
 	// there to pin a location.
@@ -599,7 +608,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if env.LoadedSkill != "" {
 			// Recorded, never judged. The gate is built here rather than reusing the one
 			// below because this arm returns before it: same cacheDir, same session.
-			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), env.LoadedSkill)
+			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), env.LoadedSkill)
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		if env.NothingToJudge {
@@ -644,11 +653,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// what the rules judge against, so a check swaps only the cache dir.
 	stateAt := location
 	if req.DryRun {
-		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey())
+		stateAt.cacheDir = copySessionState(location.cacheDir, who.callerKey(), who.factsKey(), who.skillsKey())
 		defer os.RemoveAll(stateAt.cacheDir)
 	}
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
+	skills := hint.NewGate(stateAt.cacheDir, who.skillsKey())
 	binding := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
 	// A subagent's first call registers its checkout. A command line runs where the call
@@ -787,8 +797,13 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
 		if verdict.Decision != "deny" {
-			if reason := denyBuzzWriteWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input); reason != "" {
+			if reason := denyBuzzWriteWithoutSkill(skills, req.ReportsSkills, location.workspace, input); reason != "" {
 				refuse(denyBuzzUnbriefed, reason)
+			}
+		}
+		if verdict.Decision != "deny" {
+			if reason := denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, newSourceDir(input)); reason != "" {
+				refuse(denyArchitectureUnbriefed, reason)
 			}
 		}
 		// A script is judged by what running it would be judged by, and the write is the
@@ -862,7 +877,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Not held, unlike its siblings: creating a boundary is not ordinary work, and the
 		// rung above (new-file) is the one held for exactly that contrast. It carries a
 		// kind anyway, because the kind is also the NAME a verdict reports.
-		if verdict.Decision == "pass" && !spoken {
+		//
+		// Quiet for an agent whose host reported it loaded the skill this text sends it to.
+		if verdict.Decision == "pass" && !spoken && !(req.ReportsSkills && skillLoaded(skills, architectureSkill)) {
 			if text := adviseNewSourceDir(input); text != "" {
 				advice, adviceKind = text, advisoryNewSourceDir
 			}
@@ -893,7 +910,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		v := judgeShellLine(ctx, deps, location, callDir, input, shellD)
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
-		switch v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(facts, req.ObservesSkillLoads, location.workspace, input, shellD), rankBuzzAuthor); {
+		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ReportsSkills, location.workspace, input, shellD), rankBuzzAuthor)
+		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, ""), rankArchitectureUnbriefed); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -1559,6 +1577,19 @@ var callerKeyEscaper = strings.NewReplacer("%", "%25", "/", "%2F")
 // terminal window; with neither it is empty, so hint.Gate falls back to its anonymous
 // window rather than keying every unattributed caller together.
 func (who hookAttribution) factsKey() string { return FactsKey(who.Host, who.callerID()) }
+
+// skillsKey keys the skills an AGENT has loaded: factsKey for a root session, and the
+// subagent's own id beneath it for a subagent. A skill read into one context is not in
+// another, so a parent's load must not brief its child, nor a child's its parent. The
+// "agent" segment keeps the key from ever reading as a callerKey's host/form/caller.
+func (who hookAttribution) skillsKey() string {
+	key := who.factsKey()
+	agentID := strings.TrimSpace(who.Agent)
+	if key == "" || agentID == "" {
+		return key
+	}
+	return key + "/agent/" + callerKeyEscaper.Replace(agentID)
+}
 
 // FactsKey is the marker key the guard files a caller's facts under, for a reader outside
 // the package: `<host>/<callerID>` with each part escaped, or "" when callerID is empty.

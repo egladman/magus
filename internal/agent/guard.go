@@ -181,7 +181,11 @@ var guardInputs = []string{"command", "path", "mcp"}
 // cwd names rather than their own, because a config written for 20 starts every hook in
 // the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
 // session's PATH that a shell line in the config used to.
-const GuardTemplateVersion = 20
+//
+// 21: magus-path.buzz accepts --observes-skill-loads, which a config written for 21 passes
+// on every judging entry, and magus-command.buzz records a submitted prompt. Under that
+// config a 20 copy reports the flag as unsupported and every skill gate stands down.
+const GuardTemplateVersion = 21
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

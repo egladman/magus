@@ -6,6 +6,9 @@ namespace agentpolicy\builtins;
 // justified it here, kept where a workspace can reread them rather than in the rule's
 // shipped text.
 export final BUILTINS: {str: any} = {
+    // 2026-10-10: 11 sessions met the new-directory advisory that names
+    // magus-architecture-review, and organic loads of it stayed near zero.
+    "architecture-unbriefed": "deny",
     // 2026-09-24: 33 briefs seeded 462 prefixes of a retired variable.
     "brief-command": "deny",
     "busy-wait": "deny",

@@ -157,7 +157,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) Verdict {
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
-	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.factsKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
+	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.

@@ -595,6 +595,8 @@ const (
 	FlagShellObservesSkillLoads = "observes-skill-loads"
 	// shell: --path
 	FlagShellPath = "path"
+	// shell: --prompt
+	FlagShellPrompt = "prompt"
 	// shell: --renders-ask
 	FlagShellRendersAsk = "renders-ask"
 	// shell: --rewrites-input
@@ -1204,6 +1206,7 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 type ShellFlags struct {
 	Path               bool   // --path
 	Observe            bool   // --observe
+	Prompt             bool   // --prompt
 	Lease              string // --lease
 	AgentName          string // --agent-name
 	Transport          string // --transport
@@ -1221,6 +1224,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	var f ShellFlags
 	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
+	fs.BoolVar(&f.Prompt, FlagShellPrompt, false, "Read the input as a prompt the person submitted, without judging it: it records the topics the prompt raises for a later rule, and the verdict is always pass")
 	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE")
 	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only); required with --transport")
 	fs.StringVar(&f.Transport, FlagShellTransport, "", "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)")
@@ -1228,7 +1232,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Agent, FlagShellAgent, "", "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
-	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
+	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn, a write or a command; without it those rules stand down")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.RewritesInput, FlagShellRewritesInput, false, "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed")
 	return &f

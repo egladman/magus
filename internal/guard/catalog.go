@@ -98,6 +98,12 @@ var denyRuleDocs = []types.RuleDoc{
 		Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
 			"Typical errors of an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
 			"It grades the session, not the file: one Skill(magus-buzz-lang) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned, so `magus buzz <file>` and `magus buzz -t <file>` run something that already exists and go untouched."},
+	{Name: string(denyArchitectureUnbriefed),
+		Catches: "an agent's next call after a structure question, or a new directory, before the architecture skill",
+		Why: "A structure question is answered from the workspace's own edges: what imports what, where a cycle closes, which layer a package sits in, how far a change reaches. An agent reading files one at a time answers it from the files it happened to open, and proposes a boundary nobody needed. The magus-architecture-review skill is how the graph gets asked. " +
+			"Two acts arm it. A prompt submitted with structure vocabulary (architecture, boundaries, layering, coupling, imports, a new package, where something belongs, blast radius) marks the session, and the agent's next graded call (a shell line, a read, a search, an edit, a magus tool call) waits on the load. A write that creates a new directory waits on it too, since that write draws a boundary whatever was asked. " +
+			"A load counts for the agent that made it: a subagent in that session loads the skill itself, and a parent's load does not brief its child. Load Skill(magus-architecture-review), or its -full twin, once and the agent's later calls pass. " +
+			"It stands down on a host whose wiring does not report skill loads, where nothing could ever clear it; the new-directory advisory still speaks there."},
 	{Name: string(denyRulePushUngated),
 		Catches: "a push at a commit with no green gate: the person is asked, a leased worker refused",
 		Why: "The advisory this replaced fired on EVERY push, having read nothing: it told a caller who had just gated and a caller who had never gated the same sentence, which is a toll rather than a reminder. " +

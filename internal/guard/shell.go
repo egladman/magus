@@ -152,6 +152,8 @@ const (
 	denySpawnUnbriefed   denyRuleName = "spawn-unbriefed"
 	denyBuzzUnbriefed    denyRuleName = "buzz-unbriefed"
 	denyRuleBriefCommand denyRuleName = "brief-command"
+	// Any graded call, shell line or write; see internal/guard/architecture.go.
+	denyArchitectureUnbriefed denyRuleName = "architecture-unbriefed"
 	// A write turning vcs off, which removes the guard's approval authority; see
 	// internal/guard/write.go.
 	denyRuleVCSOffSwitch denyRuleName = "vcs-off-switch"

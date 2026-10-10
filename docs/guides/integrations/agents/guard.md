@@ -232,31 +232,32 @@ no turn. They are the compiled defaults of `magus describe rules`, and a
 workspace sets any of them to `deny` or `off` with
 [`magus\guard.builtins`](#setting-a-built-in-rule).
 
-| rule                                                                       | advises on                                                             |
-| -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [`brief-command`](../../../reference/rules/brief-command.md)               | a spawn or continuation brief that teaches a command the guard refuses |
-| [`busy-wait`](../../../reference/rules/busy-wait.md)                       | a loop that only sleeps between polls                                  |
-| [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)             | the first Buzz a session authors, before it read the Buzz skill        |
-| [`chained-run`](../../../reference/rules/chained-run.md)                   | magus runs sequenced with `&&` or `;`                                  |
-| [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)         | a line ending by printing an exit status                               |
-| [`filter-without-input`](../../../reference/rules/filter-without-input.md) | a filter with no file, pipe or redirect                                |
-| [`grep-reader`](../../../reference/rules/grep-reader.md)                   | a definition lookup with a context flag                                |
-| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)   | an inline interpreter rewriting a tracked file                         |
-| [`magus-timeout`](../../../reference/rules/magus-timeout.md)               | magus wrapped in `timeout`                                             |
-| [`output-pipe`](../../../reference/rules/output-pipe.md)                   | magus output piped into a filter                                       |
-| [`output-redirect`](../../../reference/rules/output-redirect.md)           | magus output sent to a file or discarded                               |
-| [`process-poll`](../../../reference/rules/process-poll.md)                 | a process table inspected to wait on magus work                        |
-| [`raw-tool`](../../../reference/rules/raw-tool.md)                         | a toolchain command a spell already wraps                              |
-| [`read-navigation`](../../../reference/rules/read-navigation.md)           | a whole read of a long Go, Buzz or Markdown file                       |
-| [`scripted-rewrite`](../../../reference/rules/scripted-rewrite.md)         | a scripted substitute-and-write                                        |
-| [`search-translation`](../../../reference/rules/search-translation.md)     | a text search a graph query provably answers                           |
-| [`sed-in-place`](../../../reference/rules/sed-in-place.md)                 | `sed -i`                                                               |
-| [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)         | a magus command relocated into another checkout                        |
-| [`spawn-unbriefed`](../../../reference/rules/spawn-unbriefed.md)           | a subagent spawned before the multi-agent skill loaded                 |
-| [`stage-all`](../../../reference/rules/stage-all.md)                       | a whole-tree `git add`                                                 |
-| [`symbol-search`](../../../reference/rules/symbol-search.md)               | a text search for a symbol the graph answers                           |
-| [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)             | a run inside a temp or scratchpad copy                                 |
-| [`unknown-env`](../../../reference/rules/unknown-env.md)                   | a retired or misspelled `MAGUS_*` variable                             |
+| rule                                                                           | advises on                                                             |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
+| [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
+| [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a loop that only sleeps between polls                                  |
+| [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |
+| [`chained-run`](../../../reference/rules/chained-run.md)                       | magus runs sequenced with `&&` or `;`                                  |
+| [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)             | a line ending by printing an exit status                               |
+| [`filter-without-input`](../../../reference/rules/filter-without-input.md)     | a filter with no file, pipe or redirect                                |
+| [`grep-reader`](../../../reference/rules/grep-reader.md)                       | a definition lookup with a context flag                                |
+| [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)       | an inline interpreter rewriting a tracked file                         |
+| [`magus-timeout`](../../../reference/rules/magus-timeout.md)                   | magus wrapped in `timeout`                                             |
+| [`output-pipe`](../../../reference/rules/output-pipe.md)                       | magus output piped into a filter                                       |
+| [`output-redirect`](../../../reference/rules/output-redirect.md)               | magus output sent to a file or discarded                               |
+| [`process-poll`](../../../reference/rules/process-poll.md)                     | a process table inspected to wait on magus work                        |
+| [`raw-tool`](../../../reference/rules/raw-tool.md)                             | a toolchain command a spell already wraps                              |
+| [`read-navigation`](../../../reference/rules/read-navigation.md)               | a whole read of a long Go, Buzz or Markdown file                       |
+| [`scripted-rewrite`](../../../reference/rules/scripted-rewrite.md)             | a scripted substitute-and-write                                        |
+| [`search-translation`](../../../reference/rules/search-translation.md)         | a text search a graph query provably answers                           |
+| [`sed-in-place`](../../../reference/rules/sed-in-place.md)                     | `sed -i`                                                               |
+| [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)             | a magus command relocated into another checkout                        |
+| [`spawn-unbriefed`](../../../reference/rules/spawn-unbriefed.md)               | a subagent spawned before the multi-agent skill loaded                 |
+| [`stage-all`](../../../reference/rules/stage-all.md)                           | a whole-tree `git add`                                                 |
+| [`symbol-search`](../../../reference/rules/symbol-search.md)                   | a text search for a symbol the graph answers                           |
+| [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                 | a run inside a temp or scratchpad copy                                 |
+| [`unknown-env`](../../../reference/rules/unknown-env.md)                       | a retired or misspelled `MAGUS_*` variable                             |
 
 The rules that explain from the start, such as `capture-filter`, `graph-pipe` and
 `split-run`, are in [What magus explains](#what-magus-explains). What follows
