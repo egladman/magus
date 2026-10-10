@@ -48,6 +48,42 @@ func validateHarnessPrompt(p HarnessPrompt) error {
 	return nil
 }
 
+// HarnessAgentFile is one subagent file a harness spell rendered in its host's format. The
+// descriptor owns the whole file, so a plan rewrites it whenever the bytes differ.
+type HarnessAgentFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+func validateHarnessAgentFile(f HarnessAgentFile) error {
+	if f.Path == "" || filepath.IsAbs(f.Path) || !isSafeRelativePath(f.Path) {
+		return fmt.Errorf("path must be a workspace-relative path")
+	}
+	if f.Content == "" {
+		return fmt.Errorf("%s: content is required", f.Path)
+	}
+	return nil
+}
+
+// planWholeFile reports what the file at rel needs to hold content, with no Changes when it
+// already does. The descriptor owns every byte of the file.
+func planWholeFile(root, rel, content string) (types.HarnessFile, error) {
+	path, err := harnessConfigPath(root, rel)
+	if err != nil {
+		return types.HarnessFile{}, err
+	}
+	existing, readErr := os.ReadFile(path)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
+	}
+	file := types.HarnessFile{Exists: readErr == nil}
+	if !bytes.Equal(existing, []byte(content)) {
+		file.Content = content
+		file.Changes = []types.HarnessChange{{Op: types.HarnessWrite}}
+	}
+	return file, nil
+}
+
 // promptLocation renders a prompt for a message: the file, and the key inside it.
 func promptLocation(p HarnessPrompt) string {
 	if len(p.Key) == 0 {
@@ -60,6 +96,9 @@ func promptLocation(p HarnessPrompt) string {
 // already holding another value is an error: it was someone's choice, and no plan
 // overwrites it.
 func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) {
+	if p.Content != "" {
+		return planWholeFile(root, p.Path, p.Content)
+	}
 	path, err := harnessConfigPath(root, p.Path)
 	if err != nil {
 		return types.HarnessFile{}, err
@@ -69,13 +108,6 @@ func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) 
 		return types.HarnessFile{}, fmt.Errorf("agent: read %s: %w", path, readErr)
 	}
 	file := types.HarnessFile{Exists: readErr == nil}
-	if p.Content != "" {
-		if !bytes.Equal(existing, []byte(p.Content)) {
-			file.Content = p.Content
-			file.Changes = []types.HarnessChange{{Op: types.HarnessWrite}}
-		}
-		return file, nil
-	}
 	doc := map[string]any{}
 	if len(existing) > 0 {
 		if err := decodeHarnessJSON(existing, &doc); err != nil {
@@ -129,6 +161,26 @@ func sameJSON(a, b any) bool {
 	ea, errA := json.Marshal(a)
 	eb, errB := json.Marshal(b)
 	return errA == nil && errB == nil && bytes.Equal(ea, eb)
+}
+
+// verifyHarnessAgents reports whether every subagent file a descriptor renders holds the bytes
+// the spell rendered. A descriptor with none leaves the status empty.
+func verifyHarnessAgents(root string, d HarnessDescriptor, result *HarnessVerification) {
+	for _, a := range d.Agents {
+		file, err := planWholeFile(root, a.Path, a.Content)
+		switch {
+		case err != nil:
+			result.AgentStatus, result.AgentReason = HarnessUncovered, err.Error()
+			return
+		case len(file.Changes) > 0:
+			result.AgentStatus = HarnessUncovered
+			result.AgentReason = a.Path + " is missing or differs from what the spell renders; merge what `magus describe harness " + d.ID + "` prints"
+			return
+		}
+	}
+	if len(d.Agents) > 0 {
+		result.AgentStatus = HarnessVerified
+	}
 }
 
 // verifyHarnessPrompts reports whether every prompt a descriptor keeps is in place. A

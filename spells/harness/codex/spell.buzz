@@ -214,6 +214,83 @@ export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
     return codex_prompts();
 }
 
+// codex_toml_basic renders text as a TOML basic string on one line.
+fun codex_toml_basic(text: str) > str {
+    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+    return "\"" + escaped + "\"";
+}
+
+// codex_toml_multiline renders text as a TOML multiline literal string, which reads every
+// character as written: instructions full of backslashes and quotes need no escaping. The
+// one thing a literal cannot hold is its own delimiter, so text carrying it falls back to
+// an escaped basic string.
+fun codex_toml_multiline(text: str) > str {
+    if (text.indexOf("'''") != null) { return codex_toml_basic(text); }
+    return "'''\n" + text + "'''";
+}
+
+// codex_agent renders one shipped agent as a Codex custom agent file. It sets no model, so
+// the agent runs on the person's agents.default_subagent_model. The file has no field to
+// restrict tools, so read_only is carried by the instructions alone.
+fun codex_agent(agent: {str: any}) > {str: any} {
+    final name = "{agent["name"]}";
+    final instructions = "{agent["instructions"]}".trim() + "\n";
+    final content = "name = " + codex_toml_basic(name) + "\ndescription = " + codex_toml_basic("{agent["description"]}") + "\ndeveloper_instructions = " + codex_toml_multiline(instructions) + "\n";
+    return {
+        "path": ".codex/agents/{name}.toml",
+        "content": content,
+    };
+}
+
+fun codex_agents(agents: [any]) > [any] {
+    final files: mut [any] = mut [];
+    foreach (agent in agents) {
+        files.append(codex_agent(agent as {str: any}));
+    }
+    return files;
+}
+
+// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
+export fun harness_agents(target: Target, cb: fun(any)) > [any] {
+    final req = {<str: any>};
+    cb(req);
+    final agents = req["agents"];
+    if (agents == null) { return []; }
+    return codex_agents(agents as [any]);
+}
+
+fun codex_scout_fixture(instructions: str) > {str: any} {
+    return {
+        "name": "magus-scout",
+        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        "instructions": instructions,
+        "read_only": true,
+        "class": "economy",
+    };
+}
+
+test "harness_agents renders name, description and instructions with no model" {
+    final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
+    assert\equal("{file["path"]}", ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
+    assert\equal(
+        "{file["content"]}",
+        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
+        "all three required fields, instructions as a literal",
+    );
+    assert\isTrue("{file["content"]}".indexOf("model") == null, "default_subagent_model applies");
+}
+
+test "harness_agents escapes instructions that carry the literal delimiter" {
+    final content = "{codex_agent(codex_scout_fixture("say '''\n"))["content"]}";
+    assert\isTrue(content.endsWith("developer_instructions = \"say '''\\n\"\n"), "falls back to an escaped basic string");
+}
+
+test "harness_agents renders nothing when the call carries no agents" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
+}
+
 test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }

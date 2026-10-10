@@ -62,15 +62,16 @@ var (
 // plugin) that already names magus shell. Optional MCP client wiring is a
 // separate document (or register hint), always bound to a secret ref.
 type HarnessDescriptor struct {
-	SchemaVersion  int              `json:"schema_version"`
-	ID             string           `json:"id"`
-	Display        HarnessDisplay   `json:"display"`
-	Config         HarnessConfig    `json:"config"`
-	ConfigDefaults map[string]any   `json:"config_defaults,omitempty"`
-	Skills         HarnessSkills    `json:"skills"`
-	ManagedEntries []HarnessEntries `json:"managed_entries,omitempty"`
-	MCP            *HarnessMCP      `json:"mcp,omitempty"`
-	Prompts        []HarnessPrompt  `json:"prompts,omitempty"`
+	SchemaVersion  int                `json:"schema_version"`
+	ID             string             `json:"id"`
+	Display        HarnessDisplay     `json:"display"`
+	Config         HarnessConfig      `json:"config"`
+	ConfigDefaults map[string]any     `json:"config_defaults,omitempty"`
+	Skills         HarnessSkills      `json:"skills"`
+	ManagedEntries []HarnessEntries   `json:"managed_entries,omitempty"`
+	MCP            *HarnessMCP        `json:"mcp,omitempty"`
+	Prompts        []HarnessPrompt    `json:"prompts,omitempty"`
+	Agents         []HarnessAgentFile `json:"agents,omitempty"`
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -119,6 +120,10 @@ type HarnessVerification struct {
 	// so the templates refuse the call instead.
 	PromptStatus HarnessStatus `json:"prompt_status,omitempty"`
 	PromptReason string        `json:"prompt_reason,omitempty"`
+	// AgentStatus is whether the subagent files the descriptor renders are current, empty
+	// when it renders none.
+	AgentStatus HarnessStatus `json:"agent_status,omitempty"`
+	AgentReason string        `json:"agent_reason,omitempty"`
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -242,6 +247,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("prompts[%d]: %w", i, err)
 		}
 	}
+	for i, a := range d.Agents {
+		if err := validateHarnessAgentFile(a); err != nil {
+			return fmt.Errorf("agents[%d]: %w", i, err)
+		}
+	}
 	return nil
 }
 
@@ -319,6 +329,15 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 			return plan, err
 		}
 		if err := addPlanFile(&plan, p.Path, file); err != nil {
+			return plan, err
+		}
+	}
+	for _, a := range d.Agents {
+		file, err := planWholeFile(root, a.Path, a.Content)
+		if err != nil {
+			return plan, err
+		}
+		if err := addPlanFile(&plan, a.Path, file); err != nil {
 			return plan, err
 		}
 	}
@@ -453,6 +472,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	result, err := verifyHarnessConfig(ctx, root, d, source)
 	if err == nil {
 		verifyHarnessPrompts(root, d, &result)
+		verifyHarnessAgents(root, d, &result)
 	}
 	return result, err
 }
