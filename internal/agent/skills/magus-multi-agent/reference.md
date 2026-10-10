@@ -21,6 +21,8 @@ as `internal/agent/catalog.go#SkillVersion`.
 
 The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"test ."`,
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
+A record's check may name a Buzz script instead, `{"script": "<probe>.buzz"}`, which a
+run of `{{cmd "buzz"}} --record <probe>.buzz` satisfies.
 
 Fork with `{{tool "client"}}` (`{{buzz "job.put"}}`) from an agent, or `{{cmd "job fork"}}` from a
 terminal{{if .Full}}: the same store and the same authorization either way, so a
@@ -143,8 +145,27 @@ treatment, turns a denial you could have acted on into a collision nobody sees
 until integration{{end}}. Step 1 of Integrate and verify checks the same boundary against
 the checkpoint: the half that does not depend on a worker cooperating.
 
-A read-only job carries an abbreviated row: no write paths, no deny paths. Every row
-ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
+A read-only job carries an abbreviated row: no write paths, no deny paths. Fork it
+`--read-only`: `{{cmd "job fork"}}` refuses a row naming no write paths otherwise.{{if .Full}} An
+empty write set bounds nothing, and a writing row that changed nothing never passes.{{end}}
+
+A read-only scout passes `{{cmd "job wait"}}` only through a script check. Fork it with
+`--stdin`, run the probe with `{{cmd "buzz"}} --record` after the fork, and cite its
+printed ref as the result's `output_ref`:
+
+```sh
+magus job fork --stdin <<'EOF'
+{"schema_version": 11, "id": "api-store/callers", "parent": "api-store", "read_only": true,
+ "criteria": "no caller outside api names AccountStore",
+ "check": {"script": "probes/callers.buzz"}}
+EOF
+```
+
+A scout whose output is prose has no check, so it cannot pass. The root ends it with
+`{{cmd "job exit"}} <job>`, recorded no_return. That is the expected end for such a
+scout, not a failure.
+
+Every row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state
 from one that failed its criteria{{else}}: silence is not a pass{{end}}.
 

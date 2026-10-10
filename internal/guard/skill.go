@@ -19,9 +19,15 @@ import (
 // worth keeping gets an enforcement point, which is the conclusion internal/guard/dir.go
 // reached and the one this workspace's own agent instructions already record.
 //
-// The cost is real and bounds how many of these there should be: each one spends a
-// session's first action on reading, and a deny common enough to be routine is one people
-// learn to route around. Two exist. A third needs evidence of the same kind.
+// The cost is real and bounds how many of these there should be: each one spends an
+// agent's first action on reading, and a deny common enough to be routine is one people
+// learn to route around. Three exist. The third, architecture-unbriefed, came with that
+// evidence: the new-directory advisory named its skill in every session that met it, and
+// the skill still went unloaded. A fourth needs evidence of the same kind.
+//
+// A load counts for the AGENT that made it, not its session. A skill read into a parent's
+// context is not in its child's, so a session-wide mark let every subagent pass on a brief
+// it never saw. The markers go through a gate keyed by hookAttribution.skillsKey.
 
 // skillMarker keys a session marker on a skill NAME, so the guard can ask "has this session
 // loaded that" without reading the host's transcript.
@@ -89,8 +95,8 @@ func skillNameFromHost(reported string) string {
 	return name
 }
 
-// recordSkillLoad marks a skill as loaded for this session, and reports whether the session
-// now carries that mark.
+// recordSkillLoad marks a skill as loaded for the agent markers is keyed on, and reports
+// whether that agent now carries the mark.
 //
 // NOT MarkFired's own return, which answers "was it already there": a second load of the
 // same skill is an ordinary thing for a session to do, and reporting false for it would
@@ -103,8 +109,8 @@ func recordSkillLoad(markers hint.Gate, name string) bool {
 	return markers.AlreadyFired(skillMarker(name))
 }
 
-// skillLoaded reports whether this session has read the named skill, under either the
-// primary name or its full twin.
+// skillLoaded reports whether the agent markers is keyed on has read the named skill, under
+// either the primary name or its full twin.
 //
 // Either copy counts as evidence. The twins carry the same rules and differ only in how
 // much of the worked example they keep, so a session that loaded the fuller one has read
@@ -118,7 +124,7 @@ func skillLoaded(markers hint.Gate, skill agent.SkillRef) bool {
 // denyUntilSkillLoaded is the shared verdict body: act is what the caller was about to do,
 // carries says what the skill holds that the act needs, and skill is what to load.
 //
-// observesSkillLoads is the difference between a rule and a trap, and it is the caller's to
+// reportsSkills is the difference between a rule and a trap, and it is the caller's to
 // pass rather than something this can detect. Only a host whose wiring reports skill loads
 // can ever satisfy one of these rules, and the four harnesses magus ships do not agree: one
 // matches a skill tool, one wires four other matchers, one uses its own event names, and
@@ -126,8 +132,8 @@ func skillLoaded(markers hint.Gate, skill agent.SkillRef) bool {
 // anyway would deny for the life of the session with no action the reader could take.
 //
 // Three lines, like every other deny here: what happened, why it matters, what to do.
-func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace string, skill agent.SkillRef, act, carries string) string {
-	if !observesSkillLoads {
+func denyUntilSkillLoaded(markers hint.Gate, reportsSkills bool, workspace string, skill agent.SkillRef, act, carries string) string {
+	if !reportsSkills {
 		return ""
 	}
 	// No session pointer means no marker can be keyed, so every call in every session would
@@ -141,7 +147,7 @@ func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace 
 	// location whenever the envelope's cwd sits outside a workspace or the cache dir will
 	// not resolve, so this is reachable rather than theoretical.
 	//
-	// It is the same trap observesSkillLoads exists to avoid, arriving by another road: a
+	// It is the same trap reportsSkills exists to avoid, arriving by another road: a
 	// deny the reader cannot clear by doing what it asks. Standing down is the only honest
 	// answer in both.
 	if markers.CacheDir() == "" {

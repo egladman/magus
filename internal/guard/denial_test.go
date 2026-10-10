@@ -68,7 +68,7 @@ func TestSessionFactsAreSharedAcrossTransports(t *testing.T) {
 	spawn := head + `"tool_name":"Task","tool_input":{"description":"Audit the store","prompt":"Audit internal/job",` +
 		`"subagent_type":"general-purpose"},"tool_use_id":"toolu_02"}`
 	judge := func(transport, event string) Verdict {
-		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ObservesSkillLoads: true})
+		return Judge(ctx, strict(testDependencies()), Request{Input: event, Host: "claude-code", Form: transport, ReportsSkills: true})
 	}
 
 	require.Equal(t, "deny", judge("sh", spawn).Decision, "fixture: an unbriefed spawn is denied")

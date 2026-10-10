@@ -15,7 +15,7 @@ integration is a single download.
 | --------------- | -------------------------------------------------------------------------- |
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
 | guard wiring    | `.cursor/hooks.json`                                                       |
-| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself  |
+| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself     |
 | shell commands  | deny and advise both reach the model                                       |
 | file writes     | deny and advise both reach the model                                       |
 | MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
@@ -207,7 +207,7 @@ script also accepts `file_path`.
 // Cursor has also raced additional_context away before; env is the half that sticks.
 // Compaction still has no model-facing rehydrate event.
 //
-// magus-guard-template: 20
+// magus-guard-template: 21
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human

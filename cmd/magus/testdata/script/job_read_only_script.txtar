@@ -1,0 +1,90 @@
+# A read-only scout passes `magus job wait` only through a script check: the record's
+# check names a Buzz script, the holder runs it with `magus buzz --record` after the fork,
+# and the result cites the ref that run printed. The same scout with no check is refused,
+# and its holder ends it with `magus job exit`, recorded no_return.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+cd shop
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'shop'
+
+stdin $WORK/scout.json
+exec magus job fork --stdin
+exec magus ls jobs
+stdout 'scout/pricing .* magus buzz --record probes/pricing.buzz'
+
+exec magus job exec scout/pricing
+exec magus buzz --record probes/pricing.buzz
+stdout 'total.sh computes the total'
+stderr '^ref  out[0-9a-f]{12}$'
+exec sh -c 'ref=$(magus buzz --record probes/pricing.buzz 2>&1 >/dev/null | sed -n "s/^ref  \(out[0-9a-f]*\)$/\1/p") && sed "s/out<hex>/$ref/" "$WORK/result.in.json" > "$WORK/result.json" && sed "s/out<hex>/$ref/" "$WORK/notes.in.json" > "$WORK/notes.json"'
+stdin $WORK/result.json
+exec magus job exit scout/pricing --stdin
+stdout '^exited scout/pricing, recorded exited'
+
+exec magus job wait scout/pricing
+stdout '^verified scout/pricing, recorded pass$'
+stdout 'goal check: verified \(out[0-9a-f]{12}\)'
+
+# A check-less scout has nothing a run can bind to, so wait refuses it even citing a
+# recorded run. A scout whose output is prose ends by `magus job exit`, recorded no_return.
+exec magus job fork scout/notes --read-only --criteria 'list the tax rules'
+exec magus job exec scout/notes
+stdin $WORK/notes.json
+exec magus job exit scout/notes --stdin
+! exec magus job wait scout/notes
+stdout 'declares no check and no goal'
+exec magus job exit scout/notes
+stdout '^abandoned scout/notes, recorded no_return$'
+
+exec magus job fork scout/prose --read-only --criteria 'summarize the tests'
+exec magus job exec scout/prose
+exec magus job exit scout/prose
+stdout '^abandoned scout/prose, recorded no_return$'
+
+# A scout that forgets --read-only names no write paths, which bounds nothing, so fork
+# refuses it and says how to declare it.
+! exec magus job fork scout/loose --criteria 'read the tests'
+stderr 'scout/loose names no write paths and is not read-only'
+stderr '--read-only'
+
+-- scout.json --
+{"schema_version": 11, "id": "scout/pricing", "read_only": true,
+ "criteria": "say which file computes the total",
+ "check": {"script": "probes/pricing.buzz"}}
+-- result.in.json --
+{"schema_version": 2, "job": "scout/pricing",
+ "changed_paths": [],
+ "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
+-- notes.in.json --
+{"schema_version": 2, "job": "scout/notes",
+ "changed_paths": [],
+ "validation": {"command": "magus buzz --record probes/pricing.buzz", "output_ref": "out<hex>"},
+ "unresolved_risks": []}
+-- shop/.gitignore --
+.magus/
+-- shop/magus.yaml --
+concurrency: 2
+-- shop/magusfile.buzz --
+import "magus";
+
+// test has nothing to check; the jobs here only read.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+}
+-- shop/pricing/total.sh --
+total() { echo $(( $1 + $2 )); }
+-- shop/probes/pricing.buzz --
+import "std";
+import "fs";
+
+fun main(args: [str]) > void !> any {
+    if (fs\exists("pricing/total.sh")) {
+        std\print("total.sh computes the total");
+    }
+}

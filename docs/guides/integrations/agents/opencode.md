@@ -12,17 +12,17 @@ a deny reaches the model as the tool error; an advise is appended to the tool's
 own result by `tool.execute.after`, which is the same call and the same context
 window. One file carries all of it.
 
-| what            | where                                                                                         |
-| --------------- | --------------------------------------------------------------------------------------------- |
-| skills          | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
-| guard wiring    | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
-| shell commands  | deny and advise both reach the model                                                          |
-| file writes     | deny and advise both reach the model                                                          |
-| MCP calls       | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
-| checkpoint      | the `session.idle` bus event                                                                  |
-| rehydration     | `experimental.session.compacting`                                                             |
-| MCP             | [MCP](../mcp.md)                                                                              |
-| quiet output    | not set: its config has no key for it; set `MAGUS_LOG_SILENT=true` yourself (see below)    |
+| what           | where                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| skills         | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
+| guard wiring   | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
+| shell commands | deny and advise both reach the model                                                          |
+| file writes    | deny and advise both reach the model                                                          |
+| MCP calls      | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
+| checkpoint     | the `session.idle` bus event                                                                  |
+| rehydration    | `experimental.session.compacting`                                                             |
+| MCP            | [MCP](../mcp.md)                                                                              |
+| quiet output   | not set: its config has no key for it; set `MAGUS_LOG_SILENT=true` yourself (see below)       |
 
 ## Skills
 
@@ -131,7 +131,7 @@ other templates.
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 20
+// magus-guard-template: 21
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
