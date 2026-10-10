@@ -130,10 +130,11 @@ const (
 // profileSkips lists the rules a profile leaves out. Each rule
 // ProfileCollaborative skips encodes this repository rather than writing a
 // teammate reads: terms is its glossary, tense its voice (the present tense,
-// and no author in a description, where a team writes "we" and "I"), and
-// bare-rule its own meaning of "rule".
+// and no author in a description, where a team writes "we" and "I"),
+// bare-rule its own meaning of "rule", and dash and ascii its plain-ASCII
+// typography.
 var profileSkips = map[Profile][]Rule{
-	ProfileCollaborative: {RuleTerms, RuleTense, RuleBareRule},
+	ProfileCollaborative: {RuleTerms, RuleTense, RuleBareRule, RuleDash, RuleASCII},
 }
 
 var (
@@ -182,7 +183,7 @@ var coreChecks = []check{
 	{rule: RuleAttribution, on: withReply, judge: attribution},
 	{rule: RuleTerseSentence, on: skill, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: skill, judge: terseParagraph},
-	{rule: RuleWordy, on: skill, judge: wordy},
+	{rule: RuleWordy, on: written, judge: wordy},
 	{rule: RuleBareRule, on: skill, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},

@@ -93,6 +93,7 @@ func TestJudgeSkillSourceHoldsFullOnlyTextToTheMarkdownRules(t *testing.T) {
 
 	assertFindings(t, JudgeText(body, KindSkillSource), []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
+		{Rule: RuleWordy, Message: "Write 'to', not 'in order to'.", Match: "in order to", Line: 3},
 	})
 }
 
