@@ -56,7 +56,8 @@ type ThreadHandler struct {
 	opts ThreadOptions
 }
 
-// NewThreadHandler returns the thread handler.
+// NewThreadHandler returns the GET /api/v1/diff/thread handler. A zero opts is valid: it answers
+// that no review is open.
 func NewThreadHandler(opts ThreadOptions, log *slog.Logger) *ThreadHandler {
 	h := &ThreadHandler{opts: opts}
 	h.Base = handler.New(h.serve, log)

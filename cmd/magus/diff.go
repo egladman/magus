@@ -856,9 +856,9 @@ type diffTUIRequest struct {
 	thread string
 }
 
-// keepHunksOf drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
+// keepFilteredHunks drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
 // changeset shows only what the filter kept.
-func keepHunksOf(rev types.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
+func keepFilteredHunks(rev types.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
 	kept := map[string]bool{}
 	for _, f := range rev.Files {
 		for _, h := range f.Hunks {
@@ -907,7 +907,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 			sync.close()
 			return nil
 		}
-		parsed = keepHunksOf(rev, parsed)
+		parsed = keepFilteredHunks(rev, parsed)
 	}
 	files := diffOrderTUIFiles(rev, parsed)
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
