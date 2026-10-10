@@ -170,7 +170,7 @@ func callFunctionRule(ctx context.Context, sess *buzz.Session, rule vm.Value, me
 func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 	fields, ok := v.MapView()
 	if !ok {
-		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict; return magus\guard.allow(), magus\guard.advise(text) or magus\guard.deny(text)`, name, v.Kind())
+		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule returned %s, not a GuardVerdict, return magus\guard.allow(), magus\guard.advise(text) or magus\guard.deny(text)`, name, v.Kind())
 	}
 	var out types.GuardVerdict
 	if d, ok := fields.MapGet("decision"); ok && !d.IsNull() {

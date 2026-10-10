@@ -145,7 +145,7 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 	want, id, ok := splitNoteName(req.Msg.GetName())
 	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New(`notes: name must be "shared/<note>" or "private/<note>"; the store is part of the name because a bare name can exist in both and they mean different things about who can read the note`))
+			errors.New(`notes: name must be "shared/<note>" or "private/<note>", the store is part of the name because a bare name can exist in both and they mean different things about who can read the note`))
 	}
 	for _, sd := range s.stores() {
 		if sd.pbScope != want || !sd.declared {

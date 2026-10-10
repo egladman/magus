@@ -33,7 +33,7 @@ var feedbackID = regexp.MustCompile(`^fb[0-9a-f]{12}$`)
 func FeedbackMarksDir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {
-		return "", fmt.Errorf("feedback: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+		return "", fmt.Errorf("feedback: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
 	dir, err := vcs.StateDir(base, "feedback", root)
 	if err != nil {

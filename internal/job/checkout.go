@@ -372,10 +372,10 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 		if !covered {
 			continue
 		}
-		return fmt.Errorf("job: %s declares %q, which covers %s, and %s is live in this checkout (%s)."+
-			" A magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
-			" so every job here loses `magus run` until it lands, not just this one."+
-			" Give %s its own worktree and fork it there, or leave %s out of its write paths."+
+		return fmt.Errorf("job: %s declares %q, which covers %s, and %s is live in this checkout (%s):"+
+			" a magusfile, magus.yaml or spell source that is half-saved stops the whole workspace loading,"+
+			" so every job here loses `magus run` until it lands, not just this one,"+
+			" give %s its own worktree and fork it there, or leave %s out of its write paths,"+
 			" `%s` names what else that write path covers",
 			id, declared, load, held[0].ID, store.root, id, load, hint.DescribeFile.With(load))
 	}

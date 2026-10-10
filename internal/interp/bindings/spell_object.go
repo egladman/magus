@@ -97,7 +97,7 @@ func bindBuzzCommandMethod(h vm.Value, spellName, target string, tgt spells.Op) 
 		base, consumed := ctxOverridesFromBuzz(args, 0)
 		if consumed == 0 {
 			return vm.Null, fmt.Errorf(
-				"%s: pass the target's context as the first argument, %s(ctx); override env or cwd for one call with ctx.withEnv({...}) / ctx.withCwd(\"..\")",
+				"%s: pass the target's context as the first argument, %s(ctx), override env or cwd for one call with ctx.withEnv({...}) / ctx.withCwd(\"..\")",
 				target, target)
 		}
 		opts, err := spellOptsFromBuzz(args, consumed)

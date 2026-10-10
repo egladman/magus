@@ -1082,7 +1082,7 @@ func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 // mid-path lands a write, and the prune that follows it, outside the tree.
 func checkDestination(dir, dest string) error {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
-		return fmt.Errorf("agent install: destination %q is outside the working tree, pass --global or use --tar | tar -xf - -C <dir>", dest)
+		return fmt.Errorf("agent install: destination %q is outside the working tree, pass --global or use `--tar | tar -xf - -C <dir>`", dest)
 	}
 	joined := filepath.Clean(filepath.Join(dir, dest))
 	rel, err := filepath.Rel(dir, joined)

@@ -15,7 +15,7 @@ import (
 // place, because the two are the same situation and a reader who meets it from publish and
 // again from reply must not be left wondering whether they are different problems.
 var errNoReviewProvider = errors.New(
-	"no review provider wired; a magusfile selects one with magus\\review.provider(<spell>)")
+	"no review provider wired, a magusfile selects one with magus\\review.provider(<spell>)")
 
 // FindReview asks the selected spell which review is open for a branch.
 //

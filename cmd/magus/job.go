@@ -1107,7 +1107,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		base, _ = checkoutBaseToken(ctx, root)
 	}
 	if strings.TrimSpace(base) == "" {
-		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s;"+
+		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s,"+
 			" pass the one you are on with --base", pos[0])
 	}
 	store, err := openJobs(root)
@@ -1329,8 +1329,8 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if actor := store.Actor(); !actor.Verifies(rows, pos[0]) {
-		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
-			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
+		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work,"+
+			" exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
 
 	var result *types.JobResult

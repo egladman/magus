@@ -255,7 +255,7 @@ func New(opts Options) (*Server, error) {
 	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
 	// mystery to anyone whose environment merely inherited the var) into an actionable one.
 	if sock := os.Getenv(SocketEnv); sock != "" {
-		return nil, fmt.Errorf("%w (%s=%s)", ErrAlreadyAdopted, SocketEnv, sock)
+		return nil, fmt.Errorf("%w: %s=%s", ErrAlreadyAdopted, SocketEnv, sock)
 	}
 
 	var ep endpoint.Endpoint

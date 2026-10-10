@@ -52,8 +52,8 @@ func WithLock(ctx context.Context, path string, wait time.Duration, fn func() er
 			case err != nil && wctx.Err() == nil:
 				return fmt.Errorf("file: lock %s: %w", path, err)
 			}
-			return fmt.Errorf("file: another process has held the lock at %s for more than %s."+
-				" Look for a stuck magus process with `magus status`, then retry;"+
+			return fmt.Errorf("file: another process has held the lock at %s for more than %s,"+
+				" look for a stuck magus process with `magus status`, then retry:"+
 				" the lock is an OS file lock and is released the moment its holder exits", path, wait)
 		}
 	}

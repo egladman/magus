@@ -142,7 +142,7 @@ func parseBuiltinSetting(v vm.Value) (builtin.Setting, error) {
 			}
 			s.Lines = int(field.AsInt())
 		default:
-			return s, fmt.Errorf(`unknown field %q; a setting takes "decision" and "lines"`, k)
+			return s, fmt.Errorf(`unknown field %q, a setting takes "decision" and "lines"`, k)
 		}
 	}
 	if s.Decision == "" {

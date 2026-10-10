@@ -431,7 +431,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			// or nobody gets one.
 			if strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
 				return types.ExecResult{}, fmt.Errorf(
-					"%s %s: %w (SIGKILL: nothing in the process asked for this - on CI it is usually the OOM killer)",
+					"%s %s (SIGKILL: nothing in the process asked for this, on CI it is usually the OOM killer): %w",
 					label, cmd, err)
 			}
 			return types.ExecResult{}, fmt.Errorf("%s %s: %w", label, cmd, err)
