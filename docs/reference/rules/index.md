@@ -15,7 +15,7 @@ Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that
 name is the entry below. `magus describe rules` prints the same list.
 
 Rules for written text, such as pull request descriptions and docs, are the
-[prose rules](../prose/index.md).
+[proofread rules](../proofread/index.md).
 
 ## Denies by default
 

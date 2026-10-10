@@ -122,7 +122,7 @@ export fun renderIndex(rules: [magus\Rule]) > str {
         + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
         + "name is the entry below. `magus describe rules` prints the same list.\n\n"
         + "Rules for written text, such as pull request descriptions and docs, are the\n"
-        + "[prose rules](../prose/index.md).\n\n"
+        + "[proofread rules](../proofread/index.md).\n\n"
         + table("Denies by default", rules: denies)
         + table("Advises by default", rules: advisories);
     // One final newline, not the last table's two, which the formatter would trim.
@@ -160,9 +160,9 @@ export fun write(dir: str, rules: [magus\Rule]) > void !> any {
     }
 }
 
-// ProseRule is one entry of `judge-docs -catalog`, the prose judge's rule list.
+// ProofreadRule is one entry of `proofread rules`, proofread's rule list.
 // decisions maps each kind in kinds to the default decision on that kind.
-export object ProseRule {
+export object ProofreadRule {
     name: str,
     code: str,
     kinds: [str],
@@ -172,14 +172,14 @@ export object ProseRule {
     why: str,
 }
 
-// proseRules reads the JSON `judge-docs -catalog` writes. A catalog that is empty or
-// not a rule list raises: the judge moved, not the rules.
-export fun proseRules(raw: str) > [ProseRule] !> any {
+// proofreadRules reads the JSON `proofread rules` writes. A catalog that is empty or
+// not a rule list raises: proofread moved, not the rules.
+export fun proofreadRules(raw: str) > [ProofreadRule] !> any {
     final entries: [any] = json\parse(raw);
     if (entries.len() == 0) {
-        throw "the prose rule catalog is empty; judge-docs stopped listing its rules";
+        throw "the proofread rule catalog is empty; proofread stopped listing its rules";
     }
-    final rules = mut [<ProseRule>];
+    final rules = mut [<ProofreadRule>];
     foreach (e in entries) {
         final kinds: [str] = e["kinds"];
         final decisions: {str: str} = e["decisions"];
@@ -188,7 +188,7 @@ export fun proseRules(raw: str) > [ProseRule] !> any {
         final code: str = e["code"];
         final catches: str = e["catches"];
         final why: str = e["why"];
-        rules.append(ProseRule{
+        rules.append(ProofreadRule{
             name = name, code = code, kinds = kinds, decisions = decisions, house = house,
             catches = catches, why = why,
         });
@@ -200,9 +200,9 @@ fun kindLabel(kind: str) > str {
     return "`" + kind + "`";
 }
 
-// proseTier is the decision a rule is filed under: house rules ship off, and a rule that
+// proofreadTier is the decision a rule is filed under: house rules ship off, and a rule that
 // denies anywhere is a deny rule.
-fun proseTier(r: ProseRule) > str {
+fun proofreadTier(r: ProofreadRule) > str {
     if (r.house) { return "off"; }
     foreach (kind in r.kinds) {
         if (r.decisions[kind] == "deny") { return "deny"; }
@@ -210,7 +210,7 @@ fun proseTier(r: ProseRule) > str {
     return "advise";
 }
 
-fun kindsWith(r: ProseRule, decision: str) > [str] {
+fun kindsWith(r: ProofreadRule, decision: str) > [str] {
     final found = mut [<str>];
     foreach (kind in r.kinds) {
         if (r.decisions[kind] == decision) { found.append(kindLabel(kind)); }
@@ -224,8 +224,8 @@ fun joinAnd(items: [str]) > str {
     return items.sub(0, len: items.len() - 1).join(", ") + ", and " + items[items.len() - 1];
 }
 
-// proseDescribe is the one sentence a prose page and its frontmatter share.
-fun proseDescribe(r: ProseRule) > str {
+// proofreadDescribe is the one sentence a proofread page and its frontmatter share.
+fun proofreadDescribe(r: ProofreadRule) > str {
     final denies = kindsWith(r, decision: "deny");
     final advises = kindsWith(r, decision: "advise");
     if (r.house) {
@@ -241,9 +241,9 @@ fun proseDescribe(r: ProseRule) > str {
         + " by default: it reports " + r.catches + ".";
 }
 
-// proseOther is a decision the rule does not already take on its first kind, so the
+// proofreadOther is a decision the rule does not already take on its first kind, so the
 // override example always shows a change.
-fun proseOther(r: ProseRule) > str {
+fun proofreadOther(r: ProofreadRule) > str {
     final current = r.decisions[r.kinds[0]];
     foreach (d in ["deny", "advise", "off"]) {
         if (d != current) { return d; }
@@ -251,9 +251,9 @@ fun proseOther(r: ProseRule) > str {
     return "off";
 }
 
-// proseDecisionTable is the per-kind defaults, columns padded the way the docs formatter
+// proofreadDecisionTable is the per-kind defaults, columns padded the way the docs formatter
 // aligns them.
-fun proseDecisionTable(r: ProseRule) > str {
+fun proofreadDecisionTable(r: ProofreadRule) > str {
     var kindWidth = "Kind".len();
     var decisionWidth = "Default".len();
     foreach (kind in r.kinds) {
@@ -269,19 +269,23 @@ fun proseDecisionTable(r: ProseRule) > str {
     return rows.join("");
 }
 
-// proseURL is where a finding links: the page this file renders.
-fun proseURL(r: ProseRule) > str {
-    return "https://eli.gladman.cc/magus/reference/prose/" + r.name + "/";
+// proofreadURL is where a finding links: the page this file renders.
+fun proofreadURL(r: ProofreadRule) > str {
+    return "https://eli.gladman.cc/magus/reference/proofread/" + r.name + "/";
 }
 
-// renderProseRule is one prose rule's page.
-export fun renderProseRule(r: ProseRule) > str {
-    // The title is the name alone: the docs lint holds a prose page's H1 to its title.
+// renderProofreadRule is one proofread rule's page. It aliases the page's old URL under
+// reference/prose.
+// compat(until: the docs host's request log shows no hit under /reference/prose/ for a release):
+// findings and pages written before the rename link there.
+export fun renderProofreadRule(r: ProofreadRule) > str {
+    // The title is the name alone: the docs lint holds a proofread page's H1 to its title.
     var page = "---\ntitle: " + quote(r.name) + "\n"
-        + "description: " + quote(proseDescribe(r)) + "\n"
-        + "tags: [prose, rules, " + r.name + ", " + proseTier(r) + "]\n---\n\n"
+        + "description: " + quote(proofreadDescribe(r)) + "\n"
+        + "tags: [proofread, rules, " + r.name + ", " + proofreadTier(r) + "]\n"
+        + "aliases: [reference/prose/" + r.name + "]\n---\n\n"
         + "# " + r.name + "\n\n"
-        + proseDescribe(r) + "\n\n"
+        + proofreadDescribe(r) + "\n\n"
         + "## What it catches\n\n"
         + upperFirst(r.catches) + ".\n\n";
     if (r.why != "") {
@@ -289,18 +293,18 @@ export fun renderProseRule(r: ProseRule) > str {
     }
     page = page + "## Default decision\n\n"
         + "The code is `" + r.code + "`. The decision depends on the kind of text judged:\n\n"
-        + proseDecisionTable(r) + "\n";
+        + proofreadDecisionTable(r) + "\n";
     if (r.house) {
         page = page + "House style ships `off`: the rule encodes one repository's conventions, not\n"
             + "a rule of writing a teammate reads. A repository turns it on in its decisions table.\n\n";
     }
     return page + "## Changing it\n\n"
         + "A decisions table sets this rule to `deny`, `advise` or `off`, for everything judged\n"
-        + "or for the files a glob matches. The prose judge reads the table from the file its\n"
+        + "or for the files a glob matches. Proofread reads the table from the file its\n"
         + "`-decisions` flag names:\n\n"
         + "```json\n"
         + "\{\n"
-        + "  \"rules\": \{\"" + r.name + "\": \"" + proseOther(r) + "\"},\n"
+        + "  \"rules\": \{\"" + r.name + "\": \"" + proofreadOther(r) + "\"},\n"
         + "  \"paths\": \{\"blog/**\": \{\"" + r.name + "\": \"off\"}}\n"
         + "}\n"
         + "```\n\n"
@@ -310,22 +314,22 @@ export fun renderProseRule(r: ProseRule) > str {
         + "A finding names the rule, its code and the decision that applies, and links here:\n\n"
         + "```json\n"
         + "\{\"rule\": \"" + r.name + "\", \"code\": \"" + r.code + "\", \"decision\": \""
-        + (if (r.house) "deny" else proseTier(r)) + "\", \"url\": \"" + proseURL(r) + "\"}\n"
+        + (if (r.house) "deny" else proofreadTier(r)) + "\", \"url\": \"" + proofreadURL(r) + "\"}\n"
         + "```\n\n"
-        + "The judge's `-catalog` flag prints this entry with every other rule's.\n\n"
+        + "`proofread rules` prints this entry with every other rule's.\n\n"
         + "## See also\n\n"
-        + "- [All prose rules](index.md) - every rule, grouped by what it checks\n"
+        + "- [All proofread rules](index.md) - every rule, grouped by what it checks\n"
         + "- [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests\n"
         + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/readme.md#findings) - the fields every finding carries\n";
 }
 
-// proseFamilies is the heading of each PRS family, keyed by the digit after the prefix.
-final PROSE_FAMILIES = [
+// proofreadFamilies is the heading of each PRF family, keyed by the digit after the prefix.
+final PROOFREAD_FAMILIES = [
     ["1", "Shape"], ["2", "Tone"], ["3", "Claims and hedges"], ["4", "Generated-writing tells"],
     ["5", "House style"], ["6", "Doc comments"], ["7", "Agent instructions"], ["8", "Review replies"],
 ];
 
-fun proseDefault(r: ProseRule) > str {
+fun proofreadDefault(r: ProofreadRule) > str {
     final first = r.decisions[r.kinds[0]];
     foreach (kind in r.kinds) {
         if (r.decisions[kind] != first) { return "varies by kind"; }
@@ -334,7 +338,7 @@ fun proseDefault(r: ProseRule) > str {
     return first;
 }
 
-fun proseTable(heading: str, rules: [ProseRule]) > str {
+fun proofreadTable(heading: str, rules: [ProofreadRule]) > str {
     final names = mut [<str>];
     final defaults = mut [<str>];
     final catches = mut [<str>];
@@ -346,11 +350,11 @@ fun proseTable(heading: str, rules: [ProseRule]) > str {
         final name = "[" + r.name + "](" + r.name + ".md)";
         final cell = r.catches.replace("|", with: "\\|");
         names.append(name);
-        defaults.append(proseDefault(r));
+        defaults.append(proofreadDefault(r));
         catches.append(cell);
         if (name.len() > nameWidth) { nameWidth = name.len(); }
         if (r.code.len() > codeWidth) { codeWidth = r.code.len(); }
-        if (proseDefault(r).len() > defaultWidth) { defaultWidth = proseDefault(r).len(); }
+        if (proofreadDefault(r).len() > defaultWidth) { defaultWidth = proofreadDefault(r).len(); }
         if (cell.len() > catchWidth) { catchWidth = cell.len(); }
     }
     final rows = mut [<str>];
@@ -367,30 +371,31 @@ fun proseTable(heading: str, rules: [ProseRule]) > str {
         + "\n";
 }
 
-// renderProseIndex is the whole catalog as one table per PRS family, in code order.
-export fun renderProseIndex(rules: [ProseRule]) > str {
+// renderProofreadIndex is the whole catalog as one table per PRF family, in code order.
+export fun renderProofreadIndex(rules: [ProofreadRule]) > str {
     final ordered = rules.cloneMutable();
-    ordered.sort(fun (left: ProseRule, right: ProseRule) > bool => left.code < right.code);
-    final head = "---\ntitle: \"Prose rules\"\n"
-        + "description: \"Every rule the prose judge applies to written text: what each one catches, the decision it takes by default on each kind of text, and its code.\"\n"
-        + "tags: [prose, rules, reference]\n---\n\n"
-        + "# Prose rules\n\n"
-        + "What the prose judge checks in the text a person or an agent writes. Each rule has a\n"
+    ordered.sort(fun (left: ProofreadRule, right: ProofreadRule) > bool => left.code < right.code);
+    final head = "---\ntitle: \"Proofread rules\"\n"
+        + "description: \"Every rule proofread applies to written text: what each one catches, the decision it takes by default on each kind of text, and its code.\"\n"
+        + "tags: [proofread, rules, reference]\n"
+        + "aliases: [reference/prose]\n---\n\n"
+        + "# Proofread rules\n\n"
+        + "What proofread checks in the text a person or an agent writes. Each rule has a\n"
         + "default decision on each kind of text: a **deny** is refused by the caller, an\n"
         + "**advise** is reported once and lets the text through, and an **off** rule, house\n"
         + "style, reports nothing until a repository turns it on. A decisions table changes any\n"
         + "of them.\n\n"
-        + "A finding carries the rule's name and its `PRS` code, and links to the rule's page\n"
-        + "here. The first digit of a code is its family. The judge's `-catalog` flag prints the\n"
+        + "A finding carries the rule's name and its `PRF` code, and links to the rule's page\n"
+        + "here. The first digit of a code is its family. `proofread rules` prints the\n"
         + "same list as JSON.\n\n";
     final tables = mut [<str>];
-    foreach (family in PROSE_FAMILIES) {
-        final members = mut [<ProseRule>];
+    foreach (family in PROOFREAD_FAMILIES) {
+        final members = mut [<ProofreadRule>];
         foreach (r in ordered) {
             if (r.code.sub(3, len: 1) == family[0]) { members.append(r); }
         }
         if (members.len() > 0) {
-            tables.append(proseTable(family[1], rules: members));
+            tables.append(proofreadTable(family[1], rules: members));
         }
     }
     var page = head + tables.join("");
@@ -400,18 +405,18 @@ export fun renderProseIndex(rules: [ProseRule]) > str {
     return page + "\n";
 }
 
-// writeProse renders one page per prose rule plus index.md into dir, with the pruning
+// writeProofread renders one page per proofread rule plus index.md into dir, with the pruning
 // write does: a renamed rule would otherwise leave a page describing a rule no finding
-// names. raw is `judge-docs -catalog`, so a page cannot exist under a name no finding reports.
-export fun writeProse(dir: str, raw: str) > void !> any {
-    final rules = proseRules(raw);
+// names. raw is `proofread rules`, so a page cannot exist under a name no finding reports.
+export fun writeProofread(dir: str, raw: str) > void !> any {
+    final rules = proofreadRules(raw);
     fs\mkdirAll(dir);
     final keep = mut {"index.md": true};
     foreach (r in rules) {
-        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProseRule(r));
+        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProofreadRule(r));
         keep[r.name + ".md"] = true;
     }
-    writeIfChanged(fs\join(dir, "index.md"), body: renderProseIndex(rules));
+    writeIfChanged(fs\join(dir, "index.md"), body: renderProofreadIndex(rules));
     foreach (name in fs\listDir(dir)) {
         final path = fs\join(dir, name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
@@ -522,7 +527,7 @@ test "the index pads both tables and ends in one newline" {
         + "name is the entry below. `magus describe rules` prints the same list.\n"
         + "\n"
         + "Rules for written text, such as pull request descriptions and docs, are the\n"
-        + "[prose rules](../prose/index.md).\n"
+        + "[proofread rules](../proofread/index.md).\n"
         + "\n"
         + "## Denies by default\n"
         + "\n"
@@ -539,49 +544,50 @@ test "the index pads both tables and ends in one newline" {
     std\assert(got == want, message: got);
 }
 
-fun proseCatalog() > str {
-    return `[{"name":"blame","code":"PRS2001","kinds":["change-description","review-reply"],"decisions":{"change-description":"deny","review-reply":"deny"},"house":false,"catches":"a person as the subject of a fault","why":"The fault is in the code."},`
-        + `{"name":"verdict","code":"PRS2002","kinds":["change-description","review-reply"],"decisions":{"change-description":"advise","review-reply":"deny"},"house":false,"catches":"a judgment word","why":""},`
-        + `{"name":"dash","code":"PRS5002","kinds":["reference"],"decisions":{"reference":"off"},"house":true,"catches":"an em dash","why":""}]`;
+fun proofreadCatalog() > str {
+    return `[{"name":"blame","code":"PRF2001","kinds":["change-description","review-reply"],"decisions":{"change-description":"deny","review-reply":"deny"},"house":false,"catches":"a person as the subject of a fault","why":"The fault is in the code."},`
+        + `{"name":"verdict","code":"PRF2002","kinds":["change-description","review-reply"],"decisions":{"change-description":"advise","review-reply":"deny"},"house":false,"catches":"a judgment word","why":""},`
+        + `{"name":"dash","code":"PRF5002","kinds":["reference"],"decisions":{"reference":"off"},"house":true,"catches":"an em dash","why":""}]`;
 }
 
-test "a prose rule page names its code, per-kind defaults and override" {
-    final rules = proseRules(proseCatalog()) catch [<ProseRule>];
-    final page = renderProseRule(rules[1]);
+test "a proofread rule page names its code, per-kind defaults and override" {
+    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final page = renderProofreadRule(rules[1]);
     std\assert(page.startsWith("---\ntitle: \"verdict\"\n"
         + "description: \"A rule that denies on `review-reply` and advises on `change-description` by default: it reports a judgment word.\"\n"
-        + "tags: [prose, rules, verdict, deny]\n---\n"), message: page);
+        + "tags: [proofread, rules, verdict, deny]\n"
+        + "aliases: [reference/prose/verdict]\n---\n"), message: page);
     std\assert(page.indexOf("| `change-description` | advise  |") != null, message: page);
     std\assert(page.indexOf("\"rules\": \{\"verdict\": \"deny\"}") != null, message: page);
-    std\assert(page.indexOf("\"url\": \"https://eli.gladman.cc/magus/reference/prose/verdict/\"") != null, message: page);
+    std\assert(page.indexOf("\"url\": \"https://eli.gladman.cc/magus/reference/proofread/verdict/\"") != null, message: page);
 }
 
 test "a house rule says it ships off" {
-    final rules = proseRules(proseCatalog()) catch [<ProseRule>];
-    final page = renderProseRule(rules[2]);
+    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final page = renderProofreadRule(rules[2]);
     std\assert(page.indexOf("A house-style rule, off until a decisions table turns it on") != null, message: page);
     std\assert(page.indexOf("House style ships `off`") != null, message: page);
 }
 
-test "the prose index groups rules by family and pads the tables" {
-    final page = renderProseIndex(proseRules(proseCatalog()) catch [<ProseRule>]);
+test "the proofread index groups rules by family and pads the tables" {
+    final page = renderProofreadIndex(proofreadRules(proofreadCatalog()) catch [<ProofreadRule>]);
     final want = "## Tone\n\n"
         + "| Rule                  | Code    | Default        | Catches                            |\n"
         + "| --------------------- | ------- | -------------- | ---------------------------------- |\n"
-        + "| [blame](blame.md)     | PRS2001 | deny           | a person as the subject of a fault |\n"
-        + "| [verdict](verdict.md) | PRS2002 | varies by kind | a judgment word                    |\n"
+        + "| [blame](blame.md)     | PRF2001 | deny           | a person as the subject of a fault |\n"
+        + "| [verdict](verdict.md) | PRF2002 | varies by kind | a judgment word                    |\n"
         + "\n"
         + "## House style\n\n"
         + "| Rule            | Code    | Default     | Catches    |\n"
         + "| --------------- | ------- | ----------- | ---------- |\n"
-        + "| [dash](dash.md) | PRS5002 | off (house) | an em dash |\n";
+        + "| [dash](dash.md) | PRF5002 | off (house) | an em dash |\n";
     std\assert(page.endsWith(want), message: page);
 }
 
-test "an empty prose catalog raises" {
+test "an empty proofread catalog raises" {
     var raised = false;
     try {
-        proseRules("[]");
+        proofreadRules("[]");
     } catch (err: str) {
         raised = true;
     }

@@ -309,7 +309,7 @@ Generated pages are their generator's to fix, and skip these checks.
 
 Hand-written Markdown anywhere in the repository keeps to plain punctuation, and
 `magus run lint-rules .` refuses a file that departs from it
-([`hack/lint/markdown-prose.buzz`](https://github.com/egladman/magus/blob/main/hack/lint/markdown-prose.buzz)):
+([`hack/lint/markdown-proofread.buzz`](https://github.com/egladman/magus/blob/main/hack/lint/markdown-proofread.buzz)):
 
 - **No typographic characters outside code.** No em or en dash, curly quote or ellipsis
   character: each has a plain spelling anyone can type and search for.
@@ -383,16 +383,16 @@ supersedes: <what this replaces, optional>
 Hand-written Markdown, every pull request's title and description, review replies, doc
 comments and the text an agent loads read as plain technical writing: a teammate
 understands each sentence without the request, the conversation or the tool behind it.
-The checks are a Go package, the prose judge, in
-[`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose);
-the `judge-docs` command runs it. The guard's `pull-request-text` rule runs it on a
+The checks are a Go package, proofread, in
+[`libs/conventions/proofread`](https://github.com/egladman/magus/blob/main/libs/conventions/proofread);
+the `proofread` command runs it. The guard's `pull-request-text` rule runs it on a
 pull request description and on a reply an agent posts, and the `pr-description` check
 runs it on every pull request, so the two cannot disagree. A person runs it on a draft
 before posting. [ADR 0008](decisions/0008-writing-a-teammate-reads.md) holds the
 design.
 
-[Each rule has a page](reference/prose/index.md): what it catches, why, its default
-decision on each kind of text, and its `PRS` code. A finding names the rule and the code
+[Each rule has a page](reference/proofread/index.md): what it catches, why, its default
+decision on each kind of text, and its `PRF` code. A finding names the rule and the code
 and links to that page.
 
 ### Kinds
@@ -425,8 +425,8 @@ House style ships `off`. It is the set of rules that encode one repository's
 conventions rather than writing a teammate reads: the glossary (`terms`), the present
 tense with no author (`tense`), no credit to a tool (`attribution`), plain ASCII
 typography (`dash`, `ascii`), the doc-comment budgets, and the agent-instruction budgets.
-This repository turns them on in `hack/policy/prose.buzz`, with a reason beside every
-entry. With no table, the judge holds text to shape, tone, claims and the
+This repository turns them on in `hack/policy/proofread.buzz`, with a reason beside every
+entry. With no table, proofread holds text to shape, tone, claims and the
 generated-writing tells alone, which suits a repository that has not chosen a house
 style.
 
@@ -505,7 +505,7 @@ provider I/O, so the guard passes none and `long-thread` stays silent there.
 
 ### Generated-writing tells
 
-The deterministic checks of the `stop-slop` and `humanizer` skills run in the judge, so
+The deterministic checks of the `stop-slop` and `humanizer` skills run in proofread, so
 a skill spends no tokens on them. They refuse chatbot residue (`leak`, `chatbot`),
 announcements standing where the point should be (`signpost`, `closer`), weight asserted
 with nothing named (`vague`), words chosen to sound significant (`buzzword`, with

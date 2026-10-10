@@ -126,13 +126,13 @@ A caller denies on `deny`, tells `advise` once, and never sees `off`.
   ships `off`. Run with no table, the judge holds text to tone, claims, shape and the
   generated-writing tells alone.
 - **A repository states its own.** This repository turns its house style on in
-  `hack/policy/prose.buzz`, a decisions table beside `hack/policy/builtins.buzz` and kept
+  `hack/policy/proofread.buzz`, a decisions table beside `hack/policy/builtins.buzz` and kept
   the same way: a reason beside every entry. A path-scoped entry (`blog/**`: a post keeps
   its author's voice) is an exemption with its reason, reported when it no longer matches.
 - **No profiles.** A named profile would be a second spelling of a decisions table.
 - **Every rule is catalogued** like a guard rule, as `{name, code, decision, catches, why}`
-  (`judge-docs -catalog`), and the docs render a page per rule from it. Each rule also has
-  a code in its own `PRS` prefix through `libs/diagnostics`, the shared framework magus
+  (`proofread rules`), and the docs render a page per rule from it. Each rule also has
+  a code in its own `PRF` prefix through `libs/diagnostics`, the shared framework magus
   uses for `MGS` codes and gopherbuzz for `BZZ`, so a finding links to its page.
 - **The findings are a contract.** A finding is `{source, kind, rule, code, decision,
   message, match, url}`. Any command that writes the same array, a team's own style
@@ -243,7 +243,7 @@ thread. It takes every tone rule, plus:
 | `stacked-hedge` | advise | two or more softeners in one sentence, or an apology before a valid point: "Sorry if this is dumb, but maybe...". Instead: state it.                                   |
 | `long-thread` | advise | the reply is the fourth or later by one author in a thread: suggest a call. Needs the thread length, which the caller passes in.                                       |
 
-The same judge runs on replies a person types (`judge-docs -kind review-reply` reads a draft on
+The same judge runs on replies a person types (`proofread review-reply` reads a draft on
 stdin), and the guard runs it on replies an agent posts. Illustrative replies:
 
 ```text
@@ -258,7 +258,7 @@ Judgment, labelled: I'd move the retry into the client: the upstream drops about
 ### 6. The AI-writing checks move into the judge
 
 The deterministic parts of the `stop-slop` and `humanizer` skills and of Wikipedia's
-"Signs of AI writing" move into `libs/conventions/prose`. Of 96 pattern families, 52 are
+"Signs of AI writing" move into `libs/conventions/proofread`. Of 96 pattern families, 52 are
 word or phrase lists, 20 are structural, 9 heuristic and 15 need meaning. The proposed
 rules catch 33 of the skills' own 41 "before" examples. Each was measured over 261 docs
 pages, 665 changelog fragments, 200 merged pull requests and the Go comments; every
@@ -293,15 +293,15 @@ skills once the judge carries them.
 
 | Piece                                                                                                                  | Home                                                                                                                                          | Why there                                                                                                                 |
 | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Rules, kinds, default decisions, `PRS` codes, the catalog | `libs/conventions/prose` (Go) | text in, findings out; no forge, VCS or repository knowledge; its own `go.mod`, installable anywhere |
-| `judge-docs -kind -decisions -only -thread-length -catalog` | `libs/conventions/cmd/judge-docs` | the one command every layer runs; its findings JSON is the contract an outside judge also writes |
-| This repository's decisions table and path exemptions | `hack/policy/prose.buzz` | a repository's own preferences, kept like `hack/policy/builtins.buzz` |
+| Rules, kinds, default decisions, `PRF` codes, the catalog | `libs/conventions/proofread` (Go) | text in, findings out; no forge, VCS or repository knowledge; its own `go.mod`, installable anywhere |
+| `proofread <kind> -decisions -only -thread-length`, `proofread rules`, `proofread explain` | `libs/conventions/cmd/proofread` | the one command every layer runs; its findings JSON is the contract an outside judge also writes |
+| This repository's decisions table and path exemptions | `hack/policy/proofread.buzz` | a repository's own preferences, kept like `hack/policy/builtins.buzz` |
 | A workspace guard rule's name | `types.GuardVerdict`, `magus\guard.deny(reason, {rule})` | a named rule shortens on repeat and is stored, as a built-in is |
 | Which command writes which kind (`gh pr create` writes a description, `gh pr comment` a reply, `glab mr note` a reply) | a table in `hack/policy/` (Buzz)                                                                                                              | recognizing a forge's CLI is forge knowledge, and provider I/O is Buzz (docs/doctrine.md)                                 |
 | Thread length for `long-thread`                                                                                        | the forge spells (`spells/github/review`, `spells/gitlab`)                                                                                    | reading a thread is provider I/O                                                                                          |
 | Changed lines and files for the budget                                                                                 | a diff-stat method on the backend interface in `vcs/`, exposed through `std/vcs`                                                              | today `branchDiff` passes git's `diff --numstat` through `vcs\cmd`, which fails quietly on Mercurial, Sapling and Jujutsu |
 | Output-ref verification, word budget, changelog-fragment count                                                         | `hack/policy/pull_requests.buzz`                                                                                                              | this repository's policy, inputs the judge never sees                                                                     |
-| Outside magus                                                                                                          | `judge-docs` plus a user-level `idiomatic-pr-descriptions` skill; the `idiomatic-hooks pr` hook calls `judge-docs` instead of its own regexes | one rule set at work and here                                                                                             |
+| Outside magus                                                                                                          | `proofread` plus a user-level `idiomatic-pr-descriptions` skill; the `idiomatic-hooks pr` hook calls `proofread` instead of its own regexes | one rule set at work and here                                                                                             |
 
 Adding a forge is one table row. Adding a VCS is one more method implementation in
 `vcs/`. Adding a check is one Go rule with tests, which the guard and CI pick up because
@@ -311,12 +311,12 @@ both already run the same judge.
 
 | Unit | Write set | State |
 | --- | --- | --- |
-| U1 judge: the review-reply kind, shape and heading rules, the ported AI-writing rules, the tone rules, the claim rule, one selling-word list | `libs/conventions/prose/*`, `libs/conventions/cmd/judge-docs/*`, `libs/conventions/readme.md` | done |
-| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRS` codes, the catalog, purpose-named kinds, the findings contract | the same | in progress |
+| U1 judge: the review-reply kind, shape and heading rules, the ported AI-writing rules, the tone rules, the claim rule, one selling-word list | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, `libs/conventions/readme.md` | done |
+| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRF` codes, the catalog, purpose-named kinds, the findings contract | the same | in progress |
 | U2 diff stat for every backend | `vcs/*.go`, `types/vcs.go`, `std/vcs.go` | done |
 | U2b a workspace guard rule names itself | `types/guard.go`, `internal/interp/bindings/guard_rule.go`, `internal/guard/workspace_rule.go` | in progress |
 | U3 guard and CI: this repository's decisions table, the command table, replies, outside judges, output-ref check, lead exempt from the budget, denials that teach the shape with one example, CI running the same checks as the guard | `hack/policy/*.buzz`, `hack/lint/markdown-prose.buzz`, `magusfile.buzz` (`pr-title`, `pr-description`), `.github/workflows/pr.yaml` | planned |
-| U4 docs: writing rules, a page per prose rule rendered from the catalog, CONTRIBUTING's PR checks | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/prose/`, `CONTRIBUTING.md`, `changes/unreleased/` | planned |
+| U4 docs: writing rules, a page per proofread rule rendered from the catalog, CONTRIBUTING's PR checks | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/proofread/`, `CONTRIBUTING.md`, `changes/unreleased/` | planned |
 | U5 outside this tree: the portable skill and hook | `~/.claude/skills/`, `~/.dotfiles/claude/.claude/hooks/idiomatic-hooks` | in progress |
 
 U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
@@ -325,13 +325,13 @@ U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
 
 - The judge speaks the guard's decisions (`off`, `advise`, `deny`), not a severity of its
   own, and a repository states its preferences as a decisions table, not a profile.
-- Rules are named like guard rules and also carry a `PRS` code, minted through
+- Rules are named like guard rules and also carry a `PRF` code, minted through
   `libs/diagnostics` in a prefix of their own; no `MGS` code is spent on a writing rule.
 - `verdict`, `absolute`, `intent` and `credit` start at `advise`. Each moves to `deny`
   only after it has fired on real text and every firing was right.
 - The guard judges every reply an agent posts: `gh pr comment`, `gh pr review` and
   review comments posted through `gh api`.
-- `idiomatic-hooks pr` calls `judge-docs` and fails closed without it, so the hook and
+- `idiomatic-hooks pr` calls `proofread` and fails closed without it, so the hook and
   the judge cannot drift apart. It keeps no regexes of its own.
 - `long-thread` reads its count from `-thread-length N`, and stays silent without it. The
   guard passes none: reading a thread is provider I/O a hook cannot afford. A person
