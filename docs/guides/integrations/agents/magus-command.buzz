@@ -363,7 +363,7 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
 // the record and never the message, and nothing printed here could be anything but noise in
 // the model's context. `attribution` is the same argv the judged calls carry.
 fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
-    if (bin == "" or !hook\isExecutable(bin)) { return; }
+    if (bin == "") { return; }
     final args = mut ["shell", "--message"];
     foreach (word in attribution) { args.append(word); }
     proc\exec(bin, args: args, dir: dir, opts: {
