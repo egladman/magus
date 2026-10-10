@@ -34,7 +34,7 @@ separate is what makes each one answerable.
 | -------------------------- | --------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
 | magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts | additive-only keys, plus a declared version floor    |
 | the CLI                    | your shell scripts and CI configuration | a removed flag, a changed output format   | a drift-gated `api.lock` snapshot of the whole CLI   |
-| the server wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint` |
+| the daemon wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint` |
 
 The promise is the same for all three. The mechanisms differ because the ways
 they break differ.
@@ -51,7 +51,7 @@ Within a major version:
   whose existing fields keep their names and meanings.
 - **A wire message keeps parsing.** A protobuf field is never renumbered,
   retyped, or repurposed. Removed fields have their numbers reserved forever, so
-  a newer server can never hand an older client a field that means something
+  a newer daemon can never hand an older client a field that means something
   different from what it expects.
 
 New things are added, never substituted. That is the whole discipline: a new key
@@ -118,25 +118,25 @@ uses, so `magus doctor` reports a floor that is lower than what the workspace
 requires. The old binary reads the floor; the new binary proves the floor
 is accurate.
 
-## Client and server
+## Client and daemon
 
-The server is the one place where two magus builds meet, and it applies two
+The daemon is the one place where two magus builds meet, and it applies two
 different rules to two different kinds of client. This is deliberate, not an
 inconsistency.
 
-**The CLI must match the server exactly.** Forwarding a run to the server means
-that server executes your build logic, so anything short of identical builds risks
+**The CLI must match the daemon exactly.** Forwarding a run to the daemon means
+that daemon executes your build logic, so anything short of identical builds risks
 running the wrong bytes. The gate is string equality on build identity, and it
 fails closed: an unstamped dev build is fingerprinted from its VCS stamp, and a
 dirty tree gets a per-process token that can never match anything. Two dirty trees
 at the same revision are not provably the same code, so they refuse each other.
 
 **The console is a wire client, and follows the wire contract.** It reads status,
-graphs, and activity; it does not hand the server code to run, so exact-match
+graphs, and activity; it does not hand the daemon code to run, so exact-match
 would be absurd: every magus upgrade would blank the browser until you found the
 right refresh. Instead the protobuf contract applies, an older console keeps
-working against a newer server, and the console compares the build it was compiled
-against with the one the server reports. When the server is newer it offers a
+working against a newer daemon, and the console compares the build it was compiled
+against with the one the daemon reports. When the daemon is newer it offers a
 reload rather than silently rendering a stale view. This matters more than it
 sounds: the console is a PWA whose service worker serves a bundle from
 months ago.
