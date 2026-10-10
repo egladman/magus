@@ -37,7 +37,7 @@ import "hack/lint/lockfiles-are-sorted" as lockfiles;
 import "hack/lint/magusfile-modules-have-no-main" as magusfilemodules;
 import "hack/lint/magusfiles-hold-no-tests" as magusfiletests;
 import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
-import "hack/lint/markdown-prose" as markdownprose;
+import "hack/lint/markdown-proofread" as markdownproofread;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
 import "hack/lint/provider-io-is-buzz" as providerio;
@@ -46,7 +46,7 @@ import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publ
 import "hack/lint/root-project-declares-the-configs-its-tools-read" as rootconfigs;
 import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as queuetoken;
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
-import "hack/lint/symbol-docs-follow-prose-rules" as symbolprose;
+import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
@@ -75,7 +75,7 @@ export fun rules() > [Rule] {
         Rule{ name = "buzz-glue-is-wired-as-plain-argv", reads = buzzglue\reads(), check = buzzglue\check },
         Rule{ name = "magusfiles-hold-no-tests", reads = magusfiletests\reads(), check = magusfiletests\check },
         Rule{ name = "markdown-carries-no-mermaid", reads = nomermaid\reads(), check = nomermaid\check },
-        Rule{ name = "markdown-prose", reads = markdownprose\reads(), check = markdownprose\check },
+        Rule{ name = "markdown-proofread", reads = markdownproofread\reads(), check = markdownproofread\check },
         Rule{ name = "banned-words", reads = bannedwords\reads(), check = bannedwords\check },
         Rule{ name = "provider-io-is-buzz", reads = providerio\reads(), check = providerio\check },
         Rule{ name = "hack-scripts-start-with-a-verb", reads = hackverbs\reads(), check = hackverbs\check },
@@ -85,7 +85,7 @@ export fun rules() > [Rule] {
         Rule{ name = "testlayout-pairing-has-no-exemptions", reads = testpairing\reads(), check = testpairing\check },
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
-        Rule{ name = "symbol-docs-follow-prose-rules", reads = symbolprose\reads(), check = symbolprose\check },
+        Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
     ];
 }
 

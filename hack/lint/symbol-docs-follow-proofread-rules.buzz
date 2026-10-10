@@ -1,4 +1,4 @@
-namespace symbolprose;
+namespace symbolproofread;
 
 import "assert";
 import "std";
@@ -7,8 +7,8 @@ import "proc";
 import "encoding/json";
 import "magus";
 import "magus/lint";
-import "hack/policy/prose" as decisions;
-import "libs/conventions/judge_docs" as judgeDocs;
+import "hack/policy/proofread" as decisions;
+import "libs/conventions/proofread" as proofread;
 
 // LANGUAGES are the indexes the rule judges. A language whose index judged no symbol is
 // reported, so an indexer that stops emitting docs cannot turn the rule into a pass.
@@ -19,37 +19,37 @@ export final LANGUAGES = ["go", "typescript"];
 export final SANCTIONED = {<str: str>};
 
 // THIS is where a finding sends a reader to sanction a symbol.
-final THIS = "hack/lint/symbol-docs-follow-prose-rules.buzz";
+final THIS = "hack/lint/symbol-docs-follow-proofread-rules.buzz";
 
 // reads keys lint-rules on every source the indexes cover: a tree glob stops at a nested
 // project, so each project holding Go or TypeScript is named. proto's Go is all generated.
-// The prose rules are the Go of libs/conventions, so its module files key the rule too.
+// The proofread rules are the Go of libs/conventions, so its module files key the rule too.
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
-        "libs/conventions/**/*.go", "libs/conventions/judge_docs.buzz", "hack/policy/prose.buzz", "libs/diagnostics/**/*.go",
+        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz", "hack/policy/proofread.buzz", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
         "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }
 
-// check fails every prose finding the decisions table in hack/policy/prose.buzz denies and
+// check fails every proofread finding the decisions table in hack/policy/proofread.buzz denies and
 // SANCTIONED does not name. magus\symbols supplies the docs and the indexes; the judging runs
-// in libs/conventions/cmd/judge-docs, as lint-rules has judge-build link it. A missing or
+// in libs/conventions/cmd/proofread, as lint-rules has proofread-build link it. A missing or
 // stale index, a language that judged nothing and a runner that fails are findings, never a
 // pass: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
     final data: {str: any} = magus\symbols();
     final symbols: [any] = data["symbols"] ?? [<any>];
     final indexes: [any] = data["indexes"] ?? [<any>];
-    final bin = "{judgeDocs\home}/{judgeDocs\binary}";
+    final bin = "{proofread\home}/{proofread\binary}";
     final table = decisions\writeDecisions([<str>]);
-    final run = proc\exec(bin, args: ["-kind", "doc-comment", "-decisions", table],
+    final run = proc\exec(bin, args: ["doc-comment", "-decisions", table],
         opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
     fs\remove(table) catch void;
     if (run.code != 0) {
-        return [Finding{ path = "{judgeDocs\home}/{judgeDocs\command}",
-            message = "the prose runner exited {run.code}, so no doc was judged: " + run.stderr.trim(),
-            fix = "Run `{judgeDocs\build}`, then {bin} -kind doc-comment, and read why it stopped." }];
+        return [Finding{ path = "{proofread\home}/{proofread\command}",
+            message = "proofread exited {run.code}, so no doc was judged: " + run.stderr.trim(),
+            fix = "Run `{proofread\build}`, then {bin} doc-comment, and read why it stopped." }];
     }
     final findings: [any] = json\parse(run.stdout);
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
@@ -158,9 +158,9 @@ fun counts() > {str: int} {
 }
 
 fun finding(rule: str, node: str, source: str) > {str: any} {
-    return {"node": node, "source": source, "kind": "doc-comment", "rule": rule, "code": "PRS4001",
+    return {"node": node, "source": source, "kind": "doc-comment", "rule": rule, "code": "PRF4001",
         "decision": "deny", "message": "the doc opens with filler", "match": "simply",
-        "url": "https://eli.gladman.cc/magus/reference/prose/{rule}/"};
+        "url": "https://eli.gladman.cc/magus/reference/proofread/{rule}/"};
 }
 
 fun symbol(language: str) > {str: any} {
@@ -175,7 +175,7 @@ test "a finding is reported at its declaration with the rule and the match" {
     assert\equal(got[0].path, want: "cmd/magus/run.go", message: "file");
     assert\equal(got[0].line, want: 41, message: "line");
     assert\equal(got[0].message, want: "the doc opens with filler: simply [filler]", message: got[0].message);
-    assert\equal(got[0].url, want: "https://eli.gladman.cc/magus/reference/prose/filler/", message: "the rule's page");
+    assert\equal(got[0].url, want: "https://eli.gladman.cc/magus/reference/proofread/filler/", message: "the rule's page");
 }
 
 test "a sanctioned finding is skipped and a sanction that no longer applies fails" {

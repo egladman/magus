@@ -24,8 +24,8 @@ final nonASCII = $"[^ -~\n\t]";
 final titlecased = $"^[^A-Za-z]*[A-Z][a-z]";
 final conventionalPrefix = $"^[a-z]+(\([^)\n]*\))?!?: ";
 final pastOrThirdPerson = $"(?i)^(added|adds|adding|fixed|fixes|fixing|updated|updates|updating|removed|removes|removing|changed|changes|changing|implemented|implements|implementing|refactored|refactors|refactoring|improved|improves|improving|created|creates|creating|introduced|introduces|introducing|renamed|renames|renaming|moved|moves|moving|made|makes|making)\b";
-// The selling words a subject is denied. A description's twin is the prose judge's filler
-// list in libs/conventions/prose, which pull-request-text runs.
+// The selling words a subject is denied. A description's twin is proofread's filler
+// list in libs/conventions/proofread, which pull-request-text runs.
 final puffery = $"(?i)\b(comprehensive|robust|seamless|seamlessly|powerful|elegant|elegantly|cutting-edge|state-of-the-art|world-class|effortless|effortlessly)\b";
 
 // Syntax is how one tool's commit command spells its options: the long options and the
@@ -370,8 +370,8 @@ test "a subject opens in the imperative" {
         std\assert(ask(["git", "commit", "-m", subject]).decision == "allow", message: subject);
     }
     std\assert(wordingProblems("added a vale spell", conventional: false).len() == 1, message: "past tense");
-    std\assert(wordingProblems("feat(prose): adds a vale spell", conventional: true).len() == 1, message: "third person after a prefix");
-    std\assert(wordingProblems("feat(prose)!: adds a vale spell", conventional: true).len() == 1, message: "a breaking prefix");
+    std\assert(wordingProblems("feat(proofread): adds a vale spell", conventional: true).len() == 1, message: "third person after a prefix");
+    std\assert(wordingProblems("feat(proofread)!: adds a vale spell", conventional: true).len() == 1, message: "a breaking prefix");
     std\assert(wordingProblems("fix: updated the key", conventional: true).len() == 1, message: "a prefix without a scope");
     std\assert(wordingProblems("fix(cache): keep the key stable", conventional: true).len() == 0, message: "imperative");
     std\assert(wordingProblems("added a vale spell", conventional: true).len() == 1, message: "no prefix to strip");
@@ -396,7 +396,7 @@ test "a commit on the base branch has its wording judged after the prefix" {
     final onBase = fun (subject: str) > GuardVerdict {
         return decideCommit(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
     };
-    std\assert(onBase("feat(prose): adds a vale spell").reason.indexOf("not 'added' or 'adds'") != null, message: "third person");
+    std\assert(onBase("feat(proofread): adds a vale spell").reason.indexOf("not 'added' or 'adds'") != null, message: "third person");
     std\assert(onBase("fix(cache): add a robust key").reason.indexOf("drop it and say what changed") != null, message: "puffery");
     std\assert(onBase("fix(cache): keep the key stable").decision == "allow", message: "imperative");
 }

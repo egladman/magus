@@ -1,11 +1,11 @@
-namespace agentpolicy\prose;
+namespace agentpolicy\proofread;
 
 import "std";
 import "fs";
 import "path";
 import "encoding/json";
 
-// RULES is this repository's decisions table for libs/conventions/prose: the house style the
+// RULES is this repository's decisions table for libs/conventions/proofread: the house style the
 // judge ships off, turned on here, each with what justified it. A rule left out keeps its
 // shipped default. history stays off: a doc that says what a symbol replaced is judged by a
 // reader, and the symbol-docs lint never held it.
@@ -50,8 +50,8 @@ final PATHS: {str: {str: str}} = {
     },
 };
 
-// table is the decisions file judge-docs reads, for a run over files: a PATHS entry joins
-// only when one of files matches it, since judge-docs refuses a glob matching no argument.
+// table is the decisions file proofread reads, for a run over files: a PATHS entry joins
+// only when one of files matches it, since proofread refuses a glob matching no argument.
 // Text read from stdin has no files and takes RULES alone.
 export fun table(files: [str]) > {str: any} !> any {
     final paths = mut {<str: any>};
@@ -72,15 +72,15 @@ export fun table(files: [str]) > {str: any} !> any {
 }
 
 // writeDecisions writes table(files) to a new temp file and returns its path, for
-// `judge-docs -decisions`. The caller removes it; a checked-in copy could drift from RULES.
+// `proofread -decisions`. The caller removes it; a checked-in copy could drift from RULES.
 export fun writeDecisions(files: [str]) > str !> any {
-    final file = fs\tempFile("prose-decisions");
+    final file = fs\tempFile("proofread-decisions");
     fs\writeFile(file, content: json\stringify(table(files)));
     return file;
 }
 
 // decide is the decision this repository gives a finding of rule that a judge outside
-// libs/conventions reported as given: RULES wins, as it does for judge-docs.
+// libs/conventions reported as given: RULES wins, as it does for proofread.
 export fun decide(rule: str, given: str) > str {
     return RULES[rule] ?? given;
 }

@@ -3,11 +3,11 @@
 // or a reply in a thread (review-reply). COMMANDS says which command writes which kind, and
 // through which flags.
 //
-// The words are judged by libs/conventions/prose under this repository's decisions table
-// (hack/policy/prose.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
+// The words are judged by libs/conventions/proofread under this repository's decisions table
+// (hack/policy/proofread.buzz), with any OUTSIDE_JUDGES beside it. A finding decided deny is
 // denied, every one listed with its rule; one decided advise is told once per pull request.
 // The pr-description CI step runs judgeText too, so the guard and CI reach one decision.
-// This rule keeps what the judge does not read: the spaced hyphen, the word budget, the
+// This rule keeps what proofread does not read: the spaced hyphen, the word budget, the
 // shape past the lead, the areas the diff touches and the title. When the text cannot be
 // read, the whole line is judged for credit and typography instead.
 //
@@ -40,10 +40,10 @@ import "path";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/commits" as subjects;
-import "./hack/policy/prose" as decisions;
+import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
 import "./hack/magusfile/changelog" as entries;
-import "./libs/conventions/judge_docs" as judgeDocs;
+import "./libs/conventions/proofread" as proofread;
 
 final descriptionKind = "change-description";
 final replyKind = "review-reply";
@@ -151,9 +151,9 @@ final COMMANDS = [
         body = ["--message", "-m"], values = ["-R", "--repo"] },
 ];
 
-// OutsideJudge is a command that judges text the way judge-docs does: it reads the text on
+// OutsideJudge is a command that judges text the way proofread does: it reads the text on
 // stdin and writes one JSON array of findings on stdout, {source, rule, decision, message,
-// match, url} at least, and exits 0 whatever it found. Its findings join judge-docs's under
+// match, url} at least, and exits 0 whatever it found. Its findings join proofread's under
 // the same decisions table, so a rule it names that the table decides takes the table's
 // decision. kinds are the text kinds it judges.
 export object OutsideJudge {
@@ -161,7 +161,7 @@ export object OutsideJudge {
     kinds: [str],
 }
 
-// OUTSIDE_JUDGES is empty here: libs/conventions/prose is this repository's only judge.
+// OUTSIDE_JUDGES is empty here: libs/conventions/proofread is this repository's only judge.
 export final OUTSIDE_JUDGES = [<OutsideJudge>];
 
 // matchCommand is the row of COMMANDS p runs, or null.
@@ -551,7 +551,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
     };
 }
 
-// Judged is one finding of a prose judge, in the findings JSON libs/conventions/readme.md
+// Judged is one finding of a judge, in the findings JSON libs/conventions/readme.md
 // describes: line counts from the first line of the text judged, 0 when the finding has
 // none, and decision is "deny" or "advise".
 export object Judged {
@@ -563,30 +563,30 @@ export object Judged {
     url: str = "",
 }
 
-// judgeRunner returns a judge that runs the built libs/conventions/cmd/judge-docs over text
+// judgeRunner returns a judge that runs the built libs/conventions/cmd/proofread over text
 // of a kind, under this repository's decisions table, and then each of OUTSIDE_JUDGES that
 // judges the kind. The judge lives in Go, where the Markdown lint and the CI step reach the
 // same rules; a judge that is missing, stale or did not run is a finding, since silence
 // would read as a pass.
 export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
-    final dir = "{workspace}/{judgeDocs\home}";
+    final dir = "{workspace}/{proofread\home}";
     return fun (text: str, kind: str) > [Judged] {
-        final notRunnable = judgeDocs\whyStale(dir);
+        final notRunnable = proofread\whyStale(dir);
         if (notRunnable != "") {
             return [Judged{ rule = "judge", line = 0,
-                message = "the prose judge cannot run: {notRunnable}; run `{judgeDocs\build}`, then retry" }];
+                message = "proofread cannot run: {notRunnable}; run `{proofread\build}`, then retry" }];
         }
         final table = decisions\writeDecisions([<str>]) catch "";
         if (table == "") {
             return [Judged{ rule = "judge", line = 0,
-                message = "the prose judge cannot run: its decisions file could not be written to a temp dir" }];
+                message = "proofread cannot run: its decisions file could not be written to a temp dir" }];
         }
         // No dir: proc\exec resolves a relative cmd against dir, which names libs/conventions
         // twice when workspace is relative (the pr-description target passes "."), so the
         // judge must run from the path stale checked.
-        final bin = "{dir}/{judgeDocs\binary}";
+        final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
-        final run = proc\exec(bin, args: ["-kind", kind, "-decisions", table],
+        final run = proc\exec(bin, args: [kind, "-decisions", table],
             opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         fs\remove(table) catch void;
         if (run == null or run!.code != 0) {
@@ -595,7 +595,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
                 why = judgeFailure(code: run!.code, stdout: run!.stdout, stderr: run!.stderr, bin: bin);
             }
             found.append(Judged{ rule = "judge", line = 0,
-                message = "the prose judge did not run ({why}); run {judgeDocs\home}/{judgeDocs\binary} -kind {kind} "
+                message = "proofread did not run ({why}); run {proofread\home}/{proofread\binary} {kind} "
                     + "with the text on stdin, and read why" });
         } else {
             foreach (f in parseJudged(run!.stdout)) {
@@ -615,7 +615,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
 
 // outsideFindings runs one outside judge over text. Its findings take this repository's
 // decisions, and one decided off is dropped; a judge that fails is a finding, as
-// judge-docs failing is.
+// proofread failing is.
 fun outsideFindings(outside: OutsideJudge, text: str) > [Judged] {
     final run = proc\exec(outside.argv[0], args: outside.argv.sub(1),
         opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
@@ -645,7 +645,7 @@ export fun judgeFailure(code: int, stdout: str, stderr: str, bin: str) > str {
     if (stderr.trim() != "") {
         return stderr.trim();
     }
-    var why = "judge-docs exited {code} with nothing on stderr";
+    var why = "proofread exited {code} with nothing on stderr";
     if (code == -1) {
         final info = fs\stat(bin) catch null;
         if (info == null or info!.is_dir) {
@@ -866,7 +866,7 @@ export object Findings {
 
 // judgeShape advises on body's shape past the lead: bullets and at most one closing
 // sentence after them, then headed sections, whose prose is free. A fenced code block may
-// sit anywhere after the lead. A missing lead and a stock heading are the prose judge's
+// sit anywhere after the lead. A missing lead and a stock heading are proofread's
 // (lead-context and reply-voice), so this denies nothing.
 export fun judgeShape(body: str) > Findings {
     final denies = mut [<str>];
@@ -1013,7 +1013,7 @@ fun titleProblems(title: str, judged: [str]) > [str] {
     return problems;
 }
 
-// alreadyJudged reports whether problem quotes a word the prose judge reported.
+// alreadyJudged reports whether problem quotes a word proofread reported.
 fun alreadyJudged(problem: str, judged: [str]) > bool {
     foreach (w in judged) {
         if (problem.lower().indexOf("\"{w}\"") != null) {
@@ -1191,15 +1191,15 @@ fun facts(f: Facts) > fun (base: str) > Facts {
     };
 }
 
-// passing is a prose judge that finds nothing, so a case sees only this rule's own verdicts;
-// libs/conventions/prose tests the judge itself.
+// passing is a judge that finds nothing, so a case sees only this rule's own verdicts;
+// libs/conventions/proofread tests proofread itself.
 fun passing() > fun (text: str, kind: str) > [Judged] {
     return fun (text: str, kind: str) > [Judged] {
         return [<Judged>];
     };
 }
 
-// reporting is a prose judge that reports f whatever it reads.
+// reporting is a judge that reports f whatever it reads.
 fun reporting(f: Judged) > fun (text: str, kind: str) > [Judged] {
     return fun (text: str, kind: str) > [Judged] {
         return [f];
@@ -1274,7 +1274,7 @@ test "every deny finding is listed with where it sits and its rule, under the ru
     final t = decidePullRequest(create("fix(cache): add a robust key", body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(title), once: helpers\counter());
     std\assert(t.reason.indexOf("the title: Drop 'robust': state the fact. [filler]") != null, message: t.reason);
-    std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word the judge reported is not reported twice: {t.reason}");
+    std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word proofread reported is not reported twice: {t.reason}");
 }
 
 test "an advise finding is told once per pull request and never denies" {
@@ -1289,7 +1289,7 @@ test "an advise finding is told once per pull request and never denies" {
     std\assert(again.decision == "allow", message: "said once: {again.reason}");
 }
 
-test "the judge reads the title and the description as one pull request" {
+test "proofread reads the title and the description as one pull request" {
     final seen = mut [<Call>];
     final recording = fun (text: str, kind: str) > [Judged] {
         seen.append(Call{ text = text, kind = kind });
@@ -1340,10 +1340,10 @@ test "a reply denial teaches a reply, not a description" {
 
 test "parseJudged reads each finding's line, decision and page" {
     final got = parseJudged("[\{\"node\":\"change-description\",\"source\":\"change-description:3\",\"kind\":\"change-description\","
-        + "\"rule\":\"hedge\",\"code\":\"PRS3002\",\"decision\":\"deny\",\"message\":\"Drop 'might fix'.\",\"match\":\"might fix\","
-        + "\"url\":\"https://eli.gladman.cc/magus/reference/prose/hedge/\"}]");
+        + "\"rule\":\"hedge\",\"code\":\"PRF3002\",\"decision\":\"deny\",\"message\":\"Drop 'might fix'.\",\"match\":\"might fix\","
+        + "\"url\":\"https://eli.gladman.cc/magus/reference/proofread/hedge/\"}]");
     std\assert(got.len() == 1 and got[0].rule == "hedge" and got[0].line == 3 and got[0].matched == "might fix"
-        and got[0].decision == "deny" and got[0].url.endsWith("/prose/hedge/"), message: "{got.len()}");
+        and got[0].decision == "deny" and got[0].url.endsWith("/proofread/hedge/"), message: "{got.len()}");
     std\assert(judgedProblem(got[0], kind: "change-description") == "description line 2: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "change-description"));
     std\assert(judgedProblem(got[0], kind: "review-reply") == "line 3: Drop 'might fix'. [hedge]", message: judgedProblem(got[0], kind: "review-reply"));
     std\assert(parseJudged("[]").len() == 0, message: "no finding");
@@ -1351,37 +1351,37 @@ test "parseJudged reads each finding's line, decision and page" {
 
 test "a judge that failed is named by its stderr, else by whether its binary exists and runs" {
     std\assert(judgeFailure(code: 1, stdout: "", stderr: " no Go files \n", bin: ".") == "no Go files", message: "stderr wins");
-    final gone = judgeFailure(code: -1, stdout: "", stderr: "", bin: "./gone/gen/judge-docs");
-    std\assert(gone == "judge-docs exited -1 with nothing on stderr: it never started, since ./gone/gen/judge-docs does not exist", message: gone);
+    final gone = judgeFailure(code: -1, stdout: "", stderr: "", bin: "./gone/gen/proofread");
+    std\assert(gone == "proofread exited -1 with nothing on stderr: it never started, since ./gone/gen/proofread does not exist", message: gone);
     final said = judgeFailure(code: 2, stdout: "bad flag", stderr: "", bin: ".");
-    std\assert(said == "judge-docs exited 2 with nothing on stderr; stdout: bad flag", message: said);
+    std\assert(said == "proofread exited 2 with nothing on stderr; stdout: bad flag", message: said);
 
     final dir = fs\tempDir("judge-failure") catch "";
     std\assert(dir != "", message: "a temp dir");
-    final bin = "{dir}/judge-docs";
+    final bin = "{dir}/proofread";
     fs\writeFile(bin, content: "#!/bin/sh\n") catch void;
     fs\chmod(bin, mode: 0b110100100) catch void;
     final flat = judgeFailure(code: -1, stdout: "", stderr: "", bin: bin);
-    std\assert(flat == "judge-docs exited -1 with nothing on stderr: it never started, since {bin} is not executable", message: flat);
+    std\assert(flat == "proofread exited -1 with nothing on stderr: it never started, since {bin} is not executable", message: flat);
     fs\chmod(bin, mode: 0b111101101) catch void;
     final killed = judgeFailure(code: -1, stdout: "", stderr: "", bin: bin);
-    std\assert(killed == "judge-docs exited -1 with nothing on stderr: {bin} is an executable file, so a signal ended it or the system refused to load it", message: killed);
+    std\assert(killed == "proofread exited -1 with nothing on stderr: {bin} is an executable file, so a signal ended it or the system refused to load it", message: killed);
     fs\removeAll(dir) catch void;
 }
 
 // The pr-description target passes the workspace as ".", the guard as an absolute path;
 // both must reach the one built judge, and neither may pass without it.
-test "the judge runs from a relative workspace and its absence is a finding" {
+test "proofread runs from a relative workspace and its absence is a finding" {
     final ws = fs\tempDir("judge-runner") catch "";
     std\assert(ws != "", message: "a temp dir");
-    final dir = "{ws}/{judgeDocs\home}";
-    fs\mkdirAll("{dir}/prose") catch void;
-    fs\mkdirAll("{dir}/cmd/judge-docs") catch void;
+    final dir = "{ws}/{proofread\home}";
+    fs\mkdirAll("{dir}/proofread") catch void;
+    fs\mkdirAll("{dir}/cmd/proofread") catch void;
     fs\mkdirAll("{dir}/gen") catch void;
     fs\writeFile("{dir}/go.mod", content: "module m\n") catch void;
     fs\writeFile("{dir}/go.sum", content: "") catch void;
-    fs\writeFile("{dir}/prose/prose.go", content: "package prose\n") catch void;
-    fs\writeFile("{dir}/cmd/judge-docs/main.go", content: "package main\n") catch void;
+    fs\writeFile("{dir}/proofread/proofread.go", content: "package proofread\n") catch void;
+    fs\writeFile("{dir}/cmd/proofread/main.go", content: "package main\n") catch void;
     final relative = path\rel(path\abs(".") catch ".", target: ws) catch ws;
     std\assert(!path\isAbs(relative), message: relative);
 
@@ -1389,11 +1389,11 @@ test "the judge runs from a relative workspace and its absence is a finding" {
     std\assert(missing.len() == 1 and missing[0].rule == "judge" and missing[0].message.indexOf("is not built") != null,
         message: if (missing.len() > 0) missing[0].message else "no finding");
 
-    final bin = "{dir}/{judgeDocs\binary}";
+    final bin = "{dir}/{proofread\binary}";
     fs\writeFile(bin, content: "#!/bin/sh\ncat >/dev/null\n"
         + "echo '[\{\"source\":\"change-description:2\",\"rule\":\"hedge\",\"decision\":\"advise\",\"message\":\"Drop it.\",\"match\":\"might\"}]'\n") catch void;
     fs\chmod(bin, mode: 0b111101101) catch void;
-    fs\writeFile("{dir}/{judgeDocs\inputsFile}", content: (judgeDocs\inputs(dir) catch "") + "\n") catch void;
+    fs\writeFile("{dir}/{proofread\inputsFile}", content: (proofread\inputs(dir) catch "") + "\n") catch void;
     final ran = judgeRunner(relative)("docs: a title\nA body.", kind: "change-description");
     std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == "advise",
         message: if (ran.len() > 0) ran[0].message else "no finding");
@@ -1418,8 +1418,8 @@ test "an outside judge's findings take this repository's decisions" {
 
 test "a title is judged for the imperative and puffery after its prefix" {
     foreach (title, want in {
-        "feat(prose): adds a vale spell": "not 'added' or 'adds'",
-        "feat(prose)!: added a vale spell": "not 'added' or 'adds'",
+        "feat(proofread): adds a vale spell": "not 'added' or 'adds'",
+        "feat(proofread)!: added a vale spell": "not 'added' or 'adds'",
         "fix: updated the key": "not 'added' or 'adds'",
         "fix(cache): add a robust key": "drop it and say what changed",
         "feat(cache): add a powerful cache": "\"powerful\"",
@@ -1503,7 +1503,7 @@ test "touchedAreas names projects and top-level packages, generated files and fr
     final files: [any] = [
         {"path": "internal/guard/dir.go", "project": ".", "role": "source"},
         {"path": "internal/guard/rules/x.go", "project": ".", "role": "source"},
-        {"path": "libs/conventions/prose/voice.go", "project": "libs/conventions", "role": "source"},
+        {"path": "libs/conventions/proofread/voice.go", "project": "libs/conventions", "role": "source"},
         {"path": "magusfile.buzz", "project": ".", "role": "source"},
         {"path": "MAGUS.md", "project": ".", "role": "output"},
         {"path": ".gitattributes", "project": ".", "role": "maintained"},
@@ -1657,7 +1657,7 @@ test "no message sends the reader to a skill" {
     std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
 }
 
-test "the example a denial teaches passes the judge and this rule" {
+test "the example a denial teaches passes proofread and this rule" {
     final lines = example.split("\n");
     final body = mut [<str>];
     foreach (i, l in lines) {
