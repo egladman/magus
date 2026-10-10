@@ -655,9 +655,25 @@ func checkDefinitions(root, name string, sites []types.KnowledgeDefinitionSite, 
 			}
 		}
 		if withSource {
-			site.Source = string(bytes.Join(file.lines[site.StartLine-1:end], []byte("\n")))
+			site.Source = string(bytes.Join(file.lines[docStart(file.lines, site.StartLine-1):end], []byte("\n")))
 		}
 	}
+}
+
+// docStart returns the index of the first line of the comment block that sits directly
+// above the declaration at index decl, or decl when none does. The doc comment is where a
+// symbol states its contract and the test that pins it, so a reader shown the body alone
+// misses exactly what --source is asked for.
+func docStart(lines [][]byte, decl int) int {
+	start := decl
+	for start > 0 {
+		above := bytes.TrimSpace(lines[start-1])
+		if !bytes.HasPrefix(above, []byte("//")) && !bytes.HasPrefix(above, []byte("#")) {
+			break
+		}
+		start--
+	}
+	return start
 }
 
 // containsWord reports whether line holds name delimited by non-identifier bytes, so a
