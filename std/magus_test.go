@@ -843,6 +843,26 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 	require.ErrorContains(t, err, "no stored output")
 }
 
+// A guard rule has no workspace on its context; the guard pins the judged checkout's store.
+func TestOutputReadsTheStoreAGuardPinned(t *testing.T) {
+	t.Parallel()
+	cacheDir := t.TempDir()
+	ctx := types.WithOutputCacheDir(t.Context(), cacheDir)
+
+	desc, err := cache.NewOutputStore(cacheDir).Persist(ctx, strings.Repeat("cd", 32),
+		[]byte("FAIL\n"), cache.OutputDescriptor{Project: "pkg/a", Target: "test", Failed: true})
+	require.NoError(t, err)
+
+	got, err := MagusOutput(ctx, desc.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, types.OutputRecord{Ref: desc.Ref, Project: "pkg/a", Target: "test", Failed: true, Output: "FAIL\n"}, got)
+
+	_, err = MagusOutput(ctx, "out0000000000")
+	require.ErrorContains(t, err, "no stored output")
+	_, err = MagusQuery(ctx, "x", nil)
+	require.ErrorIs(t, err, types.MagusfileOnlyMember, "the pin opens the output store and no other member")
+}
+
 // fakeCheckoutWorkspace is a workspace rooted at this package's own checkout.
 type fakeCheckoutWorkspace struct {
 	types.WorkspaceRepository

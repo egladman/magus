@@ -283,7 +283,7 @@ var Magus = Module{
 		},
 		{
 			Name: "output",
-			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context, or inside a guard rule from the checkout the guard judges; raises MGS1022 outside both.",
 			Args: []Arg{
 				{Name: "ref", Type: TypeString},
 			},

@@ -94,6 +94,8 @@ final sentenceEnd = $"[.!?]+(\s|$)";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
 final maxCitedRefs = 10;
+// unknownRef is what magus\output raises for a ref this checkout's output store lacks.
+final unknownRef = "no stored output for ref";
 
 // TextCommand is one forge command that posts text to a pull request: the program and the
 // words naming the command, the kind of text it writes, and the flags carrying it. title,
@@ -950,7 +952,7 @@ export object Text {
 // the branch's Facts, and is called only for a description's body. cited judges each output
 // ref a description cites (see citedRun): the guard holds the author's runs and passes
 // citedRun; CI's checkout holds none of them and passes skipCited.
-export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > str) > Findings {
+export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
     final problems = mut [<str>];
     final advice = mut [<str>];
     var text = t.body ?? "";
@@ -1000,9 +1002,12 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
     }
     if (t.kind == descriptionKind) {
         foreach (ref in citedRefs(text)) {
-            final problem = cited(ref);
-            if (problem != "") {
-                problems.append(problem);
+            final found = cited(ref);
+            if (found.problem != "") {
+                problems.append(found.problem);
+            }
+            if (found.note != "") {
+                advice.append(found.note);
             }
         }
     }
@@ -1029,10 +1034,39 @@ fun citedRefs(text: str) > [str] {
     return refs;
 }
 
-// citedRun is the problem with the run ref names, "" when this checkout holds it and it
-// passed. A `grd` ref is a guard verdict, not a run, and never reaches here.
-export fun citedRun(ref: str) > str {
-    return runProblem(ref, run: magus\output(ref) catch null);
+// Citation is what judging one cited output ref found: problem denies the text, and note
+// is advice. Both are "" for a passing run.
+export object Citation {
+    problem: str = "",
+    note: str = "",
+}
+
+// citedRun judges the run ref names in this checkout's output store. A `grd` ref is a guard
+// verdict, not a run, and never reaches here. A lookup that fails for any reason but the
+// store lacking ref says nothing about the author's runs, so it fails open with a note, as
+// a rule that raises does.
+export fun citedRun(ref: str) > Citation {
+    try {
+        return Citation{ problem = runProblem(ref, run: magus\output(ref)) };
+    } catch (e) {
+        return lookupFailed(ref, message: thrownText(e));
+    }
+}
+
+// lookupFailed is citedRun's verdict when looking ref up raised message.
+fun lookupFailed(ref: str, message: str) > Citation {
+    if (message.indexOf(unknownRef) != null) {
+        return Citation{ problem = runProblem(ref, run: null) };
+    }
+    return Citation{ note = "`{ref}` went unchecked, since its run could not be looked up: {message}" };
+}
+
+// thrownText is a caught host error's message: a magus\* call throws a map, not a str.
+fun thrownText(e: any) > str {
+    if (e is {str: str}) {
+        return (e as? {str: str})!["message"] ?? "{e}";
+    }
+    return "{e}";
 }
 
 // runProblem is citedRun's verdict over run, the record ref resolved to or null.
@@ -1047,8 +1081,8 @@ fun runProblem(ref: str, run: magus\OutputRecord?) > str {
 }
 
 // skipCited accepts every ref, for a checkout that holds none of the author's runs.
-export fun skipCited(ref: str) > str {
-    return "";
+export fun skipCited(ref: str) > Citation {
+    return Citation{};
 }
 
 // titleProblems are the checks CI's pr-title step runs on title, less a word the prose
@@ -1096,7 +1130,7 @@ fun describesBranch(p: helpers\Program, c: TextCommand) > bool {
 // judge (see judgeRunner); cited judges the output refs a description cites (see judgeText).
 // A value the parser could not render is unknown, and then the whole line is judged for
 // credit and typography in its place.
-export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > str) > Findings {
+export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > Citation) > Findings {
     final c = matchCommand(p)!;
     final title = last(flagValues(p.args, flags: c.title));
     var body = last(flagValues(p.args, flags: c.body));
@@ -1170,7 +1204,7 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
 }
 
 // decideCiting is decidePullRequest with the check on cited output refs chosen by the caller.
-fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > str) > GuardVerdict {
+fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
     final problems = mut [<str>];
     final advice = mut [<str>];
     final denied = mut [<str>];
@@ -1355,14 +1389,14 @@ fun run(ref: str, project: str, target: str, failed: bool) > magus\OutputRecord 
 }
 
 // holding is a cited check over a store holding runs, standing in for this checkout's.
-fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) > str {
-    return fun (ref: str) > str {
+fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) > Citation {
+    return fun (ref: str) > Citation {
         asked.append(ref);
-        return runProblem(ref, run: runs[ref]);
+        return Citation{ problem = runProblem(ref, run: runs[ref]) };
     };
 }
 
-fun citing(body: str, cited: fun (ref: str) > str) > GuardVerdict {
+fun citing(body: str, cited: fun (ref: str) > Citation) > GuardVerdict {
     return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(unknownFacts()),
         judge: passing(), once: helpers\counter(), cited: cited);
 }
@@ -1385,6 +1419,16 @@ test "a cited ref that names a passing run passes" {
     final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: false)};
     final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
     std\assert(v.decision == "allow", message: v.reason);
+}
+
+test "a cited ref the store lacks is denied and a lookup that failed is advised" {
+    final missing = lookupFailed("out1a2b3c4d5e6f", message: "magus\\output: no stored output for ref \"out1a2b3c4d5e6f\" in this checkout");
+    std\assert(missing.problem.indexOf("holds no record of") != null and missing.note == "", message: "{missing.problem} {missing.note}");
+    final broken = lookupFailed("out1a2b3c4d5e6f", message: "magus\\output: open outputs: permission denied");
+    std\assert(broken.problem == "", message: broken.problem);
+    std\assert(broken.note.indexOf("`out1a2b3c4d5e6f` went unchecked") != null and broken.note.indexOf("permission denied") != null, message: broken.note);
+    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: fun (ref: str) > Citation => lookupFailed(ref, message: "magus\\output: open outputs: permission denied"));
+    std\assert(v.decision == "advise" and v.reason.indexOf("went unchecked") != null, message: "{v.decision}: {v.reason}");
 }
 
 test "CI skips the cited refs a checkout cannot hold" {

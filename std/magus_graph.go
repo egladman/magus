@@ -624,19 +624,24 @@ func (o optionReader) relations() ([]types.RelationID, error) {
 // MagusOutput backs magus\output: one target run's captured output by its ref, the bytes
 // `magus query output <ref>` prints, with the run's identity beside them. It reads this
 // checkout's output store, so a ref minted in another worktree does not resolve here.
+// Inside a guard rule there is no workspace, and the store is the one the guard pinned for
+// the checkout it judges.
 func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	if !cache.LooksLikeRef(ref) {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
 	}
-	ws := types.WorkspaceFromContext(ctx)
-	if ws == nil {
+	cacheDir := types.OutputCacheDirFromContext(ctx)
+	if ws := types.WorkspaceFromContext(ctx); ws != nil {
+		cd, ok := ws.(workspaceCacheDir)
+		if !ok {
+			return types.OutputRecord{}, errors.New("magus\\output: this workspace has no cache directory")
+		}
+		cacheDir = cd.CacheDir()
+	}
+	if cacheDir == "" {
 		return types.OutputRecord{}, errNoWorkspace("output")
 	}
-	cd, ok := ws.(workspaceCacheDir)
-	if !ok {
-		return types.OutputRecord{}, errors.New("magus\\output: this workspace has no cache directory")
-	}
-	data, desc, err := cache.NewOutputStore(cd.CacheDir()).ByRef(ref)
+	data, desc, err := cache.NewOutputStore(cacheDir).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: no stored output for ref %q in this checkout", ref)
 	}

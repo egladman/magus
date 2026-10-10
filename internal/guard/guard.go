@@ -640,6 +640,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		policyDigest = recordPolicy(ctx, deps, location, false)
 	}
 	ctx = withJobStoreRows(ctx, location)
+	ctx = withOutputStore(ctx, location)
 	// Where the gates and the workspace rules keep session state. The rest of location is
 	// what the rules judge against, so a check swaps only the cache dir.
 	stateAt := location
@@ -1607,6 +1608,16 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	}
 	rows, err := listJobRows(job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}))
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+}
+
+// withOutputStore lets magus\output in a workspace rule read the output store of the
+// checkout being judged, which a description citing its runs is held to. A rule has no
+// workspace on its context, and this pins the store alone.
+func withOutputStore(ctx context.Context, at location) context.Context {
+	if at.cacheDir == "" {
+		return ctx
+	}
+	return types.WithOutputCacheDir(ctx, at.cacheDir)
 }
 
 // jobRowsMemoTTL bounds how long a memoized sweep is trusted. The sweep also ends rows for

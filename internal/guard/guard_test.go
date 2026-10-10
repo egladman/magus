@@ -25,6 +25,7 @@ import (
 	// nothing ever populated, and every raw-tool test would match against an empty
 	// catalog. See internal/interp/bindings/spell.go's init.
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/cache"
 	_ "github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -375,9 +376,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		})
 	}
 
-	// shellIn judges shell lines in a checkout on branch, whose base ref is origin/main. The
-	// workspace is an empty temporary dir unless one is named.
-	shellIn := func(t *testing.T, branch, workspace string) func(command string) Verdict {
+	// shellAt judges shell lines in a checkout on branch, whose base ref is origin/main, and
+	// returns the cache dir they are judged against. The workspace is an empty temporary
+	// dir unless one is named.
+	shellAt := func(t *testing.T, branch, workspace string) (func(command string) Verdict, string) {
 		t.Helper()
 		ctx, cacheDir := spawnFixture(t)
 		if workspace != "" {
@@ -394,7 +396,12 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 				"session_id": "8f2c6a1e", "hook_event_name": "PreToolUse", "tool_name": "Bash",
 				"tool_input": map[string]any{"command": command},
 			})})
-		}
+		}, cacheDir
+	}
+	shellIn := func(t *testing.T, branch, workspace string) func(command string) Verdict {
+		t.Helper()
+		run, _ := shellAt(t, branch, workspace)
+		return run
 	}
 
 	covered["commit-subject"] = true
@@ -458,10 +465,30 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		ws := t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(ws, "libs"), 0o755))
 		require.NoError(t, os.Symlink(conventions, filepath.Join(ws, "libs", "conventions")))
-		run := shellIn(t, "trim-key", ws)
+		run, cacheDir := shellAt(t, "trim-key", ws)
 		const describe = `gh pr create --title "fix(cache): pin the key" --body "Warm builds miss the cache because the key hashes its inputs in map order; sorting them pins one key per build."`
 		v := run(describe)
 		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
+
+		// A cited ref is looked up in the store of the checkout being judged.
+		store := cache.NewOutputStore(cacheDir)
+		passed, err := store.Persist(t.Context(), strings.Repeat("a1", 32), []byte("ok\n"),
+			cache.OutputDescriptor{Project: ".", Target: "go-test"})
+		require.NoError(t, err)
+		failed, err := store.Persist(t.Context(), strings.Repeat("b2", 32), []byte("FAIL\n"),
+			cache.OutputDescriptor{Project: "libs/conventions", Target: "go-test", Failed: true})
+		require.NoError(t, err)
+		citing := func(ref string) string {
+			return `gh pr edit 9 --title "fix(cache): pin the key" --body "Warm builds hit the cache again because the key now sorts its inputs; TestKey passed (` + ref + `)."`
+		}
+		v = run(citing(passed.Ref))
+		assert.Equal(t, "pass", v.Decision, "a passing run this checkout holds: "+v.Reason+v.Context)
+		v = run(citing(failed.Ref))
+		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "`"+failed.Ref+"` cites a failed run (libs/conventions:go-test)")
+		v = run(citing("outc3c3c3c3c3c3"))
+		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "`outc3c3c3c3c3c3` cites a run this checkout holds no record of")
 
 		// attribution ships off; this repository's decisions table turns it on.
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")

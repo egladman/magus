@@ -76,6 +76,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
+	ctx = withOutputStore(ctx, at)
 
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	decided := ""
